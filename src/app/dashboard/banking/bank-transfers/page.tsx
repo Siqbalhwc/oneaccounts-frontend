@@ -98,13 +98,17 @@ export default function BankTransfersPage() {
       setError(`Insufficient balance. Available: PKR ${(fromAccount?.balance || 0).toLocaleString()}`)
       return
     }
+    if (!toAccount) {
+      setError("Destination account not found")
+      return
+    }
 
     setLoading(true)
     setError("")
 
     try {
       // 1. Update account balances (transfer = DR destination / CR source)
-      const { data: toAcc } = await supabase.from("accounts").select("id,balance").eq("id", toAccount!.account_id).single()
+      const { data: toAcc } = await supabase.from("accounts").select("id,balance").eq("id", toAccount.account_id).single()
       const { data: fromAcc } = await supabase.from("accounts").select("id,balance").eq("id", fromAccount.account_id).single()
 
       if (!toAcc || !fromAcc) throw new Error("Accounts not found")
@@ -264,7 +268,7 @@ export default function BankTransfersPage() {
                 <div>
                   <span style={{ fontWeight: 600 }}>{t.transfer_date}</span>
                   <span style={{ marginLeft: 12, color: "#64748B" }}>
-                    {t.from_account?.accounts?.code} → {t.to_account?.accounts?.code}
+                    {t.from_account?.code} → {t.to_account?.code}
                   </span>
                 </div>
                 <span style={{ fontWeight: 700, color: "#1D4ED8" }}>PKR {t.amount.toLocaleString()}</span>

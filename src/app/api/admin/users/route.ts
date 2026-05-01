@@ -10,11 +10,9 @@ const supabaseAdmin = createClient(
 // GET /api/admin/users — list all users with their roles
 export async function GET() {
   try {
-    // List users using the admin client
     const { data: users, error } = await supabaseAdmin.auth.admin.listUsers()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // Get roles for these users
     const userIds = users.users.map(u => u.id)
     const { data: roles } = await supabaseAdmin
       .from("user_roles")
