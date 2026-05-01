@@ -1,16 +1,14 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Plus, Trash2, Send, Eye, X, Search, ChevronDown, ChevronUp } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Send, Search, X } from "lucide-react"
 
-interface Customer { id: number; code: string; name: string; phone: string | null; balance: number }
-interface Product { id: number; code: string; name: string; sale_price: number; cost_price: number; qty_on_hand: number }
-interface InvoiceItem { product_id: number | null; description: string; qty: number; unit_price: number; cost_price: number; total: number }
-interface PriceHistory { unit_price: number; invoice_no: string; date: string }
+const SALARY_RATE = 0.04
+const ADS_RATE = 0.005
+const FUEL_RATE = 0.005
 
-const SALARY_RATE = 0.04; const ADS_RATE = 0.005; const FUEL_RATE = 0.005
 const PARTNERS: Record<string, [string, number]> = {
   "3101": ["Profit A", 0.05],
   "3102": ["Profit BA", 0.05],
@@ -23,21 +21,19 @@ export default function NewInvoicePage() {
   const router = useRouter()
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
-  const [customers, setCustomers] = useState<Customer[]>([])
-  const [products, setProducts] = useState<Product[]>([])
+  const [customers, setCustomers] = useState<any[]>([])
+  const [products, setProducts] = useState<any[]>([])
   const [customerId, setCustomerId] = useState<number | null>(null)
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0])
-  const [dueDate, setDueDate] = useState(new Date(Date.now() + 30*86400000).toISOString().split("T")[0])
+  const [dueDate, setDueDate] = useState(new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0])
   const [reference, setReference] = useState("")
   const [notes, setNotes] = useState("")
-  const [items, setItems] = useState<InvoiceItem[]>([])
+  const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const [preview, setPreview] = useState(false)
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [productSearch, setProductSearch] = useState("")
   const [showProductList, setShowProductList] = useState(false)
-  const [priceHistory, setPriceHistory] = useState<PriceHistory[]>([])
+  const [priceHistory, setPriceHistory] = useState<any[]>([])
   const [showHistory, setShowHistory] = useState(false)
 
   useEffect(() => {
@@ -45,7 +41,7 @@ export default function NewInvoicePage() {
     supabase.from("products").select("id,code,name,sale_price,cost_price,qty_on_hand").order("name").then(r => r.data && setProducts(r.data))
   }, [])
 
-  const filteredProducts = products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()))
+  const filteredProducts = products.filter((p: any) => p.name.toLowerCase().includes(productSearch.toLowerCase()))
 
   const fetchPriceHistory = async (productId: number, custId: number) => {
     const { data } = await supabase.from("invoice_items")
@@ -58,9 +54,10 @@ export default function NewInvoicePage() {
     setShowHistory(true)
   }
 
-  const addItem = (prod: Product) => {
+  const addItem = (prod: any) => {
     setItems([...items, { product_id: prod.id, description: `${prod.code} - ${prod.name}`, qty: 1, unit_price: prod.sale_price, cost_price: prod.cost_price, total: prod.sale_price }])
-    setProductSearch(""); setSelectedProduct(null); setShowProductList(false)
+    setProductSearch("")
+    setShowProductList(false)
   }
 
   const addManualItem = () => {
@@ -79,12 +76,12 @@ export default function NewInvoicePage() {
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
 
   const generateInvoiceNo = () => {
-    const cust = customers.find(c => c.id === customerId)
+    const cust = customers.find((c: any) => c.id === customerId)
     return cust ? `${cust.code}-01` : `INV-${Date.now().toString(36).toUpperCase()}`
   }
 
-  const totalAmount = items.reduce((s, i) => s + i.total, 0)
-  const totalCost = items.reduce((s, i) => s + (i.qty * i.cost_price), 0)
+  const totalAmount = items.reduce((s: number, i: any) => s + i.total, 0)
+  const totalCost = items.reduce((s: number, i: any) => s + (i.qty * i.cost_price), 0)
   const totalSalary = totalAmount * SALARY_RATE
   const totalAds = totalAmount * ADS_RATE
   const totalFuel = totalAmount * FUEL_RATE
@@ -94,7 +91,8 @@ export default function NewInvoicePage() {
   const handleSubmit = async () => {
     if (!customerId) { setError("Please select a customer"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
-    setLoading(true); setError("")
+    setLoading(true)
+    setError("")
 
     const res = await fetch("/api/invoices", {
       method: "POST",
@@ -104,21 +102,20 @@ export default function NewInvoicePage() {
         party_id: customerId,
         invoice_date: invoiceDate,
         due_date: dueDate,
-        items: items.map(i => ({ product_id: i.product_id, description: i.description, qty: i.qty, unit_price: i.unit_price, cost_price: i.cost_price })),
-        reference, notes
+        items: items.map((i: any) => ({ product_id: i.product_id, description: i.description, qty: i.qty, unit_price: i.unit_price, cost_price: i.cost_price })),
+        reference,
+        notes
       })
     })
     const result = await res.json()
     if (result.error) { setError(result.error); setLoading(false) }
-    else {
-      router.push("/dashboard/invoices")
-    }
+    else { router.push("/dashboard/invoices") }
   }
 
   const waLink = () => {
-    const cust = customers.find(c => c.id === customerId)
+    const cust = customers.find((c: any) => c.id === customerId)
     if (!cust?.phone) return ""
-    const msg = `Assalam-u-Alaikum ${cust.name},\nInvoice of PKR ${totalAmount.toLocaleString()} is ready.\nDue date: ${dueDate}.\nKindly arrange payment. JazakAllah Khair.\n— Shahid Iqbal & Co`
+    const msg = `Assalam-u-Alaikum ${cust.name},\nInvoice of PKR ${totalAmount.toLocaleString()} is ready.\nDue date: ${dueDate}.\nKindly arrange payment. JazakAllah Khair.\n— OneAccounts by Siqbal`
     return `https://wa.me/92${cust.phone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`
   }
 
@@ -163,14 +160,13 @@ export default function NewInvoicePage() {
 
         {error && <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#B91C1C", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{error}</div>}
 
-        {/* Customer & Dates */}
         <div className="inv-card">
           <div className="inv-row">
             <div>
               <label className="inv-label">Customer *</label>
               <select className="inv-select" value={customerId || ""} onChange={e => setCustomerId(Number(e.target.value) || null)}>
                 <option value="">Select customer...</option>
-                {customers.map(c => <option key={c.id} value={c.id}>{c.code} - {c.name} (Bal: PKR {(c.balance||0).toLocaleString()})</option>)}
+                {customers.map((c: any) => <option key={c.id} value={c.id}>{c.code} - {c.name} (Bal: PKR {(c.balance || 0).toLocaleString()})</option>)}
               </select>
             </div>
             <div>
@@ -192,7 +188,6 @@ export default function NewInvoicePage() {
           </div>
         </div>
 
-        {/* Product Search */}
         <div className="inv-card">
           <label className="inv-label">Add Product</label>
           <div style={{ position: "relative" }}>
@@ -207,7 +202,7 @@ export default function NewInvoicePage() {
             </div>
             {showProductList && productSearch && (
               <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid #E2E8F0", borderRadius: 8, maxHeight: 200, overflowY: "auto", zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", marginTop: 4 }}>
-                {filteredProducts.map(p => (
+                {filteredProducts.map((p: any) => (
                   <div key={p.id} style={{ padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #F1F5F9", fontSize: 13 }}
                     onClick={() => { addItem(p); if (customerId) fetchPriceHistory(p.id, customerId) }}>
                     <span><strong>{p.code}</strong> - {p.name}</span>
@@ -219,14 +214,13 @@ export default function NewInvoicePage() {
             )}
           </div>
 
-          {/* Price History */}
           {showHistory && priceHistory.length > 0 && (
             <div className="inv-price-history" style={{ marginTop: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <span style={{ fontWeight: 600, fontSize: 12 }}>📋 Last 5 prices given to this customer</span>
                 <button style={{ background: "none", border: "none", cursor: "pointer", color: "#94A3B8" }} onClick={() => setShowHistory(false)}><X size={14} /></button>
               </div>
-              {priceHistory.map((h, i) => (
+              {priceHistory.map((h: any, i: number) => (
                 <div key={i} className="inv-price-history-item">
                   <span>{h.invoice_no} - {h.date}</span>
                   <span style={{ fontWeight: 600 }}>PKR {h.unit_price.toLocaleString()}</span>
@@ -236,13 +230,12 @@ export default function NewInvoicePage() {
           )}
         </div>
 
-        {/* Items */}
         {items.length > 0 && (
           <div className="inv-card">
             <div className="inv-item-header">
               <span>Description</span><span>Qty</span><span>Price</span><span>Total</span><span></span>
             </div>
-            {items.map((item, idx) => (
+            {items.map((item: any, idx: number) => (
               <div key={idx} className="inv-item-row">
                 <input className="inv-input" style={{ height: 36, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} />
                 <input className="inv-input" style={{ height: 36, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
@@ -254,7 +247,6 @@ export default function NewInvoicePage() {
           </div>
         )}
 
-        {/* Totals & Profit Allocation */}
         {items.length > 0 && (
           <div className="inv-card">
             <div className="inv-total-row"><span>Subtotal</span><span>PKR {totalAmount.toLocaleString()}</span></div>
@@ -280,7 +272,6 @@ export default function NewInvoicePage() {
           </div>
         )}
 
-        {/* Actions */}
         {items.length > 0 && (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button className="inv-btn inv-btn-primary" onClick={handleSubmit} disabled={loading}>
@@ -291,9 +282,6 @@ export default function NewInvoicePage() {
                 <Send size={14} /> WhatsApp
               </a>
             )}
-            <button className="inv-btn inv-btn-outline" onClick={() => setPreview(!preview)}>
-              <Eye size={14} /> Preview
-            </button>
           </div>
         )}
       </div>
