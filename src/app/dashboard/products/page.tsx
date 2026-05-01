@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { Plus, Search, Edit, Trash2, X, Upload, Package, AlertTriangle, CheckCircle, ImageIcon } from "lucide-react"
+import { Plus, Search, Edit, Trash2, X, Upload, Package, AlertTriangle, CheckCircle } from "lucide-react"
+import { CsvExport } from "@/components/CsvExport"
+import { CsvImport } from "@/components/CsvImport"
 
 interface Product {
   id: number
@@ -31,7 +33,6 @@ export default function ProductsPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [flash, setFlash] = useState("")
 
-  // Form state
   const [code, setCode] = useState("")
   const [name, setName] = useState("")
   const [category, setCategory] = useState("")
@@ -122,7 +123,6 @@ export default function ProductsPage() {
     } else {
       const { data: newProd } = await supabase.from("products").insert(payload).select("id").single()
       if (newProd && openingQty > 0) {
-        // Post opening inventory GL entry
         const { data: invAcc } = await supabase.from("accounts").select("id,balance").eq("code", "1200").single()
         const { data: eqAcc } = await supabase.from("accounts").select("id,balance").eq("code", "3000").single()
         if (invAcc && eqAcc) {
@@ -140,7 +140,6 @@ export default function ProductsPage() {
             await supabase.from("accounts").update({ balance: eqAcc.balance + totalValue }).eq("id", eqAcc.id)
           }
         }
-        // Record stock move
         await supabase.from("stock_moves").insert({
           product_id: newProd.id, move_type: "opening", qty: openingQty,
           unit_price: costPrice, ref: `Opening - ${code}`, date: new Date().toISOString().split("T")[0]
@@ -157,6 +156,25 @@ export default function ProductsPage() {
     if (!deleteId) return
     await supabase.from("products").delete().eq("id", deleteId)
     setDeleteId(null); setFlash("Product deleted."); fetchProducts()
+    setTimeout(() => setFlash(""), 3000)
+  }
+
+  const handleImport = async (rows: any[]) => {
+    for (const row of rows) {
+      await supabase.from("products").insert({
+        code: row.code || `PROD-${Date.now()}`,
+        name: row.name || "Unnamed",
+        category: row.category || null,
+        unit: row.unit || "PCS",
+        cost_price: parseFloat(row.cost_price) || 0,
+        sale_price: parseFloat(row.sale_price) || 0,
+        opening_qty: parseFloat(row.opening_qty) || 0,
+        qty_on_hand: parseFloat(row.qty_on_hand) || 0,
+        reorder_level: parseFloat(row.reorder_level) || 0
+      })
+    }
+    fetchProducts()
+    setFlash("Import completed!")
     setTimeout(() => setFlash(""), 3000)
   }
 
@@ -181,6 +199,7 @@ export default function ProductsPage() {
         .prod-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all 0.15s; white-space: nowrap; }
         .prod-btn-primary { background: linear-gradient(135deg, #1740C8, #071352); color: white; }
         .prod-btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
+        .prod-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
         .prod-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 20px; }
         .prod-stat { background: white; border-radius: 10px; border: 1px solid #E2E8F0; padding: 14px; }
         .prod-stat-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #94A3B8; margin-bottom: 4px; }
@@ -216,21 +235,22 @@ export default function ProductsPage() {
       `}</style>
 
       <div className="prod-shell">
-        {/* Flash message */}
         {flash && (
           <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#15803D", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>✅ {flash}</div>
         )}
 
-        {/* Header */}
         <div className="prod-header">
           <div>
             <div className="prod-title">📦 Products & Inventory</div>
             <div className="prod-subtitle">Manage products, stock levels, and product images</div>
           </div>
-          <button className="prod-btn prod-btn-primary" onClick={openNew}><Plus size={16} /> Add Product</button>
+          <div className="prod-actions">
+            <button className="prod-btn prod-btn-primary" onClick={openNew}><Plus size={16} /> Add Product</button>
+            <CsvExport data={products} filename="products" />
+            <CsvImport onImport={handleImport} />
+          </div>
         </div>
 
-        {/* Stats */}
         <div className="prod-stats">
           <div className="prod-stat"><div className="prod-stat-label">Total Products</div><div className="prod-stat-value" style={{ color: "#1E3A8A" }}>{totalProducts}</div></div>
           <div className="prod-stat"><div className="prod-stat-label">Stock at Cost</div><div className="prod-stat-value" style={{ color: "#1D4ED8" }}>PKR {totalValue.toLocaleString()}</div></div>
@@ -238,14 +258,12 @@ export default function ProductsPage() {
           <div className="prod-stat"><div className="prod-stat-label">Out of Stock</div><div className="prod-stat-value" style={{ color: "#EF4444" }}>{outOfStock}</div></div>
         </div>
 
-        {/* Search */}
         <div style={{ position: "relative", marginBottom: 16 }}>
           <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "#94A3B8" }} />
           <input placeholder="Search by code or name..." value={search} onChange={e => setSearch(e.target.value)}
             style={{ width: "100%", maxWidth: 320, height: 40, border: "1.5px solid #E2E8F0", borderRadius: 9, padding: "0 14px 0 36px", fontSize: 13, outline: "none" }} />
         </div>
 
-        {/* Products Table */}
         {loading ? <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading...</div> :
           filtered.length === 0 ? <div style={{ textAlign: "center", padding: 40, color: "#94A3B8", background: "white", borderRadius: 10 }}>No products found</div> :
           <div className="prod-table">
@@ -281,7 +299,6 @@ export default function ProductsPage() {
         }
       </div>
 
-      {/* Add/Edit Modal */}
       {showModal && (
         <div className="prod-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="prod-modal" onClick={e => e.stopPropagation()}>
@@ -317,7 +334,6 @@ export default function ProductsPage() {
                 </div>
               )}
 
-              {/* Image Upload */}
               <div>
                 <label className="prod-label">Product Image</label>
                 <div className="prod-image-upload" onClick={() => fileInputRef.current?.click()}>
@@ -343,7 +359,6 @@ export default function ProductsPage() {
         </div>
       )}
 
-      {/* Delete Confirmation */}
       {deleteId && (
         <div className="prod-modal-overlay">
           <div className="prod-modal" style={{ maxWidth: 400 }}>

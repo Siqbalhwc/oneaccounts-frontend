@@ -111,6 +111,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { label: 'Payments',          icon: '💳', href: '/dashboard/payments',   section: 'MAIN'      },
     { label: 'Customers',         icon: '👥', href: '/dashboard/customers',  section: 'CRM'       },
     { label: 'Suppliers',         icon: '🚚', href: '/dashboard/suppliers',  section: 'CRM'       },
+    { label: 'Investors',        icon: '💼', href: '/dashboard/investors',   section: 'CRM'       },
     { label: 'Products',          icon: '📦', href: '/dashboard/products',   section: 'INVENTORY' },
     { label: 'All Reports',       icon: '📁', href: '/dashboard/reports',    section: 'REPORTS'   },
   ]

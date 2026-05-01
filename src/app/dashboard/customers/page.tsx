@@ -3,7 +3,9 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { Plus, Search, Edit, Trash2, Phone, Mail, MapPin, CreditCard, X, Check } from "lucide-react"
+import { Plus, Search, Edit, Trash2, X, Check } from "lucide-react"
+import { CsvExport } from "@/components/CsvExport"
+import { CsvImport } from "@/components/CsvImport"
 
 interface Customer {
   id: number
@@ -21,7 +23,7 @@ const styles = `
   .cp-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
   .cp-title { font-size: clamp(18px, 1.8vw, 24px); font-weight: 800; color: #1E293B; }
   .cp-subtitle { font-size: 13px; color: #94A3B8; margin-top: 2px; }
-  .cp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .cp-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .cp-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all 0.15s; white-space: nowrap; }
   .cp-btn-primary { background: linear-gradient(135deg, #1740C8, #071352); color: white; box-shadow: 0 2px 8px rgba(7,19,82,0.25); }
   .cp-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(7,19,82,0.35); }
@@ -80,7 +82,6 @@ export default function CustomersPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [flash, setFlash] = useState<{type: string, msg: string} | null>(null)
 
-  // Form state
   const [code, setCode] = useState("")
   const [name, setName] = useState("")
   const [phone, setPhone] = useState("")
@@ -152,20 +153,35 @@ export default function CustomersPage() {
     setTimeout(() => setFlash(null), 3000)
   }
 
+  const handleImport = async (rows: any[]) => {
+    for (const row of rows) {
+      await supabase.from("customers").insert({
+        code: row.code || `CUST-${Date.now()}`,
+        name: row.name || "Unnamed",
+        phone: row.phone || null,
+        email: row.email || null,
+        address: row.address || null,
+        balance: parseFloat(row.balance) || 0,
+        payment_terms: row.payment_terms || "Net 30"
+      })
+    }
+    fetchCustomers()
+    setFlash({ type: "success", msg: "Import completed!" })
+    setTimeout(() => setFlash(null), 3000)
+  }
+
   const totalReceivables = filtered.reduce((s, c) => s + (c.balance || 0), 0)
 
   return (
     <>
       <style>{styles}</style>
       <div className="cp-shell">
-        {/* Flash */}
         {flash && (
           <div style={{ background: flash.type === "success" ? "#F0FDF4" : "#FEF2F2", border: `1px solid ${flash.type === "success" ? "#BBF7D0" : "#FECACA"}`, color: flash.type === "success" ? "#15803D" : "#B91C1C", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
             {flash.type === "success" ? <Check size={16} /> : <X size={16} />} {flash.msg}
           </div>
         )}
 
-        {/* Header */}
         <div className="cp-header">
           <div>
             <div className="cp-title">👥 Customers</div>
@@ -173,10 +189,11 @@ export default function CustomersPage() {
           </div>
           <div className="cp-actions">
             <button className="cp-btn cp-btn-primary" onClick={openNew}><Plus size={16} /> Add Customer</button>
+            <CsvExport data={customers} filename="customers" />
+            <CsvImport onImport={handleImport} />
           </div>
         </div>
 
-        {/* Stats */}
         <div className="cp-stats">
           <div className="cp-stat-card">
             <div className="cp-stat-label">Total Customers</div>
@@ -188,13 +205,11 @@ export default function CustomersPage() {
           </div>
         </div>
 
-        {/* Search */}
         <div className="cp-search" style={{ marginBottom: 16 }}>
           <Search size={16} />
           <input type="text" placeholder="Search by code, name, phone or email..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
 
-        {/* Table */}
         <div className="cp-table-wrap">
           <div className="cp-table-header">
             <span>Code</span>
@@ -227,7 +242,6 @@ export default function CustomersPage() {
         </div>
       </div>
 
-      {/* Add/Edit Modal */}
       {showModal && (
         <div className="cp-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="cp-modal" onClick={e => e.stopPropagation()}>
@@ -281,7 +295,6 @@ export default function CustomersPage() {
         </div>
       )}
 
-      {/* Delete Confirmation */}
       {deleteId && (
         <div className="cp-modal-overlay">
           <div className="cp-modal" style={{ maxWidth: 400 }}>

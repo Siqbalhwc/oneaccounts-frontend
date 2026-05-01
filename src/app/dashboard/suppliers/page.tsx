@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { Plus, Search, Edit, Trash2, X, Check } from "lucide-react"
+import { CsvExport } from "@/components/CsvExport"
+import { CsvImport } from "@/components/CsvImport"
 
 interface Supplier {
   id: number
@@ -22,6 +24,8 @@ const styles = `
   .sp-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all 0.15s; white-space: nowrap; }
   .sp-btn-primary { background: linear-gradient(135deg, #1740C8, #071352); color: white; box-shadow: 0 2px 8px rgba(7,19,82,0.25); }
   .sp-btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
+  .sp-btn-outline:hover { border-color: #1740C8; color: #1740C8; }
+  .sp-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .sp-search { position: relative; max-width: 320px; }
   .sp-search input { width: 100%; height: 40px; border: 1.5px solid #E2E8F0; border-radius: 9px; padding: 0 14px 0 38px; font-size: 13px; font-family: inherit; background: white; outline: none; }
   .sp-search input:focus { border-color: #1740C8; }
@@ -114,12 +118,32 @@ export default function SuppliersPage() {
       await supabase.from("suppliers").insert(payload)
     }
     setSaving(false); setShowModal(false); fetchSuppliers()
+    setFlash({ type: "success", msg: `Supplier '${name}' saved!` })
+    setTimeout(() => setFlash(null), 3000)
   }
 
   const handleDelete = async () => {
     if (!deleteId) return
     await supabase.from("suppliers").delete().eq("id", deleteId)
-    setDeleteId(null); fetchSuppliers()
+    setDeleteId(null); setFlash({ type: "success", msg: "Supplier deleted." }); fetchSuppliers()
+    setTimeout(() => setFlash(null), 3000)
+  }
+
+  const handleImport = async (rows: any[]) => {
+    for (const row of rows) {
+      await supabase.from("suppliers").insert({
+        code: row.code || `VEND-${Date.now()}`,
+        name: row.name || "Unnamed",
+        phone: row.phone || null,
+        email: row.email || null,
+        address: row.address || null,
+        balance: parseFloat(row.balance) || 0,
+        opening_balance: parseFloat(row.opening_balance) || 0
+      })
+    }
+    fetchSuppliers()
+    setFlash({ type: "success", msg: "Import completed!" })
+    setTimeout(() => setFlash(null), 3000)
   }
 
   const totalPayables = filtered.reduce((s, c) => s + (c.balance || 0), 0)
@@ -128,13 +152,17 @@ export default function SuppliersPage() {
     <>
       <style>{styles}</style>
       <div className="sp-shell">
-        {flash && <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#15803D", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>✅ {flash.msg}</div>}
+        {flash && <div style={{ background: flash.type === "success" ? "#F0FDF4" : "#FEF2F2", border: `1px solid ${flash.type === "success" ? "#BBF7D0" : "#FECACA"}`, color: flash.type === "success" ? "#15803D" : "#B91C1C", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{flash.type === "success" ? <Check size={16} /> : <X size={16} />} {flash.msg}</div>}
         <div className="sp-header">
           <div>
             <div className="sp-title">🚚 Suppliers</div>
             <div className="sp-subtitle">Manage supplier accounts and payables</div>
           </div>
-          <button className="sp-btn sp-btn-primary" onClick={openNew}><Plus size={16} /> Add Supplier</button>
+          <div className="sp-actions">
+            <button className="sp-btn sp-btn-primary" onClick={openNew}><Plus size={16} /> Add Supplier</button>
+            <CsvExport data={suppliers} filename="suppliers" />
+            <CsvImport onImport={handleImport} />
+          </div>
         </div>
         <div className="sp-stats">
           <div className="sp-stat-card"><div className="sp-stat-label">Total Suppliers</div><div className="sp-stat-value" style={{color:"#1E3A8A"}}>{filtered.length}</div></div>
