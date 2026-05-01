@@ -1,14 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Plus, Trash2, Send, Search, X } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Send, Search, X, Download, FileText } from "lucide-react"
+import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 
 const SALARY_RATE = 0.04
 const ADS_RATE = 0.005
 const FUEL_RATE = 0.005
-
 const PARTNERS: Record<string, [string, number]> = {
   "3101": ["Profit A", 0.05],
   "3102": ["Profit BA", 0.05],
@@ -20,6 +20,7 @@ const PARTNERS: Record<string, [string, number]> = {
 export default function NewInvoicePage() {
   const router = useRouter()
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [customers, setCustomers] = useState<any[]>([])
   const [products, setProducts] = useState<any[]>([])
@@ -31,10 +32,12 @@ export default function NewInvoicePage() {
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [successInvoice, setSuccessInvoice] = useState<any>(null) // holds created invoice data after save
   const [productSearch, setProductSearch] = useState("")
   const [showProductList, setShowProductList] = useState(false)
   const [priceHistory, setPriceHistory] = useState<any[]>([])
   const [showHistory, setShowHistory] = useState(false)
+  const [lastSelectedProduct, setLastSelectedProduct] = useState<any>(null)
 
   useEffect(() => {
     supabase.from("customers").select("id,code,name,phone,balance").order("name").then(r => r.data && setCustomers(r.data))
@@ -50,14 +53,24 @@ export default function NewInvoicePage() {
       .eq("product_id", productId)
       .order("invoices.date", { ascending: false })
       .limit(5)
-    if (data) setPriceHistory(data.map((d: any) => ({ unit_price: d.unit_price, invoice_no: d.invoices.invoice_no, date: d.invoices.date })))
-    setShowHistory(true)
+    if (data) {
+      setPriceHistory(data.map((d: any) => ({
+        unit_price: d.unit_price,
+        invoice_no: d.invoices.invoice_no,
+        date: d.invoices.date,
+      })))
+      setShowHistory(true)
+    } else {
+      setPriceHistory([])
+      setShowHistory(true)
+    }
   }
 
   const addItem = (prod: any) => {
     setItems([...items, { product_id: prod.id, description: `${prod.code} - ${prod.name}`, qty: 1, unit_price: prod.sale_price, cost_price: prod.cost_price, total: prod.sale_price }])
     setProductSearch("")
     setShowProductList(false)
+    if (customerId) fetchPriceHistory(prod.id, customerId)
   }
 
   const addManualItem = () => {
@@ -109,14 +122,46 @@ export default function NewInvoicePage() {
     })
     const result = await res.json()
     if (result.error) { setError(result.error); setLoading(false) }
-    else { router.push("/dashboard/invoices") }
+    else {
+      // fetch the created invoice to get full data for PDF
+      const { data: createdInvoice } = await supabase.from("invoices").select("*, customers(name,phone)").eq("id", result.invoice_id).single()
+      setSuccessInvoice(createdInvoice)
+      setLoading(false)
+      // keep items and form visible; user can now download PDF or send WhatsApp
+    }
+  }
+
+  const handleDownloadPDF = async () => {
+    if (!successInvoice) return
+    const { data: itemsData } = await supabase.from("invoice_items").select("*").eq("invoice_id", successInvoice.id)
+    const doc = generateInvoicePDF(successInvoice, itemsData || [])
+    doc.save(`invoice-${successInvoice.invoice_no}.pdf`)
   }
 
   const waLink = () => {
+    if (successInvoice) {
+      const cust = successInvoice.customers
+      if (!cust?.phone) return ""
+      const msg = `Assalam-u-Alaikum ${cust.name},\nInvoice ${successInvoice.invoice_no} of PKR ${totalAmount.toLocaleString()} is ready.\nDue date: ${dueDate}.\nKindly arrange payment. JazakAllah Khair.\n— OneAccounts by Siqbal`
+      return `https://wa.me/92${cust.phone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`
+    }
+    // before saving, use selected customer
     const cust = customers.find((c: any) => c.id === customerId)
     if (!cust?.phone) return ""
     const msg = `Assalam-u-Alaikum ${cust.name},\nInvoice of PKR ${totalAmount.toLocaleString()} is ready.\nDue date: ${dueDate}.\nKindly arrange payment. JazakAllah Khair.\n— OneAccounts by Siqbal`
     return `https://wa.me/92${cust.phone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`
+  }
+
+  const handleBeforeSavePdf = () => {
+    // Generate a temporary invoice object for PDF preview
+    const tempInvoice = {
+      invoice_no: generateInvoiceNo(),
+      date: invoiceDate,
+      due_date: dueDate,
+      customers: customers.find((c: any) => c.id === customerId) || {},
+    }
+    const doc = generateInvoicePDF(tempInvoice, items)
+    doc.save(`invoice-preview-${tempInvoice.invoice_no}.pdf`)
   }
 
   return (
@@ -160,132 +205,155 @@ export default function NewInvoicePage() {
 
         {error && <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#B91C1C", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{error}</div>}
 
-        <div className="inv-card">
-          <div className="inv-row">
-            <div>
-              <label className="inv-label">Customer *</label>
-              <select className="inv-select" value={customerId || ""} onChange={e => setCustomerId(Number(e.target.value) || null)}>
-                <option value="">Select customer...</option>
-                {customers.map((c: any) => <option key={c.id} value={c.id}>{c.code} - {c.name} (Bal: PKR {(c.balance || 0).toLocaleString()})</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="inv-label">Invoice Date *</label>
-              <input className="inv-input" type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
-            </div>
-            <div>
-              <label className="inv-label">Due Date</label>
-              <input className="inv-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
-            </div>
-            <div>
-              <label className="inv-label">Reference</label>
-              <input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="PO #" />
+        {successInvoice ? (
+          <div className="inv-card" style={{ background: "#F0FDF4", border: "1px solid #BBF7D0" }}>
+            <h3 style={{ color: "#15803D", marginBottom: 8 }}>✅ Invoice {successInvoice.invoice_no} posted!</h3>
+            <p style={{ marginBottom: 12 }}>Total: PKR {successInvoice.total?.toLocaleString()}</p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button onClick={handleDownloadPDF} className="inv-btn inv-btn-primary"><Download size={14} /> Download PDF</button>
+              {waLink() && <a href={waLink()} target="_blank" className="inv-btn inv-btn-success" style={{ textDecoration: "none" }}><Send size={14} /> WhatsApp</a>}
+              <button onClick={() => router.push("/dashboard/invoices")} className="inv-btn inv-btn-outline">View Invoices List</button>
+              <button onClick={() => { setSuccessInvoice(null); setItems([]); setCustomerId(null); setReference(""); setNotes(""); }} className="inv-btn inv-btn-outline">Create Another</button>
             </div>
           </div>
-          <div style={{ marginTop: 14 }}>
-            <label className="inv-label">Notes</label>
-            <input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" />
-          </div>
-        </div>
-
-        <div className="inv-card">
-          <label className="inv-label">Add Product</label>
-          <div style={{ position: "relative" }}>
-            <div style={{ display: "flex", gap: 8 }}>
-              <div style={{ position: "relative", flex: 1 }}>
-                <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "#94A3B8" }} />
-                <input className="inv-input" style={{ paddingLeft: 36 }} placeholder="Search product..." value={productSearch}
-                  onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
-                  onFocus={() => setShowProductList(true)} />
+        ) : (
+          <>
+            {/* Customer & Dates */}
+            <div className="inv-card">
+              <div className="inv-row">
+                <div>
+                  <label className="inv-label">Customer *</label>
+                  <select className="inv-select" value={customerId || ""} onChange={e => setCustomerId(Number(e.target.value) || null)}>
+                    <option value="">Select customer...</option>
+                    {customers.map((c: any) => <option key={c.id} value={c.id}>{c.code} - {c.name} (Bal: PKR {(c.balance || 0).toLocaleString()})</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="inv-label">Invoice Date *</label>
+                  <input className="inv-input" type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
+                </div>
+                <div>
+                  <label className="inv-label">Due Date</label>
+                  <input className="inv-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+                </div>
+                <div>
+                  <label className="inv-label">Reference</label>
+                  <input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="PO #" />
+                </div>
               </div>
-              <button className="inv-btn inv-btn-outline" onClick={addManualItem}><Plus size={14} /> Manual</button>
+              <div style={{ marginTop: 14 }}>
+                <label className="inv-label">Notes</label>
+                <input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" />
+              </div>
             </div>
-            {showProductList && productSearch && (
-              <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid #E2E8F0", borderRadius: 8, maxHeight: 200, overflowY: "auto", zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", marginTop: 4 }}>
-                {filteredProducts.map((p: any) => (
-                  <div key={p.id} style={{ padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #F1F5F9", fontSize: 13 }}
-                    onClick={() => { addItem(p); if (customerId) fetchPriceHistory(p.id, customerId) }}>
-                    <span><strong>{p.code}</strong> - {p.name}</span>
-                    <span style={{ color: "#64748B" }}>PKR {p.sale_price} | Stock: {p.qty_on_hand}</span>
+
+            {/* Product Search */}
+            <div className="inv-card">
+              <label className="inv-label">Add Product</label>
+              <div style={{ position: "relative" }}>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ position: "relative", flex: 1 }}>
+                    <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "#94A3B8" }} />
+                    <input className="inv-input" style={{ paddingLeft: 36 }} placeholder="Search product..." value={productSearch}
+                      onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
+                      onFocus={() => setShowProductList(true)}
+                      onBlur={() => setTimeout(() => setShowProductList(false), 200)}
+                    />
+                  </div>
+                  <button className="inv-btn inv-btn-outline" onClick={addManualItem}><Plus size={14} /> Manual</button>
+                </div>
+                {showProductList && (
+                  <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid #E2E8F0", borderRadius: 8, maxHeight: 200, overflowY: "auto", zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", marginTop: 4 }}>
+                    {(productSearch ? filteredProducts : products).map((p: any) => (
+                      <div key={p.id} style={{ padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #F1F5F9", fontSize: 13 }}
+                        onClick={() => { addItem(p); if (customerId) fetchPriceHistory(p.id, customerId) }}>
+                        <span><strong>{p.code}</strong> - {p.name}</span>
+                        <span style={{ color: "#64748B" }}>PKR {p.sale_price} | Stock: {p.qty_on_hand}</span>
+                      </div>
+                    ))}
+                    {(productSearch ? filteredProducts : products).length === 0 && <div style={{ padding: 12, color: "#94A3B8", fontSize: 12 }}>No products found</div>}
+                  </div>
+                )}
+              </div>
+
+              {showHistory && (
+                <div className="inv-price-history" style={{ marginTop: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <span style={{ fontWeight: 600, fontSize: 12 }}>📋 Price history for {lastSelectedProduct?.name}</span>
+                    <button style={{ background: "none", border: "none", cursor: "pointer", color: "#94A3B8" }} onClick={() => setShowHistory(false)}><X size={14} /></button>
+                  </div>
+                  {priceHistory.length > 0 ? priceHistory.map((h: any, i: number) => (
+                    <div key={i} className="inv-price-history-item">
+                      <span>{h.invoice_no} - {h.date}</span>
+                      <span style={{ fontWeight: 600 }}>PKR {h.unit_price.toLocaleString()}</span>
+                    </div>
+                  )) : <div style={{ color: "#94A3B8", fontSize: 12 }}>No previous sales</div>}
+                </div>
+              )}
+            </div>
+
+            {/* Items */}
+            {items.length > 0 && (
+              <div className="inv-card">
+                <div className="inv-item-header">
+                  <span>Description</span><span>Qty</span><span>Price</span><span>Total</span><span></span>
+                </div>
+                {items.map((item: any, idx: number) => (
+                  <div key={idx} className="inv-item-row">
+                    <input className="inv-input" style={{ height: 36, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} />
+                    <input className="inv-input" style={{ height: 36, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                    <input className="inv-input" style={{ height: 36, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                    <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13 }}>PKR {item.total.toLocaleString()}</span>
+                    <button className="inv-btn inv-btn-danger inv-btn-sm" onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
                   </div>
                 ))}
-                {filteredProducts.length === 0 && <div style={{ padding: 12, color: "#94A3B8", fontSize: 12 }}>No products found</div>}
               </div>
             )}
-          </div>
 
-          {showHistory && priceHistory.length > 0 && (
-            <div className="inv-price-history" style={{ marginTop: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <span style={{ fontWeight: 600, fontSize: 12 }}>📋 Last 5 prices given to this customer</span>
-                <button style={{ background: "none", border: "none", cursor: "pointer", color: "#94A3B8" }} onClick={() => setShowHistory(false)}><X size={14} /></button>
-              </div>
-              {priceHistory.map((h: any, i: number) => (
-                <div key={i} className="inv-price-history-item">
-                  <span>{h.invoice_no} - {h.date}</span>
-                  <span style={{ fontWeight: 600 }}>PKR {h.unit_price.toLocaleString()}</span>
+            {/* Totals & Profit Allocation */}
+            {items.length > 0 && (
+              <div className="inv-card">
+                <div className="inv-total-row"><span>Subtotal</span><span>PKR {totalAmount.toLocaleString()}</span></div>
+                <div className="inv-total-row"><span>COGS</span><span>PKR {totalCost.toLocaleString()}</span></div>
+                <div className="inv-total-row"><span>Salary (4%)</span><span>PKR {totalSalary.toLocaleString()}</span></div>
+                <div className="inv-total-row"><span>Advertisement (0.5%)</span><span>PKR {totalAds.toLocaleString()}</span></div>
+                <div className="inv-total-row"><span>Fuel (0.5%)</span><span>PKR {totalFuel.toLocaleString()}</span></div>
+                <div className="inv-total-row bold">
+                  <span>Net Profit</span>
+                  <span className={netProfit >= 0 ? "inv-profit" : "inv-loss"}>PKR {netProfit.toLocaleString()}</span>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {items.length > 0 && (
-          <div className="inv-card">
-            <div className="inv-item-header">
-              <span>Description</span><span>Qty</span><span>Price</span><span>Total</span><span></span>
-            </div>
-            {items.map((item: any, idx: number) => (
-              <div key={idx} className="inv-item-row">
-                <input className="inv-input" style={{ height: 36, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} />
-                <input className="inv-input" style={{ height: 36, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                <input className="inv-input" style={{ height: 36, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13 }}>PKR {item.total.toLocaleString()}</span>
-                <button className="inv-btn inv-btn-danger inv-btn-sm" onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {items.length > 0 && (
-          <div className="inv-card">
-            <div className="inv-total-row"><span>Subtotal</span><span>PKR {totalAmount.toLocaleString()}</span></div>
-            <div className="inv-total-row"><span>COGS</span><span>PKR {totalCost.toLocaleString()}</span></div>
-            <div className="inv-total-row"><span>Salary (4%)</span><span>PKR {totalSalary.toLocaleString()}</span></div>
-            <div className="inv-total-row"><span>Advertisement (0.5%)</span><span>PKR {totalAds.toLocaleString()}</span></div>
-            <div className="inv-total-row"><span>Fuel (0.5%)</span><span>PKR {totalFuel.toLocaleString()}</span></div>
-            <div className="inv-total-row bold">
-              <span>Net Profit</span>
-              <span className={netProfit >= 0 ? "inv-profit" : "inv-loss"}>PKR {netProfit.toLocaleString()}</span>
-            </div>
-            {netProfit > 0 && (
-              <div style={{ marginTop: 12, padding: "12px 14px", background: "#F0FDF4", borderRadius: 8, fontSize: 12 }}>
-                <div style={{ fontWeight: 600, marginBottom: 6 }}>Profit Allocation:</div>
-                {Object.entries(PARTNERS).map(([code, value]) => {
-                  const [name, share] = value as [string, number];
-                  return (
-                    <div key={code} className="inv-total-row" style={{ fontSize: 12 }}>
-                      <span>{name} ({(share * 100).toFixed(0)}%)</span>
-                      <span>PKR {(netProfit * share).toLocaleString()}</span>
-                    </div>
-                  );
-                })}
+                {netProfit > 0 && (
+                  <div style={{ marginTop: 12, padding: "12px 14px", background: "#F0FDF4", borderRadius: 8, fontSize: 12 }}>
+                    <div style={{ fontWeight: 600, marginBottom: 6 }}>Profit Allocation:</div>
+                    {Object.entries(PARTNERS).map(([code, value]) => {
+                      const [name, share] = value as [string, number];
+                      return (
+                        <div key={code} className="inv-total-row" style={{ fontSize: 12 }}>
+                          <span>{name} ({(share * 100).toFixed(0)}%)</span>
+                          <span>PKR {(netProfit * share).toLocaleString()}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
-          </div>
-        )}
 
-        {items.length > 0 && (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button className="inv-btn inv-btn-primary" onClick={handleSubmit} disabled={loading}>
-              {loading ? "Posting..." : "💾 POST Invoice"}
-            </button>
-            {waLink() && (
-              <a href={waLink()} target="_blank" className="inv-btn inv-btn-success" style={{ textDecoration: "none" }}>
-                <Send size={14} /> WhatsApp
-              </a>
+            {/* Actions: Save, PDF preview, WhatsApp preview */}
+            {items.length > 0 && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+                <button className="inv-btn inv-btn-primary" onClick={handleSubmit} disabled={loading}>
+                  {loading ? "Posting..." : "💾 POST Invoice"}
+                </button>
+                <button className="inv-btn inv-btn-outline" onClick={handleBeforeSavePdf}><Download size={14} /> PDF</button>
+                {waLink() && (
+                  <a href={waLink()} target="_blank" className="inv-btn inv-btn-success" style={{ textDecoration: "none" }}>
+                    <Send size={14} /> WhatsApp
+                  </a>
+                )}
+              </div>
             )}
-          </div>
+          </>
         )}
       </div>
     </div>
