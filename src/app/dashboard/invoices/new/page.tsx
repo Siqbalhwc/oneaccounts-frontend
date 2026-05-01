@@ -70,6 +70,7 @@ export default function NewInvoicePage() {
     setItems([...items, { product_id: prod.id, description: `${prod.code} - ${prod.name}`, qty: 1, unit_price: prod.sale_price, cost_price: prod.cost_price, total: prod.sale_price }])
     setProductSearch("")
     setShowProductList(false)
+    setLastSelectedProduct(prod)
     if (customerId) fetchPriceHistory(prod.id, customerId)
   }
 
@@ -124,7 +125,7 @@ export default function NewInvoicePage() {
     if (result.error) { setError(result.error); setLoading(false) }
     else {
       // fetch the created invoice to get full data for PDF
-      const { data: createdInvoice } = await supabase.from("invoices").select("*, customers(name,phone)").eq("id", result.invoice_id).single()
+      const { data: createdInvoice } = await supabase.from("invoices").select("id, invoice_no, total, date, customers!party_id(name,phone)").eq("id", result.invoice_id).single()
       setSuccessInvoice(createdInvoice)
       setLoading(false)
       // keep items and form visible; user can now download PDF or send WhatsApp

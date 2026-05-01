@@ -20,14 +20,29 @@ export default function InvoicesPage() {
   const [search, setSearch] = useState("")
   const [loading, setLoading] = useState(true)
 
+  const loadInvoices = async () => {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from("invoices")
+      .select("id,invoice_no,date,due_date,total,paid,status,customers!party_id(name,phone,address)")
+      .eq("type", "sale")
+      .order("date", { ascending: false })
+
+    console.log("Invoices fetch:", data, error)   // ← keep for debugging
+    if (!error && data) {
+      setInvoices(data)
+    }
+    setLoading(false)
+  }
+
   useEffect(() => {
-    supabase.from("invoices").select("*, customers(name, phone, address)").eq("type", "sale").order("date", { ascending: false }).then(r => {
-      if (r.data) setInvoices(r.data)
-      setLoading(false)
-    })
+    loadInvoices()
   }, [])
 
-  const filtered = invoices.filter(i => i.invoice_no.toLowerCase().includes(search.toLowerCase()) || (i.customers?.name || "").toLowerCase().includes(search.toLowerCase()))
+  const filtered = invoices.filter(i =>
+    (i.invoice_no || "").toLowerCase().includes(search.toLowerCase()) ||
+    (i.customers?.name || "").toLowerCase().includes(search.toLowerCase())
+  )
 
   const statusStyle = (s: string) => {
     if (s === "Paid") return { bg: "#D1FAE5", color: "#065F46" }

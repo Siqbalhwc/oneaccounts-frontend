@@ -2,17 +2,15 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
-// ─── Constants (from your Streamlit app) ─────────────────────────────────────
-const SALARY_RATE = 0.04   // 4%
-const ADS_RATE = 0.005     // 0.5%
-const FUEL_RATE = 0.005    // 0.5%
-
+const SALARY_RATE = 0.04
+const ADS_RATE = 0.005
+const FUEL_RATE = 0.005
 const PARTNER_SHARES: Record<string, number> = {
-  "3101": 0.05,  // Profit A
-  "3102": 0.05,  // Profit BA
-  "3103": 0.05,  // Profit AM
-  "3104": 0.05,  // Profit MA
-  "3106": 0.80,  // Profit Owner
+  "3101": 0.05,
+  "3102": 0.05,
+  "3103": 0.05,
+  "3104": 0.05,
+  "3106": 0.80,
 }
 
 export async function POST(request: NextRequest) {
@@ -32,17 +30,16 @@ export async function POST(request: NextRequest) {
   if (!items || items.length === 0) return NextResponse.json({ error: 'No items provided' }, { status: 400 })
 
   try {
-    // ── Calculate totals ─────────────────────────────────────────────────────
+    // Calculate totals
     const total_amount = items.reduce((s: number, i: any) => s + (i.qty * i.unit_price), 0)
     const total_cost = items.reduce((s: number, i: any) => s + (i.qty * (i.cost_price || 0)), 0)
-
     const total_salary = total_amount * SALARY_RATE
     const total_ads = total_amount * ADS_RATE
     const total_fuel = total_amount * FUEL_RATE
     const total_expenses = total_salary + total_ads + total_fuel
     const net_profit = total_amount - total_cost - total_expenses
 
-    // ── 1. Create Invoice ────────────────────────────────────────────────────
+    // 1. Create Invoice
     const { data: inv } = await supabase.from("invoices").insert({
       invoice_no, type: "sale", party_id,
       date: invoice_date, due_date, total: total_amount, paid: 0,
@@ -51,7 +48,7 @@ export async function POST(request: NextRequest) {
     if (!inv) throw new Error("Failed to create invoice")
     const inv_id = inv.id
 
-    // ── 2. Insert Invoice Items & Update Stock ──────────────────────────────
+    // 2. Insert Invoice Items & Update Stock
     for (const item of items) {
       await supabase.from("invoice_items").insert({
         invoice_id: inv_id, product_id: item.product_id,
@@ -60,7 +57,6 @@ export async function POST(request: NextRequest) {
       })
 
       if (item.product_id) {
-        // Deduct stock
         const { data: prod } = await supabase.from("products").select("qty_on_hand").eq("id", item.product_id).single()
         if (prod) {
           const new_qty = (prod.qty_on_hand || 0) - item.qty
@@ -74,33 +70,30 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ── 3. Update Customer Balance ──────────────────────────────────────────
+    // 3. Update Customer Balance
     const { data: cust } = await supabase.from("customers").select("balance").eq("id", party_id).single()
     const new_balance = (cust?.balance || 0) + total_amount
     await supabase.from("customers").update({ balance: new_balance }).eq("id", party_id)
 
-    // ── 4. Journal Entry: DR Accounts Receivable / CR Sales Revenue ────────
+    // 4. GL Entries
     const { data: arAcc } = await supabase.from("accounts").select("id,balance").eq("code", "1100").single()
     const { data: revAcc } = await supabase.from("accounts").select("id,balance").eq("code", "4000").single()
-
     if (arAcc && revAcc) {
       const { data: je1 } = await supabase.from("journal_entries").insert({
         entry_no: `JE-SI-${String(inv_id).padStart(4, "0")}`,
         date: invoice_date,
         description: `Sales Invoice - ${invoice_no}`
       }).select("id").single()
-
       if (je1) {
         await supabase.from("journal_lines").insert([
-          { entry_id: je1.id, account_id: arAcc.id, debit: total_amount, credit: 0, narration: `AR - ${invoice_no}` },
-          { entry_id: je1.id, account_id: revAcc.id, debit: 0, credit: total_amount, narration: `Sales - ${invoice_no}` }
+          { entry_id: je1.id, account_id: arAcc.id, debit: total_amount, credit: 0 },
+          { entry_id: je1.id, account_id: revAcc.id, debit: 0, credit: total_amount }
         ])
         await supabase.from("accounts").update({ balance: arAcc.balance + total_amount }).eq("id", arAcc.id)
         await supabase.from("accounts").update({ balance: revAcc.balance + total_amount }).eq("id", revAcc.id)
       }
     }
 
-    // ── 5. COGS Entry: DR COGS / CR Inventory ──────────────────────────────
     if (total_cost > 0) {
       const { data: cogsAcc } = await supabase.from("accounts").select("id,balance").eq("code", "5000").single()
       const { data: invAcc } = await supabase.from("accounts").select("id,balance").eq("code", "1200").single()
@@ -121,13 +114,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ── 6. Expense Entry ────────────────────────────────────────────────────
     if (total_expenses > 0) {
       const salAcc = await supabase.from("accounts").select("id,balance").eq("code", "5100").single()
       const adsAcc = await supabase.from("accounts").select("id,balance").eq("code", "5600").single()
       const fuelAcc = await supabase.from("accounts").select("id,balance").eq("code", "5700").single()
       const apAcc = await supabase.from("accounts").select("id,balance").eq("code", "2001").single()
-
       if (salAcc.data && adsAcc.data && fuelAcc.data && apAcc.data) {
         const { data: je3 } = await supabase.from("journal_entries").insert({
           entry_no: `JE-EXP-${String(inv_id).padStart(4, "0")}`,
@@ -145,7 +136,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ── 7. Profit Allocation ────────────────────────────────────────────────
     if (net_profit > 0) {
       const { data: retAcc } = await supabase.from("accounts").select("id,balance").eq("code", "3100").single()
       if (retAcc) {
@@ -167,7 +157,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, invoice_id: inv_id, total: total_amount, net_profit })
+    // Fetch the created invoice with customer data
+    const { data: createdInvoice } = await supabase.from("invoices").select("id, invoice_no, total, date").eq("id", inv_id).single()
+
+    return NextResponse.json({ success: true, invoice_id: inv_id, invoice: createdInvoice })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
