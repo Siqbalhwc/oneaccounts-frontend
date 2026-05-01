@@ -1,0 +1,85 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { createBrowserClient } from "@supabase/ssr"
+import { ArrowLeft } from "lucide-react"
+import { useRouter } from "next/navigation"
+
+export default function ARAgingPage() {
+  const router = useRouter()
+  const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+  const [data, setData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase.from("invoices").select("*, customers(name)").eq("type", "sale").neq("status", "Paid").order("due_date").then(r => {
+      if (r.data) {
+        const today = new Date()
+        const enriched = r.data.map((inv: any) => {
+          const due = new Date(inv.due_date)
+          const days = Math.floor((today.getTime() - due.getTime()) / 86400000)
+          const bal = (inv.total || 0) - (inv.paid || 0)
+          let bucket = "Current"
+          if (days > 90) bucket = ">90 days"
+          else if (days > 60) bucket = "61-90 days"
+          else if (days > 30) bucket = "31-60 days"
+          else if (days > 0) bucket = "1-30 days"
+          return { ...inv, days_overdue: days, balance: bal, bucket, customer_name: inv.customers?.name || "Unknown" }
+        })
+        setData(enriched)
+      }
+      setLoading(false)
+    })
+  }, [])
+
+  const buckets = ["Current", "1-30 days", "31-60 days", "61-90 days", ">90 days"]
+  const totals = buckets.reduce((acc, b) => ({ ...acc, [b]: data.filter(d => d.bucket === b).reduce((s, d) => s + d.balance, 0) }), {} as Record<string, number>)
+  const grandTotal = data.reduce((s, d) => s + d.balance, 0)
+
+  return (
+    <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+        <button onClick={() => router.push("/dashboard/reports")}
+          style={{ background: "white", border: "1px solid #E2E8F0", borderRadius: 8, padding: "8px 12px", cursor: "pointer" }}>
+          <ArrowLeft size={16} />
+        </button>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", margin: 0 }}>📅 AR Aging Report</h1>
+          <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>Accounts Receivable aging analysis</p>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 20 }}>
+        {buckets.map(b => (
+          <div key={b} style={{ background: "white", borderRadius: 10, border: "1px solid #E2E8F0", padding: 14, textAlign: "center" }}>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>{b}</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: b === ">90 days" ? "#EF4444" : "#1E3A8A" }}>PKR {(totals[b] || 0).toLocaleString()}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ background: "white", borderRadius: 10, border: "1px solid #E2E8F0", padding: 14, marginBottom: 10, display: "flex", justifyContent: "space-between" }}>
+        <span style={{ fontWeight: 700 }}>Total Outstanding</span>
+        <span style={{ fontWeight: 800, fontSize: 18, color: "#EF4444" }}>PKR {grandTotal.toLocaleString()}</span>
+      </div>
+
+      {loading ? <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading...</div> :
+        <div style={{ background: "white", borderRadius: 10, border: "1px solid #E2E8F0", overflow: "hidden" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "110px 1fr 90px 90px 90px 90px", padding: "10px 14px", background: "#F8FAFC", fontSize: 9, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8" }}>
+            <span>Invoice</span><span>Customer</span><span>Due Date</span><span>Days</span><span>Balance</span><span>Bucket</span>
+          </div>
+          {data.map((d, i) => (
+            <div key={d.id} style={{ display: "grid", gridTemplateColumns: "110px 1fr 90px 90px 90px 90px", padding: "10px 14px", borderBottom: i < data.length - 1 ? "1px solid #F1F5F9" : "none", fontSize: 12, alignItems: "center" }}>
+              <span style={{ fontWeight: 600, color: "#1E3A8A" }}>{d.invoice_no}</span>
+              <span>{d.customer_name}</span>
+              <span>{d.due_date}</span>
+              <span style={{ color: d.days_overdue > 60 ? "#EF4444" : "#64748B" }}>{d.days_overdue}d</span>
+              <span style={{ fontWeight: 600 }}>PKR {d.balance.toLocaleString()}</span>
+              <span style={{ color: d.bucket === ">90 days" ? "#EF4444" : "#F59E0B", fontWeight: 600 }}>{d.bucket}</span>
+            </div>
+          ))}
+        </div>
+      }
+    </div>
+  )
+}
