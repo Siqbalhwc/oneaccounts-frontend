@@ -11,7 +11,13 @@ interface InvoiceItem { product_id: number | null; description: string; qty: num
 interface PriceHistory { unit_price: number; invoice_no: string; date: string }
 
 const SALARY_RATE = 0.04; const ADS_RATE = 0.005; const FUEL_RATE = 0.005
-const PARTNERS = { "3101": ["Profit A", 0.05], "3102": ["Profit BA", 0.05], "3103": ["Profit AM", 0.05], "3104": ["Profit MA", 0.05], "3106": ["Profit Owner", 0.80] }
+const PARTNERS: Record<string, [string, number]> = {
+  "3101": ["Profit A", 0.05],
+  "3102": ["Profit BA", 0.05],
+  "3103": ["Profit AM", 0.05],
+  "3104": ["Profit MA", 0.05],
+  "3106": ["Profit Owner", 0.80],
+}
 
 export default function NewInvoicePage() {
   const router = useRouter()
@@ -265,8 +271,8 @@ export default function NewInvoicePage() {
                 <div style={{ fontWeight: 600, marginBottom: 6 }}>Profit Allocation:</div>
                 {Object.entries(PARTNERS).map(([code, [name, share]]) => (
                   <div key={code} className="inv-total-row" style={{ fontSize: 12 }}>
-                    <span>{name} ({(share * 100).toFixed(0)}%)</span>
-                    <span>PKR {(netProfit * share).toLocaleString()}</span>
+                    <span>{name} ({(Number(share) * 100).toFixed(0)}%)</span>
+                    <span>PKR {(netProfit * Number(share)).toLocaleString()}</span>
                   </div>
                 ))}
               </div>
