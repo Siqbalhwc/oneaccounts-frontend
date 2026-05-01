@@ -261,12 +261,15 @@ export default function NewInvoicePage() {
             {netProfit > 0 && (
               <div style={{ marginTop: 12, padding: "12px 14px", background: "#F0FDF4", borderRadius: 8, fontSize: 12 }}>
                 <div style={{ fontWeight: 600, marginBottom: 6 }}>Profit Allocation:</div>
-                {Object.entries(PARTNERS).map(([code, [name, share]]) => (
-                  <div key={code} className="inv-total-row" style={{ fontSize: 12 }}>
-                    <span>{name} ({(Number(share) * 100).toFixed(0)}%)</span>
-                    <span>PKR {(netProfit * Number(share)).toLocaleString()}</span>
-                  </div>
-                ))}
+                {Object.entries(PARTNERS).map(([code, value]) => {
+                  const [name, share] = value as [string, number];
+                  return (
+                    <div key={code} className="inv-total-row" style={{ fontSize: 12 }}>
+                      <span>{name} ({(share * 100).toFixed(0)}%)</span>
+                      <span>PKR {(netProfit * share).toLocaleString()}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
