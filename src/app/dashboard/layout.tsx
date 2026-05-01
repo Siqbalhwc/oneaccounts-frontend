@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import SidebarClient from './sidebar-client'
+import { RoleProvider } from "@/contexts/RoleContext"
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
@@ -135,6 +136,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { label: 'Inventory Adj.',    icon: '⚖️', href: '/dashboard/inventory/adjustments', section: 'INVENTORY' },
     { label: 'All Reports',       icon: '📁', href: '/dashboard/reports',             section: 'REPORTS'   },
     { label: 'Settings',          icon: '⚙️', href: '/dashboard/settings',            section: 'SYSTEM'    },
+    { label: 'Admin Panel',       icon: '👑', href: '/dashboard/admin/users',         section: 'SYSTEM'    },
   ]
 
   const sections = navItems.reduce((acc, item) => {
@@ -144,7 +146,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }, {} as Record<string, typeof navItems>)
 
   return (
-    <>
+    <RoleProvider>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       <div className="dl-shell">
         <SidebarClient />
@@ -200,6 +202,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
           {children}
         </div>
       </div>
-    </>
+    </RoleProvider>
   )
 }
