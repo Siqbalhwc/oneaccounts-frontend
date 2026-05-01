@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Download } from "lucide-react"
 import { useRouter } from "next/navigation"
+import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
 
 export default function ARAgingPage() {
   const router = useRouter()
@@ -36,6 +38,41 @@ export default function ARAgingPage() {
   const totals = buckets.reduce((acc, b) => ({ ...acc, [b]: data.filter(d => d.bucket === b).reduce((s, d) => s + d.balance, 0) }), {} as Record<string, number>)
   const grandTotal = data.reduce((s, d) => s + d.balance, 0)
 
+  const handleDownloadPDF = () => {
+    const doc = new jsPDF()
+    doc.setFontSize(16)
+    doc.text("AR Aging Report", 14, 20)
+    doc.setFontSize(10)
+    doc.text(`As of ${new Date().toLocaleDateString()}`, 14, 28)
+    
+    const summaryRows = buckets.map(b => [b, `PKR ${(totals[b] || 0).toLocaleString()}`])
+    autoTable(doc, {
+      startY: 35,
+      head: [['Bucket', 'Amount']],
+      body: summaryRows,
+      foot: [['Total', `PKR ${grandTotal.toLocaleString()}`]],
+      theme: 'grid',
+      headStyles: { fillColor: [30, 58, 138] },
+    })
+
+    const detailRows = data.map(d => [
+      d.invoice_no,
+      d.customer_name,
+      d.due_date,
+      d.days_overdue.toString(),
+      `PKR ${d.balance.toLocaleString()}`,
+      d.bucket,
+    ])
+    autoTable(doc, {
+      startY: (doc as any).lastAutoTable.finalY + 10,
+      head: [['Invoice', 'Customer', 'Due Date', 'Days', 'Balance', 'Bucket']],
+      body: detailRows,
+      theme: 'striped',
+    })
+
+    doc.save('ar-aging-report.pdf')
+  }
+
   return (
     <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
@@ -43,10 +80,14 @@ export default function ARAgingPage() {
           style={{ background: "white", border: "1px solid #E2E8F0", borderRadius: 8, padding: "8px 12px", cursor: "pointer" }}>
           <ArrowLeft size={16} />
         </button>
-        <div>
+        <div style={{ flex: 1 }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", margin: 0 }}>📅 AR Aging Report</h1>
           <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>Accounts Receivable aging analysis</p>
         </div>
+        <button onClick={handleDownloadPDF}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", background: "white", border: "1px solid #E2E8F0", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+          <Download size={14} /> Download PDF
+        </button>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 20 }}>

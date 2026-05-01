@@ -4,11 +4,13 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { Plus, Search, Send } from "lucide-react"
+import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
+import DownloadPDFButton from "@/components/DownloadPDFButton"
 
 interface Invoice {
   id: number; invoice_no: string; date: string; due_date: string;
   total: number; paid: number; status: string;
-  customers?: { name: string; phone: string }
+  customers?: { name: string; phone: string; address?: string }
 }
 
 export default function InvoicesPage() {
@@ -19,7 +21,7 @@ export default function InvoicesPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.from("invoices").select("*, customers(name, phone)").eq("type", "sale").order("date", { ascending: false }).then(r => {
+    supabase.from("invoices").select("*, customers(name, phone, address)").eq("type", "sale").order("date", { ascending: false }).then(r => {
       if (r.data) setInvoices(r.data)
       setLoading(false)
     })
@@ -38,15 +40,22 @@ export default function InvoicesPage() {
     return `https://wa.me/92${phone.replace(/\D/g,"")}?text=${encodeURIComponent(`Dear ${name},\nPayment of PKR ${bal.toLocaleString()} for invoice ${no} is due.\nPlease clear it at your earliest convenience. 🙏`)}`
   }
 
+  const handleDownloadPDF = async (invoice: Invoice) => {
+    const { data: items } = await supabase.from("invoice_items").select("*").eq("invoice_id", invoice.id)
+    if (!items) return
+    const doc = generateInvoicePDF(invoice, items)
+    doc.save(`invoice-${invoice.invoice_no}.pdf`)
+  }
+
   return (
     <div style={{ padding: "clamp(16px,2.5vw,24px)", background: "#EFF4FB", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <style>{`
         .il-table { background: white; border-radius: 10px; border: 1px solid #E2E8F0; overflow: hidden; }
-        .il-header { display: grid; grid-template-columns: 110px 1fr 100px 90px 90px 90px 90px; padding: 10px 16px; background: #F8FAFC; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #94A3B8; }
-        .il-row { display: grid; grid-template-columns: 110px 1fr 100px 90px 90px 90px 90px; padding: 10px 16px; border-bottom: 1px solid #F1F5F9; font-size: 13px; align-items: center; }
+        .il-header { display: grid; grid-template-columns: 110px 1fr 100px 90px 90px 90px 90px 60px; padding: 10px 16px; background: #F8FAFC; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #94A3B8; }
+        .il-row { display: grid; grid-template-columns: 110px 1fr 100px 90px 90px 90px 90px 60px; padding: 10px 16px; border-bottom: 1px solid #F1F5F9; font-size: 13px; align-items: center; }
         .il-row:hover { background: #FAFBFF; }
-        @media (max-width: 700px) {
-          .il-header, .il-row { grid-template-columns: 100px 1fr 80px 70px; }
+        @media (max-width: 800px) {
+          .il-header, .il-row { grid-template-columns: 100px 1fr 80px 70px 60px; }
           .il-hide { display: none; }
         }
       `}</style>
@@ -69,7 +78,7 @@ export default function InvoicesPage() {
       </div>
 
       <div className="il-table">
-        <div className="il-header"><span>Invoice No</span><span>Customer</span><span>Date</span><span className="il-hide">Due Date</span><span>Total</span><span>Status</span><span>Action</span></div>
+        <div className="il-header"><span>Invoice No</span><span>Customer</span><span>Date</span><span className="il-hide">Due Date</span><span>Total</span><span>Status</span><span>Action</span><span>PDF</span></div>
         {loading ? <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>Loading...</div> :
           filtered.length === 0 ? <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>No invoices found</div> :
           filtered.map(i => {
@@ -90,6 +99,9 @@ export default function InvoicesPage() {
                       <Send size={10} /> Remind
                     </a>
                   )}
+                </span>
+                <span>
+                  <DownloadPDFButton onGenerate={() => handleDownloadPDF(i)} />
                 </span>
               </div>
             )
