@@ -104,7 +104,7 @@ export default function BankTransfersPage() {
 
     try {
       // 1. Update account balances (transfer = DR destination / CR source)
-      const { data: toAcc } = await supabase.from("accounts").select("id,balance").eq("id", toAccount.account_id).single()
+      const { data: toAcc } = await supabase.from("accounts").select("id,balance").eq("id", toAccount!.account_id).single()
       const { data: fromAcc } = await supabase.from("accounts").select("id,balance").eq("id", fromAccount.account_id).single()
 
       if (!toAcc || !fromAcc) throw new Error("Accounts not found")
