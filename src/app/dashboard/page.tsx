@@ -171,9 +171,32 @@ export default function DashboardPage() {
       setOps({ receivables, unpaid_invoices: unpaid, partial_invoices: partial, payables: payablesData?.balance || 0, low_stock: lowStock, total_products: prodCount || 0, total_customers: custCount || 0, total_suppliers: suppCount || 0 })
 
       const today = new Date().toISOString().split("T")[0]
-      const { data: overdueData } = await supabase.from("invoices").select("id,invoice_no,total,paid,due_date,customers(name,phone)").eq("type", "sale").lt("due_date", today).neq("status", "Paid").limit(5)
-      setOverdue(overdueData?.map((inv: any) => ({ id: inv.id, invoice_no: inv.invoice_no, customer_name: inv.customers?.name || "Unknown", customer_phone: inv.customers?.phone || "", balance: (inv.total || 0) - (inv.paid || 0), due_date: inv.due_date })) || [])
+const { data: overdueInvs } = await supabase
+  .from("invoices")
+  .select("id,invoice_no,total,paid,due_date,party_id")
+  .eq("type", "sale")
+  .lt("due_date", today)
+  .neq("status", "Paid")
+  .limit(5)
 
+const partyIds = overdueInvs?.map((i: any) => i.party_id).filter(Boolean) || []
+let customerMap: Record<number, {name: string, phone: string}> = {}
+if (partyIds.length > 0) {
+  const { data: custData } = await supabase
+    .from("customers")
+    .select("id,name,phone")
+    .in("id", partyIds)
+  custData?.forEach((c: any) => { customerMap[c.id] = { name: c.name, phone: c.phone } })
+}
+
+setOverdue(overdueInvs?.map((inv: any) => ({
+  id: inv.id,
+  invoice_no: inv.invoice_no,
+  customer_name: customerMap[inv.party_id]?.name || "Unknown",
+  customer_phone: customerMap[inv.party_id]?.phone || "",
+  balance: (inv.total || 0) - (inv.paid || 0),
+  due_date: inv.due_date,
+})) || [])
       const months: string[] = [], revValues: number[] = [], profitValues: number[] = []
       for (let i = 5; i >= 0; i--) {
         const d = new Date()
