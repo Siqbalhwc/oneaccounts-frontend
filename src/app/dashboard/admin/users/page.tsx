@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRole } from "@/contexts/RoleContext"
-import { Shield, X, Check } from "lucide-react"
+import { Shield } from "lucide-react"
 
 export default function AdminUsersPage() {
   const { role, loading: roleLoading } = useRole()
@@ -16,34 +16,57 @@ export default function AdminUsersPage() {
       setLoading(false)
       return
     }
-    fetch("/api/admin/users")
-      .then(r => r.json())
-      .then(data => {
-        if (data.users) setUsers(data.users)
-        else setError(data.error || "Failed to load users")
-      })
-      .catch(() => setError("Network error"))
-      .finally(() => setLoading(false))
+
+    const fetchUsers = async () => {
+      try {
+        setLoading(true)
+        setError("")
+        const res = await fetch("/api/admin/users", { credentials: "include" })
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}))
+          throw new Error(errData.error || `HTTP ${res.status}`)
+        }
+        const data = await res.json()
+        console.log("Admin API response:", data)
+        if (data.users && Array.isArray(data.users)) {
+          setUsers(data.users)
+        } else {
+          setUsers([])
+        }
+      } catch (e: any) {
+        setError(e.message || "Failed to load users")
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchUsers()
   }, [role])
 
   const assignRole = async (userId: string, newRole: string) => {
-    const res = await fetch("/api/admin/users", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, role: newRole }),
-    })
-    const data = await res.json()
-    if (data.success) {
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u))
-      setMessage("Role updated!")
-      setTimeout(() => setMessage(""), 3000)
-    } else {
-      setMessage(data.error || "Error")
-      setTimeout(() => setMessage(""), 3000)
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, role: newRole }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u))
+        setMessage("Role updated!")
+        setTimeout(() => setMessage(""), 3000)
+      } else {
+        setMessage(data.error || "Error updating role")
+        setTimeout(() => setMessage(""), 5000)
+      }
+    } catch (e: any) {
+      setMessage("Network error")
+      setTimeout(() => setMessage(""), 5000)
     }
   }
 
-  if (roleLoading) return <div style={{ padding: 40, textAlign: "center" }}>Loading...</div>
+  if (roleLoading) {
+    return <div style={{ padding: 40, textAlign: "center" }}>Loading...</div>
+  }
 
   if (role !== "admin") {
     return (
@@ -62,11 +85,15 @@ export default function AdminUsersPage() {
         .admin-title { font-size: 22px; font-weight: 800; color: #1E293B; }
         .admin-subtitle { font-size: 13px; color: #94A3B8; }
         .admin-table { background: white; border-radius: 10px; border: 1px solid #E2E8F0; overflow: hidden; }
-        .admin-row { display: grid; grid-template-columns: 1fr 200px 120px 80px; padding: 10px 16px; border-bottom: 1px solid #F1F5F9; align-items: center; font-size: 13px; }
+        .admin-row { display: grid; grid-template-columns: 1fr 200px 120px 120px; padding: 10px 16px; border-bottom: 1px solid #F1F5F9; align-items: center; font-size: 13px; }
         .admin-row-header { background: #F8FAFC; font-size: 9px; font-weight: 700; text-transform: uppercase; color: #94A3B8; }
-        .admin-badge { padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+        .admin-badge { padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; display: inline-block; }
         .admin-select { padding: 6px 10px; border: 1px solid #E2E8F0; border-radius: 6px; font-size: 12px; }
         .admin-btn { padding: 6px 14px; background: #1D4ED8; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; }
+        @media (max-width: 700px) {
+          .admin-row { grid-template-columns: 1fr 100px 100px; }
+          .admin-hide-mobile { display: none; }
+        }
       `}</style>
 
       <div className="admin-header">
@@ -75,25 +102,47 @@ export default function AdminUsersPage() {
       </div>
 
       {message && (
-        <div style={{ background: message.includes("Error") ? "#FEF2F2" : "#F0FDF4", color: message.includes("Error") ? "#B91C1C" : "#15803D", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+        <div style={{
+          background: message.includes("Error") || message.includes("error") || message.includes("Failed") ? "#FEF2F2" : "#F0FDF4",
+          color: message.includes("Error") || message.includes("error") || message.includes("Failed") ? "#B91C1C" : "#15803D",
+          padding: "10px 16px",
+          borderRadius: 8,
+          marginBottom: 16,
+          fontSize: 13
+        }}>
           {message}
+        </div>
+      )}
+
+      {error && (
+        <div style={{ background: "#FEF2F2", color: "#B91C1C", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+          ⚠️ {error}
+          <button onClick={() => window.location.reload()} style={{ marginLeft: 12, background: "none", border: "none", color: "#1D4ED8", cursor: "pointer", textDecoration: "underline" }}>
+            Retry
+          </button>
         </div>
       )}
 
       {loading ? (
         <div style={{ textAlign: "center", padding: 40 }}>Loading users...</div>
+      ) : users.length === 0 ? (
+        <div style={{ background: "white", borderRadius: 10, border: "1px solid #E2E8F0", padding: 40, textAlign: "center", color: "#94A3B8" }}>
+          No users found. Users who sign up will appear here.
+        </div>
       ) : (
         <div className="admin-table">
           <div className="admin-row admin-row-header">
             <span>Email</span>
-            <span>Created</span>
+            <span className="admin-hide-mobile">Created</span>
             <span>Role</span>
             <span>Action</span>
           </div>
           {users.map(u => (
             <div key={u.id} className="admin-row">
               <span>{u.email}</span>
-              <span style={{ color: "#64748B" }}>{new Date(u.created_at).toLocaleDateString()}</span>
+              <span className="admin-hide-mobile" style={{ color: "#64748B" }}>
+                {u.created_at ? new Date(u.created_at).toLocaleDateString() : "-"}
+              </span>
               <span>
                 <span className="admin-badge" style={{
                   background: u.role === "admin" ? "#D1FAE5" : u.role === "accountant" ? "#FEF3C7" : "#FEE2E2",
@@ -103,21 +152,15 @@ export default function AdminUsersPage() {
                 </span>
               </span>
               <span>
-                {u.role !== "admin" ? (
-                  <div style={{ display: "flex", gap: 4 }}>
-                    <select
-                      className="admin-select"
-                      value={u.role || "viewer"}
-                      onChange={(e) => assignRole(u.id, e.target.value)}
-                    >
-                      <option value="viewer">Viewer</option>
-                      <option value="accountant">Accountant</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                  </div>
-                ) : (
-                  <span style={{ fontSize: 11, color: "#94A3B8" }}>Super admin</span>
-                )}
+                <select
+                  className="admin-select"
+                  value={u.role || "viewer"}
+                  onChange={(e) => assignRole(u.id, e.target.value)}
+                >
+                  <option value="viewer">Viewer</option>
+                  <option value="accountant">Accountant</option>
+                  <option value="admin">Admin</option>
+                </select>
               </span>
             </div>
           ))}
