@@ -1,6 +1,8 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { usePathname } from "next/navigation"
+import { createBrowserClient } from "@supabase/ssr"
 import { PlanProvider, usePlan } from "@/contexts/PlanContext"
 import SidebarClient from "@/app/dashboard/sidebar-client"
 import TrialGuard from "@/components/TrialGuard"
@@ -36,6 +38,22 @@ function DashboardLayoutInner({
 }) {
   const { hasFeature } = usePlan()
   const pathname = usePathname()
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+    supabase
+      .from("company_settings")
+      .select("logo_url")
+      .eq("id", 1)
+      .single()
+      .then(({ data }) => {
+        if (data?.logo_url) setLogoUrl(data.logo_url)
+      })
+  }, [])
 
   const getGreeting = () => {
     const hour = new Date().getHours()
@@ -92,7 +110,11 @@ function DashboardLayoutInner({
                 <div className="dl-nav-section">{section}</div>
                 {items.map((item) => (
                   <a key={item.href} href={item.href}
-                    className={`dl-nav-item${item.href === pathname ? ' active' : ''}`}>
+                    className={`dl-nav-item${
+                      (item.href === '/dashboard' && pathname === '/dashboard') ||
+                      (item.href !== '/dashboard' && pathname.startsWith(item.href))
+                      ? ' active' : ''
+                    }`}>
                     <span className="dl-nav-icon">{item.icon}</span>
                     <span>{item.label}</span>
                   </a>
@@ -116,6 +138,19 @@ function DashboardLayoutInner({
             <button className="dl-hamburger" id="dl-hamburger" aria-label="Open menu">
               <span/><span/><span/>
             </button>
+            {logoUrl && (
+              <img
+                src={logoUrl}
+                alt="Logo"
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 6,
+                  objectFit: "contain",
+                  marginRight: 8,
+                }}
+              />
+            )}
             <div className="dl-topbar-greeting">
               <div className="dl-topbar-title">👋 {getGreeting()}, {email.split('@')[0]}!</div>
               <div className="dl-topbar-subtitle">Here's what's happening with your business today</div>
@@ -131,7 +166,11 @@ function DashboardLayoutInner({
               <a href="/dashboard/payments/new" className="dl-action-btn dl-btn-payment"><span>💳</span> Payment</a>
             </div>
           </header>
-          <TrialGuard>{children}</TrialGuard>
+          <TrialGuard>
+            <div style={{ padding: "24px", background: "#EFF4FB", minHeight: "100%" }}>
+              {children}
+            </div>
+          </TrialGuard>
         </div>
       </div>
     </>

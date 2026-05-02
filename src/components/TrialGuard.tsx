@@ -30,29 +30,24 @@ export default function TrialGuard({ children }: { children: React.ReactNode }) 
 
         const trialEnd = data.trial_ends_at ? new Date(data.trial_ends_at) : null
 
-        // No trial set, trial still active, or plan is not basic → allow
         if (!trialEnd || trialEnd > new Date() || data.plan_id !== null) {
           setAllowed(true)
           return
         }
 
-        // Never block the upgrade page itself
         if (pathname === "/dashboard/upgrade") {
           setAllowed(true)
           return
         }
 
-        // Trial expired and plan is basic → block
         setAllowed(false)
       } catch {
-        // On error, don't block
         setAllowed(true)
       }
     }
     checkTrial()
   }, [pathname])
 
-  // While checking, show nothing
   if (allowed === null) return null
 
   if (!allowed) {
