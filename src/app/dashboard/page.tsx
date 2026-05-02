@@ -74,7 +74,19 @@ function KpiCard({ label, value, subtitle, accent, icon, isCurrency = true, tren
   const display = isCurrency ? `PKR ${SHORT(value)}` : value.toLocaleString()
   return (
     <div
-      style={{ background: "white", borderRadius: 10, border: "1px solid #E2E8F0", borderTop: `3px solid ${accent}`, display: "flex", flexDirection: "column", transition: "box-shadow .15s,transform .15s", cursor: href ? "pointer" : "default", overflow: "hidden", height: "100%" }}
+      style={{
+        background: "white",
+        borderRadius: 10,
+        border: "1px solid #E2E8F0",
+        borderTop: `3px solid ${accent}`,
+        display: "flex",
+        flexDirection: "column",
+        transition: "box-shadow .15s,transform .15s",
+        cursor: href ? "pointer" : "default",
+        overflow: "hidden",
+        height: "100%",
+        animation: "floaty 6s ease-in-out infinite",
+      }}
       onClick={() => { if (href) window.location.href = href }}
       onMouseEnter={e => { if (href) { const d = e.currentTarget as HTMLDivElement; d.style.boxShadow = "0 4px 18px rgba(30,58,138,.11)"; d.style.transform = "translateY(-1px)" } }}
       onMouseLeave={e => { if (href) { const d = e.currentTarget as HTMLDivElement; d.style.boxShadow = "none"; d.style.transform = "none" } }}
@@ -169,8 +181,6 @@ export default function DashboardPage() {
         months.push(d.toLocaleString("default", { month: "short" }))
 
         const start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`
-
-        // ✅ Use the real last day of the month (Feb 28/29, Apr 30, etc.)
         const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0)
         const end = lastDay.toISOString().split("T")[0]
 
@@ -195,7 +205,7 @@ export default function DashboardPage() {
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off) }
   }, [])
 
-  // Auto‑refresh every 30 seconds
+  // Auto‑refresh every 30 seconds (unchanged)
   useEffect(() => {
     const interval = setInterval(() => { fetchData() }, 30000)
     return () => clearInterval(interval)
@@ -218,6 +228,11 @@ export default function DashboardPage() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
         @keyframes spin { to { transform: rotate(360deg) } }
+        @keyframes floaty {
+          0% { transform: translateY(0px); }
+          50% { transform: translateY(-6px); }
+          100% { transform: translateY(0px); }
+        }
 
         .kpi-grid {
           display: grid;
@@ -280,10 +295,6 @@ export default function DashboardPage() {
               <RefreshCw size={12} style={{ animation: refreshing ? "spin 0.8s linear infinite" : "none" }} /> Refresh
             </button>
           </div>
-
-          {/* Page Title */}
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: "#1E293B", marginBottom: 4 }}>Dashboard</h1>
-          <p style={{ fontSize: 13, color: "#94A3B8", marginBottom: 20 }}>Financial overview of your business</p>
 
           <SectionLabel>Financial Overview</SectionLabel>
           <div className="kpi-grid">
