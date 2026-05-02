@@ -84,22 +84,26 @@ export default function UpgradePage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase
-      .from("company_settings")
-      .select("plan_id, trial_ends_at, plans(id, code)")
-      .eq("id", 1)
-      .single()
-      .then(({ data }) => {
+    async function fetchSettings() {
+      try {
+        const { data } = await supabase
+          .from("company_settings")
+          .select("plan_id, trial_ends_at, plans(id, code)")
+          .eq("id", 1)
+          .single()
+
         if (data) {
-          // Normalize the joined relation – it may be an array or a single object
           const plan = Array.isArray(data.plans) ? data.plans[0] : data.plans
           setCurrentPlan(plan?.code || "basic")
           setTrialEndsAt(data.trial_ends_at || null)
         }
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
-  }, [])
+      } catch {
+        // silently ignore errors – default to basic
+      }
+      setLoading(false)
+    }
+    fetchSettings()
+  }, [supabase])
 
   if (loading) return <div style={{ padding: 40, textAlign: "center" }}>Loading...</div>
 
