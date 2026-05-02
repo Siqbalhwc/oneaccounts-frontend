@@ -1,10 +1,17 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import SidebarClient from './sidebar-client'
-import { RoleProvider } from "@/contexts/RoleContext"
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+  
+  /* ── Floating animation (used by action buttons + nav items) ── */
+  @keyframes floaty {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-4px); }
+    100% { transform: translateY(0px); }
+  }
+
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Plus Jakarta Sans', sans-serif; background: #EFF4FB; }
 
@@ -29,11 +36,19 @@ const styles = `
   .dl-sidebar-logo-sub { color: rgba(255,255,255,0.45); font-size: 9px; }
   .dl-sidebar-nav { flex: 1; padding: 12px 10px; overflow-y: auto; position: relative; z-index: 1; }
   .dl-nav-section { padding: 8px 8px 4px; color: rgba(255,255,255,0.35); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
-  .dl-nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; color: rgba(255,255,255,0.65); font-size: 13px; font-weight: 500; text-decoration: none; transition: all 0.15s; margin-bottom: 2px; }
+  
+  /* Nav item with floating animation */
+  .dl-nav-item {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    border-radius: 8px; color: rgba(255,255,255,0.65); font-size: 13px; font-weight: 500;
+    text-decoration: none; transition: all 0.15s; margin-bottom: 2px;
+    animation: floaty 6s ease-in-out infinite;
+  }
   .dl-nav-item:hover { background: rgba(255,255,255,0.06); color: white; }
   .dl-nav-item.active { background: rgba(255,255,255,0.1); color: white; font-weight: 600; }
   .dl-nav-icon { width: 18px; text-align: center; flex-shrink: 0; }
   .dl-nav-divider { height: 1px; background: rgba(255,255,255,0.08); margin: 8px 14px; }
+
   .dl-sidebar-user { padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 10px; position: relative; z-index: 1; }
   .dl-sidebar-avatar { width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.15); color: white; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
   .dl-sidebar-email { color: rgba(255,255,255,0.7); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -57,7 +72,16 @@ const styles = `
   .dl-topbar-title { font-size: clamp(12px, 1.1vw, 14px); font-weight: 700; color: #1E293B; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .dl-topbar-subtitle { font-size: clamp(10px, 0.8vw, 11px); color: #94A3B8; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .dl-topbar-actions { display: flex; gap: 8px; flex-shrink: 0; }
-  .dl-action-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px clamp(10px, 1.2vw, 14px); border-radius: 8px; font-size: clamp(10px, 0.78vw, 11.5px); font-weight: 600; text-decoration: none; cursor: pointer; border: 1.5px solid; font-family: inherit; transition: all 0.15s; white-space: nowrap; height: 34px; }
+  
+  /* Action buttons with floating animation */
+  .dl-action-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px clamp(10px, 1.2vw, 14px); border-radius: 8px;
+    font-size: clamp(10px, 0.78vw, 11.5px); font-weight: 600;
+    text-decoration: none; cursor: pointer; border: 1.5px solid;
+    font-family: inherit; transition: all 0.15s; white-space: nowrap; height: 34px;
+    animation: floaty 6s ease-in-out infinite;
+  }
   .dl-btn-invoice { background: #EEF2FF; border-color: #C7D2FE; color: #4338CA; }
   .dl-btn-bill    { background: #FEF3C7; border-color: #FCD34D; color: #92400E; }
   .dl-btn-receipt { background: #D1FAE5; border-color: #A7F3D0; color: #065F46; }
@@ -146,7 +170,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }, {} as Record<string, typeof navItems>)
 
   return (
-    <RoleProvider>
+    <>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       <div className="dl-shell">
         <SidebarClient />
@@ -202,6 +226,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
           {children}
         </div>
       </div>
-    </RoleProvider>
+    </>
   )
 }
