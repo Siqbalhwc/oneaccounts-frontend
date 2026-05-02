@@ -10,48 +10,52 @@ export default function TrialGuard({ children }: { children: React.ReactNode }) 
   const [allowed, setAllowed] = useState<boolean | null>(null)
 
   useEffect(() => {
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+    async function checkTrial() {
+      try {
+        const supabase = createBrowserClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
 
-    supabase
-      .from("company_settings")
-      .select("trial_ends_at, plan_id")
-      .eq("id", 1) // default company settings row
-      .single()
-      .then(({ data }) => {
+        const { data } = await supabase
+          .from("company_settings")
+          .select("trial_ends_at, plan_id")
+          .eq("id", 1)
+          .single()
+
         if (!data) {
-          // No settings yet – allow access
           setAllowed(true)
           return
         }
 
         const trialEnd = data.trial_ends_at ? new Date(data.trial_ends_at) : null
 
-        // No trial set OR trial still active OR plan is not basic → allow
+        // No trial set, trial still active, or plan is not basic → allow
         if (!trialEnd || trialEnd > new Date() || data.plan_id !== null) {
           setAllowed(true)
           return
         }
 
-        // Trial expired and plan is basic → block
-        // But never block the upgrade page itself
+        // Never block the upgrade page itself
         if (pathname === "/dashboard/upgrade") {
           setAllowed(true)
           return
         }
 
+        // Trial expired and plan is basic → block
         setAllowed(false)
-      })
-      .catch(() => setAllowed(true)) // on error, don't block
+      } catch {
+        // On error, don't block
+        setAllowed(true)
+      }
+    }
+    checkTrial()
   }, [pathname])
 
-  // While checking, show nothing (or a brief loading)
+  // While checking, show nothing
   if (allowed === null) return null
 
   if (!allowed) {
-    // Redirect to upgrade page
     router.replace("/dashboard/upgrade")
     return null
   }
