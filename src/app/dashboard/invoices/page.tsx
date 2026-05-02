@@ -6,7 +6,6 @@ import { createBrowserClient } from "@supabase/ssr"
 import { Plus, Search, Send } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import DownloadPDFButton from "@/components/DownloadPDFButton"
-import PremiumGuard from "@/components/PremiumGuard"
 
 interface InvoiceItem {
   id: number
@@ -21,7 +20,7 @@ interface InvoiceItem {
   customer_phone?: string
 }
 
-function InvoicesPageContent() {
+export default function InvoicesPage() {
   const router = useRouter()
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -154,17 +153,5 @@ function InvoicesPageContent() {
         }
       </div>
     </div>
-  )
-}
-
-export default function InvoicesPage() {
-  return (
-    <PremiumGuard
-      featureCode="sales_invoices"
-      featureName="Sales Invoices"
-      featureDesc="Create professional invoices with profit allocation, price history, and WhatsApp sharing."
-    >
-      <InvoicesPageContent />
-    </PremiumGuard>
   )
 }

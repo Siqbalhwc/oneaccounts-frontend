@@ -6,7 +6,6 @@ import { createBrowserClient } from "@supabase/ssr"
 import { Plus, Search } from "lucide-react"
 import { generateBillPDF } from "@/lib/pdf/billPDF"
 import DownloadPDFButton from "@/components/DownloadPDFButton"
-import PremiumGuard from "@/components/PremiumGuard"
 
 interface BillItem {
   id: number
@@ -20,7 +19,7 @@ interface BillItem {
   supplier_name?: string
 }
 
-function BillsPageContent() {
+export default function BillsPage() {
   const router = useRouter()
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
   const [bills, setBills] = useState<BillItem[]>([])
@@ -117,17 +116,5 @@ function BillsPageContent() {
         </div>
       }
     </div>
-  )
-}
-
-export default function BillsPage() {
-  return (
-    <PremiumGuard
-      featureCode="purchase_bills"
-      featureName="Purchase Bills"
-      featureDesc="Record and manage supplier bills with automatic stock updates and PDF downloads."
-    >
-      <BillsPageContent />
-    </PremiumGuard>
   )
 }

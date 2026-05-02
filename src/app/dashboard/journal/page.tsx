@@ -4,9 +4,8 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { Plus, Search, ChevronDown, ChevronUp } from "lucide-react"
-import PremiumGuard from "@/components/PremiumGuard"
 
-function JournalPageContent() {
+export default function JournalPage() {
   const router = useRouter()
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
   const [entries, setEntries] = useState<any[]>([])
@@ -81,17 +80,5 @@ function JournalPageContent() {
         </div>
       }
     </div>
-  )
-}
-
-export default function JournalPage() {
-  return (
-    <PremiumGuard
-      featureCode="journal_entries"
-      featureName="Journal Entries"
-      featureDesc="Record manual double‑entry journal entries for adjustments and corrections."
-    >
-      <JournalPageContent />
-    </PremiumGuard>
   )
 }

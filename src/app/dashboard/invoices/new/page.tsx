@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Plus, Trash2, Send, Search, X, Download } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
-import PremiumGuard from "@/components/PremiumGuard"
 
 const SALARY_RATE = 0.04
 const ADS_RATE    = 0.005
@@ -18,7 +17,7 @@ const PARTNERS: Record<string, [string, number]> = {
   "3106": ["Profit Owner", 0.80],
 }
 
-function NewInvoicePageContent() {
+export default function NewInvoicePage() {
   const router  = useRouter()
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -51,7 +50,6 @@ function NewInvoicePageContent() {
     supabase.from("products").select("id,code,name,sale_price,cost_price,qty_on_hand").order("name").then(r => r.data && setProducts(r.data))
   }, [])
 
-  // ── Close customer dropdown when clicking outside ─────────────────────────
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (customerRef.current && !customerRef.current.contains(e.target as Node)) {
@@ -62,7 +60,6 @@ function NewInvoicePageContent() {
     return () => document.removeEventListener("mousedown", handler)
   }, [])
 
-  // ── Customer search filter ────────────────────────────────────────────────
   const filteredCustomers = customers.filter(c =>
     c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
     c.code.toLowerCase().includes(customerSearch.toLowerCase()) ||
@@ -83,7 +80,6 @@ function NewInvoicePageContent() {
     setShowCustomerList(false)
   }
 
-  // ── Product helpers ───────────────────────────────────────────────────────
   const filteredProducts = products.filter(p =>
     p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
     p.code.toLowerCase().includes(productSearch.toLowerCase())
@@ -307,7 +303,6 @@ function NewInvoicePageContent() {
             {/* ── Customer & Dates ── */}
             <div className="inv-card">
               <div className="inv-row">
-                {/* ── SEARCHABLE CUSTOMER DROPDOWN ── */}
                 <div style={{ gridColumn: "1 / -1" }}>
                   <label className="inv-label">Customer *</label>
                   <div className="cust-wrap" ref={customerRef}>
@@ -504,17 +499,5 @@ function NewInvoicePageContent() {
         )}
       </div>
     </div>
-  )
-}
-
-export default function NewInvoicePage() {
-  return (
-    <PremiumGuard
-      featureCode="sales_invoices"
-      featureName="New Sales Invoice"
-      featureDesc="Create professional invoices with profit allocation, price history, and WhatsApp sharing."
-    >
-      <NewInvoicePageContent />
-    </PremiumGuard>
   )
 }
