@@ -3,28 +3,88 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { Plus, Search, Send } from "lucide-react"
+import { Plus, Search } from "lucide-react"
+import { generateBillPDF } from "@/lib/pdf/billPDF"
+import DownloadPDFButton from "@/components/DownloadPDFButton"
+
+interface BillItem {
+  id: number
+  invoice_no: string
+  date: string
+  due_date: string
+  total: number
+  paid: number
+  status: string
+  party_id: number
+  supplier_name?: string
+}
 
 export default function BillsPage() {
   const router = useRouter()
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
-  const [bills, setBills] = useState<any[]>([])
+  const [bills, setBills] = useState<BillItem[]>([])
   const [search, setSearch] = useState("")
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    supabase.from("invoices").select("*, suppliers(name,phone)").eq("type", "purchase").order("date", { ascending: false }).then(r => {
-      if (r.data) setBills(r.data)
-      setLoading(false)
-    })
-  }, [])
+  const loadBills = async () => {
+    setLoading(true)
+    const { data: billData, error } = await supabase
+      .from("invoices")
+      .select("id,invoice_no,date,due_date,total,paid,status,party_id")
+      .eq("type", "purchase")
+      .order("date", { ascending: false })
 
-  const filtered = bills.filter(b => b.invoice_no?.toLowerCase().includes(search.toLowerCase()) || (b.suppliers?.name || "").toLowerCase().includes(search.toLowerCase()))
+    if (error || !billData) {
+      console.error("Bill fetch error:", error)
+      setLoading(false)
+      return
+    }
+
+    const supplierIds = [...new Set(billData.map(b => b.party_id).filter(Boolean))]
+    let supplierMap: Record<number, string> = {}
+    if (supplierIds.length > 0) {
+      const { data: suppData } = await supabase
+        .from("suppliers")
+        .select("id, name")
+        .in("id", supplierIds)
+      if (suppData) {
+        suppData.forEach((s: any) => { supplierMap[s.id] = s.name })
+      }
+    }
+
+    const enriched = billData.map(b => ({
+      ...b,
+      supplier_name: supplierMap[b.party_id] || "Unknown",
+    }))
+    setBills(enriched)
+    setLoading(false)
+  }
+
+  useEffect(() => { loadBills() }, [])
+
+  const filtered = bills.filter(b =>
+    (b.invoice_no || "").toLowerCase().includes(search.toLowerCase()) ||
+    (b.supplier_name || "").toLowerCase().includes(search.toLowerCase())
+  )
 
   const statusStyle = (s: string) => {
     if (s === "Paid") return { bg: "#D1FAE5", color: "#065F46" }
     if (s === "Partial") return { bg: "#FEF3C7", color: "#92400E" }
     return { bg: "#FEE2E2", color: "#991B1B" }
+  }
+
+  const handleDownloadPDF = async (bill: BillItem) => {
+    const { data: items } = await supabase
+      .from("invoice_items")
+      .select("*")
+      .eq("invoice_id", bill.id)
+    if (!items) return
+    const pdfBill = {
+      ...bill,
+      suppliers: { name: bill.supplier_name },
+    }
+    const doc = generateBillPDF(pdfBill, items)
+    doc.save(`bill-${bill.invoice_no}.pdf`)
   }
 
   return (
@@ -49,19 +109,20 @@ export default function BillsPage() {
       {loading ? <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading...</div> :
         filtered.length === 0 ? <div style={{ textAlign: "center", padding: 40, color: "#94A3B8", background: "white", borderRadius: 10 }}>No bills found</div> :
         <div style={{ background: "white", borderRadius: 10, border: "1px solid #E2E8F0", overflow: "hidden" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "110px 1fr 100px 90px 90px 90px", padding: "10px 16px", background: "#F8FAFC", fontSize: 9, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8" }}>
-            <span>Bill No</span><span>Supplier</span><span>Date</span><span>Due Date</span><span>Total</span><span>Status</span>
+          <div style={{ display: "grid", gridTemplateColumns: "110px 1fr 100px 90px 90px 90px 60px", padding: "10px 16px", background: "#F8FAFC", fontSize: 9, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8" }}>
+            <span>Bill No</span><span>Supplier</span><span>Date</span><span>Due Date</span><span>Total</span><span>Status</span><span>PDF</span>
           </div>
           {filtered.map((b, i) => {
             const st = statusStyle(b.status)
             return (
-              <div key={b.id} style={{ display: "grid", gridTemplateColumns: "110px 1fr 100px 90px 90px 90px", padding: "10px 16px", borderBottom: i < filtered.length - 1 ? "1px solid #F1F5F9" : "none", fontSize: 13, alignItems: "center" }}>
+              <div key={b.id} style={{ display: "grid", gridTemplateColumns: "110px 1fr 100px 90px 90px 90px 60px", padding: "10px 16px", borderBottom: i < filtered.length - 1 ? "1px solid #F1F5F9" : "none", fontSize: 13, alignItems: "center" }}>
                 <span style={{ fontWeight: 700, color: "#1E3A8A" }}>{b.invoice_no}</span>
-                <span>{b.suppliers?.name || "-"}</span>
+                <span>{b.supplier_name || "-"}</span>
                 <span style={{ color: "#64748B" }}>{b.date}</span>
                 <span style={{ color: "#64748B" }}>{b.due_date}</span>
                 <span style={{ fontWeight: 600 }}>PKR {(b.total || 0).toLocaleString()}</span>
                 <span><span style={{ padding: "2px 8px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: st.bg, color: st.color }}>{b.status}</span></span>
+                <span><DownloadPDFButton onGenerate={() => handleDownloadPDF(b)} /></span>
               </div>
             )
           })}
