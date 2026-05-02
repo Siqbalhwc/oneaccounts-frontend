@@ -4,6 +4,20 @@ import { NextResponse } from 'next/server'
 
 export async function GET() {
   const cookieStore = await cookies()
+
+  // Admin client with service‑role key (bypasses RLS)
+  const supabaseAdmin = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll() },
+        setAll() {},
+      },
+    }
+  )
+
+  // Standard client (respects RLS) for auth check
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -19,6 +33,7 @@ export async function GET() {
     }
   )
 
+  // Check user is logged in
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -36,16 +51,16 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  // Fetch all companies
-  const { data: companies, error: compError } = await supabase
+  // Fetch all companies with the admin client (bypasses RLS)
+  const { data: companies, error: compError } = await supabaseAdmin
     .from('companies')
     .select('id, name, subscription_status, created_at')
 
   if (compError) return NextResponse.json({ error: compError.message }, { status: 500 })
 
-  // Fetch all plans and features
-  const { data: plans } = await supabase.from('plans').select('id, code, name')
-  const { data: features } = await supabase.from('features').select('id, code, name')
+  // Fetch all plans and features (using admin client)
+  const { data: plans } = await supabaseAdmin.from('plans').select('id, code, name')
+  const { data: features } = await supabaseAdmin.from('features').select('id, code, name')
 
   // Helper to get plan info
   const getPlanInfo = (planId: string | null) => {
@@ -55,7 +70,7 @@ export async function GET() {
 
   // Enrich companies
   const enriched = await Promise.all((companies || []).map(async (c: any) => {
-    const { data: cs } = await supabase
+    const { data: cs } = await supabaseAdmin
       .from('company_settings')
       .select('plan_id')
       .eq('id', 1)
@@ -64,7 +79,7 @@ export async function GET() {
     const plan = getPlanInfo(cs?.plan_id || null)
 
     // Company-level overrides
-    const { data: companyFeatures } = await supabase
+    const { data: companyFeatures } = await supabaseAdmin
       .from('company_features')
       .select('features!inner(code), enabled')
       .eq('company_id', c.id)
@@ -77,7 +92,7 @@ export async function GET() {
     return {
       id: c.id,
       name: c.name,
-      status: c.subscription_status || 'active',   // ← correct column name
+      status: c.subscription_status || 'active',
       plan_code: plan.code,
       plan_name: plan.name,
       features: (features || []).map((feat: any) => {
