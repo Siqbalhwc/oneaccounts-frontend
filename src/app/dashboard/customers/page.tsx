@@ -6,6 +6,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import { Plus, Search, Edit, Trash2, X, Check } from "lucide-react"
 import { CsvExport } from "@/components/CsvExport"
 import { CsvImport } from "@/components/CsvImport"
+import { usePlan } from "@/contexts/PlanContext"
 
 interface Customer {
   id: number
@@ -72,6 +73,7 @@ const styles = `
 export default function CustomersPage() {
   const router = useRouter()
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+  const { hasFeature } = usePlan()
   
   const [customers, setCustomers] = useState<Customer[]>([])
   const [filtered, setFiltered] = useState<Customer[]>([])
@@ -189,8 +191,12 @@ export default function CustomersPage() {
           </div>
           <div className="cp-actions">
             <button className="cp-btn cp-btn-primary" onClick={openNew}><Plus size={16} /> Add Customer</button>
-            <CsvExport data={customers} filename="customers" />
-            <CsvImport onImport={handleImport} />
+            {hasFeature('csv_import') && (
+              <>
+                <CsvExport data={customers} filename="customers" />
+                <CsvImport onImport={handleImport} />
+              </>
+            )}
           </div>
         </div>
 

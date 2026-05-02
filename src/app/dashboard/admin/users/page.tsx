@@ -1,46 +1,34 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRole } from "@/contexts/RoleContext"
-import { Shield } from "lucide-react"
 
 export default function AdminUsersPage() {
-  const { role, loading: roleLoading } = useRole()
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
 
-  useEffect(() => {
-    if (role !== "admin") {
-      setLoading(false)
-      return
-    }
-
-    const fetchUsers = async () => {
-      try {
-        setLoading(true)
-        setError("")
-        const res = await fetch("/api/admin/users", { credentials: "include" })
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}))
-          throw new Error(errData.error || `HTTP ${res.status}`)
-        }
-        const data = await res.json()
-        console.log("Admin API response:", data)
-        if (data.users && Array.isArray(data.users)) {
-          setUsers(data.users)
-        } else {
-          setUsers([])
-        }
-      } catch (e: any) {
-        setError(e.message || "Failed to load users")
-      } finally {
-        setLoading(false)
+  const fetchUsers = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch("/api/admin/users")
+      const data = await res.json()
+      if (data.users && Array.isArray(data.users)) {
+        setUsers(data.users)
+      } else if (data.error) {
+        setError(data.error)
+      } else {
+        setError("Unknown response from server")
       }
+    } catch {
+      setError("Network error. Please check your connection.")
     }
+    setLoading(false)
+  }
+
+  useEffect(() => {
     fetchUsers()
-  }, [role])
+  }, [])
 
   const assignRole = async (userId: string, newRole: string) => {
     try {
@@ -58,24 +46,10 @@ export default function AdminUsersPage() {
         setMessage(data.error || "Error updating role")
         setTimeout(() => setMessage(""), 5000)
       }
-    } catch (e: any) {
+    } catch {
       setMessage("Network error")
       setTimeout(() => setMessage(""), 5000)
     }
-  }
-
-  if (roleLoading) {
-    return <div style={{ padding: 40, textAlign: "center" }}>Loading...</div>
-  }
-
-  if (role !== "admin") {
-    return (
-      <div style={{ padding: 40, textAlign: "center" }}>
-        <Shield size={48} color="#EF4444" />
-        <h2 style={{ marginTop: 20 }}>Access Denied</h2>
-        <p style={{ color: "#94A3B8" }}>You need admin privileges to view this page.</p>
-      </div>
-    )
   }
 
   return (
@@ -101,25 +75,15 @@ export default function AdminUsersPage() {
         <div className="admin-subtitle">Manage user permissions</div>
       </div>
 
-      {message && (
-        <div style={{
-          background: message.includes("Error") || message.includes("error") || message.includes("Failed") ? "#FEF2F2" : "#F0FDF4",
-          color: message.includes("Error") || message.includes("error") || message.includes("Failed") ? "#B91C1C" : "#15803D",
-          padding: "10px 16px",
-          borderRadius: 8,
-          marginBottom: 16,
-          fontSize: 13
-        }}>
-          {message}
+      {error && (
+        <div style={{ background: "#FEF2F2", color: "#B91C1C", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+          {error}
         </div>
       )}
 
-      {error && (
-        <div style={{ background: "#FEF2F2", color: "#B91C1C", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
-          ⚠️ {error}
-          <button onClick={() => window.location.reload()} style={{ marginLeft: 12, background: "none", border: "none", color: "#1D4ED8", cursor: "pointer", textDecoration: "underline" }}>
-            Retry
-          </button>
+      {message && (
+        <div style={{ background: "#F0FDF4", color: "#15803D", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+          {message}
         </div>
       )}
 

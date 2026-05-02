@@ -66,6 +66,7 @@ function DashboardLayoutInner({
     { label: 'All Reports',       icon: '📁', href: '/dashboard/reports',             section: 'REPORTS',     feature: null },
     { label: 'Settings',          icon: '⚙️', href: '/dashboard/settings',            section: 'SYSTEM',      feature: null },
     { label: 'Admin Panel',       icon: '👑', href: '/dashboard/admin/users',         section: 'SYSTEM',      feature: null },
+ { label: 'Feature Manage',    icon: '⚙️', href: '/dashboard/admin/features',      section: 'SYSTEM',      feature: null },
   ]
 
   // Filter based on hasFeature (null means always visible)

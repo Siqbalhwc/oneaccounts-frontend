@@ -5,6 +5,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import { Plus, Search, Edit, Trash2, X, Check } from "lucide-react"
 import { CsvExport } from "@/components/CsvExport"
 import { CsvImport } from "@/components/CsvImport"
+import { usePlan } from "@/contexts/PlanContext"
 
 interface Supplier {
   id: number
@@ -64,6 +65,7 @@ const styles = `
 
 export default function SuppliersPage() {
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+  const { hasFeature } = usePlan()
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [filtered, setFiltered] = useState<Supplier[]>([])
   const [search, setSearch] = useState("")
@@ -160,8 +162,12 @@ export default function SuppliersPage() {
           </div>
           <div className="sp-actions">
             <button className="sp-btn sp-btn-primary" onClick={openNew}><Plus size={16} /> Add Supplier</button>
-            <CsvExport data={suppliers} filename="suppliers" />
-            <CsvImport onImport={handleImport} />
+            {hasFeature('csv_import') && (
+              <>
+                <CsvExport data={suppliers} filename="suppliers" />
+                <CsvImport onImport={handleImport} />
+              </>
+            )}
           </div>
         </div>
         <div className="sp-stats">
