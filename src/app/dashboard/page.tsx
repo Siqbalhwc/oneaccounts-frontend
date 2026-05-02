@@ -164,20 +164,28 @@ export default function DashboardPage() {
 
       const months: string[] = [], revValues: number[] = [], profitValues: number[] = []
       for (let i = 5; i >= 0; i--) {
-        const d = new Date(); d.setMonth(d.getMonth() - i)
-        const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+        const d = new Date()
+        d.setMonth(d.getMonth() - i)
         months.push(d.toLocaleString("default", { month: "short" }))
-        const start = `${m}-01`, end = `${m}-31`
+
+        const start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`
+
+        // ✅ Use the real last day of the month (Feb 28/29, Apr 30, etc.)
+        const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0)
+        const end = lastDay.toISOString().split("T")[0]
+
         const { data: revData } = await supabase.from("invoices").select("total").eq("type", "sale").gte("date", start).lte("date", end)
         const rev = revData?.reduce((s: number, r: any) => s + (r.total || 0), 0) || 0
         const { data: expData } = await supabase.from("journal_lines").select("debit, journal_entries!inner(date), accounts!inner(type)").eq("accounts.type", "Expense").gte("journal_entries.date", start).lte("journal_entries.date", end)
         const exp = expData?.reduce((s: number, l: any) => s + (l.debit || 0), 0) || 0
-        revValues.push(rev); profitValues.push(rev - exp)
+        revValues.push(rev)
+        profitValues.push(rev - exp)
       }
       setIncomeChart({ labels: months, values: revValues })
       setProfitChart({ labels: months, values: profitValues })
     } catch (e) { console.error(e) }
-    setLoading(false); setRefreshing(false)
+    setLoading(false)
+    setRefreshing(false)
   }
 
   useEffect(() => {
@@ -187,11 +195,9 @@ export default function DashboardPage() {
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off) }
   }, [])
 
-  // Auto-refresh every 30 seconds
+  // Auto‑refresh every 30 seconds
   useEffect(() => {
-    const interval = setInterval(() => {
-      fetchData()
-    }, 30000)
+    const interval = setInterval(() => { fetchData() }, 30000)
     return () => clearInterval(interval)
   }, [])
 
@@ -213,7 +219,6 @@ export default function DashboardPage() {
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
         @keyframes spin { to { transform: rotate(360deg) } }
 
-        /* ── KPI grid: fills full width, min 160px per card ── */
         .kpi-grid {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
@@ -222,7 +227,6 @@ export default function DashboardPage() {
           width: 100%;
         }
 
-        /* ── Chart grid: two equal columns ── */
         .chart-grid {
           display: grid;
           grid-template-columns: repeat(2, 1fr);
@@ -231,14 +235,12 @@ export default function DashboardPage() {
           width: 100%;
         }
 
-        /* ── Overdue table ── */
         .ov-header { display: grid; grid-template-columns: 1fr 110px 140px 100px; padding: 8px 14px; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #94A3B8; }
         .ov-row { display: grid; grid-template-columns: 1fr 110px 140px 100px; padding: clamp(8px,1.2vh,11px) 14px; border-bottom: 1px solid #F1F5F9; align-items: center; font-size: clamp(11px,0.9vw,12.5px); }
         .ov-row:last-child { border-bottom: none; }
         .ov-row:hover { background: #FAFBFF; }
         .ov-bal-inline { display: none; }
 
-        /* ── Tablet: 2-col KPI, 1-col chart ── */
         @media (max-width: 900px) {
           .kpi-grid { grid-template-columns: repeat(2, 1fr); }
           .chart-grid { grid-template-columns: 1fr; }
@@ -248,7 +250,6 @@ export default function DashboardPage() {
           .ov-bal-inline { display: block !important; }
         }
 
-        /* ── Mobile: 1-col KPI ── */
         @media (max-width: 480px) {
           .kpi-grid { grid-template-columns: repeat(2, 1fr); }
           .ov-header { display: none !important; }
@@ -259,13 +260,11 @@ export default function DashboardPage() {
           .kpi-grid { grid-template-columns: 1fr; }
         }
 
-        /* ── Ultra-wide: cap max width ── */
         @media (min-width: 2560px) {
           .dash-content { max-width: 2200px; margin: 0 auto; }
         }
       `}</style>
 
-      {/* ── Full-width wrapper — no width restrictions ── */}
       <div style={{ padding: "clamp(8px,1.5vw,16px) clamp(12px,2vw,20px) clamp(16px,2vw,20px)", background: "#EFF4FB", minHeight: "100%", width: "100%", fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
         <div className="dash-content">
 
@@ -282,7 +281,10 @@ export default function DashboardPage() {
             </button>
           </div>
 
-          {/* ── Financial KPIs ── */}
+          {/* Page Title */}
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: "#1E293B", marginBottom: 4 }}>Dashboard</h1>
+          <p style={{ fontSize: 13, color: "#94A3B8", marginBottom: 20 }}>Financial overview of your business</p>
+
           <SectionLabel>Financial Overview</SectionLabel>
           <div className="kpi-grid">
             <KpiCard label="Total Assets"      value={kpis.assets}      subtitle="All company resources"   accent="#1E3A8A" icon={<Building2 size={13} />}    trend={incomeChart.values} href="/dashboard/reports/balance-sheet" />
@@ -291,7 +293,6 @@ export default function DashboardPage() {
             <KpiCard label="Net Profit"        value={kpis.profit}      subtitle="Revenue − Expenses"      accent={profitable ? "#10B981" : "#EF4444"} icon={profitable ? <TrendingUp size={13} /> : <TrendingDown size={13} />} trend={profitChart.values} href="/dashboard/reports/profit-loss" />
           </div>
 
-          {/* ── Operations KPIs ── */}
           <SectionLabel>Operations</SectionLabel>
           <div className="kpi-grid">
             <KpiCard label="Receivables" value={ops.receivables}     subtitle={`${ops.unpaid_invoices} unpaid · ${ops.partial_invoices} partial`} accent="#F59E0B" icon={<Clock size={13} />}        trend={incomeChart.values.map(v => v * 0.2)}  href="/dashboard/reports/ar-aging" />
@@ -300,14 +301,12 @@ export default function DashboardPage() {
             <KpiCard label="Customers"   value={ops.total_customers} subtitle={`${ops.total_suppliers} suppliers · ${ops.total_products} SKUs`} accent="#0EA5E9" icon={<Users size={13} />} isCurrency={false} trend={incomeChart.values.map(v => Math.max(1, v * 0.03))} href="/dashboard/customers" />
           </div>
 
-          {/* ── Charts ── */}
           <SectionLabel>Monthly Trends</SectionLabel>
           <div className="chart-grid">
             <ChartCard title="Monthly Revenue" badge="Last 6 months" badgeColor="#1D4ED8" labels={incomeChart.labels} values={incomeChart.values} color="#1D4ED8" />
             <ChartCard title="Monthly Profit"  badge="Last 6 months" badgeColor="#10B981" labels={profitChart.labels} values={profitChart.values} color={profitChart.values.every(v => v >= 0) ? "#10B981" : "#1D4ED8"} />
           </div>
 
-          {/* ── Overdue Invoices ── */}
           <SectionLabel>Overdue Invoice Reminders</SectionLabel>
           <div style={{ background: "white", borderRadius: 10, border: "1px solid #E2E8F0", overflow: "hidden", marginBottom: 10, width: "100%" }}>
             {overdue.length === 0
@@ -342,7 +341,6 @@ export default function DashboardPage() {
             }
           </div>
 
-          {/* ── Status Footer ── */}
           <div style={{ background: "white", borderRadius: 8, border: "1px solid #E2E8F0", padding: "8px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, width: "100%" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <div style={{ width: 7, height: 7, borderRadius: "50%", background: profitable ? "#10B981" : "#EF4444", boxShadow: `0 0 0 3px ${profitable ? "#10B98133" : "#EF444433"}`, flexShrink: 0 }} />
