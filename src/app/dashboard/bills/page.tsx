@@ -6,6 +6,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import { Plus, Search } from "lucide-react"
 import { generateBillPDF } from "@/lib/pdf/billPDF"
 import DownloadPDFButton from "@/components/DownloadPDFButton"
+import PremiumGuard from "@/components/PremiumGuard"
 
 interface BillItem {
   id: number
@@ -19,7 +20,7 @@ interface BillItem {
   supplier_name?: string
 }
 
-export default function BillsPage() {
+function BillsPageContent() {
   const router = useRouter()
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
   const [bills, setBills] = useState<BillItem[]>([])
@@ -34,11 +35,7 @@ export default function BillsPage() {
       .eq("type", "purchase")
       .order("date", { ascending: false })
 
-    if (error || !billData) {
-      console.error("Bill fetch error:", error)
-      setLoading(false)
-      return
-    }
+    if (error || !billData) { setLoading(false); return }
 
     const supplierIds = [...new Set(billData.map(b => b.party_id).filter(Boolean))]
     let supplierMap: Record<number, string> = {}
@@ -52,10 +49,7 @@ export default function BillsPage() {
       }
     }
 
-    const enriched = billData.map(b => ({
-      ...b,
-      supplier_name: supplierMap[b.party_id] || "Unknown",
-    }))
+    const enriched = billData.map(b => ({ ...b, supplier_name: supplierMap[b.party_id] || "Unknown" }))
     setBills(enriched)
     setLoading(false)
   }
@@ -74,15 +68,9 @@ export default function BillsPage() {
   }
 
   const handleDownloadPDF = async (bill: BillItem) => {
-    const { data: items } = await supabase
-      .from("invoice_items")
-      .select("*")
-      .eq("invoice_id", bill.id)
+    const { data: items } = await supabase.from("invoice_items").select("*").eq("invoice_id", bill.id)
     if (!items) return
-    const pdfBill = {
-      ...bill,
-      suppliers: { name: bill.supplier_name },
-    }
+    const pdfBill = { ...bill, suppliers: { name: bill.supplier_name } }
     const doc = generateBillPDF(pdfBill, items)
     doc.save(`bill-${bill.invoice_no}.pdf`)
   }
@@ -129,5 +117,17 @@ export default function BillsPage() {
         </div>
       }
     </div>
+  )
+}
+
+export default function BillsPage() {
+  return (
+    <PremiumGuard
+      featureCode="purchase_bills"
+      featureName="Purchase Bills"
+      featureDesc="Record and manage supplier bills with automatic stock updates and PDF downloads."
+    >
+      <BillsPageContent />
+    </PremiumGuard>
   )
 }

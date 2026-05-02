@@ -4,8 +4,9 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { Plus, Search, ChevronDown, ChevronUp } from "lucide-react"
+import PremiumGuard from "@/components/PremiumGuard"
 
-export default function JournalPage() {
+function JournalPageContent() {
   const router = useRouter()
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
   const [entries, setEntries] = useState<any[]>([])
@@ -73,11 +74,6 @@ export default function JournalPage() {
                       <span style={{ textAlign: "right", color: "#10B981" }}>{l.credit > 0 ? `PKR ${l.credit.toLocaleString()}` : "-"}</span>
                     </div>
                   ))}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px", gap: 8, fontSize: 12, fontWeight: 700, borderTop: "1px solid #E2E8F0", paddingTop: 6, marginTop: 4 }}>
-                    <span>Total</span>
-                    <span style={{ textAlign: "right" }}>PKR {e.lines.reduce((s: number, l: any) => s + l.debit, 0).toLocaleString()}</span>
-                    <span style={{ textAlign: "right" }}>PKR {e.lines.reduce((s: number, l: any) => s + l.credit, 0).toLocaleString()}</span>
-                  </div>
                 </div>
               )}
             </div>
@@ -85,5 +81,17 @@ export default function JournalPage() {
         </div>
       }
     </div>
+  )
+}
+
+export default function JournalPage() {
+  return (
+    <PremiumGuard
+      featureCode="journal_entries"
+      featureName="Journal Entries"
+      featureDesc="Record manual double‑entry journal entries for adjustments and corrections."
+    >
+      <JournalPageContent />
+    </PremiumGuard>
   )
 }

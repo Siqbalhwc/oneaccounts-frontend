@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Plus, Trash2, Send, Search, X, Download } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
+import PremiumGuard from "@/components/PremiumGuard"
 
 const SALARY_RATE = 0.04
 const ADS_RATE    = 0.005
@@ -17,7 +18,7 @@ const PARTNERS: Record<string, [string, number]> = {
   "3106": ["Profit Owner", 0.80],
 }
 
-export default function NewInvoicePage() {
+function NewInvoicePageContent() {
   const router  = useRouter()
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,7 +32,6 @@ export default function NewInvoicePage() {
   const [showCustomerList,     setShowCustomerList]     = useState(false)
   const [selectedCustomer,     setSelectedCustomer]     = useState<any>(null)
   const customerRef                                      = useRef<HTMLDivElement>(null)
-
   const [invoiceDate,          setInvoiceDate]          = useState(new Date().toISOString().split("T")[0])
   const [dueDate,              setDueDate]              = useState(new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0])
   const [reference,            setReference]            = useState("")
@@ -140,7 +140,6 @@ export default function NewInvoicePage() {
     return cust ? `${cust.code}-01` : `INV-${Date.now().toString(36).toUpperCase()}`
   }
 
-  // ── Totals ────────────────────────────────────────────────────────────────
   const totalAmount   = items.reduce((s, i) => s + i.total, 0)
   const totalCost     = items.reduce((s, i) => s + (i.qty * i.cost_price), 0)
   const totalSalary   = totalAmount * SALARY_RATE
@@ -149,7 +148,6 @@ export default function NewInvoicePage() {
   const totalExpenses = totalSalary + totalAds + totalFuel
   const netProfit     = totalAmount - totalCost - totalExpenses
 
-  // ── Submit ────────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (!customerId)       { setError("Please select a customer"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
@@ -179,7 +177,6 @@ export default function NewInvoicePage() {
         .select("id,invoice_no,total,date,customers!party_id(name,phone)")
         .eq("id", result.invoice_id)
         .single()
-      // normalise customers relation
       const inv = createdInvoice as any
       if (inv && Array.isArray(inv.customers)) inv.customers = inv.customers[0] ?? null
       setSuccessInvoice(inv)
@@ -243,7 +240,6 @@ export default function NewInvoicePage() {
         .inv-price-history { background: #F8FAFC; border-radius: 8px; padding: 10px 14px; margin-top: 8px; font-size: 12px; }
         .inv-price-history-item { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #E2E8F0; }
 
-        /* ── Searchable customer dropdown ── */
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
         .cust-search-icon { position: absolute; left: 12px; color: #94A3B8; pointer-events: none; }
@@ -311,13 +307,10 @@ export default function NewInvoicePage() {
             {/* ── Customer & Dates ── */}
             <div className="inv-card">
               <div className="inv-row">
-
                 {/* ── SEARCHABLE CUSTOMER DROPDOWN ── */}
                 <div style={{ gridColumn: "1 / -1" }}>
                   <label className="inv-label">Customer *</label>
                   <div className="cust-wrap" ref={customerRef}>
-
-                    {/* If customer already selected — show badge with clear button */}
                     {selectedCustomer ? (
                       <div className="cust-selected-badge">
                         <span>👤</span>
@@ -346,7 +339,6 @@ export default function NewInvoicePage() {
                             </button>
                           )}
                         </div>
-
                         {showCustomerList && (
                           <div className="cust-dropdown">
                             {filteredCustomers.length === 0 ? (
@@ -371,7 +363,6 @@ export default function NewInvoicePage() {
                   </div>
                 </div>
 
-                {/* Dates & reference */}
                 <div>
                   <label className="inv-label">Invoice Date *</label>
                   <input className="inv-input" type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
@@ -513,5 +504,17 @@ export default function NewInvoicePage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function NewInvoicePage() {
+  return (
+    <PremiumGuard
+      featureCode="sales_invoices"
+      featureName="New Sales Invoice"
+      featureDesc="Create professional invoices with profit allocation, price history, and WhatsApp sharing."
+    >
+      <NewInvoicePageContent />
+    </PremiumGuard>
   )
 }
