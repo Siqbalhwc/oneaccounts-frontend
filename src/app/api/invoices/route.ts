@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
+// ─── Constants (unchanged) ───────────────────────────────────────────────────
 const SALARY_RATE = 0.04
 const ADS_RATE = 0.005
 const FUEL_RATE = 0.005
@@ -13,31 +14,116 @@ const PARTNER_SHARES: Record<string, number> = {
   "3106": 0.80,
 }
 
+// ─── Feature Guard Helper ────────────────────────────────────────────────────
+/**
+ * Check if the current user's company has a specific feature enabled.
+ * Returns false if the user is not authenticated or the feature is disabled.
+ */
+async function companyHasFeature(
+  supabase: ReturnType<typeof createServerClient>,
+  userId: string,
+  featureCode: string
+): Promise<boolean> {
+  // 1. Find the user's company
+  const { data: roleData } = await supabase
+    .from('user_roles')
+    .select('company_id')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (!roleData?.company_id) return false
+
+  // 2. Check company-level override first
+  const { data: coOverride } = await supabase
+    .from('company_features')
+    .select('enabled, expires_at')
+    .eq('company_id', roleData.company_id)
+    .eq('features.code', featureCode)
+    .maybeSingle()
+
+  if (coOverride) {
+    if (coOverride.expires_at && new Date(coOverride.expires_at) < new Date()) {
+      // expired → fall through
+    } else {
+      return coOverride.enabled
+    }
+  }
+
+  // 3. Get the company's plan
+  const { data: compData } = await supabase
+    .from('company_settings')
+    .select('plan_id')
+    .eq('id', 1) // company_settings.id is always 1 for the default company
+    .single()
+
+  if (compData?.plan_id) {
+    const { data: planFeature } = await supabase
+      .from('plan_features')
+      .select('enabled')
+      .eq('plan_id', compData.plan_id)
+      .eq('features.code', featureCode)
+      .maybeSingle()
+
+    if (planFeature) return planFeature.enabled
+  }
+
+  // 4. Fallback to global default
+  const { data: feature } = await supabase
+    .from('features')
+    .select('default_enabled')
+    .eq('code', featureCode)
+    .single()
+
+  return feature?.default_enabled ?? false
+}
+
+// ─── Main POST handler ───────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll() { return cookieStore.getAll() }, setAll(cookiesToSet) { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) } } }
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll() },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          )
+        },
+      },
+    }
   )
 
+  // Authenticate the user
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  // 🔒 Feature gate: only allow if the company has sales_invoices enabled
+  const allowed = await companyHasFeature(supabase, user.id, 'sales_invoices')
+  if (!allowed) {
+    return NextResponse.json(
+      { error: 'Your plan does not include Sales Invoices. Upgrade to Pro.' },
+      { status: 403 }
+    )
+  }
+
+  // ─── Everything below is unchanged ─────────────────────────────────────────
   const body = await request.json()
   const { invoice_no, party_id, invoice_date, due_date, items, reference, notes } = body
 
-  if (!items || items.length === 0) return NextResponse.json({ error: 'No items provided' }, { status: 400 })
+  if (!items || items.length === 0)
+    return NextResponse.json({ error: 'No items provided' }, { status: 400 })
 
   try {
     // Calculate totals
     const total_amount = items.reduce((s: number, i: any) => s + (i.qty * i.unit_price), 0)
-    const total_cost = items.reduce((s: number, i: any) => s + (i.qty * (i.cost_price || 0)), 0)
-    const total_salary = total_amount * SALARY_RATE
-    const total_ads = total_amount * ADS_RATE
-    const total_fuel = total_amount * FUEL_RATE
+    const total_cost   = items.reduce((s: number, i: any) => s + (i.qty * (i.cost_price || 0)), 0)
+    const total_salary   = total_amount * SALARY_RATE
+    const total_ads      = total_amount * ADS_RATE
+    const total_fuel     = total_amount * FUEL_RATE
     const total_expenses = total_salary + total_ads + total_fuel
-    const net_profit = total_amount - total_cost - total_expenses
+    const net_profit     = total_amount - total_cost - total_expenses
 
     // 1. Create Invoice
     const { data: inv } = await supabase.from("invoices").insert({
@@ -57,10 +143,12 @@ export async function POST(request: NextRequest) {
       })
 
       if (item.product_id) {
-        const { data: prod } = await supabase.from("products").select("qty_on_hand").eq("id", item.product_id).single()
+        const { data: prod } = await supabase.from("products")
+          .select("qty_on_hand").eq("id", item.product_id).single()
         if (prod) {
           const new_qty = (prod.qty_on_hand || 0) - item.qty
-          await supabase.from("products").update({ qty_on_hand: new_qty }).eq("id", item.product_id)
+          await supabase.from("products")
+            .update({ qty_on_hand: new_qty }).eq("id", item.product_id)
           await supabase.from("stock_moves").insert({
             product_id: item.product_id, move_type: "sale",
             qty: -item.qty, unit_price: item.unit_price,
@@ -71,13 +159,17 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Update Customer Balance
-    const { data: cust } = await supabase.from("customers").select("balance").eq("id", party_id).single()
+    const { data: cust } = await supabase.from("customers")
+      .select("balance").eq("id", party_id).single()
     const new_balance = (cust?.balance || 0) + total_amount
-    await supabase.from("customers").update({ balance: new_balance }).eq("id", party_id)
+    await supabase.from("customers")
+      .update({ balance: new_balance }).eq("id", party_id)
 
-    // 4. GL Entries
-    const { data: arAcc } = await supabase.from("accounts").select("id,balance").eq("code", "1100").single()
-    const { data: revAcc } = await supabase.from("accounts").select("id,balance").eq("code", "4000").single()
+    // 4. GL Entries (AR / Sales)
+    const { data: arAcc } = await supabase.from("accounts")
+      .select("id,balance").eq("code", "1100").single()
+    const { data: revAcc } = await supabase.from("accounts")
+      .select("id,balance").eq("code", "4000").single()
     if (arAcc && revAcc) {
       const { data: je1 } = await supabase.from("journal_entries").insert({
         entry_no: `JE-SI-${String(inv_id).padStart(4, "0")}`,
@@ -89,14 +181,19 @@ export async function POST(request: NextRequest) {
           { entry_id: je1.id, account_id: arAcc.id, debit: total_amount, credit: 0 },
           { entry_id: je1.id, account_id: revAcc.id, debit: 0, credit: total_amount }
         ])
-        await supabase.from("accounts").update({ balance: arAcc.balance + total_amount }).eq("id", arAcc.id)
-        await supabase.from("accounts").update({ balance: revAcc.balance + total_amount }).eq("id", revAcc.id)
+        await supabase.from("accounts")
+          .update({ balance: arAcc.balance + total_amount }).eq("id", arAcc.id)
+        await supabase.from("accounts")
+          .update({ balance: revAcc.balance + total_amount }).eq("id", revAcc.id)
       }
     }
 
+    // 5. COGS Entry
     if (total_cost > 0) {
-      const { data: cogsAcc } = await supabase.from("accounts").select("id,balance").eq("code", "5000").single()
-      const { data: invAcc } = await supabase.from("accounts").select("id,balance").eq("code", "1200").single()
+      const { data: cogsAcc } = await supabase.from("accounts")
+        .select("id,balance").eq("code", "5000").single()
+      const { data: invAcc } = await supabase.from("accounts")
+        .select("id,balance").eq("code", "1200").single()
       if (cogsAcc && invAcc) {
         const { data: je2 } = await supabase.from("journal_entries").insert({
           entry_no: `JE-COGS-${String(inv_id).padStart(4, "0")}`,
@@ -108,17 +205,20 @@ export async function POST(request: NextRequest) {
             { entry_id: je2.id, account_id: cogsAcc.id, debit: total_cost, credit: 0 },
             { entry_id: je2.id, account_id: invAcc.id, debit: 0, credit: total_cost }
           ])
-          await supabase.from("accounts").update({ balance: cogsAcc.balance + total_cost }).eq("id", cogsAcc.id)
-          await supabase.from("accounts").update({ balance: invAcc.balance - total_cost }).eq("id", invAcc.id)
+          await supabase.from("accounts")
+            .update({ balance: cogsAcc.balance + total_cost }).eq("id", cogsAcc.id)
+          await supabase.from("accounts")
+            .update({ balance: invAcc.balance - total_cost }).eq("id", invAcc.id)
         }
       }
     }
 
+    // 6. Expense Entry
     if (total_expenses > 0) {
-      const salAcc = await supabase.from("accounts").select("id,balance").eq("code", "5100").single()
-      const adsAcc = await supabase.from("accounts").select("id,balance").eq("code", "5600").single()
+      const salAcc  = await supabase.from("accounts").select("id,balance").eq("code", "5100").single()
+      const adsAcc  = await supabase.from("accounts").select("id,balance").eq("code", "5600").single()
       const fuelAcc = await supabase.from("accounts").select("id,balance").eq("code", "5700").single()
-      const apAcc = await supabase.from("accounts").select("id,balance").eq("code", "2001").single()
+      const apAcc   = await supabase.from("accounts").select("id,balance").eq("code", "2001").single()
       if (salAcc.data && adsAcc.data && fuelAcc.data && apAcc.data) {
         const { data: je3 } = await supabase.from("journal_entries").insert({
           entry_no: `JE-EXP-${String(inv_id).padStart(4, "0")}`,
@@ -136,8 +236,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 7. Profit Allocation
     if (net_profit > 0) {
-      const { data: retAcc } = await supabase.from("accounts").select("id,balance").eq("code", "3100").single()
+      const { data: retAcc } = await supabase.from("accounts")
+        .select("id,balance").eq("code", "3100").single()
       if (retAcc) {
         const { data: je4 } = await supabase.from("journal_entries").insert({
           entry_no: `JE-PRF-${String(inv_id).padStart(4, "0")}`,
@@ -147,7 +249,8 @@ export async function POST(request: NextRequest) {
         if (je4) {
           const lines = [{ entry_id: je4.id, account_id: retAcc.id, debit: net_profit, credit: 0 }]
           for (const [code, share] of Object.entries(PARTNER_SHARES)) {
-            const { data: pAcc } = await supabase.from("accounts").select("id,balance").eq("code", code).single()
+            const { data: pAcc } = await supabase.from("accounts")
+              .select("id,balance").eq("code", code).single()
             if (pAcc) {
               lines.push({ entry_id: je4.id, account_id: pAcc.id, debit: 0, credit: net_profit * share })
             }
@@ -157,8 +260,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Fetch the created invoice with customer data
-    const { data: createdInvoice } = await supabase.from("invoices").select("id, invoice_no, total, date").eq("id", inv_id).single()
+    // Return success
+    const { data: createdInvoice } = await supabase.from("invoices")
+      .select("id, invoice_no, total, date").eq("id", inv_id).single()
 
     return NextResponse.json({ success: true, invoice_id: inv_id, invoice: createdInvoice })
   } catch (e: any) {
