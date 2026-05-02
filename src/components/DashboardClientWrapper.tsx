@@ -62,28 +62,42 @@ function DashboardLayoutInner({
     return 'Good evening'
   }
 
+  // ── Navigation items (restructured per your instructions) ─────────────────
   const allNavItems = [
-    { label: 'Dashboard',         icon: '📊', href: '/dashboard',                    section: 'MAIN',       feature: null },
-    { label: 'Chart of Accounts', icon: '📋', href: '/dashboard/accounts',            section: 'MAIN',       feature: null },
-    { label: 'Journal Entries',   icon: '📓', href: '/dashboard/journal',             section: 'MAIN',       feature: 'journal_entries' },
-    { label: 'Sales Invoices',    icon: '🧾', href: '/dashboard/invoices',            section: 'MAIN',       feature: 'sales_invoices' },
-    { label: 'Purchase Bills',    icon: '📦', href: '/dashboard/bills',               section: 'MAIN',       feature: 'purchase_bills' },
-    { label: 'Receipts',          icon: '💰', href: '/dashboard/receipts',            section: 'MAIN',       feature: null },
-    { label: 'Payments',          icon: '💳', href: '/dashboard/payments',            section: 'MAIN',       feature: null },
-    { label: 'Bank Accounts',     icon: '🏦', href: '/dashboard/banking/bank-accounts', section: 'BANKING',  feature: null },
-    { label: 'Bank Transfers',    icon: '🔄', href: '/dashboard/banking/bank-transfers', section: 'BANKING',  feature: null },
-    { label: 'Customers',         icon: '👥', href: '/dashboard/customers',           section: 'CRM',         feature: null },
-    { label: 'Suppliers',         icon: '🚚', href: '/dashboard/suppliers',           section: 'CRM',         feature: null },
-    { label: 'Investors',         icon: '💼', href: '/dashboard/investors',           section: 'CRM',         feature: 'investors' },
-    { label: 'Products',          icon: '📦', href: '/dashboard/products',            section: 'INVENTORY',   feature: null },
-    { label: 'Inventory Adj.',    icon: '⚖️', href: '/dashboard/inventory/adjustments', section: 'INVENTORY', feature: 'inventory_adjustments' },
-    { label: 'All Reports',       icon: '📁', href: '/dashboard/reports',             section: 'REPORTS',     feature: null },
-    { label: 'Settings',          icon: '⚙️', href: '/dashboard/settings',            section: 'SYSTEM',      feature: null },
-    { label: 'Admin Panel',       icon: '👑', href: '/dashboard/admin/users',         section: 'SYSTEM',      feature: null },
-    { label: 'Feature Manage',    icon: '⚙️', href: '/dashboard/admin/features',      section: 'SYSTEM',      feature: null },
-    { label: 'Upgrade Plan',      icon: '⭐', href: '/dashboard/upgrade',             section: 'SYSTEM',      feature: null },
+    // MAIN
+    { label: 'Dashboard',          icon: '📊', href: '/dashboard',                    section: 'MAIN',      feature: null },
+
+    // CRM
+    { label: 'Customers',          icon: '👥', href: '/dashboard/customers',          section: 'CRM',       feature: null },
+    { label: 'Sales Invoices',     icon: '🧾', href: '/dashboard/invoices',           section: 'CRM',       feature: 'sales_invoices' },
+    { label: 'Receipts',           icon: '💰', href: '/dashboard/receipts',           section: 'CRM',       feature: null },
+    { label: 'Suppliers',          icon: '🚚', href: '/dashboard/suppliers',          section: 'CRM',       feature: null },
+    { label: 'Purchase Bills',     icon: '📦', href: '/dashboard/bills',              section: 'CRM',       feature: 'purchase_bills' },
+    { label: 'Payments',           icon: '💳', href: '/dashboard/payments',           section: 'CRM',       feature: null },
+
+    // BANKING
+    { label: 'Bank Accounts',      icon: '🏦', href: '/dashboard/banking/bank-accounts', section: 'BANKING', feature: null },
+    { label: 'Bank Transfers',     icon: '🔄', href: '/dashboard/banking/bank-transfers', section: 'BANKING', feature: null },
+
+    // INVENTORY
+    { label: 'Products',           icon: '📦', href: '/dashboard/products',           section: 'INVENTORY', feature: null },
+    { label: 'Inventory Adj.',     icon: '⚖️', href: '/dashboard/inventory/adjustments', section: 'INVENTORY', feature: 'inventory_adjustments' },
+
+    // ACCOUNTING
+    { label: 'Chart of Accounts',  icon: '📋', href: '/dashboard/accounts',           section: 'ACCOUNTING', feature: null },
+    { label: 'Journal Entries',    icon: '📓', href: '/dashboard/journal',            section: 'ACCOUNTING', feature: 'journal_entries' },
+    { label: 'Trial Balance',      icon: '⚖️', href: '/dashboard/reports/trial-balance', section: 'ACCOUNTING', feature: null },
+    { label: 'Profit & Loss',      icon: '📈', href: '/dashboard/reports/profit-loss',  section: 'ACCOUNTING', feature: null },
+    { label: 'Balance Sheet',      icon: '📊', href: '/dashboard/reports/balance-sheet', section: 'ACCOUNTING', feature: null },
+    { label: 'All Reports',        icon: '📁', href: '/dashboard/reports',            section: 'ACCOUNTING', feature: null },
+
+    // SYSTEM
+    { label: 'Admin Panel',        icon: '👑', href: '/dashboard/admin/users',        section: 'SYSTEM',    feature: null },
+    { label: 'Feature Manager',    icon: '⚙️', href: '/dashboard/admin/features',     section: 'SYSTEM',    feature: null },
+    { label: 'Upgrade Plan',       icon: '⭐', href: '/dashboard/upgrade',            section: 'SYSTEM',    feature: null },
   ]
 
+  // Filter based on hasFeature (null means always visible)
   const navItems = allNavItems.filter(item => item.feature === null || hasFeature(item.feature))
 
   const sections = navItems.reduce((acc: Record<string, typeof navItems>, item) => {
