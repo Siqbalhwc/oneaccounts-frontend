@@ -1,12 +1,10 @@
 "use client"
 
 import { usePathname } from "next/navigation"
-import { useState, useEffect } from "react"
 import { PlanProvider, usePlan } from "@/contexts/PlanContext"
 import SidebarClient from "@/app/dashboard/sidebar-client"
+import TrialGuard from "@/components/TrialGuard"
 
-// This component is a client wrapper that provides the PlanContext
-// and renders the entire dashboard layout.
 export default function DashboardClientWrapper({
   children,
   enabledFeatures,
@@ -27,7 +25,6 @@ export default function DashboardClientWrapper({
   )
 }
 
-// The actual layout UI, now client component so we can use hooks
 function DashboardLayoutInner({
   children,
   email,
@@ -37,7 +34,7 @@ function DashboardLayoutInner({
   email: string
   initial: string
 }) {
-  const { hasFeature, features } = usePlan()
+  const { hasFeature } = usePlan()
   const pathname = usePathname()
 
   const getGreeting = () => {
@@ -47,7 +44,6 @@ function DashboardLayoutInner({
     return 'Good evening'
   }
 
-  // Full nav items
   const allNavItems = [
     { label: 'Dashboard',         icon: '📊', href: '/dashboard',                    section: 'MAIN',       feature: null },
     { label: 'Chart of Accounts', icon: '📋', href: '/dashboard/accounts',            section: 'MAIN',       feature: null },
@@ -66,11 +62,10 @@ function DashboardLayoutInner({
     { label: 'All Reports',       icon: '📁', href: '/dashboard/reports',             section: 'REPORTS',     feature: null },
     { label: 'Settings',          icon: '⚙️', href: '/dashboard/settings',            section: 'SYSTEM',      feature: null },
     { label: 'Admin Panel',       icon: '👑', href: '/dashboard/admin/users',         section: 'SYSTEM',      feature: null },
- { label: 'Feature Manage',    icon: '⚙️', href: '/dashboard/admin/features',      section: 'SYSTEM',      feature: null },
-   { label: 'Upgrade Plan',     icon: '⭐', href: '/dashboard/upgrade',          section: 'SYSTEM',      feature: null },
+    { label: 'Feature Manage',    icon: '⚙️', href: '/dashboard/admin/features',      section: 'SYSTEM',      feature: null },
+    { label: 'Upgrade Plan',      icon: '⭐', href: '/dashboard/upgrade',             section: 'SYSTEM',      feature: null },
   ]
 
-  // Filter based on hasFeature (null means always visible)
   const navItems = allNavItems.filter(item => item.feature === null || hasFeature(item.feature))
 
   const sections = navItems.reduce((acc: Record<string, typeof navItems>, item) => {
@@ -136,7 +131,7 @@ function DashboardLayoutInner({
               <a href="/dashboard/payments/new" className="dl-action-btn dl-btn-payment"><span>💳</span> Payment</a>
             </div>
           </header>
-          {children}
+          <TrialGuard>{children}</TrialGuard>
         </div>
       </div>
     </>
