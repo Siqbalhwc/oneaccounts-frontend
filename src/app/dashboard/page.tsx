@@ -8,8 +8,10 @@ import {
   RefreshCw, WifiOff, CheckCircle2, MessageCircle,
 } from "lucide-react"
 
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface MonthlyData { labels: string[]; values: number[] }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 const PKR = (n: number) => "PKR " + new Intl.NumberFormat("en-PK", { maximumFractionDigits: 0 }).format(n)
 const SHORT = (n: number) => {
   const a = Math.abs(n)
@@ -20,6 +22,7 @@ const SHORT = (n: number) => {
 const waLink = (phone: string, no: string, bal: number, name: string) =>
   `https://wa.me/${phone}?text=${encodeURIComponent(`Dear ${name},\nPayment of PKR ${bal.toLocaleString()} for invoice ${no} is overdue.\nPlease clear it at your earliest convenience. 🙏`)}`
 
+// ─── Sparkline (unchanged) ────────────────────────────────────────────────────
 function Sparkline({ values, color }: { values: number[]; color: string }) {
   if (!values || values.length < 2) return null
   const W = 200, H = 32, P = 3
@@ -37,6 +40,7 @@ function Sparkline({ values, color }: { values: number[]; color: string }) {
   )
 }
 
+// ─── Bar Chart (unchanged) ────────────────────────────────────────────────────
 function BarChart({ labels, values, color }: { labels: string[]; values: number[]; color: string }) {
   const max = Math.max(...values.map(Math.abs), 1)
   const hasNeg = values.some(v => v < 0)
@@ -58,6 +62,7 @@ function BarChart({ labels, values, color }: { labels: string[]; values: number[
   )
 }
 
+// ─── Section Label ────────────────────────────────────────────────────────────
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8, marginTop: 4 }}>
@@ -67,6 +72,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
+// ─── KPI Card ─────────────────────────────────────────────────────────────────
 function KpiCard({ label, value, subtitle, accent, icon, isCurrency = true, trend, href }: {
   label: string; value: number; subtitle: string; accent: string;
   icon: React.ReactNode; isCurrency?: boolean; trend?: number[]; href?: string
@@ -112,6 +118,7 @@ function KpiCard({ label, value, subtitle, accent, icon, isCurrency = true, tren
   )
 }
 
+// ─── Chart Card ───────────────────────────────────────────────────────────────
 function ChartCard({ title, badge, badgeColor, labels, values, color }: {
   title: string; badge: string; badgeColor: string; labels: string[]; values: number[]; color: string
 }) {
@@ -129,6 +136,7 @@ function ChartCard({ title, badge, badgeColor, labels, values, color }: {
   )
 }
 
+// ─── Main Dashboard ───────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -144,6 +152,7 @@ export default function DashboardPage() {
   const [online, setOnline] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
+  // ── Data Fetching (with the two fixes applied) ─────────────────────────────
   const fetchData = async () => {
     setRefreshing(true)
     try {
@@ -170,33 +179,36 @@ export default function DashboardPage() {
 
       setOps({ receivables, unpaid_invoices: unpaid, partial_invoices: partial, payables: payablesData?.balance || 0, low_stock: lowStock, total_products: prodCount || 0, total_customers: custCount || 0, total_suppliers: suppCount || 0 })
 
+      // ── FIX 1: Overdue invoices — manual join ─────────────────────────────
       const today = new Date().toISOString().split("T")[0]
-const { data: overdueInvs } = await supabase
-  .from("invoices")
-  .select("id,invoice_no,total,paid,due_date,party_id")
-  .eq("type", "sale")
-  .lt("due_date", today)
-  .neq("status", "Paid")
-  .limit(5)
+      const { data: overdueInvs } = await supabase
+        .from("invoices")
+        .select("id,invoice_no,total,paid,due_date,party_id")
+        .eq("type", "sale")
+        .lt("due_date", today)
+        .neq("status", "Paid")
+        .limit(5)
 
-const partyIds = overdueInvs?.map((i: any) => i.party_id).filter(Boolean) || []
-let customerMap: Record<number, {name: string, phone: string}> = {}
-if (partyIds.length > 0) {
-  const { data: custData } = await supabase
-    .from("customers")
-    .select("id,name,phone")
-    .in("id", partyIds)
-  custData?.forEach((c: any) => { customerMap[c.id] = { name: c.name, phone: c.phone } })
-}
+      const partyIds = overdueInvs?.map((i: any) => i.party_id).filter(Boolean) || []
+      let customerMap: Record<number, { name: string; phone: string }> = {}
+      if (partyIds.length > 0) {
+        const { data: custData } = await supabase
+          .from("customers")
+          .select("id,name,phone")
+          .in("id", partyIds)
+        custData?.forEach((c: any) => { customerMap[c.id] = { name: c.name, phone: c.phone } })
+      }
 
-setOverdue(overdueInvs?.map((inv: any) => ({
-  id: inv.id,
-  invoice_no: inv.invoice_no,
-  customer_name: customerMap[inv.party_id]?.name || "Unknown",
-  customer_phone: customerMap[inv.party_id]?.phone || "",
-  balance: (inv.total || 0) - (inv.paid || 0),
-  due_date: inv.due_date,
-})) || [])
+      setOverdue(overdueInvs?.map((inv: any) => ({
+        id: inv.id,
+        invoice_no: inv.invoice_no,
+        customer_name: customerMap[inv.party_id]?.name || "Unknown",
+        customer_phone: customerMap[inv.party_id]?.phone || "",
+        balance: (inv.total || 0) - (inv.paid || 0),
+        due_date: inv.due_date,
+      })) || [])
+
+      // ── Monthly revenue & profit ─────────────────────────────────────────
       const months: string[] = [], revValues: number[] = [], profitValues: number[] = []
       for (let i = 5; i >= 0; i--) {
         const d = new Date()
@@ -207,10 +219,24 @@ setOverdue(overdueInvs?.map((inv: any) => ({
         const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0)
         const end = lastDay.toISOString().split("T")[0]
 
-        const { data: revData } = await supabase.from("invoices").select("total").eq("type", "sale").gte("date", start).lte("date", end)
+        // Sales revenue
+        const { data: revData } = await supabase
+          .from("invoices")
+          .select("total")
+          .eq("type", "sale")
+          .gte("date", start)
+          .lte("date", end)
         const rev = revData?.reduce((s: number, r: any) => s + (r.total || 0), 0) || 0
-        const { data: expData } = await supabase.from("journal_lines").select("debit, journal_entries!inner(date), accounts!inner(type)").eq("accounts.type", "Expense").gte("journal_entries.date", start).lte("journal_entries.date", end)
-        const exp = expData?.reduce((s: number, l: any) => s + (l.debit || 0), 0) || 0
+
+        // ── FIX 2: Expenses — use purchase bills instead of broken journal join ──
+        const { data: expData } = await supabase
+          .from("invoices")
+          .select("total")
+          .eq("type", "purchase")
+          .gte("date", start)
+          .lte("date", end)
+        const exp = expData?.reduce((s: number, r: any) => s + (r.total || 0), 0) || 0
+
         revValues.push(rev)
         profitValues.push(rev - exp)
       }
@@ -228,7 +254,7 @@ setOverdue(overdueInvs?.map((inv: any) => ({
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off) }
   }, [])
 
-  // Auto‑refresh every 30 seconds (unchanged)
+  // Auto‑refresh every 30 seconds
   useEffect(() => {
     const interval = setInterval(() => { fetchData() }, 30000)
     return () => clearInterval(interval)
@@ -251,11 +277,6 @@ setOverdue(overdueInvs?.map((inv: any) => ({
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
         @keyframes spin { to { transform: rotate(360deg) } }
-        @keyframes floaty {
-          0% { transform: translateY(0px); }
-          50% { transform: translateY(-6px); }
-          100% { transform: translateY(0px); }
-        }
 
         .kpi-grid {
           display: grid;
