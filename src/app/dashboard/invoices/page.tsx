@@ -7,11 +7,7 @@ import { Plus, Search, Send } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import DownloadPDFButton from "@/components/DownloadPDFButton"
 
-// ── FIX 1: customers is a single object, not an array ────────────────────────
-// Supabase returns joined relations as arrays by default.
-// We cast it correctly here so TypeScript is happy and
-// we access it as i.customers?.name (not i.customers[0]?.name)
-interface Invoice {
+interface InvoiceItem {
   id: number
   invoice_no: string
   date: string
@@ -19,7 +15,9 @@ interface Invoice {
   total: number
   paid: number
   status: string
-  customers?: { name: string; phone: string; address?: string } | null
+  party_id: number
+  customer_name?: string
+  customer_phone?: string
 }
 
 export default function InvoicesPage() {
@@ -28,32 +26,50 @@ export default function InvoicesPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [invoices, setInvoices] = useState<InvoiceItem[]>([])
   const [search, setSearch] = useState("")
   const [loading, setLoading] = useState(true)
 
   const loadInvoices = async () => {
     setLoading(true)
-    const { data, error } = await supabase
+    // 1. Fetch invoices without the join first
+    const { data: invData, error: invError } = await supabase
       .from("invoices")
-      .select("id,invoice_no,date,due_date,total,paid,status,customers!party_id(name,phone,address)")
+      .select("id,invoice_no,date,due_date,total,paid,status,party_id")
       .eq("type", "sale")
       .order("date", { ascending: false })
 
-    console.log("Invoices fetch:", data, error)
-
-    if (!error && data) {
-      // ── FIX 2: Supabase returns the joined relation as an array.
-      // We normalise it to a single object so our interface is satisfied
-      // and i.customers?.name works correctly everywhere.
-      const normalised: Invoice[] = (data as any[]).map((row) => ({
-        ...row,
-        customers: Array.isArray(row.customers)
-          ? (row.customers[0] ?? null)
-          : (row.customers ?? null),
-      }))
-      setInvoices(normalised)
+    if (invError || !invData) {
+      console.error("Invoice fetch error:", invError)
+      setLoading(false)
+      return
     }
+
+    // 2. Get unique customer IDs
+    const customerIds = [...new Set(invData.map(i => i.party_id).filter(Boolean))]
+
+    // 3. Fetch customers separately
+    let customerMap: Record<number, { name: string; phone: string }> = {}
+    if (customerIds.length > 0) {
+      const { data: custData } = await supabase
+        .from("customers")
+        .select("id, name, phone")
+        .in("id", customerIds)
+      if (custData) {
+        custData.forEach((c: any) => {
+          customerMap[c.id] = { name: c.name, phone: c.phone }
+        })
+      }
+    }
+
+    // 4. Combine
+    const enriched = invData.map(inv => ({
+      ...inv,
+      customer_name: customerMap[inv.party_id]?.name || "Unknown",
+      customer_phone: customerMap[inv.party_id]?.phone || "",
+    }))
+
+    setInvoices(enriched)
     setLoading(false)
   }
 
@@ -63,11 +79,11 @@ export default function InvoicesPage() {
 
   const filtered = invoices.filter(i =>
     (i.invoice_no || "").toLowerCase().includes(search.toLowerCase()) ||
-    (i.customers?.name || "").toLowerCase().includes(search.toLowerCase())
+    (i.customer_name || "").toLowerCase().includes(search.toLowerCase())
   )
 
   const statusStyle = (s: string) => {
-    if (s === "Paid")    return { bg: "#D1FAE5", color: "#065F46" }
+    if (s === "Paid") return { bg: "#D1FAE5", color: "#065F46" }
     if (s === "Partial") return { bg: "#FEF3C7", color: "#92400E" }
     return { bg: "#FEE2E2", color: "#991B1B" }
   }
@@ -79,13 +95,18 @@ export default function InvoicesPage() {
     )}`
   }
 
-  const handleDownloadPDF = async (invoice: Invoice) => {
+  const handleDownloadPDF = async (invoice: InvoiceItem) => {
     const { data: items } = await supabase
       .from("invoice_items")
       .select("*")
       .eq("invoice_id", invoice.id)
     if (!items) return
-    const doc = generateInvoicePDF(invoice, items)
+    // Build a minimal invoice object for the PDF generator
+    const pdfInvoice = {
+      ...invoice,
+      customers: { name: invoice.customer_name, phone: invoice.customer_phone },
+    }
+    const doc = generateInvoicePDF(pdfInvoice, items)
     doc.save(`invoice-${invoice.invoice_no}.pdf`)
   }
 
@@ -141,7 +162,7 @@ export default function InvoicesPage() {
           <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>Loading...</div>
         ) : filtered.length === 0 ? (
           <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>
-            {invoices.length === 0 ? "No invoices yet — create your first one!" : "No invoices match your search"}
+            No invoices yet — create your first one!
           </div>
         ) : (
           filtered.map(i => {
@@ -150,7 +171,7 @@ export default function InvoicesPage() {
             return (
               <div key={i.id} className="il-row">
                 <span style={{ fontWeight: 700, color: "#1E3A8A" }}>{i.invoice_no}</span>
-                <span>{i.customers?.name || "-"}</span>
+                <span>{i.customer_name || "-"}</span>
                 <span style={{ color: "#64748B" }}>{i.date}</span>
                 <span className="il-hide" style={{ color: "#64748B" }}>{i.due_date}</span>
                 <span style={{ fontWeight: 600 }}>PKR {i.total?.toLocaleString()}</span>
@@ -160,9 +181,9 @@ export default function InvoicesPage() {
                   </span>
                 </span>
                 <span>
-                  {i.status !== "Paid" && i.customers?.phone && (
+                  {i.status !== "Paid" && i.customer_phone && (
                     <a
-                      href={waLink(i.customers.phone, i.invoice_no, bal, i.customers.name)}
+                      href={waLink(i.customer_phone, i.invoice_no, bal, i.customer_name || "")}
                       target="_blank"
                       style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#25D366", color: "white", padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: 600, textDecoration: "none" }}>
                       <Send size={10} /> Remind
