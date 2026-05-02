@@ -86,16 +86,19 @@ export default function UpgradePage() {
   useEffect(() => {
     supabase
       .from("company_settings")
-      .select("plan_id, trial_ends_at, plans(code)")
+      .select("plan_id, trial_ends_at, plans(id, code)")
       .eq("id", 1)
       .single()
       .then(({ data }) => {
         if (data) {
-          setCurrentPlan(data.plans?.code || "basic")
+          // Normalize the joined relation – it may be an array or a single object
+          const plan = Array.isArray(data.plans) ? data.plans[0] : data.plans
+          setCurrentPlan(plan?.code || "basic")
           setTrialEndsAt(data.trial_ends_at || null)
         }
         setLoading(false)
       })
+      .catch(() => setLoading(false))
   }, [])
 
   if (loading) return <div style={{ padding: 40, textAlign: "center" }}>Loading...</div>
