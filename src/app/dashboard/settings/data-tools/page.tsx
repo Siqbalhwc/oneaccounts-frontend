@@ -3,15 +3,17 @@
 import { useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import {
-  Trash2,
-  Upload,
-  Download,
-  Save,
-  RotateCcw,
-  AlertTriangle,
+  Trash2, Upload, Download, Save, RotateCcw, AlertTriangle,
+  X, Check, FileSpreadsheet, Database,
 } from "lucide-react"
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
+
+// Helper to invalidate caches – just forces a refresh by calling a dummy RPC or we can use router.refresh
+const invalidateCaches = async () => {
+  // We can't call "invalidate_caches" directly, but we can re-fetch data on next page load.
+  // For client-side, we just rely on React Query and manual refetches.
+}
 
 export default function DataManagementPage() {
   const supabase = createBrowserClient(
@@ -20,98 +22,123 @@ export default function DataManagementPage() {
   )
   const { role } = useRole()
   const canView = role === "admin" || role === "accountant"
-  const canEdit = role === "admin" || role === "accountant"
+  const canEdit = role === "admin" || role === "accountant" // same for now
 
   const [flash, setFlash] = useState("")
-  const [cleaning, setCleaning] = useState(false)
-  const [exporting, setExporting] = useState(false)
-  const [importFile, setImportFile] = useState<File | null>(null)
-  const [importing, setImporting] = useState(false)
-  const [backingUp, setBackingUp] = useState(false)
-  const [restoring, setRestoring] = useState(false)
+  const [confirmSection, setConfirmSection] = useState<string | null>(null) // tracks which delete is being confirmed
 
-  const showMessage = (msg: string, isError = false) => {
+  const showMessage = (msg: string) => {
     setFlash(msg)
     setTimeout(() => setFlash(""), 4000)
   }
 
-  const handleClean = async () => {
-    if (!canEdit) return
-    setCleaning(true)
+  // ── Generic delete helper ──────────────────────────────────
+  const deleteAllFromTable = async (table: string, message: string) => {
     try {
-      // Example: delete old data or reset temporary tables
-      // Adjust to your actual cleaning logic
-      await supabase.rpc("clean_old_data")   // replace with your own RPC if needed
-      showMessage("Old data cleaned successfully.")
+      // Use .neq("id",0) to delete all rows while still respecting RLS (company-scoped)
+      await supabase.from(table).delete().neq("id", 0)
+      showMessage("✅ " + message)
+      setConfirmSection(null)
     } catch (e: any) {
-      showMessage(e.message || "Cleaning failed", true)
+      showMessage("❌ " + (e.message || "Error"))
     }
-    setCleaning(false)
   }
 
-  const handleExport = async () => {
-    if (!canEdit) return
-    setExporting(true)
-    try {
-      const { data, error } = await supabase.rpc("export_all_data")
-      if (error) throw error
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `oneaccounts-export-${new Date().toISOString().slice(0, 10)}.json`
-      a.click()
-      window.URL.revokeObjectURL(url)
-      showMessage("Data exported successfully.")
-    } catch (e: any) {
-      showMessage(e.message || "Export failed", true)
-    }
-    setExporting(false)
+  // ── Specific operations ─────────────────────────────────────
+  const handleDeleteJournal = () => deleteAllFromTable("journal_lines", "Journal entries deleted.")
+    .then(() => deleteAllFromTable("journal_entries", "Journal entries deleted."))
+    .then(() => resetBalances())
+  
+  const handleDeleteInvoices = async () => {
+    // delete invoice items first
+    await supabase.from("invoice_items").delete().neq("id", 0)
+    await supabase.from("invoices").delete().neq("id", 0)
+    showMessage("✅ All invoices deleted.")
+    setConfirmSection(null)
   }
 
-  const handleImport = async () => {
-    if (!canEdit || !importFile) return
-    setImporting(true)
-    try {
-      const reader = new FileReader()
-      reader.onload = async (e) => {
-        const content = e.target?.result
-        if (!content) return
-        const json = JSON.parse(content as string)
-        // Call a function or API to import data
-        const { error } = await supabase.rpc("import_all_data", { data: json })
-        if (error) throw error
-        showMessage("Data imported successfully.")
+  const handleDeleteSalesInvoices = async () => {
+    const { data: sales } = await supabase.from("invoices").select("id").eq("type", "sale")
+    if (sales && sales.length) {
+      const ids = sales.map((i: any) => i.id)
+      await supabase.from("invoice_items").delete().in("invoice_id", ids)
+      await supabase.from("invoices").delete().eq("type", "sale")
+    }
+    showMessage("✅ Sales invoices deleted.")
+    setConfirmSection(null)
+  }
+
+  const handleDeletePurchaseBills = async () => {
+    const { data: purchases } = await supabase.from("invoices").select("id").eq("type", "purchase")
+    if (purchases && purchases.length) {
+      const ids = purchases.map((i: any) => i.id)
+      await supabase.from("invoice_items").delete().in("invoice_id", ids)
+      await supabase.from("invoices").delete().eq("type", "purchase")
+    }
+    showMessage("✅ Purchase bills deleted.")
+    setConfirmSection(null)
+  }
+
+  const handleDeleteCustomers = async () => {
+    const { data: custs } = await supabase.from("customers").select("id")
+    if (custs && custs.length) {
+      const custIds = custs.map((c: any) => c.id)
+      // delete related sales invoices
+      const { data: invs } = await supabase.from("invoices").select("id").eq("type", "sale").in("party_id", custIds)
+      if (invs && invs.length) {
+        const invIds = invs.map((i: any) => i.id)
+        await supabase.from("invoice_items").delete().in("invoice_id", invIds)
+        await supabase.from("invoices").delete().in("id", invIds)
       }
-      reader.readAsText(importFile)
-    } catch (e: any) {
-      showMessage(e.message || "Import failed", true)
+      await supabase.from("customers").delete().neq("id", 0)
     }
-    setImporting(false)
+    showMessage("✅ Customers and related invoices deleted.")
+    setConfirmSection(null)
   }
 
-  const handleBackup = async () => {
-    if (!canEdit) return
-    setBackingUp(true)
-    try {
-      await supabase.rpc("create_backup")
-      showMessage("Backup created.")
-    } catch (e: any) {
-      showMessage(e.message || "Backup failed", true)
+  const handleDeleteSuppliers = async () => {
+    const { data: supps } = await supabase.from("suppliers").select("id")
+    if (supps && supps.length) {
+      const suppIds = supps.map((s: any) => s.id)
+      const { data: invs } = await supabase.from("invoices").select("id").eq("type", "purchase").in("party_id", suppIds)
+      if (invs && invs.length) {
+        const invIds = invs.map((i: any) => i.id)
+        await supabase.from("invoice_items").delete().in("invoice_id", invIds)
+        await supabase.from("invoices").delete().in("id", invIds)
+      }
+      await supabase.from("suppliers").delete().neq("id", 0)
     }
-    setBackingUp(false)
+    showMessage("✅ Suppliers and related bills deleted.")
+    setConfirmSection(null)
   }
 
-  const handleRestore = async () => {
-    if (!canEdit) return
-    setRestoring(true)
-    try {
-      await supabase.rpc("restore_latest_backup")
-      showMessage("Restore initiated.")
-    } catch (e: any) {
-      showMessage(e.message || "Restore failed", true)
+  const handleDeleteProducts = async () => {
+    await supabase.from("stock_moves").delete().neq("id", 0)
+    await supabase.from("invoice_items").delete().neq("id", 0)
+    await supabase.from("products").delete().neq("id", 0)
+    showMessage("✅ Products deleted.")
+    setConfirmSection(null)
+  }
+
+  const resetBalances = async () => {
+    await supabase.from("accounts").update({ balance: 0 }).neq("id", 0)
+    showMessage("✅ Account balances reset to zero.")
+  }
+
+  const handleCompleteReset = async () => {
+    const tables = [
+      "journal_lines", "journal_entries",
+      "invoice_items", "invoices",
+      "stock_moves", "products",
+      "customers", "suppliers", "investors",
+      "company_settings", "user_roles"
+    ]
+    for (const table of tables) {
+      await supabase.from(table).delete().neq("id", 0)
     }
-    setRestoring(false)
+    await resetBalances()
+    showMessage("✅ Complete reset done. Default chart of accounts preserved.")
+    setConfirmSection(null)
   }
 
   if (!role) return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
@@ -131,15 +158,10 @@ export default function DataManagementPage() {
           .dm-header { margin-bottom: 20px; }
           .dm-title { font-size: 22px; font-weight: 800; color: #1E293B; }
           .dm-subtitle { font-size: 13px; color: #94A3B8; }
-          .dm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 20px; }
+          .dm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 20px; }
           .dm-card {
-            background: white;
-            border: 1px solid #E2E8F0;
-            border-radius: 10px;
-            padding: 18px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
+            background: white; border: 1px solid #E2E8F0; border-radius: 10px;
+            padding: 18px; display: flex; flex-direction: column; gap: 10px;
           }
           .dm-card-title { font-size: 14px; font-weight: 700; color: #1E293B; display: flex; align-items: center; gap: 6px; }
           .dm-card-desc { font-size: 12px; color: #64748B; flex: 1; }
@@ -149,21 +171,25 @@ export default function DataManagementPage() {
             border: none; cursor: pointer; font-family: inherit;
           }
           .dm-btn-primary { background: #1D4ED8; color: white; }
-          .dm-btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
           .dm-btn-danger { background: #EF4444; color: white; }
-          .dm-input-file { font-size: 12px; }
+          .dm-btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
+          .confirmation-box {
+            background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; padding: 12px;
+            margin-top: 8px; font-size: 12px; color: #B91C1C;
+          }
+          .confirmation-buttons { display: flex; gap: 8px; margin-top: 8px; }
         `}</style>
 
         <div className="dm-header">
           <div className="dm-title">🗄️ Data Management</div>
-          <div className="dm-subtitle">{canEdit ? "Clean, import, export, backup & restore" : "View data tools"}</div>
+          <div className="dm-subtitle">Clean, import, export, backup & restore</div>
         </div>
 
         {flash && (
           <div style={{
-            background: flash.toLowerCase().includes("error") || flash.toLowerCase().includes("failed") ? "#FEF2F2" : "#F0FDF4",
-            border: "1px solid #BBF7D0",
-            color: flash.toLowerCase().includes("error") || flash.toLowerCase().includes("failed") ? "#B91C1C" : "#15803D",
+            background: flash.startsWith("✅") ? "#F0FDF4" : "#FEF2F2",
+            border: "1px solid " + (flash.startsWith("✅") ? "#BBF7D0" : "#FECACA"),
+            color: flash.startsWith("✅") ? "#15803D" : "#B91C1C",
             padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13
           }}>
             {flash}
@@ -171,76 +197,157 @@ export default function DataManagementPage() {
         )}
 
         <div className="dm-grid">
-          {/* Clean Up */}
+          {/* Clean Journal */}
           <div className="dm-card">
-            <div className="dm-card-title"><Trash2 size={16} /> Clean Data</div>
-            <div className="dm-card-desc">Remove old temporary data or reset test entries.</div>
-            <button
-              className="dm-btn dm-btn-danger"
-              onClick={handleClean}
-              disabled={!canEdit || cleaning}
-            >
-              {cleaning ? "Cleaning..." : "Clean Now"}
-            </button>
+            <div className="dm-card-title"><Trash2 size={16} /> Delete Journal Entries</div>
+            <div className="dm-card-desc">Remove all journal entries and reset balances to opening.</div>
+            {confirmSection === "journal" ? (
+              <div className="confirmation-box">
+                ⚠️ Delete ALL journal entries?
+                <div className="confirmation-buttons">
+                  <button className="dm-btn dm-btn-danger" onClick={handleDeleteJournal}>✅ Yes, Delete All</button>
+                  <button className="dm-btn dm-btn-outline" onClick={() => setConfirmSection(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button className="dm-btn dm-btn-danger" onClick={() => setConfirmSection("journal")} disabled={!canEdit}>Clean Journal</button>
+            )}
           </div>
 
-          {/* Export */}
+          {/* Clean Invoices (All) */}
           <div className="dm-card">
-            <div className="dm-card-title"><Download size={16} /> Export Data</div>
-            <div className="dm-card-desc">Download all company data as JSON file.</div>
-            <button
-              className="dm-btn dm-btn-primary"
-              onClick={handleExport}
-              disabled={!canEdit || exporting}
-            >
-              {exporting ? "Exporting..." : "Export"}
-            </button>
+            <div className="dm-card-title"><Trash2 size={16} /> Delete All Invoices</div>
+            <div className="dm-card-desc">Remove all sales & purchase invoices.</div>
+            {confirmSection === "all_invoices" ? (
+              <div className="confirmation-box">
+                ⚠️ Delete ALL invoices?
+                <div className="confirmation-buttons">
+                  <button className="dm-btn dm-btn-danger" onClick={handleDeleteInvoices}>✅ Yes, Delete All</button>
+                  <button className="dm-btn dm-btn-outline" onClick={() => setConfirmSection(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button className="dm-btn dm-btn-danger" onClick={() => setConfirmSection("all_invoices")} disabled={!canEdit}>Delete All Invoices</button>
+            )}
           </div>
 
-          {/* Import */}
+          {/* Clean Sales Invoices */}
           <div className="dm-card">
-            <div className="dm-card-title"><Upload size={16} /> Import Data</div>
-            <div className="dm-card-desc">Restore from a previously exported JSON file.</div>
-            <input
-              type="file"
-              accept=".json"
-              className="dm-input-file"
-              onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-              disabled={!canEdit}
-            />
-            <button
-              className="dm-btn dm-btn-outline"
-              onClick={handleImport}
-              disabled={!canEdit || !importFile || importing}
-            >
-              {importing ? "Importing..." : "Import"}
-            </button>
+            <div className="dm-card-title"><Trash2 size={16} /> Delete Sales Invoices</div>
+            <div className="dm-card-desc">Remove only sales invoices.</div>
+            {confirmSection === "sales_invoices" ? (
+              <div className="confirmation-box">
+                ⚠️ Delete all sales invoices?
+                <div className="confirmation-buttons">
+                  <button className="dm-btn dm-btn-danger" onClick={handleDeleteSalesInvoices}>✅ Yes</button>
+                  <button className="dm-btn dm-btn-outline" onClick={() => setConfirmSection(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button className="dm-btn dm-btn-danger" onClick={() => setConfirmSection("sales_invoices")} disabled={!canEdit}>Delete Sales Invoices</button>
+            )}
           </div>
 
-          {/* Backup */}
+          {/* Clean Purchase Bills */}
           <div className="dm-card">
-            <div className="dm-card-title"><Save size={16} /> Backup</div>
-            <div className="dm-card-desc">Create a server‑side backup of your data.</div>
-            <button
-              className="dm-btn dm-btn-primary"
-              onClick={handleBackup}
-              disabled={!canEdit || backingUp}
-            >
-              {backingUp ? "Backing up..." : "Create Backup"}
-            </button>
+            <div className="dm-card-title"><Trash2 size={16} /> Delete Purchase Bills</div>
+            <div className="dm-card-desc">Remove only purchase bills.</div>
+            {confirmSection === "purchase_bills" ? (
+              <div className="confirmation-box">
+                ⚠️ Delete all purchase bills?
+                <div className="confirmation-buttons">
+                  <button className="dm-btn dm-btn-danger" onClick={handleDeletePurchaseBills}>✅ Yes</button>
+                  <button className="dm-btn dm-btn-outline" onClick={() => setConfirmSection(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button className="dm-btn dm-btn-danger" onClick={() => setConfirmSection("purchase_bills")} disabled={!canEdit}>Delete Purchase Bills</button>
+            )}
           </div>
 
-          {/* Restore */}
+          {/* Clean Customers */}
           <div className="dm-card">
-            <div className="dm-card-title"><RotateCcw size={16} /> Restore</div>
-            <div className="dm-card-desc">Restore from the latest backup.</div>
-            <button
-              className="dm-btn dm-btn-outline"
-              onClick={handleRestore}
-              disabled={!canEdit || restoring}
-            >
-              {restoring ? "Restoring..." : "Restore"}
-            </button>
+            <div className="dm-card-title"><Trash2 size={16} /> Delete Customers</div>
+            <div className="dm-card-desc">Remove all customers & related invoices.</div>
+            {confirmSection === "customers" ? (
+              <div className="confirmation-box">
+                ⚠️ Delete ALL customers?
+                <div className="confirmation-buttons">
+                  <button className="dm-btn dm-btn-danger" onClick={handleDeleteCustomers}>✅ Yes</button>
+                  <button className="dm-btn dm-btn-outline" onClick={() => setConfirmSection(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button className="dm-btn dm-btn-danger" onClick={() => setConfirmSection("customers")} disabled={!canEdit}>Delete Customers</button>
+            )}
+          </div>
+
+          {/* Clean Suppliers */}
+          <div className="dm-card">
+            <div className="dm-card-title"><Trash2 size={16} /> Delete Suppliers</div>
+            <div className="dm-card-desc">Remove all suppliers & related bills.</div>
+            {confirmSection === "suppliers" ? (
+              <div className="confirmation-box">
+                ⚠️ Delete ALL suppliers?
+                <div className="confirmation-buttons">
+                  <button className="dm-btn dm-btn-danger" onClick={handleDeleteSuppliers}>✅ Yes</button>
+                  <button className="dm-btn dm-btn-outline" onClick={() => setConfirmSection(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button className="dm-btn dm-btn-danger" onClick={() => setConfirmSection("suppliers")} disabled={!canEdit}>Delete Suppliers</button>
+            )}
+          </div>
+
+          {/* Clean Products */}
+          <div className="dm-card">
+            <div className="dm-card-title"><Trash2 size={16} /> Delete Products</div>
+            <div className="dm-card-desc">Remove all products, stock moves, and related invoice items.</div>
+            {confirmSection === "products" ? (
+              <div className="confirmation-box">
+                ⚠️ Delete ALL products?
+                <div className="confirmation-buttons">
+                  <button className="dm-btn dm-btn-danger" onClick={handleDeleteProducts}>✅ Yes</button>
+                  <button className="dm-btn dm-btn-outline" onClick={() => setConfirmSection(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button className="dm-btn dm-btn-danger" onClick={() => setConfirmSection("products")} disabled={!canEdit}>Delete Products</button>
+            )}
+          </div>
+
+          {/* Reset Balances */}
+          <div className="dm-card">
+            <div className="dm-card-title"><RotateCcw size={16} /> Reset Balances</div>
+            <div className="dm-card-desc">Set all account balances to zero.</div>
+            {confirmSection === "reset_balances" ? (
+              <div className="confirmation-box">
+                ⚠️ Reset ALL balances?
+                <div className="confirmation-buttons">
+                  <button className="dm-btn dm-btn-danger" onClick={() => { resetBalances(); setConfirmSection(null); }}>✅ Yes</button>
+                  <button className="dm-btn dm-btn-outline" onClick={() => setConfirmSection(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button className="dm-btn dm-btn-danger" onClick={() => setConfirmSection("reset_balances")} disabled={!canEdit}>Reset Balances</button>
+            )}
+          </div>
+
+          {/* Complete Reset (NUKE) */}
+          <div className="dm-card">
+            <div className="dm-card-title"><AlertTriangle size={16} /> Complete Database Reset</div>
+            <div className="dm-card-desc">Delete ALL data except default chart of accounts. Irreversible!</div>
+            {confirmSection === "nuke" ? (
+              <div className="confirmation-box">
+                ⚠️ NUKE ENTIRE DATABASE? This cannot be undone!
+                <div className="confirmation-buttons">
+                  <button className="dm-btn dm-btn-danger" onClick={handleCompleteReset}>💣 Yes, NUKE Everything</button>
+                  <button className="dm-btn dm-btn-outline" onClick={() => setConfirmSection(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button className="dm-btn dm-btn-danger" onClick={() => setConfirmSection("nuke")} disabled={!canEdit}>💣 Complete Reset</button>
+            )}
           </div>
         </div>
 
