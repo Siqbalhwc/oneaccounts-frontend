@@ -19,27 +19,63 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) {
-        setLoading(false)
-        return
-      }
-      const companyId = (user.app_metadata as any)?.company_id
-      if (!companyId) {
-        setLoading(false)
-        return
-      }
-      supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("company_id", companyId)
-        .maybeSingle()
-        .then(({ data }) => {
-          setRole(data?.role || "viewer")
+    supabase.auth.getUser()
+      .then(({ data: { user } }) => {
+        if (!user) {
+          setRole(null)
           setLoading(false)
-        })
-    })
+          return
+        }
+
+        const companyId = (user.app_metadata as any)?.company_id
+
+        const fetchRole = (cid: string) => {
+          supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", user.id)
+            .eq("company_id", cid)
+            .maybeSingle()
+            .then(({ data }) => {
+              setRole(data?.role || "viewer")
+              setLoading(false)
+            })
+            .catch(() => {
+              setRole(null)
+              setLoading(false)
+            })
+        }
+
+        if (companyId) {
+          fetchRole(companyId)
+        } else {
+          // fallback: find first company from user_roles
+          supabase
+            .from("user_roles")
+            .select("company_id")
+            .eq("user_id", user.id)
+            .limit(1)
+            .maybeSingle()
+            .then(({ data }) => {
+              const cid = data?.company_id
+              if (cid) {
+                fetchRole(cid)
+              } else {
+                setRole(null)
+                setLoading(false)
+              }
+            })
+            .catch(() => {
+              setRole(null)
+              setLoading(false)
+            })
+        }
+      })
+      .catch(() => {
+        // can’t even get the user – loading ends with no role
+        setRole(null)
+        setLoading(false)
+      })
   }, [])
 
   return (
