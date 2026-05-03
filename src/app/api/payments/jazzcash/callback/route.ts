@@ -9,7 +9,6 @@ const supabaseAdmin = createClient(
 )
 
 export async function POST(request: NextRequest) {
-  // JazzCash sends the callback as form data (application/x-www-form-urlencoded)
   let body: Record<string, string>
   try {
     const formData = await request.formData()
@@ -18,7 +17,6 @@ export async function POST(request: NextRequest) {
       body[key] = value.toString()
     })
   } catch {
-    // Fallback: try JSON
     body = await request.json()
   }
 
@@ -27,33 +25,72 @@ export async function POST(request: NextRequest) {
   try {
     const result = await verifyCallback(body)
 
-    if (result.isSuccess && result.paymentType === 'plan_upgrade') {
-      const { plan_to } = result.metadata
-      if (plan_to && result.companyId) {
-        // Upgrade the company's plan
-        const { data: plan } = await supabaseAdmin
-          .from('plans')
-          .select('id')
-          .eq('code', plan_to)
-          .single()
+    if (result.isSuccess) {
+      const { paymentType, companyId, metadata } = result
 
-        if (plan) {
-          await supabaseAdmin
-            .from('companies')
-            .update({ plan_id: plan.id })
-            .eq('id', result.companyId)
+      if (paymentType === 'plan_upgrade') {
+        const { plan_to } = metadata
+        if (plan_to && companyId) {
+          const { data: plan } = await supabaseAdmin
+            .from('plans')
+            .select('id')
+            .eq('code', plan_to)
+            .single()
+          if (plan) {
+            await supabaseAdmin
+              .from('companies')
+              .update({ plan_id: plan.id })
+              .eq('id', companyId)
+          }
+        }
+      } else if (paymentType === 'create_company') {
+        const { company_name, plan_code } = metadata
+        if (company_name && plan_code) {
+          const { data: plan } = await supabaseAdmin
+            .from('plans')
+            .select('id')
+            .eq('code', plan_code)
+            .single()
+          if (plan) {
+            // Create the company
+            const { data: newCompany, error: createError } = await supabaseAdmin
+              .from('companies')
+              .insert({
+                name: company_name,
+                plan_id: plan.id,
+                trial_ends_at: null, // no trial
+              })
+              .select('id')
+              .single()
+            if (!createError && newCompany) {
+              // Seed accounts
+              await supabaseAdmin.rpc('seed_accounts_for_company', {
+                target_company_id: newCompany.id,
+              })
+              // Assign admin role – need user from payment history? We stored user_id in metadata
+              const userId = metadata.user_id // ensure we pass user_id in metadata
+              if (userId) {
+                await supabaseAdmin.from('user_roles').insert({
+                  user_id: userId,
+                  company_id: newCompany.id,
+                  role: 'admin',
+                })
+                // Refresh JWT
+                await supabaseAdmin.functions.invoke('custom-claims', {
+                  body: { userId },
+                })
+              }
+            }
+          }
         }
       }
     }
 
-    // JazzCash expects a redirect back to the site
     return NextResponse.redirect(
       new URL(`/dashboard/upgrade?payment=${result.isSuccess ? 'success' : 'failed'}`, request.url)
     )
   } catch (e: any) {
     console.error('Callback error:', e)
-    return NextResponse.redirect(
-      new URL('/dashboard/upgrade?payment=error', request.url)
-    )
+    return NextResponse.redirect(new URL('/dashboard/upgrade?payment=error', request.url))
   }
 }

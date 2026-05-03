@@ -20,22 +20,18 @@ export async function POST(request: NextRequest) {
     }
   )
 
-  // Auth check
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Get user's company
   const { data: role } = await supabase
     .from('user_roles')
     .select('company_id')
     .eq('user_id', user.id)
     .maybeSingle()
-
   if (!role?.company_id) return NextResponse.json({ error: 'No company found' }, { status: 400 })
 
   const body = await request.json()
   const { amount, paymentType, metadata } = body
-
   if (!amount || !paymentType) {
     return NextResponse.json({ error: 'Missing amount or paymentType' }, { status: 400 })
   }
@@ -45,9 +41,11 @@ export async function POST(request: NextRequest) {
       companyId: role.company_id,
       amount,
       paymentType,
-      metadata,
+      metadata: {
+        ...metadata,
+        user_id: user.id,   // pass user for later company assignment
+      },
     })
-
     return NextResponse.json({
       success: true,
       redirectUrl: result.redirectUrl,
