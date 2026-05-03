@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { useDashboardData } from "@/hooks/useDashboardData"
 import {
   TrendingUp, TrendingDown, Building2, AlertTriangle,
   Clock, Package, Users, CreditCard, ArrowUpRight,
@@ -15,11 +14,11 @@ const PKR = (n: number) => "PKR " + new Intl.NumberFormat("en-PK", { maximumFrac
 const SHORT = (n: number) => {
   const a = Math.abs(n)
   if (a >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M"
-  if (a >= 1_000) return (n / 1_000).toFixed(0) + "K"
+  if (a >= 1_000)     return (n / 1_000).toFixed(0) + "K"
   return String(n)
 }
 const waLink = (phone: string, no: string, bal: number, name: string) =>
-  `https://wa.me/${phone}?text=${encodeURIComponent(`Dear ${name},\nPayment of PKR ${bal.toLocaleString()} for invoice ${no} is overdue.\nPlease clear it at your earliest convenience. 🙏`)}`
+  `https://wa.me/${phone}?text=${encodeURIComponent(`Dear ${name},\nPayment of PKR ${bal.toLocaleString()} for invoice ${no} is overdue.\nPlease clear at your earliest convenience. 🙏`)}`
 
 function Sparkline({ values, color }: { values: number[]; color: string }) {
   if (!values || values.length < 2) return null
@@ -28,12 +27,12 @@ function Sparkline({ values, color }: { values: number[]; color: string }) {
   const pts = values.map((v, i) => ({ x: P + (i / (values.length - 1)) * (W - P * 2), y: H - P - ((v - mn) / rng) * (H - P * 2) }))
   const line = pts.map(p => `${p.x},${p.y}`).join(" ")
   const area = `${P},${H} ${line} ${W - P},${H}`
-  const uid = `s${color.replace("#", "")}`
+  const uid  = `s${color.replace("#", "")}`
   return (
     <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: "100%", height: 32, display: "block", marginTop: 4 }}>
-      <defs><linearGradient id={uid} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity="0.18" /><stop offset="100%" stopColor={color} stopOpacity="0" /></linearGradient></defs>
-      <polygon points={area} fill={`url(#${uid})`} />
-      <polyline points={line} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+      <defs><linearGradient id={uid} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity="0.18"/><stop offset="100%" stopColor={color} stopOpacity="0"/></linearGradient></defs>
+      <polygon points={area} fill={`url(#${uid})`}/>
+      <polyline points={line} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round"/>
     </svg>
   )
 }
@@ -48,8 +47,8 @@ function BarChart({ labels, values, color }: { labels: string[]; values: number[
         return (
           <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%", justifyContent: hasNeg ? "center" : "flex-end" }}>
             {neg
-              ? <><div style={{ flex: 1 }} /><div style={{ width: "100%", height: barH, background: "#EF4444", borderRadius: "0 0 3px 3px", opacity: .8 }} /><div style={{ width: "100%", height: 1, background: "#E2E8F0" }} /></>
-              : <><div style={{ flex: 1 }} /><div style={{ width: "100%", height: barH, background: color, borderRadius: "3px 3px 0 0", opacity: .85 }} />{hasNeg && <div style={{ width: "100%", height: 1, background: "#E2E8F0" }} />}</>
+              ? <><div style={{ flex: 1 }}/><div style={{ width: "100%", height: barH, background: "#EF4444", borderRadius: "0 0 3px 3px", opacity: .8 }}/><div style={{ width: "100%", height: 1, background: "#E2E8F0" }}/></>
+              : <><div style={{ flex: 1 }}/><div style={{ width: "100%", height: barH, background: color, borderRadius: "3px 3px 0 0", opacity: .85 }}/>{hasNeg && <div style={{ width: "100%", height: 1, background: "#E2E8F0" }}/>}</>
             }
             <span style={{ fontSize: 9, color: "#94A3B8", marginTop: 3, whiteSpace: "nowrap" }}>{labels[i]}</span>
           </div>
@@ -62,7 +61,7 @@ function BarChart({ labels, values, color }: { labels: string[]; values: number[
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6, marginTop: 2 }}>
-      <div style={{ width: 3, height: 14, background: "#1E3A8A", borderRadius: 2, flexShrink: 0 }} />
+      <div style={{ width: 3, height: 14, background: "#1E3A8A", borderRadius: 2, flexShrink: 0 }}/>
       <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#1E3A8A" }}>{children}</span>
     </div>
   )
@@ -75,39 +74,27 @@ function KpiCard({ label, value, subtitle, accent, icon, isCurrency = true, tren
   const display = isCurrency ? `PKR ${SHORT(value)}` : value.toLocaleString()
   return (
     <div
-      style={{
-        background: "white",
-        borderRadius: 10,
-        border: "1px solid #E2E8F0",
-        borderTop: `3px solid ${accent}`,
-        display: "flex",
-        flexDirection: "column",
-        transition: "box-shadow .15s,transform .15s",
-        cursor: href ? "pointer" : "default",
-        overflow: "hidden",
-        height: "100%",
-        animation: "floaty 6s ease-in-out infinite",
-      }}
+      style={{ background: "white", borderRadius: 10, border: "1px solid #E2E8F0", borderTop: `3px solid ${accent}`, display: "flex", flexDirection: "column", transition: "box-shadow .15s,transform .15s", cursor: href ? "pointer" : "default", overflow: "hidden", height: "100%" }}
       onClick={() => { if (href) window.location.href = href }}
       onMouseEnter={e => { if (href) { const d = e.currentTarget as HTMLDivElement; d.style.boxShadow = "0 4px 18px rgba(30,58,138,.11)"; d.style.transform = "translateY(-1px)" } }}
       onMouseLeave={e => { if (href) { const d = e.currentTarget as HTMLDivElement; d.style.boxShadow = "none"; d.style.transform = "none" } }}
     >
-      <div style={{ padding: "11px 13px 0", flex: 1 }}>
+      <div style={{ padding: "10px 12px 0", flex: 1 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 3 }}>
           <span style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94A3B8" }}>{label}</span>
           <span style={{ color: accent }}>{icon}</span>
         </div>
-        <div style={{ fontSize: "clamp(13px,1.4vw,22px)", fontWeight: 800, color: accent, lineHeight: 1.1, marginBottom: 2 }}>{display}</div>
-        <div style={{ fontSize: "clamp(9px,0.7vw,11px)", color: "#94A3B8", marginBottom: 6 }}>{subtitle}</div>
+        <div style={{ fontSize: "clamp(13px,1.4vw,20px)", fontWeight: 800, color: accent, lineHeight: 1.1, marginBottom: 2 }}>{display}</div>
+        <div style={{ fontSize: "clamp(9px,0.7vw,11px)", color: "#94A3B8", marginBottom: 5 }}>{subtitle}</div>
         {trend && trend.length >= 2 && (
-          <div style={{ marginLeft: -13, marginRight: -13 }}>
-            <Sparkline values={trend} color={accent} />
+          <div style={{ marginLeft: -12, marginRight: -12 }}>
+            <Sparkline values={trend} color={accent}/>
           </div>
         )}
       </div>
-      <div style={{ padding: "5px 13px", background: "#F8FAFC", borderTop: "1px solid #E2E8F0", display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "clamp(9px,0.7vw,11px)", fontWeight: 600, color: href ? "#1E3A8A" : "#475569" }}>
+      <div style={{ padding: "4px 12px", background: "#F8FAFC", borderTop: "1px solid #E2E8F0", display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "clamp(9px,0.7vw,11px)", fontWeight: 600, color: href ? "#1E3A8A" : "#475569" }}>
         <span>{href ? "Open" : "View details"}</span>
-        {href && <ArrowUpRight size={12} />}
+        {href && <ArrowUpRight size={12}/>}
       </div>
     </div>
   )
@@ -117,13 +104,13 @@ function ChartCard({ title, badge, badgeColor, labels, values, color }: {
   title: string; badge: string; badgeColor: string; labels: string[]; values: number[]; color: string
 }) {
   return (
-    <div style={{ background: "white", borderRadius: 10, border: "1px solid #E2E8F0", padding: "11px 13px 10px" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+    <div style={{ background: "white", borderRadius: 10, border: "1px solid #E2E8F0", padding: "10px 12px 9px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
         <span style={{ fontSize: "clamp(11px,0.9vw,13px)", fontWeight: 700, color: "#1E293B" }}>{title}</span>
-        <span style={{ fontSize: 9, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: badgeColor + "22", color: badgeColor, border: `1px solid ${badgeColor}44` }}>{badge}</span>
+        <span style={{ fontSize: 9, fontWeight: 600, padding: "2px 7px", borderRadius: 20, background: badgeColor + "22", color: badgeColor, border: `1px solid ${badgeColor}44` }}>{badge}</span>
       </div>
       {labels.length
-        ? <BarChart labels={labels} values={values} color={color} />
+        ? <BarChart labels={labels} values={values} color={color}/>
         : <div style={{ height: 80, display: "flex", alignItems: "center", justifyContent: "center", color: "#CBD5E1", fontSize: 12 }}>No data yet</div>
       }
     </div>
@@ -136,92 +123,122 @@ export default function DashboardPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  const { data: kpiData, isLoading, refetch } = useDashboardData()
-
+  const [kpis,        setKpis]        = useState({ assets: 0, liabilities: 0, equity: 0, revenue: 0, expenses: 0, profit: 0 })
+  const [ops,         setOps]         = useState({ receivables: 0, unpaid_invoices: 0, partial_invoices: 0, payables: 0, low_stock: 0, total_products: 0, total_customers: 0, total_suppliers: 0 })
   const [incomeChart, setIncomeChart] = useState<MonthlyData>({ labels: [], values: [] })
   const [profitChart, setProfitChart] = useState<MonthlyData>({ labels: [], values: [] })
-  const [overdue, setOverdue] = useState<any[]>([])
-  const [online, setOnline] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
+  const [overdue,     setOverdue]     = useState<any[]>([])
+  const [loading,     setLoading]     = useState(true)
+  const [online,      setOnline]      = useState(true)
+  const [refreshing,  setRefreshing]  = useState(false)
 
-  // Fetch monthly charts and overdue invoices – unchanged from original
-  const fetchChartsAndOverdue = async () => {
+  const fetchData = async () => {
     setRefreshing(true)
     try {
       const today = new Date().toISOString().split("T")[0]
-      const { data: overdueInvs } = await supabase
-        .from("invoices")
-        .select("id,invoice_no,total,paid,due_date,party_id")
-        .eq("type", "sale")
-        .lt("due_date", today)
-        .neq("status", "Paid")
-        .limit(5)
 
-      const partyIds = overdueInvs?.map((i: any) => i.party_id).filter(Boolean) || []
-      let customerMap: Record<number, { name: string; phone: string }> = {}
-      if (partyIds.length > 0) {
-        const { data: custData } = await supabase
-          .from("customers")
-          .select("id,name,phone")
-          .in("id", partyIds)
-        custData?.forEach((c: any) => { customerMap[c.id] = { name: c.name, phone: c.phone } })
+      // Build 6 month ranges
+      const monthRanges = Array.from({ length: 6 }, (_, i) => {
+        const d = new Date()
+        d.setMonth(d.getMonth() - (5 - i))
+        return {
+          label: d.toLocaleString("default", { month: "short" }),
+          start: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`,
+          end:   new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split("T")[0],
+        }
+      })
+
+      // Fire ALL queries in parallel
+      const [
+        { data: accounts },
+        { count: custCount },
+        { count: suppCount },
+        { count: prodCount },
+        { data: unpaidInvs },
+        { data: payablesData },
+        { data: prods },
+        { data: overdueInvs },
+        ...monthlyResults
+      ] = await Promise.all([
+        supabase.from("accounts").select("type,balance"),
+        supabase.from("customers").select("*", { count: "exact", head: true }),
+        supabase.from("suppliers").select("*", { count: "exact", head: true }),
+        supabase.from("products").select("*", { count: "exact", head: true }),
+        supabase.from("invoices").select("total,paid,status").eq("type", "sale").neq("status", "Paid"),
+        supabase.from("accounts").select("balance").eq("code", "2000").single(),
+        supabase.from("products").select("qty_on_hand,reorder_level"),
+        supabase.from("invoices").select("id,invoice_no,total,paid,due_date,party_id").eq("type", "sale").lt("due_date", today).neq("status", "Paid").limit(5),
+        ...monthRanges.flatMap(({ start, end }) => [
+          supabase.from("invoices").select("total").eq("type", "sale").gte("date", start).lte("date", end),
+          supabase.from("invoices").select("total").eq("type", "purchase").gte("date", start).lte("date", end),
+        ]),
+      ])
+
+      // KPIs
+      if (accounts) {
+        const a = { Asset: 0, Liability: 0, Equity: 0, Revenue: 0, Expense: 0 }
+        accounts.forEach((acc: any) => { if (a[acc.type as keyof typeof a] !== undefined) a[acc.type as keyof typeof a] += (acc.balance || 0) })
+        setKpis({ assets: a.Asset, liabilities: a.Liability, equity: a.Equity, revenue: a.Revenue, expenses: a.Expense, profit: a.Revenue - a.Expense })
       }
 
+      // Ops
+      let receivables = 0, unpaid = 0, partial = 0
+      unpaidInvs?.forEach((inv: any) => { receivables += (inv.total || 0) - (inv.paid || 0); if (inv.status === "Unpaid") unpaid++; if (inv.status === "Partial") partial++ })
+      const lowStock = prods?.filter((p: any) => p.qty_on_hand > 0 && p.qty_on_hand <= p.reorder_level).length || 0
+      setOps({ receivables, unpaid_invoices: unpaid, partial_invoices: partial, payables: payablesData?.balance || 0, low_stock: lowStock, total_products: prodCount || 0, total_customers: custCount || 0, total_suppliers: suppCount || 0 })
+
+      // Overdue — fetch customer names
+      const partyIds = overdueInvs?.map((i: any) => i.party_id).filter(Boolean) || []
+      const customerMap: Record<number, { name: string; phone: string }> = {}
+      if (partyIds.length > 0) {
+        const { data: custData } = await supabase.from("customers").select("id,name,phone").in("id", partyIds)
+        custData?.forEach((c: any) => { customerMap[c.id] = { name: c.name, phone: c.phone } })
+      }
       setOverdue(overdueInvs?.map((inv: any) => ({
-        id: inv.id,
-        invoice_no: inv.invoice_no,
+        id: inv.id, invoice_no: inv.invoice_no,
         customer_name: customerMap[inv.party_id]?.name || "Unknown",
         customer_phone: customerMap[inv.party_id]?.phone || "",
         balance: (inv.total || 0) - (inv.paid || 0),
         due_date: inv.due_date,
       })) || [])
 
+      // Monthly charts
       const months: string[] = [], revValues: number[] = [], profitValues: number[] = []
-      for (let i = 5; i >= 0; i--) {
-        const d = new Date()
-        d.setMonth(d.getMonth() - i)
-        months.push(d.toLocaleString("default", { month: "short" }))
-        const start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`
-        const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0)
-        const end = lastDay.toISOString().split("T")[0]
-
-        const { data: revData } = await supabase.from("invoices").select("total").eq("type", "sale").gte("date", start).lte("date", end)
-        const rev = revData?.reduce((s: number, r: any) => s + (r.total || 0), 0) || 0
-        const { data: expData } = await supabase.from("invoices").select("total").eq("type", "purchase").gte("date", start).lte("date", end)
-        const exp = expData?.reduce((s: number, r: any) => s + (r.total || 0), 0) || 0
-        revValues.push(rev)
-        profitValues.push(rev - exp)
-      }
+      monthRanges.forEach(({ label }, i) => {
+        const rev = (monthlyResults[i * 2] as any).data?.reduce((s: number, r: any) => s + (r.total || 0), 0) || 0
+        const exp = (monthlyResults[i * 2 + 1] as any).data?.reduce((s: number, r: any) => s + (r.total || 0), 0) || 0
+        months.push(label); revValues.push(rev); profitValues.push(rev - exp)
+      })
       setIncomeChart({ labels: months, values: revValues })
       setProfitChart({ labels: months, values: profitValues })
+
     } catch (e) { console.error(e) }
+    setLoading(false)
     setRefreshing(false)
   }
 
   useEffect(() => {
     const on = () => setOnline(true), off = () => setOnline(false)
     window.addEventListener("online", on); window.addEventListener("offline", off)
-    fetchChartsAndOverdue()
+    fetchData()
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off) }
   }, [])
 
-  // Auto-refresh every 30 seconds for charts/overdue only (KPIs are cached separately)
   useEffect(() => {
-    const interval = setInterval(() => { fetchChartsAndOverdue() }, 30000)
+    const interval = setInterval(fetchData, 30000)
     return () => clearInterval(interval)
   }, [])
 
-  if (isLoading) return (
-    <div style={{ padding: 20, background: "#EFF4FB", minHeight: "100%", width: "100%" }}>
+  if (loading) return (
+    <div style={{ padding: "8px", background: "#EFF4FB", minHeight: "100%", width: "100%" }}>
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}`}</style>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))", gap: 10, marginBottom: 16 }}>
-        {[...Array(8)].map((_, i) => <div key={i} style={{ height: 110, background: "#F1F5F9", borderRadius: 10, animation: "pulse 1.5s ease-in-out infinite", animationDelay: `${i * 80}ms` }} />)}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 7, marginBottom: 10 }}>
+        {[...Array(8)].map((_, i) => <div key={i} style={{ height: 100, background: "#F1F5F9", borderRadius: 10, animation: "pulse 1.5s ease-in-out infinite", animationDelay: `${i * 80}ms` }}/>)}
       </div>
-      <div style={{ height: 140, background: "#F1F5F9", borderRadius: 10, animation: "pulse 1.5s ease-in-out infinite" }} />
+      <div style={{ height: 140, background: "#F1F5F9", borderRadius: 10, animation: "pulse 1.5s ease-in-out infinite" }}/>
     </div>
   )
 
-  const kpis = kpiData!
   const profitable = kpis.profit >= 0
 
   return (
@@ -230,102 +247,124 @@ export default function DashboardPage() {
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
         @keyframes spin { to { transform: rotate(360deg) } }
 
+        /* ── KPI Grid ── */
         .kpi-grid {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
-          gap: 8px;
-          margin-bottom: 8px;
+          gap: 7px;
+          margin-bottom: 7px;
           width: 100%;
         }
 
+        /* ── Chart Grid ── */
         .chart-grid {
           display: grid;
           grid-template-columns: repeat(2, 1fr);
-          gap: 8px;
-          margin-bottom: 8px;
+          gap: 7px;
+          margin-bottom: 7px;
           width: 100%;
         }
 
-        .ov-header { display: grid; grid-template-columns: 1fr 110px 140px 100px; padding: 8px 14px; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #94A3B8; }
-        .ov-row { display: grid; grid-template-columns: 1fr 110px 140px 100px; padding: clamp(8px,1.2vh,11px) 14px; border-bottom: 1px solid #F1F5F9; align-items: center; font-size: clamp(11px,0.9vw,12.5px); }
+        /* ── Overdue table ── */
+        .ov-header { display: grid; grid-template-columns: 1fr 110px 140px 100px; padding: 7px 12px; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #94A3B8; }
+        .ov-row { display: grid; grid-template-columns: 1fr 110px 140px 100px; padding: 9px 12px; border-bottom: 1px solid #F1F5F9; align-items: center; font-size: clamp(11px,0.9vw,12.5px); }
         .ov-row:last-child { border-bottom: none; }
         .ov-row:hover { background: #FAFBFF; }
         .ov-bal-inline { display: none; }
 
+        /* ── Tablet ≤900px ── */
         @media (max-width: 900px) {
-          .kpi-grid { grid-template-columns: repeat(2, 1fr); }
-          .chart-grid { grid-template-columns: 1fr; }
-          .ov-header { grid-template-columns: 1fr 110px 100px; }
-          .ov-row { grid-template-columns: 1fr 110px 100px; }
+          .kpi-grid   { grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 6px; }
+          .chart-grid { grid-template-columns: 1fr; gap: 6px; }
+          .ov-header  { grid-template-columns: 1fr 110px 100px; }
+          .ov-row     { grid-template-columns: 1fr 110px 100px; }
           .ov-col-bal { display: none !important; }
           .ov-bal-inline { display: block !important; }
         }
 
-        @media (max-width: 480px) {
-          .kpi-grid { grid-template-columns: repeat(2, 1fr); }
-          .ov-header { display: none !important; }
-          .ov-row { grid-template-columns: 1fr 1fr !important; grid-template-rows: auto auto; gap: 4px; padding: 10px 14px; }
+        /* ── Mobile ≤600px — tighten padding ── */
+        @media (max-width: 600px) {
+          .kpi-grid   { gap: 5px; margin-bottom: 5px; }
+          .chart-grid { gap: 5px; margin-bottom: 5px; }
         }
 
+        /* ── Mobile ≤480px — stack overdue ── */
+        @media (max-width: 480px) {
+          .ov-header { display: none !important; }
+          .ov-row { grid-template-columns: 1fr 1fr !important; grid-template-rows: auto auto; gap: 4px; padding: 8px 10px; }
+        }
+
+        /* ── Very small ≤360px ── */
         @media (max-width: 360px) {
           .kpi-grid { grid-template-columns: 1fr; }
         }
 
+        /* ── Ultrawide ≥2560px ── */
         @media (min-width: 2560px) {
           .dash-content { max-width: 2200px; margin: 0 auto; }
         }
       `}</style>
 
-      <div style={{ padding: "6px 10px 10px", background: "#EFF4FB", minHeight: "100%", width: "100%", fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+      {/* ── Outer wrapper: tight padding on all sides, especially mobile ── */}
+      <div style={{
+        padding: "4px 6px 8px",
+        background: "#EFF4FB",
+        minHeight: "100%",
+        width: "100%",
+        fontFamily: "'Plus Jakarta Sans',sans-serif",
+      }}>
         <div className="dash-content">
 
           {!online && (
-            <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#B91C1C", padding: "8px 14px", borderRadius: 8, marginBottom: 10, display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 500 }}>
-              <WifiOff size={14} /> You are offline
+            <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#B91C1C", padding: "7px 12px", borderRadius: 8, marginBottom: 8, display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 500 }}>
+              <WifiOff size={14}/> You are offline
             </div>
           )}
 
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
-            <button onClick={() => { refetch(); fetchChartsAndOverdue(); }} disabled={refreshing}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", background: "white", border: "1px solid #E2E8F0", borderRadius: 7, fontSize: 11, fontWeight: 600, color: "#475569", cursor: "pointer", fontFamily: "inherit" }}>
-              <RefreshCw size={12} style={{ animation: refreshing ? "spin 0.8s linear infinite" : "none" }} /> Refresh
+            <button onClick={fetchData} disabled={refreshing}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 11px", background: "white", border: "1px solid #E2E8F0", borderRadius: 7, fontSize: 11, fontWeight: 600, color: "#475569", cursor: "pointer", fontFamily: "inherit" }}>
+              <RefreshCw size={12} style={{ animation: refreshing ? "spin 0.8s linear infinite" : "none" }}/> Refresh
             </button>
           </div>
 
+          {/* Financial KPIs */}
           <SectionLabel>Financial Overview</SectionLabel>
           <div className="kpi-grid">
-            <KpiCard label="Total Assets"      value={kpis.assets}      subtitle="All company resources"   accent="#1E3A8A" icon={<Building2 size={13} />}    trend={incomeChart.values} href="/dashboard/reports/balance-sheet" />
-            <KpiCard label="Total Liabilities" value={kpis.liabilities} subtitle="Outstanding obligations" accent="#EF4444" icon={<TrendingDown size={13} />}  trend={incomeChart.values.map(v => v * 0.4)} href="/dashboard/reports/balance-sheet" />
-            <KpiCard label="Owner's Equity"    value={kpis.equity}      subtitle="Net worth"               accent="#1D4ED8" icon={<CreditCard size={13} />}    trend={incomeChart.values.map(v => v * 0.5)} href="/dashboard/reports/balance-sheet" />
-            <KpiCard label="Net Profit"        value={kpis.profit}      subtitle="Revenue − Expenses"      accent={profitable ? "#10B981" : "#EF4444"} icon={profitable ? <TrendingUp size={13} /> : <TrendingDown size={13} />} trend={profitChart.values} href="/dashboard/reports/profit-loss" />
+            <KpiCard label="Total Assets"      value={kpis.assets}      subtitle="All company resources"   accent="#1E3A8A" icon={<Building2 size={13}/>}   trend={incomeChart.values} href="/dashboard/reports/balance-sheet"/>
+            <KpiCard label="Total Liabilities" value={kpis.liabilities} subtitle="Outstanding obligations" accent="#EF4444" icon={<TrendingDown size={13}/>} trend={incomeChart.values.map(v => v * 0.4)} href="/dashboard/reports/balance-sheet"/>
+            <KpiCard label="Owner's Equity"    value={kpis.equity}      subtitle="Net worth"               accent="#1D4ED8" icon={<CreditCard size={13}/>}   trend={incomeChart.values.map(v => v * 0.5)} href="/dashboard/reports/balance-sheet"/>
+            <KpiCard label="Net Profit"        value={kpis.profit}      subtitle="Revenue − Expenses"      accent={profitable ? "#10B981" : "#EF4444"} icon={profitable ? <TrendingUp size={13}/> : <TrendingDown size={13}/>} trend={profitChart.values} href="/dashboard/reports/profit-loss"/>
           </div>
 
+          {/* Operations KPIs */}
           <SectionLabel>Operations</SectionLabel>
           <div className="kpi-grid">
-            <KpiCard label="Receivables" value={kpis.receivables}     subtitle={`${kpis.unpaid_count} unpaid`} accent="#F59E0B" icon={<Clock size={13} />}        trend={incomeChart.values.map(v => v * 0.2)}  href="/dashboard/reports/ar-aging" />
-            <KpiCard label="Payables"    value={kpis.payables}        subtitle="Outstanding supplier bills" accent="#EF4444" icon={<TrendingDown size={13} />}  trend={incomeChart.values.map(v => v * 0.15)} href="/dashboard/reports/ar-aging" />
-            <KpiCard label="Low Stock"   value={kpis.low_stock}       subtitle={`of ${kpis.total_products} products`} accent="#F97316" icon={<Package size={13} />} isCurrency={false} trend={incomeChart.values.map(v => Math.max(0, v * 0.01))} href="/dashboard/products" />
-            <KpiCard label="Customers"   value={kpis.total_customers} subtitle={`${kpis.total_suppliers} suppliers · ${kpis.total_products} SKUs`} accent="#0EA5E9" icon={<Users size={13} />} isCurrency={false} trend={incomeChart.values.map(v => Math.max(1, v * 0.03))} href="/dashboard/customers" />
+            <KpiCard label="Receivables" value={ops.receivables}     subtitle={`${ops.unpaid_invoices} unpaid · ${ops.partial_invoices} partial`} accent="#F59E0B" icon={<Clock size={13}/>}        trend={incomeChart.values.map(v => v * 0.2)}  href="/dashboard/reports/ar-aging"/>
+            <KpiCard label="Payables"    value={ops.payables}        subtitle="Outstanding supplier bills" accent="#EF4444" icon={<TrendingDown size={13}/>} trend={incomeChart.values.map(v => v * 0.15)} href="/dashboard/reports/ar-aging"/>
+            <KpiCard label="Low Stock"   value={ops.low_stock}       subtitle={`of ${ops.total_products} products`} accent="#F97316" icon={<Package size={13}/>} isCurrency={false} trend={incomeChart.values.map(v => Math.max(0, v * 0.01))} href="/dashboard/products"/>
+            <KpiCard label="Customers"   value={ops.total_customers} subtitle={`${ops.total_suppliers} suppliers · ${ops.total_products} SKUs`} accent="#0EA5E9" icon={<Users size={13}/>} isCurrency={false} trend={incomeChart.values.map(v => Math.max(1, v * 0.03))} href="/dashboard/customers"/>
           </div>
 
+          {/* Charts */}
           <SectionLabel>Monthly Trends</SectionLabel>
           <div className="chart-grid">
-            <ChartCard title="Monthly Revenue" badge="Last 6 months" badgeColor="#1D4ED8" labels={incomeChart.labels} values={incomeChart.values} color="#1D4ED8" />
-            <ChartCard title="Monthly Profit"  badge="Last 6 months" badgeColor="#10B981" labels={profitChart.labels} values={profitChart.values} color={profitChart.values.every(v => v >= 0) ? "#10B981" : "#1D4ED8"} />
+            <ChartCard title="Monthly Revenue" badge="Last 6 months" badgeColor="#1D4ED8" labels={incomeChart.labels} values={incomeChart.values} color="#1D4ED8"/>
+            <ChartCard title="Monthly Profit"  badge="Last 6 months" badgeColor="#10B981" labels={profitChart.labels} values={profitChart.values} color={profitChart.values.every(v => v >= 0) ? "#10B981" : "#1D4ED8"}/>
           </div>
 
+          {/* Overdue invoices */}
           <SectionLabel>Overdue Invoice Reminders</SectionLabel>
-          <div style={{ background: "white", borderRadius: 10, border: "1px solid #E2E8F0", overflow: "hidden", marginBottom: 10, width: "100%" }}>
+          <div style={{ background: "white", borderRadius: 10, border: "1px solid #E2E8F0", overflow: "hidden", marginBottom: 8, width: "100%" }}>
             {overdue.length === 0
-              ? <div style={{ padding: "16px 18px", display: "flex", alignItems: "center", gap: 8, color: "#10B981", fontSize: 13, fontWeight: 500 }}><CheckCircle2 size={16} /> No overdue invoices — all clear!</div>
+              ? <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: 8, color: "#10B981", fontSize: 13, fontWeight: 500 }}><CheckCircle2 size={16}/> No overdue invoices — all clear!</div>
               : <>
                   <div className="ov-header">
-                    <span>Invoice / Customer</span>
-                    <span>Due Date</span>
+                    <span>Invoice / Customer</span><span>Due Date</span>
                     <span className="ov-col-bal" style={{ textAlign: "right" }}>Balance</span>
                     <span style={{ textAlign: "right" }}>Action</span>
                   </div>
-                  {overdue.map((inv) => (
+                  {overdue.map(inv => (
                     <div key={inv.id} className="ov-row">
                       <div style={{ minWidth: 0 }}>
                         <span style={{ fontWeight: 700, color: "#1E293B" }}>{inv.invoice_no}</span>
@@ -333,12 +372,12 @@ export default function DashboardPage() {
                         <div className="ov-bal-inline" style={{ fontSize: 11, color: "#1E293B", fontWeight: 700, marginTop: 2 }}>{PKR(inv.balance)}</div>
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 4, color: "#EF4444", fontWeight: 600, fontSize: 11 }}>
-                        <AlertTriangle size={11} /> {inv.due_date}
+                        <AlertTriangle size={11}/> {inv.due_date}
                       </div>
                       <div className="ov-col-bal" style={{ textAlign: "right", fontWeight: 700, color: "#1E293B", fontSize: 12 }}>{PKR(inv.balance)}</div>
                       <div style={{ textAlign: "right" }}>
                         {inv.customer_phone
-                          ? <a href={waLink(inv.customer_phone, inv.invoice_no, inv.balance, inv.customer_name)} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#25D366", color: "white", padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, textDecoration: "none", whiteSpace: "nowrap" }}><MessageCircle size={11} /> Remind</a>
+                          ? <a href={waLink(inv.customer_phone, inv.invoice_no, inv.balance, inv.customer_name)} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#25D366", color: "white", padding: "4px 9px", borderRadius: 6, fontSize: 11, fontWeight: 600, textDecoration: "none", whiteSpace: "nowrap" }}><MessageCircle size={11}/> Remind</a>
                           : <span style={{ fontSize: 10, color: "#CBD5E1" }}>No phone</span>
                         }
                       </div>
@@ -348,13 +387,14 @@ export default function DashboardPage() {
             }
           </div>
 
-          <div style={{ background: "white", borderRadius: 8, border: "1px solid #E2E8F0", padding: "8px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, width: "100%" }}>
+          {/* Status footer */}
+          <div style={{ background: "white", borderRadius: 8, border: "1px solid #E2E8F0", padding: "7px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6, width: "100%" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <div style={{ width: 7, height: 7, borderRadius: "50%", background: profitable ? "#10B981" : "#EF4444", boxShadow: `0 0 0 3px ${profitable ? "#10B98133" : "#EF444433"}`, flexShrink: 0 }} />
+              <div style={{ width: 7, height: 7, borderRadius: "50%", background: profitable ? "#10B981" : "#EF4444", boxShadow: `0 0 0 3px ${profitable ? "#10B98133" : "#EF444433"}`, flexShrink: 0 }}/>
               <span style={{ fontSize: 12, color: "#64748B" }}>Business Health: <strong style={{ color: profitable ? "#10B981" : "#EF4444" }}>{profitable ? "Profitable" : "Loss-Making"}</strong></span>
             </div>
-            <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-              {[["Revenue", PKR(kpis.revenue)], ["Expenses", PKR(kpis.expenses)], ["Products", String(kpis.total_products)], ["Customers", String(kpis.total_customers)]].map(([k, v]) => (
+            <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+              {[["Revenue", PKR(kpis.revenue)], ["Expenses", PKR(kpis.expenses)], ["Products", String(ops.total_products)], ["Customers", String(ops.total_customers)]].map(([k, v]) => (
                 <span key={k} style={{ fontSize: 11, color: "#64748B" }}>{k}: <strong style={{ color: "#1E293B" }}>{v}</strong></span>
               ))}
             </div>
