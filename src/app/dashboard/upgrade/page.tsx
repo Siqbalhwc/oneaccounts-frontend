@@ -89,19 +89,32 @@ export default function UpgradePage() {
   useEffect(() => {
     async function fetchSettings() {
       try {
-        const { data } = await supabase
-          .from("company_settings")
-          .select("plan_id, trial_ends_at, plans(id, code)")
-          .eq("id", 1)
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) throw new Error("Not logged in")
+
+        // Get the user's company
+        const { data: role } = await supabase
+          .from("user_roles")
+          .select("company_id")
+          .eq("user_id", user.id)
+          .maybeSingle()
+
+        if (!role?.company_id) throw new Error("No company found")
+
+        // Get plan code from the companies table
+        const { data: company } = await supabase
+          .from("companies")
+          .select("plan_id, trial_ends_at, plans(code)")
+          .eq("id", role.company_id)
           .single()
 
-        if (data) {
-          const plan = Array.isArray(data.plans) ? data.plans[0] : data.plans
+        if (company) {
+          const plan = Array.isArray(company.plans) ? company.plans[0] : company.plans
           setCurrentPlan(plan?.code || "basic")
-          setTrialEndsAt(data.trial_ends_at || null)
+          setTrialEndsAt(company.trial_ends_at || null)
         }
       } catch {
-        // silently ignore errors – default to basic
+        // silently fallback to "basic" if anything fails
       }
       setLoading(false)
     }
