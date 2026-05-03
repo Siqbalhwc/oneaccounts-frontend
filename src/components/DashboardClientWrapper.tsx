@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { PlanProvider, usePlan } from "@/contexts/PlanContext"
+import { RoleProvider, useRole } from "@/contexts/RoleContext"
 import SidebarClient from "@/app/dashboard/sidebar-client"
 import TrialGuard from "@/components/TrialGuard"
 import NotificationBell from "@/components/NotificationBell"
@@ -20,11 +21,13 @@ export default function DashboardClientWrapper({
   initial: string
 }) {
   return (
-    <PlanProvider enabledFeatures={enabledFeatures}>
-      <DashboardLayoutInner email={email} initial={initial}>
-        {children}
-      </DashboardLayoutInner>
-    </PlanProvider>
+    <RoleProvider>
+      <PlanProvider enabledFeatures={enabledFeatures}>
+        <DashboardLayoutInner email={email} initial={initial}>
+          {children}
+        </DashboardLayoutInner>
+      </PlanProvider>
+    </RoleProvider>
   )
 }
 
@@ -38,6 +41,7 @@ function DashboardLayoutInner({
   initial: string
 }) {
   const { hasFeature } = usePlan()
+  const { role } = useRole()
   const pathname = usePathname()
   const router = useRouter()
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
@@ -72,27 +76,47 @@ function DashboardLayoutInner({
     }
   }
 
-  const allNavItems = [
-    // MAIN
-    { label: 'Dashboard',          icon: '📊', href: '/dashboard',                    section: 'MAIN',       feature: null },
+  // Role-based access map (same as before)
+  const roleAccess: Record<string, string[]> = {
+    "Dashboard": ["admin", "accountant", "viewer"],
+    "Customers": ["admin", "accountant", "viewer"],
+    "Suppliers": ["admin", "accountant", "viewer"],
+    "Chart of Accounts": ["admin", "accountant", "viewer"],
+    "All Reports": ["admin", "accountant", "viewer"],
+    "Trial Balance": ["admin", "accountant", "viewer"],
+    "Profit & Loss": ["admin", "accountant", "viewer"],
+    "Balance Sheet": ["admin", "accountant", "viewer"],
+    "Sales Invoices": ["admin", "accountant"],
+    "Purchase Bills": ["admin", "accountant"],
+    "Receipts": ["admin", "accountant"],
+    "Payments": ["admin", "accountant"],
+    "Journal Entries": ["admin", "accountant"],
+    "Investors": ["admin", "accountant"],
+    "Products": ["admin", "accountant"],
+    "Inventory Adj.": ["admin", "accountant"],
+    "Bank Accounts": ["admin", "accountant"],
+    "Bank Transfers": ["admin", "accountant"],
+    "Admin Panel": ["admin"],
+    "Feature Manager": ["admin"],
+    "Audit Logs": ["admin"],
+    "Invoice Automation": ["admin", "accountant"],
+    "Upgrade Plan": ["admin", "accountant", "viewer"],
+    "Settings": ["admin"],
+    "New Company": ["admin", "accountant"],
+  }
 
-    // CRM
+  const allNavItems = [
+    { label: 'Dashboard',          icon: '📊', href: '/dashboard',                    section: 'MAIN',       feature: null },
     { label: 'Customers',          icon: '👥', href: '/dashboard/customers',          section: 'CRM',        feature: null },
     { label: 'Sales Invoices',     icon: '🧾', href: '/dashboard/invoices',           section: 'CRM',        feature: null },
     { label: 'Receipts',           icon: '💰', href: '/dashboard/receipts',           section: 'CRM',        feature: null },
     { label: 'Suppliers',          icon: '🚚', href: '/dashboard/suppliers',          section: 'CRM',        feature: null },
     { label: 'Purchase Bills',     icon: '📦', href: '/dashboard/bills',              section: 'CRM',        feature: null },
     { label: 'Payments',           icon: '💳', href: '/dashboard/payments',           section: 'CRM',        feature: null },
-
-    // BANKING
     { label: 'Bank Accounts',      icon: '🏦', href: '/dashboard/banking/bank-accounts', section: 'BANKING',  feature: null },
     { label: 'Bank Transfers',     icon: '🔄', href: '/dashboard/banking/bank-transfers', section: 'BANKING',  feature: null },
-
-    // INVENTORY
     { label: 'Products',           icon: '📦', href: '/dashboard/products',           section: 'INVENTORY',  feature: null },
     { label: 'Inventory Adj.',     icon: '⚖️', href: '/dashboard/inventory/adjustments', section: 'INVENTORY', feature: 'inventory' },
-
-    // ACCOUNTING
     { label: 'Chart of Accounts',  icon: '📋', href: '/dashboard/accounts',           section: 'ACCOUNTING', feature: null },
     { label: 'Journal Entries',    icon: '📓', href: '/dashboard/journal',            section: 'ACCOUNTING', feature: null },
     { label: 'Trial Balance',      icon: '⚖️', href: '/dashboard/reports/trial-balance', section: 'ACCOUNTING', feature: null },
@@ -101,8 +125,6 @@ function DashboardLayoutInner({
     { label: 'All Reports',        icon: '📁', href: '/dashboard/reports',            section: 'ACCOUNTING', feature: null },
     { label: 'Invoice Automation', icon: '⚙️', href: '/dashboard/settings/invoice-automation', section: 'ACCOUNTING', feature: 'invoice_automation' },
     { label: 'Investors',          icon: '💼', href: '/dashboard/investors',           section: 'ACCOUNTING', feature: 'investors' },
-
-    // SYSTEM
     { label: 'Admin Panel',        icon: '👑', href: '/dashboard/admin/users',        section: 'SYSTEM',     feature: null },
     { label: 'Feature Manager',    icon: '⚙️', href: '/dashboard/admin/features',     section: 'SYSTEM',     feature: null },
     { label: 'Upgrade Plan',       icon: '⭐', href: '/dashboard/upgrade',            section: 'SYSTEM',     feature: null },
@@ -111,7 +133,11 @@ function DashboardLayoutInner({
     { label: 'New Company',       icon: '🏢', href: '/dashboard/companies/new',       section: 'SYSTEM',     feature: null },
   ]
 
-  const navItems = allNavItems.filter(item => item.feature === null || hasFeature(item.feature))
+  const navItems = allNavItems.filter(
+    item =>
+      (item.feature === null || hasFeature(item.feature)) &&
+      (!role || (roleAccess[item.label] && roleAccess[item.label].includes(role)))
+  )
 
   const sections = navItems.reduce((acc: Record<string, typeof navItems>, item) => {
     if (!acc[item.section]) acc[item.section] = []
@@ -178,7 +204,6 @@ function DashboardLayoutInner({
                 }}
               />
             )}
-            {/* ─── Universal Back Button ─── */}
             <button
               onClick={handleBack}
               className="dl-action-btn"
@@ -193,7 +218,6 @@ function DashboardLayoutInner({
             >
               ← Back
             </button>
-            {/* ─── Universal Dashboard Button ─── */}
             <a
               href="/dashboard"
               className="dl-action-btn"
@@ -217,17 +241,25 @@ function DashboardLayoutInner({
             </div>
             <div className="dl-topbar-actions">
               {hasFeature('sales_invoices') && (
-                <a href="/dashboard/invoices/new" className="dl-action-btn dl-btn-invoice"><span>🧾</span> New Invoice</a>
+                <a href="/dashboard/invoices/new" className="dl-action-btn dl-btn-invoice">
+                  <span>🧾</span> New Invoice
+                </a>
               )}
               {hasFeature('purchase_bills') && (
-                <a href="/dashboard/bills/new"    className="dl-action-btn dl-btn-bill"   ><span>📦</span> New Bill</a>
+                <a href="/dashboard/bills/new" className="dl-action-btn dl-btn-bill">
+                  <span>📦</span> New Bill
+                </a>
               )}
-              <a href="/dashboard/receipts/new" className="dl-action-btn dl-btn-receipt"><span>💰</span> Receipt</a>
-              <a href="/dashboard/payments/new" className="dl-action-btn dl-btn-payment"><span>💳</span> Payment</a>
+              <a href="/dashboard/receipts/new" className="dl-action-btn dl-btn-receipt">
+                <span>💰</span> Receipt
+              </a>
+              <a href="/dashboard/payments/new" className="dl-action-btn dl-btn-payment">
+                <span>💳</span> Payment
+              </a>
             </div>
           </header>
           <TrialGuard>
-            <div style={{ padding: "24px", background: "#EFF4FB", minHeight: "100%" }}>
+            <div className="dl-main-inner">
               {children}
             </div>
           </TrialGuard>
