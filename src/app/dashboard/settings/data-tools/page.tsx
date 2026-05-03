@@ -1,12 +1,53 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import {
   Trash2, Upload, Download, Save, RotateCcw, AlertTriangle,
 } from "lucide-react"
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
+
+// ---------- DB‑validated active company ID ----------
+async function getActiveCompanyId(supabase: any): Promise<string> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return '00000000-0000-0000-0000-000000000001'
+
+    const cookieMatch = document.cookie.match(/(?:^| )active_company_id=([^;]+)/)
+    const candidateId = cookieMatch ? cookieMatch[2] : (user.app_metadata as any)?.company_id
+
+    // prefer the active company from user_roles
+    const { data: activeRole } = await supabase
+      .from('user_roles')
+      .select('company_id')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle()
+    if (activeRole?.company_id) return activeRole.company_id
+
+    // fallback: any company the user belongs to
+    if (candidateId) {
+      const { data: anyRole } = await supabase
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', user.id)
+        .eq('company_id', candidateId)
+        .maybeSingle()
+      if (anyRole) return candidateId
+    }
+
+    const { data: first } = await supabase
+      .from('user_roles')
+      .select('company_id')
+      .eq('user_id', user.id)
+      .limit(1)
+      .single()
+    return first?.company_id || '00000000-0000-0000-0000-000000000001'
+  } catch {
+    return '00000000-0000-0000-0000-000000000001'
+  }
+}
 
 export default function DataManagementPage() {
   const supabase = createBrowserClient(
@@ -19,8 +60,9 @@ export default function DataManagementPage() {
 
   const [flash, setFlash] = useState("")
   const [confirmSection, setConfirmSection] = useState<string | null>(null)
+  const [companyId, setCompanyId] = useState<string | null>(null)
 
-  // ── Import state ───────────────────────────────────────────
+  // import state
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importEntity, setImportEntity] = useState("customer")
   const [importing, setImporting] = useState(false)
@@ -28,112 +70,92 @@ export default function DataManagementPage() {
   const [columnMap, setColumnMap] = useState<Record<string, string>>({})
   const [duplicateAction, setDuplicateAction] = useState<"skip" | "update">("skip")
 
+  useEffect(() => {
+    getActiveCompanyId(supabase).then(id => setCompanyId(id))
+  }, [])
+
   const showMessage = (msg: string) => {
     setFlash(msg)
     setTimeout(() => setFlash(""), 5000)
   }
 
-  // ── Generic delete helper ──────────────────────────────────
+  // ----- delete helpers (all scoped by companyId) -----
   const deleteAllFromTable = async (table: string, message: string) => {
     try {
-      await supabase.from(table).delete().neq("id", 0)
+      await supabase.from(table).delete().eq("company_id", companyId!)
       showMessage("✅ " + message)
       setConfirmSection(null)
-    } catch (e: any) {
-      showMessage("❌ " + (e.message || "Error"))
-    }
+    } catch (e: any) { showMessage("❌ " + (e.message || "Error")) }
   }
 
   const resetBalances = async () => {
-    await supabase.from("accounts").update({ balance: 0 }).neq("id", 0)
+    await supabase.from("accounts").update({ balance: 0 }).eq("company_id", companyId!)
     showMessage("✅ Account balances reset to zero.")
   }
 
-  // ── Specific operations ─────────────────────────────────────
   const handleDeleteJournal = async () => {
-    await supabase.from("journal_lines").delete().neq("id", 0)
-    await supabase.from("journal_entries").delete().neq("id", 0)
+    await supabase.from("journal_lines").delete().eq("company_id", companyId!)
+    await supabase.from("journal_entries").delete().eq("company_id", companyId!)
     await resetBalances()
     setConfirmSection(null)
   }
-
   const handleDeleteInvoices = async () => {
-    await supabase.from("invoice_items").delete().neq("id", 0)
-    await supabase.from("invoices").delete().neq("id", 0)
-    showMessage("✅ All invoices deleted.")
-    setConfirmSection(null)
+    await supabase.from("invoice_items").delete().eq("company_id", companyId!)
+    await supabase.from("invoices").delete().eq("company_id", companyId!)
+    showMessage("✅ All invoices deleted."); setConfirmSection(null)
   }
-
   const handleDeleteSalesInvoices = async () => {
-    const { data: sales } = await supabase.from("invoices").select("id").eq("type", "sale")
+    const { data: sales } = await supabase.from("invoices").select("id").eq("company_id", companyId!).eq("type", "sale")
     if (sales && sales.length) {
       const ids = sales.map((i: any) => i.id)
-      await supabase.from("invoice_items").delete().in("invoice_id", ids)
-      await supabase.from("invoices").delete().eq("type", "sale")
+      await supabase.from("invoice_items").delete().in("invoice_id", ids).eq("company_id", companyId!)
+      await supabase.from("invoices").delete().in("id", ids).eq("company_id", companyId!)
     }
-    showMessage("✅ Sales invoices deleted.")
-    setConfirmSection(null)
+    showMessage("✅ Sales invoices deleted."); setConfirmSection(null)
   }
-
   const handleDeletePurchaseBills = async () => {
-    const { data: purchases } = await supabase.from("invoices").select("id").eq("type", "purchase")
+    const { data: purchases } = await supabase.from("invoices").select("id").eq("company_id", companyId!).eq("type", "purchase")
     if (purchases && purchases.length) {
       const ids = purchases.map((i: any) => i.id)
-      await supabase.from("invoice_items").delete().in("invoice_id", ids)
-      await supabase.from("invoices").delete().eq("type", "purchase")
+      await supabase.from("invoice_items").delete().in("invoice_id", ids).eq("company_id", companyId!)
+      await supabase.from("invoices").delete().in("id", ids).eq("company_id", companyId!)
     }
-    showMessage("✅ Purchase bills deleted.")
-    setConfirmSection(null)
+    showMessage("✅ Purchase bills deleted."); setConfirmSection(null)
   }
-
   const handleDeleteCustomers = async () => {
-    const { data: custs } = await supabase.from("customers").select("id")
+    const { data: custs } = await supabase.from("customers").select("id").eq("company_id", companyId!)
     if (custs && custs.length) {
       const custIds = custs.map((c: any) => c.id)
-      const { data: invs } = await supabase
-        .from("invoices")
-        .select("id")
-        .eq("type", "sale")
-        .in("party_id", custIds)
+      const { data: invs } = await supabase.from("invoices").select("id").eq("company_id", companyId!).eq("type", "sale").in("party_id", custIds)
       if (invs && invs.length) {
         const invIds = invs.map((i: any) => i.id)
-        await supabase.from("invoice_items").delete().in("invoice_id", invIds)
-        await supabase.from("invoices").delete().in("id", invIds)
+        await supabase.from("invoice_items").delete().in("invoice_id", invIds).eq("company_id", companyId!)
+        await supabase.from("invoices").delete().in("id", invIds).eq("company_id", companyId!)
       }
-      await supabase.from("customers").delete().neq("id", 0)
+      await supabase.from("customers").delete().eq("company_id", companyId!)
     }
-    showMessage("✅ Customers and related invoices deleted.")
-    setConfirmSection(null)
+    showMessage("✅ Customers and related invoices deleted."); setConfirmSection(null)
   }
-
   const handleDeleteSuppliers = async () => {
-    const { data: supps } = await supabase.from("suppliers").select("id")
+    const { data: supps } = await supabase.from("suppliers").select("id").eq("company_id", companyId!)
     if (supps && supps.length) {
       const suppIds = supps.map((s: any) => s.id)
-      const { data: invs } = await supabase
-        .from("invoices")
-        .select("id")
-        .eq("type", "purchase")
-        .in("party_id", suppIds)
+      const { data: invs } = await supabase.from("invoices").select("id").eq("company_id", companyId!).eq("type", "purchase").in("party_id", suppIds)
       if (invs && invs.length) {
         const invIds = invs.map((i: any) => i.id)
-        await supabase.from("invoice_items").delete().in("invoice_id", invIds)
-        await supabase.from("invoices").delete().in("id", invIds)
+        await supabase.from("invoice_items").delete().in("invoice_id", invIds).eq("company_id", companyId!)
+        await supabase.from("invoices").delete().in("id", invIds).eq("company_id", companyId!)
       }
-      await supabase.from("suppliers").delete().neq("id", 0)
+      await supabase.from("suppliers").delete().eq("company_id", companyId!)
     }
-    showMessage("✅ Suppliers and related bills deleted.")
-    setConfirmSection(null)
+    showMessage("✅ Suppliers and related bills deleted."); setConfirmSection(null)
   }
-
   const handleDeleteProducts = async () => {
-    await supabase.from("stock_moves").delete().neq("id", 0)
-    await supabase.from("invoice_items").delete().neq("id", 0)
-    await supabase.from("products").delete().neq("id", 0)
-    showMessage("✅ Products deleted.")
-    setConfirmSection(null)
+    await supabase.from("stock_moves").delete().eq("company_id", companyId!)
+    await supabase.from("invoice_items").delete().eq("company_id", companyId!)
+    await supabase.from("products").delete().eq("company_id", companyId!)
+    showMessage("✅ Products deleted."); setConfirmSection(null)
   }
-
   const handleCompleteReset = async () => {
     const tables = [
       "journal_lines", "journal_entries",
@@ -143,26 +165,21 @@ export default function DataManagementPage() {
       "company_settings", "user_roles"
     ]
     for (const table of tables) {
-      await supabase.from(table).delete().neq("id", 0)
+      await supabase.from(table).delete().eq("company_id", companyId!)
     }
     await resetBalances()
-    showMessage("✅ Complete reset done. Default chart of accounts preserved.")
-    setConfirmSection(null)
+    showMessage("✅ Complete reset done."); setConfirmSection(null)
   }
 
-  // ── CSV IMPORT HANDLERS ────────────────────────────────────
+  // ----- CSV Import handlers (same as before, scoped) -----
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     setImportFile(file)
-
     try {
       const text = await file.text()
       const rows = text.split("\n").filter(line => line.trim() !== "")
-      if (rows.length === 0) {
-        showMessage("File is empty.")
-        return
-      }
+      if (rows.length === 0) { showMessage("File is empty."); return }
       const headers = rows[0].split(",").map(h => h.trim())
       const data = rows.slice(1).map(row => {
         const values = row.split(",")
@@ -171,7 +188,6 @@ export default function DataManagementPage() {
         return obj
       })
       setImportPreview(data)
-      // Auto‑map columns
       const autoMap: Record<string, string> = {}
       headers.forEach(h => {
         const lower = h.toLowerCase().replace(/\s/g, "")
@@ -186,38 +202,24 @@ export default function DataManagementPage() {
         if (lower.includes("qty") || lower.includes("quantity")) autoMap.qty_on_hand = h
       })
       setColumnMap(autoMap)
-    } catch (err) {
-      showMessage("Error reading file. Please upload a valid CSV.")
-    }
+    } catch { showMessage("Error reading file.") }
   }
 
   const handleImport = async () => {
-    if (!importFile || importing) return
+    if (!importFile || importing || !companyId) return
     setImporting(true)
-    showMessage("")
-
-    const tableMap: Record<string, string> = {
-      customer: "customers",
-      supplier: "suppliers",
-      product: "products",
-    }
+    const tableMap: Record<string, string> = { customer: "customers", supplier: "suppliers", product: "products" }
     const tableName = tableMap[importEntity]
     if (!tableName) { showMessage("Invalid entity type."); setImporting(false); return }
 
-    if (!columnMap.name) { showMessage("Name column is required."); setImporting(false); return }
-
-    const autoCode = !columnMap.code
     let startNum = 1
-    if (autoCode) {
+    if (!columnMap.code) {
       const prefix = importEntity === "customer" ? "CUST-" : importEntity === "supplier" ? "VEND-" : "PROD-"
-      const { data: existing } = await supabase.from(tableName).select("code").like("code", `${prefix}%`)
+      const { data: existing } = await supabase.from(tableName).select("code").like("code", `${prefix}%`).eq("company_id", companyId)
       let maxNum = 0
       existing?.forEach((r: any) => {
         const parts = r.code.split("-")
-        if (parts.length === 2) {
-          const n = parseInt(parts[1])
-          if (!isNaN(n) && n > maxNum) maxNum = n
-        }
+        if (parts.length === 2) { const n = parseInt(parts[1]); if (!isNaN(n) && n > maxNum) maxNum = n }
       })
       startNum = maxNum + 1
     }
@@ -225,12 +227,8 @@ export default function DataManagementPage() {
     let success = 0, updated = 0, skipped = 0
     for (const row of importPreview) {
       const record: any = {}
-      Object.entries(columnMap).forEach(([field, col]) => {
-        record[field] = row[col] || ""
-      })
+      Object.entries(columnMap).forEach(([field, col]) => { record[field] = row[col] || "" })
       if (!record.name) continue
-
-      // numeric conversion
       if (importEntity === "product") {
         record.cost_price = parseFloat(record.cost_price || 0)
         record.sale_price = parseFloat(record.sale_price || 0)
@@ -238,32 +236,18 @@ export default function DataManagementPage() {
       } else {
         record.balance = parseFloat(record.balance || 0)
       }
-
-      if (autoCode) {
+      if (!columnMap.code) {
         const code = importEntity === "customer" ? `CUST-${String(startNum++).padStart(3, "0")}`
           : importEntity === "supplier" ? `VEND-${String(startNum++).padStart(3, "0")}`
           : `PROD-${String(startNum++).padStart(3, "0")}`
         record.code = code
       }
-
-      const { data: existing } = await supabase.from(tableName).select("id").eq("code", record.code).maybeSingle()
+      const { data: existing } = await supabase.from(tableName).select("id").eq("code", record.code).eq("company_id", companyId).maybeSingle()
       if (existing) {
         if (duplicateAction === "skip") { skipped++; continue }
-        else {
-          const { error } = await supabase.from(tableName).update(record).eq("code", record.code)
-          if (error) {
-            showMessage("Error updating " + record.code + ": " + error.message)
-            continue
-          }
-          updated++
-        }
+        else { await supabase.from(tableName).update(record).eq("code", record.code).eq("company_id", companyId); updated++ }
       } else {
-        const { error } = await supabase.from(tableName).insert(record)
-        if (error) {
-          showMessage("Error inserting " + record.code + ": " + error.message)
-          continue
-        }
-        success++
+        await supabase.from(tableName).insert({ ...record, company_id: companyId }); success++
       }
     }
     showMessage(`✅ Import completed! Inserted: ${success}, Updated: ${updated}, Skipped: ${skipped}`)
@@ -276,15 +260,15 @@ export default function DataManagementPage() {
     product: ["name", "code", "cost_price", "sale_price", "qty_on_hand"],
   }
 
+  // ----- Access guards -----
+  if (companyId === null) return <div style={{ padding: 24, textAlign: "center" }}>Loading company context…</div>
   if (!role) return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
-  if (!canView) {
-    return (
-      <div style={{ padding: 24, textAlign: "center" }}>
-        <h2>Access Denied</h2>
-        <p style={{ color: "#94A3B8" }}>You do not have permission to view this page.</p>
-      </div>
-    )
-  }
+  if (!canView) return (
+    <div style={{ padding: 24, textAlign: "center" }}>
+      <h2>Access Denied</h2>
+      <p style={{ color: "#94A3B8" }}>You do not have permission to view this page.</p>
+    </div>
+  )
 
   return (
     <RoleGuard allowedRoles={["admin", "accountant"]}>
@@ -323,16 +307,16 @@ export default function DataManagementPage() {
 
         {flash && (
           <div style={{
-            background: flash.startsWith("✅") ? "#F0FDF4" : "#FEF2F2",
-            border: "1px solid " + (flash.startsWith("✅") ? "#BBF7D0" : "#FECACA"),
-            color: flash.startsWith("✅") ? "#15803D" : "#B91C1C",
+            background: flash.includes("✅") ? "#F0FDF4" : "#FEF2F2",
+            border: "1px solid " + (flash.includes("✅") ? "#BBF7D0" : "#FECACA"),
+            color: flash.includes("✅") ? "#15803D" : "#B91C1C",
             padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13
           }}>
             {flash}
           </div>
         )}
 
-        {/* ─── Clean / Reset cards ────────────────────────────────── */}
+        {/* ── Delete / Reset cards ─────────────────────────── */}
         <div className="dm-grid">
           {[
             { key: "journal", title: "Delete Journal Entries", desc: "Remove all journal entries and reset balances.", fn: handleDeleteJournal },
@@ -342,7 +326,7 @@ export default function DataManagementPage() {
             { key: "customers", title: "Delete Customers", desc: "Remove all customers & related invoices.", fn: handleDeleteCustomers },
             { key: "suppliers", title: "Delete Suppliers", desc: "Remove all suppliers & related bills.", fn: handleDeleteSuppliers },
             { key: "products", title: "Delete Products", desc: "Remove all products, stock moves & invoice items.", fn: handleDeleteProducts },
-            { key: "reset_balances", title: "Reset Balances", desc: "Set all account balances to zero.", fn: () => { resetBalances(); setConfirmSection(null); } },
+            { key: "reset_balances", title: "Reset Balances", desc: "Set all account balances to zero.", fn: () => { resetBalances(); setConfirmSection(null) } },
             { key: "nuke", title: "Complete Reset", desc: "Delete ALL data except default chart of accounts.", fn: handleCompleteReset },
           ].map(item => (
             <div key={item.key} className="dm-card">
@@ -365,7 +349,7 @@ export default function DataManagementPage() {
           ))}
         </div>
 
-        {/* ─── Bulk Import Section ───────────────────────────────── */}
+        {/* ── Bulk Import Section ───────────────────────────── */}
         <div className="import-section">
           <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10 }}>📥 Import from CSV</h3>
           <p style={{ fontSize: 12, color: "#64748B", marginBottom: 12 }}>

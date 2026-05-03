@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Company name is required' }, { status: 400 })
   }
 
-  // Don't allow someone who already has a company
+  // Prevent duplicate trials
   const { count } = await supabaseAdmin
     .from('user_roles')
     .select('*', { count: 'exact', head: true })
@@ -60,18 +60,29 @@ export async function POST(request: Request) {
     )
   }
 
-  // Seed accounts and assign admin role
-  await supabaseAdmin.rpc('seed_accounts_for_company', { target_company_id: company.id })
-  await supabaseAdmin.from('user_roles').insert({
-    user_id: user.id,
-    company_id: company.id,
-    role: 'admin',
+  // Seed accounts with the new safe function (pass user ID)
+  await supabaseAdmin.rpc('seed_accounts_for_company', {
+    target_company_id: company.id,
+    actor_user_id: user.id,
   })
 
-  // Refresh the user's JWT to include the new company_id claim
+  // Upsert admin role and mark as active
+  await supabaseAdmin.from('user_roles')
+    .update({ is_active: false })
+    .eq('user_id', user.id)
+
+  await supabaseAdmin.from('user_roles')
+    .upsert({
+      user_id: user.id,
+      company_id: company.id,
+      role: 'admin',
+      is_active: true,
+    })
+
+  // Refresh JWT
   await supabaseAdmin.functions.invoke('custom-claims', { body: { userId: user.id } })
 
-  // Build the response and set the active_company_id cookie
+  // Set active company cookie
   const response = NextResponse.json({
     success: true,
     companyId: company.id,
@@ -81,7 +92,7 @@ export async function POST(request: Request) {
 
   response.cookies.set('active_company_id', company.id, {
     path: '/',
-    maxAge: 60 * 60 * 24 * 30, // 30 days
+    maxAge: 60 * 60 * 24 * 30,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
   })
