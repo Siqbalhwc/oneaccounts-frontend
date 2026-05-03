@@ -171,6 +171,9 @@ function DashboardLayoutInner({
               <div className="dl-topbar-title">👋 {getGreeting()}, {email.split('@')[0]}!</div>
               <div className="dl-topbar-subtitle">Here's what's happening with your business today</div>
             </div>
+ <div style={{ flexShrink: 0 }}>
+              <NotificationBell />
+            </div>
             <div className="dl-topbar-actions">
               {hasFeature('sales_invoices') && (
                 <a href="/dashboard/invoices/new" className="dl-action-btn dl-btn-invoice"><span>🧾</span> New Invoice</a>
