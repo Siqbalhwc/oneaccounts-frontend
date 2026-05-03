@@ -137,7 +137,6 @@ export default function DashboardPage() {
     try {
       const today = new Date().toISOString().split("T")[0]
 
-      // Build 6 month ranges
       const monthRanges = Array.from({ length: 6 }, (_, i) => {
         const d = new Date()
         d.setMonth(d.getMonth() - (5 - i))
@@ -148,7 +147,6 @@ export default function DashboardPage() {
         }
       })
 
-      // Fire ALL queries in parallel
       const [
         { data: accounts },
         { count: custCount },
@@ -174,20 +172,17 @@ export default function DashboardPage() {
         ]),
       ])
 
-      // KPIs
       if (accounts) {
         const a = { Asset: 0, Liability: 0, Equity: 0, Revenue: 0, Expense: 0 }
         accounts.forEach((acc: any) => { if (a[acc.type as keyof typeof a] !== undefined) a[acc.type as keyof typeof a] += (acc.balance || 0) })
         setKpis({ assets: a.Asset, liabilities: a.Liability, equity: a.Equity, revenue: a.Revenue, expenses: a.Expense, profit: a.Revenue - a.Expense })
       }
 
-      // Ops
       let receivables = 0, unpaid = 0, partial = 0
       unpaidInvs?.forEach((inv: any) => { receivables += (inv.total || 0) - (inv.paid || 0); if (inv.status === "Unpaid") unpaid++; if (inv.status === "Partial") partial++ })
       const lowStock = prods?.filter((p: any) => p.qty_on_hand > 0 && p.qty_on_hand <= p.reorder_level).length || 0
       setOps({ receivables, unpaid_invoices: unpaid, partial_invoices: partial, payables: payablesData?.balance || 0, low_stock: lowStock, total_products: prodCount || 0, total_customers: custCount || 0, total_suppliers: suppCount || 0 })
 
-      // Overdue — fetch customer names
       const partyIds = overdueInvs?.map((i: any) => i.party_id).filter(Boolean) || []
       const customerMap: Record<number, { name: string; phone: string }> = {}
       if (partyIds.length > 0) {
@@ -202,7 +197,6 @@ export default function DashboardPage() {
         due_date: inv.due_date,
       })) || [])
 
-      // Monthly charts
       const months: string[] = [], revValues: number[] = [], profitValues: number[] = []
       monthRanges.forEach(({ label }, i) => {
         const rev = (monthlyResults[i * 2] as any).data?.reduce((s: number, r: any) => s + (r.total || 0), 0) || 0
@@ -247,7 +241,6 @@ export default function DashboardPage() {
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
         @keyframes spin { to { transform: rotate(360deg) } }
 
-        /* ── KPI Grid ── */
         .kpi-grid {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
@@ -255,8 +248,6 @@ export default function DashboardPage() {
           margin-bottom: 7px;
           width: 100%;
         }
-
-        /* ── Chart Grid ── */
         .chart-grid {
           display: grid;
           grid-template-columns: repeat(2, 1fr);
@@ -264,15 +255,12 @@ export default function DashboardPage() {
           margin-bottom: 7px;
           width: 100%;
         }
-
-        /* ── Overdue table ── */
         .ov-header { display: grid; grid-template-columns: 1fr 110px 140px 100px; padding: 7px 12px; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #94A3B8; }
         .ov-row { display: grid; grid-template-columns: 1fr 110px 140px 100px; padding: 9px 12px; border-bottom: 1px solid #F1F5F9; align-items: center; font-size: clamp(11px,0.9vw,12.5px); }
         .ov-row:last-child { border-bottom: none; }
         .ov-row:hover { background: #FAFBFF; }
         .ov-bal-inline { display: none; }
 
-        /* ── Tablet ≤900px ── */
         @media (max-width: 900px) {
           .kpi-grid   { grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 6px; }
           .chart-grid { grid-template-columns: 1fr; gap: 6px; }
@@ -281,31 +269,22 @@ export default function DashboardPage() {
           .ov-col-bal { display: none !important; }
           .ov-bal-inline { display: block !important; }
         }
-
-        /* ── Mobile ≤600px — tighten padding ── */
         @media (max-width: 600px) {
           .kpi-grid   { gap: 5px; margin-bottom: 5px; }
           .chart-grid { gap: 5px; margin-bottom: 5px; }
         }
-
-        /* ── Mobile ≤480px — stack overdue ── */
         @media (max-width: 480px) {
           .ov-header { display: none !important; }
           .ov-row { grid-template-columns: 1fr 1fr !important; grid-template-rows: auto auto; gap: 4px; padding: 8px 10px; }
         }
-
-        /* ── Very small ≤360px ── */
         @media (max-width: 360px) {
           .kpi-grid { grid-template-columns: 1fr; }
         }
-
-        /* ── Ultrawide ≥2560px ── */
         @media (min-width: 2560px) {
           .dash-content { max-width: 2200px; margin: 0 auto; }
         }
       `}</style>
 
-      {/* ── Outer wrapper: tight padding on all sides, especially mobile ── */}
       <div style={{
         padding: "4px 6px 8px",
         background: "#EFF4FB",
@@ -321,15 +300,18 @@ export default function DashboardPage() {
             </div>
           )}
 
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
+          {/* ── Financial Overview + Refresh (same row) ── */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, marginTop: 2 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <div style={{ width: 3, height: 14, background: "#1E3A8A", borderRadius: 2, flexShrink: 0 }}/>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#1E3A8A" }}>Financial Overview</span>
+            </div>
             <button onClick={fetchData} disabled={refreshing}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 11px", background: "white", border: "1px solid #E2E8F0", borderRadius: 7, fontSize: 11, fontWeight: 600, color: "#475569", cursor: "pointer", fontFamily: "inherit" }}>
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", background: "white", border: "1px solid #E2E8F0", borderRadius: 7, fontSize: 11, fontWeight: 600, color: "#475569", cursor: "pointer", fontFamily: "inherit" }}>
               <RefreshCw size={12} style={{ animation: refreshing ? "spin 0.8s linear infinite" : "none" }}/> Refresh
             </button>
           </div>
 
-          {/* Financial KPIs */}
-          <SectionLabel>Financial Overview</SectionLabel>
           <div className="kpi-grid">
             <KpiCard label="Total Assets"      value={kpis.assets}      subtitle="All company resources"   accent="#1E3A8A" icon={<Building2 size={13}/>}   trend={incomeChart.values} href="/dashboard/reports/balance-sheet"/>
             <KpiCard label="Total Liabilities" value={kpis.liabilities} subtitle="Outstanding obligations" accent="#EF4444" icon={<TrendingDown size={13}/>} trend={incomeChart.values.map(v => v * 0.4)} href="/dashboard/reports/balance-sheet"/>
@@ -337,7 +319,6 @@ export default function DashboardPage() {
             <KpiCard label="Net Profit"        value={kpis.profit}      subtitle="Revenue − Expenses"      accent={profitable ? "#10B981" : "#EF4444"} icon={profitable ? <TrendingUp size={13}/> : <TrendingDown size={13}/>} trend={profitChart.values} href="/dashboard/reports/profit-loss"/>
           </div>
 
-          {/* Operations KPIs */}
           <SectionLabel>Operations</SectionLabel>
           <div className="kpi-grid">
             <KpiCard label="Receivables" value={ops.receivables}     subtitle={`${ops.unpaid_invoices} unpaid · ${ops.partial_invoices} partial`} accent="#F59E0B" icon={<Clock size={13}/>}        trend={incomeChart.values.map(v => v * 0.2)}  href="/dashboard/reports/ar-aging"/>
@@ -346,14 +327,12 @@ export default function DashboardPage() {
             <KpiCard label="Customers"   value={ops.total_customers} subtitle={`${ops.total_suppliers} suppliers · ${ops.total_products} SKUs`} accent="#0EA5E9" icon={<Users size={13}/>} isCurrency={false} trend={incomeChart.values.map(v => Math.max(1, v * 0.03))} href="/dashboard/customers"/>
           </div>
 
-          {/* Charts */}
           <SectionLabel>Monthly Trends</SectionLabel>
           <div className="chart-grid">
             <ChartCard title="Monthly Revenue" badge="Last 6 months" badgeColor="#1D4ED8" labels={incomeChart.labels} values={incomeChart.values} color="#1D4ED8"/>
             <ChartCard title="Monthly Profit"  badge="Last 6 months" badgeColor="#10B981" labels={profitChart.labels} values={profitChart.values} color={profitChart.values.every(v => v >= 0) ? "#10B981" : "#1D4ED8"}/>
           </div>
 
-          {/* Overdue invoices */}
           <SectionLabel>Overdue Invoice Reminders</SectionLabel>
           <div style={{ background: "white", borderRadius: 10, border: "1px solid #E2E8F0", overflow: "hidden", marginBottom: 8, width: "100%" }}>
             {overdue.length === 0
@@ -387,7 +366,6 @@ export default function DashboardPage() {
             }
           </div>
 
-          {/* Status footer */}
           <div style={{ background: "white", borderRadius: 8, border: "1px solid #E2E8F0", padding: "7px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6, width: "100%" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <div style={{ width: 7, height: 7, borderRadius: "50%", background: profitable ? "#10B981" : "#EF4444", boxShadow: `0 0 0 3px ${profitable ? "#10B98133" : "#EF444433"}`, flexShrink: 0 }}/>
