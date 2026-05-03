@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
+import { usePlan } from "@/contexts/PlanContext"
 import { Bell, X, Check } from "lucide-react"
 
 interface Notification {
@@ -18,6 +19,7 @@ export default function NotificationBell() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
+  const { hasFeature } = usePlan()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [open, setOpen] = useState(false)
@@ -54,7 +56,7 @@ export default function NotificationBell() {
 
   useEffect(() => {
     fetchNotifications()
-    const interval = setInterval(fetchNotifications, 60000) // refresh every minute
+    const interval = setInterval(fetchNotifications, 60000)
     return () => clearInterval(interval)
   }, [])
 
@@ -64,6 +66,8 @@ export default function NotificationBell() {
     payment_failed: "#DC2626",
     internal_alert: "#3B82F6",
   }
+
+  if (!hasFeature('notifications')) return null
 
   return (
     <div style={{ position: "relative" }}>
@@ -105,13 +109,11 @@ export default function NotificationBell() {
 
       {open && (
         <>
-          {/* Overlay to close when clicking outside */}
           <div
             style={{ position: "fixed", inset: 0, zIndex: 50 }}
             onClick={() => setOpen(false)}
           />
 
-          {/* Dropdown */}
           <div
             style={{
               position: "absolute",
@@ -178,13 +180,7 @@ export default function NotificationBell() {
                       marginBottom: 4,
                     }}
                   >
-                    <span
-                      style={{
-                        fontWeight: 600,
-                        fontSize: 13,
-                        color: "#1E293B",
-                      }}
-                    >
+                    <span style={{ fontWeight: 600, fontSize: 13, color: "#1E293B" }}>
                       {n.title}
                     </span>
                     <span style={{ fontSize: 10, color: "#94A3B8" }}>

@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { Settings, Database, Cog, Shield, ArrowRight } from "lucide-react"
+import { Settings, Database, Cog, Shield, Bell, ArrowRight } from "lucide-react"
 
 export default function SettingsHubPage() {
   const router = useRouter()
@@ -34,6 +34,13 @@ export default function SettingsHubPage() {
       icon: <Shield size={22} />,
       href: "/dashboard/settings/permissions",
       color: "#8B5CF6",
+    },
+    {
+      title: "Notification Settings",
+      desc: "Configure reminders and alerts",
+      icon: <Bell size={22} />,
+      href: "/dashboard/settings/notifications",
+      color: "#EF4444",
     },
   ]
 
