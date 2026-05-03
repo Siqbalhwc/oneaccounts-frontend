@@ -43,7 +43,7 @@ export default function SignupPage() {
       return
     }
 
-    // 2. User is logged in — create the company via trial API
+    // 2. User is logged in – create the company via trial API
     try {
       const res = await fetch("/api/trial/signup", {
         method: "POST",
@@ -56,7 +56,11 @@ export default function SignupPage() {
         setLoading(false)
         return
       }
-      // 3. Redirect to dashboard — JWT has the new company_id
+
+      // 3. ✨ Force a session refresh so the JWT picks up the new company_id
+      await supabase.auth.refreshSession()
+
+      // 4. Redirect to dashboard
       router.push("/dashboard")
     } catch (e) {
       setErrorMsg("Network error. Please try again.")
