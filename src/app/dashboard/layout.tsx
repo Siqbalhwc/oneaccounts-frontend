@@ -128,30 +128,33 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const email   = user.email || ''
   const initial = email.charAt(0).toUpperCase()
 
-  const defaultCompanyId = '00000000-0000-0000-0000-000000000001'
+  // Get the active company_id from the user's JWT metadata
+  const companyId = (user.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
 
-  const { data: compData } = await supabase
+  // Fetch company settings for the active company
+  const { data: compSettings } = await supabase
     .from('company_settings')
     .select('plan_id')
-    .eq('id', 1)
-    .single()
+    .eq('company_id', companyId)
+    .maybeSingle()
 
   let enabledFeatures: string[] = []
-  if (compData?.plan_id) {
+  if (compSettings?.plan_id) {
     const { data: pfData } = await supabase
       .from('plan_features')
       .select('features!inner(code)')
-      .eq('plan_id', compData.plan_id)
+      .eq('plan_id', compSettings.plan_id)
       .eq('enabled', true)
 
     if (pfData) {
       enabledFeatures = pfData.map((row: any) => row.features?.code).filter(Boolean) as string[]
     }
 
+    // Company-level overrides
     const { data: coData } = await supabase
       .from('company_features')
       .select('features!inner(code), enabled')
-      .eq('company_id', defaultCompanyId)
+      .eq('company_id', companyId)
 
     if (coData) {
       for (const row of coData) {
