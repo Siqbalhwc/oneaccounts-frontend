@@ -2,14 +2,12 @@ import { createClient as createSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
-// ── Service-role admin client (no cookies needed — server only) ───────────────
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
   { auth: { persistSession: false, autoRefreshToken: false } }
 )
 
-// ── Helper: check user is authenticated and is admin ─────────────────────────
 async function requireAdmin() {
   const supabase = await createSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -29,18 +27,10 @@ async function requireAdmin() {
   return { error: null, status: 200, user }
 }
 
-// ── GET: list all users with their roles ──────────────────────────────────────
+// ─── GET ──────────────────────────────────────────────────
 export async function GET() {
   const { error, status } = await requireAdmin()
   if (error) return NextResponse.json({ error }, { status })
-
-  // Use the DB function we created — bypasses Auth Admin API entirely
-  // Run this in Supabase SQL Editor first if not done yet:
-  //
-  // CREATE OR REPLACE FUNCTION get_auth_users()
-  // RETURNS TABLE (id uuid, email text, created_at timestamptz)
-  // LANGUAGE sql SECURITY DEFINER SET search_path = auth, public
-  // AS $$ SELECT id, email, created_at FROM auth.users ORDER BY created_at DESC; $$;
 
   const { data: authUsers, error: usersError } = await supabaseAdmin
     .rpc('get_auth_users')
@@ -52,7 +42,6 @@ export async function GET() {
 
   const userIds = (authUsers || []).map((u: any) => u.id)
 
-  // Fetch roles for all users in this company
   const { data: roles } = await supabaseAdmin
     .from('user_roles')
     .select('user_id, role')
@@ -72,7 +61,7 @@ export async function GET() {
   return NextResponse.json({ users: enriched })
 }
 
-// ── PUT: update a user's role ─────────────────────────────────────────────────
+// ─── PUT (update role) ────────────────────────────────────
 export async function PUT(request: Request) {
   const { error, status } = await requireAdmin()
   if (error) return NextResponse.json({ error }, { status })
@@ -96,4 +85,41 @@ export async function PUT(request: Request) {
   }
 
   return NextResponse.json({ success: true })
+}
+
+// ─── POST (invite user – no hard limit, per‑user billing) ──
+export async function POST(request: Request) {
+  const { error, status } = await requireAdmin()
+  if (error) return NextResponse.json({ error }, { status })
+
+  const { email, role = 'viewer' } = await request.json()
+  if (!email) return NextResponse.json({ error: 'Email required' }, { status: 400 })
+
+  const companyId = '00000000-0000-0000-0000-000000000001' // single‑tenant for now
+
+  // No limit check – just invite (admin already confirmed cost on frontend)
+  const { data: inviteData, error: inviteError } = await supabaseAdmin
+    .auth.admin.inviteUserByEmail(email, {
+      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
+    })
+
+  if (inviteError) {
+    console.error('Invite error:', inviteError)
+    return NextResponse.json({ error: inviteError.message }, { status: 500 })
+  }
+
+  if (inviteData.user) {
+    await supabaseAdmin
+      .from('user_roles')
+      .upsert({
+        user_id: inviteData.user.id,
+        company_id: companyId,
+        role,
+      })
+  }
+
+  return NextResponse.json({
+    success: true,
+    message: `Invitation sent to ${email}. They will appear after signing up.`
+  })
 }
