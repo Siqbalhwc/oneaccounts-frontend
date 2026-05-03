@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { Settings, Database, Cog, Shield, Bell, ArrowRight } from "lucide-react"
+import { Settings, Database, Cog, Shield, Bell, CreditCard, ArrowRight } from "lucide-react"
 
 export default function SettingsHubPage() {
   const router = useRouter()
@@ -27,6 +27,13 @@ export default function SettingsHubPage() {
       icon: <Cog size={22} />,
       href: "/dashboard/settings/invoice-automation",
       color: "#F59E0B",
+    },
+    {
+      title: "Payment Settings",
+      desc: "JazzCash merchant credentials and gateway config",
+      icon: <CreditCard size={22} />,
+      href: "/dashboard/settings/payments",
+      color: "#10B981",
     },
     {
       title: "Permissions Reference",
