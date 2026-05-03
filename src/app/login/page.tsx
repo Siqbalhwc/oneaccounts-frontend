@@ -321,6 +321,25 @@ export default function LoginPage() {
                     {isSignUp ? "Already have an account? Sign in" : "Don't have an account? Sign up"}
                   </button>
                 </div>
+                <div style={{ textAlign: "center", marginTop: 14, borderTop: "1px solid #E8EDF5", paddingTop: 14 }}>
+                  <a href="/signup"
+                     style={{
+                       display: "inline-block",
+                       padding: "10px 24px",
+                       background: "linear-gradient(135deg, #10B981, #047857)",
+                       color: "white",
+                       borderRadius: 8,
+                       fontWeight: 700,
+                       fontSize: 13,
+                       textDecoration: "none",
+                     }}
+                  >
+                    🚀 Start Free Trial (14 days · Professional Plan)
+                  </a>
+                  <p style={{ fontSize: 11, color: "#6B7280", marginTop: 6 }}>
+                    No credit card required. Create your company in seconds.
+                  </p>
+                </div>
               </div>
 
               {/* Card Foot — Support */}
