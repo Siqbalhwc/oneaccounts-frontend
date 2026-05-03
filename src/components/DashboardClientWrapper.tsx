@@ -68,15 +68,7 @@ function DashboardLayoutInner({
     return 'Good evening'
   }
 
-  const handleBack = () => {
-    if (window.history.length > 1) {
-      router.back()
-    } else {
-      router.push('/dashboard')
-    }
-  }
-
-  // Role-based access map (same as before)
+  // Role-based access map
   const roleAccess: Record<string, string[]> = {
     "Dashboard": ["admin", "accountant", "viewer"],
     "Customers": ["admin", "accountant", "viewer"],
@@ -204,34 +196,7 @@ function DashboardLayoutInner({
                 }}
               />
             )}
-            <button
-              onClick={handleBack}
-              className="dl-action-btn"
-              style={{
-                background: "transparent",
-                border: "1px solid #E2E8F0",
-                color: "#475569",
-                padding: "5px 10px",
-                fontSize: 13,
-              }}
-              title="Go Back"
-            >
-              ← Back
-            </button>
-            <a
-              href="/dashboard"
-              className="dl-action-btn"
-              style={{
-                background: "#EEF2FF",
-                border: "1px solid #C7D2FE",
-                color: "#4338CA",
-                padding: "5px 10px",
-                fontSize: 13,
-              }}
-              title="Dashboard"
-            >
-              🏠 Dashboard
-            </a>
+            {/* Back and Dashboard shortcuts removed for mobile clarity */}
             <div className="dl-topbar-greeting">
               <div className="dl-topbar-title">👋 {getGreeting()}, {email.split('@')[0]}!</div>
               <div className="dl-topbar-subtitle">Here's what's happening with your business today</div>
