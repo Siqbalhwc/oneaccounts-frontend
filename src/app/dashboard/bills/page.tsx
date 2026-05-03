@@ -6,6 +6,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import { Plus, Search } from "lucide-react"
 import { generateBillPDF } from "@/lib/pdf/billPDF"
 import DownloadPDFButton from "@/components/DownloadPDFButton"
+import Pagination from "@/components/Pagination"
 
 interface BillItem {
   id: number
@@ -25,27 +26,32 @@ export default function BillsPage() {
   const [bills, setBills] = useState<BillItem[]>([])
   const [search, setSearch] = useState("")
   const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
+  const [total, setTotal] = useState(0)
 
   const loadBills = async () => {
     setLoading(true)
+
+    const { count } = await supabase.from("invoices").select("*", { count: "exact", head: true }).eq("type", "purchase")
+    setTotal(count || 0)
+
+    const from = (page - 1) * pageSize
+    const to = from + pageSize - 1
     const { data: billData, error } = await supabase
       .from("invoices")
       .select("id,invoice_no,date,due_date,total,paid,status,party_id")
       .eq("type", "purchase")
       .order("date", { ascending: false })
+      .range(from, to)
 
     if (error || !billData) { setLoading(false); return }
 
     const supplierIds = [...new Set(billData.map(b => b.party_id).filter(Boolean))]
     let supplierMap: Record<number, string> = {}
     if (supplierIds.length > 0) {
-      const { data: suppData } = await supabase
-        .from("suppliers")
-        .select("id, name")
-        .in("id", supplierIds)
-      if (suppData) {
-        suppData.forEach((s: any) => { supplierMap[s.id] = s.name })
-      }
+      const { data: suppData } = await supabase.from("suppliers").select("id, name").in("id", supplierIds)
+      if (suppData) suppData.forEach((s: any) => { supplierMap[s.id] = s.name })
     }
 
     const enriched = billData.map(b => ({ ...b, supplier_name: supplierMap[b.party_id] || "Unknown" }))
@@ -53,12 +59,9 @@ export default function BillsPage() {
     setLoading(false)
   }
 
-  useEffect(() => { loadBills() }, [])
+  useEffect(() => { loadBills() }, [page, pageSize])
 
-  const filtered = bills.filter(b =>
-    (b.invoice_no || "").toLowerCase().includes(search.toLowerCase()) ||
-    (b.supplier_name || "").toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = bills.filter(b => (b.invoice_no || "").toLowerCase().includes(search.toLowerCase()) || (b.supplier_name || "").toLowerCase().includes(search.toLowerCase()))
 
   const statusStyle = (s: string) => {
     if (s === "Paid") return { bg: "#D1FAE5", color: "#065F46" }
@@ -77,10 +80,7 @@ export default function BillsPage() {
   return (
     <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", margin: 0 }}>📦 Purchase Bills</h1>
-          <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>View and manage all purchase bills</p>
-        </div>
+        <div><h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", margin: 0 }}>📦 Purchase Bills</h1><p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>View and manage all purchase bills</p></div>
         <button onClick={() => router.push("/dashboard/bills/new")}
           style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: "linear-gradient(135deg, #1740C8, #071352)", color: "white" }}>
           <Plus size={16} /> New Bill
@@ -113,6 +113,7 @@ export default function BillsPage() {
               </div>
             )
           })}
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1) }} />
         </div>
       }
     </div>

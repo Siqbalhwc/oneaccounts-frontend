@@ -4,47 +4,45 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { Plus } from "lucide-react"
-
-interface ReceiptItem {
-  id: number
-  entry_no: string
-  date: string
-  description: string
-  amount: number
-}
+import Pagination from "@/components/Pagination"
 
 export default function ReceiptsPage() {
   const router = useRouter()
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
-  const [entries, setEntries] = useState<ReceiptItem[]>([])
+  const [entries, setEntries] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
+  const [total, setTotal] = useState(0)
 
   useEffect(() => {
-    supabase.from("journal_entries")
-      .select("id, entry_no, date, description")
-      .like("entry_no", "RCP-%")
-      .order("date", { ascending: false })
-      .limit(50)
-      .then(async r => {
-        if (r.data) {
-          const enriched = await Promise.all(r.data.map(async (je: any) => {
-            const { data: lines } = await supabase.from("journal_lines").select("debit").eq("entry_id", je.id)
-            const amount = lines?.reduce((s: number, l: any) => s + (l.debit || 0), 0) || 0
-            return { ...je, amount }
-          }))
-          setEntries(enriched)
-        }
-        setLoading(false)
-      })
-  }, [])
+    const load = async () => {
+      setLoading(true)
+      const { count } = await supabase.from("journal_entries").select("*", { count: "exact", head: true }).like("entry_no", "RCP-%")
+      setTotal(count || 0)
+
+      const from = (page - 1) * pageSize
+      const to = from + pageSize - 1
+      const { data } = await supabase.from("journal_entries")
+        .select("id, entry_no, date, description").like("entry_no", "RCP-%").order("date", { ascending: false }).range(from, to)
+
+      if (data) {
+        const enriched = await Promise.all(data.map(async (je: any) => {
+          const { data: lines } = await supabase.from("journal_lines").select("debit").eq("entry_id", je.id)
+          const amount = lines?.reduce((s: number, l: any) => s + (l.debit || 0), 0) || 0
+          return { ...je, amount }
+        }))
+        setEntries(enriched)
+      }
+      setLoading(false)
+    }
+    load()
+  }, [page, pageSize])
 
   return (
     <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", margin: 0 }}>💰 Receipts</h1>
-          <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>Customer payment history</p>
-        </div>
+        <div><h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", margin: 0 }}>💰 Receipts</h1><p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>Customer payment history</p></div>
         <button onClick={() => router.push("/dashboard/receipts/new")}
           style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", fontFamily: "inherit", background: "linear-gradient(135deg, #1740C8, #071352)", color: "white" }}>
           <Plus size={16} /> New Receipt
@@ -65,6 +63,7 @@ export default function ReceiptsPage() {
               <span style={{ fontWeight: 700, color: "#10B981" }}>PKR {(e.amount || 0).toLocaleString()}</span>
             </div>
           ))}
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1) }} />
         </div>
       }
     </div>

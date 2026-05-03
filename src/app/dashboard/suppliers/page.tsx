@@ -6,6 +6,7 @@ import { Plus, Search, Edit, Trash2, X, Check } from "lucide-react"
 import { CsvExport } from "@/components/CsvExport"
 import { CsvImport } from "@/components/CsvImport"
 import { usePlan } from "@/contexts/PlanContext"
+import Pagination from "@/components/Pagination"
 
 interface Supplier {
   id: number
@@ -25,18 +26,16 @@ const styles = `
   .sp-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all 0.15s; white-space: nowrap; }
   .sp-btn-primary { background: linear-gradient(135deg, #1740C8, #071352); color: white; box-shadow: 0 2px 8px rgba(7,19,82,0.25); }
   .sp-btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
-  .sp-btn-outline:hover { border-color: #1740C8; color: #1740C8; }
   .sp-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .sp-search { position: relative; max-width: 320px; }
   .sp-search input { width: 100%; height: 40px; border: 1.5px solid #E2E8F0; border-radius: 9px; padding: 0 14px 0 38px; font-size: 13px; font-family: inherit; background: white; outline: none; }
-  .sp-search input:focus { border-color: #1740C8; }
   .sp-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94A3B8; }
   .sp-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 20px; }
   .sp-stat-card { background: white; border-radius: 10px; border: 1px solid #E2E8F0; padding: 14px 16px; }
   .sp-stat-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #94A3B8; margin-bottom: 4px; }
   .sp-stat-value { font-size: 22px; font-weight: 800; color: #EF4444; }
   .sp-table-wrap { background: white; border-radius: 10px; border: 1px solid #E2E8F0; overflow: hidden; }
-  .sp-table-header { display: grid; grid-template-columns: 100px 1fr 130px 1fr 100px 60px 60px; padding: 10px 16px; background: #F8FAFC; border-bottom: 2px solid #E2E8F0; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #94A3B8; align-items: center; }
+  .sp-table-header { display: grid; grid-template-columns: 100px 1fr 130px 1fr 100px 60px 60px; padding: 10px 16px; background: "#F8FAFC"; border-bottom: 2px solid #E2E8F0; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #94A3B8; align-items: center; }
   .sp-table-row { display: grid; grid-template-columns: 100px 1fr 130px 1fr 100px 60px 60px; padding: 10px 16px; border-bottom: 1px solid #F1F5F9; align-items: center; font-size: 13px; }
   .sp-table-row:hover { background: #FAFBFF; }
   .sp-code { font-weight: 700; color: #1E3A8A; font-size: 12px; }
@@ -53,14 +52,10 @@ const styles = `
   .sp-modal-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
   .sp-field-label { font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; }
   .sp-field-input { width: 100%; height: 40px; border: 1.5px solid #E5EAF2; border-radius: 9px; padding: 0 14px; font-size: 13px; font-family: inherit; background: #FAFBFF; outline: none; }
-  .sp-field-input:focus { border-color: #1740C8; background: white; }
   .sp-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   .sp-modal-footer { padding: 16px 24px; border-top: 1px solid #E2E8F0; display: flex; justify-content: flex-end; gap: 8px; }
-  @media (max-width: 768px) {
-    .sp-table-header, .sp-table-row { grid-template-columns: 80px 1fr 100px 60px 60px; }
-    .sp-hide-mobile { display: none; }
-    .sp-field-row { grid-template-columns: 1fr; }
-  }
+  @media (max-width: 768px) { .sp-table-header, .sp-table-row { grid-template-columns: 80px 1fr 100px 60px 60px; } .sp-hide-mobile { display: none; } }
+  @media (max-width: 480px) { .sp-table-header, .sp-table-row { grid-template-columns: 1fr 80px 50px 50px; } }
 `
 
 export default function SuppliersPage() {
@@ -81,15 +76,22 @@ export default function SuppliersPage() {
   const [address, setAddress] = useState("")
   const [openingBalance, setOpeningBalance] = useState(0)
   const [saving, setSaving] = useState(false)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
+  const [total, setTotal] = useState(0)
 
   const fetchSuppliers = async () => {
     setLoading(true)
-    const { data } = await supabase.from("suppliers").select("*").order("code")
+    const { count } = await supabase.from("suppliers").select("*", { count: "exact", head: true })
+    setTotal(count || 0)
+    const from = (page - 1) * pageSize
+    const to = from + pageSize - 1
+    const { data } = await supabase.from("suppliers").select("*").order("code").range(from, to)
     if (data) { setSuppliers(data); setFiltered(data) }
     setLoading(false)
   }
 
-  useEffect(() => { fetchSuppliers() }, [])
+  useEffect(() => { fetchSuppliers() }, [page, pageSize])
 
   useEffect(() => {
     if (!search.trim()) { setFiltered(suppliers); return }
@@ -114,11 +116,8 @@ export default function SuppliersPage() {
     if (!code.trim() || !name.trim()) return
     setSaving(true)
     const payload = { code: code.trim(), name: name.trim(), phone: phone.trim() || null, email: email.trim() || null, address: address.trim() || null, balance: openingBalance, opening_balance: openingBalance }
-    if (editing) {
-      await supabase.from("suppliers").update(payload).eq("id", editing.id)
-    } else {
-      await supabase.from("suppliers").insert(payload)
-    }
+    if (editing) { await supabase.from("suppliers").update(payload).eq("id", editing.id) }
+    else { await supabase.from("suppliers").insert(payload) }
     setSaving(false); setShowModal(false); fetchSuppliers()
     setFlash({ type: "success", msg: `Supplier '${name}' saved!` })
     setTimeout(() => setFlash(null), 3000)
@@ -134,13 +133,8 @@ export default function SuppliersPage() {
   const handleImport = async (rows: any[]) => {
     for (const row of rows) {
       await supabase.from("suppliers").insert({
-        code: row.code || `VEND-${Date.now()}`,
-        name: row.name || "Unnamed",
-        phone: row.phone || null,
-        email: row.email || null,
-        address: row.address || null,
-        balance: parseFloat(row.balance) || 0,
-        opening_balance: parseFloat(row.opening_balance) || 0
+        code: row.code || `VEND-${Date.now()}`, name: row.name || "Unnamed", phone: row.phone || null, email: row.email || null,
+        address: row.address || null, balance: parseFloat(row.balance) || 0, opening_balance: parseFloat(row.opening_balance) || 0
       })
     }
     fetchSuppliers()
@@ -156,18 +150,10 @@ export default function SuppliersPage() {
       <div className="sp-shell">
         {flash && <div style={{ background: flash.type === "success" ? "#F0FDF4" : "#FEF2F2", border: `1px solid ${flash.type === "success" ? "#BBF7D0" : "#FECACA"}`, color: flash.type === "success" ? "#15803D" : "#B91C1C", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{flash.type === "success" ? <Check size={16} /> : <X size={16} />} {flash.msg}</div>}
         <div className="sp-header">
-          <div>
-            <div className="sp-title">🚚 Suppliers</div>
-            <div className="sp-subtitle">Manage supplier accounts and payables</div>
-          </div>
+          <div><div className="sp-title">🚚 Suppliers</div><div className="sp-subtitle">Manage supplier accounts and payables</div></div>
           <div className="sp-actions">
             <button className="sp-btn sp-btn-primary" onClick={openNew}><Plus size={16} /> Add Supplier</button>
-            {hasFeature('csv_import') && (
-              <>
-                <CsvExport data={suppliers} filename="suppliers" />
-                <CsvImport onImport={handleImport} />
-              </>
-            )}
+            {hasFeature('csv_import') && <><CsvExport data={suppliers} filename="suppliers" /><CsvImport onImport={handleImport} /></>}
           </div>
         </div>
         <div className="sp-stats">
@@ -189,9 +175,9 @@ export default function SuppliersPage() {
               </div>
             ))
           }
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1) }} />
         </div>
       </div>
-
       {showModal && (
         <div className="sp-modal-overlay" onClick={()=>setShowModal(false)}>
           <div className="sp-modal" onClick={e=>e.stopPropagation()}>

@@ -6,6 +6,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import { Plus, Search, Send } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import DownloadPDFButton from "@/components/DownloadPDFButton"
+import Pagination from "@/components/Pagination"
 
 interface InvoiceItem {
   id: number
@@ -29,18 +30,39 @@ export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<InvoiceItem[]>([])
   const [search, setSearch] = useState("")
   const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
+  const [total, setTotal] = useState(0)
 
   const loadInvoices = async () => {
     setLoading(true)
+
+    // Get total count (for pagination)
+    const { count } = await supabase
+      .from("invoices")
+      .select("*", { count: "exact", head: true })
+      .eq("type", "sale")
+
+    setTotal(count || 0)
+
+    // Fetch current page
+    const from = (page - 1) * pageSize
+    const to = from + pageSize - 1
+
     const { data: invData, error: invError } = await supabase
       .from("invoices")
       .select("id,invoice_no,date,due_date,total,paid,status,party_id")
       .eq("type", "sale")
       .order("date", { ascending: false })
+      .range(from, to)
 
-    if (invError || !invData) { setLoading(false); return }
+    if (invError || !invData) {
+      setLoading(false)
+      return
+    }
 
-    const customerIds = [...new Set(invData.map(i => i.party_id).filter(Boolean))]
+    // Customer names (manual join)
+    const customerIds = [...new Set(invData.map((i) => i.party_id).filter(Boolean))]
     let customerMap: Record<number, { name: string; phone: string }> = {}
     if (customerIds.length > 0) {
       const { data: custData } = await supabase
@@ -54,7 +76,7 @@ export default function InvoicesPage() {
       }
     }
 
-    const enriched = invData.map(inv => ({
+    const enriched = invData.map((inv) => ({
       ...inv,
       customer_name: customerMap[inv.party_id]?.name || "Unknown",
       customer_phone: customerMap[inv.party_id]?.phone || "",
@@ -64,11 +86,14 @@ export default function InvoicesPage() {
     setLoading(false)
   }
 
-  useEffect(() => { loadInvoices() }, [])
+  useEffect(() => {
+    loadInvoices()
+  }, [page, pageSize])
 
-  const filtered = invoices.filter(i =>
-    (i.invoice_no || "").toLowerCase().includes(search.toLowerCase()) ||
-    (i.customer_name || "").toLowerCase().includes(search.toLowerCase())
+  const filtered = invoices.filter(
+    (i) =>
+      (i.invoice_no || "").toLowerCase().includes(search.toLowerCase()) ||
+      (i.customer_name || "").toLowerCase().includes(search.toLowerCase())
   )
 
   const statusStyle = (s: string) => {
@@ -85,15 +110,28 @@ export default function InvoicesPage() {
   }
 
   const handleDownloadPDF = async (invoice: InvoiceItem) => {
-    const { data: items } = await supabase.from("invoice_items").select("*").eq("invoice_id", invoice.id)
+    const { data: items } = await supabase
+      .from("invoice_items")
+      .select("*")
+      .eq("invoice_id", invoice.id)
     if (!items) return
-    const pdfInvoice = { ...invoice, customers: { name: invoice.customer_name, phone: invoice.customer_phone } }
+    const pdfInvoice = {
+      ...invoice,
+      customers: { name: invoice.customer_name, phone: invoice.customer_phone },
+    }
     const doc = generateInvoicePDF(pdfInvoice, items)
     doc.save(`invoice-${invoice.invoice_no}.pdf`)
   }
 
   return (
-    <div style={{ padding: "clamp(16px,2.5vw,24px)", background: "#EFF4FB", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div
+      style={{
+        padding: "clamp(16px,2.5vw,24px)",
+        background: "#EFF4FB",
+        minHeight: "100%",
+        fontFamily: "'Plus Jakarta Sans', sans-serif",
+      }}
+    >
       <style>{`
         .il-table { background: white; border-radius: 10px; border: 1px solid #E2E8F0; overflow: hidden; }
         .il-header { display: grid; grid-template-columns: 110px 1fr 100px 90px 90px 90px 90px 60px; padding: 10px 16px; background: #F8FAFC; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #94A3B8; }
@@ -111,23 +149,66 @@ export default function InvoicesPage() {
           <div style={{ fontSize: 20, fontWeight: 800, color: "#1E293B" }}>🧾 Sales Invoices</div>
           <div style={{ fontSize: 13, color: "#94A3B8" }}>View and manage all sales invoices</div>
         </div>
-        <button onClick={() => router.push("/dashboard/invoices/new")}
-          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", fontFamily: "inherit", background: "linear-gradient(135deg, #1740C8, #071352)", color: "white" }}>
+        <button
+          onClick={() => router.push("/dashboard/invoices/new")}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "9px 16px",
+            borderRadius: 9,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+            border: "none",
+            fontFamily: "inherit",
+            background: "linear-gradient(135deg, #1740C8, #071352)",
+            color: "white",
+          }}
+        >
           <Plus size={16} /> New Invoice
         </button>
       </div>
 
       <div style={{ position: "relative", marginBottom: 16 }}>
         <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "#94A3B8" }} />
-        <input placeholder="Search by invoice no or customer name..." value={search} onChange={e => setSearch(e.target.value)}
-          style={{ width: "100%", maxWidth: 360, height: 40, border: "1.5px solid #E2E8F0", borderRadius: 9, padding: "0 14px 0 36px", fontSize: 13, outline: "none", fontFamily: "inherit" }} />
+        <input
+          placeholder="Search by invoice no or customer name..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{
+            width: "100%",
+            maxWidth: 360,
+            height: 40,
+            border: "1.5px solid #E2E8F0",
+            borderRadius: 9,
+            padding: "0 14px 0 36px",
+            fontSize: 13,
+            outline: "none",
+            fontFamily: "inherit",
+          }}
+        />
       </div>
 
       <div className="il-table">
-        <div className="il-header"><span>Invoice No</span><span>Customer</span><span>Date</span><span className="il-hide">Due Date</span><span>Total</span><span>Status</span><span>Action</span><span>PDF</span></div>
-        {loading ? <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>Loading...</div> :
-          filtered.length === 0 ? <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>No invoices yet — create your first one!</div> :
-          filtered.map(i => {
+        <div className="il-header">
+          <span>Invoice No</span>
+          <span>Customer</span>
+          <span>Date</span>
+          <span className="il-hide">Due Date</span>
+          <span>Total</span>
+          <span>Status</span>
+          <span>Action</span>
+          <span>PDF</span>
+        </div>
+        {loading ? (
+          <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>Loading...</div>
+        ) : filtered.length === 0 ? (
+          <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>
+            {total === 0 ? "No invoices yet — create your first one!" : "No invoices match your search"}
+          </div>
+        ) : (
+          filtered.map((i) => {
             const bal = i.total - i.paid
             const st = statusStyle(i.status)
             return (
@@ -137,20 +218,59 @@ export default function InvoicesPage() {
                 <span style={{ color: "#64748B" }}>{i.date}</span>
                 <span className="il-hide" style={{ color: "#64748B" }}>{i.due_date}</span>
                 <span style={{ fontWeight: 600 }}>PKR {i.total?.toLocaleString()}</span>
-                <span><span style={{ padding: "2px 8px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: st.bg, color: st.color }}>{i.status}</span></span>
+                <span>
+                  <span
+                    style={{
+                      padding: "2px 8px",
+                      borderRadius: 20,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      background: st.bg,
+                      color: st.color,
+                    }}
+                  >
+                    {i.status}
+                  </span>
+                </span>
                 <span>
                   {i.status !== "Paid" && i.customer_phone && (
-                    <a href={waLink(i.customer_phone, i.invoice_no, bal, i.customer_name || "")} target="_blank"
-                      style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#25D366", color: "white", padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: 600, textDecoration: "none" }}>
+                    <a
+                      href={waLink(i.customer_phone, i.invoice_no, bal, i.customer_name || "")}
+                      target="_blank"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                        background: "#25D366",
+                        color: "white",
+                        padding: "3px 8px",
+                        borderRadius: 5,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        textDecoration: "none",
+                      }}
+                    >
                       <Send size={10} /> Remind
                     </a>
                   )}
                 </span>
-                <span><DownloadPDFButton onGenerate={() => handleDownloadPDF(i)} /></span>
+                <span>
+                  <DownloadPDFButton onGenerate={() => handleDownloadPDF(i)} />
+                </span>
               </div>
             )
           })
-        }
+        )}
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size)
+            setPage(1)
+          }}
+        />
       </div>
     </div>
   )
