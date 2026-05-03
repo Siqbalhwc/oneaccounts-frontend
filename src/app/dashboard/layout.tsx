@@ -5,7 +5,7 @@ import QueryProvider from '@/components/QueryProvider'
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
-  
+
   @keyframes floaty {
     0% { transform: translateY(0px); }
     50% { transform: translateY(-4px); }
@@ -35,7 +35,7 @@ const styles = `
   .dl-sidebar-logo-sub { color: rgba(255,255,255,0.45); font-size: 9px; }
   .dl-sidebar-nav { flex: 1; padding: 12px 10px; overflow-y: auto; position: relative; z-index: 1; }
   .dl-nav-section { padding: 8px 8px 4px; color: rgba(255,255,255,0.35); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
-  
+
   .dl-nav-item {
     display: flex; align-items: center; gap: 10px; padding: 8px 12px;
     border-radius: 8px; color: rgba(255,255,255,0.65); font-size: 13px; font-weight: 500;
@@ -67,7 +67,7 @@ const styles = `
   .dl-topbar-title { font-size: clamp(12px, 1.1vw, 14px); font-weight: 700; color: #1E293B; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .dl-topbar-subtitle { font-size: clamp(10px, 0.8vw, 11px); color: #94A3B8; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .dl-topbar-actions { display: flex; gap: 8px; flex-shrink: 0; }
-  
+
   .dl-action-btn {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 7px clamp(10px, 1.2vw, 14px); border-radius: 8px;
@@ -128,8 +128,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const email   = user.email || ''
   const initial = email.charAt(0).toUpperCase()
 
-  // Use the default company — the original working value
-  const defaultCompanyId = '00000000-0000-0000-0000-000000000001'
+  // Read the active company from the JWT custom claim (set by custom-claims function)
+  // Fallback to the original default company if no claim is present
+  const activeCompanyId =
+    (user?.app_metadata as any)?.company_id ||
+    '00000000-0000-0000-0000-000000000001'
 
   const { data: compData } = await supabase
     .from('company_settings')
@@ -152,7 +155,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     const { data: coData } = await supabase
       .from('company_features')
       .select('features!inner(code), enabled')
-      .eq('company_id', defaultCompanyId)
+      .eq('company_id', activeCompanyId)
 
     if (coData) {
       for (const row of coData) {
