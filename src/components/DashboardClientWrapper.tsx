@@ -108,8 +108,7 @@ function DashboardLayoutInner({
     { label: 'Upgrade Plan',       icon: '⭐', href: '/dashboard/upgrade',            section: 'SYSTEM',     feature: null },
     { label: 'Audit Logs',        icon: '📋', href: '/dashboard/admin/audit-logs', section: 'SYSTEM',     feature: null },
     { label: 'Settings',          icon: '⚙️', href: '/dashboard/settings',            section: 'SYSTEM',     feature: null },
-    { label: 'Settings',          icon: '⚙️', href: '/dashboard/settings',            section: 'SYSTEM',     feature: null },
-  ]
+    { label: 'New Company',       icon: '🏢', href: '/dashboard/companies/new',       section: 'SYSTEM',     feature: null },
   ]
 
   const navItems = allNavItems.filter(item => item.feature === null || hasFeature(item.feature))
