@@ -96,6 +96,7 @@ function DashboardLayoutInner({
     { label: 'Admin Panel',        icon: '👑', href: '/dashboard/admin/users',        section: 'SYSTEM',     feature: null },
     { label: 'Feature Manager',    icon: '⚙️', href: '/dashboard/admin/features',     section: 'SYSTEM',     feature: null },
     { label: 'Upgrade Plan',       icon: '⭐', href: '/dashboard/upgrade',            section: 'SYSTEM',     feature: null },
+{ label: 'Audit Logs',        icon: '📋', href: '/dashboard/admin/audit-logs', section: 'SYSTEM',     feature: null },
   ]
 
   const navItems = allNavItems.filter(item => item.feature === null || hasFeature(item.feature))
