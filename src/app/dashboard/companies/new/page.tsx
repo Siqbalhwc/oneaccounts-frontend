@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowRight } from "lucide-react"
 
 const PLAN_PRICES: Record<string, number> = {
   basic: 1999,
@@ -42,12 +41,10 @@ export default function NewCompanyPage() {
   const [loadingJazzCash, setLoadingJazzCash] = useState(false)
   const [errorMsg, setErrorMsg] = useState("")
 
-  // Bank transfer fields
   const [reference, setReference] = useState("")
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null)
   const [submittingBank, setSubmittingBank] = useState(false)
 
-  // ─── JazzCash Payment ────────────────────────────────
   const handleJazzCash = async () => {
     if (!companyName.trim()) return
     setLoadingJazzCash(true)
@@ -97,7 +94,6 @@ export default function NewCompanyPage() {
     }
   }
 
-  // ─── Bank Transfer Submission ─────────────────────────
   const handleBankSubmit = async () => {
     if (!companyName.trim()) return
     if (!reference.trim() && !evidenceFile) {
@@ -149,173 +145,181 @@ export default function NewCompanyPage() {
   }
 
   return (
-    <div style={{ maxWidth: 500, margin: "30px auto", background: "white", padding: 24, borderRadius: 12, border: "1px solid #E2E8F0" }}>
-      <h2 style={{ marginBottom: 4, fontSize: 20, fontWeight: 800 }}>Add New Company</h2>
-      <p style={{ fontSize: 13, color: "#64748B", marginBottom: 18 }}>
-        Choose a plan and payment method.
-      </p>
+    <>
+      <style>{`
+        .new-company-container { max-width: 500px; margin: 20px auto; }
+        .plan-group, .payment-group { display: flex; gap: 8px; }
+        .btn-plan, .btn-payment { flex: 1; }
+        @media (max-width: 480px) {
+          .new-company-container { margin: 10px; }
+          .plan-group, .payment-group { flex-direction: column; }
+          .btn-plan, .btn-payment { flex: none; width: 100%; }
+        }
+      `}</style>
 
-      {/* Company Name */}
-      <input
-        type="text"
-        placeholder="Company Name"
-        value={companyName}
-        onChange={e => setCompanyName(e.target.value)}
-        style={{
-          width: "100%", padding: "8px 12px", border: "1px solid #E2E8F0",
-          borderRadius: 6, fontSize: 13, marginBottom: 16, boxSizing: "border-box",
-        }}
-      />
+      <div className="new-company-container" style={{ background: "white", padding: 24, borderRadius: 12, border: "1px solid #E2E8F0" }}>
+        <h2 style={{ marginBottom: 4, fontSize: 20, fontWeight: 800 }}>Add New Company</h2>
+        <p style={{ fontSize: 13, color: "#64748B", marginBottom: 18 }}>
+          Choose a plan and payment method.
+        </p>
 
-      {/* Plan Selection */}
-      <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 6 }}>Select Plan</label>
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        {["basic", "pro", "enterprise"].map(code => (
+        <input
+          type="text"
+          placeholder="Company Name"
+          value={companyName}
+          onChange={e => setCompanyName(e.target.value)}
+          style={{
+            width: "100%", padding: "8px 12px", border: "1px solid #E2E8F0",
+            borderRadius: 6, fontSize: 13, marginBottom: 16, boxSizing: "border-box",
+          }}
+        />
+
+        <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 6 }}>Select Plan</label>
+        <div className="plan-group" style={{ marginBottom: 16 }}>
+          {["basic", "pro", "enterprise"].map(code => (
+            <button
+              key={code}
+              className="btn-plan"
+              onClick={() => setSelectedPlan(code)}
+              style={{
+                padding: "8px 0",
+                borderRadius: 8,
+                border: selectedPlan === code ? "2px solid #1D4ED8" : "1px solid #E2E8F0",
+                background: selectedPlan === code ? "#EEF2FF" : "white",
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: "pointer",
+              }}
+            >
+              {code.charAt(0).toUpperCase() + code.slice(1)}
+            </button>
+          ))}
+        </div>
+
+        <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 6 }}>Payment Method</label>
+        <div className="payment-group" style={{ marginBottom: 16 }}>
           <button
-            key={code}
-            onClick={() => setSelectedPlan(code)}
+            className="btn-payment"
+            onClick={() => setPaymentMethod("jazzcash")}
             style={{
-              flex: 1,
               padding: "8px 0",
               borderRadius: 8,
-              border: selectedPlan === code ? "2px solid #1D4ED8" : "1px solid #E2E8F0",
-              background: selectedPlan === code ? "#EEF2FF" : "white",
+              border: paymentMethod === "jazzcash" ? "2px solid #1D4ED8" : "1px solid #E2E8F0",
+              background: paymentMethod === "jazzcash" ? "#EEF2FF" : "white",
               fontWeight: 600,
               fontSize: 13,
               cursor: "pointer",
             }}
           >
-            {code.charAt(0).toUpperCase() + code.slice(1)}
+            💳 JazzCash
           </button>
-        ))}
-      </div>
-
-      {/* Payment Method */}
-      <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 6 }}>Payment Method</label>
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        <button
-          onClick={() => setPaymentMethod("jazzcash")}
-          style={{
-            flex: 1,
-            padding: "8px 0",
-            borderRadius: 8,
-            border: paymentMethod === "jazzcash" ? "2px solid #1D4ED8" : "1px solid #E2E8F0",
-            background: paymentMethod === "jazzcash" ? "#EEF2FF" : "white",
-            fontWeight: 600,
-            fontSize: 13,
-            cursor: "pointer",
-          }}
-        >
-          💳 JazzCash
-        </button>
-        <button
-          onClick={() => setPaymentMethod("bank")}
-          style={{
-            flex: 1,
-            padding: "8px 0",
-            borderRadius: 8,
-            border: paymentMethod === "bank" ? "2px solid #1D4ED8" : "1px solid #E2E8F0",
-            background: paymentMethod === "bank" ? "#EEF2FF" : "white",
-            fontWeight: 600,
-            fontSize: 13,
-            cursor: "pointer",
-          }}
-        >
-          🏦 Bank Transfer
-        </button>
-      </div>
-
-      {errorMsg && (
-        <div style={{ background: "#FEF2F2", color: "#B91C1C", padding: "6px 10px", borderRadius: 6, fontSize: 12, marginBottom: 12 }}>
-          {errorMsg}
-        </div>
-      )}
-
-      {/* ── JazzCash Section ── */}
-      {paymentMethod === "jazzcash" && (
-        <div>
-          <p style={{ fontSize: 12, color: "#475569", marginBottom: 12 }}>
-            You will be redirected to JazzCash to pay{" "}
-            <strong>PKR {PLAN_PRICES[selectedPlan]?.toLocaleString() || "Custom"}</strong> for the first month.
-          </p>
           <button
-            onClick={handleJazzCash}
-            disabled={loadingJazzCash || !companyName.trim()}
+            className="btn-payment"
+            onClick={() => setPaymentMethod("bank")}
             style={{
-              width: "100%",
-              padding: 10,
-              background: "#1D4ED8",
-              color: "white",
-              border: "none",
+              padding: "8px 0",
               borderRadius: 8,
+              border: paymentMethod === "bank" ? "2px solid #1D4ED8" : "1px solid #E2E8F0",
+              background: paymentMethod === "bank" ? "#EEF2FF" : "white",
               fontWeight: 600,
+              fontSize: 13,
               cursor: "pointer",
             }}
           >
-            {loadingJazzCash ? "Processing..." : "Pay with JazzCash"}
+            🏦 Bank Transfer
           </button>
         </div>
-      )}
 
-      {/* ── Bank Transfer Section ── */}
-      {paymentMethod === "bank" && (
-        <div style={{ background: "#F8FAFC", padding: 14, borderRadius: 8, fontSize: 12 }}>
-          <p style={{ fontWeight: 700, marginBottom: 8 }}>Bank Details</p>
+        {errorMsg && (
+          <div style={{ background: "#FEF2F2", color: "#B91C1C", padding: "6px 10px", borderRadius: 6, fontSize: 12, marginBottom: 12 }}>
+            {errorMsg}
+          </div>
+        )}
 
-          {BANK_DETAILS.accounts.map((acc, idx) => (
-            <div key={idx} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: idx < BANK_DETAILS.accounts.length - 1 ? "1px solid #E2E8F0" : "none" }}>
-              <p><strong>{acc.bank}</strong></p>
-              <p>Account No: <strong>{acc.accountNo}</strong></p>
-              {acc.iban && <p>IBAN: <strong>{acc.iban}</strong></p>}
-              <p>Title: <strong>{acc.title}</strong></p>
-            </div>
-          ))}
+        {paymentMethod === "jazzcash" && (
+          <div>
+            <p style={{ fontSize: 12, color: "#475569", marginBottom: 12 }}>
+              You will be redirected to JazzCash to pay{" "}
+              <strong>PKR {PLAN_PRICES[selectedPlan]?.toLocaleString() || "Custom"}</strong> for the first month.
+            </p>
+            <button
+              onClick={handleJazzCash}
+              disabled={loadingJazzCash || !companyName.trim()}
+              style={{
+                width: "100%",
+                padding: 10,
+                background: "#1D4ED8",
+                color: "white",
+                border: "none",
+                borderRadius: 8,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              {loadingJazzCash ? "Processing..." : "Pay with JazzCash"}
+            </button>
+          </div>
+        )}
 
-          <p style={{ marginTop: 8 }}>Mobile: <strong>{BANK_DETAILS.mobile}</strong></p>
-          <p>Email: <strong>{BANK_DETAILS.email}</strong></p>
+        {paymentMethod === "bank" && (
+          <div style={{ background: "#F8FAFC", padding: 14, borderRadius: 8, fontSize: 12 }}>
+            <p style={{ fontWeight: 700, marginBottom: 8 }}>Bank Details</p>
 
-          <p style={{ marginTop: 8, fontWeight: 600 }}>
-            Amount: PKR {PLAN_PRICES.basic.toLocaleString()} (Basic only)
-          </p>
-          <p style={{ marginTop: 8, color: "#B91C1C" }}>
-            After transfer, enter the transaction reference and attach the receipt below.
-          </p>
+            {BANK_DETAILS.accounts.map((acc, idx) => (
+              <div key={idx} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: idx < BANK_DETAILS.accounts.length - 1 ? "1px solid #E2E8F0" : "none" }}>
+                <p><strong>{acc.bank}</strong></p>
+                <p>Account No: <strong>{acc.accountNo}</strong></p>
+                {acc.iban && <p>IBAN: <strong>{acc.iban}</strong></p>}
+                <p>Title: <strong>{acc.title}</strong></p>
+              </div>
+            ))}
 
-          <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginTop: 10 }}>Transaction Reference</label>
-          <input
-            type="text"
-            placeholder="e.g. TID 1234567890"
-            value={reference}
-            onChange={e => setReference(e.target.value)}
-            style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: "1px solid #E2E8F0", fontSize: 12, marginBottom: 8 }}
-          />
+            <p style={{ marginTop: 8 }}>Mobile: <strong>{BANK_DETAILS.mobile}</strong></p>
+            <p>Email: <strong>{BANK_DETAILS.email}</strong></p>
 
-          <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginTop: 6 }}>Transfer Receipt (optional)</label>
-          <input
-            type="file"
-            accept="image/*,.pdf"
-            onChange={e => setEvidenceFile(e.target.files?.[0] || null)}
-            style={{ fontSize: 12, marginBottom: 12 }}
-          />
+            <p style={{ marginTop: 8, fontWeight: 600 }}>
+              Amount: PKR {PLAN_PRICES.basic.toLocaleString()} (Basic only)
+            </p>
+            <p style={{ marginTop: 8, color: "#B91C1C" }}>
+              After transfer, enter the transaction reference and attach the receipt below.
+            </p>
 
-          <button
-            onClick={handleBankSubmit}
-            disabled={submittingBank || !companyName.trim()}
-            style={{
-              width: "100%",
-              padding: 10,
-              background: "#10B981",
-              color: "white",
-              border: "none",
-              borderRadius: 8,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            {submittingBank ? "Submitting..." : "Submit for Verification"}
-          </button>
-        </div>
-      )}
-    </div>
+            <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginTop: 10 }}>Transaction Reference</label>
+            <input
+              type="text"
+              placeholder="e.g. TID 1234567890"
+              value={reference}
+              onChange={e => setReference(e.target.value)}
+              style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: "1px solid #E2E8F0", fontSize: 12, marginBottom: 8 }}
+            />
+
+            <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginTop: 6 }}>Transfer Receipt (optional)</label>
+            <input
+              type="file"
+              accept="image/*,.pdf"
+              onChange={e => setEvidenceFile(e.target.files?.[0] || null)}
+              style={{ fontSize: 12, marginBottom: 12 }}
+            />
+
+            <button
+              onClick={handleBankSubmit}
+              disabled={submittingBank || !companyName.trim()}
+              style={{
+                width: "100%",
+                padding: 10,
+                background: "#10B981",
+                color: "white",
+                border: "none",
+                borderRadius: 8,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              {submittingBank ? "Submitting..." : "Submit for Verification"}
+            </button>
+          </div>
+        )}
+      </div>
+    </>
   )
 }
