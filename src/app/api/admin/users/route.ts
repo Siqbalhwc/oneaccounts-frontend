@@ -11,12 +11,25 @@ const supabaseAdmin = createClient(
 async function requireAdmin() {
   const supabase = await createSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Unauthorized', status: 401, user: null }
+  if (!user) return { error: 'Unauthorized', status: 401, user: null, companyId: null }
 
-  // Get the active company from the JWT
-  const companyId = (user.app_metadata as any)?.company_id
-  if (!companyId) return { error: 'No active company', status: 400, user: null }
+  // 1. Try to get the active company from JWT
+  let companyId = (user.app_metadata as any)?.company_id
 
+  // 2. Fallback – if no claim, use the user's first company from user_roles
+  if (!companyId) {
+    const { data: anyRole } = await supabaseAdmin
+      .from('user_roles')
+      .select('company_id')
+      .eq('user_id', user.id)
+      .limit(1)
+      .maybeSingle()
+    companyId = anyRole?.company_id || null
+  }
+
+  if (!companyId) return { error: 'No active company', status: 400, user: null, companyId: null }
+
+  // 3. Check if the user is admin in that company
   const { data: roleData } = await supabase
     .from('user_roles')
     .select('role')
@@ -25,7 +38,7 @@ async function requireAdmin() {
     .maybeSingle()
 
   if (!roleData || roleData.role !== 'admin') {
-    return { error: 'Forbidden', status: 403, user: null }
+    return { error: 'Forbidden', status: 403, user: null, companyId }
   }
 
   return { error: null, status: 200, user, companyId }
@@ -99,7 +112,6 @@ export async function POST(request: Request) {
   const { email, role = 'viewer' } = await request.json()
   if (!email) return NextResponse.json({ error: 'Email required' }, { status: 400 })
 
-  // Invite via Supabase Auth Admin
   const { data: inviteData, error: inviteError } = await supabaseAdmin
     .auth.admin.inviteUserByEmail(email, {
       redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
