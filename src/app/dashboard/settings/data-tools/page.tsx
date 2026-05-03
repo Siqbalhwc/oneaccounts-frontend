@@ -256,7 +256,9 @@ export default function DataManagementPage() {
                   </thead>
                   <tbody>
                     {importPreview.slice(0, 5).map((row, i) => (
-                      <tr key={i}>{Object.values(row).map((v, j) => <td key={j}>{v}</td>)}</tr>
+                      <tr key={i}>{Object.values(row).map((v, j) => (
+  <td key={j}>{String(v)}</td>
+))}</tr>
                     ))}
                   </tbody>
                 </table>
