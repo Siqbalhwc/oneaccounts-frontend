@@ -7,7 +7,6 @@ import { PlanProvider, usePlan } from "@/contexts/PlanContext"
 import SidebarClient from "@/app/dashboard/sidebar-client"
 import TrialGuard from "@/components/TrialGuard"
 import NotificationBell from "@/components/NotificationBell"
-import CompanySelector from "@/components/CompanySelector"
 
 export default function DashboardClientWrapper({
   children,
@@ -173,7 +172,6 @@ function DashboardLayoutInner({
               <div className="dl-topbar-title">👋 {getGreeting()}, {email.split('@')[0]}!</div>
               <div className="dl-topbar-subtitle">Here's what's happening with your business today</div>
             </div>
-            <CompanySelector />
             <div style={{ flexShrink: 0 }}>
               <NotificationBell />
             </div>
