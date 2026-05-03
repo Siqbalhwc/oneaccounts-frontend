@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { Plus, Search, Edit, Trash2, X } from "lucide-react"
+import PremiumGuard from "@/components/PremiumGuard"
 
 interface Investor {
   id: number
@@ -14,7 +15,7 @@ interface Investor {
   notes: string | null
 }
 
-export default function InvestorsPage() {
+function InvestorsContent() {
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
   const [investors, setInvestors] = useState<Investor[]>([])
   const [filtered, setFiltered] = useState<Investor[]>([])
@@ -24,7 +25,6 @@ export default function InvestorsPage() {
   const [editing, setEditing] = useState<Investor | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [flash, setFlash] = useState("")
-
   const [code, setCode] = useState("")
   const [name, setName] = useState("")
   const [phone, setPhone] = useState("")
@@ -216,5 +216,17 @@ export default function InvestorsPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function InvestorsPage() {
+  return (
+    <PremiumGuard
+      featureCode="investors"
+      featureName="Investors"
+      featureDesc="Track investor capital and details."
+    >
+      <InvestorsContent />
+    </PremiumGuard>
   )
 }

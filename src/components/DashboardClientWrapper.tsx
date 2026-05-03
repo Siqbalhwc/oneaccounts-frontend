@@ -80,15 +80,17 @@ function DashboardLayoutInner({
 
     // INVENTORY
     { label: 'Products',           icon: '📦', href: '/dashboard/products',           section: 'INVENTORY',  feature: null },
-    { label: 'Inventory Adj.',     icon: '⚖️', href: '/dashboard/inventory/adjustments', section: 'INVENTORY', feature: 'inventory_adjustments' },
+    { label: 'Inventory Adj.',     icon: '⚖️', href: '/dashboard/inventory/adjustments', section: 'INVENTORY', feature: 'inventory' },
 
     // ACCOUNTING
     { label: 'Chart of Accounts',  icon: '📋', href: '/dashboard/accounts',           section: 'ACCOUNTING', feature: null },
     { label: 'Journal Entries',    icon: '📓', href: '/dashboard/journal',            section: 'ACCOUNTING', feature: null },
     { label: 'Trial Balance',      icon: '⚖️', href: '/dashboard/reports/trial-balance', section: 'ACCOUNTING', feature: null },
     { label: 'Profit & Loss',      icon: '📈', href: '/dashboard/reports/profit-loss',  section: 'ACCOUNTING', feature: null },
-    { label: 'Balance Sheet',      icon: '📊', href: '/dashboard/reports/balance-sheet', section: 'ACCOUNTING', feature: null },
+    { label: 'Balance Sheet',      icon: '📊', href: '/dashboard/reports/balance-sheet', section: 'ACCOUNTING', feature: 'balance_sheet' },
     { label: 'All Reports',        icon: '📁', href: '/dashboard/reports',            section: 'ACCOUNTING', feature: null },
+    { label: 'Invoice Automation', icon: '⚙️', href: '/dashboard/settings/invoice-automation', section: 'ACCOUNTING', feature: 'invoice_automation' },
+    { label: 'Investors',          icon: '💼', href: '/dashboard/investors',           section: 'ACCOUNTING', feature: 'investors' },
 
     // SYSTEM
     { label: 'Admin Panel',        icon: '👑', href: '/dashboard/admin/users',        section: 'SYSTEM',     feature: null },

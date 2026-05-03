@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Plus, Trash2, Send, Search, X, Download } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
+import { usePlan } from "@/contexts/PlanContext"
 
 const SALARY_RATE = 0.04
 const ADS_RATE    = 0.005
@@ -23,6 +24,7 @@ export default function NewInvoicePage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
+  const { hasFeature } = usePlan()
 
   const [customers,            setCustomers]            = useState<any[]>([])
   const [products,             setProducts]             = useState<any[]>([])
@@ -211,6 +213,7 @@ export default function NewInvoicePage() {
     doc.save(`invoice-preview-${tempInvoice.invoice_no}.pdf`)
   }
 
+  // ── UI (unchanged) ──
   return (
     <div style={{ padding: "clamp(16px,2.5vw,24px)", background: "#EFF4FB", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <style>{`
@@ -450,7 +453,7 @@ export default function NewInvoicePage() {
               </div>
             )}
 
-            {/* ── Totals & Profit Allocation ── */}
+            {/* ── Totals (expenses always shown, profit allocation only if feature enabled) ── */}
             {items.length > 0 && (
               <div className="inv-card">
                 <div className="inv-total-row"><span>Subtotal</span><span>PKR {totalAmount.toLocaleString()}</span></div>
@@ -462,7 +465,9 @@ export default function NewInvoicePage() {
                   <span>Net Profit</span>
                   <span className={netProfit >= 0 ? "inv-profit" : "inv-loss"}>PKR {netProfit.toLocaleString()}</span>
                 </div>
-                {netProfit > 0 && (
+
+                {/* Profit allocation – only visible when feature is enabled */}
+                {hasFeature('profit_allocation') && netProfit > 0 && (
                   <div style={{ marginTop: 12, padding: "12px 14px", background: "#F0FDF4", borderRadius: 8, fontSize: 12 }}>
                     <div style={{ fontWeight: 600, marginBottom: 6 }}>Profit Allocation:</div>
                     {Object.entries(PARTNERS).map(([code, value]) => {
@@ -488,7 +493,7 @@ export default function NewInvoicePage() {
                 <button className="inv-btn inv-btn-outline" onClick={handleBeforeSavePdf}>
                   <Download size={14} /> PDF Preview
                 </button>
-                {waLink() && (
+                {hasFeature('whatsapp_send') && waLink() && (
                   <a href={waLink()} target="_blank" className="inv-btn inv-btn-success" style={{ textDecoration: "none" }}>
                     <Send size={14} /> WhatsApp
                   </a>

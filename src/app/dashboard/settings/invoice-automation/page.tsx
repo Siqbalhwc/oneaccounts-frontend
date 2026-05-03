@@ -3,16 +3,15 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { Save } from "lucide-react"
+import PremiumGuard from "@/components/PremiumGuard"
 
-export default function InvoiceAutomationPage() {
+function InvoiceAutomationContent() {
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
-
   const [expenseRules, setExpenseRules] = useState([
     { name: "Salaries", rate: 4.0, account: "Salaries Expense" },
     { name: "Advertising", rate: 0.5, account: "Advertisement Expense" },
     { name: "Fuel", rate: 0.5, account: "Fuel Expense" },
   ])
-
   const [profitAllocations, setProfitAllocations] = useState([
     { account: "Profit A", percentage: 5.0 },
     { account: "Profit BA", percentage: 5.0 },
@@ -20,7 +19,6 @@ export default function InvoiceAutomationPage() {
     { account: "Profit MA", percentage: 5.0 },
     { account: "Profit Owner", percentage: 80.0 },
   ])
-
   const [message, setMessage] = useState("")
   const [accounts, setAccounts] = useState<any[]>([])
 
@@ -29,7 +27,6 @@ export default function InvoiceAutomationPage() {
   }, [])
 
   const handleSave = () => {
-    // Store configuration in localStorage (or a company_settings JSON column later)
     localStorage.setItem("invoice-expense-rules", JSON.stringify(expenseRules))
     localStorage.setItem("invoice-profit-allocations", JSON.stringify(profitAllocations))
     setMessage("✅ Automation rules saved!")
@@ -43,26 +40,19 @@ export default function InvoiceAutomationPage() {
       <style>{`
         .ia-card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 24px; margin-bottom: 16px; }
         .ia-title { font-size: 22px; font-weight: 800; color: #1E293B; }
-        .ia-subtitle { font-size: 13px; color: "#94A3B8"; margin-bottom: 20px; }
-        .ia-label { font-size: 11px; font-weight: 600; color: "#6B7280"; text-transform: uppercase; margin-bottom: 4px; display: block; }
+        .ia-subtitle { font-size: 13px; color: #64748B; margin-bottom: 20px; }
+        .ia-label { font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase; margin-bottom: 4px; display: block; }
         .ia-input { width: 100%; height: 40px; border: 1.5px solid #E5EAF2; border-radius: 9px; padding: 0 14px; font-size: 13px; font-family: inherit; background: #FAFBFF; outline: none; }
         .ia-row { display: grid; grid-template-columns: 2fr 1fr 2fr; gap: 14px; margin-bottom: 10px; align-items: end; }
         .ia-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; background: linear-gradient(135deg, #1740C8, #071352); color: white; }
-        @media (max-width: 500px) {
-          .ia-row { grid-template-columns: 1fr 1fr; }
-        }
+        @media (max-width: 500px) { .ia-row { grid-template-columns: 1fr 1fr; } }
       `}</style>
 
       <div className="ia-title">⚙️ Invoice Automation</div>
       <div className="ia-subtitle">Configure expense rates and profit allocation</div>
 
-      {message && (
-        <div style={{ background: "#F0FDF4", color: "#15803D", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
-          {message}
-        </div>
-      )}
+      {message && <div style={{ background: "#F0FDF4", color: "#15803D", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{message}</div>}
 
-      {/* Expense Rules */}
       <div className="ia-card">
         <h3 style={{ marginTop: 0, marginBottom: 16, color: "#EF4444" }}>💰 Expense Rules</h3>
         {expenseRules.map((rule, i) => (
@@ -89,7 +79,6 @@ export default function InvoiceAutomationPage() {
         ))}
       </div>
 
-      {/* Profit Allocation */}
       <div className="ia-card">
         <h3 style={{ marginTop: 0, marginBottom: 16, color: "#10B981" }}>📊 Profit Allocation</h3>
         {profitAllocations.map((alloc, i) => (
@@ -110,11 +99,7 @@ export default function InvoiceAutomationPage() {
             </div>
             <div>
               <button style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", marginTop: 20 }}
-                onClick={() => {
-                  setProfitAllocations(profitAllocations.filter((_, idx) => idx !== i))
-                }}>
-                🗑️
-              </button>
+                onClick={() => setProfitAllocations(profitAllocations.filter((_, idx) => idx !== i))}>🗑️</button>
             </div>
           </div>
         ))}
@@ -131,5 +116,17 @@ export default function InvoiceAutomationPage() {
 
       <button className="ia-btn" onClick={handleSave}><Save size={16} /> Save Configuration</button>
     </div>
+  )
+}
+
+export default function InvoiceAutomationPage() {
+  return (
+    <PremiumGuard
+      featureCode="invoice_automation"
+      featureName="Invoice Automation"
+      featureDesc="Configure expense rules and profit allocation."
+    >
+      <InvoiceAutomationContent />
+    </PremiumGuard>
   )
 }

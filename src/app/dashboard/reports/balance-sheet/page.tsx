@@ -4,8 +4,9 @@ import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft } from "lucide-react"
 import { useRouter } from "next/navigation"
+import PremiumGuard from "@/components/PremiumGuard"
 
-export default function BalanceSheetPage() {
+function BalanceSheetContent() {
   const router = useRouter()
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
   const [accounts, setAccounts] = useState<any[]>([])
@@ -44,7 +45,6 @@ export default function BalanceSheetPage() {
       </div>
 
       <div style={{ display: "flex", gap: 20, alignItems: "stretch", maxWidth: 900, margin: "0 auto" }}>
-        {/* Assets Column */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
           <div style={{ background: "white", borderRadius: 12, padding: 20, border: "1px solid #E2E8F0", flex: 1 }}>
             <h3 style={{ color: "#1E3A8A", marginBottom: 8, fontSize: 14 }}>Assets</h3>
@@ -59,7 +59,6 @@ export default function BalanceSheetPage() {
           </div>
         </div>
 
-        {/* Liabilities + Equity Column */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
           <div style={{ background: "white", borderRadius: 12, padding: 20, border: "1px solid #E2E8F0", flex: 1 }}>
             <h3 style={{ color: "#EF4444", marginBottom: 8, fontSize: 14 }}>Liabilities</h3>
@@ -82,5 +81,17 @@ export default function BalanceSheetPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function BalanceSheetPage() {
+  return (
+    <PremiumGuard
+      featureCode="balance_sheet"
+      featureName="Balance Sheet"
+      featureDesc="View your assets, liabilities, and equity."
+    >
+      <BalanceSheetContent />
+    </PremiumGuard>
   )
 }
