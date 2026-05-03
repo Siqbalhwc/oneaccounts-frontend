@@ -4,6 +4,11 @@ import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { Check, X, ArrowRight, Star, Clock } from "lucide-react"
 
+const PLAN_PRICES: Record<string, number> = {
+  pro: 4999,
+  enterprise: 0, // Custom pricing — will trigger Contact Us
+}
+
 const PLANS = [
   {
     code: "basic",
@@ -85,6 +90,8 @@ export default function UpgradePage() {
   const [currentPlan, setCurrentPlan] = useState<string>("basic")
   const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [upgrading, setUpgrading] = useState<string | null>(null) // plan code being processed
+  const [message, setMessage] = useState("")
 
   useEffect(() => {
     async function fetchSettings() {
@@ -92,7 +99,6 @@ export default function UpgradePage() {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) throw new Error("Not logged in")
 
-        // Get the user's company
         const { data: role } = await supabase
           .from("user_roles")
           .select("company_id")
@@ -101,7 +107,6 @@ export default function UpgradePage() {
 
         if (!role?.company_id) throw new Error("No company found")
 
-        // Get plan code from the companies table
         const { data: company } = await supabase
           .from("companies")
           .select("plan_id, trial_ends_at, plans(code)")
@@ -114,12 +119,60 @@ export default function UpgradePage() {
           setTrialEndsAt(company.trial_ends_at || null)
         }
       } catch {
-        // silently fallback to "basic" if anything fails
+        // silently fallback to "basic"
       }
       setLoading(false)
     }
     fetchSettings()
   }, [supabase])
+
+  const handleUpgrade = async (targetPlan: string) => {
+    const price = PLAN_PRICES[targetPlan]
+    if (!price) {
+      // Enterprise – still uses email for now (Custom pricing)
+      window.location.href = `mailto:siqbalhwc@gmail.com?subject=Upgrade to ${targetPlan}`
+      return
+    }
+
+    setUpgrading(targetPlan)
+    setMessage("")
+
+    try {
+      const res = await fetch("/api/payments/jazzcash/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: price,
+          paymentType: "plan_upgrade",
+          metadata: { plan_from: currentPlan, plan_to: targetPlan },
+        }),
+      })
+      const data = await res.json()
+
+      if (data.success) {
+        // Build a form and auto-submit to JazzCash
+        const form = document.createElement("form")
+        form.method = "POST"
+        form.action = data.redirectUrl
+
+        Object.entries(data.params).forEach(([key, value]) => {
+          const input = document.createElement("input")
+          input.type = "hidden"
+          input.name = key
+          input.value = value as string
+          form.appendChild(input)
+        })
+
+        document.body.appendChild(form)
+        form.submit()
+      } else {
+        setMessage(data.error || "Failed to initiate payment")
+      }
+    } catch (e: any) {
+      setMessage("Network error. Please try again.")
+    }
+    setUpgrading(null)
+  }
 
   if (loading) return <div style={{ padding: 40, textAlign: "center" }}>Loading...</div>
 
@@ -199,6 +252,15 @@ export default function UpgradePage() {
       <h1 className="upgrade-title">⚡ Plans & Pricing</h1>
       <p className="upgrade-subtitle">Choose the plan that fits your business</p>
 
+      {message && (
+        <div style={{
+          background: "#FEF2F2", color: "#B91C1C", padding: "10px 16px",
+          borderRadius: 8, marginBottom: 16, fontSize: 13,
+        }}>
+          {message}
+        </div>
+      )}
+
       {trialEndsAt && daysLeft !== null && daysLeft > 0 && (
         <div className="trial-banner">
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -208,7 +270,7 @@ export default function UpgradePage() {
             </span>
           </div>
           <button className="btn-upgrade" style={{ width: "auto", padding: "8px 20px" }}
-            onClick={() => window.location.href = "mailto:siqbalhwc@gmail.com?subject=Upgrade to Pro"}>
+            onClick={() => handleUpgrade("pro")}>
             Upgrade Now <ArrowRight size={14} />
           </button>
         </div>
@@ -232,9 +294,12 @@ export default function UpgradePage() {
                 ))}
               </div>
               {!isCurrent && (
-                <button className="btn-upgrade"
-                  onClick={() => window.location.href = `mailto:siqbalhwc@gmail.com?subject=Upgrade to ${plan.name}`}>
-                  Upgrade to {plan.name} <ArrowRight size={14} />
+                <button
+                  className="btn-upgrade"
+                  onClick={() => handleUpgrade(plan.code)}
+                  disabled={upgrading === plan.code}
+                >
+                  {upgrading === plan.code ? "Redirecting..." : `Upgrade to ${plan.name}`} <ArrowRight size={14} />
                 </button>
               )}
             </div>
