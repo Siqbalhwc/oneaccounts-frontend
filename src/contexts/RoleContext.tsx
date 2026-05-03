@@ -1,35 +1,44 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect } from "react"
+import { createContext, useContext, useEffect, useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 
 interface RoleContextType {
-  role: string
+  role: string | null
   loading: boolean
 }
 
-const RoleContext = createContext<RoleContextType>({ role: "viewer", loading: true })
+const RoleContext = createContext<RoleContextType>({ role: null, loading: true })
 
 export function RoleProvider({ children }: { children: React.ReactNode }) {
-  const [role, setRole] = useState("viewer")
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+  const [role, setRole] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (user) {
-        const { data } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user.id)
-          .eq("company_id", "00000000-0000-0000-0000-000000000001")  // default company
-          .maybeSingle()
-        if (data) setRole(data.role)
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) {
+        setLoading(false)
+        return
       }
-      setLoading(false)
+      const companyId = (user.app_metadata as any)?.company_id
+      if (!companyId) {
+        setLoading(false)
+        return
+      }
+      supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id)
+        .eq("company_id", companyId)
+        .maybeSingle()
+        .then(({ data }) => {
+          setRole(data?.role || "viewer")
+          setLoading(false)
+        })
     })
   }, [])
 

@@ -13,23 +13,27 @@ async function requireAdmin() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized', status: 401, user: null }
 
+  // Get the active company from the JWT
+  const companyId = (user.app_metadata as any)?.company_id
+  if (!companyId) return { error: 'No active company', status: 400, user: null }
+
   const { data: roleData } = await supabase
     .from('user_roles')
     .select('role')
     .eq('user_id', user.id)
-    .eq('company_id', '00000000-0000-0000-0000-000000000001')
+    .eq('company_id', companyId)
     .maybeSingle()
 
   if (!roleData || roleData.role !== 'admin') {
     return { error: 'Forbidden', status: 403, user: null }
   }
 
-  return { error: null, status: 200, user }
+  return { error: null, status: 200, user, companyId }
 }
 
 // ─── GET ──────────────────────────────────────────────────
 export async function GET() {
-  const { error, status } = await requireAdmin()
+  const { error, status, companyId } = await requireAdmin()
   if (error) return NextResponse.json({ error }, { status })
 
   const { data: authUsers, error: usersError } = await supabaseAdmin
@@ -45,7 +49,7 @@ export async function GET() {
   const { data: roles } = await supabaseAdmin
     .from('user_roles')
     .select('user_id, role')
-    .eq('company_id', '00000000-0000-0000-0000-000000000001')
+    .eq('company_id', companyId)
     .in('user_id', userIds)
 
   const roleMap: Record<string, string> = {}
@@ -63,7 +67,7 @@ export async function GET() {
 
 // ─── PUT (update role) ────────────────────────────────────
 export async function PUT(request: Request) {
-  const { error, status } = await requireAdmin()
+  const { error, status, companyId } = await requireAdmin()
   if (error) return NextResponse.json({ error }, { status })
 
   const { userId, role } = await request.json()
@@ -75,7 +79,7 @@ export async function PUT(request: Request) {
     .from('user_roles')
     .upsert({
       user_id: userId,
-      company_id: '00000000-0000-0000-0000-000000000001',
+      company_id: companyId,
       role,
     })
 
@@ -87,17 +91,15 @@ export async function PUT(request: Request) {
   return NextResponse.json({ success: true })
 }
 
-// ─── POST (invite user – no hard limit, per‑user billing) ──
+// ─── POST (invite user) ───────────────────────────────────
 export async function POST(request: Request) {
-  const { error, status } = await requireAdmin()
+  const { error, status, companyId } = await requireAdmin()
   if (error) return NextResponse.json({ error }, { status })
 
   const { email, role = 'viewer' } = await request.json()
   if (!email) return NextResponse.json({ error: 'Email required' }, { status: 400 })
 
-  const companyId = '00000000-0000-0000-0000-000000000001' // single‑tenant for now
-
-  // No limit check – just invite (admin already confirmed cost on frontend)
+  // Invite via Supabase Auth Admin
   const { data: inviteData, error: inviteError } = await supabaseAdmin
     .auth.admin.inviteUserByEmail(email, {
       redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,

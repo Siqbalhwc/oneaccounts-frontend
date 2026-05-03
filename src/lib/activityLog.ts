@@ -1,19 +1,26 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
+const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!   // uses anon key, RLS will apply
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  { auth: { persistSession: false, autoRefreshToken: false } }
 )
 
-export async function logActivity(userId: string, companyId: string, action: string, details?: Record<string, any>) {
-  try {
-    await supabase.from('activity_logs').insert({
-      company_id: companyId || '00000000-0000-0000-0000-000000000001',
-      user_id: userId,
-      action,
-      details: details || {},
-    })
-  } catch (error) {
-    console.error('Activity log error:', error)
+export async function logActivity(
+  action: string,
+  userId?: string,
+  companyId?: string,
+  metadata?: Record<string, any>
+) {
+  if (!companyId) {
+    console.error('logActivity called without companyId')
+    return
   }
+
+  await supabaseAdmin.from('activity_logs').insert({
+    company_id: companyId,
+    user_id: userId || null,
+    action,
+    metadata: metadata || {},
+  })
 }
