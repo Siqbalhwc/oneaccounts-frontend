@@ -1,8 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import DashboardClientWrapper from '@/components/DashboardClientWrapper'
+import QueryProvider from '@/components/QueryProvider'
 
-// Keep the same styles exactly as before (no changes)
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
   
@@ -128,20 +128,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const email   = user.email || ''
   const initial = email.charAt(0).toUpperCase()
 
-  // ── Fetch the default company's plan and enabled features ────────────────────
-  // Since we haven't activated multi‑tenant JWT claims yet, we use the default company.
   const defaultCompanyId = '00000000-0000-0000-0000-000000000001'
 
-  // Get the plan_id for the default company
   const { data: compData } = await supabase
     .from('company_settings')
     .select('plan_id')
-    .eq('id', 1)  // company_settings.id is always 1 for the default company
+    .eq('id', 1)
     .single()
 
   let enabledFeatures: string[] = []
   if (compData?.plan_id) {
-    // Get all features enabled for this plan
     const { data: pfData } = await supabase
       .from('plan_features')
       .select('features!inner(code)')
@@ -152,7 +148,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
       enabledFeatures = pfData.map((row: any) => row.features?.code).filter(Boolean) as string[]
     }
 
-    // Also check company‑level overrides (if any)
     const { data: coData } = await supabase
       .from('company_features')
       .select('features!inner(code), enabled')
@@ -171,11 +166,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     }
   }
 
-  // If no plan or no features found, default to empty (basic user)
-  // For your own company (Pro), enabledFeatures will contain the premium codes.
-
   return (
-    <>
+    <QueryProvider>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       <DashboardClientWrapper
         enabledFeatures={enabledFeatures}
@@ -184,6 +176,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
       >
         {children}
       </DashboardClientWrapper>
-    </>
+    </QueryProvider>
   )
 }

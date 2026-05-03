@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
+import { useDashboardData } from "@/hooks/useDashboardData"
 import {
   TrendingUp, TrendingDown, Building2, AlertTriangle,
   Clock, Package, Users, CreditCard, ArrowUpRight,
@@ -135,41 +136,18 @@ export default function DashboardPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  const [kpis, setKpis] = useState({ assets: 0, liabilities: 0, equity: 0, revenue: 0, expenses: 0, profit: 0 })
-  const [ops, setOps] = useState({ receivables: 0, unpaid_invoices: 0, partial_invoices: 0, payables: 0, low_stock: 0, total_products: 0, total_customers: 0, total_suppliers: 0 })
+  const { data: kpiData, isLoading, refetch } = useDashboardData()
+
   const [incomeChart, setIncomeChart] = useState<MonthlyData>({ labels: [], values: [] })
   const [profitChart, setProfitChart] = useState<MonthlyData>({ labels: [], values: [] })
   const [overdue, setOverdue] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
   const [online, setOnline] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
-  const fetchData = async () => {
+  // Fetch monthly charts and overdue invoices – unchanged from original
+  const fetchChartsAndOverdue = async () => {
     setRefreshing(true)
     try {
-      const { data: accounts } = await supabase.from("accounts").select("type,balance")
-      if (accounts) {
-        const a = { Asset: 0, Liability: 0, Equity: 0, Revenue: 0, Expense: 0 }
-        accounts.forEach((acc: any) => { if (a[acc.type as keyof typeof a] !== undefined) a[acc.type as keyof typeof a] += (acc.balance || 0) })
-        setKpis({ assets: a.Asset, liabilities: a.Liability, equity: a.Equity, revenue: a.Revenue, expenses: a.Expense, profit: a.Revenue - a.Expense })
-      }
-
-      const [{ count: custCount }, { count: suppCount }, { count: prodCount }] = await Promise.all([
-        supabase.from("customers").select("*", { count: "exact", head: true }),
-        supabase.from("suppliers").select("*", { count: "exact", head: true }),
-        supabase.from("products").select("*", { count: "exact", head: true }),
-      ])
-
-      const { data: unpaidInvs } = await supabase.from("invoices").select("total,paid,status").eq("type", "sale").neq("status", "Paid")
-      let receivables = 0, unpaid = 0, partial = 0
-      unpaidInvs?.forEach((inv: any) => { receivables += (inv.total || 0) - (inv.paid || 0); if (inv.status === "Unpaid") unpaid++; if (inv.status === "Partial") partial++ })
-
-      const { data: payablesData } = await supabase.from("accounts").select("balance").eq("code", "2000").single()
-      const { data: prods } = await supabase.from("products").select("qty_on_hand,reorder_level")
-      const lowStock = prods?.filter((p: any) => p.qty_on_hand > 0 && p.qty_on_hand <= p.reorder_level).length || 0
-
-      setOps({ receivables, unpaid_invoices: unpaid, partial_invoices: partial, payables: payablesData?.balance || 0, low_stock: lowStock, total_products: prodCount || 0, total_customers: custCount || 0, total_suppliers: suppCount || 0 })
-
       const today = new Date().toISOString().split("T")[0]
       const { data: overdueInvs } = await supabase
         .from("invoices")
@@ -217,23 +195,23 @@ export default function DashboardPage() {
       setIncomeChart({ labels: months, values: revValues })
       setProfitChart({ labels: months, values: profitValues })
     } catch (e) { console.error(e) }
-    setLoading(false)
     setRefreshing(false)
   }
 
   useEffect(() => {
     const on = () => setOnline(true), off = () => setOnline(false)
     window.addEventListener("online", on); window.addEventListener("offline", off)
-    fetchData()
+    fetchChartsAndOverdue()
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off) }
   }, [])
 
+  // Auto-refresh every 30 seconds for charts/overdue only (KPIs are cached separately)
   useEffect(() => {
-    const interval = setInterval(() => { fetchData() }, 30000)
+    const interval = setInterval(() => { fetchChartsAndOverdue() }, 30000)
     return () => clearInterval(interval)
   }, [])
 
-  if (loading) return (
+  if (isLoading) return (
     <div style={{ padding: 20, background: "#EFF4FB", minHeight: "100%", width: "100%" }}>
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}`}</style>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))", gap: 10, marginBottom: 16 }}>
@@ -243,6 +221,7 @@ export default function DashboardPage() {
     </div>
   )
 
+  const kpis = kpiData!
   const profitable = kpis.profit >= 0
 
   return (
@@ -307,7 +286,7 @@ export default function DashboardPage() {
           )}
 
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
-            <button onClick={fetchData} disabled={refreshing}
+            <button onClick={() => { refetch(); fetchChartsAndOverdue(); }} disabled={refreshing}
               style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", background: "white", border: "1px solid #E2E8F0", borderRadius: 7, fontSize: 11, fontWeight: 600, color: "#475569", cursor: "pointer", fontFamily: "inherit" }}>
               <RefreshCw size={12} style={{ animation: refreshing ? "spin 0.8s linear infinite" : "none" }} /> Refresh
             </button>
@@ -323,10 +302,10 @@ export default function DashboardPage() {
 
           <SectionLabel>Operations</SectionLabel>
           <div className="kpi-grid">
-            <KpiCard label="Receivables" value={ops.receivables}     subtitle={`${ops.unpaid_invoices} unpaid · ${ops.partial_invoices} partial`} accent="#F59E0B" icon={<Clock size={13} />}        trend={incomeChart.values.map(v => v * 0.2)}  href="/dashboard/reports/ar-aging" />
-            <KpiCard label="Payables"    value={ops.payables}        subtitle="Outstanding supplier bills" accent="#EF4444" icon={<TrendingDown size={13} />}  trend={incomeChart.values.map(v => v * 0.15)} href="/dashboard/reports/ar-aging" />
-            <KpiCard label="Low Stock"   value={ops.low_stock}       subtitle={`of ${ops.total_products} products`} accent="#F97316" icon={<Package size={13} />} isCurrency={false} trend={incomeChart.values.map(v => Math.max(0, v * 0.01))} href="/dashboard/products" />
-            <KpiCard label="Customers"   value={ops.total_customers} subtitle={`${ops.total_suppliers} suppliers · ${ops.total_products} SKUs`} accent="#0EA5E9" icon={<Users size={13} />} isCurrency={false} trend={incomeChart.values.map(v => Math.max(1, v * 0.03))} href="/dashboard/customers" />
+            <KpiCard label="Receivables" value={kpis.receivables}     subtitle={`${kpis.unpaid_count} unpaid`} accent="#F59E0B" icon={<Clock size={13} />}        trend={incomeChart.values.map(v => v * 0.2)}  href="/dashboard/reports/ar-aging" />
+            <KpiCard label="Payables"    value={kpis.payables}        subtitle="Outstanding supplier bills" accent="#EF4444" icon={<TrendingDown size={13} />}  trend={incomeChart.values.map(v => v * 0.15)} href="/dashboard/reports/ar-aging" />
+            <KpiCard label="Low Stock"   value={kpis.low_stock}       subtitle={`of ${kpis.total_products} products`} accent="#F97316" icon={<Package size={13} />} isCurrency={false} trend={incomeChart.values.map(v => Math.max(0, v * 0.01))} href="/dashboard/products" />
+            <KpiCard label="Customers"   value={kpis.total_customers} subtitle={`${kpis.total_suppliers} suppliers · ${kpis.total_products} SKUs`} accent="#0EA5E9" icon={<Users size={13} />} isCurrency={false} trend={incomeChart.values.map(v => Math.max(1, v * 0.03))} href="/dashboard/customers" />
           </div>
 
           <SectionLabel>Monthly Trends</SectionLabel>
@@ -375,7 +354,7 @@ export default function DashboardPage() {
               <span style={{ fontSize: 12, color: "#64748B" }}>Business Health: <strong style={{ color: profitable ? "#10B981" : "#EF4444" }}>{profitable ? "Profitable" : "Loss-Making"}</strong></span>
             </div>
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-              {[["Revenue", PKR(kpis.revenue)], ["Expenses", PKR(kpis.expenses)], ["Products", String(ops.total_products)], ["Customers", String(ops.total_customers)]].map(([k, v]) => (
+              {[["Revenue", PKR(kpis.revenue)], ["Expenses", PKR(kpis.expenses)], ["Products", String(kpis.total_products)], ["Customers", String(kpis.total_customers)]].map(([k, v]) => (
                 <span key={k} style={{ fontSize: 11, color: "#64748B" }}>{k}: <strong style={{ color: "#1E293B" }}>{v}</strong></span>
               ))}
             </div>
