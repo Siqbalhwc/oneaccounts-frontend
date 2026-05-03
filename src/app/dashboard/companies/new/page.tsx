@@ -3,18 +3,28 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { Check, ArrowRight, Upload } from "lucide-react"
+import { ArrowRight } from "lucide-react"
 
 const PLAN_PRICES: Record<string, number> = {
   basic: 1999,
   pro: 4999,
-  enterprise: 0, // custom
+  enterprise: 0,
 }
 
 const BANK_DETAILS = {
-  bank: "JazzCash / EasyPaisa",
-  accountNo: "03214315665",
-  title: "Shahid Iqbal",
+  accounts: [
+    {
+      bank: "Standard Chartered Bank",
+      accountNo: "01-1659402-01",
+      title: "Shahid Iqbal",
+    },
+    {
+      bank: "Meezan Bank (IBAN)",
+      accountNo: "02850106669725",
+      iban: "PK40MEZN0002850106669725",
+      title: "SHAHID IQBAL",
+    },
+  ],
   mobile: "0321-4315665",
   email: "siqbalhwc@gmail.com",
 }
@@ -32,12 +42,12 @@ export default function NewCompanyPage() {
   const [loadingJazzCash, setLoadingJazzCash] = useState(false)
   const [errorMsg, setErrorMsg] = useState("")
 
-  // Bank transfer extra fields
+  // Bank transfer fields
   const [reference, setReference] = useState("")
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null)
   const [submittingBank, setSubmittingBank] = useState(false)
 
-  // ─── JazzCash Payment ────────────────────────────────────────
+  // ─── JazzCash Payment ────────────────────────────────
   const handleJazzCash = async () => {
     if (!companyName.trim()) return
     setLoadingJazzCash(true)
@@ -45,7 +55,6 @@ export default function NewCompanyPage() {
 
     const price = PLAN_PRICES[selectedPlan]
     if (!price) {
-      // Enterprise – still contacts admin
       window.location.href = `mailto:siqbalhwc@gmail.com?subject=Enterprise Plan for ${companyName.trim()}`
       return
     }
@@ -70,7 +79,6 @@ export default function NewCompanyPage() {
         return
       }
 
-      // Auto‑submit the JazzCash form
       const form = document.createElement("form")
       form.method = "POST"
       form.action = data.redirectUrl
@@ -89,7 +97,7 @@ export default function NewCompanyPage() {
     }
   }
 
-  // ─── Bank Transfer Submission ────────────────────────────────
+  // ─── Bank Transfer Submission ─────────────────────────
   const handleBankSubmit = async () => {
     if (!companyName.trim()) return
     if (!reference.trim() && !evidenceFile) {
@@ -99,11 +107,10 @@ export default function NewCompanyPage() {
     setSubmittingBank(true)
     setErrorMsg("")
 
-    // Upload evidence if provided
     let evidenceUrl = ""
     if (evidenceFile) {
       const { data: uploadData, error: uploadErr } = await supabase.storage
-        .from("reports") // reuse an existing public bucket, or create a new one "payments"
+        .from("reports")
         .upload(`bank-proofs/${Date.now()}-${evidenceFile.name}`, evidenceFile, {
           cacheControl: "3600",
           upsert: false,
@@ -119,7 +126,6 @@ export default function NewCompanyPage() {
       evidenceUrl = pubData.publicUrl
     }
 
-    // Submit the request
     const res = await fetch("/api/companies/request-bank-transfer", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -137,7 +143,6 @@ export default function NewCompanyPage() {
       return
     }
 
-    // Show success and reset
     setSubmittingBank(false)
     alert("Your request has been submitted. We will verify the payment and create your company shortly.")
     router.push("/dashboard")
@@ -226,7 +231,7 @@ export default function NewCompanyPage() {
         </div>
       )}
 
-      {/* ── JazzCash Section ────────────────────────────── */}
+      {/* ── JazzCash Section ── */}
       {paymentMethod === "jazzcash" && (
         <div>
           <p style={{ fontSize: 12, color: "#475569", marginBottom: 12 }}>
@@ -252,15 +257,23 @@ export default function NewCompanyPage() {
         </div>
       )}
 
-      {/* ── Bank Transfer Section ─────────────────────────── */}
+      {/* ── Bank Transfer Section ── */}
       {paymentMethod === "bank" && (
         <div style={{ background: "#F8FAFC", padding: 14, borderRadius: 8, fontSize: 12 }}>
           <p style={{ fontWeight: 700, marginBottom: 8 }}>Bank Details</p>
-          <p>Bank: <strong>{BANK_DETAILS.bank}</strong></p>
-          <p>Account No: <strong>{BANK_DETAILS.accountNo}</strong></p>
-          <p>Title: <strong>{BANK_DETAILS.title}</strong></p>
-          <p>Mobile: <strong>{BANK_DETAILS.mobile}</strong></p>
+
+          {BANK_DETAILS.accounts.map((acc, idx) => (
+            <div key={idx} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: idx < BANK_DETAILS.accounts.length - 1 ? "1px solid #E2E8F0" : "none" }}>
+              <p><strong>{acc.bank}</strong></p>
+              <p>Account No: <strong>{acc.accountNo}</strong></p>
+              {acc.iban && <p>IBAN: <strong>{acc.iban}</strong></p>}
+              <p>Title: <strong>{acc.title}</strong></p>
+            </div>
+          ))}
+
+          <p style={{ marginTop: 8 }}>Mobile: <strong>{BANK_DETAILS.mobile}</strong></p>
           <p>Email: <strong>{BANK_DETAILS.email}</strong></p>
+
           <p style={{ marginTop: 8, fontWeight: 600 }}>
             Amount: PKR {PLAN_PRICES.basic.toLocaleString()} (Basic only)
           </p>
