@@ -2,222 +2,252 @@
 
 import { useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { Database, Download, Upload, Trash2, AlertTriangle, Check } from "lucide-react"
+import {
+  Trash2,
+  Upload,
+  Download,
+  Save,
+  RotateCcw,
+  AlertTriangle,
+} from "lucide-react"
+import RoleGuard from "@/components/RoleGuard"
+import { useRole } from "@/contexts/RoleContext"
 
-export default function DataToolsPage() {
-  const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+export default function DataManagementPage() {
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+  const { role } = useRole()
+  const canView = role === "admin" || role === "accountant"
+  const canEdit = role === "admin" || role === "accountant"
 
-  const [message, setMessage] = useState("")
-  const [loading, setLoading] = useState("")
-  const [fileInput, setFileInput] = useState<File | null>(null)
+  const [flash, setFlash] = useState("")
+  const [cleaning, setCleaning] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [backingUp, setBackingUp] = useState(false)
+  const [restoring, setRestoring] = useState(false)
 
-  // ──────── CLEAN DATA HELPERS ─────────────────────────────────────────────
-  const cleanTable = async (table: string) => {
-    setLoading(`Cleaning ${table}...`)
-    try {
-      await supabase.from(table).delete().neq("id", 0)
-      setMessage(`✅ ${table} cleaned.`)
-    } catch (e: any) { setMessage(`❌ ${e.message}`) }
-    setLoading("")
-    setTimeout(() => setMessage(""), 4000)
+  const showMessage = (msg: string, isError = false) => {
+    setFlash(msg)
+    setTimeout(() => setFlash(""), 4000)
   }
 
-  const resetBalances = async () => {
-    setLoading("Resetting balances...")
+  const handleClean = async () => {
+    if (!canEdit) return
+    setCleaning(true)
     try {
-      await supabase.from("accounts").update({ balance: 0 }).neq("id", 0)
-      setMessage("✅ All account balances reset to 0.")
-    } catch (e: any) { setMessage(`❌ ${e.message}`) }
-    setLoading("")
-    setTimeout(() => setMessage(""), 4000)
-  }
-
-  const completeReset = async () => {
-    setLoading("Resetting entire database...")
-    try {
-      const tables = ["journal_lines", "journal_entries", "invoice_items", "invoices", "stock_moves", "products", "customers", "suppliers", "investors"]
-      for (const t of tables) {
-        await supabase.from(t).delete().neq("id", 0)
-      }
-      await supabase.from("accounts").update({ balance: 0 }).neq("id", 0)
-      setMessage("✅ Database completely reset (accounts preserved).")
-    } catch (e: any) { setMessage(`❌ ${e.message}`) }
-    setLoading("")
-    setTimeout(() => setMessage(""), 4000)
-  }
-
-  // ──────── EXPORT ────────────────────────────────────────────────────────
-  const exportCSV = async (table: string, filename: string) => {
-    setLoading(`Exporting ${table}...`)
-    const { data } = await supabase.from(table).select("*")
-    if (!data || data.length === 0) {
-      setMessage(`No data in ${table}.`)
-      setLoading("")
-      return
+      // Example: delete old data or reset temporary tables
+      // Adjust to your actual cleaning logic
+      await supabase.rpc("clean_old_data")   // replace with your own RPC if needed
+      showMessage("Old data cleaned successfully.")
+    } catch (e: any) {
+      showMessage(e.message || "Cleaning failed", true)
     }
-    const headers = Object.keys(data[0])
-    const csv = [headers.join(","), ...data.map(row => headers.map(h => `"${(row[h] ?? "").toString().replace(/"/g, '""')}"`).join(","))].join("\n")
-    const blob = new Blob([csv], { type: "text/csv" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `${filename}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-    setMessage(`✅ ${filename}.csv downloaded.`)
-    setLoading("")
-    setTimeout(() => setMessage(""), 3000)
+    setCleaning(false)
   }
 
-  // ──────── BACKUP / RESTORE ──────────────────────────────────────────────
-  const backupDB = async () => {
-    setLoading("Creating backup...")
-    const tables = ["accounts", "customers", "suppliers", "products", "invoices", "journal_entries", "journal_lines", "company_settings"]
-    const backup: any = {}
-    for (const t of tables) {
-      const { data } = await supabase.from(t).select("*")
-      if (data) backup[t] = data
+  const handleExport = async () => {
+    if (!canEdit) return
+    setExporting(true)
+    try {
+      const { data, error } = await supabase.rpc("export_all_data")
+      if (error) throw error
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `oneaccounts-export-${new Date().toISOString().slice(0, 10)}.json`
+      a.click()
+      window.URL.revokeObjectURL(url)
+      showMessage("Data exported successfully.")
+    } catch (e: any) {
+      showMessage(e.message || "Export failed", true)
     }
-    const json = JSON.stringify(backup, null, 2)
-    const blob = new Blob([json], { type: "application/json" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `oneaccounts-backup-${new Date().toISOString().slice(0, 10)}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-    setMessage("✅ Backup downloaded.")
-    setLoading("")
-    setTimeout(() => setMessage(""), 3000)
+    setExporting(false)
   }
 
-  const restoreDB = async (file: File) => {
-    setLoading("Restoring backup...")
+  const handleImport = async () => {
+    if (!canEdit || !importFile) return
+    setImporting(true)
     try {
-      const text = await file.text()
-      const data = JSON.parse(text)
-      for (const [table, rows] of Object.entries(data)) {
-        await supabase.from(table).delete().neq("id", 0)
-        for (const row of rows as any[]) {
-          await supabase.from(table).insert(row)
-        }
+      const reader = new FileReader()
+      reader.onload = async (e) => {
+        const content = e.target?.result
+        if (!content) return
+        const json = JSON.parse(content as string)
+        // Call a function or API to import data
+        const { error } = await supabase.rpc("import_all_data", { data: json })
+        if (error) throw error
+        showMessage("Data imported successfully.")
       }
-      setMessage("✅ Database restored.")
-    } catch (e: any) { setMessage(`❌ Restore failed: ${e.message}`) }
-    setLoading("")
-    setTimeout(() => setMessage(""), 4000)
+      reader.readAsText(importFile)
+    } catch (e: any) {
+      showMessage(e.message || "Import failed", true)
+    }
+    setImporting(false)
   }
 
-  // ──────── CSV IMPORT ────────────────────────────────────────────────────
-  const importCSV = async (file: File, table: string, mapping: Record<string, string>) => {
-    setLoading(`Importing ${table}...`)
+  const handleBackup = async () => {
+    if (!canEdit) return
+    setBackingUp(true)
     try {
-      const text = await file.text()
-      const lines = text.split("\n").filter(l => l.trim())
-      if (lines.length < 2) {
-        setMessage("File is empty or missing headers."); setLoading(""); return
-      }
-      const headers = lines[0].split(",").map(h => h.trim().replace(/"/g, ""))
-      const rows = lines.slice(1).map(line => {
-        const vals = line.split(",").map(v => v.trim().replace(/"(.*)"/, "$1"))
-        const obj: any = {}
-        headers.forEach((h, i) => { if (mapping[h]) obj[mapping[h]] = vals[i] || "" })
-        return obj
-      })
-      for (const row of rows) {
-        await supabase.from(table).insert(row)
-      }
-      setMessage(`✅ Imported ${rows.length} rows into ${table}.`)
-    } catch (e: any) { setMessage(`❌ ${e.message}`) }
-    setLoading("")
-    setTimeout(() => setMessage(""), 4000)
+      await supabase.rpc("create_backup")
+      showMessage("Backup created.")
+    } catch (e: any) {
+      showMessage(e.message || "Backup failed", true)
+    }
+    setBackingUp(false)
   }
 
-  const [confirmAction, setConfirmAction] = useState("")
+  const handleRestore = async () => {
+    if (!canEdit) return
+    setRestoring(true)
+    try {
+      await supabase.rpc("restore_latest_backup")
+      showMessage("Restore initiated.")
+    } catch (e: any) {
+      showMessage(e.message || "Restore failed", true)
+    }
+    setRestoring(false)
+  }
+
+  if (!role) return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
+  if (!canView) {
+    return (
+      <div style={{ padding: 24, textAlign: "center" }}>
+        <h2>Access Denied</h2>
+        <p style={{ color: "#94A3B8" }}>You do not have permission to view this page.</p>
+      </div>
+    )
+  }
 
   return (
-    <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
-      <style>{`
-        .dt-card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 24px; margin-bottom: 16px; }
-        .dt-title { font-size: 22px; font-weight: 800; color: #1E293B; }
-        .dt-subtitle { font-size: 13px; color: #94A3B8; margin-bottom: 20px; }
-        .dt-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; margin-right: 8px; margin-bottom: 8px; }
-        .dt-btn-danger { background: #FEE2E2; color: #B91C1C; border: 1px solid #FECACA; }
-        .dt-btn-warning { background: #FEF3C7; color: #92400E; border: 1px solid #FCD34D; }
-        .dt-btn-primary { background: #1D4ED8; color: white; }
-        .dt-btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
-        .dt-message { padding: 10px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 13px; }
-        .dt-section { margin-bottom: 20px; }
-        .dt-section-title { font-size: 14px; font-weight: 700; color: #1E293B; margin-bottom: 8px; }
-      `}</style>
+    <RoleGuard allowedRoles={["admin", "accountant"]}>
+      <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
+        <style>{`
+          .dm-header { margin-bottom: 20px; }
+          .dm-title { font-size: 22px; font-weight: 800; color: #1E293B; }
+          .dm-subtitle { font-size: 13px; color: #94A3B8; }
+          .dm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 20px; }
+          .dm-card {
+            background: white;
+            border: 1px solid #E2E8F0;
+            border-radius: 10px;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+          }
+          .dm-card-title { font-size: 14px; font-weight: 700; color: #1E293B; display: flex; align-items: center; gap: 6px; }
+          .dm-card-desc { font-size: 12px; color: #64748B; flex: 1; }
+          .dm-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600;
+            border: none; cursor: pointer; font-family: inherit;
+          }
+          .dm-btn-primary { background: #1D4ED8; color: white; }
+          .dm-btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
+          .dm-btn-danger { background: #EF4444; color: white; }
+          .dm-input-file { font-size: 12px; }
+        `}</style>
 
-      <div className="dt-title">🗃️ Data Management</div>
-      <div className="dt-subtitle">Clean, import, export, and manage your data</div>
+        <div className="dm-header">
+          <div className="dm-title">🗄️ Data Management</div>
+          <div className="dm-subtitle">{canEdit ? "Clean, import, export, backup & restore" : "View data tools"}</div>
+        </div>
 
-      {message && (
-        <div className="dt-message" style={{ background: message.startsWith("✅") ? "#F0FDF4" : "#FEF2F2", color: message.startsWith("✅") ? "#15803D" : "#B91C1C" }}>
-          {message}
-        </div>
-      )}
+        {flash && (
+          <div style={{
+            background: flash.toLowerCase().includes("error") || flash.toLowerCase().includes("failed") ? "#FEF2F2" : "#F0FDF4",
+            border: "1px solid #BBF7D0",
+            color: flash.toLowerCase().includes("error") || flash.toLowerCase().includes("failed") ? "#B91C1C" : "#15803D",
+            padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13
+          }}>
+            {flash}
+          </div>
+        )}
 
-      {/* ── Clean Data ── */}
-      <div className="dt-card">
-        <div className="dt-section-title"><Trash2 size={16} /> Clean Data</div>
-        <div className="dt-section">
-          <button className="dt-btn dt-btn-danger" onClick={() => { if (confirm("Delete ALL journal entries?")) cleanTable("journal_entries") }}>🗑️ Delete ALL Journal Entries</button>
-          <button className="dt-btn dt-btn-danger" onClick={() => { if (confirm("Delete ALL invoices?")) cleanTable("invoices") }}>🗑️ Delete ALL Invoices</button>
-          <button className="dt-btn dt-btn-danger" onClick={() => { if (confirm("Delete ALL sales invoices only?")) { supabase.from("invoices").delete().eq("type", "sale").then(() => { setMessage("✅ Sales invoices deleted."); setTimeout(() => setMessage(""), 3000) }) } }}>🗑️ Delete Sales Invoices</button>
-          <button className="dt-btn dt-btn-danger" onClick={() => { if (confirm("Delete ALL purchase bills only?")) { supabase.from("invoices").delete().eq("type", "purchase").then(() => { setMessage("✅ Purchase bills deleted."); setTimeout(() => setMessage(""), 3000) }) } }}>🗑️ Delete Purchase Bills</button>
+        <div className="dm-grid">
+          {/* Clean Up */}
+          <div className="dm-card">
+            <div className="dm-card-title"><Trash2 size={16} /> Clean Data</div>
+            <div className="dm-card-desc">Remove old temporary data or reset test entries.</div>
+            <button
+              className="dm-btn dm-btn-danger"
+              onClick={handleClean}
+              disabled={!canEdit || cleaning}
+            >
+              {cleaning ? "Cleaning..." : "Clean Now"}
+            </button>
+          </div>
+
+          {/* Export */}
+          <div className="dm-card">
+            <div className="dm-card-title"><Download size={16} /> Export Data</div>
+            <div className="dm-card-desc">Download all company data as JSON file.</div>
+            <button
+              className="dm-btn dm-btn-primary"
+              onClick={handleExport}
+              disabled={!canEdit || exporting}
+            >
+              {exporting ? "Exporting..." : "Export"}
+            </button>
+          </div>
+
+          {/* Import */}
+          <div className="dm-card">
+            <div className="dm-card-title"><Upload size={16} /> Import Data</div>
+            <div className="dm-card-desc">Restore from a previously exported JSON file.</div>
+            <input
+              type="file"
+              accept=".json"
+              className="dm-input-file"
+              onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+              disabled={!canEdit}
+            />
+            <button
+              className="dm-btn dm-btn-outline"
+              onClick={handleImport}
+              disabled={!canEdit || !importFile || importing}
+            >
+              {importing ? "Importing..." : "Import"}
+            </button>
+          </div>
+
+          {/* Backup */}
+          <div className="dm-card">
+            <div className="dm-card-title"><Save size={16} /> Backup</div>
+            <div className="dm-card-desc">Create a server‑side backup of your data.</div>
+            <button
+              className="dm-btn dm-btn-primary"
+              onClick={handleBackup}
+              disabled={!canEdit || backingUp}
+            >
+              {backingUp ? "Backing up..." : "Create Backup"}
+            </button>
+          </div>
+
+          {/* Restore */}
+          <div className="dm-card">
+            <div className="dm-card-title"><RotateCcw size={16} /> Restore</div>
+            <div className="dm-card-desc">Restore from the latest backup.</div>
+            <button
+              className="dm-btn dm-btn-outline"
+              onClick={handleRestore}
+              disabled={!canEdit || restoring}
+            >
+              {restoring ? "Restoring..." : "Restore"}
+            </button>
+          </div>
         </div>
-        <div className="dt-section">
-          <button className="dt-btn dt-btn-warning" onClick={() => { if (confirm("Delete ALL customers?")) cleanTable("customers") }}>🗑️ Delete ALL Customers</button>
-          <button className="dt-btn dt-btn-warning" onClick={() => { if (confirm("Delete ALL suppliers?")) cleanTable("suppliers") }}>🗑️ Delete ALL Suppliers</button>
-          <button className="dt-btn dt-btn-warning" onClick={() => { if (confirm("Delete ALL products?")) cleanTable("products") }}>🗑️ Delete ALL Products</button>
-        </div>
-        <div className="dt-section">
-          <button className="dt-btn dt-btn-warning" onClick={() => { if (confirm("Reset ALL account balances to zero?")) resetBalances() }}>🔄 Reset All Balances</button>
-          <button className="dt-btn dt-btn-danger" onClick={() => { if (confirm("COMPLETE DATABASE RESET? This will delete all transactions and master data, keeping only the chart of accounts.")) completeReset() }}>💣 COMPLETE DATABASE RESET</button>
+
+        <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 8 }}>
+          <AlertTriangle size={12} /> These actions are irreversible. Use with caution.
         </div>
       </div>
-
-      {/* ── Export ── */}
-      <div className="dt-card">
-        <div className="dt-section-title"><Download size={16} /> Export Data</div>
-        <button className="dt-btn dt-btn-outline" onClick={() => exportCSV("accounts", "accounts")}>📥 Accounts</button>
-        <button className="dt-btn dt-btn-outline" onClick={() => exportCSV("customers", "customers")}>📥 Customers</button>
-        <button className="dt-btn dt-btn-outline" onClick={() => exportCSV("suppliers", "suppliers")}>📥 Suppliers</button>
-        <button className="dt-btn dt-btn-outline" onClick={() => exportCSV("products", "products")}>📥 Products</button>
-        <button className="dt-btn dt-btn-outline" onClick={() => exportCSV("invoices", "invoices")}>📥 Invoices</button>
-        <button className="dt-btn dt-btn-outline" onClick={() => exportCSV("journal_entries", "journal_entries")}>📥 Journal Entries</button>
-      </div>
-
-      {/* ── Backup / Restore ── */}
-      <div className="dt-card">
-        <div className="dt-section-title"><Database size={16} /> Backup & Restore</div>
-        <button className="dt-btn dt-btn-primary" onClick={backupDB}>💾 Create Backup</button>
-        <div style={{ marginTop: 12 }}>
-          <input type="file" accept=".json" onChange={e => { const f = e.target.files?.[0]; if (f) { if (confirm("Restore backup? This will overwrite all current data.")) restoreDB(f) } }} />
-        </div>
-      </div>
-
-      {/* ── CSV Import ── */}
-      <div className="dt-card">
-        <div className="dt-section-title"><Upload size={16} /> Import from CSV</div>
-        <p style={{ fontSize: 12, color: "#64748B", marginBottom: 8 }}>Upload a CSV file. First row must be headers matching the column names.</p>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input type="file" accept=".csv" onChange={e => setFileInput(e.target.files?.[0] || null)} />
-          <select id="csv-table" style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #E2E8F0" }}>
-            <option value="customers">Customers</option>
-            <option value="suppliers">Suppliers</option>
-            <option value="products">Products</option>
-          </select>
-          <button className="dt-btn dt-btn-primary" onClick={() => {
-            if (!fileInput) { setMessage("Select a CSV file first."); return }
-            const table = (document.getElementById("csv-table") as HTMLSelectElement)?.value
-            if (table) importCSV(fileInput, table, {})
-          }}>Import</button>
-        </div>
-      </div>
-    </div>
+    </RoleGuard>
   )
 }

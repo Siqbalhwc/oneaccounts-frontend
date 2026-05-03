@@ -269,8 +269,8 @@ export default function BankAccountsPage() {
         </div>
       )}
 
-      {/* Add/Edit Modal */}
-      {showModal && (
+      {/* Add/Edit Modal – only for editors */}
+      {showModal && canEdit && (
         <div className="ba-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="ba-modal" onClick={(e) => e.stopPropagation()}>
             <div className="ba-modal-header">
@@ -350,8 +350,8 @@ export default function BankAccountsPage() {
         </div>
       )}
 
-      {/* Delete Confirmation */}
-      {deleteId && (
+      {/* Delete Confirmation – only for editors */}
+      {deleteId && canEdit && (
         <div className="ba-modal-overlay">
           <div className="ba-modal" style={{ maxWidth: 400 }}>
             <div className="ba-modal-header">

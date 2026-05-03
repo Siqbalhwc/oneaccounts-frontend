@@ -62,7 +62,19 @@ const styles = `
     overflow-x: hidden;
   }
 
-  .dl-topbar { background: white; border-bottom: 1px solid #E2E8F0; padding: 0 20px; display: flex; align-items: center; min-height: 56px; gap: 16px; position: sticky; top: 0; z-index: 30; }
+  .dl-topbar {
+    background: white;
+    border-bottom: 1px solid #E2E8F0;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    min-height: 56px;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    flex-wrap: wrap;
+  }
   .dl-topbar-greeting { flex: 1; min-width: 0; }
   .dl-topbar-title { font-size: clamp(12px, 1.1vw, 14px); font-weight: 700; color: #1E293B; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .dl-topbar-subtitle { font-size: clamp(10px, 0.8vw, 11px); color: #94A3B8; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -90,6 +102,13 @@ const styles = `
   .dl-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 35; }
   .dl-overlay.open { display: block; }
 
+  /* Responsive – main content area */
+  .dl-main-inner {
+    padding: 16px;
+    background: #EFF4FB;
+    min-height: 100%;
+  }
+
   @media (max-width: 900px) {
     .dl-sidebar { width: 60px; min-width: 60px; }
     .dl-sidebar-logo-name, .dl-sidebar-logo-sub, .dl-nav-section,
@@ -109,14 +128,16 @@ const styles = `
     .dl-sidebar.mobile-open .dl-nav-item { justify-content: flex-start; padding: 8px 12px; }
     .dl-main { margin-left: 0; }
     .dl-hamburger { display: block; }
-    .dl-topbar { flex-wrap: wrap; min-height: auto; padding: 10px 14px; gap: 10px; }
-    .dl-topbar-greeting { flex: 1 1 60%; }
+    .dl-topbar { padding: 0 10px; min-height: 48px; }
     .dl-topbar-actions { flex: 1 1 100%; gap: 6px; }
-    .dl-action-btn { flex: 1; justify-content: center; padding: 7px 8px; font-size: 10px; }
+    .dl-action-btn { flex: 1; justify-content: center; padding: 6px 8px; font-size: 10px; }
+    .dl-main-inner { padding: 12px; }
   }
   @media (max-width: 380px) {
+    .dl-topbar { padding: 0 8px; }
     .dl-topbar-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
     .dl-action-btn { padding: 6px 4px; font-size: 9px; }
+    .dl-main-inner { padding: 8px; }
   }
 `
 

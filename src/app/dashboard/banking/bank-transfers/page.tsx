@@ -4,6 +4,8 @@ import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, ArrowRightLeft, CheckCircle, X } from "lucide-react"
 import { useRouter } from "next/navigation"
+import RoleGuard from "@/components/RoleGuard"
+import { useRole } from "@/contexts/RoleContext"
 
 interface BankAccount {
   id: number
@@ -30,253 +32,241 @@ interface Transfer {
 
 export default function BankTransfersPage() {
   const router = useRouter()
-  const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
-  const [accounts, setAccounts] = useState<BankAccount[]>([])
-  const [fromId, setFromId] = useState<number | null>(null)
-  const [toId, setToId] = useState<number | null>(null)
-  const [amount, setAmount] = useState(0)
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+  const { role } = useRole()
+  const canView = role === "admin" || role === "accountant"
+  const canEdit = role === "admin" || role === "accountant"
+
+  const [transfers, setTransfers] = useState<Transfer[]>([])
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [flash, setFlash] = useState("")
+
+  // Form state
+  const [fromAccountId, setFromAccountId] = useState<number | null>(null)
+  const [toAccountId, setToAccountId] = useState<number | null>(null)
+  const [amount, setAmount] = useState("")
   const [transferDate, setTransferDate] = useState(new Date().toISOString().split("T")[0])
   const [reference, setReference] = useState("")
   const [notes, setNotes] = useState("")
-  const [transfers, setTransfers] = useState<Transfer[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
-  const [success, setSuccess] = useState("")
+  const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    // fetch bank accounts with balances
-    supabase
-      .from("bank_accounts")
-      .select("id, account_id, bank_name, account_number, accounts(code, name, balance)")
-      .eq("is_active", true)
-      .order("id")
-      .then(r => {
-        if (r.data) {
-          const enriched = r.data
-            .filter((b: any) => b.accounts)
-            .map((b: any) => ({
-              id: b.id,
-              account_id: b.account_id,
-              bank_name: b.bank_name,
-              account_number: b.account_number,
-              balance: b.accounts.balance || 0,
-              code: b.accounts.code || "",
-              name: b.accounts.name || "",
-            }))
-          setAccounts(enriched)
-        }
-      })
-
-    // fetch recent transfers
-    supabase
-      .from("bank_transfers")
-      .select("*, from_account:bank_accounts!from_account_id(account_id, accounts(code,name)), to_account:bank_accounts!to_account_id(account_id, accounts(code,name))")
-      .order("created_at", { ascending: false })
-      .limit(20)
-      .then(r => {
-        if (r.data) setTransfers(r.data)
-      })
-  }, [])
-
-  const fromAccount = accounts.find(a => a.id === fromId)
-  const toAccount = accounts.find(a => a.id === toId)
-
-  const handleSubmit = async () => {
-    if (!fromId || !toId) {
-      setError("Select both source and destination accounts")
-      return
-    }
-    if (fromId === toId) {
-      setError("Source and destination must be different")
-      return
-    }
-    if (amount <= 0) {
-      setError("Amount must be greater than 0")
-      return
-    }
-    if (!fromAccount || (fromAccount.balance || 0) < amount) {
-      setError(`Insufficient balance. Available: PKR ${(fromAccount?.balance || 0).toLocaleString()}`)
-      return
-    }
-    if (!toAccount) {
-      setError("Destination account not found")
-      return
-    }
-
+  const fetchData = async () => {
     setLoading(true)
-    setError("")
+    const { data: transferData } = await supabase
+      .from("bank_transfers")
+      .select("*, from_account:accounts!from_account_id(code, name), to_account:accounts!to_account_id(code, name)")
+      .order("created_at", { ascending: false })
 
-    try {
-      // 1. Update account balances (transfer = DR destination / CR source)
-      const { data: toAcc } = await supabase.from("accounts").select("id,balance").eq("id", toAccount.account_id).single()
-      const { data: fromAcc } = await supabase.from("accounts").select("id,balance").eq("id", fromAccount.account_id).single()
+    const { data: accountData } = await supabase
+      .from("bank_accounts")
+      .select("*, accounts(code, name, balance)")
+      .order("created_at")
 
-      if (!toAcc || !fromAcc) throw new Error("Accounts not found")
-
-      await supabase.from("accounts").update({ balance: toAcc.balance + amount }).eq("id", toAcc.id)
-      await supabase.from("accounts").update({ balance: fromAcc.balance - amount }).eq("id", fromAcc.id)
-
-      // 2. Create journal entry
-      const entryNo = `BT-${transferDate.replace(/-/g, "")}-${Date.now().toString(36).toUpperCase()}`
-      const { data: je } = await supabase.from("journal_entries")
-        .insert({
-          entry_no: entryNo,
-          date: transferDate,
-          description: `Bank Transfer from ${fromAccount.code} to ${toAccount.code}`,
-          reference,
-        })
-        .select("id")
-        .single()
-
-      if (je) {
-        await supabase.from("journal_lines").insert([
-          { entry_id: je.id, account_id: toAcc.id, debit: amount, credit: 0, narration: `Transfer to ${toAccount.code}` },
-          { entry_id: je.id, account_id: fromAcc.id, debit: 0, credit: amount, narration: `Transfer from ${fromAccount.code}` },
-        ])
-      }
-
-      // 3. Record the transfer
-      await supabase.from("bank_transfers").insert({
-        from_account_id: fromId,
-        to_account_id: toId,
-        amount,
-        transfer_date: transferDate,
-        reference,
-        notes,
-        journal_entry_id: je?.id || null,
-      })
-
-      setSuccess(`Transfer of PKR ${amount.toLocaleString()} completed!`)
-      setAmount(0)
-      setFromId(null)
-      setToId(null)
-      setReference("")
-      setNotes("")
-
-      // Refresh the list
-      const { data: freshTransfers } = await supabase
-        .from("bank_transfers")
-        .select("*, from_account:bank_accounts!from_account_id(account_id, accounts(code,name)), to_account:bank_accounts!to_account_id(account_id, accounts(code,name))")
-        .order("created_at", { ascending: false })
-        .limit(20)
-      if (freshTransfers) setTransfers(freshTransfers)
-
-      setTimeout(() => setSuccess(""), 3000)
-    } catch (e: any) {
-      setError(e.message)
+    if (transferData) setTransfers(transferData)
+    if (accountData) {
+      setBankAccounts(
+        accountData.map((a: any) => ({
+          id: a.id,
+          account_id: a.account_id,
+          bank_name: a.bank_name,
+          account_number: a.account_number,
+          balance: a.accounts?.balance || 0,
+          code: a.accounts?.code || "",
+          name: a.accounts?.name || "",
+        }))
+      )
     }
     setLoading(false)
   }
 
+  useEffect(() => {
+    if (role) fetchData()
+  }, [role])
+
+  if (!role) {
+    return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
+  }
+
+  if (!canView) {
+    return (
+      <div style={{ padding: 24, textAlign: "center" }}>
+        <h2>Access Denied</h2>
+        <p style={{ color: "#94A3B8" }}>You do not have permission to view this page.</p>
+      </div>
+    )
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!fromAccountId || !toAccountId || !amount || fromAccountId === toAccountId) {
+      setFlash("Please fill all fields and make sure accounts are different.")
+      setTimeout(() => setFlash(""), 3000)
+      return
+    }
+    setSaving(true)
+    const { error } = await supabase.from("bank_transfers").insert({
+      from_account_id: fromAccountId,
+      to_account_id: toAccountId,
+      amount: parseFloat(amount),
+      transfer_date: transferDate,
+      reference,
+      notes,
+    })
+    if (error) {
+      setFlash("Error: " + error.message)
+    } else {
+      setFlash("Transfer recorded!")
+      setShowForm(false)
+      fetchData()
+    }
+    setSaving(false)
+    setTimeout(() => setFlash(""), 3000)
+  }
+
   return (
-    <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
-      <style>{`
-        .bt-shell { max-width: 800px; margin: 0 auto; }
-        .bt-card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 24px; margin-bottom: 16px; }
-        .bt-title { font-size: 22px; font-weight: 800; color: #1E293B; margin-bottom: 4px; }
-        .bt-subtitle { font-size: 13px; color: #94A3B8; }
-        .bt-label { font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; display: block; }
-        .bt-input, .bt-select { width: 100%; height: 40px; border: 1.5px solid #E5EAF2; border-radius: 9px; padding: 0 14px; font-size: 13px; font-family: inherit; background: #FAFBFF; outline: none; }
-        .bt-input:focus, .bt-select:focus { border-color: #1740C8; background: white; }
-        .bt-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-        .bt-btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; }
-        .bt-btn-primary { background: linear-gradient(135deg, #1740C8, #071352); color: white; }
-        .bt-btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
-        .bt-transfer-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #F1F5F9; font-size: 13px; }
-        @media (max-width: 500px) {
-          .bt-row { grid-template-columns: 1fr; }
-        }
-      `}</style>
+    <RoleGuard allowedRoles={["admin", "accountant"]}>
+      <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
+        <style>{`
+          .bt-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+          .bt-title { font-size: 22px; font-weight: 800; color: #1E293B; }
+          .bt-subtitle { font-size: 13px; color: #94A3B8; }
+          .bt-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; }
+          .bt-btn-primary { background: linear-gradient(135deg, #1740C8, #071352); color: white; }
+          .bt-btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
+          .bt-table { background: white; border-radius: 10px; border: 1px solid #E2E8F0; overflow: hidden; }
+          .bt-table-header, .bt-table-row { display: grid; grid-template-columns: 100px 100px 100px 100px 1fr 120px; padding: 10px 14px; border-bottom: 1px solid #F1F5F9; font-size: 12px; align-items: center; }
+          .bt-table-header { background: #F8FAFC; font-size: 9px; font-weight: 700; text-transform: uppercase; color: #94A3B8; }
+          .bt-table-row:hover { background: #FAFBFF; }
+          .bt-form-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
+          .bt-form { background: white; border-radius: 14px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
+          .bt-form-header { padding: 20px 24px; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; }
+          .bt-form-title { font-size: 18px; font-weight: 700; color: #1E293B; }
+          .bt-form-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
+          .bt-label { font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; }
+          .bt-input, .bt-select { width: 100%; height: 40px; border: 1.5px solid #E5EAF2; border-radius: 9px; padding: 0 14px; font-size: 13px; font-family: inherit; background: #FAFBFF; outline: none; }
+          .bt-input:focus, .bt-select:focus { border-color: #1740C8; background: white; }
+          .bt-form-footer { padding: 16px 24px; border-top: 1px solid #E2E8F0; display: flex; justify-content: flex-end; gap: 8px; }
+          .bt-icon-btn { background: none; border: none; cursor: pointer; padding: 4px; border-radius: 6px; color: #94A3B8; }
+          .bt-icon-btn:hover { background: #F1F5F9; color: #475569; }
+          @media (max-width: 768px) {
+            .bt-table-header, .bt-table-row { grid-template-columns: 100px 100px 100px 1fr; }
+            .bt-hide-mobile { display: none; }
+          }
+        `}</style>
 
-      <div className="bt-shell">
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-          <button className="bt-btn bt-btn-outline" onClick={() => router.push("/dashboard/banking/bank-accounts")}>
-            <ArrowLeft size={16} />
-          </button>
+        <div className="bt-header">
           <div>
-            <div className="bt-title">🔄 Bank Transfers</div>
-            <div className="bt-subtitle">Transfer funds between bank accounts</div>
+            <div className="bt-title">↔️ Bank Transfers</div>
+            <div className="bt-subtitle">Record a transfer between your bank accounts</div>
           </div>
-        </div>
-
-        {error && (
-          <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#B91C1C", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
-            ⚠️ {error}
-          </div>
-        )}
-        {success && (
-          <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#15803D", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
-            ✅ {success}
-          </div>
-        )}
-
-        <div className="bt-card">
-          <div className="bt-row">
-            <div>
-              <label className="bt-label">From Account *</label>
-              <select className="bt-select" value={fromId || ""} onChange={e => setFromId(Number(e.target.value) || null)}>
-                <option value="">Select source account...</option>
-                {accounts.map(a => (
-                  <option key={a.id} value={a.id}>
-                    {a.code} - {a.bank_name} (PKR {a.balance?.toLocaleString()})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="bt-label">To Account *</label>
-              <select className="bt-select" value={toId || ""} onChange={e => setToId(Number(e.target.value) || null)}>
-                <option value="">Select destination account...</option>
-                {accounts.map(a => (
-                  <option key={a.id} value={a.id}>
-                    {a.code} - {a.bank_name} (PKR {a.balance?.toLocaleString()})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="bt-label">Amount (PKR) *</label>
-              <input className="bt-input" type="number" value={amount || ""} onChange={e => setAmount(Number(e.target.value))} />
-            </div>
-            <div>
-              <label className="bt-label">Date *</label>
-              <input className="bt-input" type="date" value={transferDate} onChange={e => setTransferDate(e.target.value)} />
-            </div>
-          </div>
-          <div className="bt-row" style={{ marginTop: 14 }}>
-            <div>
-              <label className="bt-label">Reference</label>
-              <input className="bt-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="Optional" />
-            </div>
-            <div>
-              <label className="bt-label">Notes</label>
-              <input className="bt-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" />
-            </div>
-          </div>
-          <button className="bt-btn bt-btn-primary" style={{ marginTop: 20, width: "100%" }} onClick={handleSubmit} disabled={loading}>
-            <ArrowRightLeft size={16} /> {loading ? "Processing..." : "Execute Transfer"}
-          </button>
-        </div>
-
-        <div className="bt-card">
-          <h3 style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700, color: "#1E293B" }}>Recent Transfers</h3>
-          {transfers.length === 0 ? (
-            <p style={{ color: "#94A3B8", textAlign: "center", padding: 20 }}>No transfers yet.</p>
-          ) : (
-            transfers.map((t, i) => (
-              <div key={t.id} className="bt-transfer-row">
-                <div>
-                  <span style={{ fontWeight: 600 }}>{t.transfer_date}</span>
-                  <span style={{ marginLeft: 12, color: "#64748B" }}>
-                    {t.from_account?.code} → {t.to_account?.code}
-                  </span>
-                </div>
-                <span style={{ fontWeight: 700, color: "#1D4ED8" }}>PKR {t.amount.toLocaleString()}</span>
-              </div>
-            ))
+          {canEdit && (
+            <button className="bt-btn bt-btn-primary" onClick={() => setShowForm(true)}>
+              <ArrowRightLeft size={16} /> New Transfer
+            </button>
           )}
         </div>
+
+        {flash && (
+          <div style={{
+            background: flash.includes("Error") ? "#FEF2F2" : "#F0FDF4",
+            border: "1px solid #BBF7D0",
+            color: flash.includes("Error") ? "#B91C1C" : "#15803D",
+            padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13
+          }}>
+            {flash}
+          </div>
+        )}
+
+        {loading ? (
+          <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading transfers...</div>
+        ) : transfers.length === 0 ? (
+          <div style={{ background: "white", borderRadius: 10, border: "1px solid #E2E8F0", padding: 40, textAlign: "center", color: "#94A3B8" }}>
+            No transfers recorded yet. {canEdit && 'Click "New Transfer" to record one.'}
+          </div>
+        ) : (
+          <div className="bt-table">
+            <div className="bt-table-header">
+              <span>From</span>
+              <span>To</span>
+              <span>Amount</span>
+              <span>Date</span>
+              <span className="bt-hide-mobile">Ref</span>
+              <span></span>
+            </div>
+            {transfers.map(t => (
+              <div key={t.id} className="bt-table-row">
+                <span>{t.from_account?.code} - {t.from_account?.name}</span>
+                <span>{t.to_account?.code} - {t.to_account?.name}</span>
+                <span style={{ fontWeight: 600 }}>PKR {t.amount.toLocaleString()}</span>
+                <span>{new Date(t.transfer_date).toLocaleDateString()}</span>
+                <span className="bt-hide-mobile" style={{ color: "#64748B" }}>{t.reference || "—"}</span>
+                <span></span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* New Transfer Form – only shown to editors */}
+        {showForm && canEdit && (
+          <div className="bt-form-overlay" onClick={() => setShowForm(false)}>
+            <div className="bt-form" onClick={e => e.stopPropagation()}>
+              <div className="bt-form-header">
+                <div className="bt-form-title">New Bank Transfer</div>
+                <button className="bt-icon-btn" onClick={() => setShowForm(false)}><X size={18} /></button>
+              </div>
+              <form onSubmit={handleSubmit}>
+                <div className="bt-form-body">
+                  <div>
+                    <label className="bt-label">From Account *</label>
+                    <select className="bt-select" value={fromAccountId ?? ""} onChange={e => setFromAccountId(Number(e.target.value) || null)} required>
+                      <option value="">Select account</option>
+                      {bankAccounts.map(a => (
+                        <option key={a.id} value={a.id}>{a.code} - {a.name} (PKR {a.balance})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="bt-label">To Account *</label>
+                    <select className="bt-select" value={toAccountId ?? ""} onChange={e => setToAccountId(Number(e.target.value) || null)} required>
+                      <option value="">Select account</option>
+                      {bankAccounts.map(a => (
+                        <option key={a.id} value={a.id}>{a.code} - {a.name} (PKR {a.balance})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="bt-label">Amount *</label>
+                    <input className="bt-input" type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} required />
+                  </div>
+                  <div>
+                    <label className="bt-label">Transfer Date</label>
+                    <input className="bt-input" type="date" value={transferDate} onChange={e => setTransferDate(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="bt-label">Reference</label>
+                    <input className="bt-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="Optional" />
+                  </div>
+                  <div>
+                    <label className="bt-label">Notes</label>
+                    <input className="bt-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" />
+                  </div>
+                </div>
+                <div className="bt-form-footer">
+                  <button type="button" className="bt-btn bt-btn-outline" onClick={() => setShowForm(false)}>Cancel</button>
+                  <button type="submit" className="bt-btn bt-btn-primary" disabled={saving}>
+                    {saving ? "Saving..." : "Save Transfer"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+    </RoleGuard>
   )
 }
