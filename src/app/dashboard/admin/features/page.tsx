@@ -89,10 +89,13 @@ export default function FeatureManagerPage() {
               setLoading(false)
             })
         })
-        .catch(() => {
-          setMessage("Error loading features.")
-          setLoading(false)
-        })
+          .then(
+      () => {},
+      () => {
+        setMessage("Error loading features.")
+        setLoading(false)
+      }
+    )
     })
   }, [])
 

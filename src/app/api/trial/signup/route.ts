@@ -9,7 +9,6 @@ const supabaseAdmin = createClient(
 )
 
 export async function POST(request: Request) {
-  // 1. Get the authenticated user
   const supabase = await createSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
@@ -21,7 +20,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Company name is required' }, { status: 400 })
   }
 
-  // 2. Ensure the user doesn't already have a company
+  // Don't allow someone who already has a company
   const { count } = await supabaseAdmin
     .from('user_roles')
     .select('*', { count: 'exact', head: true })
@@ -31,7 +30,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'You already belong to a company.' }, { status: 400 })
   }
 
-  // 3. Use the Professional plan
+  // Use Professional plan
   const { data: plan } = await supabaseAdmin
     .from('plans')
     .select('id')
@@ -41,7 +40,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Professional plan not found' }, { status: 500 })
   }
 
-  // 4. Create the company with a 14‑day trial
+  // Create company with 14‑day trial
   const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
   const { data: company, error: companyError } = await supabaseAdmin
     .from('companies')
@@ -49,6 +48,7 @@ export async function POST(request: Request) {
       name: companyName.trim(),
       plan_id: plan.id,
       trial_ends_at: trialEnd,
+      is_trial: true,
     })
     .select('id')
     .single()
@@ -60,31 +60,31 @@ export async function POST(request: Request) {
     )
   }
 
-  // 5. Seed chart of accounts
-  await supabaseAdmin.rpc('seed_accounts_for_company', {
-    target_company_id: company.id,
-  })
-
-  // 6. Assign the creator as admin
+  // Seed accounts and assign admin role
+  await supabaseAdmin.rpc('seed_accounts_for_company', { target_company_id: company.id })
   await supabaseAdmin.from('user_roles').insert({
     user_id: user.id,
     company_id: company.id,
     role: 'admin',
   })
 
-  // 7. Refresh the JWT to include the new company_id
-  const { error: refreshError } = await supabaseAdmin.functions.invoke(
-    'custom-claims',
-    { body: { userId: user.id } }
-  )
-  if (refreshError) {
-    console.error('Failed to update JWT claim:', refreshError)
-  }
+  // Refresh the user's JWT to include the new company_id claim
+  await supabaseAdmin.functions.invoke('custom-claims', { body: { userId: user.id } })
 
-  return NextResponse.json({
+  // Build the response and set the active_company_id cookie
+  const response = NextResponse.json({
     success: true,
     companyId: company.id,
     companyName: companyName.trim(),
     message: `${companyName.trim()} is ready with a 14‑day Professional trial.`,
   })
+
+  response.cookies.set('active_company_id', company.id, {
+    path: '/',
+    maxAge: 60 * 60 * 24 * 30, // 30 days
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+  })
+
+  return response
 }
