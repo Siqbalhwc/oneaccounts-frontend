@@ -106,73 +106,98 @@ function DashboardLayoutInner({
     return true
   }
 
+  const allNavItems: NavLeaf[] = [
+    { label: 'Dashboard',          icon: '📊', href: '/dashboard',                    feature: null, roles: ["admin","accountant","viewer"] },
+    { label: 'Customers',          icon: '👥', href: '/dashboard/customers',          feature: null, roles: ["admin","accountant","viewer"] },
+    { label: 'Sales Invoices',     icon: '🧾', href: '/dashboard/invoices',           feature: null, roles: ["admin","accountant"] },
+    { label: 'Receipts',           icon: '💰', href: '/dashboard/receipts',           feature: null, roles: ["admin","accountant"] },
+    { label: 'Suppliers',          icon: '🚚', href: '/dashboard/suppliers',          feature: null, roles: ["admin","accountant","viewer"] },
+    { label: 'Purchase Bills',     icon: '📦', href: '/dashboard/bills',              feature: null, roles: ["admin","accountant"] },
+    { label: 'Payments',           icon: '💳', href: '/dashboard/payments',           feature: null, roles: ["admin","accountant"] },
+    { label: 'Bank Accounts',      icon: '🏦', href: '/dashboard/banking/bank-accounts',  feature: null, roles: ["admin","accountant"] },
+    { label: 'Bank Transfers',     icon: '🔄', href: '/dashboard/banking/bank-transfers', feature: null, roles: ["admin","accountant"] },
+    { label: 'Products',           icon: '📦', href: '/dashboard/products',                 feature: null, roles: ["admin","accountant"] },
+    { label: 'Inventory Adj.',     icon: '⚖️', href: '/dashboard/inventory/adjustments',    feature: "inventory", roles: ["admin","accountant"] },
+    { label: 'Chart of Accounts',  icon: '📋', href: '/dashboard/accounts',           feature: null, roles: ["admin","accountant","viewer"] },
+    { label: 'Journal Entries',    icon: '📓', href: '/dashboard/journal',            feature: null, roles: ["admin","accountant"] },
+    { label: 'All Reports',        icon: '📁', href: '/dashboard/reports',            feature: null, roles: ["admin","accountant","viewer"] },
+    { label: 'Invoice Automation', icon: '⚙️', href: '/dashboard/settings/invoice-automation', feature: "invoice_automation", roles: ["admin","accountant"] },
+    { label: 'Investors',          icon: '💼', href: '/dashboard/investors',                        feature: "investors",           roles: ["admin","accountant"] },
+    { label: 'Admin Panel',        icon: '👑', href: '/dashboard/admin/users',        feature: null, roles: ["admin"] },
+    { label: 'Feature Manager',    icon: '⚙️', href: '/dashboard/admin/features',     feature: null, roles: ["admin"] },
+    { label: 'Upgrade Plan',       icon: '⭐', href: '/dashboard/upgrade',            feature: null, roles: ["admin","accountant","viewer"] },
+    { label: 'Audit Logs',        icon: '📋', href: '/dashboard/admin/audit-logs',   feature: null, roles: ["admin"] },
+    { label: 'Settings',          icon: '⚙️', href: '/dashboard/settings',            feature: null, roles: ["admin"] },
+    { label: 'New Company',       icon: '🏢', href: '/dashboard/companies/new',       feature: null, roles: ["admin","accountant"] },
+  ]
+
+  // ── Only add Super Admin link for the owner ──────────────────
+  if (email === 'siqbalhwc@gmail.com') {
+    allNavItems.push({
+      label: 'Super Admin',
+      icon: '🛡️',
+      href: '/dashboard/super-admin',
+      feature: null,
+      roles: ["admin"],
+    })
+  }
+
+  // ── Build navigation sections ─────────────────────────────────
   const navSections: NavSection[] = [
     {
       section: "MAIN",
-      items: [
-        { label: "Dashboard", icon: "📊", href: "/dashboard", feature: null, roles: ["admin","accountant","viewer"] },
-      ],
+      items: allNavItems.filter(i => i.href === '/dashboard'),
     },
     {
       section: "CRM",
-      items: [
-        { label: "Customers",          icon: "👥", href: "/dashboard/customers",          feature: null, roles: ["admin","accountant","viewer"] },
-        { label: "Sales Invoices",     icon: "🧾", href: "/dashboard/invoices",           feature: null, roles: ["admin","accountant"] },
-        { label: "Receipts",           icon: "💰", href: "/dashboard/receipts",           feature: null, roles: ["admin","accountant"] },
-        { label: "Suppliers",          icon: "🚚", href: "/dashboard/suppliers",          feature: null, roles: ["admin","accountant","viewer"] },
-        { label: "Purchase Bills",     icon: "📦", href: "/dashboard/bills",              feature: null, roles: ["admin","accountant"] },
-        { label: "Payments",           icon: "💳", href: "/dashboard/payments",           feature: null, roles: ["admin","accountant"] },
-      ],
+      items: allNavItems.filter(i =>
+        ["/dashboard/customers","/dashboard/invoices","/dashboard/receipts","/dashboard/suppliers","/dashboard/bills","/dashboard/payments"].includes(i.href)
+      ),
     },
     {
       section: "BANKING",
-      items: [
-        { label: "Bank Accounts",  icon: "🏦", href: "/dashboard/banking/bank-accounts",  feature: null, roles: ["admin","accountant"] },
-        { label: "Bank Transfers", icon: "🔄", href: "/dashboard/banking/bank-transfers", feature: null, roles: ["admin","accountant"] },
-      ],
+      items: allNavItems.filter(i =>
+        ["/dashboard/banking/bank-accounts","/dashboard/banking/bank-transfers"].includes(i.href)
+      ),
     },
     {
       section: "INVENTORY",
-      items: [
-        { label: "Products",           icon: "📦", href: "/dashboard/products",                 feature: null, roles: ["admin","accountant"] },
-        { label: "Inventory Adj.",     icon: "⚖️", href: "/dashboard/inventory/adjustments",    feature: "inventory", roles: ["admin","accountant"] },
-      ],
+      items: allNavItems.filter(i =>
+        ["/dashboard/products","/dashboard/inventory/adjustments"].includes(i.href)
+      ),
     },
     {
       section: "ACCOUNTING",
       groups: [
         {
           groupLabel: "General",
-          items: [
-            { label: "Chart of Accounts", icon: "📋", href: "/dashboard/accounts", feature: null, roles: ["admin","accountant","viewer"] },
-            { label: "Journal Entries",   icon: "📓", href: "/dashboard/journal",  feature: null, roles: ["admin","accountant"] },
-          ],
+          items: allNavItems.filter(i =>
+            ["/dashboard/accounts","/dashboard/journal"].includes(i.href)
+          ),
         },
         {
           groupLabel: "Reports",
-          items: [
-            { label: "All Reports", icon: "📁", href: "/dashboard/reports", feature: null, roles: ["admin","accountant","viewer"] },
-          ],
+          items: allNavItems.filter(i =>
+            ["/dashboard/reports"].includes(i.href)
+          ),
         },
         {
           groupLabel: "Automation",
-          items: [
-            { label: "Invoice Automation", icon: "⚙️", href: "/dashboard/settings/invoice-automation", feature: "invoice_automation", roles: ["admin","accountant"] },
-            { label: "Investors",          icon: "💼", href: "/dashboard/investors",                        feature: "investors",           roles: ["admin","accountant"] },
-          ],
+          items: allNavItems.filter(i =>
+            ["/dashboard/settings/invoice-automation","/dashboard/investors"].includes(i.href)
+          ),
         },
       ],
     },
     {
       section: "SYSTEM",
-      items: [
-        { label: "Admin Panel",     icon: "👑", href: "/dashboard/admin/users",         feature: null, roles: ["admin"] },
-        { label: "Feature Manager", icon: "⚙️", href: "/dashboard/admin/features",      feature: null, roles: ["admin"] },
-        { label: "Upgrade Plan",    icon: "⭐", href: "/dashboard/upgrade",             feature: null, roles: ["admin","accountant","viewer"] },
-        { label: "Audit Logs",      icon: "📋", href: "/dashboard/admin/audit-logs",    feature: null, roles: ["admin"] },
-        { label: "Settings",        icon: "⚙️", href: "/dashboard/settings",             feature: null, roles: ["admin"] },
-        { label: "New Company",     icon: "🏢", href: "/dashboard/companies/new",        feature: null, roles: ["admin","accountant"] },
-      ],
+      items: allNavItems.filter(i =>
+        !["/dashboard"].includes(i.href) &&
+        !["/dashboard/customers","/dashboard/invoices","/dashboard/receipts","/dashboard/suppliers","/dashboard/bills","/dashboard/payments"].includes(i.href) &&
+        !["/dashboard/banking/bank-accounts","/dashboard/banking/bank-transfers"].includes(i.href) &&
+        !["/dashboard/products","/dashboard/inventory/adjustments"].includes(i.href) &&
+        !["/dashboard/accounts","/dashboard/journal","/dashboard/reports","/dashboard/settings/invoice-automation","/dashboard/investors"].includes(i.href)
+      ),
     },
   ]
 
