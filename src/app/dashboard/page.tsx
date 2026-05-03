@@ -8,10 +8,8 @@ import {
   RefreshCw, WifiOff, CheckCircle2, MessageCircle,
 } from "lucide-react"
 
-// ─── Types ────────────────────────────────────────────────────────────────────
 interface MonthlyData { labels: string[]; values: number[] }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 const PKR = (n: number) => "PKR " + new Intl.NumberFormat("en-PK", { maximumFractionDigits: 0 }).format(n)
 const SHORT = (n: number) => {
   const a = Math.abs(n)
@@ -22,7 +20,6 @@ const SHORT = (n: number) => {
 const waLink = (phone: string, no: string, bal: number, name: string) =>
   `https://wa.me/${phone}?text=${encodeURIComponent(`Dear ${name},\nPayment of PKR ${bal.toLocaleString()} for invoice ${no} is overdue.\nPlease clear it at your earliest convenience. 🙏`)}`
 
-// ─── Sparkline (unchanged) ────────────────────────────────────────────────────
 function Sparkline({ values, color }: { values: number[]; color: string }) {
   if (!values || values.length < 2) return null
   const W = 200, H = 32, P = 3
@@ -40,7 +37,6 @@ function Sparkline({ values, color }: { values: number[]; color: string }) {
   )
 }
 
-// ─── Bar Chart (unchanged) ────────────────────────────────────────────────────
 function BarChart({ labels, values, color }: { labels: string[]; values: number[]; color: string }) {
   const max = Math.max(...values.map(Math.abs), 1)
   const hasNeg = values.some(v => v < 0)
@@ -62,17 +58,15 @@ function BarChart({ labels, values, color }: { labels: string[]; values: number[
   )
 }
 
-// ─── Section Label ────────────────────────────────────────────────────────────
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8, marginTop: 4 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6, marginTop: 2 }}>
       <div style={{ width: 3, height: 14, background: "#1E3A8A", borderRadius: 2, flexShrink: 0 }} />
       <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#1E3A8A" }}>{children}</span>
     </div>
   )
 }
 
-// ─── KPI Card ─────────────────────────────────────────────────────────────────
 function KpiCard({ label, value, subtitle, accent, icon, isCurrency = true, trend, href }: {
   label: string; value: number; subtitle: string; accent: string;
   icon: React.ReactNode; isCurrency?: boolean; trend?: number[]; href?: string
@@ -118,7 +112,6 @@ function KpiCard({ label, value, subtitle, accent, icon, isCurrency = true, tren
   )
 }
 
-// ─── Chart Card ───────────────────────────────────────────────────────────────
 function ChartCard({ title, badge, badgeColor, labels, values, color }: {
   title: string; badge: string; badgeColor: string; labels: string[]; values: number[]; color: string
 }) {
@@ -136,7 +129,6 @@ function ChartCard({ title, badge, badgeColor, labels, values, color }: {
   )
 }
 
-// ─── Main Dashboard ───────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -152,7 +144,6 @@ export default function DashboardPage() {
   const [online, setOnline] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
-  // ── Data Fetching (with the two fixes applied) ─────────────────────────────
   const fetchData = async () => {
     setRefreshing(true)
     try {
@@ -179,7 +170,6 @@ export default function DashboardPage() {
 
       setOps({ receivables, unpaid_invoices: unpaid, partial_invoices: partial, payables: payablesData?.balance || 0, low_stock: lowStock, total_products: prodCount || 0, total_customers: custCount || 0, total_suppliers: suppCount || 0 })
 
-      // ── FIX 1: Overdue invoices — manual join ─────────────────────────────
       const today = new Date().toISOString().split("T")[0]
       const { data: overdueInvs } = await supabase
         .from("invoices")
@@ -208,35 +198,19 @@ export default function DashboardPage() {
         due_date: inv.due_date,
       })) || [])
 
-      // ── Monthly revenue & profit ─────────────────────────────────────────
       const months: string[] = [], revValues: number[] = [], profitValues: number[] = []
       for (let i = 5; i >= 0; i--) {
         const d = new Date()
         d.setMonth(d.getMonth() - i)
         months.push(d.toLocaleString("default", { month: "short" }))
-
         const start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`
         const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0)
         const end = lastDay.toISOString().split("T")[0]
 
-        // Sales revenue
-        const { data: revData } = await supabase
-          .from("invoices")
-          .select("total")
-          .eq("type", "sale")
-          .gte("date", start)
-          .lte("date", end)
+        const { data: revData } = await supabase.from("invoices").select("total").eq("type", "sale").gte("date", start).lte("date", end)
         const rev = revData?.reduce((s: number, r: any) => s + (r.total || 0), 0) || 0
-
-        // ── FIX 2: Expenses — use purchase bills instead of broken journal join ──
-        const { data: expData } = await supabase
-          .from("invoices")
-          .select("total")
-          .eq("type", "purchase")
-          .gte("date", start)
-          .lte("date", end)
+        const { data: expData } = await supabase.from("invoices").select("total").eq("type", "purchase").gte("date", start).lte("date", end)
         const exp = expData?.reduce((s: number, r: any) => s + (r.total || 0), 0) || 0
-
         revValues.push(rev)
         profitValues.push(rev - exp)
       }
@@ -254,7 +228,6 @@ export default function DashboardPage() {
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off) }
   }, [])
 
-  // Auto‑refresh every 30 seconds
   useEffect(() => {
     const interval = setInterval(() => { fetchData() }, 30000)
     return () => clearInterval(interval)
@@ -281,16 +254,16 @@ export default function DashboardPage() {
         .kpi-grid {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
-          gap: clamp(7px, 1.2vw, 12px);
-          margin-bottom: clamp(10px, 1.8vh, 16px);
+          gap: 8px;
+          margin-bottom: 8px;
           width: 100%;
         }
 
         .chart-grid {
           display: grid;
           grid-template-columns: repeat(2, 1fr);
-          gap: clamp(7px, 1.2vw, 12px);
-          margin-bottom: clamp(10px, 1.8vh, 16px);
+          gap: 8px;
+          margin-bottom: 8px;
           width: 100%;
         }
 
@@ -324,7 +297,7 @@ export default function DashboardPage() {
         }
       `}</style>
 
-      <div style={{ padding: "clamp(8px,1.5vw,16px) clamp(12px,2vw,20px) clamp(16px,2vw,20px)", background: "#EFF4FB", minHeight: "100%", width: "100%", fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+      <div style={{ padding: "6px 10px 10px", background: "#EFF4FB", minHeight: "100%", width: "100%", fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
         <div className="dash-content">
 
           {!online && (
@@ -333,7 +306,7 @@ export default function DashboardPage() {
             </div>
           )}
 
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
             <button onClick={fetchData} disabled={refreshing}
               style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", background: "white", border: "1px solid #E2E8F0", borderRadius: 7, fontSize: 11, fontWeight: 600, color: "#475569", cursor: "pointer", fontFamily: "inherit" }}>
               <RefreshCw size={12} style={{ animation: refreshing ? "spin 0.8s linear infinite" : "none" }} /> Refresh
