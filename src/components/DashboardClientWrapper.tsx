@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { PlanProvider, usePlan } from "@/contexts/PlanContext"
 import SidebarClient from "@/app/dashboard/sidebar-client"
@@ -39,6 +39,7 @@ function DashboardLayoutInner({
 }) {
   const { hasFeature } = usePlan()
   const pathname = usePathname()
+  const router = useRouter()
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
 
   useEffect(() => {
@@ -61,6 +62,14 @@ function DashboardLayoutInner({
     if (hour < 12) return 'Good morning'
     if (hour < 17) return 'Good afternoon'
     return 'Good evening'
+  }
+
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      router.back()
+    } else {
+      router.push('/dashboard')
+    }
   }
 
   const allNavItems = [
@@ -168,6 +177,36 @@ function DashboardLayoutInner({
                 }}
               />
             )}
+            {/* ─── Universal Back Button ─── */}
+            <button
+              onClick={handleBack}
+              className="dl-action-btn"
+              style={{
+                background: "transparent",
+                border: "1px solid #E2E8F0",
+                color: "#475569",
+                padding: "5px 10px",
+                fontSize: 13,
+              }}
+              title="Go Back"
+            >
+              ← Back
+            </button>
+            {/* ─── Universal Dashboard Button ─── */}
+            <a
+              href="/dashboard"
+              className="dl-action-btn"
+              style={{
+                background: "#EEF2FF",
+                border: "1px solid #C7D2FE",
+                color: "#4338CA",
+                padding: "5px 10px",
+                fontSize: 13,
+              }}
+              title="Dashboard"
+            >
+              🏠 Dashboard
+            </a>
             <div className="dl-topbar-greeting">
               <div className="dl-topbar-title">👋 {getGreeting()}, {email.split('@')[0]}!</div>
               <div className="dl-topbar-subtitle">Here's what's happening with your business today</div>
