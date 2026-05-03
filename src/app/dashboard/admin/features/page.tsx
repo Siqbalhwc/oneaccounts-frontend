@@ -6,18 +6,31 @@ import { ToggleLeft, ToggleRight } from "lucide-react"
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
 
-const ALL_FEATURES = [
-  { code: "inventory",            name: "Inventory & Adjustments",   desc: "Stock management, purchase orders" },
-  { code: "investors",            name: "Investors",                 desc: "Track capital contributions" },
-  { code: "balance_sheet",        name: "Balance Sheet",             desc: "Full balance sheet report" },
-  { code: "invoice_automation",   name: "Invoice Automation",        desc: "Auto‑calculate expenses & profit allocation" },
-  { code: "profit_allocation",    name: "Profit Allocation",         desc: "Distribute profit to partners" },
-  { code: "whatsapp_invoice",     name: "WhatsApp Invoice Sending",  desc: "Send invoices via WhatsApp" },
-  { code: "payment_reminders",    name: "Payment Reminders",         desc: "Automated overdue reminders" },
-  { code: "csv_import_export",    name: "CSV Import / Export",       desc: "Bulk data import & export" },
-  { code: "email_reports",        name: "Email Reports",             desc: "Send financial reports by email" },
-  { code: "purchase_orders",      name: "Purchase Orders",           desc: "Create and track purchase orders" },
+const FEATURE_CODES = [
+  "inventory",
+  "investors",
+  "balance_sheet",
+  "invoice_automation",
+  "profit_allocation",
+  "whatsapp_invoice",
+  "payment_reminders",
+  "csv_import_export",
+  "email_reports",
+  "purchase_orders",
 ]
+
+const FEATURE_LABELS: Record<string, string> = {
+  inventory:            "Inventory & Adjustments",
+  investors:            "Investors",
+  balance_sheet:        "Balance Sheet",
+  invoice_automation:   "Invoice Automation",
+  profit_allocation:    "Profit Allocation",
+  whatsapp_invoice:     "WhatsApp Invoice Sending",
+  payment_reminders:    "Payment Reminders",
+  csv_import_export:    "CSV Import / Export",
+  email_reports:        "Email Reports",
+  purchase_orders:      "Purchase Orders",
+}
 
 export default function FeatureManagerPage() {
   const supabase = createBrowserClient(
@@ -30,53 +43,81 @@ export default function FeatureManagerPage() {
 
   const [companyId, setCompanyId] = useState<string | null>(null)
   const [featureStates, setFeatureStates] = useState<Record<string, boolean>>({})
+  const [featureIdMap, setFeatureIdMap] = useState<Record<string, string>>({}) // code -> uuid
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState("")
 
   useEffect(() => {
     if (!canView) { setLoading(false); return }
+
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
-      if (cid) {
-        setCompanyId(cid)
-        // fetch existing overrides for this company
-        supabase
-          .from("company_features")
-          .select("features(code), enabled")
-          .eq("company_id", cid)
-          .then(({ data }) => {
-            const map: Record<string, boolean> = {}
-            // default all features to false
-            ALL_FEATURES.forEach(f => { map[f.code] = false })
-            if (data) {
-              data.forEach((row: any) => {
-                const code = row.features?.code
-                if (code) map[code] = row.enabled
-              })
-            }
-            setFeatureStates(map)
-            setLoading(false)
-          })
-      } else {
+      if (!cid) {
         setMessage("No active company found.")
         setLoading(false)
+        return
       }
+      setCompanyId(cid)
+
+      // Fetch feature IDs from features table
+      supabase
+        .from("features")
+        .select("id, code")
+        .in("code", FEATURE_CODES)
+        .then(({ data: featureRows }) => {
+          const map: Record<string, string> = {}
+          if (featureRows) {
+            featureRows.forEach((f: any) => { map[f.code] = f.id })
+          }
+          setFeatureIdMap(map)
+
+          // Fetch current overrides for this company
+          return supabase
+            .from("company_features")
+            .select("features(code), enabled")
+            .eq("company_id", cid)
+            .then(({ data }) => {
+              const states: Record<string, boolean> = {}
+              FEATURE_CODES.forEach(code => { states[code] = false })
+              if (data) {
+                data.forEach((row: any) => {
+                  const code = row.features?.code
+                  if (code) states[code] = row.enabled
+                })
+              }
+              setFeatureStates(states)
+              setLoading(false)
+            })
+        })
+        .catch(() => {
+          setMessage("Error loading features.")
+          setLoading(false)
+        })
     })
   }, [])
 
   const toggleFeature = async (code: string, enabled: boolean) => {
     if (!canEdit || !companyId) return
+    const featureId = featureIdMap[code]
+    if (!featureId) {
+      setMessage("Feature not found in database.")
+      return
+    }
+
     // Optimistic update
     setFeatureStates(prev => ({ ...prev, [code]: enabled }))
     setMessage("")
-    const { error } = await supabase.from("company_features").upsert({
-      company_id: companyId,
-      feature_id: code,   // assumes feature_id field stores the feature code; adjust if you use numeric id
-      enabled,
-    })
+
+    const { error } = await supabase
+      .from("company_features")
+      .upsert({
+        company_id: companyId,
+        features: featureId,   // correct foreign key column name
+        enabled,
+      })
+
     if (error) {
       setMessage("Error: " + error.message)
-      // revert
       setFeatureStates(prev => ({ ...prev, [code]: !enabled }))
     } else {
       setMessage("✅ Feature updated!")
@@ -125,18 +166,17 @@ export default function FeatureManagerPage() {
         {loading ? (
           <div style={{ textAlign: "center", padding: 30 }}>Loading features...</div>
         ) : (
-          ALL_FEATURES.map(f => (
-            <div key={f.code} className="fm-card">
+          FEATURE_CODES.map(code => (
+            <div key={code} className="fm-card">
               <div>
-                <div className="fm-feature-name">{f.name}</div>
-                {f.desc && <div className="fm-feature-desc">{f.desc}</div>}
+                <div className="fm-feature-name">{FEATURE_LABELS[code] || code}</div>
               </div>
               <button
                 className="fm-toggle-btn"
-                onClick={() => toggleFeature(f.code, !featureStates[f.code])}
+                onClick={() => toggleFeature(code, !featureStates[code])}
                 disabled={!canEdit}
               >
-                {featureStates[f.code] ? (
+                {featureStates[code] ? (
                   <ToggleRight size={24} color="#10B981" />
                 ) : (
                   <ToggleLeft size={24} color="#CBD5E1" />
