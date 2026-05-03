@@ -32,13 +32,12 @@ export default function DashboardClientWrapper({
   )
 }
 
-// ─── Navigation tree definition ──────────────────────────────────
 interface NavLeaf {
   label: string
   icon: string
   href: string
   feature: string | null
-  roles: string[]              // who can see this item
+  roles: string[]
 }
 
 interface NavGroup {
@@ -48,8 +47,8 @@ interface NavGroup {
 
 interface NavSection {
   section: string
-  groups?: NavGroup[]           // optional groups inside the section
-  items?: NavLeaf[]             // flat items if no groups
+  groups?: NavGroup[]
+  items?: NavLeaf[]
 }
 
 function DashboardLayoutInner({
@@ -67,7 +66,12 @@ function DashboardLayoutInner({
   const router = useRouter()
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    MAIN: true,      // keep Main open by default
+    MAIN: true,
+    CRM: false,
+    BANKING: false,
+    INVENTORY: false,
+    ACCOUNTING: false,
+    SYSTEM: false,
   })
 
   useEffect(() => {
@@ -96,14 +100,12 @@ function DashboardLayoutInner({
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }))
   }
 
-  // ─── Filter helper ──────────────────────────────────────────────
   const isVisible = (leaf: NavLeaf) => {
     if (leaf.feature !== null && !hasFeature(leaf.feature)) return false
     if (role && leaf.roles.length > 0 && !leaf.roles.includes(role)) return false
     return true
   }
 
-  // ─── Navigation structure (matches your requested grouping) ────
   const navSections: NavSection[] = [
     {
       section: "MAIN",
@@ -113,28 +115,13 @@ function DashboardLayoutInner({
     },
     {
       section: "CRM",
-      groups: [
-        {
-          groupLabel: "Customers",
-          items: [
-            { label: "Sales Invoices", icon: "🧾", href: "/dashboard/invoices",  feature: null, roles: ["admin","accountant"] },
-            { label: "Receipts",       icon: "💰", href: "/dashboard/receipts",  feature: null, roles: ["admin","accountant"] },
-          ],
-        },
-        {
-          groupLabel: "Suppliers",
-          items: [
-            { label: "Purchase Bills", icon: "📦", href: "/dashboard/bills",     feature: null, roles: ["admin","accountant"] },
-            { label: "Payments",       icon: "💳", href: "/dashboard/payments",  feature: null, roles: ["admin","accountant"] },
-          ],
-        },
-        {
-          groupLabel: "Contacts",
-          items: [
-            { label: "Customers", icon: "👥", href: "/dashboard/customers", feature: null, roles: ["admin","accountant","viewer"] },
-            { label: "Suppliers", icon: "🚚", href: "/dashboard/suppliers", feature: null, roles: ["admin","accountant","viewer"] },
-          ],
-        },
+      items: [
+        { label: "Customers",          icon: "👥", href: "/dashboard/customers",          feature: null, roles: ["admin","accountant","viewer"] },
+        { label: "Sales Invoices",     icon: "🧾", href: "/dashboard/invoices",           feature: null, roles: ["admin","accountant"] },
+        { label: "Receipts",           icon: "💰", href: "/dashboard/receipts",           feature: null, roles: ["admin","accountant"] },
+        { label: "Suppliers",          icon: "🚚", href: "/dashboard/suppliers",          feature: null, roles: ["admin","accountant","viewer"] },
+        { label: "Purchase Bills",     icon: "📦", href: "/dashboard/bills",              feature: null, roles: ["admin","accountant"] },
+        { label: "Payments",           icon: "💳", href: "/dashboard/payments",           feature: null, roles: ["admin","accountant"] },
       ],
     },
     {
@@ -165,24 +152,6 @@ function DashboardLayoutInner({
           groupLabel: "Reports",
           items: [
             { label: "All Reports", icon: "📁", href: "/dashboard/reports", feature: null, roles: ["admin","accountant","viewer"] },
-          ],
-        },
-        {
-          groupLabel: "Financial Reports",
-          items: [
-            { label: "Trial Balance", icon: "⚖️", href: "/dashboard/reports/trial-balance", feature: null, roles: ["admin","accountant","viewer"] },
-            { label: "Profit & Loss", icon: "📈", href: "/dashboard/reports/profit-loss",   feature: null, roles: ["admin","accountant","viewer"] },
-            { label: "Balance Sheet", icon: "📊", href: "/dashboard/reports/balance-sheet", feature: "balance_sheet", roles: ["admin","accountant","viewer"] },
-          ],
-        },
-        {
-          groupLabel: "Ledgers & Aging",
-          items: [
-            { label: "General Ledger", icon: "📒", href: "/dashboard/reports/ledger",          feature: null, roles: ["admin","accountant","viewer"] },
-            { label: "AR Aging",       icon: "⏳", href: "/dashboard/reports/ar-aging",        feature: null, roles: ["admin","accountant","viewer"] },
-            { label: "AP Aging",       icon: "⏳", href: "/dashboard/reports/ap-aging",        feature: null, roles: ["admin","accountant","viewer"] },
-            { label: "Customer Ledger",icon: "👤", href: "/dashboard/reports/customer-ledger", feature: null, roles: ["admin","accountant","viewer"] },
-            { label: "Supplier Ledger",icon: "👤", href: "/dashboard/reports/supplier-ledger", feature: null, roles: ["admin","accountant","viewer"] },
           ],
         },
         {
@@ -221,7 +190,6 @@ function DashboardLayoutInner({
           </div>
           <nav className="dl-sidebar-nav" style={{ padding: "12px 8px" }}>
             {navSections.map((sec) => {
-              // ── Filter leaf items inside the section ──────────
               let visibleGroups: { groupLabel: string; items: NavLeaf[] }[] = []
               let visibleFlatItems: NavLeaf[] = []
               if (sec.groups) {
@@ -241,30 +209,32 @@ function DashboardLayoutInner({
               const expanded = expandedSections[sec.section] ?? false
 
               return (
-                <div key={sec.section} style={{ marginBottom: 6 }}>
-                  {/* Section header */}
+                <div key={sec.section} style={{ marginBottom: 2 }}>
                   <button
                     onClick={() => toggleSection(sec.section)}
                     style={{
                       width: "100%", display: "flex", alignItems: "center", gap: 6,
                       padding: "8px 10px", background: "transparent", border: "none",
-                      color: "rgba(255,255,255,0.5)", fontSize: 10, fontWeight: 700,
+                      color: "rgba(255,255,255,0.55)", fontSize: 10, fontWeight: 700,
                       textTransform: "uppercase", letterSpacing: "0.08em",
                       cursor: "pointer", fontFamily: "inherit",
+                      borderRadius: 6,
+                      transition: "background 0.15s",
                     }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                   >
                     {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                     {sec.section}
                   </button>
 
                   {expanded && (
-                    <div style={{ marginLeft: 8 }}>
-                      {/* Groups with sub-labels */}
+                    <div style={{ marginLeft: 6, borderLeft: "1px solid rgba(255,255,255,0.06)", paddingLeft: 6 }}>
                       {visibleGroups.map(group => (
-                        <div key={group.groupLabel} style={{ marginBottom: 4 }}>
+                        <div key={group.groupLabel} style={{ marginBottom: 2 }}>
                           <div style={{
-                            fontSize: 9, fontWeight: 700, textTransform: "uppercase",
-                            color: "rgba(255,255,255,0.25)", padding: "2px 10px",
+                            fontSize: 8, fontWeight: 700, textTransform: "uppercase",
+                            color: "rgba(255,255,255,0.22)", padding: "4px 10px 2px",
                             letterSpacing: "0.05em",
                           }}>
                             {group.groupLabel}
@@ -282,7 +252,6 @@ function DashboardLayoutInner({
                           ))}
                         </div>
                       ))}
-                      {/* Flat items */}
                       {visibleFlatItems.map(item => (
                         <a key={item.href} href={item.href}
                           className={`dl-nav-item${
