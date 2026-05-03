@@ -4,7 +4,6 @@ import { useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import {
   Trash2, Upload, Download, Save, RotateCcw, AlertTriangle,
-  X, Check, FileSpreadsheet, Database,
 } from "lucide-react"
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
@@ -25,7 +24,7 @@ export default function DataManagementPage() {
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importEntity, setImportEntity] = useState("customer")
   const [importing, setImporting] = useState(false)
-  const [importPreview, setImportPreview] = useState<any[]>([])
+  const [importPreview, setImportPreview] = useState<Record<string, string>[]>([])
   const [columnMap, setColumnMap] = useState<Record<string, string>>({})
   const [duplicateAction, setDuplicateAction] = useState<"skip" | "update">("skip")
 
@@ -34,7 +33,124 @@ export default function DataManagementPage() {
     setTimeout(() => setFlash(""), 5000)
   }
 
-  // ── Helper to parse CSV/Excel before import ────────────────
+  // ── Generic delete helper ──────────────────────────────────
+  const deleteAllFromTable = async (table: string, message: string) => {
+    try {
+      await supabase.from(table).delete().neq("id", 0)
+      showMessage("✅ " + message)
+      setConfirmSection(null)
+    } catch (e: any) {
+      showMessage("❌ " + (e.message || "Error"))
+    }
+  }
+
+  const resetBalances = async () => {
+    await supabase.from("accounts").update({ balance: 0 }).neq("id", 0)
+    showMessage("✅ Account balances reset to zero.")
+  }
+
+  // ── Specific operations ─────────────────────────────────────
+  const handleDeleteJournal = async () => {
+    await supabase.from("journal_lines").delete().neq("id", 0)
+    await supabase.from("journal_entries").delete().neq("id", 0)
+    await resetBalances()
+    setConfirmSection(null)
+  }
+
+  const handleDeleteInvoices = async () => {
+    await supabase.from("invoice_items").delete().neq("id", 0)
+    await supabase.from("invoices").delete().neq("id", 0)
+    showMessage("✅ All invoices deleted.")
+    setConfirmSection(null)
+  }
+
+  const handleDeleteSalesInvoices = async () => {
+    const { data: sales } = await supabase.from("invoices").select("id").eq("type", "sale")
+    if (sales && sales.length) {
+      const ids = sales.map((i: any) => i.id)
+      await supabase.from("invoice_items").delete().in("invoice_id", ids)
+      await supabase.from("invoices").delete().eq("type", "sale")
+    }
+    showMessage("✅ Sales invoices deleted.")
+    setConfirmSection(null)
+  }
+
+  const handleDeletePurchaseBills = async () => {
+    const { data: purchases } = await supabase.from("invoices").select("id").eq("type", "purchase")
+    if (purchases && purchases.length) {
+      const ids = purchases.map((i: any) => i.id)
+      await supabase.from("invoice_items").delete().in("invoice_id", ids)
+      await supabase.from("invoices").delete().eq("type", "purchase")
+    }
+    showMessage("✅ Purchase bills deleted.")
+    setConfirmSection(null)
+  }
+
+  const handleDeleteCustomers = async () => {
+    const { data: custs } = await supabase.from("customers").select("id")
+    if (custs && custs.length) {
+      const custIds = custs.map((c: any) => c.id)
+      const { data: invs } = await supabase
+        .from("invoices")
+        .select("id")
+        .eq("type", "sale")
+        .in("party_id", custIds)
+      if (invs && invs.length) {
+        const invIds = invs.map((i: any) => i.id)
+        await supabase.from("invoice_items").delete().in("invoice_id", invIds)
+        await supabase.from("invoices").delete().in("id", invIds)
+      }
+      await supabase.from("customers").delete().neq("id", 0)
+    }
+    showMessage("✅ Customers and related invoices deleted.")
+    setConfirmSection(null)
+  }
+
+  const handleDeleteSuppliers = async () => {
+    const { data: supps } = await supabase.from("suppliers").select("id")
+    if (supps && supps.length) {
+      const suppIds = supps.map((s: any) => s.id)
+      const { data: invs } = await supabase
+        .from("invoices")
+        .select("id")
+        .eq("type", "purchase")
+        .in("party_id", suppIds)
+      if (invs && invs.length) {
+        const invIds = invs.map((i: any) => i.id)
+        await supabase.from("invoice_items").delete().in("invoice_id", invIds)
+        await supabase.from("invoices").delete().in("id", invIds)
+      }
+      await supabase.from("suppliers").delete().neq("id", 0)
+    }
+    showMessage("✅ Suppliers and related bills deleted.")
+    setConfirmSection(null)
+  }
+
+  const handleDeleteProducts = async () => {
+    await supabase.from("stock_moves").delete().neq("id", 0)
+    await supabase.from("invoice_items").delete().neq("id", 0)
+    await supabase.from("products").delete().neq("id", 0)
+    showMessage("✅ Products deleted.")
+    setConfirmSection(null)
+  }
+
+  const handleCompleteReset = async () => {
+    const tables = [
+      "journal_lines", "journal_entries",
+      "invoice_items", "invoices",
+      "stock_moves", "products",
+      "customers", "suppliers", "investors",
+      "company_settings", "user_roles"
+    ]
+    for (const table of tables) {
+      await supabase.from(table).delete().neq("id", 0)
+    }
+    await resetBalances()
+    showMessage("✅ Complete reset done. Default chart of accounts preserved.")
+    setConfirmSection(null)
+  }
+
+  // ── CSV IMPORT HANDLERS ────────────────────────────────────
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -43,7 +159,10 @@ export default function DataManagementPage() {
     try {
       const text = await file.text()
       const rows = text.split("\n").filter(line => line.trim() !== "")
-      if (rows.length === 0) { showMessage("File is empty."); return }
+      if (rows.length === 0) {
+        showMessage("File is empty.")
+        return
+      }
       const headers = rows[0].split(",").map(h => h.trim())
       const data = rows.slice(1).map(row => {
         const values = row.split(",")
@@ -52,7 +171,7 @@ export default function DataManagementPage() {
         return obj
       })
       setImportPreview(data)
-      // Auto-map columns if names match
+      // Auto‑map columns
       const autoMap: Record<string, string> = {}
       headers.forEach(h => {
         const lower = h.toLowerCase().replace(/\s/g, "")
@@ -72,20 +191,6 @@ export default function DataManagementPage() {
     }
   }
 
-  // ── Generic delete helper ──────────────────────────────────
-  const deleteAllFromTable = async (table: string, message: string) => {
-    try {
-      await supabase.from(table).delete().neq("id", 0)
-      showMessage("✅ " + message)
-      setConfirmSection(null)
-    } catch (e: any) {
-      showMessage("❌ " + (e.message || "Error"))
-    }
-  }
-
-  // ... (all existing delete/reset functions from previous version) ...
-
-  // ── NEW IMPORT FUNCTION ────────────────────────────────────
   const handleImport = async () => {
     if (!importFile || importing) return
     setImporting(true)
@@ -99,13 +204,11 @@ export default function DataManagementPage() {
     const tableName = tableMap[importEntity]
     if (!tableName) { showMessage("Invalid entity type."); setImporting(false); return }
 
-    // Validate required fields
     if (!columnMap.name) { showMessage("Name column is required."); setImporting(false); return }
 
-    // Generate code if not mapped
     const autoCode = !columnMap.code
+    let startNum = 1
     if (autoCode) {
-      // Get next code number (simplified)
       const prefix = importEntity === "customer" ? "CUST-" : importEntity === "supplier" ? "VEND-" : "PROD-"
       const { data: existing } = await supabase.from(tableName).select("code").like("code", `${prefix}%`)
       let maxNum = 0
@@ -116,66 +219,71 @@ export default function DataManagementPage() {
           if (!isNaN(n) && n > maxNum) maxNum = n
         }
       })
-      let startNum = maxNum + 1
-      // Process data with generated codes
-      const records = importPreview.map(row => {
-        const record: any = {}
-        Object.keys(columnMap).forEach(field => {
-          if (columnMap[field]) record[field] = row[columnMap[field]]
-        })
-        if (autoCode) {
-          record.code = `${prefix}${String(startNum++).padStart(3, "0")}`
-        }
-        return record
-      })
-      await insertRecords(records, tableName, importEntity)
-    } else {
-      const records = importPreview.map(row => {
-        const record: any = {}
-        Object.keys(columnMap).forEach(field => {
-          if (columnMap[field]) record[field] = row[columnMap[field]]
-        })
-        return record
-      })
-      await insertRecords(records, tableName, importEntity)
+      startNum = maxNum + 1
     }
-    setImporting(false)
-  }
 
-  const insertRecords = async (records: any[], tableName: string, entity: string) => {
     let success = 0, updated = 0, skipped = 0
-    for (const rec of records) {
-      if (!rec.name) continue
-      // Convert numeric fields
-      if (entity === "product") {
-        rec.cost_price = parseFloat(rec.cost_price || 0)
-        rec.sale_price = parseFloat(rec.sale_price || 0)
-        rec.qty_on_hand = parseFloat(rec.qty_on_hand || 0)
+    for (const row of importPreview) {
+      const record: any = {}
+      Object.entries(columnMap).forEach(([field, col]) => {
+        record[field] = row[col] || ""
+      })
+      if (!record.name) continue
+
+      // numeric conversion
+      if (importEntity === "product") {
+        record.cost_price = parseFloat(record.cost_price || 0)
+        record.sale_price = parseFloat(record.sale_price || 0)
+        record.qty_on_hand = parseFloat(record.qty_on_hand || 0)
       } else {
-        rec.balance = parseFloat(rec.balance || 0)
+        record.balance = parseFloat(record.balance || 0)
       }
-      // Check for existing code
-      const { data: existing } = await supabase.from(tableName).select("id").eq("code", rec.code).maybeSingle()
+
+      if (autoCode) {
+        const code = importEntity === "customer" ? `CUST-${String(startNum++).padStart(3, "0")}`
+          : importEntity === "supplier" ? `VEND-${String(startNum++).padStart(3, "0")}`
+          : `PROD-${String(startNum++).padStart(3, "0")}`
+        record.code = code
+      }
+
+      const { data: existing } = await supabase.from(tableName).select("id").eq("code", record.code).maybeSingle()
       if (existing) {
         if (duplicateAction === "skip") { skipped++; continue }
         else {
-          const { error } = await supabase.from(tableName).update(rec).eq("code", rec.code)
-          if (error) { showMessage("Error updating " + rec.code + ": " + error.message); continue }
+          const { error } = await supabase.from(tableName).update(record).eq("code", record.code)
+          if (error) {
+            showMessage("Error updating " + record.code + ": " + error.message)
+            continue
+          }
           updated++
         }
       } else {
-        const { error } = await supabase.from(tableName).insert(rec)
-        if (error) { showMessage("Error inserting " + rec.code + ": " + error.message); continue }
+        const { error } = await supabase.from(tableName).insert(record)
+        if (error) {
+          showMessage("Error inserting " + record.code + ": " + error.message)
+          continue
+        }
         success++
       }
     }
     showMessage(`✅ Import completed! Inserted: ${success}, Updated: ${updated}, Skipped: ${skipped}`)
+    setImporting(false)
   }
 
   const fieldOptions: Record<string, string[]> = {
     customer: ["name", "code", "phone", "email", "address", "balance"],
     supplier: ["name", "code", "phone", "email", "address", "balance"],
     product: ["name", "code", "cost_price", "sale_price", "qty_on_hand"],
+  }
+
+  if (!role) return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
+  if (!canView) {
+    return (
+      <div style={{ padding: 24, textAlign: "center" }}>
+        <h2>Access Denied</h2>
+        <p style={{ color: "#94A3B8" }}>You do not have permission to view this page.</p>
+      </div>
+    )
   }
 
   return (
@@ -224,13 +332,40 @@ export default function DataManagementPage() {
           </div>
         )}
 
-        {/* ─── All the delete/reset cards (same as previous version) ─── */}
-        {/* ... (omitted for brevity, but include all the cards from the previous answer) ... */}
+        {/* ─── Clean / Reset cards ────────────────────────────────── */}
         <div className="dm-grid">
-          {/* Keep all the existing clean/reset cards exactly as in the previous answer */}
+          {[
+            { key: "journal", title: "Delete Journal Entries", desc: "Remove all journal entries and reset balances.", fn: handleDeleteJournal },
+            { key: "all_invoices", title: "Delete All Invoices", desc: "Remove all sales & purchase invoices.", fn: handleDeleteInvoices },
+            { key: "sales_invoices", title: "Delete Sales Invoices", desc: "Remove only sales invoices.", fn: handleDeleteSalesInvoices },
+            { key: "purchase_bills", title: "Delete Purchase Bills", desc: "Remove only purchase bills.", fn: handleDeletePurchaseBills },
+            { key: "customers", title: "Delete Customers", desc: "Remove all customers & related invoices.", fn: handleDeleteCustomers },
+            { key: "suppliers", title: "Delete Suppliers", desc: "Remove all suppliers & related bills.", fn: handleDeleteSuppliers },
+            { key: "products", title: "Delete Products", desc: "Remove all products, stock moves & invoice items.", fn: handleDeleteProducts },
+            { key: "reset_balances", title: "Reset Balances", desc: "Set all account balances to zero.", fn: () => { resetBalances(); setConfirmSection(null); } },
+            { key: "nuke", title: "Complete Reset", desc: "Delete ALL data except default chart of accounts.", fn: handleCompleteReset },
+          ].map(item => (
+            <div key={item.key} className="dm-card">
+              <div className="dm-card-title"><Trash2 size={16} /> {item.title}</div>
+              <div className="dm-card-desc">{item.desc}</div>
+              {confirmSection === item.key ? (
+                <div className="confirmation-box">
+                  ⚠️ Are you sure?
+                  <div className="confirmation-buttons">
+                    <button className="dm-btn dm-btn-danger" onClick={item.fn}>✅ Yes</button>
+                    <button className="dm-btn dm-btn-outline" onClick={() => setConfirmSection(null)}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <button className="dm-btn dm-btn-danger" onClick={() => setConfirmSection(item.key)} disabled={!canEdit}>
+                  {item.key === "nuke" ? "💣 Reset" : "Delete"}
+                </button>
+              )}
+            </div>
+          ))}
         </div>
 
-        {/* ─── BULK IMPORT SECTION ─────────────────────────────────── */}
+        {/* ─── Bulk Import Section ───────────────────────────────── */}
         <div className="import-section">
           <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10 }}>📥 Import from CSV</h3>
           <p style={{ fontSize: 12, color: "#64748B", marginBottom: 12 }}>
@@ -256,9 +391,7 @@ export default function DataManagementPage() {
                   </thead>
                   <tbody>
                     {importPreview.slice(0, 5).map((row, i) => (
-                      <tr key={i}>{Object.values(row).map((v, j) => (
-  <td key={j}>{String(v)}</td>
-))}</tr>
+                      <tr key={i}>{Object.values(row).map((v, j) => <td key={j}>{String(v)}</td>)}</tr>
                     ))}
                   </tbody>
                 </table>
