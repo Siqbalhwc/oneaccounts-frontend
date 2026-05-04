@@ -38,11 +38,23 @@ export default function InvoicesPage() {
   const [pageSize, setPageSize] = useState(25)
   const [total, setTotal] = useState(0)
 
-  // ── Get company ID from JWT (same as dashboard) ────────────
+  // ── Bullet‑proof company ID retrieval ──────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
-      const cid = (user?.app_metadata as any)?.company_id
-      if (cid) setCompanyId(cid)
+      // 1. JWT claim
+      const claim = (user?.app_metadata as any)?.company_id
+      if (claim) { setCompanyId(claim); return }
+
+      // 2. Cookie fallback
+      const match = document.cookie.match(/(?:^| )active_company_id=([^;]+)/)
+      if (match) { setCompanyId(match[2]); return }
+
+      // 3. First company from user_roles
+      if (user) {
+        supabase.from('user_roles')
+          .select('company_id').eq('user_id', user.id).limit(1).maybeSingle()
+          .then(({ data }) => { if (data) setCompanyId(data.company_id) })
+      }
     })
   }, [])
 
