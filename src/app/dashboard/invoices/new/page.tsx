@@ -329,7 +329,7 @@ export default function NewInvoicePage() {
                   <label className="inv-label">Customer *</label>
                   <div className="cust-wrap" ref={customerRef}>
                     {selectedCustomer ? (
-                      <div className="cust-selected-badge" **onClick={clearCustomer}**>
+                      <div className="cust-selected-badge" onClick={clearCustomer}>
                         <span>👤</span>
                         <span style={{ flex: 1 }}>{selectedCustomer.code} — {selectedCustomer.name}</span>
                         <span style={{ fontSize: 11, color: "#64748B" }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
