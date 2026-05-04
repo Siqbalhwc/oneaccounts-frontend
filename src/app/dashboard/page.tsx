@@ -20,40 +20,29 @@ const SHORT = (n: number) => {
 const waLink = (phone: string, no: string, bal: number, name: string) =>
   `https://wa.me/${phone}?text=${encodeURIComponent(`Dear ${name},\nPayment of PKR ${bal.toLocaleString()} for invoice ${no} is overdue.\nPlease clear at your earliest convenience. 🙏`)}`
 
-// ── DB‑validated active company ID (matches Data Management) ──
+// ── Simplified, correct company resolver ──
 async function getActiveCompanyId(supabase: any): Promise<string> {
   try {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return '00000000-0000-0000-0000-000000000001'
 
+    // 1. Use the JWT claim – this is always correct after login / trial creation
+    const claim = (user.app_metadata as any)?.company_id
+    if (claim) return claim
+
+    // 2. Fallback to the cookie
     const cookieMatch = document.cookie.match(/(?:^| )active_company_id=([^;]+)/)
-    const candidateId = cookieMatch ? cookieMatch[2] : (user.app_metadata as any)?.company_id
+    const cookieId = cookieMatch ? cookieMatch[2] : null
+    if (cookieId) return cookieId
 
-    const { data: activeRole } = await supabase
-      .from('user_roles')
-      .select('company_id')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .maybeSingle()
-    if (activeRole?.company_id) return activeRole.company_id
-
-    if (candidateId) {
-      const { data: anyRole } = await supabase
-        .from('user_roles')
-        .select('company_id')
-        .eq('user_id', user.id)
-        .eq('company_id', candidateId)
-        .maybeSingle()
-      if (anyRole) return candidateId
-    }
-
-    const { data: first } = await supabase
+    // 3. Fallback – any company the user belongs to
+    const { data: anyRole } = await supabase
       .from('user_roles')
       .select('company_id')
       .eq('user_id', user.id)
       .limit(1)
-      .single()
-    return first?.company_id || '00000000-0000-0000-0000-000000000001'
+      .maybeSingle()
+    return anyRole?.company_id || '00000000-0000-0000-0000-000000000001'
   } catch {
     return '00000000-0000-0000-0000-000000000001'
   }
@@ -208,7 +197,7 @@ export default function DashboardPage() {
           ...monthlyPromises,
         ].map(p => Promise.resolve(p).catch(e => { console.warn("Dashboard sub-fetch failed", e); return null })))
 
-      // ── Accounts → KPIs (safe with guard) ────────────────
+      // ── Accounts → KPIs ────────────────
       const rawAccounts = accountsRes?.data
       if (!Array.isArray(rawAccounts)) {
         setKpis({ assets: 0, liabilities: 0, equity: 0, revenue: 0, expenses: 0, profit: 0 })
@@ -229,7 +218,7 @@ export default function DashboardPage() {
         })
       }
 
-      // ── Operations (receivables) ─────────────────────────
+      // ── Operations (receivables) ─────────
       const unpaidData = unpaidInvsRes?.data
       let receivables = 0, unpaid = 0, partial = 0
       if (Array.isArray(unpaidData)) {
@@ -240,17 +229,17 @@ export default function DashboardPage() {
         })
       }
 
-      // ── Payables (safe extraction) ───────────────────────
+      // ── Payables ───────────────────────
       const payablesData = payablesRes?.data
       const payables = (!Array.isArray(payablesData) && payablesData?.balance != null) ? payablesData.balance : 0
 
-      // ── Low stock ────────────────────────────────────────
+      // ── Low stock ──────────────────────
       const prodsData = prodsRes?.data
       const lowStock = Array.isArray(prodsData)
         ? prodsData.filter((p: any) => p.qty_on_hand > 0 && p.qty_on_hand <= p.reorder_level).length
         : 0
 
-      // ── All operations in one update ─────────────────────
+      // ── All operations in one update ────
       setOps({
         receivables,
         unpaid_invoices: unpaid,
@@ -262,7 +251,7 @@ export default function DashboardPage() {
         total_suppliers: (suppCountRes as any)?.count || 0,
       })
 
-      // ── Overdue invoices (safe map) ──────────────────────
+      // ── Overdue invoices ─────────────────
       const overdueData = Array.isArray(overdueRes?.data) ? overdueRes.data : []
       const partyIds = overdueData.map((i: any) => i.party_id).filter(Boolean)
 
@@ -286,7 +275,7 @@ export default function DashboardPage() {
         }))
       )
 
-      // ── Monthly charts (safe reduce) ─────────────────────
+      // ── Monthly charts ──────────────────
       const months: string[] = [], revValues: number[] = [], profitValues: number[] = []
       monthRanges.forEach(({ label }, i) => {
         const revData = (monthlyRes[i * 2] as any)?.data
@@ -340,20 +329,8 @@ export default function DashboardPage() {
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
         @keyframes spin { to { transform: rotate(360deg) } }
 
-        .kpi-grid {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 7px;
-          margin-bottom: 7px;
-          width: 100%;
-        }
-        .chart-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 7px;
-          margin-bottom: 7px;
-          width: 100%;
-        }
+        .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-bottom: 7px; width: 100%; }
+        .chart-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; margin-bottom: 7px; width: 100%; }
         .ov-header { display: grid; grid-template-columns: 1fr 110px 140px 100px; padding: 7px 12px; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #94A3B8; }
         .ov-row { display: grid; grid-template-columns: 1fr 110px 140px 100px; padding: 9px 12px; border-bottom: 1px solid #F1F5F9; align-items: center; font-size: clamp(11px,0.9vw,12.5px); }
         .ov-row:last-child { border-bottom: none; }
@@ -361,36 +338,26 @@ export default function DashboardPage() {
         .ov-bal-inline { display: none; }
 
         @media (max-width: 900px) {
-          .kpi-grid   { grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 6px; }
+          .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 6px; }
           .chart-grid { grid-template-columns: 1fr; gap: 6px; }
-          .ov-header  { grid-template-columns: 1fr 110px 100px; }
-          .ov-row     { grid-template-columns: 1fr 110px 100px; }
+          .ov-header { grid-template-columns: 1fr 110px 100px; }
+          .ov-row { grid-template-columns: 1fr 110px 100px; }
           .ov-col-bal { display: none !important; }
           .ov-bal-inline { display: block !important; }
         }
         @media (max-width: 600px) {
-          .kpi-grid   { gap: 5px; margin-bottom: 5px; }
+          .kpi-grid { gap: 5px; margin-bottom: 5px; }
           .chart-grid { gap: 5px; margin-bottom: 5px; }
         }
         @media (max-width: 480px) {
           .ov-header { display: none !important; }
           .ov-row { grid-template-columns: 1fr 1fr !important; grid-template-rows: auto auto; gap: 4px; padding: 8px 10px; }
         }
-        @media (max-width: 360px) {
-          .kpi-grid { grid-template-columns: 1fr; }
-        }
-        @media (min-width: 2560px) {
-          .dash-content { max-width: 2200px; margin: 0 auto; }
-        }
+        @media (max-width: 360px) { .kpi-grid { grid-template-columns: 1fr; } }
+        @media (min-width: 2560px) { .dash-content { max-width: 2200px; margin: 0 auto; } }
       `}</style>
 
-      <div style={{
-  padding: "10px 6px 8px",
-  background: "#EFF4FB",
-  minHeight: "100%",
-  width: "100%",
-  fontFamily: "'Plus Jakarta Sans',sans-serif",
-}}>
+      <div className="dash-outer" style={{ background: "#EFF4FB", minHeight: "100%", width: "100%", fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
         <div className="dash-content">
 
           {!online && (
@@ -399,7 +366,6 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Financial Overview + Refresh */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, marginTop: 2 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
               <div style={{ width: 3, height: 14, background: "#1E3A8A", borderRadius: 2, flexShrink: 0 }}/>
