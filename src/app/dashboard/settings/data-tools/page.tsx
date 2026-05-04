@@ -79,99 +79,35 @@ export default function DataManagementPage() {
     setTimeout(() => setFlash(""), 5000)
   }
 
-  // ----- delete helpers (all scoped by companyId) -----
-  const deleteAllFromTable = async (table: string, message: string) => {
-    try {
-      await supabase.from(table).delete().eq("company_id", companyId!)
-      showMessage("✅ " + message)
-      setConfirmSection(null)
-    } catch (e: any) { showMessage("❌ " + (e.message || "Error")) }
-  }
-
+  // ----- Reset balances (direct Supabase call, safe with RLS) -----
   const resetBalances = async () => {
-    await supabase.from("accounts").update({ balance: 0 }).eq("company_id", companyId!)
+    if (!companyId) return
+    await supabase.from("accounts").update({ balance: 0 }).eq("company_id", companyId)
     showMessage("✅ Account balances reset to zero.")
   }
 
-  const handleDeleteJournal = async () => {
-    await supabase.from("journal_lines").delete().eq("company_id", companyId!)
-    await supabase.from("journal_entries").delete().eq("company_id", companyId!)
-    await resetBalances()
-    setConfirmSection(null)
-  }
-  const handleDeleteInvoices = async () => {
-    await supabase.from("invoice_items").delete().eq("company_id", companyId!)
-    await supabase.from("invoices").delete().eq("company_id", companyId!)
-    showMessage("✅ All invoices deleted."); setConfirmSection(null)
-  }
-  const handleDeleteSalesInvoices = async () => {
-    const { data: sales } = await supabase.from("invoices").select("id").eq("company_id", companyId!).eq("type", "sale")
-    if (sales && sales.length) {
-      const ids = sales.map((i: any) => i.id)
-      await supabase.from("invoice_items").delete().in("invoice_id", ids).eq("company_id", companyId!)
-      await supabase.from("invoices").delete().in("id", ids).eq("company_id", companyId!)
-    }
-    showMessage("✅ Sales invoices deleted."); setConfirmSection(null)
-  }
-  const handleDeletePurchaseBills = async () => {
-    const { data: purchases } = await supabase.from("invoices").select("id").eq("company_id", companyId!).eq("type", "purchase")
-    if (purchases && purchases.length) {
-      const ids = purchases.map((i: any) => i.id)
-      await supabase.from("invoice_items").delete().in("invoice_id", ids).eq("company_id", companyId!)
-      await supabase.from("invoices").delete().in("id", ids).eq("company_id", companyId!)
-    }
-    showMessage("✅ Purchase bills deleted."); setConfirmSection(null)
-  }
-  const handleDeleteCustomers = async () => {
-    const { data: custs } = await supabase.from("customers").select("id").eq("company_id", companyId!)
-    if (custs && custs.length) {
-      const custIds = custs.map((c: any) => c.id)
-      const { data: invs } = await supabase.from("invoices").select("id").eq("company_id", companyId!).eq("type", "sale").in("party_id", custIds)
-      if (invs && invs.length) {
-        const invIds = invs.map((i: any) => i.id)
-        await supabase.from("invoice_items").delete().in("invoice_id", invIds).eq("company_id", companyId!)
-        await supabase.from("invoices").delete().in("id", invIds).eq("company_id", companyId!)
+  // ----- Generic API caller for entity deletion -----
+  const callDeleteEntity = async (entity: string, successMsg: string) => {
+    if (!companyId) return
+    try {
+      const res = await fetch('/api/admin/delete-entity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entity }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        showMessage('✅ ' + successMsg)
+        setConfirmSection(null)
+      } else {
+        showMessage('❌ ' + (data.error || 'Failed'))
       }
-      await supabase.from("customers").delete().eq("company_id", companyId!)
+    } catch (e: any) {
+      showMessage('❌ Network error')
     }
-    showMessage("✅ Customers and related invoices deleted."); setConfirmSection(null)
-  }
-  const handleDeleteSuppliers = async () => {
-    const { data: supps } = await supabase.from("suppliers").select("id").eq("company_id", companyId!)
-    if (supps && supps.length) {
-      const suppIds = supps.map((s: any) => s.id)
-      const { data: invs } = await supabase.from("invoices").select("id").eq("company_id", companyId!).eq("type", "purchase").in("party_id", suppIds)
-      if (invs && invs.length) {
-        const invIds = invs.map((i: any) => i.id)
-        await supabase.from("invoice_items").delete().in("invoice_id", invIds).eq("company_id", companyId!)
-        await supabase.from("invoices").delete().in("id", invIds).eq("company_id", companyId!)
-      }
-      await supabase.from("suppliers").delete().eq("company_id", companyId!)
-    }
-    showMessage("✅ Suppliers and related bills deleted."); setConfirmSection(null)
-  }
-  const handleDeleteProducts = async () => {
-    await supabase.from("stock_moves").delete().eq("company_id", companyId!)
-    await supabase.from("invoice_items").delete().eq("company_id", companyId!)
-    await supabase.from("products").delete().eq("company_id", companyId!)
-    showMessage("✅ Products deleted."); setConfirmSection(null)
-  }
-  const handleCompleteReset = async () => {
-    const tables = [
-      "journal_lines", "journal_entries",
-      "invoice_items", "invoices",
-      "stock_moves", "products",
-      "customers", "suppliers", "investors",
-      "company_settings", "user_roles"
-    ]
-    for (const table of tables) {
-      await supabase.from(table).delete().eq("company_id", companyId!)
-    }
-    await resetBalances()
-    showMessage("✅ Complete reset done."); setConfirmSection(null)
   }
 
-  // ----- CSV Import handlers (same as before, scoped) -----
+  // ----- CSV Import handlers (unchanged) -----
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -316,18 +252,19 @@ export default function DataManagementPage() {
           </div>
         )}
 
-        {/* ── Delete / Reset cards ─────────────────────────── */}
+        {/* ── Delete / Reset cards (now using server‑side API) ── */}
         <div className="dm-grid">
           {[
-            { key: "journal", title: "Delete Journal Entries", desc: "Remove all journal entries and reset balances.", fn: handleDeleteJournal },
-            { key: "all_invoices", title: "Delete All Invoices", desc: "Remove all sales & purchase invoices.", fn: handleDeleteInvoices },
-            { key: "sales_invoices", title: "Delete Sales Invoices", desc: "Remove only sales invoices.", fn: handleDeleteSalesInvoices },
-            { key: "purchase_bills", title: "Delete Purchase Bills", desc: "Remove only purchase bills.", fn: handleDeletePurchaseBills },
-            { key: "customers", title: "Delete Customers", desc: "Remove all customers & related invoices.", fn: handleDeleteCustomers },
-            { key: "suppliers", title: "Delete Suppliers", desc: "Remove all suppliers & related bills.", fn: handleDeleteSuppliers },
-            { key: "products", title: "Delete Products", desc: "Remove all products, stock moves & invoice items.", fn: handleDeleteProducts },
-            { key: "reset_balances", title: "Reset Balances", desc: "Set all account balances to zero.", fn: () => { resetBalances(); setConfirmSection(null) } },
-            { key: "nuke", title: "Complete Reset", desc: "Delete ALL data except default chart of accounts.", fn: handleCompleteReset },
+            { key: "journal",          title: "Delete Journal Entries",    desc: "Remove all journal entries and reset balances.", entity: "journal",          successMsg: "Journal entries deleted." },
+            { key: "all_invoices",     title: "Delete All Invoices",       desc: "Remove all sales & purchase invoices.",        entity: "invoices",         successMsg: "All invoices deleted." },
+            { key: "sales_invoices",   title: "Delete Sales Invoices",     desc: "Remove only sales invoices.",                   entity: "sales_invoices",   successMsg: "Sales invoices deleted." },
+            { key: "purchase_bills",   title: "Delete Purchase Bills",     desc: "Remove only purchase bills.",                   entity: "purchase_bills",   successMsg: "Purchase bills deleted." },
+            { key: "customers",        title: "Delete Customers",          desc: "Remove all customers & related invoices.",     entity: "customers",        successMsg: "Customers and related invoices deleted." },
+            { key: "suppliers",        title: "Delete Suppliers",          desc: "Remove all suppliers & related bills.",        entity: "suppliers",        successMsg: "Suppliers and related bills deleted." },
+            { key: "products",         title: "Delete Products",           desc: "Remove all products, stock moves & invoice items.", entity: "products",    successMsg: "Products deleted." },
+            { key: "reset_balances",   title: "Reset Balances",            desc: "Set all account balances to zero.",            entity: null,                // special case – uses resetBalances()
+              fn: () => { resetBalances(); setConfirmSection(null) } },
+            { key: "nuke",             title: "Complete Reset (NUKE)",     desc: "Delete ALL data except chart of accounts.",   entity: "all",              successMsg: "Company completely reset." },
           ].map(item => (
             <div key={item.key} className="dm-card">
               <div className="dm-card-title"><Trash2 size={16} /> {item.title}</div>
@@ -336,12 +273,38 @@ export default function DataManagementPage() {
                 <div className="confirmation-box">
                   ⚠️ Are you sure?
                   <div className="confirmation-buttons">
-                    <button className="dm-btn dm-btn-danger" onClick={item.fn}>✅ Yes</button>
+                    <button
+                      className="dm-btn dm-btn-danger"
+                      onClick={() => {
+                        if (item.entity === 'all') {
+                          // NUKE uses dedicated endpoint
+                          fetch('/api/admin/nuke-company', { method: 'POST' })
+                            .then(r => r.json())
+                            .then(data => {
+                              if (data.success) showMessage('✅ Company wiped.')
+                              else showMessage('❌ ' + (data.error || 'Failed'))
+                            })
+                            .catch(() => showMessage('❌ Network error'))
+                        } else if (item.entity) {
+                          callDeleteEntity(item.entity, item.successMsg)
+                        } else if (item.key === 'reset_balances') {
+                          resetBalances()
+                        }
+                        // The UI will hide confirmation via the success handler; but we also reset confirmSection immediately
+                        // to avoid flicker (handled inside callDeleteEntity/resetBalances).
+                      }}
+                    >
+                      ✅ Yes
+                    </button>
                     <button className="dm-btn dm-btn-outline" onClick={() => setConfirmSection(null)}>Cancel</button>
                   </div>
                 </div>
               ) : (
-                <button className="dm-btn dm-btn-danger" onClick={() => setConfirmSection(item.key)} disabled={!canEdit}>
+                <button
+                  className="dm-btn dm-btn-danger"
+                  onClick={() => setConfirmSection(item.key)}
+                  disabled={!canEdit}
+                >
                   {item.key === "nuke" ? "💣 Reset" : "Delete"}
                 </button>
               )}
@@ -349,7 +312,7 @@ export default function DataManagementPage() {
           ))}
         </div>
 
-        {/* ── Bulk Import Section ───────────────────────────── */}
+        {/* ── Bulk Import Section (unchanged) ─────────────── */}
         <div className="import-section">
           <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10 }}>📥 Import from CSV</h3>
           <p style={{ fontSize: 12, color: "#64748B", marginBottom: 12 }}>
