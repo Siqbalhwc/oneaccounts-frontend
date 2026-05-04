@@ -22,18 +22,41 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { code, name, unit_price, cost_price, opening_qty, image_url } = await request.json()
-  if (!code || !name) return NextResponse.json({ error: 'Code and name required' }, { status: 400 })
+  const { code, name, sale_price, cost_price, opening_qty, image_url } = await request.json()
+  if (!name) return NextResponse.json({ error: 'Product name is required' }, { status: 400 })
 
-  const openingQty = Number(opening_qty || 0)
+  const salePrice = Number(sale_price || 0)
   const costPrice = Number(cost_price || 0)
+  const openingQty = Number(opening_qty || 0)
+
+  let productCode = code?.trim() || ""
+  if (!productCode) {
+    // Auto‑generate code: PROD‑XXX (next available number)
+    const { data: existing } = await supabase
+      .from('products')
+      .select('code')
+      .like('code', 'PROD-%')
+      .order('code', { ascending: false })
+      .limit(1)
+
+    let maxNum = 0
+    if (existing && existing.length > 0) {
+      const parts = existing[0].code.split('-')
+      if (parts.length === 2) {
+        const n = parseInt(parts[1])
+        if (!isNaN(n)) maxNum = n
+      }
+    }
+    productCode = `PROD-${String(maxNum + 1).padStart(3, '0')}`
+  }
 
   // Create product
   const { data: product, error: insertErr } = await supabase
     .from('products')
     .insert({
-      code, name,
-      unit_price: Number(unit_price || 0),
+      code: productCode,
+      name,
+      sale_price: salePrice,
       cost_price: costPrice,
       qty_on_hand: openingQty,
       image_url: image_url || null,
@@ -45,13 +68,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: insertErr?.message || 'Failed to create product' }, { status: 500 })
   }
 
-  // If opening inventory has value, post GL entry
+  // Opening inventory GL entry
   if (openingQty > 0 && costPrice > 0) {
     const totalValue = openingQty * costPrice
-    await postOpeningInventoryEntry(supabase, product.id, code, name, totalValue, 'new')
+    await postOpeningInventoryEntry(supabase, product.id, productCode, name, totalValue, 'new')
   }
 
-  return NextResponse.json({ success: true, productId: product.id })
+  return NextResponse.json({ success: true, productId: product.id, code: productCode })
 }
 
 export async function PUT(request: NextRequest) {
@@ -74,7 +97,7 @@ export async function PUT(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { id, code, name, unit_price, cost_price, opening_qty, image_url } = await request.json()
+  const { id, code, name, sale_price, cost_price, opening_qty, image_url } = await request.json()
   if (!id || !code || !name) return NextResponse.json({ error: 'ID, code and name required' }, { status: 400 })
 
   // Fetch old product for GL reversal
@@ -86,13 +109,14 @@ export async function PUT(request: NextRequest) {
 
   const newOpeningQty = Number(opening_qty || 0)
   const newCostPrice = Number(cost_price || 0)
+  const newSalePrice = Number(sale_price || 0)
 
   // Update product
   const { error: updateErr } = await supabase
     .from('products')
     .update({
       code, name,
-      unit_price: Number(unit_price || 0),
+      sale_price: newSalePrice,
       cost_price: newCostPrice,
       qty_on_hand: newOpeningQty,
       image_url: image_url || null,
@@ -136,8 +160,8 @@ async function postOpeningInventoryEntry(
   const sign = mode === 'reverse' ? -1 : 1
   const debitAccount = mode === 'new' ? invAcc.data.id : eqAcc.data.id
   const creditAccount = mode === 'new' ? eqAcc.data.id : invAcc.data.id
-  const debitAmount = mode === 'new' ? totalValue : totalValue
-  const creditAmount = mode === 'new' ? totalValue : totalValue
+  const debitAmount = totalValue
+  const creditAmount = totalValue
 
   const description = mode === 'new'
     ? `Opening Inventory - ${code} ${name}`
@@ -156,7 +180,6 @@ async function postOpeningInventoryEntry(
     { entry_id: entry.id, account_id: creditAccount, debit: 0, credit: creditAmount },
   ])
 
-  // Update balances
   await supabase.from('accounts').update({
     balance: invAcc.data.balance + (sign * totalValue)
   }).eq('id', invAcc.data.id)

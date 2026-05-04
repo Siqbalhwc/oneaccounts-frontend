@@ -15,9 +15,9 @@ export default function EditProductPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  const [code, setCode] = useState("")
+  const [code, setCode] = useState("")           // read‑only, auto‑generated initially
   const [name, setName] = useState("")
-  const [unit_price, setUnitPrice] = useState("0")
+  const [sale_price, setSalePrice] = useState("0")
   const [cost_price, setCostPrice] = useState("0")
   const [opening_qty, setOpeningQty] = useState("0")
   const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null)
@@ -40,7 +40,7 @@ export default function EditProductPage() {
           if (data) {
             setCode(data.code)
             setName(data.name)
-            setUnitPrice(String(data.unit_price || 0))
+            setSalePrice(String(data.sale_price || 0))
             setCostPrice(String(data.cost_price || 0))
             setOpeningQty(String(data.qty_on_hand || 0))
             setExistingImageUrl(data.image_url || null)
@@ -73,8 +73,8 @@ export default function EditProductPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true); setError("")
-    if (!code.trim() || !name.trim()) {
-      setError("Product code and name are required.")
+    if (!name.trim()) {
+      setError("Product name is required.")
       setLoading(false); return
     }
 
@@ -100,9 +100,9 @@ export default function EditProductPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         id: Number(productId),
-        code: code.trim(),
+        code: code.trim(),          // must be sent back unchanged
         name: name.trim(),
-        unit_price: parseFloat(unit_price) || 0,
+        sale_price: parseFloat(sale_price) || 0,
         cost_price: parseFloat(cost_price) || 0,
         opening_qty: parseFloat(opening_qty) || 0,
         image_url: finalImageUrl,
@@ -151,8 +151,8 @@ export default function EditProductPage() {
           <form onSubmit={handleSubmit} style={{ background: "white", borderRadius: 12, border: "1px solid #E2E8F0", padding: 24 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>Product Code *</label>
-                <input className="inv-input" value={code} onChange={e => setCode(e.target.value)} required />
+                <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>Product Code</label>
+                <input className="inv-input" value={code} readOnly style={{ background: "#F1F5F9", color: "#475569" }} />
               </div>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>Product Name *</label>
@@ -160,7 +160,7 @@ export default function EditProductPage() {
               </div>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>Sale Price (PKR)</label>
-                <input className="inv-input" type="number" value={unit_price} onChange={e => setUnitPrice(e.target.value)} />
+                <input className="inv-input" type="number" value={sale_price} onChange={e => setSalePrice(e.target.value)} />
               </div>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>Cost Price (PKR)</label>
