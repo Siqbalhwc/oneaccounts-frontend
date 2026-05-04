@@ -384,15 +384,13 @@ export default function DashboardPage() {
         }
       `}</style>
 
-      <div
-  className="dash-outer"
-  style={{
-    background: "#EFF4FB",
-    minHeight: "100%",
-    width: "100%",
-    fontFamily: "'Plus Jakarta Sans',sans-serif",
-  }}
->
+      <div style={{
+  padding: "10px 6px 8px",
+  background: "#EFF4FB",
+  minHeight: "100%",
+  width: "100%",
+  fontFamily: "'Plus Jakarta Sans',sans-serif",
+}}>
         <div className="dash-content">
 
           {!online && (
