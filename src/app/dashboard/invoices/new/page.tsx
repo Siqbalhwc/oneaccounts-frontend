@@ -511,7 +511,7 @@ export default function NewInvoicePage() {
                 <button className="inv-btn inv-btn-outline" onClick={handleBeforeSavePdf}>
                   <Download size={14} /> PDF Preview
                 </button>
-                {hasFeature('whatsapp_send') && waLink() && (
+                {hasFeature('whatsapp_invoice') && waLink() && (
                   <a href={waLink()} target="_blank" className="inv-btn inv-btn-success" style={{ textDecoration: "none" }}>
                     <Send size={14} /> WhatsApp
                   </a>
