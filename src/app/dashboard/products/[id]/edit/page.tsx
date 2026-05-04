@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Save, Upload, Trash2 } from "lucide-react"
+import { ArrowLeft, Save, Trash2 } from "lucide-react"
 import RoleGuard from "@/components/RoleGuard"
 
 export default function EditProductPage() {
@@ -35,24 +35,26 @@ export default function EditProductPage() {
       .select("*")
       .eq("id", productId)
       .single()
-      .then(({ data }) => {
-        if (data) {
-          setCode(data.code)
-          setName(data.name)
-          setUnitPrice(String(data.unit_price || 0))
-          setCostPrice(String(data.cost_price || 0))
-          setOpeningQty(String(data.qty_on_hand || 0))
-          setExistingImageUrl(data.image_url || null)
-          if (data.image_url) setImagePreview(data.image_url)
-        } else {
-          setError("Product not found")
+      .then(
+        ({ data }) => {
+          if (data) {
+            setCode(data.code)
+            setName(data.name)
+            setUnitPrice(String(data.unit_price || 0))
+            setCostPrice(String(data.cost_price || 0))
+            setOpeningQty(String(data.qty_on_hand || 0))
+            setExistingImageUrl(data.image_url || null)
+            if (data.image_url) setImagePreview(data.image_url)
+          } else {
+            setError("Product not found")
+          }
+          setFetching(false)
+        },
+        () => {
+          setError("Failed to load product")
+          setFetching(false)
         }
-        setFetching(false)
-      })
-      .catch(() => {
-        setError("Failed to load product")
-        setFetching(false)
-      })
+      )
   }, [productId])
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
