@@ -20,7 +20,7 @@ const SHORT = (n: number) => {
 const waLink = (phone: string, no: string, bal: number, name: string) =>
   `https://wa.me/${phone}?text=${encodeURIComponent(`Dear ${name},\nPayment of PKR ${bal.toLocaleString()} for invoice ${no} is overdue.\nPlease clear at your earliest convenience. 🙏`)}`
 
-// ── DB‑validated active company ID (same as Data Management) ──
+// ── DB‑validated active company ID (matches Data Management) ──
 async function getActiveCompanyId(supabase: any): Promise<string> {
   try {
     const { data: { user } } = await supabase.auth.getUser()
@@ -186,7 +186,6 @@ export default function DashboardPage() {
       }
     })
 
-    // Each fetch is wrapped in its own try/catch so one failure doesn't break everything
     try {
       const accountPromise = supabase.from("accounts").select("type,balance").eq("company_id", cid)
       const custCountPromise = supabase.from("customers").select("*", { count: "exact", head: true }).eq("company_id", cid)
@@ -209,15 +208,36 @@ export default function DashboardPage() {
           ...monthlyPromises,
         ].map(p => Promise.resolve(p).catch(e => { console.warn("Dashboard sub-fetch failed", e); return null })))
 
-      // Accounts → KPIs
-      const accounts = accountsRes?.data
-      if (accounts) {
+      // ── Accounts → KPIs (safe with guard) ─────────────────
+      const rawAccounts = accountsRes?.data
+
+      if (!Array.isArray(rawAccounts)) {
+        setKpis({
+          assets: 0,
+          liabilities: 0,
+          equity: 0,
+          revenue: 0,
+          expenses: 0,
+          profit: 0,
+        })
+      } else {
         const a = { Asset: 0, Liability: 0, Equity: 0, Revenue: 0, Expense: 0 }
-        accounts.forEach((acc: any) => { if (a[acc.type as keyof typeof a] !== undefined) a[acc.type as keyof typeof a] += (acc.balance || 0) })
-        setKpis({ assets: a.Asset, liabilities: a.Liability, equity: a.Equity, revenue: a.Revenue, expenses: a.Expense, profit: a.Revenue - a.Expense })
+        rawAccounts.forEach((acc: any) => {
+          if (acc?.type && acc.type in a) {
+            a[acc.type as keyof typeof a] += Number(acc.balance || 0)
+          }
+        })
+        setKpis({
+          assets: a.Asset,
+          liabilities: a.Liability,
+          equity: a.Equity,
+          revenue: a.Revenue,
+          expenses: a.Expense,
+          profit: a.Revenue - a.Expense,
+        })
       }
 
-      // Ops
+      // ── Operations ────────────────────────────────────────
       let receivables = 0, unpaid = 0, partial = 0
       unpaidInvsRes?.data?.forEach((inv: any) => {
         receivables += (inv.total || 0) - (inv.paid || 0)
@@ -236,7 +256,7 @@ export default function DashboardPage() {
         total_suppliers: (suppCountRes as any)?.count || 0,
       })
 
-      // Overdue + customer names
+      // ── Overdue invoices & customer names ─────────────────
       const partyIds = overdueRes?.data?.map((i: any) => i.party_id).filter(Boolean) || []
       let customerMap: Record<number, { name: string; phone: string }> = {}
       if (partyIds.length > 0) {
@@ -254,7 +274,7 @@ export default function DashboardPage() {
         due_date: inv.due_date,
       })) || [])
 
-      // Monthly charts
+      // ── Monthly charts ────────────────────────────────────
       const months: string[] = [], revValues: number[] = [], profitValues: number[] = []
       monthRanges.forEach(({ label }, i) => {
         const rev = (monthlyRes[i * 2] as any)?.data?.reduce((s: number, r: any) => s + (r.total || 0), 0) || 0
