@@ -124,8 +124,32 @@ export default function CustomersPage() {
     if (!code.trim() || !name.trim()) return
     setSaving(true)
     const payload = { code: code.trim(), name: name.trim(), phone: phone.trim() || null, email: email.trim() || null, address: address.trim() || null, payment_terms: paymentTerms, balance: openingBalance, opening_balance: openingBalance }
-    if (editing) { await supabase.from("customers").update(payload).eq("id", editing.id); setFlash({ type: "success", msg: `Customer '${name}' updated!` }) }
-    else { await supabase.from("customers").insert(payload); setFlash({ type: "success", msg: `Customer '${name}' added!` }) }
+    if (editing) {
+      await supabase.from("customers").update(payload).eq("id", editing.id)
+      setFlash({ type: "success", msg: `Customer '${name}' updated!` })
+    }
+    else {
+      const { data: newCust, error: insertErr } = await supabase.from("customers").insert(payload).select("id").single()
+      if (insertErr || !newCust) {
+        setFlash({ type: "error", msg: insertErr?.message || "Insert failed" })
+        setSaving(false)
+        return
+      }
+      setFlash({ type: "success", msg: `Customer '${name}' added!` })
+
+      // Post opening balance journal entry if > 0
+      if (openingBalance > 0) {
+        await fetch("/api/customers/opening-entry", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            customerId: newCust.id,
+            customerName: name.trim(),
+            amount: openingBalance,
+          }),
+        }).catch(console.error)
+      }
+    }
     setSaving(false); setShowModal(false); fetchCustomers()
     setTimeout(() => setFlash(null), 3000)
   }
@@ -139,6 +163,8 @@ export default function CustomersPage() {
 
   const handleImport = async (rows: any[]) => {
     for (const row of rows) {
+      // For bulk import, you may also want to optionally create opening balance entries.
+      // For now, we'll just insert the customer without journal entry (can be enhanced later).
       await supabase.from("customers").insert({
         code: row.code || `CUST-${Date.now()}`, name: row.name || "Unnamed", phone: row.phone || null, email: row.email || null, address: row.address || null,
         balance: parseFloat(row.balance) || 0, payment_terms: row.payment_terms || "Net 30"
@@ -160,7 +186,7 @@ export default function CustomersPage() {
           <div><div className="cp-title">👥 Customers</div><div className="cp-subtitle">Manage customer accounts, view balances, and transactions</div></div>
           <div className="cp-actions">
             <button className="cp-btn cp-btn-primary" onClick={openNew}><Plus size={16} /> Add Customer</button>
-            {hasFeature('csv_import') && <><CsvExport data={customers} filename="customers" /><CsvImport onImport={handleImport} /></>}
+            {hasFeature('csv_import_export') && <><CsvExport data={customers} filename="customers" /><CsvImport onImport={handleImport} /></>}
           </div>
         </div>
         <div className="cp-stats">
