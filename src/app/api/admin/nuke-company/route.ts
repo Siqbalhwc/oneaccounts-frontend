@@ -9,13 +9,14 @@ const supabaseAdmin = createClient(
 )
 
 export async function POST(request: Request) {
+  // Authenticate user
   const supabase = await createSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
-  const { entity } = await request.json()
-  if (!entity) return NextResponse.json({ error: 'entity is required' }, { status: 400 })
-
+  // Find user's active admin company
   const { data: activeRole } = await supabaseAdmin
     .from('user_roles')
     .select('company_id, role')
@@ -42,18 +43,17 @@ export async function POST(request: Request) {
   }
 
   if (targetCompanyId === '00000000-0000-0000-0000-000000000001') {
-    return NextResponse.json({ error: 'Cannot modify template company' }, { status: 400 })
+    return NextResponse.json({ error: 'Cannot nuke the template company' }, { status: 400 })
   }
 
   try {
-    const { error } = await supabaseAdmin.rpc('delete_company_entity', {
-      p_company_id: targetCompanyId,
-      p_entity: entity,
+    const { error } = await supabaseAdmin.rpc('nuke_company_data', {
+      target_company_id: targetCompanyId,
     })
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
-    return NextResponse.json({ success: true, message: `Entity '${entity}' deleted.` })
+    return NextResponse.json({ success: true, message: 'Company wiped completely.' })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
