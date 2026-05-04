@@ -77,11 +77,12 @@ export default function NewInvoicePage() {
     setShowCustomerList(false)
   }
 
+  // ⚡ FIXED: Re-open customer list when clearing
   const clearCustomer = () => {
     setCustomerId(null)
     setSelectedCustomer(null)
     setCustomerSearch("")
-    setShowCustomerList(false)
+    setShowCustomerList(true)   // <-- now opens the search again
   }
 
   const filteredProducts = products.filter(p =>
@@ -121,6 +122,7 @@ export default function NewInvoicePage() {
   }
 
   const addManualItem = () => {
+    // manual item = service line, no product_id, no cost validation
     setItems([...items, { product_id: null, description: "Manual Item", qty: 1, unit_price: 0, cost_price: 0, total: 0 }])
   }
 
@@ -152,9 +154,9 @@ export default function NewInvoicePage() {
     if (!customerId)       { setError("Please select a customer"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
 
-    // ── Stock validation ───────────────────────────────────
+    // ── Stock validation (only for physical products) ────────
     for (const item of items) {
-      if (!item.product_id) continue
+      if (!item.product_id) continue   // service – skip
       const prod = products.find(p => p.id === item.product_id)
       if (prod && item.qty > (prod.qty_on_hand || 0)) {
         setError(`Not enough stock for ${prod.name}. Available: ${prod.qty_on_hand || 0}, Requested: ${item.qty}`)
@@ -188,13 +190,12 @@ export default function NewInvoicePage() {
         return
       }
 
-      // Show success – use the returned invoice data directly
+      // Show success
       setSuccessInvoice({
         id: result.invoice_id,
         invoice_no: result.invoice?.invoice_no || generateInvoiceNo(),
         total: result.invoice?.total || totalAmount,
         date: result.invoice?.date || invoiceDate,
-        // no customer info in success response, we already know the customer
         customers: selectedCustomer || null,
       })
       setLoading(false)
@@ -328,11 +329,11 @@ export default function NewInvoicePage() {
                   <label className="inv-label">Customer *</label>
                   <div className="cust-wrap" ref={customerRef}>
                     {selectedCustomer ? (
-                      <div className="cust-selected-badge">
+                      <div className="cust-selected-badge" **onClick={clearCustomer}**>
                         <span>👤</span>
                         <span style={{ flex: 1 }}>{selectedCustomer.code} — {selectedCustomer.name}</span>
                         <span style={{ fontSize: 11, color: "#64748B" }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
-                        <button className="cust-clear" onClick={clearCustomer} title="Change customer">
+                        <button className="cust-clear" onClick={(e) => { e.stopPropagation(); clearCustomer(); }}>
                           <X size={14} />
                         </button>
                       </div>
