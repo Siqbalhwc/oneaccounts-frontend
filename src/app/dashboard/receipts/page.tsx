@@ -13,7 +13,7 @@ interface Receipt {
   receipt_no: string
   date: string
   amount: number
-  customer?: { name: string }
+  customer_name: string
   payment_method: string
   reference: string
 }
@@ -38,43 +38,75 @@ export default function ReceiptsPage() {
   const [pageSize, setPageSize] = useState(25)
   const [total, setTotal] = useState(0)
 
-  // ── Get company ID from JWT ────────────────────────────────
+  // ── Bullet‑proof company ID retrieval (same as invoices) ───
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
-      const cid = (user?.app_metadata as any)?.company_id
-      if (cid) setCompanyId(cid)
+      const claim = (user?.app_metadata as any)?.company_id
+      if (claim) { setCompanyId(claim); return }
+
+      const match = document.cookie.match(/(?:^| )active_company_id=([^;]+)/)
+      if (match) { setCompanyId(match[2]); return }
+
+      if (user) {
+        supabase.from('user_roles')
+          .select('company_id').eq('user_id', user.id).limit(1).maybeSingle()
+          .then(({ data }) => { if (data) setCompanyId(data.company_id) })
+      }
     })
   }, [])
 
+  // ── Fetch receipts and resolve customer names ─────────────
   useEffect(() => {
-    if (!canView || !companyId) {
-      setLoading(false)
-      return
-    }
+    if (!canView || !companyId) { setLoading(false); return }
 
     const fetchReceipts = async () => {
       setLoading(true)
 
+      // Count total
       const { count } = await supabase
         .from("receipts")
         .select("*", { count: "exact", head: true })
         .eq("company_id", companyId)
-
       setTotal(count || 0)
 
+      // Fetch page
       const from = (page - 1) * pageSize
       const to = from + pageSize - 1
       const { data } = await supabase
         .from("receipts")
-        .select("*, customer:customers(name)")
+        .select("*")
         .eq("company_id", companyId)
         .order("date", { ascending: false })
         .range(from, to)
 
-      if (data) {
-        setReceipts(data)
-        setFiltered(data)
+      if (!data || data.length === 0) {
+        setReceipts([])
+        setFiltered([])
+        setLoading(false)
+        return
       }
+
+      // Resolve customer names in one batch
+      const partyIds = [...new Set(data.map((r: any) => r.party_id).filter(Boolean))]
+      let customerMap: Record<number, string> = {}
+      if (partyIds.length > 0) {
+        const { data: customers } = await supabase
+          .from("customers")
+          .select("id, name")
+          .in("id", partyIds)
+          .eq("company_id", companyId)
+        if (customers) {
+          customers.forEach((c: any) => { customerMap[c.id] = c.name })
+        }
+      }
+
+      const enriched = data.map((r: any) => ({
+        ...r,
+        customer_name: customerMap[r.party_id] || "—",
+      }))
+
+      setReceipts(enriched)
+      setFiltered(enriched)
       setLoading(false)
     }
     fetchReceipts()
@@ -82,16 +114,12 @@ export default function ReceiptsPage() {
 
   // ── Search filter ─────────────────────────────────────────
   useEffect(() => {
-    if (!search.trim()) {
-      setFiltered(receipts)
-      return
-    }
+    if (!search.trim()) { setFiltered(receipts); return }
     const s = search.toLowerCase()
     setFiltered(
-      receipts.filter(
-        (r) =>
-          r.receipt_no.toLowerCase().includes(s) ||
-          (r.customer?.name || "").toLowerCase().includes(s)
+      receipts.filter(r =>
+        r.receipt_no.toLowerCase().includes(s) ||
+        (r.customer_name || "").toLowerCase().includes(s)
       )
     )
   }, [search, receipts])
@@ -158,7 +186,7 @@ export default function ReceiptsPage() {
             filtered.map(rec => (
               <div key={rec.id} className="rec-table-row">
                 <span style={{ fontWeight: 600, color: "#1E3A8A" }}>{rec.receipt_no}</span>
-                <span>{rec.customer?.name || "—"}</span>
+                <span>{rec.customer_name || "—"}</span>
                 <span className="rec-hide-mobile" style={{ color: "#64748B" }}>{new Date(rec.date).toLocaleDateString()}</span>
                 <span style={{ fontWeight: 600 }}>PKR {rec.amount.toLocaleString()}</span>
                 <span>{rec.payment_method || "—"}</span>
