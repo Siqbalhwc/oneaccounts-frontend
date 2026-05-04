@@ -2,7 +2,6 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
-// ─── Constants ──────────────────────────────────────────────────────────────────
 const SALARY_RATE = 0.04
 const ADS_RATE    = 0.005
 const FUEL_RATE   = 0.005
@@ -14,13 +13,13 @@ const PARTNER_SHARES: Record<string, number> = {
   "3106": 0.80,
 }
 
-// ─── Feature‑check helper (reused from earlier) ──────────────────────────────────
+// ── Corrected feature‑check function ──────────────────────────
 async function companyHasFeature(
   supabase: ReturnType<typeof createServerClient>,
   userId: string,
   featureCode: string
 ): Promise<boolean> {
-  // 1. Find the user's company
+  // 1. Get the user's company
   const { data: roleData } = await supabase
     .from('user_roles')
     .select('company_id')
@@ -28,28 +27,29 @@ async function companyHasFeature(
     .maybeSingle()
 
   if (!roleData?.company_id) return false
+  const companyId = roleData.company_id
 
-  // 2. Check company‑level override
+  // 2. Check company‑level override (this can override plan defaults)
   const { data: coOverride } = await supabase
     .from('company_features')
     .select('enabled, expires_at')
-    .eq('company_id', roleData.company_id)
+    .eq('company_id', companyId)
     .eq('features.code', featureCode)
     .maybeSingle()
 
   if (coOverride) {
     if (coOverride.expires_at && new Date(coOverride.expires_at) < new Date()) {
-      // expired – fall through
+      // expired – fall through to plan defaults
     } else {
       return coOverride.enabled
     }
   }
 
-  // 3. Get the company's plan
+  // 3. Get the company's plan from the companies table
   const { data: compData } = await supabase
-    .from('company_settings')
+    .from('companies')
     .select('plan_id')
-    .eq('id', 1) // using the default company row for now
+    .eq('id', companyId)
     .single()
 
   if (compData?.plan_id) {
@@ -73,7 +73,6 @@ async function companyHasFeature(
   return feature?.default_enabled ?? false
 }
 
-// ─── Main POST handler ──────────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -91,22 +90,18 @@ export async function POST(request: NextRequest) {
     }
   )
 
-  // ── Auth check ────────────────────────────────────────────────────────────────
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // ── Feature flags ─────────────────────────────────────────────────────────────
   const automationEnabled  = await companyHasFeature(supabase, user.id, 'invoice_automation')
   const profitAllocEnabled = await companyHasFeature(supabase, user.id, 'profit_allocation')
 
-  // ── Parse body ────────────────────────────────────────────────────────────────
   const body = await request.json()
   const { invoice_no, party_id, invoice_date, due_date, items, reference, notes } = body
   if (!items || items.length === 0)
     return NextResponse.json({ error: 'No items provided' }, { status: 400 })
 
   try {
-    // Calculate totals
     const total_amount = items.reduce((s: number, i: any) => s + (i.qty * i.unit_price), 0)
     const total_cost   = items.reduce((s: number, i: any) => s + (i.qty * (i.cost_price || 0)), 0)
     const total_salary   = total_amount * SALARY_RATE
@@ -151,9 +146,8 @@ export async function POST(request: NextRequest) {
     const new_balance = (cust?.balance || 0) + total_amount
     await supabase.from("customers").update({ balance: new_balance }).eq("id", party_id)
 
-    // ── 4. GL ENTRIES ──────────────────────────────────────────────────────────
-
-    // 4a. ALWAYS post: DR Accounts Receivable / CR Sales Revenue
+    // 4. GL Entries (same logic, safe because feature flags are now correct)
+    // 4a. AR / Sales
     const { data: arAcc } = await supabase.from("accounts").select("id,balance").eq("code", "1100").single()
     const { data: revAcc } = await supabase.from("accounts").select("id,balance").eq("code", "4000").single()
 
@@ -174,7 +168,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 4b. ALWAYS post: DR COGS / CR Inventory (if cost > 0)
+    // 4b. COGS / Inventory
     if (total_cost > 0) {
       const { data: cogsAcc } = await supabase.from("accounts").select("id,balance").eq("code", "5000").single()
       const { data: invAcc } = await supabase.from("accounts").select("id,balance").eq("code", "1200").single()
@@ -197,7 +191,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 4c. Only if invoice_automation is enabled → post expense entries
+    // 4c. Expenses (only if automation enabled)
     if (automationEnabled && total_expenses > 0) {
       const salAcc  = await supabase.from("accounts").select("id,balance").eq("code", "5100").single()
       const adsAcc  = await supabase.from("accounts").select("id,balance").eq("code", "5600").single()
@@ -222,7 +216,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 4d. Only if both invoice_automation AND profit_allocation are enabled → profit allocation
+    // 4d. Profit allocation (only if both automation and profit allocation enabled)
     if (automationEnabled && profitAllocEnabled && net_profit > 0) {
       const { data: retAcc } = await supabase.from("accounts").select("id,balance").eq("code", "3100").single()
 
@@ -246,7 +240,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Return success
     const { data: createdInvoice } = await supabase.from("invoices")
       .select("id, invoice_no, total, date").eq("id", inv_id).single()
 
