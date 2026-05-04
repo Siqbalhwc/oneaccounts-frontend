@@ -26,6 +26,9 @@ export default function NewInvoicePage() {
   )
   const { hasFeature } = usePlan()
 
+  const automationEnabled = hasFeature('invoice_automation')
+  const profitAllocEnabled = hasFeature('profit_allocation')
+
   const [customers,            setCustomers]            = useState<any[]>([])
   const [products,             setProducts]             = useState<any[]>([])
   const [customerId,           setCustomerId]           = useState<number | null>(null)
@@ -140,9 +143,10 @@ export default function NewInvoicePage() {
 
   const totalAmount   = items.reduce((s, i) => s + i.total, 0)
   const totalCost     = items.reduce((s, i) => s + (i.qty * i.cost_price), 0)
-  const totalSalary   = totalAmount * SALARY_RATE
-  const totalAds      = totalAmount * ADS_RATE
-  const totalFuel     = totalAmount * FUEL_RATE
+  // Expenses only apply if automation is enabled
+  const totalSalary   = automationEnabled ? totalAmount * SALARY_RATE : 0
+  const totalAds      = automationEnabled ? totalAmount * ADS_RATE : 0
+  const totalFuel     = automationEnabled ? totalAmount * FUEL_RATE : 0
   const totalExpenses = totalSalary + totalAds + totalFuel
   const netProfit     = totalAmount - totalCost - totalExpenses
 
@@ -193,12 +197,12 @@ export default function NewInvoicePage() {
     if (successInvoice) {
       const cust = successInvoice.customers
       if (!cust?.phone) return ""
-      const msg = `Assalam-u-Alaikum ${cust.name},\nInvoice ${successInvoice.invoice_no} of PKR ${totalAmount.toLocaleString()} is ready.\nDue date: ${dueDate}.\nKindly arrange payment. JazakAllah Khair.\n— OneAccounts by Siqbal`
+      const msg = `Assalam-u-Alaikum ${cust.name},\nInvoice ${successInvoice.invoice_no} of PKR ${totalAmount.toLocaleString()} is ready.\nDue date: ${dueDate}.\nKindly arrange payment. JazakAllah Khair.\n– OneAccounts by Siqbal`
       return `https://wa.me/92${cust.phone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`
     }
     const cust = customers.find(c => c.id === customerId)
     if (!cust?.phone) return ""
-    const msg = `Assalam-u-Alaikum ${cust.name},\nInvoice of PKR ${totalAmount.toLocaleString()} is ready.\nDue date: ${dueDate}.\nKindly arrange payment. JazakAllah Khair.\n— OneAccounts by Siqbal`
+    const msg = `Assalam-u-Alaikum ${cust.name},\nInvoice of PKR ${totalAmount.toLocaleString()} is ready.\nDue date: ${dueDate}.\nKindly arrange payment. JazakAllah Khair.\n– OneAccounts by Siqbal`
     return `https://wa.me/92${cust.phone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`
   }
 
@@ -213,7 +217,7 @@ export default function NewInvoicePage() {
     doc.save(`invoice-preview-${tempInvoice.invoice_no}.pdf`)
   }
 
-  // ── UI (unchanged) ──
+  // ── UI ────────────────────────────────────────────────────
   return (
     <div style={{ padding: "clamp(16px,2.5vw,24px)", background: "#EFF4FB", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <style>{`
@@ -280,7 +284,9 @@ export default function NewInvoicePage() {
           </button>
           <div>
             <div className="inv-title">🧾 New Sales Invoice</div>
-            <div style={{ fontSize: 13, color: "#94A3B8" }}>Create invoice with full accounting automation</div>
+            <div style={{ fontSize: 13, color: "#94A3B8" }}>
+              {automationEnabled ? "Automation enabled – expenses & profit allocation will be posted" : "Plain invoice (no automation)"}
+            </div>
           </div>
         </div>
 
@@ -303,7 +309,7 @@ export default function NewInvoicePage() {
           </div>
         ) : (
           <>
-            {/* ── Customer & Dates ── */}
+            {/* Customer & Dates */}
             <div className="inv-card">
               <div className="inv-row">
                 <div style={{ gridColumn: "1 / -1" }}>
@@ -380,7 +386,7 @@ export default function NewInvoicePage() {
               </div>
             </div>
 
-            {/* ── Product Search ── */}
+            {/* Add Product */}
             <div className="inv-card">
               <label className="inv-label">Add Product</label>
               <div style={{ position: "relative" }}>
@@ -435,7 +441,7 @@ export default function NewInvoicePage() {
               )}
             </div>
 
-            {/* ── Items ── */}
+            {/* Items */}
             {items.length > 0 && (
               <div className="inv-card">
                 <div className="inv-item-header">
@@ -453,21 +459,33 @@ export default function NewInvoicePage() {
               </div>
             )}
 
-            {/* ── Totals (expenses always shown, profit allocation only if feature enabled) ── */}
+            {/* Totals – conditional expense breakdown */}
             {items.length > 0 && (
               <div className="inv-card">
                 <div className="inv-total-row"><span>Subtotal</span><span>PKR {totalAmount.toLocaleString()}</span></div>
                 <div className="inv-total-row"><span>COGS</span><span>PKR {totalCost.toLocaleString()}</span></div>
-                <div className="inv-total-row"><span>Salary (4%)</span><span>PKR {totalSalary.toLocaleString()}</span></div>
-                <div className="inv-total-row"><span>Advertisement (0.5%)</span><span>PKR {totalAds.toLocaleString()}</span></div>
-                <div className="inv-total-row"><span>Fuel (0.5%)</span><span>PKR {totalFuel.toLocaleString()}</span></div>
+
+                {automationEnabled ? (
+                  <>
+                    <div className="inv-total-row"><span>Salary (4%)</span><span>PKR {totalSalary.toLocaleString()}</span></div>
+                    <div className="inv-total-row"><span>Advertisement (0.5%)</span><span>PKR {totalAds.toLocaleString()}</span></div>
+                    <div className="inv-total-row"><span>Fuel (0.5%)</span><span>PKR {totalFuel.toLocaleString()}</span></div>
+                  </>
+                ) : (
+                  <div className="inv-total-row" style={{ color: "#94A3B8", fontStyle: "italic" }}>
+                    <span>Expenses</span><span>Not applied (automation off)</span>
+                  </div>
+                )}
+
                 <div className="inv-total-row bold">
                   <span>Net Profit</span>
-                  <span className={netProfit >= 0 ? "inv-profit" : "inv-loss"}>PKR {netProfit.toLocaleString()}</span>
+                  <span className={netProfit >= 0 ? "inv-profit" : "inv-loss"}>
+                    PKR {netProfit.toLocaleString()}
+                  </span>
                 </div>
 
-                {/* Profit allocation – only visible when feature is enabled */}
-                {hasFeature('profit_allocation') && netProfit > 0 && (
+                {/* Profit allocation – only when both automation and profit allocation are enabled */}
+                {automationEnabled && profitAllocEnabled && netProfit > 0 && (
                   <div style={{ marginTop: 12, padding: "12px 14px", background: "#F0FDF4", borderRadius: 8, fontSize: 12 }}>
                     <div style={{ fontWeight: 600, marginBottom: 6 }}>Profit Allocation:</div>
                     {Object.entries(PARTNERS).map(([code, value]) => {
@@ -484,7 +502,7 @@ export default function NewInvoicePage() {
               </div>
             )}
 
-            {/* ── Actions ── */}
+            {/* Actions */}
             {items.length > 0 && (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
                 <button className="inv-btn inv-btn-primary" onClick={handleSubmit} disabled={loading}>
