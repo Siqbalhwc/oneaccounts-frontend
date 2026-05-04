@@ -13,45 +13,38 @@ const PARTNER_SHARES: Record<string, number> = {
   "3106": 0.80,
 }
 
-// ── Corrected feature‑check function ──────────────────────────
 async function companyHasFeature(
   supabase: ReturnType<typeof createServerClient>,
   userId: string,
   featureCode: string
 ): Promise<boolean> {
-  // 1. Get the user's company
   const { data: roleData } = await supabase
     .from('user_roles')
     .select('company_id')
     .eq('user_id', userId)
     .maybeSingle()
-
   if (!roleData?.company_id) return false
   const companyId = roleData.company_id
 
-  // 2. Check company‑level override (this can override plan defaults)
   const { data: coOverride } = await supabase
     .from('company_features')
     .select('enabled, expires_at')
     .eq('company_id', companyId)
     .eq('features.code', featureCode)
     .maybeSingle()
-
   if (coOverride) {
     if (coOverride.expires_at && new Date(coOverride.expires_at) < new Date()) {
-      // expired – fall through to plan defaults
+      // fall through
     } else {
       return coOverride.enabled
     }
   }
 
-  // 3. Get the company's plan from the companies table
   const { data: compData } = await supabase
     .from('companies')
     .select('plan_id')
     .eq('id', companyId)
     .single()
-
   if (compData?.plan_id) {
     const { data: planFeature } = await supabase
       .from('plan_features')
@@ -59,17 +52,14 @@ async function companyHasFeature(
       .eq('plan_id', compData.plan_id)
       .eq('features.code', featureCode)
       .maybeSingle()
-
     if (planFeature) return planFeature.enabled
   }
 
-  // 4. Fallback to global default
   const { data: feature } = await supabase
     .from('features')
     .select('default_enabled')
     .eq('code', featureCode)
     .single()
-
   return feature?.default_enabled ?? false
 }
 
@@ -93,6 +83,17 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  // ── Get the user's company ID ────────────────────────────
+  const { data: roleData } = await supabase
+    .from('user_roles')
+    .select('company_id')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  if (!roleData?.company_id) {
+    return NextResponse.json({ error: 'No company found' }, { status: 400 })
+  }
+  const companyId = roleData.company_id
+
   const automationEnabled  = await companyHasFeature(supabase, user.id, 'invoice_automation')
   const profitAllocEnabled = await companyHasFeature(supabase, user.id, 'profit_allocation')
 
@@ -104,14 +105,15 @@ export async function POST(request: NextRequest) {
   try {
     const total_amount = items.reduce((s: number, i: any) => s + (i.qty * i.unit_price), 0)
     const total_cost   = items.reduce((s: number, i: any) => s + (i.qty * (i.cost_price || 0)), 0)
-    const total_salary   = total_amount * SALARY_RATE
-    const total_ads      = total_amount * ADS_RATE
-    const total_fuel     = total_amount * FUEL_RATE
+    const total_salary   = automationEnabled ? total_amount * SALARY_RATE : 0
+    const total_ads      = automationEnabled ? total_amount * ADS_RATE : 0
+    const total_fuel     = automationEnabled ? total_amount * FUEL_RATE : 0
     const total_expenses = total_salary + total_ads + total_fuel
     const net_profit     = total_amount - total_cost - total_expenses
 
-    // 1. Create Invoice
+    // 1. Create Invoice (with company_id)
     const { data: inv } = await supabase.from("invoices").insert({
+      company_id: companyId,
       invoice_no, type: "sale", party_id,
       date: invoice_date, due_date, total: total_amount, paid: 0,
       status: "Unpaid", reference, notes
@@ -122,17 +124,26 @@ export async function POST(request: NextRequest) {
     // 2. Insert Invoice Items & Update Stock
     for (const item of items) {
       await supabase.from("invoice_items").insert({
+        company_id: companyId,
         invoice_id: inv_id, product_id: item.product_id,
         description: item.description, qty: item.qty,
         unit_price: item.unit_price, total: item.qty * item.unit_price
       })
 
       if (item.product_id) {
-        const { data: prod } = await supabase.from("products").select("qty_on_hand").eq("id", item.product_id).single()
+        const { data: prod } = await supabase.from("products")
+          .select("qty_on_hand")
+          .eq("id", item.product_id)
+          .eq("company_id", companyId)
+          .single()
         if (prod) {
           const new_qty = (prod.qty_on_hand || 0) - item.qty
-          await supabase.from("products").update({ qty_on_hand: new_qty }).eq("id", item.product_id)
+          await supabase.from("products")
+            .update({ qty_on_hand: new_qty })
+            .eq("id", item.product_id)
+            .eq("company_id", companyId)
           await supabase.from("stock_moves").insert({
+            company_id: companyId,
             product_id: item.product_id, move_type: "sale",
             qty: -item.qty, unit_price: item.unit_price,
             ref: invoice_no, date: invoice_date
@@ -142,17 +153,28 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Update Customer Balance
-    const { data: cust } = await supabase.from("customers").select("balance").eq("id", party_id).single()
-    const new_balance = (cust?.balance || 0) + total_amount
-    await supabase.from("customers").update({ balance: new_balance }).eq("id", party_id)
+    const { data: cust } = await supabase.from("customers")
+      .select("balance")
+      .eq("id", party_id)
+      .eq("company_id", companyId)
+      .single()
+    if (cust) {
+      await supabase.from("customers")
+        .update({ balance: (cust.balance || 0) + total_amount })
+        .eq("id", party_id)
+        .eq("company_id", companyId)
+    }
 
-    // 4. GL Entries (same logic, safe because feature flags are now correct)
+    // ── 4. GL Entries ──────────────────────────────────────
     // 4a. AR / Sales
-    const { data: arAcc } = await supabase.from("accounts").select("id,balance").eq("code", "1100").single()
-    const { data: revAcc } = await supabase.from("accounts").select("id,balance").eq("code", "4000").single()
+    const { data: arAcc } = await supabase.from("accounts")
+      .select("id,balance").eq("code", "1100").eq("company_id", companyId).single()
+    const { data: revAcc } = await supabase.from("accounts")
+      .select("id,balance").eq("code", "4000").eq("company_id", companyId).single()
 
     if (arAcc && revAcc) {
       const { data: je1 } = await supabase.from("journal_entries").insert({
+        company_id: companyId,
         entry_no: `JE-SI-${String(inv_id).padStart(4, "0")}`,
         date: invoice_date,
         description: `Sales Invoice - ${invoice_no}`
@@ -160,8 +182,8 @@ export async function POST(request: NextRequest) {
 
       if (je1) {
         await supabase.from("journal_lines").insert([
-          { entry_id: je1.id, account_id: arAcc.id, debit: total_amount, credit: 0 },
-          { entry_id: je1.id, account_id: revAcc.id, debit: 0, credit: total_amount }
+          { company_id: companyId, entry_id: je1.id, account_id: arAcc.id, debit: total_amount, credit: 0 },
+          { company_id: companyId, entry_id: je1.id, account_id: revAcc.id, debit: 0, credit: total_amount }
         ])
         await supabase.from("accounts").update({ balance: arAcc.balance + total_amount }).eq("id", arAcc.id)
         await supabase.from("accounts").update({ balance: revAcc.balance + total_amount }).eq("id", revAcc.id)
@@ -170,11 +192,14 @@ export async function POST(request: NextRequest) {
 
     // 4b. COGS / Inventory
     if (total_cost > 0) {
-      const { data: cogsAcc } = await supabase.from("accounts").select("id,balance").eq("code", "5000").single()
-      const { data: invAcc } = await supabase.from("accounts").select("id,balance").eq("code", "1200").single()
+      const { data: cogsAcc } = await supabase.from("accounts")
+        .select("id,balance").eq("code", "5000").eq("company_id", companyId).single()
+      const { data: invAcc } = await supabase.from("accounts")
+        .select("id,balance").eq("code", "1200").eq("company_id", companyId).single()
 
       if (cogsAcc && invAcc) {
         const { data: je2 } = await supabase.from("journal_entries").insert({
+          company_id: companyId,
           entry_no: `JE-COGS-${String(inv_id).padStart(4, "0")}`,
           date: invoice_date,
           description: `COGS - ${invoice_no}`
@@ -182,8 +207,8 @@ export async function POST(request: NextRequest) {
 
         if (je2) {
           await supabase.from("journal_lines").insert([
-            { entry_id: je2.id, account_id: cogsAcc.id, debit: total_cost, credit: 0 },
-            { entry_id: je2.id, account_id: invAcc.id, debit: 0, credit: total_cost }
+            { company_id: companyId, entry_id: je2.id, account_id: cogsAcc.id, debit: total_cost, credit: 0 },
+            { company_id: companyId, entry_id: je2.id, account_id: invAcc.id, debit: 0, credit: total_cost }
           ])
           await supabase.from("accounts").update({ balance: cogsAcc.balance + total_cost }).eq("id", cogsAcc.id)
           await supabase.from("accounts").update({ balance: invAcc.balance - total_cost }).eq("id", invAcc.id)
@@ -191,15 +216,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 4c. Expenses (only if automation enabled)
+    // 4c. Expenses
     if (automationEnabled && total_expenses > 0) {
-      const salAcc  = await supabase.from("accounts").select("id,balance").eq("code", "5100").single()
-      const adsAcc  = await supabase.from("accounts").select("id,balance").eq("code", "5600").single()
-      const fuelAcc = await supabase.from("accounts").select("id,balance").eq("code", "5700").single()
-      const apAcc   = await supabase.from("accounts").select("id,balance").eq("code", "2001").single()
+      const salAcc  = await supabase.from("accounts").select("id,balance").eq("code", "5100").eq("company_id", companyId).single()
+      const adsAcc  = await supabase.from("accounts").select("id,balance").eq("code", "5600").eq("company_id", companyId).single()
+      const fuelAcc = await supabase.from("accounts").select("id,balance").eq("code", "5700").eq("company_id", companyId).single()
+      const apAcc   = await supabase.from("accounts").select("id,balance").eq("code", "2001").eq("company_id", companyId).single()
 
       if (salAcc.data && adsAcc.data && fuelAcc.data && apAcc.data) {
         const { data: je3 } = await supabase.from("journal_entries").insert({
+          company_id: companyId,
           entry_no: `JE-EXP-${String(inv_id).padStart(4, "0")}`,
           date: invoice_date,
           description: `Expenses - ${invoice_no}`
@@ -207,32 +233,35 @@ export async function POST(request: NextRequest) {
 
         if (je3) {
           await supabase.from("journal_lines").insert([
-            { entry_id: je3.id, account_id: salAcc.data.id, debit: total_salary, credit: 0 },
-            { entry_id: je3.id, account_id: adsAcc.data.id, debit: total_ads, credit: 0 },
-            { entry_id: je3.id, account_id: fuelAcc.data.id, debit: total_fuel, credit: 0 },
-            { entry_id: je3.id, account_id: apAcc.data.id, debit: 0, credit: total_expenses }
+            { company_id: companyId, entry_id: je3.id, account_id: salAcc.data.id, debit: total_salary, credit: 0 },
+            { company_id: companyId, entry_id: je3.id, account_id: adsAcc.data.id, debit: total_ads, credit: 0 },
+            { company_id: companyId, entry_id: je3.id, account_id: fuelAcc.data.id, debit: total_fuel, credit: 0 },
+            { company_id: companyId, entry_id: je3.id, account_id: apAcc.data.id, debit: 0, credit: total_expenses }
           ])
         }
       }
     }
 
-    // 4d. Profit allocation (only if both automation and profit allocation enabled)
+    // 4d. Profit allocation
     if (automationEnabled && profitAllocEnabled && net_profit > 0) {
-      const { data: retAcc } = await supabase.from("accounts").select("id,balance").eq("code", "3100").single()
+      const { data: retAcc } = await supabase.from("accounts")
+        .select("id,balance").eq("code", "3100").eq("company_id", companyId).single()
 
       if (retAcc) {
         const { data: je4 } = await supabase.from("journal_entries").insert({
+          company_id: companyId,
           entry_no: `JE-PRF-${String(inv_id).padStart(4, "0")}`,
           date: invoice_date,
           description: `Profit Allocation - ${invoice_no}`
         }).select("id").single()
 
         if (je4) {
-          const lines = [{ entry_id: je4.id, account_id: retAcc.id, debit: net_profit, credit: 0 }]
+          const lines = [{ company_id: companyId, entry_id: je4.id, account_id: retAcc.id, debit: net_profit, credit: 0 }]
           for (const [code, share] of Object.entries(PARTNER_SHARES)) {
-            const { data: pAcc } = await supabase.from("accounts").select("id,balance").eq("code", code).single()
+            const { data: pAcc } = await supabase.from("accounts")
+              .select("id,balance").eq("code", code).eq("company_id", companyId).single()
             if (pAcc) {
-              lines.push({ entry_id: je4.id, account_id: pAcc.id, debit: 0, credit: net_profit * share })
+              lines.push({ company_id: companyId, entry_id: je4.id, account_id: pAcc.id, debit: 0, credit: net_profit * share })
             }
           }
           await supabase.from("journal_lines").insert(lines)
