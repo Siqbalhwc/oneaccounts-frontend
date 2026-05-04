@@ -2,16 +2,11 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
-// ⚠️ Service‑role key bypasses RLS – safe because we verify the user & company below
+// Service‑role client for bypassing RLS (we verify user & company below)
 const supabaseAdmin = createServerClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    cookies: {
-      getAll() { return [] },
-      setAll() {},
-    },
-  }
+  { auth: { persistSession: false, autoRefreshToken: false } }
 )
 
 const SALARY_RATE = 0.04
@@ -25,11 +20,7 @@ const PARTNER_SHARES: Record<string, number> = {
   "3106": 0.80,
 }
 
-async function companyHasFeature(
-  supabase: ReturnType<typeof createServerClient>,
-  userId: string,
-  featureCode: string
-): Promise<boolean> {
+async function companyHasFeature(userId: string, featureCode: string): Promise<boolean> {
   const { data: roleData } = await supabaseAdmin
     .from('user_roles')
     .select('company_id')
@@ -38,6 +29,7 @@ async function companyHasFeature(
   if (!roleData?.company_id) return false
   const companyId = roleData.company_id
 
+  // Check company‑level override
   const { data: coOverride } = await supabaseAdmin
     .from('company_features')
     .select('enabled, expires_at')
@@ -46,12 +38,13 @@ async function companyHasFeature(
     .maybeSingle()
   if (coOverride) {
     if (coOverride.expires_at && new Date(coOverride.expires_at) < new Date()) {
-      // fall through
+      // expired – fall through to plan defaults
     } else {
       return coOverride.enabled
     }
   }
 
+  // Plan default
   const { data: compData } = await supabaseAdmin
     .from('companies')
     .select('plan_id')
@@ -67,6 +60,7 @@ async function companyHasFeature(
     if (planFeature) return planFeature.enabled
   }
 
+  // Global default
   const { data: feature } = await supabaseAdmin
     .from('features')
     .select('default_enabled')
@@ -95,7 +89,7 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // ── Get the user's company ID (from the authenticated session) ──
+  // Get user's active company
   const { data: roleData } = await supabase
     .from('user_roles')
     .select('company_id')
@@ -106,8 +100,8 @@ export async function POST(request: NextRequest) {
   }
   const companyId = roleData.company_id
 
-  const automationEnabled  = await companyHasFeature(supabase, user.id, 'invoice_automation')
-  const profitAllocEnabled = await companyHasFeature(supabase, user.id, 'profit_allocation')
+  const automationEnabled  = await companyHasFeature(user.id, 'invoice_automation')
+  const profitAllocEnabled = await companyHasFeature(user.id, 'profit_allocation')
 
   const body = await request.json()
   const { invoice_no, party_id, invoice_date, due_date, items, reference, notes } = body
@@ -123,21 +117,23 @@ export async function POST(request: NextRequest) {
     const total_expenses = total_salary + total_ads + total_fuel
     const net_profit     = total_amount - total_cost - total_expenses
 
-    // Ensure unique invoice number per company (add timestamp if necessary)
+    // Build a unique invoice number (safety net)
     let finalInvoiceNo = invoice_no?.trim() || `INV-${Date.now().toString(36).toUpperCase()}`
-    // Check uniqueness
-    const { data: existing } = await supabaseAdmin
-      .from('invoices')
-      .select('id')
-      .eq('company_id', companyId)
-      .eq('invoice_no', finalInvoiceNo)
-      .maybeSingle()
-    if (existing) {
-      // Append a random suffix to make it unique
-      finalInvoiceNo = `${finalInvoiceNo}-${Date.now().toString(36).slice(-4).toUpperCase()}`
+    let tries = 0
+    while (tries < 3) {
+      const { data: existing } = await supabaseAdmin
+        .from('invoices')
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('invoice_no', finalInvoiceNo)
+        .maybeSingle()
+      if (!existing) break
+      // Append random suffix to avoid collision
+      finalInvoiceNo = `${finalInvoiceNo}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
+      tries++
     }
 
-    // 1. Create Invoice (with company_id, using service role)
+    // 1. Create Invoice
     const { data: inv, error: invErr } = await supabaseAdmin.from("invoices").insert({
       company_id: companyId,
       invoice_no: finalInvoiceNo,
@@ -211,7 +207,7 @@ export async function POST(request: NextRequest) {
         .eq("company_id", companyId)
     }
 
-    // ── 4. GL Entries (using service role to bypass RLS) ──
+    // ── 4. GL Entries (service role) ──────────────────────
     // 4a. AR / Sales
     const { data: arAcc } = await supabaseAdmin.from("accounts")
       .select("id,balance").eq("code", "1100").eq("company_id", companyId).single()
