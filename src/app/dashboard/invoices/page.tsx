@@ -38,22 +38,35 @@ export default function InvoicesPage() {
   const [pageSize, setPageSize] = useState(25)
   const [total, setTotal] = useState(0)
 
-  // ── Bullet‑proof company ID retrieval ──────────────────────
+  // ── Bullet‑proof company ID retrieval (with debug logs) ─────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       // 1. JWT claim
       const claim = (user?.app_metadata as any)?.company_id
-      if (claim) { setCompanyId(claim); return }
+      if (claim) {
+        setCompanyId(claim)
+        console.log('📝 Invoice list – using JWT claim:', claim)
+        return
+      }
 
       // 2. Cookie fallback
       const match = document.cookie.match(/(?:^| )active_company_id=([^;]+)/)
-      if (match) { setCompanyId(match[2]); return }
+      if (match) {
+        setCompanyId(match[2])
+        console.log('📝 Invoice list – using cookie:', match[2])
+        return
+      }
 
       // 3. First company from user_roles
       if (user) {
         supabase.from('user_roles')
           .select('company_id').eq('user_id', user.id).limit(1).maybeSingle()
-          .then(({ data }) => { if (data) setCompanyId(data.company_id) })
+          .then(({ data }) => {
+            if (data) {
+              setCompanyId(data.company_id)
+              console.log('📝 Invoice list – using user_roles:', data.company_id)
+            }
+          })
       }
     })
   }, [])
