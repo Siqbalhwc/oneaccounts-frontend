@@ -25,7 +25,6 @@ export default function NewInvoicePage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
   const { hasFeature } = usePlan()
-
   const automationEnabled = hasFeature('invoice_automation')
   const profitAllocEnabled = hasFeature('profit_allocation')
 
@@ -143,7 +142,6 @@ export default function NewInvoicePage() {
 
   const totalAmount   = items.reduce((s, i) => s + i.total, 0)
   const totalCost     = items.reduce((s, i) => s + (i.qty * i.cost_price), 0)
-  // Expenses only apply if automation is enabled
   const totalSalary   = automationEnabled ? totalAmount * SALARY_RATE : 0
   const totalAds      = automationEnabled ? totalAmount * ADS_RATE : 0
   const totalFuel     = automationEnabled ? totalAmount * FUEL_RATE : 0
@@ -153,35 +151,55 @@ export default function NewInvoicePage() {
   const handleSubmit = async () => {
     if (!customerId)       { setError("Please select a customer"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
+
+    // ── Stock validation ───────────────────────────────────
+    for (const item of items) {
+      if (!item.product_id) continue
+      const prod = products.find(p => p.id === item.product_id)
+      if (prod && item.qty > (prod.qty_on_hand || 0)) {
+        setError(`Not enough stock for ${prod.name}. Available: ${prod.qty_on_hand || 0}, Requested: ${item.qty}`)
+        return
+      }
+    }
+
     setLoading(true); setError("")
 
-    const res = await fetch("/api/invoices", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        invoice_no:   generateInvoiceNo(),
-        party_id:     customerId,
-        invoice_date: invoiceDate,
-        due_date:     dueDate,
-        items: items.map(i => ({
-          product_id: i.product_id, description: i.description,
-          qty: i.qty, unit_price: i.unit_price, cost_price: i.cost_price,
-        })),
-        reference,
-        notes,
-      }),
-    })
-    const result = await res.json()
-    if (result.error) { setError(result.error); setLoading(false) }
-    else {
-      const { data: createdInvoice } = await supabase
-        .from("invoices")
-        .select("id,invoice_no,total,date,customers!party_id(name,phone)")
-        .eq("id", result.invoice_id)
-        .single()
-      const inv = createdInvoice as any
-      if (inv && Array.isArray(inv.customers)) inv.customers = inv.customers[0] ?? null
-      setSuccessInvoice(inv)
+    try {
+      const res = await fetch("/api/invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          invoice_no:   generateInvoiceNo(),
+          party_id:     customerId,
+          invoice_date: invoiceDate,
+          due_date:     dueDate,
+          items: items.map(i => ({
+            product_id: i.product_id, description: i.description,
+            qty: i.qty, unit_price: i.unit_price, cost_price: i.cost_price,
+          })),
+          reference,
+          notes,
+        }),
+      })
+      const result = await res.json()
+      if (!result.success) {
+        setError(result.error || "Failed to create invoice")
+        setLoading(false)
+        return
+      }
+
+      // Show success – use the returned invoice data directly
+      setSuccessInvoice({
+        id: result.invoice_id,
+        invoice_no: result.invoice?.invoice_no || generateInvoiceNo(),
+        total: result.invoice?.total || totalAmount,
+        date: result.invoice?.date || invoiceDate,
+        // no customer info in success response, we already know the customer
+        customers: selectedCustomer || null,
+      })
+      setLoading(false)
+    } catch (e: any) {
+      setError("Network error. Please try again.")
       setLoading(false)
     }
   }
@@ -194,15 +212,9 @@ export default function NewInvoicePage() {
   }
 
   const waLink = () => {
-    if (successInvoice) {
-      const cust = successInvoice.customers
-      if (!cust?.phone) return ""
-      const msg = `Assalam-u-Alaikum ${cust.name},\nInvoice ${successInvoice.invoice_no} of PKR ${totalAmount.toLocaleString()} is ready.\nDue date: ${dueDate}.\nKindly arrange payment. JazakAllah Khair.\n– OneAccounts by Siqbal`
-      return `https://wa.me/92${cust.phone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`
-    }
-    const cust = customers.find(c => c.id === customerId)
+    const cust = successInvoice?.customers || selectedCustomer
     if (!cust?.phone) return ""
-    const msg = `Assalam-u-Alaikum ${cust.name},\nInvoice of PKR ${totalAmount.toLocaleString()} is ready.\nDue date: ${dueDate}.\nKindly arrange payment. JazakAllah Khair.\n– OneAccounts by Siqbal`
+    const msg = `Assalam-u-Alaikum ${cust.name},\nInvoice ${successInvoice?.invoice_no || ''} of PKR ${totalAmount.toLocaleString()} is ready.\nDue date: ${dueDate}.\nKindly arrange payment. JazakAllah Khair.\n– OneAccounts by Siqbal`
     return `https://wa.me/92${cust.phone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`
   }
 
@@ -302,7 +314,7 @@ export default function NewInvoicePage() {
             <p style={{ marginBottom: 12 }}>Total: PKR {successInvoice.total?.toLocaleString()}</p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button onClick={handleDownloadPDF} className="inv-btn inv-btn-primary"><Download size={14} /> Download PDF</button>
-              {waLink() && <a href={waLink()} target="_blank" className="inv-btn inv-btn-success" style={{ textDecoration: "none" }}><Send size={14} /> WhatsApp</a>}
+              {hasFeature('whatsapp_invoice') && waLink() && <a href={waLink()} target="_blank" className="inv-btn inv-btn-success" style={{ textDecoration: "none" }}><Send size={14} /> WhatsApp</a>}
               <button onClick={() => router.push("/dashboard/invoices")} className="inv-btn inv-btn-outline">View Invoices List</button>
               <button onClick={() => { setSuccessInvoice(null); setItems([]); setCustomerId(null); setSelectedCustomer(null); setCustomerSearch(""); setReference(""); setNotes("") }} className="inv-btn inv-btn-outline">Create Another</button>
             </div>
@@ -421,24 +433,6 @@ export default function NewInvoicePage() {
                   </div>
                 )}
               </div>
-
-              {showHistory && (
-                <div className="inv-price-history" style={{ marginTop: 12 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                    <span style={{ fontWeight: 600, fontSize: 12 }}>📋 Price history for {lastSelectedProduct?.name}</span>
-                    <button style={{ background: "none", border: "none", cursor: "pointer", color: "#94A3B8" }} onClick={() => setShowHistory(false)}><X size={14} /></button>
-                  </div>
-                  {priceHistory.length > 0
-                    ? priceHistory.map((h: any, i: number) => (
-                        <div key={i} className="inv-price-history-item">
-                          <span>{h.invoice_no} — {h.date}</span>
-                          <span style={{ fontWeight: 600 }}>PKR {h.unit_price.toLocaleString()}</span>
-                        </div>
-                      ))
-                    : <div style={{ color: "#94A3B8", fontSize: 12 }}>No previous sales to this customer</div>
-                  }
-                </div>
-              )}
             </div>
 
             {/* Items */}
@@ -459,12 +453,11 @@ export default function NewInvoicePage() {
               </div>
             )}
 
-            {/* Totals – conditional expense breakdown */}
+            {/* Totals */}
             {items.length > 0 && (
               <div className="inv-card">
                 <div className="inv-total-row"><span>Subtotal</span><span>PKR {totalAmount.toLocaleString()}</span></div>
                 <div className="inv-total-row"><span>COGS</span><span>PKR {totalCost.toLocaleString()}</span></div>
-
                 {automationEnabled ? (
                   <>
                     <div className="inv-total-row"><span>Salary (4%)</span><span>PKR {totalSalary.toLocaleString()}</span></div>
@@ -476,15 +469,12 @@ export default function NewInvoicePage() {
                     <span>Expenses</span><span>Not applied (automation off)</span>
                   </div>
                 )}
-
                 <div className="inv-total-row bold">
                   <span>Net Profit</span>
                   <span className={netProfit >= 0 ? "inv-profit" : "inv-loss"}>
                     PKR {netProfit.toLocaleString()}
                   </span>
                 </div>
-
-                {/* Profit allocation – only when both automation and profit allocation are enabled */}
                 {automationEnabled && profitAllocEnabled && netProfit > 0 && (
                   <div style={{ marginTop: 12, padding: "12px 14px", background: "#F0FDF4", borderRadius: 8, fontSize: 12 }}>
                     <div style={{ fontWeight: 600, marginBottom: 6 }}>Profit Allocation:</div>
