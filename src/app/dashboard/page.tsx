@@ -207,7 +207,7 @@ export default function DashboardPage() {
           accountPromise, custCountPromise, suppCountPromise, prodCountPromise,
           unpaidInvsPromise, payablesPromise, prodsPromise, overduePromise,
           ...monthlyPromises,
-        ].map(p => p.catch(e => { console.warn("Dashboard sub-fetch failed", e); return null })))
+        ].map(p => Promise.resolve(p).catch(e => { console.warn("Dashboard sub-fetch failed", e); return null })))
 
       // Accounts → KPIs
       const accounts = accountsRes?.data
