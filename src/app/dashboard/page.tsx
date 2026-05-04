@@ -162,15 +162,15 @@ export default function DashboardPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  const [kpis, setKpis] = useState({ assets: 0, liabilities: 0, equity: 0, revenue: 0, expenses: 0, profit: 0 })
-  const [ops, setOps] = useState({ receivables: 0, unpaid_invoices: 0, partial_invoices: 0, payables: 0, low_stock: 0, total_products: 0, total_customers: 0, total_suppliers: 0 })
+  const [kpis,        setKpis]        = useState({ assets: 0, liabilities: 0, equity: 0, revenue: 0, expenses: 0, profit: 0 })
+  const [ops,         setOps]         = useState({ receivables: 0, unpaid_invoices: 0, partial_invoices: 0, payables: 0, low_stock: 0, total_products: 0, total_customers: 0, total_suppliers: 0 })
   const [incomeChart, setIncomeChart] = useState<MonthlyData>({ labels: [], values: [] })
   const [profitChart, setProfitChart] = useState<MonthlyData>({ labels: [], values: [] })
-  const [overdue, setOverdue] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [online, setOnline] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [companyId, setCompanyId] = useState<string | null>(null)
+  const [overdue,     setOverdue]     = useState<any[]>([])
+  const [loading,     setLoading]     = useState(true)
+  const [online,      setOnline]      = useState(true)
+  const [refreshing,  setRefreshing]  = useState(false)
+  const [companyId,   setCompanyId]   = useState<string | null>(null)
 
   const fetchData = async (cid: string) => {
     setRefreshing(true)
@@ -182,7 +182,7 @@ export default function DashboardPage() {
       return {
         label: d.toLocaleString("default", { month: "short" }),
         start: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`,
-        end: new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split("T")[0],
+        end:   new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split("T")[0],
       }
     })
 
@@ -262,8 +262,10 @@ export default function DashboardPage() {
         total_suppliers: (suppCountRes as any)?.count || 0,
       })
 
-      // ── Overdue invoices and customer names ──────────────
-      const partyIds = overdueRes?.data?.map((i: any) => i.party_id).filter(Boolean) || []
+      // ── Overdue invoices (safe map) ──────────────────────
+      const overdueData = Array.isArray(overdueRes?.data) ? overdueRes.data : []
+      const partyIds = overdueData.map((i: any) => i.party_id).filter(Boolean)
+
       let customerMap: Record<number, { name: string; phone: string }> = {}
       if (partyIds.length > 0) {
         try {
@@ -273,14 +275,16 @@ export default function DashboardPage() {
           }
         } catch {}
       }
-      setOverdue(overdueRes?.data?.map((inv: any) => ({
-        id: inv.id,
-        invoice_no: inv.invoice_no,
-        customer_name: customerMap[inv.party_id]?.name || "Unknown",
-        customer_phone: customerMap[inv.party_id]?.phone || "",
-        balance: (inv.total || 0) - (inv.paid || 0),
-        due_date: inv.due_date,
-      })) || [])
+      setOverdue(
+        overdueData.map((inv: any) => ({
+          id: inv.id,
+          invoice_no: inv.invoice_no,
+          customer_name: customerMap[inv.party_id]?.name || "Unknown",
+          customer_phone: customerMap[inv.party_id]?.phone || "",
+          balance: (inv.total || 0) - (inv.paid || 0),
+          due_date: inv.due_date,
+        }))
+      )
 
       // ── Monthly charts (safe reduce) ─────────────────────
       const months: string[] = [], revValues: number[] = [], profitValues: number[] = []
