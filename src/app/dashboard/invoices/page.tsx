@@ -15,7 +15,7 @@ interface Invoice {
   total: number
   paid: number
   status: string
-  party?: { name: string }
+  customer_name: string
 }
 
 export default function InvoicesPage() {
@@ -38,55 +38,34 @@ export default function InvoicesPage() {
   const [pageSize, setPageSize] = useState(25)
   const [total, setTotal] = useState(0)
 
-  // ── Bullet‑proof company ID retrieval (with debug logs) ─────
+  // ── Get company ID (same safe approach) ─────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
-      // 1. JWT claim
       const claim = (user?.app_metadata as any)?.company_id
-      if (claim) {
-        setCompanyId(claim)
-        console.log('📝 Invoice list – using JWT claim:', claim)
-        return
-      }
-
-      // 2. Cookie fallback
+      if (claim) { setCompanyId(claim); return }
       const match = document.cookie.match(/(?:^| )active_company_id=([^;]+)/)
-      if (match) {
-        setCompanyId(match[2])
-        console.log('📝 Invoice list – using cookie:', match[2])
-        return
-      }
-
-      // 3. First company from user_roles
+      if (match) { setCompanyId(match[2]); return }
       if (user) {
         supabase.from('user_roles')
           .select('company_id').eq('user_id', user.id).limit(1).maybeSingle()
-          .then(({ data }) => {
-            if (data) {
-              setCompanyId(data.company_id)
-              console.log('📝 Invoice list – using user_roles:', data.company_id)
-            }
-          })
+          .then(({ data }) => { if (data) setCompanyId(data.company_id) })
       }
     })
   }, [])
 
+  // ── Fetch invoices and then resolve customer names ─────────
   useEffect(() => {
-    if (!canView || !companyId) {
-      setLoading(false)
-      return
-    }
+    if (!canView || !companyId) { setLoading(false); return }
 
     const fetchInvoices = async () => {
       setLoading(true)
 
-      // Count total
+      // Total count
       const { count } = await supabase
         .from("invoices")
         .select("*", { count: "exact", head: true })
         .eq("company_id", companyId)
         .eq("type", "sale")
-
       setTotal(count || 0)
 
       // Fetch page
@@ -94,16 +73,40 @@ export default function InvoicesPage() {
       const to = from + pageSize - 1
       const { data } = await supabase
         .from("invoices")
-        .select("*, party:customers(name)")
+        .select("*")                                    // plain select, no embedded resource
         .eq("company_id", companyId)
         .eq("type", "sale")
         .order("date", { ascending: false })
         .range(from, to)
 
-      if (data) {
-        setInvoices(data)
-        setFiltered(data)
+      if (!data || data.length === 0) {
+        setInvoices([])
+        setFiltered([])
+        setLoading(false)
+        return
       }
+
+      // Resolve customer names in one batch
+      const partyIds = [...new Set(data.map((inv: any) => inv.party_id).filter(Boolean))]
+      let customerMap: Record<number, string> = {}
+      if (partyIds.length > 0) {
+        const { data: customers } = await supabase
+          .from("customers")
+          .select("id, name")
+          .in("id", partyIds)
+          .eq("company_id", companyId)
+        if (customers) {
+          customers.forEach((c: any) => { customerMap[c.id] = c.name })
+        }
+      }
+
+      const enriched = data.map((inv: any) => ({
+        ...inv,
+        customer_name: customerMap[inv.party_id] || "—",
+      }))
+
+      setInvoices(enriched)
+      setFiltered(enriched)
       setLoading(false)
     }
     fetchInvoices()
@@ -111,16 +114,12 @@ export default function InvoicesPage() {
 
   // ── Search filter ─────────────────────────────────────────
   useEffect(() => {
-    if (!search.trim()) {
-      setFiltered(invoices)
-      return
-    }
+    if (!search.trim()) { setFiltered(invoices); return }
     const s = search.toLowerCase()
     setFiltered(
-      invoices.filter(
-        (inv) =>
-          inv.invoice_no.toLowerCase().includes(s) ||
-          (inv.party?.name || "").toLowerCase().includes(s)
+      invoices.filter(inv =>
+        inv.invoice_no.toLowerCase().includes(s) ||
+        (inv.customer_name || "").toLowerCase().includes(s)
       )
     )
   }, [search, invoices])
@@ -188,7 +187,7 @@ export default function InvoicesPage() {
             filtered.map(inv => (
               <div key={inv.id} className="inv-table-row">
                 <span style={{ fontWeight: 600, color: "#1E3A8A" }}>{inv.invoice_no}</span>
-                <span>{inv.party?.name || "—"}</span>
+                <span>{inv.customer_name || "—"}</span>
                 <span className="inv-hide-mobile" style={{ color: "#64748B" }}>{new Date(inv.date).toLocaleDateString()}</span>
                 <span style={{ fontWeight: 600 }}>PKR {inv.total.toLocaleString()}</span>
                 <span>
