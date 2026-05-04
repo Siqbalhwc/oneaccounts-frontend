@@ -208,18 +208,10 @@ export default function DashboardPage() {
           ...monthlyPromises,
         ].map(p => Promise.resolve(p).catch(e => { console.warn("Dashboard sub-fetch failed", e); return null })))
 
-      // ── Accounts → KPIs (safe with guard) ─────────────────
+      // ── Accounts → KPIs (safe with guard) ────────────────
       const rawAccounts = accountsRes?.data
-
       if (!Array.isArray(rawAccounts)) {
-        setKpis({
-          assets: 0,
-          liabilities: 0,
-          equity: 0,
-          revenue: 0,
-          expenses: 0,
-          profit: 0,
-        })
+        setKpis({ assets: 0, liabilities: 0, equity: 0, revenue: 0, expenses: 0, profit: 0 })
       } else {
         const a = { Asset: 0, Liability: 0, Equity: 0, Revenue: 0, Expense: 0 }
         rawAccounts.forEach((acc: any) => {
@@ -237,32 +229,46 @@ export default function DashboardPage() {
         })
       }
 
-      // ── Operations ────────────────────────────────────────
+      // ── Operations (receivables) ─────────────────────────
+      const unpaidData = unpaidInvsRes?.data
       let receivables = 0, unpaid = 0, partial = 0
-      unpaidInvsRes?.data?.forEach((inv: any) => {
-        receivables += (inv.total || 0) - (inv.paid || 0)
-        if (inv.status === "Unpaid") unpaid++
-        if (inv.status === "Partial") partial++
-      })
-      const lowStock = prodsRes?.data?.filter((p: any) => p.qty_on_hand > 0 && p.qty_on_hand <= p.reorder_level).length || 0
-      setOps({
+      if (Array.isArray(unpaidData)) {
+        unpaidData.forEach((inv: any) => {
+          receivables += (inv.total || 0) - (inv.paid || 0)
+          if (inv.status === "Unpaid") unpaid++
+          if (inv.status === "Partial") partial++
+        })
+      }
+      setOps(prev => ({
+        ...prev,
         receivables,
         unpaid_invoices: unpaid,
         partial_invoices: partial,
         payables: payablesRes?.data?.balance || 0,
+      }))
+
+      // ── Low stock ────────────────────────────────────────
+      const prodsData = prodsRes?.data
+      const lowStock = Array.isArray(prodsData)
+        ? prodsData.filter((p: any) => p.qty_on_hand > 0 && p.qty_on_hand <= p.reorder_level).length
+        : 0
+      setOps(prev => ({
+        ...prev,
         low_stock: lowStock,
         total_products: (prodCountRes as any)?.count || 0,
         total_customers: (custCountRes as any)?.count || 0,
         total_suppliers: (suppCountRes as any)?.count || 0,
-      })
+      }))
 
-      // ── Overdue invoices & customer names ─────────────────
+      // ── Overdue invoices -----------------------------------------------------------------
       const partyIds = overdueRes?.data?.map((i: any) => i.party_id).filter(Boolean) || []
       let customerMap: Record<number, { name: string; phone: string }> = {}
       if (partyIds.length > 0) {
         try {
           const { data: custData } = await supabase.from("customers").select("id,name,phone").in("id", partyIds).eq("company_id", cid)
-          custData?.forEach((c: any) => { customerMap[c.id] = { name: c.name, phone: c.phone } })
+          if (Array.isArray(custData)) {
+            custData.forEach((c: any) => { customerMap[c.id] = { name: c.name, phone: c.phone } })
+          }
         } catch {}
       }
       setOverdue(overdueRes?.data?.map((inv: any) => ({
@@ -274,11 +280,13 @@ export default function DashboardPage() {
         due_date: inv.due_date,
       })) || [])
 
-      // ── Monthly charts ────────────────────────────────────
+      // ── Monthly charts (safe reduce) ─────────────────────
       const months: string[] = [], revValues: number[] = [], profitValues: number[] = []
       monthRanges.forEach(({ label }, i) => {
-        const rev = (monthlyRes[i * 2] as any)?.data?.reduce((s: number, r: any) => s + (r.total || 0), 0) || 0
-        const exp = (monthlyRes[i * 2 + 1] as any)?.data?.reduce((s: number, r: any) => s + (r.total || 0), 0) || 0
+        const revData = (monthlyRes[i * 2] as any)?.data
+        const expData = (monthlyRes[i * 2 + 1] as any)?.data
+        const rev = Array.isArray(revData) ? revData.reduce((s: number, r: any) => s + (r.total || 0), 0) : 0
+        const exp = Array.isArray(expData) ? expData.reduce((s: number, r: any) => s + (r.total || 0), 0) : 0
         months.push(label); revValues.push(rev); profitValues.push(rev - exp)
       })
       setIncomeChart({ labels: months, values: revValues })
