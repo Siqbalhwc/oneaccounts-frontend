@@ -34,19 +34,16 @@ export default function InvoicesPage() {
   const [loading, setLoading] = useState(true)
   const [companyId, setCompanyId] = useState<string>("")
 
-  // Pagination
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
   const [total, setTotal] = useState(0)
 
+  // ── Get company ID from JWT (same as dashboard) ────────────
   useEffect(() => {
-    const getCompany = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
+    supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
-      if (!cid) return
-      setCompanyId(cid)
-    }
-    getCompany()
+      if (cid) setCompanyId(cid)
+    })
   }, [])
 
   useEffect(() => {
@@ -57,6 +54,8 @@ export default function InvoicesPage() {
 
     const fetchInvoices = async () => {
       setLoading(true)
+
+      // Count total
       const { count } = await supabase
         .from("invoices")
         .select("*", { count: "exact", head: true })
@@ -65,6 +64,7 @@ export default function InvoicesPage() {
 
       setTotal(count || 0)
 
+      // Fetch page
       const from = (page - 1) * pageSize
       const to = from + pageSize - 1
       const { data } = await supabase
@@ -84,20 +84,29 @@ export default function InvoicesPage() {
     fetchInvoices()
   }, [canView, companyId, page, pageSize])
 
+  // ── Search filter ─────────────────────────────────────────
   useEffect(() => {
     if (!search.trim()) {
       setFiltered(invoices)
       return
     }
     const s = search.toLowerCase()
-    setFiltered(invoices.filter(inv =>
-      inv.invoice_no.toLowerCase().includes(s) ||
-      (inv.party?.name || "").toLowerCase().includes(s)
-    ))
+    setFiltered(
+      invoices.filter(
+        (inv) =>
+          inv.invoice_no.toLowerCase().includes(s) ||
+          (inv.party?.name || "").toLowerCase().includes(s)
+      )
+    )
   }, [search, invoices])
 
   if (!role) return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
-  if (!canView) return <div style={{ padding: 24, textAlign: "center" }}><h2>Access Denied</h2><p style={{ color: "#94A3B8" }}>You do not have permission to view this page.</p></div>
+  if (!canView) return (
+    <div style={{ padding: 24, textAlign: "center" }}>
+      <h2>Access Denied</h2>
+      <p style={{ color: "#94A3B8" }}>You do not have permission to view this page.</p>
+    </div>
+  )
 
   return (
     <RoleGuard allowedRoles={["admin", "accountant"]}>
@@ -146,7 +155,9 @@ export default function InvoicesPage() {
             <span>Status</span>
             <span></span>
           </div>
-          {loading ? <div className="inv-empty">Loading invoices...</div> : filtered.length === 0 ? (
+          {loading ? (
+            <div className="inv-empty">Loading invoices...</div>
+          ) : filtered.length === 0 ? (
             <div className="inv-empty">No sales invoices found. {canEdit && 'Click "New Invoice" to create one.'}</div>
           ) : (
             filtered.map(inv => (

@@ -38,14 +38,12 @@ export default function ReceiptsPage() {
   const [pageSize, setPageSize] = useState(25)
   const [total, setTotal] = useState(0)
 
+  // ── Get company ID from JWT ────────────────────────────────
   useEffect(() => {
-    const getCompany = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
+    supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
-      if (!cid) return
-      setCompanyId(cid)
-    }
-    getCompany()
+      if (cid) setCompanyId(cid)
+    })
   }, [])
 
   useEffect(() => {
@@ -56,6 +54,7 @@ export default function ReceiptsPage() {
 
     const fetchReceipts = async () => {
       setLoading(true)
+
       const { count } = await supabase
         .from("receipts")
         .select("*", { count: "exact", head: true })
@@ -81,20 +80,29 @@ export default function ReceiptsPage() {
     fetchReceipts()
   }, [canView, companyId, page, pageSize])
 
+  // ── Search filter ─────────────────────────────────────────
   useEffect(() => {
     if (!search.trim()) {
       setFiltered(receipts)
       return
     }
     const s = search.toLowerCase()
-    setFiltered(receipts.filter(r =>
-      r.receipt_no.toLowerCase().includes(s) ||
-      (r.customer?.name || "").toLowerCase().includes(s)
-    ))
+    setFiltered(
+      receipts.filter(
+        (r) =>
+          r.receipt_no.toLowerCase().includes(s) ||
+          (r.customer?.name || "").toLowerCase().includes(s)
+      )
+    )
   }, [search, receipts])
 
   if (!role) return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
-  if (!canView) return <div style={{ padding: 24, textAlign: "center" }}><h2>Access Denied</h2><p style={{ color: "#94A3B8" }}>You do not have permission to view this page.</p></div>
+  if (!canView) return (
+    <div style={{ padding: 24, textAlign: "center" }}>
+      <h2>Access Denied</h2>
+      <p style={{ color: "#94A3B8" }}>You do not have permission to view this page.</p>
+    </div>
+  )
 
   return (
     <RoleGuard allowedRoles={["admin", "accountant"]}>
@@ -142,7 +150,9 @@ export default function ReceiptsPage() {
             <span>Method</span>
             <span></span>
           </div>
-          {loading ? <div className="rec-empty">Loading receipts...</div> : filtered.length === 0 ? (
+          {loading ? (
+            <div className="rec-empty">Loading receipts...</div>
+          ) : filtered.length === 0 ? (
             <div className="rec-empty">No receipts found. {canEdit && 'Click "New Receipt" to record one.'}</div>
           ) : (
             filtered.map(rec => (
