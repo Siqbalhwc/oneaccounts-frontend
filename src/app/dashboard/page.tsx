@@ -162,15 +162,15 @@ export default function DashboardPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  const [kpis,        setKpis]        = useState({ assets: 0, liabilities: 0, equity: 0, revenue: 0, expenses: 0, profit: 0 })
-  const [ops,         setOps]         = useState({ receivables: 0, unpaid_invoices: 0, partial_invoices: 0, payables: 0, low_stock: 0, total_products: 0, total_customers: 0, total_suppliers: 0 })
+  const [kpis, setKpis] = useState({ assets: 0, liabilities: 0, equity: 0, revenue: 0, expenses: 0, profit: 0 })
+  const [ops, setOps] = useState({ receivables: 0, unpaid_invoices: 0, partial_invoices: 0, payables: 0, low_stock: 0, total_products: 0, total_customers: 0, total_suppliers: 0 })
   const [incomeChart, setIncomeChart] = useState<MonthlyData>({ labels: [], values: [] })
   const [profitChart, setProfitChart] = useState<MonthlyData>({ labels: [], values: [] })
-  const [overdue,     setOverdue]     = useState<any[]>([])
-  const [loading,     setLoading]     = useState(true)
-  const [online,      setOnline]      = useState(true)
-  const [refreshing,  setRefreshing]  = useState(false)
-  const [companyId,   setCompanyId]   = useState<string | null>(null)
+  const [overdue, setOverdue] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [online, setOnline] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [companyId, setCompanyId] = useState<string | null>(null)
 
   const fetchData = async (cid: string) => {
     setRefreshing(true)
@@ -182,7 +182,7 @@ export default function DashboardPage() {
       return {
         label: d.toLocaleString("default", { month: "short" }),
         start: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`,
-        end:   new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split("T")[0],
+        end: new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split("T")[0],
       }
     })
 
@@ -239,28 +239,30 @@ export default function DashboardPage() {
           if (inv.status === "Partial") partial++
         })
       }
-      setOps(prev => ({
-        ...prev,
-        receivables,
-        unpaid_invoices: unpaid,
-        partial_invoices: partial,
-        payables: payablesRes?.data?.balance || 0,
-      }))
+
+      // ── Payables (safe extraction) ───────────────────────
+      const payablesData = payablesRes?.data
+      const payables = (!Array.isArray(payablesData) && payablesData?.balance != null) ? payablesData.balance : 0
 
       // ── Low stock ────────────────────────────────────────
       const prodsData = prodsRes?.data
       const lowStock = Array.isArray(prodsData)
         ? prodsData.filter((p: any) => p.qty_on_hand > 0 && p.qty_on_hand <= p.reorder_level).length
         : 0
-      setOps(prev => ({
-        ...prev,
+
+      // ── All operations in one update ─────────────────────
+      setOps({
+        receivables,
+        unpaid_invoices: unpaid,
+        partial_invoices: partial,
+        payables,
         low_stock: lowStock,
         total_products: (prodCountRes as any)?.count || 0,
         total_customers: (custCountRes as any)?.count || 0,
         total_suppliers: (suppCountRes as any)?.count || 0,
-      }))
+      })
 
-      // ── Overdue invoices -----------------------------------------------------------------
+      // ── Overdue invoices and customer names ──────────────
       const partyIds = overdueRes?.data?.map((i: any) => i.party_id).filter(Boolean) || []
       let customerMap: Record<number, { name: string; phone: string }> = {}
       if (partyIds.length > 0) {
