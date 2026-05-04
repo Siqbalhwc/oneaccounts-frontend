@@ -77,12 +77,12 @@ export default function NewInvoicePage() {
     setShowCustomerList(false)
   }
 
-  // ⚡ FIXED: Re-open customer list when clearing
+  // ⚡ Re-open customer list on clear
   const clearCustomer = () => {
     setCustomerId(null)
     setSelectedCustomer(null)
     setCustomerSearch("")
-    setShowCustomerList(true)   // <-- now opens the search again
+    setShowCustomerList(true)
   }
 
   const filteredProducts = products.filter(p =>
@@ -122,7 +122,6 @@ export default function NewInvoicePage() {
   }
 
   const addManualItem = () => {
-    // manual item = service line, no product_id, no cost validation
     setItems([...items, { product_id: null, description: "Manual Item", qty: 1, unit_price: 0, cost_price: 0, total: 0 }])
   }
 
@@ -137,9 +136,24 @@ export default function NewInvoicePage() {
 
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
 
-  const generateInvoiceNo = () => {
-    const cust = customers.find(c => c.id === customerId)
-    return cust ? `${cust.code}-01` : `INV-${Date.now().toString(36).toUpperCase()}`
+  // ── Generate next invoice number for a customer ──────────────
+  const getNextInvoiceNo = async (custCode: string): Promise<string> => {
+    // Find the highest existing suffix for this customer code
+    const { data } = await supabase
+      .from("invoices")
+      .select("invoice_no")
+      .like("invoice_no", `${custCode}-%`)
+      .order("invoice_no", { ascending: false })
+      .limit(1)
+
+    let nextNum = 1
+    if (data && data.length > 0) {
+      const lastInvoice = data[0].invoice_no
+      const parts = lastInvoice.split("-")
+      const num = parseInt(parts[parts.length - 1])
+      if (!isNaN(num)) nextNum = num + 1
+    }
+    return `${custCode}-${String(nextNum).padStart(2, "0")}`
   }
 
   const totalAmount   = items.reduce((s, i) => s + i.total, 0)
@@ -166,12 +180,16 @@ export default function NewInvoicePage() {
 
     setLoading(true); setError("")
 
+    // Get the customer code and generate the next invoice number
+    const cust = customers.find(c => c.id === customerId)
+    const invoiceNo = cust ? await getNextInvoiceNo(cust.code) : `INV-${Date.now().toString(36).toUpperCase()}`
+
     try {
       const res = await fetch("/api/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          invoice_no:   generateInvoiceNo(),
+          invoice_no: invoiceNo,
           party_id:     customerId,
           invoice_date: invoiceDate,
           due_date:     dueDate,
@@ -193,7 +211,7 @@ export default function NewInvoicePage() {
       // Show success
       setSuccessInvoice({
         id: result.invoice_id,
-        invoice_no: result.invoice?.invoice_no || generateInvoiceNo(),
+        invoice_no: invoiceNo,
         total: result.invoice?.total || totalAmount,
         date: result.invoice?.date || invoiceDate,
         customers: selectedCustomer || null,
@@ -221,13 +239,13 @@ export default function NewInvoicePage() {
 
   const handleBeforeSavePdf = () => {
     const tempInvoice = {
-      invoice_no: generateInvoiceNo(),
+      invoice_no: "Preview",
       date: invoiceDate,
       due_date: dueDate,
       customers: customers.find(c => c.id === customerId) || {},
     }
     const doc = generateInvoicePDF(tempInvoice, items)
-    doc.save(`invoice-preview-${tempInvoice.invoice_no}.pdf`)
+    doc.save(`invoice-preview.pdf`)
   }
 
   // ── UI ────────────────────────────────────────────────────
