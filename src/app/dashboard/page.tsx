@@ -20,22 +20,19 @@ const SHORT = (n: number) => {
 const waLink = (phone: string, no: string, bal: number, name: string) =>
   `https://wa.me/${phone}?text=${encodeURIComponent(`Dear ${name},\nPayment of PKR ${bal.toLocaleString()} for invoice ${no} is overdue.\nPlease clear at your earliest convenience. 🙏`)}`
 
-// ── Simplified, correct company resolver ──
+// ── Reliable company resolver ──
 async function getActiveCompanyId(supabase: any): Promise<string> {
   try {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return '00000000-0000-0000-0000-000000000001'
 
-    // 1. Use the JWT claim – this is always correct after login / trial creation
     const claim = (user.app_metadata as any)?.company_id
     if (claim) return claim
 
-    // 2. Fallback to the cookie
     const cookieMatch = document.cookie.match(/(?:^| )active_company_id=([^;]+)/)
     const cookieId = cookieMatch ? cookieMatch[2] : null
     if (cookieId) return cookieId
 
-    // 3. Fallback – any company the user belongs to
     const { data: anyRole } = await supabase
       .from('user_roles')
       .select('company_id')
@@ -161,6 +158,11 @@ export default function DashboardPage() {
   const [refreshing,  setRefreshing]  = useState(false)
   const [companyId,   setCompanyId]   = useState<string | null>(null)
 
+  // ── Safe async wrapper (preserves response shape) ─
+  const safe = async (promise: any) => {
+    try { return await promise } catch (e) { console.warn("Dashboard sub-fetch failed", e); return null }
+  }
+
   const fetchData = async (cid: string) => {
     setRefreshing(true)
     const today = new Date().toISOString().split("T")[0]
@@ -176,28 +178,38 @@ export default function DashboardPage() {
     })
 
     try {
-      const accountPromise = supabase.from("accounts").select("type,balance").eq("company_id", cid)
-      const custCountPromise = supabase.from("customers").select("*", { count: "exact", head: true }).eq("company_id", cid)
-      const suppCountPromise = supabase.from("suppliers").select("*", { count: "exact", head: true }).eq("company_id", cid)
-      const prodCountPromise = supabase.from("products").select("*", { count: "exact", head: true }).eq("company_id", cid)
-      const unpaidInvsPromise = supabase.from("invoices").select("total,paid,status").eq("company_id", cid).eq("type", "sale").neq("status", "Paid")
-      const payablesPromise = supabase.from("accounts").select("balance").eq("company_id", cid).eq("code", "2000").single()
-      const prodsPromise = supabase.from("products").select("qty_on_hand,reorder_level").eq("company_id", cid)
-      const overduePromise = supabase.from("invoices").select("id,invoice_no,total,paid,due_date,party_id").eq("company_id", cid).eq("type", "sale").lt("due_date", today).neq("status", "Paid").limit(5)
-      const monthlyPromises = monthRanges.flatMap(({ start, end }) => [
-        supabase.from("invoices").select("total").eq("company_id", cid).eq("type", "sale").gte("date", start).lte("date", end),
-        supabase.from("invoices").select("total").eq("company_id", cid).eq("type", "purchase").gte("date", start).lte("date", end),
+      // ── Core queries (all fire in parallel) ──────────
+      const [
+        accountsRes,
+        custCountRes,
+        suppCountRes,
+        prodCountRes,
+        unpaidInvsRes,
+        payablesRes,
+        prodsRes,
+        overdueRes,
+      ] = await Promise.all([
+        safe(supabase.from("accounts").select("type,balance").eq("company_id", cid)),
+        safe(supabase.from("customers").select("*", { count: "exact", head: true }).eq("company_id", cid)),
+        safe(supabase.from("suppliers").select("*", { count: "exact", head: true }).eq("company_id", cid)),
+        safe(supabase.from("products").select("*", { count: "exact", head: true }).eq("company_id", cid)),
+        safe(supabase.from("invoices").select("total,paid,status").eq("company_id", cid).eq("type", "sale").neq("status", "Paid")),
+        safe(supabase.from("accounts").select("balance").eq("company_id", cid).eq("code", "2000").maybeSingle()),
+        safe(supabase.from("products").select("qty_on_hand,reorder_level").eq("company_id", cid)),
+        safe(supabase.from("invoices").select("id,invoice_no,total,paid,due_date,party_id").eq("company_id", cid).eq("type", "sale").lt("due_date", today).neq("status", "Paid").limit(5)),
       ])
 
-      const [accountsRes, custCountRes, suppCountRes, prodCountRes,
-             unpaidInvsRes, payablesRes, prodsRes, overdueRes, ...monthlyRes] =
-        await Promise.all([
-          accountPromise, custCountPromise, suppCountPromise, prodCountPromise,
-          unpaidInvsPromise, payablesPromise, prodsPromise, overduePromise,
-          ...monthlyPromises,
-        ].map(p => Promise.resolve(p).catch(e => { console.warn("Dashboard sub-fetch failed", e); return null })))
+      // ── Monthly chart data (separate array to keep indices clean) ─
+      const monthlyResults = await Promise.all(
+        monthRanges.map(({ start, end }) =>
+          Promise.all([
+            safe(supabase.from("invoices").select("total").eq("company_id", cid).eq("type", "sale").gte("date", start).lte("date", end)),
+            safe(supabase.from("invoices").select("total").eq("company_id", cid).eq("type", "purchase").gte("date", start).lte("date", end)),
+          ])
+        )
+      )
 
-      // ── Accounts → KPIs ────────────────
+      // ── Accounts → KPIs ────────────────────────────────
       const rawAccounts = accountsRes?.data
       if (!Array.isArray(rawAccounts)) {
         setKpis({ assets: 0, liabilities: 0, equity: 0, revenue: 0, expenses: 0, profit: 0 })
@@ -218,40 +230,35 @@ export default function DashboardPage() {
         })
       }
 
-      // ── Operations (receivables) ─────────
-      const unpaidData = unpaidInvsRes?.data
+      // ── Receivables ─────────────────────────────────────
+      const unpaidData = Array.isArray(unpaidInvsRes?.data) ? unpaidInvsRes.data : []
       let receivables = 0, unpaid = 0, partial = 0
-      if (Array.isArray(unpaidData)) {
-        unpaidData.forEach((inv: any) => {
-          receivables += (inv.total || 0) - (inv.paid || 0)
-          if (inv.status === "Unpaid") unpaid++
-          if (inv.status === "Partial") partial++
-        })
-      }
+      unpaidData.forEach((inv: any) => {
+        receivables += (inv.total || 0) - (inv.paid || 0)
+        if (inv.status === "Unpaid") unpaid++
+        if (inv.status === "Partial") partial++
+      })
 
-      // ── Payables ───────────────────────
-      const payablesData = payablesRes?.data
-      const payables = (!Array.isArray(payablesData) && payablesData?.balance != null) ? payablesData.balance : 0
+      // ── Payables ────────────────────────────────────────
+      const payables = payablesRes?.data?.balance ?? 0
 
-      // ── Low stock ──────────────────────
-      const prodsData = prodsRes?.data
-      const lowStock = Array.isArray(prodsData)
-        ? prodsData.filter((p: any) => p.qty_on_hand > 0 && p.qty_on_hand <= p.reorder_level).length
-        : 0
+      // ── Low stock ───────────────────────────────────────
+      const prodsData = Array.isArray(prodsRes?.data) ? prodsRes.data : []
+      const lowStock = prodsData.filter((p: any) => p.qty_on_hand > 0 && p.qty_on_hand <= p.reorder_level).length
 
-      // ── All operations in one update ────
+      // ── All operations in one update ────────────────────
       setOps({
         receivables,
         unpaid_invoices: unpaid,
         partial_invoices: partial,
         payables,
         low_stock: lowStock,
-        total_products: (prodCountRes as any)?.count || 0,
-        total_customers: (custCountRes as any)?.count || 0,
-        total_suppliers: (suppCountRes as any)?.count || 0,
+        total_products: prodCountRes?.count ?? 0,
+        total_customers: custCountRes?.count ?? 0,
+        total_suppliers: suppCountRes?.count ?? 0,
       })
 
-      // ── Overdue invoices ─────────────────
+      // ── Overdue invoices ────────────────────────────────
       const overdueData = Array.isArray(overdueRes?.data) ? overdueRes.data : []
       const partyIds = overdueData.map((i: any) => i.party_id).filter(Boolean)
 
@@ -275,13 +282,12 @@ export default function DashboardPage() {
         }))
       )
 
-      // ── Monthly charts ──────────────────
+      // ── Monthly charts ─────────────────────────────────
       const months: string[] = [], revValues: number[] = [], profitValues: number[] = []
       monthRanges.forEach(({ label }, i) => {
-        const revData = (monthlyRes[i * 2] as any)?.data
-        const expData = (monthlyRes[i * 2 + 1] as any)?.data
-        const rev = Array.isArray(revData) ? revData.reduce((s: number, r: any) => s + (r.total || 0), 0) : 0
-        const exp = Array.isArray(expData) ? expData.reduce((s: number, r: any) => s + (r.total || 0), 0) : 0
+        const [revRes, expRes] = monthlyResults[i]
+        const rev = Array.isArray(revRes?.data) ? revRes.data.reduce((s: number, r: any) => s + (r.total || 0), 0) : 0
+        const exp = Array.isArray(expRes?.data) ? expRes.data.reduce((s: number, r: any) => s + (r.total || 0), 0) : 0
         months.push(label); revValues.push(rev); profitValues.push(rev - exp)
       })
       setIncomeChart({ labels: months, values: revValues })
