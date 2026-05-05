@@ -23,6 +23,7 @@ export default function AccountsPage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState("All")
   const [isAdmin, setIsAdmin] = useState(false)
+  const [companyId, setCompanyId] = useState<string>("")
 
   // ── Bank mapping (account_id -> { bankName, bankId }) ──
   const [bankMap, setBankMap] = useState<Record<number, any>>({})
@@ -37,6 +38,13 @@ export default function AccountsPage() {
   const [modalError, setModalError] = useState("")
 
   useEffect(() => {
+    // ── Get company ID from JWT (same as every other page) ──
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id
+        || '00000000-0000-0000-0000-000000000001'
+      setCompanyId(cid)
+    })
+
     // Fetch accounts
     supabase
       .from("accounts")
@@ -127,9 +135,15 @@ export default function AccountsPage() {
       }
       setAccounts(prev => prev.map(a => a.id === editId ? { ...a, ...payload } : a))
     } else {
+      // ⭐ Always include company_id when inserting a new account
+      if (!companyId) {
+        setModalError("Company ID not available. Please refresh and try again.")
+        setSaving(false)
+        return
+      }
       const { data: inserted, error } = await supabase
         .from("accounts")
-        .insert(payload)
+        .insert({ ...payload, company_id: companyId })
         .select()
         .single()
       if (error) {
