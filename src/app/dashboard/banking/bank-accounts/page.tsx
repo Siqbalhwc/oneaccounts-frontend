@@ -23,10 +23,11 @@ export default function BankAccountsPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const { role, loading: roleLoading } = useRole()
+  const { role } = useRole()
   const canEdit = role === "admin" || role === "accountant"
-  const canView = role === "admin" || role === "accountant" // Viewer has no access
+  const canView = role === "admin" || role === "accountant"
 
+  const [companyId, setCompanyId] = useState<string>("")
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [cashAccounts, setCashAccounts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -42,40 +43,57 @@ export default function BankAccountsPage() {
   const [isActive, setIsActive] = useState(true)
   const [saving, setSaving] = useState(false)
 
+  // ── Bullet‑proof company ID ──────────────────────────────
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id
+        || '00000000-0000-0000-0000-000000000001'
+      setCompanyId(cid)
+    })
+  }, [])
+
   const fetchData = async () => {
+    if (!companyId) return
     setLoading(true)
+
+    // Fetch bank accounts (no embedded resource)
     const { data: bankData } = await supabase
       .from("bank_accounts")
-      .select("*, accounts(code, name, balance)")
+      .select("*")
+      .eq("company_id", companyId)
       .order("created_at")
+
+    // Fetch the underlying GL accounts (cash/bank accounts, code 10xx)
     const { data: accountData } = await supabase
       .from("accounts")
       .select("id, code, name, balance")
       .eq("type", "Asset")
       .like("code", "10%")
+      .eq("company_id", companyId)
       .order("code")
+
     if (bankData) {
-      setBankAccounts(
-        bankData.map((b: any) => ({
+      // Merge balances from the accounts table
+      const enriched = bankData.map((b: any) => {
+        const matchedAccount = accountData?.find((a: any) => a.id === b.account_id)
+        return {
           ...b,
-          code: b.accounts?.code || "",
-          name: b.accounts?.name || "",
-          balance: b.accounts?.balance || 0,
-        }))
-      )
+          code: matchedAccount?.code || "",
+          name: matchedAccount?.name || "",
+          balance: matchedAccount?.balance || 0,
+        }
+      })
+      setBankAccounts(enriched)
     }
     if (accountData) setCashAccounts(accountData)
     setLoading(false)
   }
 
   useEffect(() => {
-    if (!roleLoading) fetchData()
-  }, [roleLoading])
+    if (companyId) fetchData()
+  }, [companyId])
 
-  if (roleLoading) {
-    return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
-  }
-
+  if (!companyId) return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
   if (!canView) {
     return (
       <div style={{ padding: 24, textAlign: "center" }}>
@@ -115,7 +133,7 @@ export default function BankAccountsPage() {
   }
 
   const handleSave = async () => {
-    if (!canEdit) return
+    if (!canEdit || !companyId) return
     if (!selectedAccountId || !bankName.trim()) {
       setFlash("Account and Bank Name are required.")
       setTimeout(() => setFlash(""), 3000)
@@ -123,6 +141,7 @@ export default function BankAccountsPage() {
     }
     setSaving(true)
     const payload = {
+      company_id: companyId,         // ⭐ always set
       account_id: selectedAccountId,
       bank_name: bankName.trim(),
       branch: branch.trim(),
@@ -130,7 +149,10 @@ export default function BankAccountsPage() {
       is_active: isActive,
     }
     if (editing) {
-      await supabase.from("bank_accounts").update(payload).eq("id", editing.id)
+      await supabase.from("bank_accounts")
+        .update(payload)
+        .eq("id", editing.id)
+        .eq("company_id", companyId)
       setFlash("Bank account updated!")
     } else {
       await supabase.from("bank_accounts").insert(payload)
@@ -143,8 +165,11 @@ export default function BankAccountsPage() {
   }
 
   const handleDelete = async () => {
-    if (!canEdit || !deleteId) return
-    await supabase.from("bank_accounts").delete().eq("id", deleteId)
+    if (!canEdit || !deleteId || !companyId) return
+    await supabase.from("bank_accounts")
+      .delete()
+      .eq("id", deleteId)
+      .eq("company_id", companyId)
     setDeleteId(null)
     setFlash("Bank account deleted.")
     fetchData()

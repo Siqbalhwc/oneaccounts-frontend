@@ -2,20 +2,10 @@
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, ArrowRightLeft, CheckCircle, X } from "lucide-react"
+import { ArrowRightLeft, X } from "lucide-react"
 import { useRouter } from "next/navigation"
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
-
-interface BankAccount {
-  id: number
-  account_id: number
-  bank_name: string
-  account_number: string
-  balance: number
-  code: string
-  name: string
-}
 
 interface Transfer {
   id: number
@@ -26,8 +16,10 @@ interface Transfer {
   reference: string
   notes: string
   created_at: string
-  from_account?: { code: string; name: string }
-  to_account?: { code: string; name: string }
+  from_code?: string
+  from_name?: string
+  to_code?: string
+  to_name?: string
 }
 
 export default function BankTransfersPage() {
@@ -40,13 +32,13 @@ export default function BankTransfersPage() {
   const canView = role === "admin" || role === "accountant"
   const canEdit = role === "admin" || role === "accountant"
 
+  const [companyId, setCompanyId] = useState<string>("")
   const [transfers, setTransfers] = useState<Transfer[]>([])
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
+  const [bankAccounts, setBankAccounts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [flash, setFlash] = useState("")
 
-  // Form state
   const [fromAccountId, setFromAccountId] = useState<number | null>(null)
   const [toAccountId, setToAccountId] = useState<number | null>(null)
   const [amount, setAmount] = useState("")
@@ -55,43 +47,79 @@ export default function BankTransfersPage() {
   const [notes, setNotes] = useState("")
   const [saving, setSaving] = useState(false)
 
+  // ── Bullet‑proof company ID ──────────────────────────────
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id
+        || '00000000-0000-0000-0000-000000000001'
+      setCompanyId(cid)
+    })
+  }, [])
+
   const fetchData = async () => {
+    if (!companyId) return
     setLoading(true)
+
+    // Fetch transfers without embedded resources
     const { data: transferData } = await supabase
       .from("bank_transfers")
-      .select("*, from_account:accounts!from_account_id(code, name), to_account:accounts!to_account_id(code, name)")
+      .select("*")
+      .eq("company_id", companyId)
       .order("created_at", { ascending: false })
 
-    const { data: accountData } = await supabase
+    // Fetch bank accounts with their linked GL accounts separately
+    const { data: bankData } = await supabase
       .from("bank_accounts")
-      .select("*, accounts(code, name, balance)")
+      .select("id, account_id, bank_name, account_number")
+      .eq("company_id", companyId)
       .order("created_at")
 
-    if (transferData) setTransfers(transferData)
-    if (accountData) {
-      setBankAccounts(
-        accountData.map((a: any) => ({
-          id: a.id,
-          account_id: a.account_id,
-          bank_name: a.bank_name,
-          account_number: a.account_number,
-          balance: a.accounts?.balance || 0,
-          code: a.accounts?.code || "",
-          name: a.accounts?.name || "",
-        }))
-      )
-    }
+    // Also fetch the actual GL accounts (to get code/name/balance)
+    const { data: accountData } = await supabase
+      .from("accounts")
+      .select("id, code, name, balance")
+      .eq("type", "Asset")
+      .like("code", "10%")
+      .eq("company_id", companyId)
+
+    // Build a lookup map for account id -> code, name, balance
+    const accountMap: Record<number, any> = {}
+    accountData?.forEach((a: any) => {
+      accountMap[a.id] = a
+    })
+
+    // Enrich bank accounts
+    const enrichedBankAccounts = bankData?.map((b: any) => ({
+      id: b.id,
+      account_id: b.account_id,
+      bank_name: b.bank_name,
+      account_number: b.account_number,
+      // from linked GL account
+      code: accountMap[b.account_id]?.code || "",
+      name: accountMap[b.account_id]?.name || "",
+      balance: accountMap[b.account_id]?.balance || 0,
+    })) || []
+
+    setBankAccounts(enrichedBankAccounts)
+
+    // Enrich transfers
+    const enrichedTransfers = transferData?.map((t: any) => ({
+      ...t,
+      from_code: accountMap[t.from_account_id]?.code,
+      from_name: accountMap[t.from_account_id]?.name,
+      to_code: accountMap[t.to_account_id]?.code,
+      to_name: accountMap[t.to_account_id]?.name,
+    })) || []
+
+    setTransfers(enrichedTransfers)
     setLoading(false)
   }
 
   useEffect(() => {
-    if (role) fetchData()
-  }, [role])
+    if (companyId) fetchData()
+  }, [companyId])
 
-  if (!role) {
-    return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
-  }
-
+  if (!companyId) return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
   if (!canView) {
     return (
       <div style={{ padding: 24, textAlign: "center" }}>
@@ -103,6 +131,7 @@ export default function BankTransfersPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!companyId) return
     if (!fromAccountId || !toAccountId || !amount || fromAccountId === toAccountId) {
       setFlash("Please fill all fields and make sure accounts are different.")
       setTimeout(() => setFlash(""), 3000)
@@ -110,6 +139,7 @@ export default function BankTransfersPage() {
     }
     setSaving(true)
     const { error } = await supabase.from("bank_transfers").insert({
+      company_id: companyId,
       from_account_id: fromAccountId,
       to_account_id: toAccountId,
       amount: parseFloat(amount),
@@ -200,8 +230,8 @@ export default function BankTransfersPage() {
             </div>
             {transfers.map(t => (
               <div key={t.id} className="bt-table-row">
-                <span>{t.from_account?.code} - {t.from_account?.name}</span>
-                <span>{t.to_account?.code} - {t.to_account?.name}</span>
+                <span>{t.from_code} - {t.from_name}</span>
+                <span>{t.to_code} - {t.to_name}</span>
                 <span style={{ fontWeight: 600 }}>PKR {t.amount.toLocaleString()}</span>
                 <span>{new Date(t.transfer_date).toLocaleDateString()}</span>
                 <span className="bt-hide-mobile" style={{ color: "#64748B" }}>{t.reference || "—"}</span>
@@ -211,7 +241,7 @@ export default function BankTransfersPage() {
           </div>
         )}
 
-        {/* New Transfer Form – only shown to editors */}
+        {/* New Transfer Form – only for editors */}
         {showForm && canEdit && (
           <div className="bt-form-overlay" onClick={() => setShowForm(false)}>
             <div className="bt-form" onClick={e => e.stopPropagation()}>
@@ -226,7 +256,7 @@ export default function BankTransfersPage() {
                     <select className="bt-select" value={fromAccountId ?? ""} onChange={e => setFromAccountId(Number(e.target.value) || null)} required>
                       <option value="">Select account</option>
                       {bankAccounts.map(a => (
-                        <option key={a.id} value={a.id}>{a.code} - {a.name} (PKR {a.balance})</option>
+                        <option key={a.id} value={a.id}>{a.code} - {a.name} (PKR {a.balance?.toLocaleString()})</option>
                       ))}
                     </select>
                   </div>
@@ -235,7 +265,7 @@ export default function BankTransfersPage() {
                     <select className="bt-select" value={toAccountId ?? ""} onChange={e => setToAccountId(Number(e.target.value) || null)} required>
                       <option value="">Select account</option>
                       {bankAccounts.map(a => (
-                        <option key={a.id} value={a.id}>{a.code} - {a.name} (PKR {a.balance})</option>
+                        <option key={a.id} value={a.id}>{a.code} - {a.name} (PKR {a.balance?.toLocaleString()})</option>
                       ))}
                     </select>
                   </div>
