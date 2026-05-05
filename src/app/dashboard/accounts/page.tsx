@@ -24,9 +24,12 @@ export default function AccountsPage() {
   const [filter, setFilter] = useState("All")
   const [isAdmin, setIsAdmin] = useState(false)
 
+  // ── Bank mapping (account_id -> { bankName, bankId }) ──
+  const [bankMap, setBankMap] = useState<Record<number, any>>({})
+
   // ── Modal state ─────────────────────────────────────────────────────
   const [showModal, setShowModal] = useState(false)
-  const [editId, setEditId] = useState<string | null>(null) // null = adding, string = editing
+  const [editId, setEditId] = useState<string | null>(null)
   const [formCode, setFormCode] = useState("")
   const [formName, setFormName] = useState("")
   const [formType, setFormType] = useState("Asset")
@@ -56,6 +59,20 @@ export default function AccountsPage() {
           if (data?.role === "admin") setIsAdmin(true)
         })
     })
+
+    // Fetch linked bank accounts
+    supabase
+      .from("bank_accounts")
+      .select("account_id, bank_name, id")
+      .then(r => {
+        if (r.data) {
+          const map: Record<number, any> = {}
+          r.data.forEach((b: any) => {
+            map[b.account_id] = { bankName: b.bank_name, bankId: b.id }
+          })
+          setBankMap(map)
+        }
+      })
   }, [])
 
   const types = ["All", "Asset", "Liability", "Equity", "Revenue", "Expense"]
@@ -69,7 +86,6 @@ export default function AccountsPage() {
     Expense: "#F59E0B",
   }
 
-  // ── Open modal for adding or editing ─────────────────────────────────
   const openAdd = () => {
     setEditId(null)
     setFormCode("")
@@ -88,7 +104,6 @@ export default function AccountsPage() {
     setShowModal(true)
   }
 
-  // ── Save (add or update) ─────────────────────────────────────────────
   const handleSave = async () => {
     if (!formCode.trim() || !formName.trim()) return
     setSaving(true)
@@ -101,7 +116,6 @@ export default function AccountsPage() {
     }
 
     if (editId) {
-      // Update existing account
       const { error } = await supabase
         .from("accounts")
         .update(payload)
@@ -111,20 +125,8 @@ export default function AccountsPage() {
         setSaving(false)
         return
       }
-      // Update local state
       setAccounts(prev => prev.map(a => a.id === editId ? { ...a, ...payload } : a))
     } else {
-      // Determine company_id from user (RLS will enforce, but we need to supply it)
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        setModalError("Not authenticated")
-        setSaving(false)
-        return
-      }
-      // Get active company from cookie (same logic as layout)
-      // Since client can't read httpOnly cookie directly, we rely on RLS.
-      // RLS will set company_id from auth.jwt() -> company_id.
-      // So we just insert and Supabase will handle it.
       const { data: inserted, error } = await supabase
         .from("accounts")
         .insert(payload)
@@ -147,30 +149,19 @@ export default function AccountsPage() {
   return (
     <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
       <style>{`
-        .modal-overlay {
-          position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%;
           background: rgba(0,0,0,0.4); display: flex; justify-content: center;
-          align-items: center; z-index: 1000;
-        }
-        .modal-box {
-          background: white; border-radius: 12px; padding: 24px;
-          max-width: 400px; width: 90%; box-shadow: 0 10px 25px rgba(0,0,0,0.15);
-        }
-        .input-field {
-          width: 100%; padding: 8px 12px; border: 1px solid #E2E8F0;
-          border-radius: 6px; font-size: 13px; margin-bottom: 12px;
-          box-sizing: border-box;
-        }
-        .btn-primary {
-          padding: 10px 20px; background: #1D4ED8; color: white;
-          border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px;
-        }
+          align-items: center; z-index: 1000; }
+        .modal-box { background: white; border-radius: 12px; padding: 24px;
+          max-width: 400px; width: 90%; box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
+        .input-field { width: 100%; padding: 8px 12px; border: 1px solid #E2E8F0;
+          border-radius: 6px; font-size: 13px; margin-bottom: 12px; box-sizing: border-box; }
+        .btn-primary { padding: 10px 20px; background: #1D4ED8; color: white;
+          border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; }
         .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-secondary {
-          padding: 10px 20px; background: white; color: #475569;
+        .btn-secondary { padding: 10px 20px; background: white; color: #475569;
           border: 1px solid #CBD5E1; border-radius: 8px; cursor: pointer;
-          font-weight: 600; font-size: 14px; margin-right: 8px;
-        }
+          font-weight: 600; font-size: 14px; margin-right: 8px; }
       `}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -182,17 +173,10 @@ export default function AccountsPage() {
           <button
             onClick={openAdd}
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "8px 16px",
-              background: "#1D4ED8",
-              color: "white",
-              border: "none",
-              borderRadius: 8,
-              cursor: "pointer",
-              fontWeight: 600,
-              fontSize: 13,
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "8px 16px", background: "#1D4ED8", color: "white",
+              border: "none", borderRadius: 8, cursor: "pointer",
+              fontWeight: 600, fontSize: 13,
             }}
           >
             <Plus size={15} /> Add Account
@@ -202,20 +186,11 @@ export default function AccountsPage() {
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         {types.map(t => (
-          <button
-            key={t}
-            onClick={() => setFilter(t)}
-            style={{
-              padding: "6px 14px",
-              borderRadius: 20,
-              border: "1px solid #E2E8F0",
+          <button key={t} onClick={() => setFilter(t)}
+            style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid #E2E8F0",
               background: filter === t ? "#1E3A8A" : "white",
               color: filter === t ? "white" : "#64748B",
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
+              fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
             {t}
           </button>
         ))}
@@ -224,74 +199,54 @@ export default function AccountsPage() {
       {loading ? (
         <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading...</div>
       ) : (
-        <div
-          style={{
-            background: "white",
-            borderRadius: 10,
-            border: "1px solid #E2E8F0",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: isAdmin ? "80px 1fr 100px 120px 50px" : "80px 1fr 100px 120px",
-              padding: "10px 16px",
-              background: "#F8FAFC",
-              fontSize: 9,
-              fontWeight: 700,
-              textTransform: "uppercase",
-              color: "#94A3B8",
-            }}
-          >
-            <span>Code</span>
-            <span>Name</span>
-            <span>Type</span>
+        <div style={{ background: "white", borderRadius: 10, border: "1px solid #E2E8F0", overflow: "hidden" }}>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: isAdmin ? "80px 1fr 100px 120px 120px 50px" : "80px 1fr 100px 120px 120px",
+            padding: "10px 16px", background: "#F8FAFC", fontSize: 9,
+            fontWeight: 700, textTransform: "uppercase", color: "#94A3B8",
+          }}>
+            <span>Code</span><span>Name</span><span>Type</span>
             <span style={{ textAlign: "right" }}>Balance</span>
+            <span>Bank</span>
             {isAdmin && <span></span>}
           </div>
           {filtered.map((a, i) => (
-            <div
-              key={a.id}
-              style={{
-                display: "grid",
-                gridTemplateColumns: isAdmin ? "80px 1fr 100px 120px 50px" : "80px 1fr 100px 120px",
-                padding: "10px 16px",
-                borderBottom: i < filtered.length - 1 ? "1px solid #F1F5F9" : "none",
-                fontSize: 13,
-                alignItems: "center",
-              }}
-            >
+            <div key={a.id} style={{
+              display: "grid",
+              gridTemplateColumns: isAdmin ? "80px 1fr 100px 120px 120px 50px" : "80px 1fr 100px 120px 120px",
+              padding: "10px 16px", borderBottom: i < filtered.length - 1 ? "1px solid #F1F5F9" : "none",
+              fontSize: 13, alignItems: "center",
+            }}>
               <span style={{ fontWeight: 700, color: "#1E3A8A" }}>{a.code}</span>
               <span>{a.name}</span>
               <span>
-                <span
-                  style={{
-                    padding: "2px 8px",
-                    borderRadius: 20,
-                    fontSize: 10,
-                    fontWeight: 600,
-                    background: (typeColors[a.type] || "#64748B") + "18",
-                    color: typeColors[a.type] || "#64748B",
-                  }}
-                >
-                  {a.type}
-                </span>
+                <span style={{
+                  padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 600,
+                  background: (typeColors[a.type] || "#64748B") + "18",
+                  color: typeColors[a.type] || "#64748B",
+                }}>{a.type}</span>
               </span>
               <span style={{ textAlign: "right", fontWeight: 600 }}>
                 PKR {(a.balance || 0).toLocaleString()}
+              </span>
+              <span style={{ fontSize: 12, color: "#1E3A8A" }}>
+                {bankMap[a.id]?.bankName || "—"}
+                {bankMap[a.id]?.bankId && (
+                  <button
+                    style={{ marginLeft: 6, background: 'none', border: 'none', cursor: 'pointer', color: '#1D4ED8', padding: 0 }}
+                    onClick={() => window.location.href = `/dashboard/banking/bank-accounts`}
+                    title="View bank details"
+                  >
+                    🔗
+                  </button>
+                )}
               </span>
               {isAdmin && (
                 <span style={{ textAlign: "center" }}>
                   <button
                     onClick={() => openEdit(a)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      color: "#64748B",
-                      padding: 0,
-                    }}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#64748B", padding: 0 }}
                     title="Edit account"
                   >
                     <Pencil size={14} />
@@ -303,7 +258,7 @@ export default function AccountsPage() {
         </div>
       )}
 
-      {/* ── Add / Edit Modal ──────────────────────────────────────────────── */}
+      {/* Add / Edit Modal */}
       {showModal && (
         <div className="modal-overlay">
           <div className="modal-box">
@@ -311,76 +266,25 @@ export default function AccountsPage() {
               {editId ? "Edit Account" : "Add New Account"}
             </h3>
             <p style={{ fontSize: 12, color: "#94A3B8", marginBottom: 16 }}>
-              {editId
-                ? "Update the account name, code, or type."
-                : "Create a new account. Choose a code within the recommended range."}
+              {editId ? "Update the account name, code, or type." : "Create a new account. Choose a code within the recommended range."}
             </p>
-
-            {/* Account Type */}
-            <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>
-              Account Type
-            </label>
-            <select
-              className="input-field"
-              value={formType}
-              onChange={e => {
-                setFormType(e.target.value)
-                // Optionally auto‑clear code when type changes
-                setFormCode("")
-              }}
-            >
-              {Object.keys(CODE_RANGES).map(t => (
-                <option key={t} value={t}>{t}</option>
-              ))}
+            <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Account Type</label>
+            <select className="input-field" value={formType} onChange={e => { setFormType(e.target.value); setFormCode("") }}>
+              {Object.keys(CODE_RANGES).map(t => <option key={t} value={t}>{t}</option>)}
             </select>
-
-            {/* Code range hint */}
             {range && (
               <p style={{ fontSize: 11, color: "#64748B", marginTop: -8, marginBottom: 10 }}>
                 Recommended range: {range.min} – {range.max}
               </p>
             )}
-
-            {/* Account Code */}
-            <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>
-              Account Code
-            </label>
-            <input
-              className="input-field"
-              type="text"
-              placeholder={range ? `e.g., ${range.min + 1}` : "Enter code"}
-              value={formCode}
-              onChange={e => setFormCode(e.target.value)}
-            />
-
-            {/* Account Name */}
-            <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>
-              Account Name
-            </label>
-            <input
-              className="input-field"
-              type="text"
-              placeholder="e.g., Office Supplies"
-              value={formName}
-              onChange={e => setFormName(e.target.value)}
-            />
-
-            {modalError && (
-              <div style={{ color: "#B91C1C", fontSize: 12, marginBottom: 10 }}>{modalError}</div>
-            )}
-
+            <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Account Code</label>
+            <input className="input-field" type="text" placeholder={range ? `e.g., ${range.min + 1}` : "Enter code"} value={formCode} onChange={e => setFormCode(e.target.value)} />
+            <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Account Name</label>
+            <input className="input-field" type="text" placeholder="e.g., Office Supplies" value={formName} onChange={e => setFormName(e.target.value)} />
+            {modalError && <div style={{ color: "#B91C1C", fontSize: 12, marginBottom: 10 }}>{modalError}</div>}
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-              <button
-                className="btn-secondary"
-                onClick={() => setShowModal(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn-primary"
-                onClick={handleSave}
-                disabled={saving || !formCode.trim() || !formName.trim()}
-              >
+              <button className="btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
+              <button className="btn-primary" onClick={handleSave} disabled={saving || !formCode.trim() || !formName.trim()}>
                 {saving ? "Saving..." : editId ? "Update" : "Create"}
               </button>
             </div>

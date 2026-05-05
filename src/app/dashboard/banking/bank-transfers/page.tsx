@@ -9,8 +9,8 @@ import { useRole } from "@/contexts/RoleContext"
 
 interface Transfer {
   id: number
-  from_account_id: number
-  to_account_id: number
+  from_account_id: number   // GL account ID
+  to_account_id: number     // GL account ID
   amount: number
   transfer_date: string
   reference: string
@@ -34,7 +34,7 @@ export default function BankTransfersPage() {
 
   const [companyId, setCompanyId] = useState<string>("")
   const [transfers, setTransfers] = useState<Transfer[]>([])
-  const [bankAccounts, setBankAccounts] = useState<any[]>([])
+  const [glAccounts, setGlAccounts] = useState<any[]>([])   // cash/bank GL accounts (10xx)
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [flash, setFlash] = useState("")
@@ -60,64 +60,41 @@ export default function BankTransfersPage() {
     if (!companyId) return
     setLoading(true)
 
-    // Fetch transfers without embedded resources
-    const { data: transferData } = await supabase
-      .from("bank_transfers")
-      .select("*")
-      .eq("company_id", companyId)
-      .order("created_at", { ascending: false })
-
-    // Fetch bank accounts with their linked GL accounts separately
-    const { data: bankData } = await supabase
-      .from("bank_accounts")
-      .select("id, account_id, bank_name, account_number")
-      .eq("company_id", companyId)
-      .order("created_at")
-
-    // Also fetch the actual GL accounts (to get code/name/balance)
+    // Fetch the cash/bank GL accounts (10xx) – these are the real accounts
     const { data: accountData } = await supabase
       .from("accounts")
       .select("id, code, name, balance")
       .eq("type", "Asset")
       .like("code", "10%")
       .eq("company_id", companyId)
+      .order("code")
 
-    // Build a lookup map for account id -> code, name, balance
+    setGlAccounts(accountData || [])
+
+    // Fetch transfers
+    const { data: transferData } = await supabase
+      .from("bank_transfers")
+      .select("*")
+      .eq("company_id", companyId)
+      .order("created_at", { ascending: false })
+
+    // Enrich transfers with GL account names
     const accountMap: Record<number, any> = {}
-    accountData?.forEach((a: any) => {
-      accountMap[a.id] = a
-    })
+    accountData?.forEach((a: any) => { accountMap[a.id] = a })
 
-    // Enrich bank accounts
-    const enrichedBankAccounts = bankData?.map((b: any) => ({
-      id: b.id,
-      account_id: b.account_id,
-      bank_name: b.bank_name,
-      account_number: b.account_number,
-      // from linked GL account
-      code: accountMap[b.account_id]?.code || "",
-      name: accountMap[b.account_id]?.name || "",
-      balance: accountMap[b.account_id]?.balance || 0,
-    })) || []
-
-    setBankAccounts(enrichedBankAccounts)
-
-    // Enrich transfers
     const enrichedTransfers = transferData?.map((t: any) => ({
       ...t,
-      from_code: accountMap[t.from_account_id]?.code,
-      from_name: accountMap[t.from_account_id]?.name,
-      to_code: accountMap[t.to_account_id]?.code,
-      to_name: accountMap[t.to_account_id]?.name,
+      from_code: accountMap[t.from_account_id]?.code || "—",
+      from_name: accountMap[t.from_account_id]?.name || "—",
+      to_code: accountMap[t.to_account_id]?.code || "—",
+      to_name: accountMap[t.to_account_id]?.name || "—",
     })) || []
 
     setTransfers(enrichedTransfers)
     setLoading(false)
   }
 
-  useEffect(() => {
-    if (companyId) fetchData()
-  }, [companyId])
+  useEffect(() => { if (companyId) fetchData() }, [companyId])
 
   if (!companyId) return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
   if (!canView) {
@@ -140,7 +117,7 @@ export default function BankTransfersPage() {
     setSaving(true)
     const { error } = await supabase.from("bank_transfers").insert({
       company_id: companyId,
-      from_account_id: fromAccountId,
+      from_account_id: fromAccountId,   // now a proper GL account ID
       to_account_id: toAccountId,
       amount: parseFloat(amount),
       transfer_date: transferDate,
@@ -169,7 +146,7 @@ export default function BankTransfersPage() {
           .bt-btn-primary { background: linear-gradient(135deg, #1740C8, #071352); color: white; }
           .bt-btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
           .bt-table { background: white; border-radius: 10px; border: 1px solid #E2E8F0; overflow: hidden; }
-          .bt-table-header, .bt-table-row { display: grid; grid-template-columns: 100px 100px 100px 100px 1fr 120px; padding: 10px 14px; border-bottom: 1px solid #F1F5F9; font-size: 12px; align-items: center; }
+          .bt-table-header, .bt-table-row { display: grid; grid-template-columns: 1fr 1fr 100px 100px 1fr; padding: 10px 14px; border-bottom: 1px solid #F1F5F9; font-size: 12px; align-items: center; }
           .bt-table-header { background: #F8FAFC; font-size: 9px; font-weight: 700; text-transform: uppercase; color: #94A3B8; }
           .bt-table-row:hover { background: #FAFBFF; }
           .bt-form-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
@@ -184,7 +161,7 @@ export default function BankTransfersPage() {
           .bt-icon-btn { background: none; border: none; cursor: pointer; padding: 4px; border-radius: 6px; color: #94A3B8; }
           .bt-icon-btn:hover { background: #F1F5F9; color: #475569; }
           @media (max-width: 768px) {
-            .bt-table-header, .bt-table-row { grid-template-columns: 100px 100px 100px 1fr; }
+            .bt-table-header, .bt-table-row { grid-template-columns: 1fr 1fr 80px 80px; }
             .bt-hide-mobile { display: none; }
           }
         `}</style>
@@ -221,12 +198,11 @@ export default function BankTransfersPage() {
         ) : (
           <div className="bt-table">
             <div className="bt-table-header">
-              <span>From</span>
-              <span>To</span>
+              <span>From Account</span>
+              <span>To Account</span>
               <span>Amount</span>
               <span>Date</span>
-              <span className="bt-hide-mobile">Ref</span>
-              <span></span>
+              <span className="bt-hide-mobile">Reference</span>
             </div>
             {transfers.map(t => (
               <div key={t.id} className="bt-table-row">
@@ -235,13 +211,12 @@ export default function BankTransfersPage() {
                 <span style={{ fontWeight: 600 }}>PKR {t.amount.toLocaleString()}</span>
                 <span>{new Date(t.transfer_date).toLocaleDateString()}</span>
                 <span className="bt-hide-mobile" style={{ color: "#64748B" }}>{t.reference || "—"}</span>
-                <span></span>
               </div>
             ))}
           </div>
         )}
 
-        {/* New Transfer Form – only for editors */}
+        {/* New Transfer Form – editors only */}
         {showForm && canEdit && (
           <div className="bt-form-overlay" onClick={() => setShowForm(false)}>
             <div className="bt-form" onClick={e => e.stopPropagation()}>
@@ -255,7 +230,7 @@ export default function BankTransfersPage() {
                     <label className="bt-label">From Account *</label>
                     <select className="bt-select" value={fromAccountId ?? ""} onChange={e => setFromAccountId(Number(e.target.value) || null)} required>
                       <option value="">Select account</option>
-                      {bankAccounts.map(a => (
+                      {glAccounts.map(a => (
                         <option key={a.id} value={a.id}>{a.code} - {a.name} (PKR {a.balance?.toLocaleString()})</option>
                       ))}
                     </select>
@@ -264,7 +239,7 @@ export default function BankTransfersPage() {
                     <label className="bt-label">To Account *</label>
                     <select className="bt-select" value={toAccountId ?? ""} onChange={e => setToAccountId(Number(e.target.value) || null)} required>
                       <option value="">Select account</option>
-                      {bankAccounts.map(a => (
+                      {glAccounts.map(a => (
                         <option key={a.id} value={a.id}>{a.code} - {a.name} (PKR {a.balance?.toLocaleString()})</option>
                       ))}
                     </select>
