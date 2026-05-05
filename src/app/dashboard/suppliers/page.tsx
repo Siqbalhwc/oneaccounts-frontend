@@ -147,7 +147,6 @@ export default function SuppliersPage() {
       }
       setFlash({ type: "success", msg: `Supplier '${name}' added!` })
 
-      // Post opening balance journal entry if > 0
       if (openingBalance > 0) {
         await fetch("/api/suppliers/opening-entry", {
           method: "POST",
@@ -225,7 +224,16 @@ export default function SuppliersPage() {
           <div className="sp-modal" onClick={e=>e.stopPropagation()}>
             <div className="sp-modal-header"><div className="sp-modal-title">{editing?"✏️ Edit Supplier":"➕ Add Supplier"}</div><button className="sp-icon-btn" onClick={()=>setShowModal(false)}><X size={18}/></button></div>
             <div className="sp-modal-body">
-              <div className="sp-field-row"><div><label className="sp-field-label">Code *</label><input className="sp-field-input" value={code} onChange={e=>setCode(e.target.value)}/></div><div><label className="sp-field-label">Name *</label><input className="sp-field-input" value={name} onChange={e=>setName(e.target.value)}/></div></div>
+              <div className="sp-field-row">
+                <div>
+                  <label className="sp-field-label">Code *</label>
+                  <input className="sp-field-input" value={code} readOnly style={{ background: '#f1f5f9', color: '#64748b' }} />
+                </div>
+                <div>
+                  <label className="sp-field-label">Name *</label>
+                  <input className="sp-field-input" value={name} onChange={e => setName(e.target.value)} />
+                </div>
+              </div>
               <div className="sp-field-row"><div><label className="sp-field-label">Phone</label><input className="sp-field-input" value={phone} onChange={e=>setPhone(e.target.value)}/></div><div><label className="sp-field-label">Email</label><input className="sp-field-input" value={email} onChange={e=>setEmail(e.target.value)}/></div></div>
               <div><label className="sp-field-label">Address</label><input className="sp-field-input" value={address} onChange={e=>setAddress(e.target.value)}/></div>
               <div><label className="sp-field-label">Opening Balance (PKR)</label><input className="sp-field-input" type="number" value={openingBalance} onChange={e=>setOpeningBalance(Number(e.target.value))}/></div>
