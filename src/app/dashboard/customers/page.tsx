@@ -83,19 +83,29 @@ export default function CustomersPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
   const [total, setTotal] = useState(0)
+  const [companyId, setCompanyId] = useState<string>("")
+
+  // ── Get company ID ────────────────────────────────────────
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id
+        || '00000000-0000-0000-0000-000000000001'
+      setCompanyId(cid)
+    })
+  }, [])
 
   const fetchCustomers = async () => {
     setLoading(true)
-    const { count } = await supabase.from("customers").select("*", { count: "exact", head: true })
+    const { count } = await supabase.from("customers").select("*", { count: "exact", head: true }).eq("company_id", companyId)
     setTotal(count || 0)
     const from = (page - 1) * pageSize
     const to = from + pageSize - 1
-    const { data } = await supabase.from("customers").select("*").order("code").range(from, to)
+    const { data } = await supabase.from("customers").select("*").eq("company_id", companyId).order("code").range(from, to)
     if (data) { setCustomers(data); setFiltered(data) }
     setLoading(false)
   }
 
-  useEffect(() => { fetchCustomers() }, [page, pageSize])
+  useEffect(() => { if (companyId) fetchCustomers() }, [companyId, page, pageSize])
 
   useEffect(() => {
     if (!search.trim()) { setFiltered(customers); return }
@@ -121,14 +131,23 @@ export default function CustomersPage() {
   }
 
   const handleSave = async () => {
-    if (!code.trim() || !name.trim()) return
+    if (!code.trim() || !name.trim() || !companyId) return
     setSaving(true)
-    const payload = { code: code.trim(), name: name.trim(), phone: phone.trim() || null, email: email.trim() || null, address: address.trim() || null, payment_terms: paymentTerms, balance: openingBalance, opening_balance: openingBalance }
-    if (editing) {
-      await supabase.from("customers").update(payload).eq("id", editing.id)
-      setFlash({ type: "success", msg: `Customer '${name}' updated!` })
+    const payload = {
+      company_id: companyId,     // ⭐ always set
+      code: code.trim(),
+      name: name.trim(),
+      phone: phone.trim() || null,
+      email: email.trim() || null,
+      address: address.trim() || null,
+      payment_terms: paymentTerms,
+      balance: openingBalance,
+      opening_balance: openingBalance,
     }
-    else {
+    if (editing) {
+      await supabase.from("customers").update(payload).eq("id", editing.id).eq("company_id", companyId)
+      setFlash({ type: "success", msg: `Customer '${name}' updated!` })
+    } else {
       const { data: newCust, error: insertErr } = await supabase.from("customers").insert(payload).select("id").single()
       if (insertErr || !newCust) {
         setFlash({ type: "error", msg: insertErr?.message || "Insert failed" })
@@ -156,16 +175,15 @@ export default function CustomersPage() {
 
   const handleDelete = async () => {
     if (!deleteId) return
-    await supabase.from("customers").delete().eq("id", deleteId)
+    await supabase.from("customers").delete().eq("id", deleteId).eq("company_id", companyId)
     setDeleteId(null); setFlash({ type: "success", msg: "Customer deleted." }); fetchCustomers()
     setTimeout(() => setFlash(null), 3000)
   }
 
   const handleImport = async (rows: any[]) => {
     for (const row of rows) {
-      // For bulk import, you may also want to optionally create opening balance entries.
-      // For now, we'll just insert the customer without journal entry (can be enhanced later).
       await supabase.from("customers").insert({
+        company_id: companyId,
         code: row.code || `CUST-${Date.now()}`, name: row.name || "Unnamed", phone: row.phone || null, email: row.email || null, address: row.address || null,
         balance: parseFloat(row.balance) || 0, payment_terms: row.payment_terms || "Net 30"
       })
