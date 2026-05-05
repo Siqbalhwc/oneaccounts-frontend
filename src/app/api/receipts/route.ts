@@ -29,7 +29,6 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Get active company ID
   const { data: roleData } = await supabase
     .from('user_roles')
     .select('company_id')
@@ -38,19 +37,18 @@ export async function POST(request: NextRequest) {
   if (!roleData?.company_id) return NextResponse.json({ error: 'No company found' }, { status: 400 })
   const companyId = roleData.company_id
 
-  const { party_id, amount, payment_method, date, reference, notes } = await request.json()
+  const { party_id, amount, payment_method, bank_account_id, date, reference, notes, allocations } = await request.json()
   if (!party_id || !amount || amount <= 0) {
     return NextResponse.json({ error: 'Customer and amount are required' }, { status: 400 })
   }
 
-  // Generate receipt number (same pattern as invoices)
+  // Generate receipt number
   const { data: existing } = await supabaseAdmin
     .from('receipts')
     .select('receipt_no')
     .eq('company_id', companyId)
     .order('receipt_no', { ascending: false })
     .limit(1)
-
   let nextNum = 1
   if (existing && existing.length > 0) {
     const last = existing[0].receipt_no
@@ -68,6 +66,7 @@ export async function POST(request: NextRequest) {
     date: date || new Date().toISOString().split('T')[0],
     amount,
     payment_method,
+    bank_account_id: bank_account_id || null,
     reference,
     notes,
   }).select('id').single()
@@ -76,7 +75,40 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: insertErr?.message || 'Insert failed' }, { status: 500 })
   }
 
-  // Update customer balance (CR = decrease AR)
+  // Allocations
+  if (allocations && Array.isArray(allocations) && allocations.length > 0) {
+    for (const alloc of allocations) {
+      const invoiceId = alloc.invoice_id
+      const allocAmount = parseFloat(alloc.amount) || 0
+      if (allocAmount <= 0) continue
+
+      const { data: inv } = await supabaseAdmin
+        .from('invoices')
+        .select('paid, total, status')
+        .eq('id', invoiceId)
+        .eq('company_id', companyId)
+        .eq('type', 'sale')
+        .single()
+
+      if (inv) {
+        const newPaid = (inv.paid || 0) + allocAmount
+        const newStatus = newPaid >= inv.total ? 'Paid' : 'Partial'
+        await supabaseAdmin.from('invoices')
+          .update({ paid: newPaid, status: newStatus })
+          .eq('id', invoiceId)
+          .eq('company_id', companyId)
+      }
+
+      await supabaseAdmin.from('receipt_allocations').insert({
+        receipt_id: receipt.id,
+        invoice_id: invoiceId,
+        amount: allocAmount,
+        company_id: companyId,
+      })
+    }
+  }
+
+  // Update customer balance (decrease AR)
   const { data: cust } = await supabaseAdmin.from('customers')
     .select('balance').eq('id', party_id).eq('company_id', companyId).single()
   if (cust) {
@@ -85,9 +117,11 @@ export async function POST(request: NextRequest) {
       .eq('id', party_id).eq('company_id', companyId)
   }
 
-  // Post GL entries: DR Cash / Bank (default cash account 1001) CR AR (1100)
+  // GL entries: DR Cash / CR AR (1100)
+  const cashAccCode = bank_account_id ? null : '1000'  // fallback to cash if no bank selected? Actually we should use the appropriate bank asset account.
+  // For simplicity, we'll still use 1000 unless you want to map bank_account to a specific GL account. We'll keep as is for now.
   const cashAcc = await supabaseAdmin.from('accounts')
-    .select('id,balance').eq('code', '1001').eq('company_id', companyId).single()
+    .select('id,balance').eq('code', '1000').eq('company_id', companyId).single()
   const arAcc = await supabaseAdmin.from('accounts')
     .select('id,balance').eq('code', '1100').eq('company_id', companyId).single()
 

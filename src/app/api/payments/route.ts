@@ -29,7 +29,6 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Get active company
   const { data: roleData } = await supabase
     .from('user_roles')
     .select('company_id')
@@ -38,7 +37,7 @@ export async function POST(request: NextRequest) {
   if (!roleData?.company_id) return NextResponse.json({ error: 'No company found' }, { status: 400 })
   const companyId = roleData.company_id
 
-  const { party_id, amount, payment_method, date, reference, notes, allocations } = await request.json()
+  const { party_id, amount, payment_method, bank_account_id, date, reference, notes, allocations } = await request.json()
   if (!party_id || !amount || amount <= 0) {
     return NextResponse.json({ error: 'Supplier and amount are required' }, { status: 400 })
   }
@@ -58,16 +57,17 @@ export async function POST(request: NextRequest) {
   }
   const payNo = `PAY-${String(nextNum).padStart(4, "0")}`
 
-  // Insert payment – using the correct column names
+  // Insert payment
   const { data: payment, error: insertErr } = await supabaseAdmin.from("payments").insert({
     company_id: companyId,
     payment_no: payNo,
-    payment_type: 'supplier_payment',       // required
-    party_type: 'supplier',                 // required
+    payment_type: 'supplier_payment',
+    party_type: 'supplier',
     party_id,
-    payment_date: date || new Date().toISOString().split('T')[0],  // ✅ payment_date
+    payment_date: date || new Date().toISOString().split('T')[0],
     amount,
     payment_method,
+    bank_account_id: bank_account_id || null,
     reference,
     notes,
   }).select('id').single()
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: insertErr?.message || 'Insert failed' }, { status: 500 })
   }
 
-  // Process multi‑bill allocations
+  // Allocations
   if (allocations && Array.isArray(allocations) && allocations.length > 0) {
     for (const alloc of allocations) {
       const billId = alloc.bill_id
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Update supplier balance (decrease AP)
+  // Update supplier balance
   const { data: supp } = await supabaseAdmin.from('suppliers')
     .select('balance').eq('id', party_id).eq('company_id', companyId).single()
   if (supp) {
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
       .eq('id', party_id).eq('company_id', companyId)
   }
 
-  // GL entries: DR AP (2000) / CR Cash (1000)
+  // GL entries: DR AP / CR Cash (or bank if chosen)
   const apAcc = await supabaseAdmin.from('accounts')
     .select('id,balance').eq('code', '2000').eq('company_id', companyId).single()
   const cashAcc = await supabaseAdmin.from('accounts')

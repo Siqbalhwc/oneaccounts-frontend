@@ -15,7 +15,6 @@ export default function NewPaymentPage() {
   const [companyId, setCompanyId] = useState<string>("")
   const [suppliers, setSuppliers] = useState<any[]>([])
   const [supplierId, setSupplierId] = useState<number | null>(null)
-  const [amount, setAmount] = useState("")
   const [paymentMethod, setPaymentMethod] = useState("Cash")
   const [date, setDate] = useState(new Date().toISOString().split("T")[0])
   const [reference, setReference] = useState("")
@@ -23,7 +22,6 @@ export default function NewPaymentPage() {
   const [bankAccounts, setBankAccounts] = useState<any[]>([])
   const [bankAccountId, setBankAccountId] = useState<number | null>(null)
 
-  // Bills
   const [unpaidBills, setUnpaidBills] = useState<any[]>([])
   const [selectedBills, setSelectedBills] = useState<Record<number, { amount: number; apply: boolean }>>({})
   const [totalAllocated, setTotalAllocated] = useState(0)
