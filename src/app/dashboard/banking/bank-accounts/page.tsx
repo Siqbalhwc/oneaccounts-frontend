@@ -43,6 +43,13 @@ export default function BankAccountsPage() {
   const [isActive, setIsActive] = useState(true)
   const [saving, setSaving] = useState(false)
 
+  // ⚡ New GL Account modal state
+  const [showNewAccountModal, setShowNewAccountModal] = useState(false)
+  const [newAccountCode, setNewAccountCode] = useState("")
+  const [newAccountName, setNewAccountName] = useState("")
+  const [newAccountBalance, setNewAccountBalance] = useState("0")
+  const [creatingAccount, setCreatingAccount] = useState(false)
+
   // ── Bullet‑proof company ID ──────────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -56,14 +63,12 @@ export default function BankAccountsPage() {
     if (!companyId) return
     setLoading(true)
 
-    // Fetch bank accounts (no embedded resource)
     const { data: bankData } = await supabase
       .from("bank_accounts")
       .select("*")
       .eq("company_id", companyId)
       .order("created_at")
 
-    // Fetch the underlying GL accounts (cash/bank accounts, code 10xx)
     const { data: accountData } = await supabase
       .from("accounts")
       .select("id, code, name, balance")
@@ -73,7 +78,6 @@ export default function BankAccountsPage() {
       .order("code")
 
     if (bankData) {
-      // Merge balances from the accounts table
       const enriched = bankData.map((b: any) => {
         const matchedAccount = accountData?.find((a: any) => a.id === b.account_id)
         return {
@@ -89,9 +93,7 @@ export default function BankAccountsPage() {
     setLoading(false)
   }
 
-  useEffect(() => {
-    if (companyId) fetchData()
-  }, [companyId])
+  useEffect(() => { if (companyId) fetchData() }, [companyId])
 
   if (!companyId) return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
   if (!canView) {
@@ -108,8 +110,8 @@ export default function BankAccountsPage() {
     const usedAccountIds = bankAccounts.map((b) => b.account_id)
     const available = cashAccounts.filter((a) => !usedAccountIds.includes(a.id))
     if (available.length === 0) {
-      setFlash("All cash/bank accounts already have bank details.")
-      setTimeout(() => setFlash(""), 3000)
+      setFlash("All cash/bank accounts already have bank details. Create a new GL account first.")
+      setTimeout(() => setFlash(""), 4000)
       return
     }
     setEditing(null)
@@ -141,7 +143,7 @@ export default function BankAccountsPage() {
     }
     setSaving(true)
     const payload = {
-      company_id: companyId,         // ⭐ always set
+      company_id: companyId,
       account_id: selectedAccountId,
       bank_name: bankName.trim(),
       branch: branch.trim(),
@@ -174,6 +176,28 @@ export default function BankAccountsPage() {
     setFlash("Bank account deleted.")
     fetchData()
     setTimeout(() => setFlash(""), 3000)
+  }
+
+  const handleCreateAccount = async () => {
+    if (!companyId || !newAccountCode.trim() || !newAccountName.trim()) return
+    setCreatingAccount(true)
+    const { error } = await supabase.from("accounts").insert({
+      company_id: companyId,
+      code: newAccountCode.trim(),
+      name: newAccountName.trim(),
+      type: "Asset",
+      balance: parseFloat(newAccountBalance) || 0,
+    })
+    if (error) {
+      setFlash("Error creating account: " + error.message)
+    } else {
+      setFlash("✅ Account created! You can now link bank details.")
+      setShowNewAccountModal(false)
+      setNewAccountCode(""); setNewAccountName(""); setNewAccountBalance("0")
+      fetchData()
+    }
+    setCreatingAccount(false)
+    setTimeout(() => setFlash(""), 4000)
   }
 
   return (
@@ -216,18 +240,21 @@ export default function BankAccountsPage() {
           </div>
         </div>
         {canEdit && (
-          <button className="ba-btn ba-btn-primary" onClick={openNew}>
-            <Plus size={16} /> Add Bank Account
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="ba-btn ba-btn-primary" onClick={openNew}>
+              <Plus size={16} /> Add Bank Account
+            </button>
+            <button className="ba-btn ba-btn-outline" onClick={() => setShowNewAccountModal(true)}>
+              <Plus size={16} /> New GL Account
+            </button>
+          </div>
         )}
       </div>
 
       {flash && (
         <div
           style={{
-            background: flash.includes("added") || flash.includes("updated") || flash.includes("deleted")
-              ? "#F0FDF4"
-              : "#FEF2F2",
+            background: flash.includes("✅") || flash.includes("updated") || flash.includes("deleted") ? "#F0FDF4" : "#FEF2F2",
             border: "1px solid #BBF7D0",
             color: "#15803D",
             padding: "10px 16px",
@@ -243,17 +270,8 @@ export default function BankAccountsPage() {
       {loading ? (
         <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading...</div>
       ) : bankAccounts.length === 0 ? (
-        <div
-          style={{
-            background: "white",
-            borderRadius: 10,
-            border: "1px solid #E2E8F0",
-            padding: 40,
-            textAlign: "center",
-            color: "#94A3B8",
-          }}
-        >
-          No bank accounts found. {canEdit && 'Click "Add Bank Account" to link a cash/bank account.'}
+        <div style={{ background: "white", borderRadius: 10, border: "1px solid #E2E8F0", padding: 40, textAlign: "center", color: "#94A3B8" }}>
+          No bank accounts found. {canEdit && 'Use "Add Bank Account" to link a cash/bank account, or create a new GL account first.'}
         </div>
       ) : (
         <div className="ba-table">
@@ -294,20 +312,18 @@ export default function BankAccountsPage() {
         </div>
       )}
 
-      {/* Add/Edit Modal – only for editors */}
+      {/* Add/Edit Bank Account Modal */}
       {showModal && canEdit && (
         <div className="ba-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="ba-modal" onClick={(e) => e.stopPropagation()}>
             <div className="ba-modal-header">
               <div className="ba-modal-title">{editing ? "✏️ Edit Bank Account" : "➕ Add Bank Account"}</div>
-              <button className="ba-icon-btn" onClick={() => setShowModal(false)}>
-                <X size={18} />
-              </button>
+              <button className="ba-icon-btn" onClick={() => setShowModal(false)}><X size={18} /></button>
             </div>
             <div className="ba-modal-body">
               {!editing && (
                 <div>
-                  <label className="ba-label">Account *</label>
+                  <label className="ba-label">GL Account *</label>
                   <select
                     className="ba-select"
                     value={selectedAccountId || ""}
@@ -316,86 +332,75 @@ export default function BankAccountsPage() {
                     {cashAccounts
                       .filter((a) => !bankAccounts.some((b) => b.account_id === a.id))
                       .map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.code} - {a.name} (PKR {a.balance?.toLocaleString()})
-                        </option>
+                        <option key={a.id} value={a.id}>{a.code} - {a.name} (PKR {a.balance?.toLocaleString()})</option>
                       ))}
                   </select>
                 </div>
               )}
               <div>
                 <label className="ba-label">Bank Name *</label>
-                <input
-                  className="ba-input"
-                  value={bankName}
-                  onChange={(e) => setBankName(e.target.value)}
-                  placeholder="e.g. HBL, UBL"
-                />
+                <input className="ba-input" value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="e.g. HBL, UBL" />
               </div>
               <div className="ba-row">
-                <div>
-                  <label className="ba-label">Branch</label>
-                  <input
-                    className="ba-input"
-                    value={branch}
-                    onChange={(e) => setBranch(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="ba-label">Account Number</label>
-                  <input
-                    className="ba-input"
-                    value={accountNumber}
-                    onChange={(e) => setAccountNumber(e.target.value)}
-                  />
-                </div>
+                <div><label className="ba-label">Branch</label><input className="ba-input" value={branch} onChange={(e) => setBranch(e.target.value)} /></div>
+                <div><label className="ba-label">Account Number</label><input className="ba-input" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} /></div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={isActive}
-                  onChange={(e) => setIsActive(e.target.checked)}
-                />
+                <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
                 <span style={{ fontSize: 13 }}>Active</span>
               </div>
             </div>
             <div className="ba-modal-footer">
-              <button className="ba-btn ba-btn-outline" onClick={() => setShowModal(false)}>
-                Cancel
-              </button>
-              <button
-                className="ba-btn ba-btn-primary"
-                onClick={handleSave}
-                disabled={saving}
-              >
-                {saving ? "Saving..." : "💾 Save"}
+              <button className="ba-btn ba-btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
+              <button className="ba-btn ba-btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "💾 Save"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New GL Account Modal */}
+      {showNewAccountModal && canEdit && (
+        <div className="ba-modal-overlay" onClick={() => setShowNewAccountModal(false)}>
+          <div className="ba-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 450 }}>
+            <div className="ba-modal-header">
+              <div className="ba-modal-title">➕ New Cash / Bank Account</div>
+              <button className="ba-icon-btn" onClick={() => setShowNewAccountModal(false)}><X size={18}/></button>
+            </div>
+            <div className="ba-modal-body">
+              <div>
+                <label className="ba-label">Account Code *</label>
+                <input className="ba-input" value={newAccountCode} onChange={e => setNewAccountCode(e.target.value)} placeholder="e.g. 1002" />
+              </div>
+              <div>
+                <label className="ba-label">Account Name *</label>
+                <input className="ba-input" value={newAccountName} onChange={e => setNewAccountName(e.target.value)} placeholder="e.g. Meezan Bank" />
+              </div>
+              <div>
+                <label className="ba-label">Opening Balance (PKR)</label>
+                <input className="ba-input" type="number" value={newAccountBalance} onChange={e => setNewAccountBalance(e.target.value)} />
+              </div>
+            </div>
+            <div className="ba-modal-footer">
+              <button className="ba-btn ba-btn-outline" onClick={() => setShowNewAccountModal(false)}>Cancel</button>
+              <button className="ba-btn ba-btn-primary" onClick={handleCreateAccount} disabled={creatingAccount}>
+                {creatingAccount ? "Creating..." : "Create Account"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Delete Confirmation – only for editors */}
+      {/* Delete Confirmation */}
       {deleteId && canEdit && (
         <div className="ba-modal-overlay">
           <div className="ba-modal" style={{ maxWidth: 400 }}>
-            <div className="ba-modal-header">
-              <div className="ba-modal-title">⚠️ Delete Bank Account?</div>
-            </div>
+            <div className="ba-modal-header"><div className="ba-modal-title">⚠️ Delete Bank Account?</div></div>
             <div className="ba-modal-body" style={{ textAlign: "center" }}>
-              <p style={{ color: "#EF4444" }}>This will remove the bank details but keep the account.</p>
+              <p style={{ color: "#EF4444" }}>This will remove the bank details but keep the GL account.</p>
             </div>
             <div className="ba-modal-footer" style={{ justifyContent: "center" }}>
-              <button className="ba-btn ba-btn-outline" onClick={() => setDeleteId(null)}>
-                Cancel
-              </button>
-              <button
-                className="ba-btn ba-btn-primary"
-                style={{ background: "#EF4444" }}
-                onClick={handleDelete}
-              >
-                Delete
-              </button>
+              <button className="ba-btn ba-btn-outline" onClick={() => setDeleteId(null)}>Cancel</button>
+              <button className="ba-btn ba-btn-primary" style={{ background: "#EF4444" }} onClick={handleDelete}>Delete</button>
             </div>
           </div>
         </div>
