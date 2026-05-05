@@ -21,7 +21,6 @@ export default function NewPaymentPage() {
   const [reference, setReference] = useState("")
   const [notes, setNotes] = useState("")
 
-  // Bills
   const [unpaidBills, setUnpaidBills] = useState<any[]>([])
   const [selectedBills, setSelectedBills] = useState<Record<number, { amount: number; apply: boolean }>>({})
   const [totalAllocated, setTotalAllocated] = useState(0)
@@ -29,7 +28,7 @@ export default function NewPaymentPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState<string | null>(null)
-  const [refreshKey, setRefreshKey] = useState(0)   // ⚡ forces re‑fetch after payment
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -43,7 +42,7 @@ export default function NewPaymentPage() {
     })
   }, [])
 
-  // ⚡ refetch bills when supplier, company, or refreshKey changes
+  // ⚡ Fetch bills whenever supplier, company, or refreshKey changes
   useEffect(() => {
     if (!supplierId || !companyId) return
     supabase.from("invoices")
@@ -54,8 +53,8 @@ export default function NewPaymentPage() {
       .neq("status", "Paid")
       .order("date", { ascending: true })
       .then(({ data, error }) => {
+        console.log('🔍 Bills fetch – supplier:', supplierId, 'company:', companyId, 'data:', data, 'error:', error)
         if (error) {
-          console.error("Failed to fetch bills:", error)
           setUnpaidBills([])
         } else {
           setUnpaidBills(data || [])
@@ -126,7 +125,7 @@ export default function NewPaymentPage() {
       return
     }
     setSuccess(data.payment_no)
-    setRefreshKey(k => k + 1)          // ⚡ force bill list refresh
+    setRefreshKey(k => k + 1)
     setLoading(false)
   }
 

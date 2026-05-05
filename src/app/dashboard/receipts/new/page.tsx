@@ -21,7 +21,7 @@ export default function NewReceiptPage() {
   const [reference, setReference] = useState("")
   const [notes, setNotes] = useState("")
 
-  // Multi‑allocation state
+  // Invoices
   const [unpaidInvoices, setUnpaidInvoices] = useState<any[]>([])
   const [selectedInvoices, setSelectedInvoices] = useState<Record<number, { amount: number; apply: boolean }>>({})
   const [totalAllocated, setTotalAllocated] = useState(0)
@@ -29,6 +29,7 @@ export default function NewReceiptPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)   // ⚡ forces re‑fetch after receipt
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -42,7 +43,7 @@ export default function NewReceiptPage() {
     })
   }, [])
 
-  // Fetch unpaid invoices when customer changes
+  // ⚡ refetch invoices when customer, company, or refreshKey changes
   useEffect(() => {
     if (!customerId || !companyId) return
     supabase.from("invoices")
@@ -62,7 +63,8 @@ export default function NewReceiptPage() {
         setSelectedInvoices({})
         setTotalAllocated(0)
       })
-  }, [customerId, companyId])
+  }, [customerId, companyId, refreshKey])
+
   const toggleInvoice = (inv: any) => {
     setSelectedInvoices(prev => {
       const next = { ...prev }
@@ -125,6 +127,7 @@ export default function NewReceiptPage() {
       return
     }
     setSuccess(data.receipt_no)
+    setRefreshKey(k => k + 1)          // ⚡ force invoice list refresh
     setLoading(false)
   }
 
@@ -136,7 +139,7 @@ export default function NewReceiptPage() {
           <p>Receipt No: <strong>{success}</strong></p>
           <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 16 }}>
             <button className="inv-btn inv-btn-primary" onClick={() => router.push("/dashboard/receipts")}>View Receipts List</button>
-            <button className="inv-btn inv-btn-outline" onClick={() => setSuccess(null)}>Create Another</button>
+            <button className="inv-btn inv-btn-outline" onClick={() => { setSuccess(null); setRefreshKey(k => k + 1) }}>Create Another</button>
           </div>
         </div>
       </div>
@@ -235,6 +238,11 @@ export default function NewReceiptPage() {
                               onChange={e => updateAllocAmount(inv.id, Number(e.target.value))}
                               disabled={!sel}
                             />
+                            {sel && sel.amount > 0 && (
+                              <div style={{ fontSize: 10, color: balance - sel.amount >= 0 ? '#10B981' : '#EF4444', marginTop: 2 }}>
+                                Remaining: PKR {(balance - sel.amount).toLocaleString()}
+                              </div>
+                            )}
                           </td>
                         </tr>
                       )
