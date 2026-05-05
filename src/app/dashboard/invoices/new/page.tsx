@@ -152,7 +152,6 @@ export default function NewInvoicePage() {
     if (!customerId)       { setError("Please select a customer"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
 
-    // ── Stock validation (only for physical products) ────────
     for (const item of items) {
       if (!item.product_id) continue
       const prod = products.find(p => p.id === item.product_id)
@@ -188,7 +187,6 @@ export default function NewInvoicePage() {
         return
       }
 
-      // Show success
       setSuccessInvoice({
         id: result.invoice_id,
         invoice_no: result.invoice?.invoice_no || generateInvoiceNo(),
@@ -230,42 +228,107 @@ export default function NewInvoicePage() {
 
   // ── UI ────────────────────────────────────────────────────
   return (
-    <div style={{ padding: "clamp(16px,2.5vw,24px)", background: "#EFF4FB", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div style={{ padding: "16px", background: "#F4F6FB", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <style>{`
         .inv-shell { max-width: 1200px; margin: 0 auto; }
-        .inv-title { font-size: 20px; font-weight: 800; color: #1E293B; }
-        .inv-label { font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; display: block; }
-        .inv-input { width: 100%; height: 40px; border: 1.5px solid #E5EAF2; border-radius: 9px; padding: 0 14px; font-size: 13px; font-family: inherit; background: #FAFBFF; outline: none; box-sizing: border-box; }
+        .inv-title { font-size: 18px; font-weight: 700; color: #1E293B; }
+        .inv-card {
+          background: white;
+          border-radius: 12px;
+          border: 1px solid #E5EAF2;
+          padding: 16px 20px;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .inv-label {
+          font-size: 10px;
+          font-weight: 600;
+          color: #6B7280;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          margin-bottom: 4px;
+          display: block;
+        }
+        .inv-input {
+          width: 100%;
+          height: 38px;
+          border: 1.5px solid #E5EAF2;
+          border-radius: 8px;
+          padding: 0 12px;
+          font-size: 13px;
+          font-family: inherit;
+          background: #FAFBFF;
+          outline: none;
+          box-sizing: border-box;
+          transition: border-color 0.15s;
+        }
         .inv-input:focus { border-color: #1740C8; background: white; }
-        .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-        .inv-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all 0.15s; white-space: nowrap; }
+        .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .inv-btn {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 8px 14px; border-radius: 8px; font-size: 13px;
+          font-weight: 600; cursor: pointer; border: none;
+          font-family: inherit; transition: all 0.15s; white-space: nowrap;
+        }
         .inv-btn-primary { background: linear-gradient(135deg, #1740C8, #071352); color: white; }
-        .inv-btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
+        .inv-btn-outline { background: white; border: 1.5px solid #E5EAF2; color: #475569; }
         .inv-btn-danger { background: #EF4444; color: white; }
         .inv-btn-success { background: #25D366; color: white; }
-        .inv-btn-sm { padding: 5px 10px; font-size: 11px; }
-        .inv-item-row { display: grid; grid-template-columns: 1fr 70px 90px 70px 40px; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid #F1F5F9; }
-        .inv-item-header { display: grid; grid-template-columns: 1fr 70px 90px 70px 40px; gap: 8px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: #94A3B8; padding-bottom: 8px; }
-        .inv-summary-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
-        .inv-summary-row.bold { font-weight: 700; font-size: 14px; border-top: 2px solid #E2E8F0; padding-top: 10px; }
+        .inv-btn-sm { padding: 4px 8px; font-size: 11px; }
+        .inv-item-row {
+          display: grid; grid-template-columns: 1fr 65px 80px 65px 40px;
+          gap: 8px; align-items: center; padding: 6px 0;
+          border-bottom: 1px solid #F1F5F9;
+        }
+        .inv-item-header {
+          display: grid; grid-template-columns: 1fr 65px 80px 65px 40px;
+          gap: 8px; font-size: 9px; font-weight: 700; text-transform: uppercase;
+          color: #94A3B8; padding-bottom: 6px;
+        }
+        .inv-summary-row {
+          display: flex; justify-content: space-between;
+          padding: 5px 0; font-size: 13px;
+        }
+        .inv-summary-row.bold {
+          font-weight: 700; font-size: 14px;
+          border-top: 2px solid #E2E8F0; padding-top: 8px; margin-top: 4px;
+        }
         .inv-profit { color: #10B981; }
         .inv-loss { color: #EF4444; }
-        .inv-price-history { background: #F8FAFC; border-radius: 8px; padding: 10px 14px; margin-top: 8px; font-size: 12px; }
-        .inv-price-history-item { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #E2E8F0; }
+        .inv-price-history {
+          background: #F8FAFC; border-radius: 8px;
+          padding: 10px 14px; margin-top: 8px; font-size: 12px;
+        }
+        .inv-price-history-item {
+          display: flex; justify-content: space-between;
+          padding: 4px 0; border-bottom: 1px solid #E2E8F0;
+        }
+        .inv-grid {
+          display: grid; grid-template-columns: 1fr 300px;
+          gap: 16px; align-items: start;
+        }
+        @media (max-width: 900px) {
+          .inv-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 600px) {
+          .inv-row { grid-template-columns: 1fr; }
+          .inv-item-row, .inv-item-header { grid-template-columns: 1fr 60px 70px 40px; }
+        }
 
+        /* Customer dropdown */
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
-        .cust-search-icon { position: absolute; left: 12px; color: #94A3B8; pointer-events: none; }
-        .cust-clear { position: absolute; right: 10px; background: none; border: none; cursor: pointer; color: #94A3B8; display: flex; align-items: center; padding: 4px; border-radius: 4px; }
+        .cust-search-icon { position: absolute; left: 10px; color: #94A3B8; pointer-events: none; }
+        .cust-clear { position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: #94A3B8; display: flex; align-items: center; padding: 4px; border-radius: 4px; }
         .cust-clear:hover { color: #EF4444; background: #FEF2F2; }
         .cust-dropdown {
           position: absolute; top: calc(100% + 4px); left: 0; right: 0;
-          background: white; border: 1.5px solid #C7D2FE;
-          border-radius: 10px; max-height: 240px; overflow-y: auto;
-          z-index: 100; box-shadow: 0 8px 24px rgba(30,58,138,0.12);
+          background: white; border: 1.5px solid #C7D2FE; border-radius: 10px;
+          max-height: 220px; overflow-y: auto; z-index: 100;
+          box-shadow: 0 8px 24px rgba(30,58,138,0.12);
         }
         .cust-option {
-          padding: 10px 14px; cursor: pointer; border-bottom: 1px solid #F1F5F9;
+          padding: 8px 12px; cursor: pointer;
+          border-bottom: 1px solid #F1F5F9;
           display: flex; justify-content: space-between; align-items: center;
           transition: background 0.1s;
         }
@@ -280,40 +343,31 @@ export default function NewInvoicePage() {
           border-radius: 8px; padding: 6px 12px; font-size: 13px;
           font-weight: 600; color: #1E3A8A; width: 100%;
         }
-
-        .inv-grid { display: grid; grid-template-columns: 1fr 320px; gap: 20px; align-items: start; }
-        @media (max-width: 900px) {
-          .inv-grid { grid-template-columns: 1fr; }
-        }
-        @media (max-width: 600px) {
-          .inv-row { grid-template-columns: 1fr; }
-          .inv-item-row, .inv-item-header { grid-template-columns: 1fr 60px 70px 40px; }
-        }
       `}</style>
 
       <div className="inv-shell">
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
           <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/invoices")}>
             <ArrowLeft size={16} />
           </button>
           <div>
             <div className="inv-title">🧾 New Sales Invoice</div>
-            <div style={{ fontSize: 13, color: "#94A3B8" }}>
+            <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 1 }}>
               {automationEnabled ? "Automation enabled – expenses & profit allocation will be posted" : "Plain invoice (no automation)"}
             </div>
           </div>
         </div>
 
         {error && (
-          <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#B91C1C", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+          <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#B91C1C", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
             {error}
           </div>
         )}
 
         {successInvoice ? (
           <div className="inv-card" style={{ background: "#F0FDF4", border: "1px solid #BBF7D0" }}>
-            <h3 style={{ color: "#15803D", marginBottom: 8 }}>✅ Invoice {successInvoice.invoice_no} posted!</h3>
-            <p style={{ marginBottom: 12 }}>Total: PKR {successInvoice.total?.toLocaleString()}</p>
+            <h3 style={{ color: "#15803D", marginBottom: 6 }}>✅ Invoice {successInvoice.invoice_no} posted!</h3>
+            <p style={{ marginBottom: 10, fontSize: 14 }}>Total: PKR {successInvoice.total?.toLocaleString()}</p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button onClick={handleDownloadPDF} className="inv-btn inv-btn-primary"><Download size={14} /> Download PDF</button>
               {hasFeature('whatsapp_invoice') && waLink() && <a href={waLink()} target="_blank" className="inv-btn inv-btn-success" style={{ textDecoration: "none" }}><Send size={14} /> WhatsApp</a>}
@@ -323,9 +377,9 @@ export default function NewInvoicePage() {
           </div>
         ) : (
           <div className="inv-grid">
-            {/* ── LEFT SIDE ── */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {/* Customer */}
+            {/* LEFT COLUMN */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {/* Customer & Dates */}
               <div className="inv-card">
                 <label className="inv-label">Customer *</label>
                 <div className="cust-wrap" ref={customerRef}>
@@ -341,10 +395,10 @@ export default function NewInvoicePage() {
                   ) : (
                     <>
                       <div className="cust-input-row">
-                        <Search size={14} className="cust-search-icon" style={{ position: "absolute", left: 12 }} />
+                        <Search size={14} className="cust-search-icon" style={{ position: "absolute", left: 10 }} />
                         <input
                           className="inv-input"
-                          style={{ paddingLeft: 36, paddingRight: 36 }}
+                          style={{ paddingLeft: 32, paddingRight: 32 }}
                           placeholder="Search by name, code or phone..."
                           value={customerSearch}
                           onChange={e => { setCustomerSearch(e.target.value); setShowCustomerList(true) }}
@@ -360,7 +414,7 @@ export default function NewInvoicePage() {
                       {showCustomerList && (
                         <div className="cust-dropdown">
                           {filteredCustomers.length === 0 ? (
-                            <div style={{ padding: "12px 14px", color: "#94A3B8", fontSize: 13 }}>No customers found</div>
+                            <div style={{ padding: "10px 14px", color: "#94A3B8", fontSize: 13 }}>No customers found</div>
                           ) : (
                             filteredCustomers.map(c => (
                               <div key={c.id} className="cust-option" onMouseDown={() => selectCustomer(c)}>
@@ -368,9 +422,7 @@ export default function NewInvoicePage() {
                                   <div className="cust-option-name">{c.name}</div>
                                   <div className="cust-option-meta">{c.code}{c.phone ? ` · ${c.phone}` : ""}</div>
                                 </div>
-                                <div className="cust-option-bal">
-                                  PKR {(c.balance || 0).toLocaleString()}
-                                </div>
+                                <div className="cust-option-bal">PKR {(c.balance || 0).toLocaleString()}</div>
                               </div>
                             ))
                           )}
@@ -380,7 +432,7 @@ export default function NewInvoicePage() {
                   )}
                 </div>
 
-                <div className="inv-row" style={{ marginTop: 14 }}>
+                <div className="inv-row" style={{ marginTop: 10 }}>
                   <div>
                     <label className="inv-label">Invoice Date *</label>
                     <input className="inv-input" type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
@@ -390,7 +442,7 @@ export default function NewInvoicePage() {
                     <input className="inv-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
                   </div>
                 </div>
-                <div className="inv-row" style={{ marginTop: 14 }}>
+                <div className="inv-row" style={{ marginTop: 10 }}>
                   <div>
                     <label className="inv-label">Reference</label>
                     <input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="PO #" />
@@ -402,16 +454,16 @@ export default function NewInvoicePage() {
                 </div>
               </div>
 
-              {/* Add Product */}
+              {/* Product Search */}
               <div className="inv-card">
                 <label className="inv-label">Add Product</label>
                 <div style={{ position: "relative" }}>
                   <div style={{ display: "flex", gap: 8 }}>
                     <div style={{ position: "relative", flex: 1 }}>
-                      <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "#94A3B8" }} />
+                      <Search size={14} style={{ position: "absolute", left: 10, top: 12, color: "#94A3B8" }} />
                       <input
                         className="inv-input"
-                        style={{ paddingLeft: 36 }}
+                        style={{ paddingLeft: 32 }}
                         placeholder="Search product by name or code..."
                         value={productSearch}
                         onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
@@ -425,22 +477,22 @@ export default function NewInvoicePage() {
                     <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid #E2E8F0", borderRadius: 8, maxHeight: 200, overflowY: "auto", zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", marginTop: 4 }}>
                       {(productSearch ? filteredProducts : products).map((p: any) => (
                         <div key={p.id}
-                          style={{ padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #F1F5F9", fontSize: 13 }}
+                          style={{ padding: "8px 12px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #F1F5F9", fontSize: 13 }}
                           onClick={() => { addItem(p); if (customerId) fetchPriceHistory(p.id, customerId) }}>
                           <span><strong>{p.code}</strong> — {p.name}</span>
                           <span style={{ color: "#64748B", fontSize: 12 }}>PKR {p.sale_price} | Stock: {p.qty_on_hand}</span>
                         </div>
                       ))}
                       {(productSearch ? filteredProducts : products).length === 0 && (
-                        <div style={{ padding: 12, color: "#94A3B8", fontSize: 12 }}>No products found</div>
+                        <div style={{ padding: 10, color: "#94A3B8", fontSize: 12 }}>No products found</div>
                       )}
                     </div>
                   )}
                 </div>
 
                 {showHistory && (
-                  <div className="inv-price-history" style={{ marginTop: 12 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <div className="inv-price-history" style={{ marginTop: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                       <span style={{ fontWeight: 600, fontSize: 12 }}>📋 Price history for {lastSelectedProduct?.name}</span>
                       <button style={{ background: "none", border: "none", cursor: "pointer", color: "#94A3B8" }} onClick={() => setShowHistory(false)}><X size={14} /></button>
                     </div>
@@ -465,9 +517,9 @@ export default function NewInvoicePage() {
                   </div>
                   {items.map((item: any, idx: number) => (
                     <div key={idx} className="inv-item-row">
-                      <input className="inv-input" style={{ height: 36, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} />
-                      <input className="inv-input" style={{ height: 36, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                      <input className="inv-input" style={{ height: 36, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                      <input className="inv-input" style={{ height: 34, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} />
+                      <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                      <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
                       <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13 }}>PKR {item.total.toLocaleString()}</span>
                       <button className="inv-btn inv-btn-danger inv-btn-sm" onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
                     </div>
@@ -476,11 +528,10 @@ export default function NewInvoicePage() {
               )}
             </div>
 
-            {/* ── RIGHT SIDE ── */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 16, position: "sticky", top: 20 }}>
-              {/* Summary Card */}
+            {/* RIGHT COLUMN (sticky summary) */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 16 }}>
               <div className="inv-card">
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: "#1E293B", marginBottom: 12 }}>Summary</h3>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: "#1E293B", marginBottom: 10 }}>Summary</h3>
                 <div className="inv-summary-row">
                   <span>Subtotal</span><span>PKR {totalAmount.toLocaleString()}</span>
                 </div>
@@ -501,7 +552,7 @@ export default function NewInvoicePage() {
                   </>
                 ) : (
                   <div className="inv-summary-row" style={{ color: "#94A3B8", fontStyle: "italic" }}>
-                    <span>Expenses</span><span>Not applied (automation off)</span>
+                    <span>Expenses</span><span>Not applied</span>
                   </div>
                 )}
                 <div className="inv-summary-row bold">
@@ -509,8 +560,8 @@ export default function NewInvoicePage() {
                   <span className={netProfit >= 0 ? "inv-profit" : "inv-loss"}>PKR {netProfit.toLocaleString()}</span>
                 </div>
                 {automationEnabled && profitAllocEnabled && netProfit > 0 && (
-                  <div style={{ marginTop: 12, padding: "12px 14px", background: "#F0FDF4", borderRadius: 8, fontSize: 12 }}>
-                    <div style={{ fontWeight: 600, marginBottom: 6 }}>Profit Allocation:</div>
+                  <div style={{ marginTop: 10, padding: "10px", background: "#F0FDF4", borderRadius: 8, fontSize: 12 }}>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>Profit Allocation:</div>
                     {Object.entries(PARTNERS).map(([code, value]) => {
                       const [name, share] = value as [string, number]
                       return (
@@ -524,16 +575,15 @@ export default function NewInvoicePage() {
                 )}
               </div>
 
-              {/* Action Buttons */}
-              <div className="inv-card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <button className="inv-btn inv-btn-primary" style={{ justifyContent: "center", padding: 12 }} onClick={handleSubmit} disabled={loading}>
+              <div className="inv-card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <button className="inv-btn inv-btn-primary" style={{ justifyContent: "center", padding: 10 }} onClick={handleSubmit} disabled={loading}>
                   {loading ? "Posting..." : "💾 POST Invoice"}
                 </button>
-                <button className="inv-btn inv-btn-outline" style={{ justifyContent: "center", padding: 10 }} onClick={handleBeforeSavePdf}>
+                <button className="inv-btn inv-btn-outline" style={{ justifyContent: "center", padding: 9 }} onClick={handleBeforeSavePdf}>
                   <Download size={14} /> PDF Preview
                 </button>
                 {hasFeature('whatsapp_invoice') && waLink() && (
-                  <a href={waLink()} target="_blank" className="inv-btn inv-btn-success" style={{ textDecoration: "none", justifyContent: "center", padding: 10 }}>
+                  <a href={waLink()} target="_blank" className="inv-btn inv-btn-success" style={{ textDecoration: "none", justifyContent: "center", padding: 9 }}>
                     <Send size={14} /> WhatsApp
                   </a>
                 )}
