@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Save } from "lucide-react"
+import { ArrowLeft, Save, CheckSquare, Square } from "lucide-react"
 
 export default function NewPaymentPage() {
   const router = useRouter()
@@ -15,85 +15,132 @@ export default function NewPaymentPage() {
   const [companyId, setCompanyId] = useState<string>("")
   const [suppliers, setSuppliers] = useState<any[]>([])
   const [supplierId, setSupplierId] = useState<number | null>(null)
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split("T")[0])
-  const [paymentAmount, setPaymentAmount] = useState<number>(0)
-  const [paymentNo, setPaymentNo] = useState("PAY-0001")
+  const [amount, setAmount] = useState("")
+  const [paymentMethod, setPaymentMethod] = useState("Cash")
+  const [date, setDate] = useState(new Date().toISOString().split("T")[0])
+  const [reference, setReference] = useState("")
+  const [notes, setNotes] = useState("")
+
+  // Bills
+  const [unpaidBills, setUnpaidBills] = useState<any[]>([])
+  const [selectedBills, setSelectedBills] = useState<Record<number, { amount: number; apply: boolean }>>({})
+  const [totalAllocated, setTotalAllocated] = useState(0)
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const [success, setSuccess] = useState("")
+  const [success, setSuccess] = useState<string | null>(null)
 
-  // ── Get active company ────────────────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
-      // Fetch suppliers belonging to this company
       supabase.from("suppliers")
-        .select("id,code,name,balance")
+        .select("id, code, name, balance")
         .eq("company_id", cid)
         .order("name")
         .then(r => r.data && setSuppliers(r.data))
     })
-    // Auto‑generate next payment number
-    supabase.from("journal_entries")
-      .select("entry_no").like("entry_no", "PAY-%")
-      .order("entry_no", { ascending: false }).limit(1)
-      .then(r => {
-        if (r.data && r.data.length > 0) {
-          const last = parseInt(r.data[0].entry_no.split("-")[1]) || 0
-          setPaymentNo(`PAY-${String(last + 1).padStart(4, "0")}`)
-        }
-      })
   }, [])
+
+  useEffect(() => {
+    if (!supplierId || !companyId) return
+    supabase.from("invoices")
+      .select("id, invoice_no, total, paid, status, date")
+      .eq("company_id", companyId)
+      .eq("type", "purchase")
+      .eq("party_id", supplierId)
+      .neq("status", "Paid")
+      .order("date", { ascending: true })
+      .then(({ data }) => {
+        setUnpaidBills(data || [])
+        setSelectedBills({})
+        setTotalAllocated(0)
+      })
+  }, [supplierId, companyId])
+
+  const toggleBill = (bill: any) => {
+    setSelectedBills(prev => {
+      const next = { ...prev }
+      if (next[bill.id]) {
+        delete next[bill.id]
+      } else {
+        next[bill.id] = { amount: bill.total - (bill.paid || 0), apply: true }
+      }
+      return next
+    })
+  }
+
+  const updateAllocAmount = (billId: number, val: number) => {
+    setSelectedBills(prev => ({
+      ...prev,
+      [billId]: { ...prev[billId], amount: val },
+    }))
+  }
+
+  useEffect(() => {
+    const total = Object.values(selectedBills).reduce((sum, a) => sum + (a.apply ? a.amount : 0), 0)
+    setTotalAllocated(total)
+  }, [selectedBills])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError("")
     if (!supplierId) { setError("Please select a supplier"); return }
-    if (!paymentAmount || paymentAmount <= 0) { setError("Amount must be greater than zero"); return }
-    setLoading(true); setError("")
-
-    try {
-      const supp = suppliers.find(s => s.id === supplierId)
-
-      // Update supplier balance
-      await supabase.from("suppliers")
-        .update({ balance: (supp?.balance || 0) - paymentAmount })
-        .eq("id", supplierId)
-        .eq("company_id", companyId)
-
-      // Post GL entries
-      const apAcc = await supabase.from("accounts").select("id,balance").eq("code", "2000").eq("company_id", companyId).single()
-      const cashAcc = await supabase.from("accounts").select("id,balance").eq("code", "1000").eq("company_id", companyId).single()
-
-      if (apAcc.data && cashAcc.data) {
-        const { data: je } = await supabase.from("journal_entries").insert({
-          company_id: companyId,
-          entry_no: paymentNo,
-          date: paymentDate,
-          description: `Payment - ${supp?.name || "Supplier"}`
-        }).select("id").single()
-
-        if (je) {
-          await supabase.from("journal_lines").insert([
-            { company_id: companyId, entry_id: je.id, account_id: apAcc.data.id, debit: paymentAmount, credit: 0 },
-            { company_id: companyId, entry_id: je.id, account_id: cashAcc.data.id, debit: 0, credit: paymentAmount }
-          ])
-        }
-      }
-
-      setSuccess(`✅ Payment ${paymentNo} posted!`)
-      setTimeout(() => router.push("/dashboard/payments"), 1500)
-    } catch (err: any) {
-      setError(err.message || "Something went wrong")
+    if (Object.keys(selectedBills).length === 0) {
+      setError("Select at least one bill to apply payment to.")
+      return
     }
+    const total = Object.values(selectedBills).reduce((s, a) => s + a.amount, 0)
+    if (total <= 0) { setError("Total amount must be > 0"); return }
+    setLoading(true)
+
+    const allocs = Object.entries(selectedBills).map(([billId, data]) => ({
+      bill_id: parseInt(billId),
+      amount: data.amount,
+    }))
+
+    const res = await fetch("/api/payments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        party_id: supplierId,
+        amount: total,
+        payment_method: paymentMethod,
+        date,
+        reference,
+        notes,
+        allocations: allocs,
+      }),
+    })
+    const data = await res.json()
+    if (!data.success) {
+      setError(data.error || "Failed to create payment")
+      setLoading(false)
+      return
+    }
+    setSuccess(data.payment_no)
     setLoading(false)
   }
 
-  // ── UI ────────────────────────────────────────────────────
+  if (success) {
+    return (
+      <div style={{ padding: "clamp(16px,2.5vw,24px)", background: "#EFF4FB", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        <div className="inv-shell" style={{ maxWidth: 500, margin: "0 auto", textAlign: "center" }}>
+          <h2>✅ Payment Created</h2>
+          <p>Payment No: <strong>{success}</strong></p>
+          <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 16 }}>
+            <button className="inv-btn inv-btn-primary" onClick={() => router.push("/dashboard/payments")}>View Payments List</button>
+            <button className="inv-btn inv-btn-outline" onClick={() => setSuccess(null)}>Create Another</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ padding: "clamp(16px,2.5vw,24px)", background: "#EFF4FB", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <style>{`
-        .inv-shell { max-width: 700px; margin: 0 auto; }
+        .inv-shell { max-width: 900px; margin: 0 auto; }
         .inv-card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 20px 24px; margin-bottom: 16px; }
         .inv-title { font-size: 20px; font-weight: 800; color: #1E293B; }
         .inv-label { font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; display: block; }
@@ -103,6 +150,9 @@ export default function NewPaymentPage() {
         .inv-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all 0.15s; white-space: nowrap; }
         .inv-btn-primary { background: linear-gradient(135deg, #1740C8, #071352); color: white; }
         .inv-btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
+        .alloc-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .alloc-table th, .alloc-table td { padding: 8px 10px; border-bottom: 1px solid #E2E8F0; text-align: left; }
+        .alloc-table th { background: #F8FAFC; font-weight: 600; color: #475569; }
       `}</style>
 
       <div className="inv-shell">
@@ -112,12 +162,11 @@ export default function NewPaymentPage() {
           </button>
           <div>
             <div className="inv-title">💳 New Payment</div>
-            <div style={{ fontSize: 13, color: "#94A3B8" }}>Record a supplier payment</div>
+            <div style={{ fontSize: 13, color: "#94A3B8" }}>Allocate payment across outstanding bills</div>
           </div>
         </div>
 
         {error && <div style={{ background: "#FEF2F2", color: "#B91C1C", padding: "10px 16px", borderRadius: 8, marginBottom: 16 }}>{error}</div>}
-        {success && <div style={{ background: "#F0FDF4", color: "#15803D", padding: "10px 16px", borderRadius: 8, marginBottom: 16 }}>{success}</div>}
 
         <form onSubmit={handleSubmit}>
           <div className="inv-card">
@@ -126,42 +175,103 @@ export default function NewPaymentPage() {
               <select
                 className="inv-input"
                 value={supplierId ?? ""}
-                onChange={e => setSupplierId(Number(e.target.value) || null)}
+                onChange={(e) => setSupplierId(Number(e.target.value) || null)}
                 required
               >
-                <option value="">Select supplier…</option>
+                <option value="">Select supplier</option>
                 {suppliers.map(s => (
-                  <option key={s.id} value={s.id}>{s.code} – {s.name} (Bal: PKR {s.balance?.toLocaleString()})</option>
+                  <option key={s.id} value={s.id}>{s.code} - {s.name} (Bal: {s.balance?.toLocaleString()})</option>
                 ))}
               </select>
             </div>
 
+            {unpaidBills.length > 0 && (
+              <div>
+                <label className="inv-label">Apply to Bills</label>
+                <table className="alloc-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Bill</th>
+                      <th>Total</th>
+                      <th>Paid</th>
+                      <th>Balance</th>
+                      <th>Amount to Apply</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {unpaidBills.map(bill => {
+                      const sel = selectedBills[bill.id]
+                      const balance = bill.total - (bill.paid || 0)
+                      return (
+                        <tr key={bill.id}>
+                          <td>
+                            <button
+                              type="button"
+                              onClick={() => toggleBill(bill)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: sel ? '#1740C8' : '#94A3B8' }}
+                            >
+                              {sel ? <CheckSquare size={16} /> : <Square size={16} />}
+                            </button>
+                          </td>
+                          <td>{bill.invoice_no} <span style={{ color: "#94A3B8", fontSize: 10 }}>({bill.date?.slice(0,10)})</span></td>
+                          <td>{bill.total.toLocaleString()}</td>
+                          <td>{bill.paid.toLocaleString()}</td>
+                          <td>{balance.toLocaleString()}</td>
+                          <td>
+                            <input
+                              className="inv-input"
+                              style={{ width: 100, textAlign: 'right' }}
+                              type="number"
+                              step="0.01"
+                              max={balance}
+                              value={sel?.amount || ""}
+                              onChange={e => updateAllocAmount(bill.id, Number(e.target.value))}
+                              disabled={!sel}
+                            />
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+                <div style={{ marginTop: 8, fontWeight: 600, textAlign: 'right' }}>
+                  Total Allocated: PKR {totalAllocated.toLocaleString()}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="inv-card">
             <div className="inv-row">
               <div>
-                <label className="inv-label">Payment No *</label>
-                <input className="inv-input" value={paymentNo} onChange={e => setPaymentNo(e.target.value)} required />
+                <label className="inv-label">Payment Method</label>
+                <select className="inv-input" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
+                  <option value="Cash">Cash</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Cheque">Cheque</option>
+                  <option value="Online">Online</option>
+                </select>
               </div>
               <div>
-                <label className="inv-label">Date *</label>
-                <input className="inv-input" type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} required />
+                <label className="inv-label">Date</label>
+                <input className="inv-input" type="date" value={date} onChange={e => setDate(e.target.value)} />
               </div>
             </div>
-
-            <div style={{ marginTop: 14 }}>
-              <label className="inv-label">Amount Paid (PKR) *</label>
-              <input
-                className="inv-input"
-                type="number"
-                step="0.01"
-                value={paymentAmount || ""}
-                onChange={e => setPaymentAmount(Number(e.target.value))}
-                required
-              />
+            <div className="inv-row" style={{ marginTop: 14 }}>
+              <div>
+                <label className="inv-label">Reference</label>
+                <input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="Optional" />
+              </div>
+              <div>
+                <label className="inv-label">Notes</label>
+                <input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" />
+              </div>
             </div>
           </div>
 
           <button className="inv-btn inv-btn-primary" type="submit" disabled={loading} style={{ width: "100%", justifyContent: "center", padding: 12 }}>
-            <Save size={16} /> {loading ? "Posting…" : "Post Payment"}
+            <Save size={16} /> {loading ? "Saving..." : "Save Payment"}
           </button>
         </form>
       </div>
