@@ -89,19 +89,50 @@ export default function NewInvoicePage() {
     p.code.toLowerCase().includes(productSearch.toLowerCase())
   )
 
+  // ⭐ FIXED: Safe two‑step price history fetch (no embedded resource)
   const fetchPriceHistory = async (productId: number, custId: number) => {
-    const { data } = await supabase
+    // 1. Get all invoice_items for this product
+    const { data: items } = await supabase
       .from("invoice_items")
-      .select("unit_price, invoices!inner(invoice_no, date, party_id)")
-      .eq("invoices.party_id", custId)
+      .select("unit_price, invoice_id")
       .eq("product_id", productId)
-      .order("invoices.date", { ascending: false })
+
+    if (!items || items.length === 0) {
+      setPriceHistory([])
+      setShowHistory(true)
+      return
+    }
+
+    const invoiceIds = [...new Set(items.map((i: any) => i.invoice_id))]
+
+    // 2. Fetch those invoices and keep only the ones belonging to this customer
+    const { data: invoices } = await supabase
+      .from("invoices")
+      .select("id, invoice_no, date")
+      .in("id", invoiceIds)
+      .eq("party_id", custId)
+      .order("date", { ascending: false })
       .limit(5)
-    setPriceHistory(data?.map((d: any) => ({
-      unit_price: d.unit_price,
-      invoice_no: d.invoices.invoice_no,
-      date: d.invoices.date,
-    })) || [])
+
+    if (!invoices || invoices.length === 0) {
+      setPriceHistory([])
+      setShowHistory(true)
+      return
+    }
+
+    // 3. Merge unit_price from the items
+    const invoiceMap = new Map(invoices.map((inv: any) => [inv.id, inv]))
+    const history = items
+      .filter((i: any) => invoiceMap.has(i.invoice_id))
+      .map((i: any) => ({
+        unit_price: i.unit_price,
+        invoice_no: invoiceMap.get(i.invoice_id)!.invoice_no,
+        date: invoiceMap.get(i.invoice_id)!.date,
+      }))
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 5)
+
+    setPriceHistory(history)
     setShowHistory(true)
   }
 
@@ -314,7 +345,6 @@ export default function NewInvoicePage() {
           .inv-item-row, .inv-item-header { grid-template-columns: 1fr 60px 70px 40px; }
         }
 
-        /* Customer dropdown */
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
         .cust-search-icon { position: absolute; left: 10px; color: #94A3B8; pointer-events: none; }
@@ -377,7 +407,6 @@ export default function NewInvoicePage() {
           </div>
         ) : (
           <div className="inv-grid">
-            {/* LEFT COLUMN */}
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {/* Customer & Dates */}
               <div className="inv-card">
@@ -499,7 +528,7 @@ export default function NewInvoicePage() {
                     {priceHistory.length > 0
                       ? priceHistory.map((h: any, i: number) => (
                           <div key={i} className="inv-price-history-item">
-                            <span>{h.invoice_no} — {h.date}</span>
+                            <span>{h.invoice_no} — {h.date?.slice(0,10)}</span>
                             <span style={{ fontWeight: 600 }}>PKR {h.unit_price.toLocaleString()}</span>
                           </div>
                         ))
