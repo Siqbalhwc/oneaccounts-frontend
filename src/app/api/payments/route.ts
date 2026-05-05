@@ -74,16 +74,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: insertErr?.message || 'Insert failed' }, { status: 500 })
   }
 
-  // Process allocations
+  // Process allocations (multi-bill)
   if (allocations && Array.isArray(allocations) && allocations.length > 0) {
-    let totalAllocated = 0
     for (const alloc of allocations) {
       const billId = alloc.bill_id
       const allocAmount = parseFloat(alloc.amount) || 0
       if (allocAmount <= 0) continue
-      totalAllocated += allocAmount
 
-      // Update bill paid amount (bills are in invoices table, type 'purchase')
       const { data: bill } = await supabaseAdmin
         .from('invoices')
         .select('paid, total, status')
