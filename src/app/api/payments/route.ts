@@ -58,10 +58,11 @@ export async function POST(request: NextRequest) {
   }
   const payNo = `PAY-${String(nextNum).padStart(4, "0")}`
 
-  // Insert payment
+  // ⭐ Insert payment (with payment_type)
   const { data: payment, error: insertErr } = await supabaseAdmin.from("payments").insert({
     company_id: companyId,
     payment_no: payNo,
+    payment_type: 'supplier_payment',     // required column
     party_id,
     date: date || new Date().toISOString().split('T')[0],
     amount,
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: insertErr?.message || 'Insert failed' }, { status: 500 })
   }
 
-  // Process allocations (multi-bill)
+  // Process allocations (multi‑bill)
   if (allocations && Array.isArray(allocations) && allocations.length > 0) {
     for (const alloc of allocations) {
       const billId = alloc.bill_id
@@ -107,7 +108,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Update supplier balance (decrease AP)
+  // Update supplier balance
   const { data: supp } = await supabaseAdmin.from('suppliers')
     .select('balance').eq('id', party_id).eq('company_id', companyId).single()
   if (supp) {
@@ -116,7 +117,7 @@ export async function POST(request: NextRequest) {
       .eq('id', party_id).eq('company_id', companyId)
   }
 
-  // GL entries: DR AP (2000) / CR Cash (1000)
+  // GL entries
   const apAcc = await supabaseAdmin.from('accounts')
     .select('id,balance').eq('code', '2000').eq('company_id', companyId).single()
   const cashAcc = await supabaseAdmin.from('accounts')
