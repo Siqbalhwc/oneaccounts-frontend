@@ -252,7 +252,8 @@ export default function PremiumDashboardPage() {
           if (inv.status === "Partial") partial++
         })
       }
-      const payables = payablesRes?.data?.balance ?? 0
+      const payablesData = payablesRes?.data
+const payables = (!Array.isArray(payablesData) && payablesData?.balance != null) ? payablesData.balance : 0
       const prodsData = prodsRes?.data
       const lowStock = Array.isArray(prodsData)
         ? prodsData.filter((p: any) => p.qty_on_hand > 0 && p.qty_on_hand <= p.reorder_level).length
