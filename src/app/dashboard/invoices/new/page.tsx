@@ -77,7 +77,6 @@ export default function NewInvoicePage() {
     setShowCustomerList(false)
   }
 
-  // ⚡ Re-open customer list on clear
   const clearCustomer = () => {
     setCustomerId(null)
     setSelectedCustomer(null)
@@ -136,24 +135,9 @@ export default function NewInvoicePage() {
 
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
 
-  // ── Generate next invoice number for a customer ──────────────
-  const getNextInvoiceNo = async (custCode: string): Promise<string> => {
-    // Find the highest existing suffix for this customer code
-    const { data } = await supabase
-      .from("invoices")
-      .select("invoice_no")
-      .like("invoice_no", `${custCode}-%`)
-      .order("invoice_no", { ascending: false })
-      .limit(1)
-
-    let nextNum = 1
-    if (data && data.length > 0) {
-      const lastInvoice = data[0].invoice_no
-      const parts = lastInvoice.split("-")
-      const num = parseInt(parts[parts.length - 1])
-      if (!isNaN(num)) nextNum = num + 1
-    }
-    return `${custCode}-${String(nextNum).padStart(2, "0")}`
+  const generateInvoiceNo = () => {
+    const cust = customers.find(c => c.id === customerId)
+    return cust ? `${cust.code}-01` : `INV-${Date.now().toString(36).toUpperCase()}`
   }
 
   const totalAmount   = items.reduce((s, i) => s + i.total, 0)
@@ -170,7 +154,7 @@ export default function NewInvoicePage() {
 
     // ── Stock validation (only for physical products) ────────
     for (const item of items) {
-      if (!item.product_id) continue   // service – skip
+      if (!item.product_id) continue
       const prod = products.find(p => p.id === item.product_id)
       if (prod && item.qty > (prod.qty_on_hand || 0)) {
         setError(`Not enough stock for ${prod.name}. Available: ${prod.qty_on_hand || 0}, Requested: ${item.qty}`)
@@ -180,16 +164,12 @@ export default function NewInvoicePage() {
 
     setLoading(true); setError("")
 
-    // Get the customer code and generate the next invoice number
-    const cust = customers.find(c => c.id === customerId)
-    const invoiceNo = cust ? await getNextInvoiceNo(cust.code) : `INV-${Date.now().toString(36).toUpperCase()}`
-
     try {
       const res = await fetch("/api/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          invoice_no: invoiceNo,
+          invoice_no:   generateInvoiceNo(),
           party_id:     customerId,
           invoice_date: invoiceDate,
           due_date:     dueDate,
@@ -211,7 +191,7 @@ export default function NewInvoicePage() {
       // Show success
       setSuccessInvoice({
         id: result.invoice_id,
-        invoice_no: invoiceNo,
+        invoice_no: result.invoice?.invoice_no || generateInvoiceNo(),
         total: result.invoice?.total || totalAmount,
         date: result.invoice?.date || invoiceDate,
         customers: selectedCustomer || null,
@@ -239,21 +219,20 @@ export default function NewInvoicePage() {
 
   const handleBeforeSavePdf = () => {
     const tempInvoice = {
-      invoice_no: "Preview",
+      invoice_no: generateInvoiceNo(),
       date: invoiceDate,
       due_date: dueDate,
       customers: customers.find(c => c.id === customerId) || {},
     }
     const doc = generateInvoicePDF(tempInvoice, items)
-    doc.save(`invoice-preview.pdf`)
+    doc.save(`invoice-preview-${tempInvoice.invoice_no}.pdf`)
   }
 
   // ── UI ────────────────────────────────────────────────────
   return (
     <div style={{ padding: "clamp(16px,2.5vw,24px)", background: "#EFF4FB", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <style>{`
-        .inv-shell { max-width: 900px; margin: 0 auto; }
-        .inv-card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 20px 24px; margin-bottom: 16px; }
+        .inv-shell { max-width: 1200px; margin: 0 auto; }
         .inv-title { font-size: 20px; font-weight: 800; color: #1E293B; }
         .inv-label { font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; display: block; }
         .inv-input { width: 100%; height: 40px; border: 1.5px solid #E5EAF2; border-radius: 9px; padding: 0 14px; font-size: 13px; font-family: inherit; background: #FAFBFF; outline: none; box-sizing: border-box; }
@@ -267,8 +246,8 @@ export default function NewInvoicePage() {
         .inv-btn-sm { padding: 5px 10px; font-size: 11px; }
         .inv-item-row { display: grid; grid-template-columns: 1fr 70px 90px 70px 40px; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid #F1F5F9; }
         .inv-item-header { display: grid; grid-template-columns: 1fr 70px 90px 70px 40px; gap: 8px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: #94A3B8; padding-bottom: 8px; }
-        .inv-total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 13px; }
-        .inv-total-row.bold { font-weight: 700; font-size: 15px; border-top: 2px solid #E2E8F0; padding-top: 12px; }
+        .inv-summary-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+        .inv-summary-row.bold { font-weight: 700; font-size: 14px; border-top: 2px solid #E2E8F0; padding-top: 10px; }
         .inv-profit { color: #10B981; }
         .inv-loss { color: #EF4444; }
         .inv-price-history { background: #F8FAFC; border-radius: 8px; padding: 10px 14px; margin-top: 8px; font-size: 12px; }
@@ -302,6 +281,10 @@ export default function NewInvoicePage() {
           font-weight: 600; color: #1E3A8A; width: 100%;
         }
 
+        .inv-grid { display: grid; grid-template-columns: 1fr 320px; gap: 20px; align-items: start; }
+        @media (max-width: 900px) {
+          .inv-grid { grid-template-columns: 1fr; }
+        }
         @media (max-width: 600px) {
           .inv-row { grid-template-columns: 1fr; }
           .inv-item-row, .inv-item-header { grid-template-columns: 1fr 60px 70px 40px; }
@@ -339,160 +322,191 @@ export default function NewInvoicePage() {
             </div>
           </div>
         ) : (
-          <>
-            {/* Customer & Dates */}
-            <div className="inv-card">
-              <div className="inv-row">
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <label className="inv-label">Customer *</label>
-                  <div className="cust-wrap" ref={customerRef}>
-                    {selectedCustomer ? (
-                      <div className="cust-selected-badge" onClick={clearCustomer}>
-                        <span>👤</span>
-                        <span style={{ flex: 1 }}>{selectedCustomer.code} — {selectedCustomer.name}</span>
-                        <span style={{ fontSize: 11, color: "#64748B" }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
-                        <button className="cust-clear" onClick={(e) => { e.stopPropagation(); clearCustomer(); }}>
-                          <X size={14} />
-                        </button>
+          <div className="inv-grid">
+            {/* ── LEFT SIDE ── */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {/* Customer */}
+              <div className="inv-card">
+                <label className="inv-label">Customer *</label>
+                <div className="cust-wrap" ref={customerRef}>
+                  {selectedCustomer ? (
+                    <div className="cust-selected-badge" onClick={clearCustomer}>
+                      <span>👤</span>
+                      <span style={{ flex: 1 }}>{selectedCustomer.code} — {selectedCustomer.name}</span>
+                      <span style={{ fontSize: 11, color: "#64748B" }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
+                      <button className="cust-clear" onClick={(e) => { e.stopPropagation(); clearCustomer(); }}>
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="cust-input-row">
+                        <Search size={14} className="cust-search-icon" style={{ position: "absolute", left: 12 }} />
+                        <input
+                          className="inv-input"
+                          style={{ paddingLeft: 36, paddingRight: 36 }}
+                          placeholder="Search by name, code or phone..."
+                          value={customerSearch}
+                          onChange={e => { setCustomerSearch(e.target.value); setShowCustomerList(true) }}
+                          onFocus={() => setShowCustomerList(true)}
+                          autoComplete="off"
+                        />
+                        {customerSearch && (
+                          <button className="cust-clear" onClick={() => setCustomerSearch("")}>
+                            <X size={13} />
+                          </button>
+                        )}
                       </div>
-                    ) : (
-                      <>
-                        <div className="cust-input-row">
-                          <Search size={14} className="cust-search-icon" style={{ position: "absolute", left: 12 }} />
-                          <input
-                            className="inv-input"
-                            style={{ paddingLeft: 36, paddingRight: 36 }}
-                            placeholder="Search by name, code or phone..."
-                            value={customerSearch}
-                            onChange={e => { setCustomerSearch(e.target.value); setShowCustomerList(true) }}
-                            onFocus={() => setShowCustomerList(true)}
-                            autoComplete="off"
-                          />
-                          {customerSearch && (
-                            <button className="cust-clear" onClick={() => setCustomerSearch("")}>
-                              <X size={13} />
-                            </button>
+                      {showCustomerList && (
+                        <div className="cust-dropdown">
+                          {filteredCustomers.length === 0 ? (
+                            <div style={{ padding: "12px 14px", color: "#94A3B8", fontSize: 13 }}>No customers found</div>
+                          ) : (
+                            filteredCustomers.map(c => (
+                              <div key={c.id} className="cust-option" onMouseDown={() => selectCustomer(c)}>
+                                <div>
+                                  <div className="cust-option-name">{c.name}</div>
+                                  <div className="cust-option-meta">{c.code}{c.phone ? ` · ${c.phone}` : ""}</div>
+                                </div>
+                                <div className="cust-option-bal">
+                                  PKR {(c.balance || 0).toLocaleString()}
+                                </div>
+                              </div>
+                            ))
                           )}
                         </div>
-                        {showCustomerList && (
-                          <div className="cust-dropdown">
-                            {filteredCustomers.length === 0 ? (
-                              <div style={{ padding: "12px 14px", color: "#94A3B8", fontSize: 13 }}>No customers found</div>
-                            ) : (
-                              filteredCustomers.map(c => (
-                                <div key={c.id} className="cust-option" onMouseDown={() => selectCustomer(c)}>
-                                  <div>
-                                    <div className="cust-option-name">{c.name}</div>
-                                    <div className="cust-option-meta">{c.code}{c.phone ? ` · ${c.phone}` : ""}</div>
-                                  </div>
-                                  <div className="cust-option-bal">
-                                    PKR {(c.balance || 0).toLocaleString()}
-                                  </div>
-                                </div>
-                              ))
-                            )}
+                      )}
+                    </>
+                  )}
+                </div>
+
+                <div className="inv-row" style={{ marginTop: 14 }}>
+                  <div>
+                    <label className="inv-label">Invoice Date *</label>
+                    <input className="inv-input" type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="inv-label">Due Date</label>
+                    <input className="inv-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+                  </div>
+                </div>
+                <div className="inv-row" style={{ marginTop: 14 }}>
+                  <div>
+                    <label className="inv-label">Reference</label>
+                    <input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="PO #" />
+                  </div>
+                  <div>
+                    <label className="inv-label">Notes</label>
+                    <input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Add Product */}
+              <div className="inv-card">
+                <label className="inv-label">Add Product</label>
+                <div style={{ position: "relative" }}>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ position: "relative", flex: 1 }}>
+                      <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "#94A3B8" }} />
+                      <input
+                        className="inv-input"
+                        style={{ paddingLeft: 36 }}
+                        placeholder="Search product by name or code..."
+                        value={productSearch}
+                        onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
+                        onFocus={() => setShowProductList(true)}
+                        onBlur={() => setTimeout(() => setShowProductList(false), 200)}
+                      />
+                    </div>
+                    <button className="inv-btn inv-btn-outline" onClick={addManualItem}><Plus size={14} /> Manual</button>
+                  </div>
+                  {showProductList && (
+                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid #E2E8F0", borderRadius: 8, maxHeight: 200, overflowY: "auto", zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", marginTop: 4 }}>
+                      {(productSearch ? filteredProducts : products).map((p: any) => (
+                        <div key={p.id}
+                          style={{ padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #F1F5F9", fontSize: 13 }}
+                          onClick={() => { addItem(p); if (customerId) fetchPriceHistory(p.id, customerId) }}>
+                          <span><strong>{p.code}</strong> — {p.name}</span>
+                          <span style={{ color: "#64748B", fontSize: 12 }}>PKR {p.sale_price} | Stock: {p.qty_on_hand}</span>
+                        </div>
+                      ))}
+                      {(productSearch ? filteredProducts : products).length === 0 && (
+                        <div style={{ padding: 12, color: "#94A3B8", fontSize: 12 }}>No products found</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {showHistory && (
+                  <div className="inv-price-history" style={{ marginTop: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                      <span style={{ fontWeight: 600, fontSize: 12 }}>📋 Price history for {lastSelectedProduct?.name}</span>
+                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#94A3B8" }} onClick={() => setShowHistory(false)}><X size={14} /></button>
+                    </div>
+                    {priceHistory.length > 0
+                      ? priceHistory.map((h: any, i: number) => (
+                          <div key={i} className="inv-price-history-item">
+                            <span>{h.invoice_no} — {h.date}</span>
+                            <span style={{ fontWeight: 600 }}>PKR {h.unit_price.toLocaleString()}</span>
                           </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="inv-label">Invoice Date *</label>
-                  <input className="inv-input" type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
-                </div>
-                <div>
-                  <label className="inv-label">Due Date</label>
-                  <input className="inv-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
-                </div>
-                <div>
-                  <label className="inv-label">Reference</label>
-                  <input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="PO #" />
-                </div>
-              </div>
-              <div style={{ marginTop: 14 }}>
-                <label className="inv-label">Notes</label>
-                <input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" />
-              </div>
-            </div>
-
-            {/* Add Product */}
-            <div className="inv-card">
-              <label className="inv-label">Add Product</label>
-              <div style={{ position: "relative" }}>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <div style={{ position: "relative", flex: 1 }}>
-                    <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "#94A3B8" }} />
-                    <input
-                      className="inv-input"
-                      style={{ paddingLeft: 36 }}
-                      placeholder="Search product by name or code..."
-                      value={productSearch}
-                      onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
-                      onFocus={() => setShowProductList(true)}
-                      onBlur={() => setTimeout(() => setShowProductList(false), 200)}
-                    />
-                  </div>
-                  <button className="inv-btn inv-btn-outline" onClick={addManualItem}><Plus size={14} /> Manual</button>
-                </div>
-                {showProductList && (
-                  <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid #E2E8F0", borderRadius: 8, maxHeight: 200, overflowY: "auto", zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", marginTop: 4 }}>
-                    {(productSearch ? filteredProducts : products).map((p: any) => (
-                      <div key={p.id}
-                        style={{ padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #F1F5F9", fontSize: 13 }}
-                        onClick={() => { addItem(p); if (customerId) fetchPriceHistory(p.id, customerId) }}>
-                        <span><strong>{p.code}</strong> — {p.name}</span>
-                        <span style={{ color: "#64748B", fontSize: 12 }}>PKR {p.sale_price} | Stock: {p.qty_on_hand}</span>
-                      </div>
-                    ))}
-                    {(productSearch ? filteredProducts : products).length === 0 && (
-                      <div style={{ padding: 12, color: "#94A3B8", fontSize: 12 }}>No products found</div>
-                    )}
+                        ))
+                      : <div style={{ color: "#94A3B8", fontSize: 12 }}>No previous sales to this customer</div>
+                    }
                   </div>
                 )}
               </div>
+
+              {/* Items Table */}
+              {items.length > 0 && (
+                <div className="inv-card">
+                  <div className="inv-item-header">
+                    <span>Description</span><span>Qty</span><span>Price</span><span>Total</span><span></span>
+                  </div>
+                  {items.map((item: any, idx: number) => (
+                    <div key={idx} className="inv-item-row">
+                      <input className="inv-input" style={{ height: 36, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} />
+                      <input className="inv-input" style={{ height: 36, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                      <input className="inv-input" style={{ height: 36, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                      <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13 }}>PKR {item.total.toLocaleString()}</span>
+                      <button className="inv-btn inv-btn-danger inv-btn-sm" onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Items */}
-            {items.length > 0 && (
+            {/* ── RIGHT SIDE ── */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 16, position: "sticky", top: 20 }}>
+              {/* Summary Card */}
               <div className="inv-card">
-                <div className="inv-item-header">
-                  <span>Description</span><span>Qty</span><span>Price</span><span>Total</span><span></span>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: "#1E293B", marginBottom: 12 }}>Summary</h3>
+                <div className="inv-summary-row">
+                  <span>Subtotal</span><span>PKR {totalAmount.toLocaleString()}</span>
                 </div>
-                {items.map((item: any, idx: number) => (
-                  <div key={idx} className="inv-item-row">
-                    <input className="inv-input" style={{ height: 36, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} />
-                    <input className="inv-input" style={{ height: 36, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                    <input className="inv-input" style={{ height: 36, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                    <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13 }}>PKR {item.total.toLocaleString()}</span>
-                    <button className="inv-btn inv-btn-danger inv-btn-sm" onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Totals */}
-            {items.length > 0 && (
-              <div className="inv-card">
-                <div className="inv-total-row"><span>Subtotal</span><span>PKR {totalAmount.toLocaleString()}</span></div>
-                <div className="inv-total-row"><span>COGS</span><span>PKR {totalCost.toLocaleString()}</span></div>
+                <div className="inv-summary-row">
+                  <span>COGS</span><span>PKR {totalCost.toLocaleString()}</span>
+                </div>
                 {automationEnabled ? (
                   <>
-                    <div className="inv-total-row"><span>Salary (4%)</span><span>PKR {totalSalary.toLocaleString()}</span></div>
-                    <div className="inv-total-row"><span>Advertisement (0.5%)</span><span>PKR {totalAds.toLocaleString()}</span></div>
-                    <div className="inv-total-row"><span>Fuel (0.5%)</span><span>PKR {totalFuel.toLocaleString()}</span></div>
+                    <div className="inv-summary-row">
+                      <span>Salary (4%)</span><span>PKR {totalSalary.toLocaleString()}</span>
+                    </div>
+                    <div className="inv-summary-row">
+                      <span>Advertisement (0.5%)</span><span>PKR {totalAds.toLocaleString()}</span>
+                    </div>
+                    <div className="inv-summary-row">
+                      <span>Fuel (0.5%)</span><span>PKR {totalFuel.toLocaleString()}</span>
+                    </div>
                   </>
                 ) : (
-                  <div className="inv-total-row" style={{ color: "#94A3B8", fontStyle: "italic" }}>
+                  <div className="inv-summary-row" style={{ color: "#94A3B8", fontStyle: "italic" }}>
                     <span>Expenses</span><span>Not applied (automation off)</span>
                   </div>
                 )}
-                <div className="inv-total-row bold">
+                <div className="inv-summary-row bold">
                   <span>Net Profit</span>
-                  <span className={netProfit >= 0 ? "inv-profit" : "inv-loss"}>
-                    PKR {netProfit.toLocaleString()}
-                  </span>
+                  <span className={netProfit >= 0 ? "inv-profit" : "inv-loss"}>PKR {netProfit.toLocaleString()}</span>
                 </div>
                 {automationEnabled && profitAllocEnabled && netProfit > 0 && (
                   <div style={{ marginTop: 12, padding: "12px 14px", background: "#F0FDF4", borderRadius: 8, fontSize: 12 }}>
@@ -500,7 +514,7 @@ export default function NewInvoicePage() {
                     {Object.entries(PARTNERS).map(([code, value]) => {
                       const [name, share] = value as [string, number]
                       return (
-                        <div key={code} className="inv-total-row" style={{ fontSize: 12 }}>
+                        <div key={code} className="inv-summary-row" style={{ fontSize: 12 }}>
                           <span>{name} ({(share * 100).toFixed(0)}%)</span>
                           <span>PKR {(netProfit * share).toLocaleString()}</span>
                         </div>
@@ -509,25 +523,23 @@ export default function NewInvoicePage() {
                   </div>
                 )}
               </div>
-            )}
 
-            {/* Actions */}
-            {items.length > 0 && (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-                <button className="inv-btn inv-btn-primary" onClick={handleSubmit} disabled={loading}>
+              {/* Action Buttons */}
+              <div className="inv-card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <button className="inv-btn inv-btn-primary" style={{ justifyContent: "center", padding: 12 }} onClick={handleSubmit} disabled={loading}>
                   {loading ? "Posting..." : "💾 POST Invoice"}
                 </button>
-                <button className="inv-btn inv-btn-outline" onClick={handleBeforeSavePdf}>
+                <button className="inv-btn inv-btn-outline" style={{ justifyContent: "center", padding: 10 }} onClick={handleBeforeSavePdf}>
                   <Download size={14} /> PDF Preview
                 </button>
                 {hasFeature('whatsapp_invoice') && waLink() && (
-                  <a href={waLink()} target="_blank" className="inv-btn inv-btn-success" style={{ textDecoration: "none" }}>
+                  <a href={waLink()} target="_blank" className="inv-btn inv-btn-success" style={{ textDecoration: "none", justifyContent: "center", padding: 10 }}>
                     <Send size={14} /> WhatsApp
                   </a>
                 )}
               </div>
-            )}
-          </>
+            </div>
+          </div>
         )}
       </div>
     </div>
