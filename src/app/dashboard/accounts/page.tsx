@@ -38,49 +38,51 @@ export default function AccountsPage() {
   const [modalError, setModalError] = useState("")
 
   useEffect(() => {
-    // ── Get company ID from JWT (same as every other page) ──
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
         || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
-    })
 
-    // Fetch accounts
-    supabase
-      .from("accounts")
-      .select("*")
-      .order("code")
-      .then(r => {
-        if (r.data) setAccounts(r.data)
-        setLoading(false)
+      // Fetch accounts – explicitly scoped to the active company
+      supabase
+        .from("accounts")
+        .select("*")
+        .eq("company_id", cid)
+        .order("code")
+        .then(r => {
+          if (r.data) setAccounts(r.data)
+          setLoading(false)
+        })
+
+      // Check if the current user is an admin
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (!user) return
+        supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user.id)
+          .eq("company_id", cid)
+          .maybeSingle()
+          .then(({ data }) => {
+            if (data?.role === "admin") setIsAdmin(true)
+          })
       })
 
-    // Check if the current user is an admin
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
+      // Fetch linked bank accounts – also scoped
       supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .maybeSingle()
-        .then(({ data }) => {
-          if (data?.role === "admin") setIsAdmin(true)
+        .from("bank_accounts")
+        .select("account_id, bank_name, id")
+        .eq("company_id", cid)
+        .then(r => {
+          if (r.data) {
+            const map: Record<number, any> = {}
+            r.data.forEach((b: any) => {
+              map[b.account_id] = { bankName: b.bank_name, bankId: b.id }
+            })
+            setBankMap(map)
+          }
         })
     })
-
-    // Fetch linked bank accounts
-    supabase
-      .from("bank_accounts")
-      .select("account_id, bank_name, id")
-      .then(r => {
-        if (r.data) {
-          const map: Record<number, any> = {}
-          r.data.forEach((b: any) => {
-            map[b.account_id] = { bankName: b.bank_name, bankId: b.id }
-          })
-          setBankMap(map)
-        }
-      })
   }, [])
 
   const types = ["All", "Asset", "Liability", "Equity", "Revenue", "Expense"]
@@ -128,6 +130,7 @@ export default function AccountsPage() {
         .from("accounts")
         .update(payload)
         .eq("id", editId)
+        .eq("company_id", companyId)
       if (error) {
         setModalError(error.message)
         setSaving(false)
@@ -135,9 +138,8 @@ export default function AccountsPage() {
       }
       setAccounts(prev => prev.map(a => a.id === editId ? { ...a, ...payload } : a))
     } else {
-      // ⭐ Always include company_id when inserting a new account
       if (!companyId) {
-        setModalError("Company ID not available. Please refresh and try again.")
+        setModalError("Company ID not available.")
         setSaving(false)
         return
       }
@@ -163,19 +165,29 @@ export default function AccountsPage() {
   return (
     <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
       <style>{`
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        .modal-overlay {
+          position: fixed; top: 0; left: 0; width: 100%; height: 100%;
           background: rgba(0,0,0,0.4); display: flex; justify-content: center;
-          align-items: center; z-index: 1000; }
-        .modal-box { background: white; border-radius: 12px; padding: 24px;
-          max-width: 400px; width: 90%; box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
-        .input-field { width: 100%; padding: 8px 12px; border: 1px solid #E2E8F0;
-          border-radius: 6px; font-size: 13px; margin-bottom: 12px; box-sizing: border-box; }
-        .btn-primary { padding: 10px 20px; background: #1D4ED8; color: white;
-          border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; }
+          align-items: center; z-index: 1000;
+        }
+        .modal-box {
+          background: white; border-radius: 12px; padding: 24px;
+          max-width: 400px; width: 90%; box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+        }
+        .input-field {
+          width: 100%; padding: 8px 12px; border: 1px solid #E2E8F0;
+          border-radius: 6px; font-size: 13px; margin-bottom: 12px; box-sizing: border-box;
+        }
+        .btn-primary {
+          padding: 10px 20px; background: #1D4ED8; color: white;
+          border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px;
+        }
         .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-secondary { padding: 10px 20px; background: white; color: #475569;
+        .btn-secondary {
+          padding: 10px 20px; background: white; color: #475569;
           border: 1px solid #CBD5E1; border-radius: 8px; cursor: pointer;
-          font-weight: 600; font-size: 14px; margin-right: 8px; }
+          font-weight: 600; font-size: 14px; margin-right: 8px;
+        }
       `}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -201,10 +213,12 @@ export default function AccountsPage() {
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         {types.map(t => (
           <button key={t} onClick={() => setFilter(t)}
-            style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid #E2E8F0",
+            style={{
+              padding: "6px 14px", borderRadius: 20, border: "1px solid #E2E8F0",
               background: filter === t ? "#1E3A8A" : "white",
               color: filter === t ? "white" : "#64748B",
-              fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+              fontSize: 12, fontWeight: 600, cursor: "pointer",
+            }}>
             {t}
           </button>
         ))}
@@ -217,10 +231,12 @@ export default function AccountsPage() {
           <div style={{
             display: "grid",
             gridTemplateColumns: isAdmin ? "80px 1fr 100px 120px 120px 50px" : "80px 1fr 100px 120px 120px",
-            padding: "10px 16px", background: "#F8FAFC", fontSize: 9,
-            fontWeight: 700, textTransform: "uppercase", color: "#94A3B8",
+            padding: "10px 16px", background: "#F8FAFC",
+            fontSize: 9, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8",
           }}>
-            <span>Code</span><span>Name</span><span>Type</span>
+            <span>Code</span>
+            <span>Name</span>
+            <span>Type</span>
             <span style={{ textAlign: "right" }}>Balance</span>
             <span>Bank</span>
             {isAdmin && <span></span>}
@@ -229,7 +245,8 @@ export default function AccountsPage() {
             <div key={a.id} style={{
               display: "grid",
               gridTemplateColumns: isAdmin ? "80px 1fr 100px 120px 120px 50px" : "80px 1fr 100px 120px 120px",
-              padding: "10px 16px", borderBottom: i < filtered.length - 1 ? "1px solid #F1F5F9" : "none",
+              padding: "10px 16px",
+              borderBottom: i < filtered.length - 1 ? "1px solid #F1F5F9" : "none",
               fontSize: 13, alignItems: "center",
             }}>
               <span style={{ fontWeight: 700, color: "#1E3A8A" }}>{a.code}</span>
