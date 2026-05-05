@@ -12,6 +12,7 @@ export default function NewReceiptPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
+  const [companyId, setCompanyId] = useState<string>("")
   const [customers, setCustomers] = useState<any[]>([])
   const [customerId, setCustomerId] = useState<number | null>(null)
   const [amount, setAmount] = useState("")
@@ -23,9 +24,19 @@ export default function NewReceiptPage() {
   const [error, setError] = useState("")
   const [success, setSuccess] = useState<string | null>(null)
 
+  // ── Get company ID (same safe pattern) ──────────────────────
   useEffect(() => {
-    supabase.from("customers").select("id, code, name, balance").order("name")
-      .then(r => r.data && setCustomers(r.data))
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id
+        || '00000000-0000-0000-0000-000000000001'
+      setCompanyId(cid)
+      // Fetch only customers of this company
+      supabase.from("customers")
+        .select("id, code, name, balance")
+        .eq("company_id", cid)
+        .order("name")
+        .then(r => r.data && setCustomers(r.data))
+    })
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
