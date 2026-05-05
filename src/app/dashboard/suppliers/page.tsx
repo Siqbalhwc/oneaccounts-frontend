@@ -18,6 +18,15 @@ interface Supplier {
   balance: number
 }
 
+// ── Supported countries ──────────────────────────────────────
+const COUNTRIES = [
+  { code: "+92",  pattern: /^92\d{10}$/,  label: "🇵🇰 Pakistan (+92)" },
+  { code: "+44",  pattern: /^44\d{10}$/,  label: "🇬🇧 UK (+44)" },
+  { code: "+971", pattern: /^971\d{9}$/,  label: "🇦🇪 UAE (+971)" },
+  { code: "+91",  pattern: /^91\d{10}$/,  label: "🇮🇳 India (+91)" },
+  { code: "+1",   pattern: /^1\d{10}$/,   label: "🇺🇸 USA (+1)" },
+]
+
 const styles = `
   .sp-shell { padding: clamp(16px, 2.5vw, 24px); background: #EFF4FB; min-height: 100%; font-family: 'Plus Jakarta Sans', sans-serif; }
   .sp-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
@@ -69,27 +78,28 @@ export default function SuppliersPage() {
   const [editing, setEditing] = useState<Supplier | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [flash, setFlash] = useState<{type: string, msg: string} | null>(null)
+
+  // Form fields
   const [code, setCode] = useState("")
   const [name, setName] = useState("")
+  const [countryCode, setCountryCode] = useState("+92")
   const [phone, setPhone] = useState("")
   const [email, setEmail] = useState("")
   const [address, setAddress] = useState("")
   const [openingBalance, setOpeningBalance] = useState(0)
   const [saving, setSaving] = useState(false)
+
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
   const [total, setTotal] = useState(0)
   const [companyId, setCompanyId] = useState<string>("")
 
-  // ── Bullet‑proof company ID ────────────────────────────────
+  // ── Get company ID ────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
-      const claim = (user?.app_metadata as any)?.company_id
-      if (claim) { setCompanyId(claim); return }
-      const match = document.cookie.match(/(?:^| )active_company_id=([^;]+)/)
-      if (match) { setCompanyId(match[2]); return }
-      // Hardcoded fallback to your main company
-      setCompanyId('00000000-0000-0000-0000-000000000001')
+      const cid = (user?.app_metadata as any)?.company_id
+        || '00000000-0000-0000-0000-000000000001'
+      setCompanyId(cid)
     })
   }, [])
 
@@ -118,29 +128,53 @@ export default function SuppliersPage() {
     return `VEND-${String(max + 1).padStart(3, "0")}`
   }
 
-  const formatPhoneForWhatsApp = (raw: string): { valid: boolean; formatted: string; error?: string } => {
+  // ── Country‑aware phone validation ─────────────────────────
+  const validatePhone = (): { valid: boolean; formatted: string; error?: string } => {
+    const raw = phone.trim()
+    if (!raw) return { valid: true, formatted: "" }
+
     const digits = raw.replace(/\D/g, "")
-    if (digits.length === 0) return { valid: true, formatted: "" }
-    if (digits.startsWith("92") && digits.length === 12) return { valid: true, formatted: digits }
-    if (digits.startsWith("0") && digits.length === 11) return { valid: true, formatted: "92" + digits.slice(1) }
-    return { valid: false, formatted: "", error: "Invalid WhatsApp number. Must be 03xx-xxxxxxx or 92xxxxxxxxxx." }
+    const country = COUNTRIES.find(c => c.code === countryCode)
+    if (!country) return { valid: false, formatted: "", error: "Unknown country code" }
+
+    if (digits.startsWith(country.code.replace("+", "")) && country.pattern.test(digits)) {
+      return { valid: true, formatted: digits }
+    }
+    const prefix = country.code.replace("+", "")
+    const testNumber = prefix + digits
+    if (country.pattern.test(testNumber)) {
+      return { valid: true, formatted: testNumber }
+    }
+    return { valid: false, formatted: "", error: `Invalid ${country.label} number. Expected ${country.code} followed by valid digits.` }
   }
 
   const openNew = () => {
-    setEditing(null); setCode(generateCode()); setName(""); setPhone(""); setEmail(""); setAddress(""); setOpeningBalance(0); setShowModal(true)
+    setEditing(null); setCode(generateCode()); setName(""); setCountryCode("+92"); setPhone(""); setEmail(""); setAddress(""); setOpeningBalance(0); setShowModal(true)
   }
 
   const openEdit = (c: Supplier) => {
-    setEditing(c); setCode(c.code); setName(c.name); setPhone(c.phone || ""); setEmail(c.email || ""); setAddress(c.address || ""); setOpeningBalance(c.balance); setShowModal(true)
+    setEditing(c); setCode(c.code); setName(c.name)
+    const savedPhone = c.phone || ""
+    const found = COUNTRIES.find(cntry => savedPhone.startsWith(cntry.code.replace("+", "")))
+    if (found) {
+      setCountryCode(found.code)
+      setPhone(savedPhone.slice(found.code.replace("+", "").length))
+    } else {
+      setCountryCode("+92")
+      setPhone(savedPhone)
+    }
+    setEmail(c.email || ""); setAddress(c.address || ""); setOpeningBalance(c.balance); setShowModal(true)
   }
 
   const handleSave = async () => {
     if (!code.trim() || !name.trim() || !companyId) return
-    const phoneCheck = formatPhoneForWhatsApp(phone)
+
+    const phoneCheck = validatePhone()
     if (!phoneCheck.valid) {
       setFlash({ type: "error", msg: phoneCheck.error || "Invalid phone number" })
       return
     }
+
     setSaving(true)
     const payload = {
       company_id: companyId,
@@ -184,11 +218,10 @@ export default function SuppliersPage() {
 
   const handleImport = async (rows: any[]) => {
     for (const row of rows) {
-      const phoneCheck = formatPhoneForWhatsApp(row.phone || "")
       await supabase.from("suppliers").insert({
         company_id: companyId,
         code: row.code || `VEND-${Date.now()}`, name: row.name || "Unnamed",
-        phone: phoneCheck.formatted || null, email: row.email || null,
+        phone: row.phone || null, email: row.email || null,
         address: row.address || null, balance: parseFloat(row.balance) || 0, opening_balance: parseFloat(row.opening_balance) || 0
       })
     }
@@ -248,15 +281,33 @@ export default function SuppliersPage() {
                   <input className="sp-field-input" value={name} onChange={e => setName(e.target.value)} />
                 </div>
               </div>
-              <div className="sp-field-row">
-                <div>
-                  <label className="sp-field-label">Phone (WhatsApp)</label>
-                  <input className="sp-field-input" value={phone} onChange={e => setPhone(e.target.value)} placeholder="03xx-xxxxxxx" />
-                  <div style={{ fontSize: 10, color: "#94A3B8", marginTop: 2 }}>Must be a valid Pakistani mobile number (03xx or 92)</div>
+              <div>
+                <label className="sp-field-label">Phone (WhatsApp)</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <select
+                    className="sp-field-input"
+                    style={{ width: 160, background: "#FAFBFF" }}
+                    value={countryCode}
+                    onChange={e => setCountryCode(e.target.value)}
+                  >
+                    {COUNTRIES.map(c => (
+                      <option key={c.code} value={c.code}>{c.label}</option>
+                    ))}
+                  </select>
+                  <input
+                    className="sp-field-input"
+                    value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    placeholder="Enter local number"
+                    style={{ flex: 1 }}
+                  />
                 </div>
-                <div><label className="sp-field-label">Email</label><input className="sp-field-input" value={email} onChange={e=>setEmail(e.target.value)}/></div>
+                <div style={{ fontSize: 10, color: "#94A3B8", marginTop: 2 }}>Select country code and enter the local number</div>
               </div>
-              <div><label className="sp-field-label">Address</label><input className="sp-field-input" value={address} onChange={e=>setAddress(e.target.value)}/></div>
+              <div className="sp-field-row">
+                <div><label className="sp-field-label">Email</label><input className="sp-field-input" value={email} onChange={e=>setEmail(e.target.value)}/></div>
+                <div><label className="sp-field-label">Address</label><input className="sp-field-input" value={address} onChange={e=>setAddress(e.target.value)}/></div>
+              </div>
               <div><label className="sp-field-label">Opening Balance (PKR)</label><input className="sp-field-input" type="number" value={openingBalance} onChange={e=>setOpeningBalance(Number(e.target.value))}/></div>
             </div>
             <div className="sp-modal-footer"><button className="sp-btn sp-btn-outline" onClick={()=>setShowModal(false)}>Cancel</button><button className="sp-btn sp-btn-primary" onClick={handleSave} disabled={saving}>{saving?"Saving...":"💾 Save"}</button></div>

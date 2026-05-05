@@ -20,6 +20,15 @@ interface Customer {
   payment_terms: string
 }
 
+// ── Supported countries ──────────────────────────────────────
+const COUNTRIES = [
+  { code: "+92", pattern: /^92\d{10}$/, label: "🇵🇰 Pakistan (+92)" },
+  { code: "+44", pattern: /^44\d{10}$/, label: "🇬🇧 UK (+44)" },
+  { code: "+971", pattern: /^971\d{9}$/, label: "🇦🇪 UAE (+971)" },
+  { code: "+91", pattern: /^91\d{10}$/, label: "🇮🇳 India (+91)" },
+  { code: "+1", pattern: /^1\d{10}$/, label: "🇺🇸 USA (+1)" },
+]
+
 const styles = `
   .cp-shell { padding: clamp(16px, 2.5vw, 24px); background: #EFF4FB; min-height: 100%; font-family: 'Plus Jakarta Sans', sans-serif; }
   .cp-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
@@ -72,14 +81,19 @@ export default function CustomersPage() {
   const [editing, setEditing] = useState<Customer | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [flash, setFlash] = useState<{type: string, msg: string} | null>(null)
+
+  // Form fields
   const [code, setCode] = useState("")
   const [name, setName] = useState("")
+  const [countryCode, setCountryCode] = useState("+92")
   const [phone, setPhone] = useState("")
   const [email, setEmail] = useState("")
   const [address, setAddress] = useState("")
   const [paymentTerms, setPaymentTerms] = useState("Net 30")
   const [openingBalance, setOpeningBalance] = useState(0)
   const [saving, setSaving] = useState(false)
+
+  // List pagination
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
   const [total, setTotal] = useState(0)
@@ -118,46 +132,66 @@ export default function CustomersPage() {
     return `CUST-${String(max + 1).padStart(3, "0")}`
   }
 
-  // ── Phone validation helper ─────────────────────────────────
-  const formatPhoneForWhatsApp = (raw: string): { valid: boolean; formatted: string; error?: string } => {
+  // ── Country‑aware phone validation ─────────────────────────
+  const validatePhone = (): { valid: boolean; formatted: string; error?: string } => {
+    const raw = phone.trim()
+    if (!raw) return { valid: true, formatted: "" }   // phone is optional
+
     const digits = raw.replace(/\D/g, "")
-    if (digits.length === 0) return { valid: true, formatted: "" }   // empty is ok
-    // Must be a Pakistani mobile number
-    if (digits.startsWith("92") && digits.length === 12) {
-      return { valid: true, formatted: digits }                      // already intl format
+    const country = COUNTRIES.find(c => c.code === countryCode)
+    if (!country) return { valid: false, formatted: "", error: "Unknown country code" }
+
+    // Already in international format?
+    if (digits.startsWith(country.code.replace("+", "")) && country.pattern.test(digits)) {
+      return { valid: true, formatted: digits }
     }
-    if (digits.startsWith("0") && digits.length === 11) {
-      return { valid: true, formatted: "92" + digits.slice(1) }     // convert 03xx to 92
+    // Local number without prefix – try auto‑prepend
+    const prefix = country.code.replace("+", "")
+    const testNumber = prefix + digits
+    if (country.pattern.test(testNumber)) {
+      return { valid: true, formatted: testNumber }
     }
-    return { valid: false, formatted: "", error: "Invalid WhatsApp number. Must be 03xx-xxxxxxx or 92xxxxxxxxxx." }
+    return { valid: false, formatted: "", error: `Invalid ${country.label} number. Expected ${country.code} followed by valid digits.` }
   }
 
   const openNew = () => {
     setEditing(null)
-    setCode(generateCode()); setName(""); setPhone(""); setEmail(""); setAddress(""); setPaymentTerms("Net 30"); setOpeningBalance(0)
+    setCode(generateCode()); setName(""); setCountryCode("+92"); setPhone(""); setEmail(""); setAddress(""); setPaymentTerms("Net 30"); setOpeningBalance(0)
     setShowModal(true)
   }
 
   const openEdit = (c: Customer) => {
     setEditing(c)
-    setCode(c.code); setName(c.name); setPhone(c.phone || ""); setEmail(c.email || ""); setAddress(c.address || ""); setPaymentTerms(c.payment_terms || "Net 30"); setOpeningBalance(c.balance)
+    setCode(c.code); setName(c.name)
+    // Try to detect country from existing phone
+    const savedPhone = c.phone || ""
+    const found = COUNTRIES.find(cntry => savedPhone.startsWith(cntry.code.replace("+", "")))
+    if (found) {
+      setCountryCode(found.code)
+      setPhone(savedPhone.slice(found.code.replace("+", "").length))
+    } else {
+      setCountryCode("+92")
+      setPhone(savedPhone)
+    }
+    setEmail(c.email || ""); setAddress(c.address || ""); setPaymentTerms(c.payment_terms || "Net 30"); setOpeningBalance(c.balance)
     setShowModal(true)
   }
 
   const handleSave = async () => {
     if (!code.trim() || !name.trim() || !companyId) return
-    // Validate phone
-    const phoneCheck = formatPhoneForWhatsApp(phone)
+
+    const phoneCheck = validatePhone()
     if (!phoneCheck.valid) {
       setFlash({ type: "error", msg: phoneCheck.error || "Invalid phone number" })
       return
     }
+
     setSaving(true)
     const payload = {
       company_id: companyId,
       code: code.trim(),
       name: name.trim(),
-      phone: phoneCheck.formatted || null,   // store formatted version
+      phone: phoneCheck.formatted || null,
       email: email.trim() || null,
       address: address.trim() || null,
       payment_terms: paymentTerms,
@@ -201,11 +235,11 @@ export default function CustomersPage() {
 
   const handleImport = async (rows: any[]) => {
     for (const row of rows) {
-      const phoneCheck = formatPhoneForWhatsApp(row.phone || "")
+      // For simplicity, expect the phone to be already in international format in the CSV
       await supabase.from("customers").insert({
         company_id: companyId,
         code: row.code || `CUST-${Date.now()}`, name: row.name || "Unnamed",
-        phone: phoneCheck.formatted || null, email: row.email || null, address: row.address || null,
+        phone: row.phone || null, email: row.email || null, address: row.address || null,
         balance: parseFloat(row.balance) || 0, payment_terms: row.payment_terms || "Net 30"
       })
     }
@@ -257,15 +291,30 @@ export default function CustomersPage() {
             <div className="cp-modal-header"><div className="cp-modal-title">{editing ? "✏️ Edit Customer" : "➕ Add New Customer"}</div><button className="cp-icon-btn" onClick={() => setShowModal(false)}><X size={18} /></button></div>
             <div className="cp-modal-body">
               <div className="cp-field-row"><div><label className="cp-field-label">Customer Code *</label><input className="cp-field-input" value={code} onChange={e => setCode(e.target.value)} placeholder="CUST-001" /></div><div><label className="cp-field-label">Customer Name *</label><input className="cp-field-input" value={name} onChange={e => setName(e.target.value)} placeholder="Customer name" /></div></div>
-              <div className="cp-field-row">
-                <div>
-                  <label className="cp-field-label">Phone (WhatsApp)</label>
-                  <input className="cp-field-input" value={phone} onChange={e => setPhone(e.target.value)} placeholder="03xx-xxxxxxx" />
-                  <div style={{ fontSize: 10, color: "#94A3B8", marginTop: 2 }}>Must be a valid Pakistani mobile number (03xx or 92)</div>
+              <div>
+                <label className="cp-field-label">Phone (WhatsApp)</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <select
+                    className="cp-field-input"
+                    style={{ width: 160, background: "#FAFBFF" }}
+                    value={countryCode}
+                    onChange={e => setCountryCode(e.target.value)}
+                  >
+                    {COUNTRIES.map(c => (
+                      <option key={c.code} value={c.code}>{c.label}</option>
+                    ))}
+                  </select>
+                  <input
+                    className="cp-field-input"
+                    value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    placeholder="Enter local number"
+                    style={{ flex: 1 }}
+                  />
                 </div>
-                <div><label className="cp-field-label">Email</label><input className="cp-field-input" value={email} onChange={e => setEmail(e.target.value)} placeholder="customer@email.com" /></div>
+                <div style={{ fontSize: 10, color: "#94A3B8", marginTop: 2 }}>Select country code and enter the local number</div>
               </div>
-              <div><label className="cp-field-label">Address</label><input className="cp-field-input" value={address} onChange={e => setAddress(e.target.value)} placeholder="Address" /></div>
+              <div className="cp-field-row"><div><label className="cp-field-label">Email</label><input className="cp-field-input" value={email} onChange={e => setEmail(e.target.value)} placeholder="customer@email.com" /></div><div><label className="cp-field-label">Address</label><input className="cp-field-input" value={address} onChange={e => setAddress(e.target.value)} placeholder="Address" /></div></div>
               <div className="cp-field-row"><div><label className="cp-field-label">Payment Terms</label><input className="cp-field-input" value={paymentTerms} onChange={e => setPaymentTerms(e.target.value)} placeholder="Net 30" /></div><div><label className="cp-field-label">Opening Balance (PKR)</label><input className="cp-field-input" type="number" value={openingBalance} onChange={e => setOpeningBalance(Number(e.target.value))} /></div></div>
             </div>
             <div className="cp-modal-footer"><button className="cp-btn cp-btn-outline" onClick={() => setShowModal(false)}>Cancel</button><button className="cp-btn cp-btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "💾 Save Customer"}</button></div>
