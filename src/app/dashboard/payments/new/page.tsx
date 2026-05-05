@@ -29,6 +29,7 @@ export default function NewPaymentPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)   // ⚡ forces re‑fetch after payment
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -42,6 +43,7 @@ export default function NewPaymentPage() {
     })
   }, [])
 
+  // ⚡ refetch bills when supplier, company, or refreshKey changes
   useEffect(() => {
     if (!supplierId || !companyId) return
     supabase.from("invoices")
@@ -61,7 +63,7 @@ export default function NewPaymentPage() {
         setSelectedBills({})
         setTotalAllocated(0)
       })
-  }, [supplierId, companyId])
+  }, [supplierId, companyId, refreshKey])
 
   const toggleBill = (bill: any) => {
     setSelectedBills(prev => {
@@ -124,6 +126,7 @@ export default function NewPaymentPage() {
       return
     }
     setSuccess(data.payment_no)
+    setRefreshKey(k => k + 1)          // ⚡ force bill list refresh
     setLoading(false)
   }
 
@@ -135,7 +138,7 @@ export default function NewPaymentPage() {
           <p>Payment No: <strong>{success}</strong></p>
           <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 16 }}>
             <button className="inv-btn inv-btn-primary" onClick={() => router.push("/dashboard/payments")}>View Payments List</button>
-            <button className="inv-btn inv-btn-outline" onClick={() => setSuccess(null)}>Create Another</button>
+            <button className="inv-btn inv-btn-outline" onClick={() => { setSuccess(null); setRefreshKey(k => k + 1) }}>Create Another</button>
           </div>
         </div>
       </div>
