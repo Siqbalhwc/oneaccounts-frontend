@@ -79,19 +79,29 @@ export default function SuppliersPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
   const [total, setTotal] = useState(0)
+  const [companyId, setCompanyId] = useState<string>("")
+
+  // ── Get company ID ────────────────────────────────────────
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id
+        || '00000000-0000-0000-0000-000000000001'
+      setCompanyId(cid)
+    })
+  }, [])
 
   const fetchSuppliers = async () => {
     setLoading(true)
-    const { count } = await supabase.from("suppliers").select("*", { count: "exact", head: true })
+    const { count } = await supabase.from("suppliers").select("*", { count: "exact", head: true }).eq("company_id", companyId)
     setTotal(count || 0)
     const from = (page - 1) * pageSize
     const to = from + pageSize - 1
-    const { data } = await supabase.from("suppliers").select("*").order("code").range(from, to)
+    const { data } = await supabase.from("suppliers").select("*").eq("company_id", companyId).order("code").range(from, to)
     if (data) { setSuppliers(data); setFiltered(data) }
     setLoading(false)
   }
 
-  useEffect(() => { fetchSuppliers() }, [page, pageSize])
+  useEffect(() => { if (companyId) fetchSuppliers() }, [companyId, page, pageSize])
 
   useEffect(() => {
     if (!search.trim()) { setFiltered(suppliers); return }
@@ -113,19 +123,37 @@ export default function SuppliersPage() {
   }
 
   const handleSave = async () => {
-    if (!code.trim() || !name.trim()) return
+    if (!code.trim() || !name.trim() || !companyId) return
     setSaving(true)
-    const payload = { code: code.trim(), name: name.trim(), phone: phone.trim() || null, email: email.trim() || null, address: address.trim() || null, balance: openingBalance, opening_balance: openingBalance }
-    if (editing) { await supabase.from("suppliers").update(payload).eq("id", editing.id) }
-    else { await supabase.from("suppliers").insert(payload) }
+    const payload = {
+      company_id: companyId,     // ⭐ always set
+      code: code.trim(),
+      name: name.trim(),
+      phone: phone.trim() || null,
+      email: email.trim() || null,
+      address: address.trim() || null,
+      balance: openingBalance,
+      opening_balance: openingBalance,
+    }
+    if (editing) {
+      await supabase.from("suppliers").update(payload).eq("id", editing.id).eq("company_id", companyId)
+      setFlash({ type: "success", msg: `Supplier '${name}' updated!` })
+    } else {
+      const { data: newSupp, error: insertErr } = await supabase.from("suppliers").insert(payload).select("id").single()
+      if (insertErr || !newSupp) {
+        setFlash({ type: "error", msg: insertErr?.message || "Insert failed" })
+        setSaving(false)
+        return
+      }
+      setFlash({ type: "success", msg: `Supplier '${name}' added!` })
+    }
     setSaving(false); setShowModal(false); fetchSuppliers()
-    setFlash({ type: "success", msg: `Supplier '${name}' saved!` })
     setTimeout(() => setFlash(null), 3000)
   }
 
   const handleDelete = async () => {
     if (!deleteId) return
-    await supabase.from("suppliers").delete().eq("id", deleteId)
+    await supabase.from("suppliers").delete().eq("id", deleteId).eq("company_id", companyId)
     setDeleteId(null); setFlash({ type: "success", msg: "Supplier deleted." }); fetchSuppliers()
     setTimeout(() => setFlash(null), 3000)
   }
@@ -133,6 +161,7 @@ export default function SuppliersPage() {
   const handleImport = async (rows: any[]) => {
     for (const row of rows) {
       await supabase.from("suppliers").insert({
+        company_id: companyId,
         code: row.code || `VEND-${Date.now()}`, name: row.name || "Unnamed", phone: row.phone || null, email: row.email || null,
         address: row.address || null, balance: parseFloat(row.balance) || 0, opening_balance: parseFloat(row.opening_balance) || 0
       })
@@ -153,7 +182,7 @@ export default function SuppliersPage() {
           <div><div className="sp-title">🚚 Suppliers</div><div className="sp-subtitle">Manage supplier accounts and payables</div></div>
           <div className="sp-actions">
             <button className="sp-btn sp-btn-primary" onClick={openNew}><Plus size={16} /> Add Supplier</button>
-            {hasFeature('csv_import') && <><CsvExport data={suppliers} filename="suppliers" /><CsvImport onImport={handleImport} /></>}
+            {hasFeature('csv_import_export') && <><CsvExport data={suppliers} filename="suppliers" /><CsvImport onImport={handleImport} /></>}
           </div>
         </div>
         <div className="sp-stats">
