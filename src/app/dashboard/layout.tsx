@@ -2,6 +2,14 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import DashboardClientWrapper from '@/components/DashboardClientWrapper'
 import QueryProvider from '@/components/QueryProvider'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+
+// Service‑role admin client (used only for reading user_roles without RLS interference)
+const supabaseAdmin = createSupabaseClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  { auth: { persistSession: false, autoRefreshToken: false } }
+)
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
@@ -102,7 +110,6 @@ const styles = `
   .dl-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 35; }
   .dl-overlay.open { display: block; }
 
-  /* Responsive – main content area */
   .dl-main-inner {
     padding: 16px;
     background: #EFF4FB;
@@ -149,11 +156,32 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const email   = user.email || ''
   const initial = email.charAt(0).toUpperCase()
 
-  // Read the active company from the JWT custom claim (set by custom-claims function)
-  // Fallback to the original default company if no claim is present
-  const activeCompanyId =
-    (user?.app_metadata as any)?.company_id ||
-    '00000000-0000-0000-0000-000000000001'
+  // ─── Bullet‑proof active company resolution ──────────────────
+  // 1. Try the cookie (set after trial creation)
+  const cookieStore = await import('next/headers').then(m => m.cookies())
+  let activeCompanyId = cookieStore.get('active_company_id')?.value
+
+  // 2. Try the JWT custom claim
+  if (!activeCompanyId) {
+    activeCompanyId = (user?.app_metadata as any)?.company_id
+  }
+
+  // 3. Ask the database for the last active company of this user
+  if (!activeCompanyId) {
+    const { data: activeRole } = await supabaseAdmin
+      .from('user_roles')
+      .select('company_id')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle()
+    activeCompanyId = activeRole?.company_id
+  }
+
+  // 4. Absolute last resort – the template company (should never happen for real users)
+  if (!activeCompanyId) {
+    activeCompanyId = '00000000-0000-0000-0000-000000000001'
+  }
+  // ─── End of active company resolution ────────────────────────
 
   const { data: compData } = await supabase
     .from('company_settings')
