@@ -20,7 +20,10 @@ export default function NewPaymentPage() {
   const [date, setDate] = useState(new Date().toISOString().split("T")[0])
   const [reference, setReference] = useState("")
   const [notes, setNotes] = useState("")
+  const [bankAccounts, setBankAccounts] = useState<any[]>([])
+  const [bankAccountId, setBankAccountId] = useState<number | null>(null)
 
+  // Bills
   const [unpaidBills, setUnpaidBills] = useState<any[]>([])
   const [selectedBills, setSelectedBills] = useState<Record<number, { amount: number; apply: boolean }>>({})
   const [totalAllocated, setTotalAllocated] = useState(0)
@@ -39,10 +42,14 @@ export default function NewPaymentPage() {
         .eq("company_id", cid)
         .order("name")
         .then(r => r.data && setSuppliers(r.data))
+      supabase.from("bank_accounts")
+        .select("id, bank_name, account_number")
+        .eq("company_id", cid)
+        .order("bank_name")
+        .then(r => r.data && setBankAccounts(r.data))
     })
   }, [])
 
-  // ⚡ Fetch bills whenever supplier, company, or refreshKey changes
   useEffect(() => {
     if (!supplierId || !companyId) return
     supabase.from("invoices")
@@ -53,8 +60,8 @@ export default function NewPaymentPage() {
       .neq("status", "Paid")
       .order("date", { ascending: true })
       .then(({ data, error }) => {
-        console.log('🔍 Bills fetch – supplier:', supplierId, 'company:', companyId, 'data:', data, 'error:', error)
         if (error) {
+          console.error("Failed to fetch bills:", error)
           setUnpaidBills([])
         } else {
           setUnpaidBills(data || [])
@@ -96,6 +103,10 @@ export default function NewPaymentPage() {
       setError("Select at least one bill to apply payment to.")
       return
     }
+    if (paymentMethod === "Bank Transfer" && !bankAccountId) {
+      setError("Please select a bank account for the transfer.")
+      return
+    }
     const total = Object.values(selectedBills).reduce((s, a) => s + a.amount, 0)
     if (total <= 0) { setError("Total amount must be > 0"); return }
     setLoading(true)
@@ -112,6 +123,7 @@ export default function NewPaymentPage() {
         party_id: supplierId,
         amount: total,
         payment_method: paymentMethod,
+        bank_account_id: bankAccountId,
         date,
         reference,
         notes,
@@ -258,7 +270,7 @@ export default function NewPaymentPage() {
             <div className="inv-row">
               <div>
                 <label className="inv-label">Payment Method</label>
-                <select className="inv-input" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
+                <select className="inv-input" value={paymentMethod} onChange={e => { setPaymentMethod(e.target.value); setBankAccountId(null) }}>
                   <option value="Cash">Cash</option>
                   <option value="Bank Transfer">Bank Transfer</option>
                   <option value="Cheque">Cheque</option>
@@ -270,6 +282,24 @@ export default function NewPaymentPage() {
                 <input className="inv-input" type="date" value={date} onChange={e => setDate(e.target.value)} />
               </div>
             </div>
+
+            {paymentMethod === "Bank Transfer" && (
+              <div style={{ marginTop: 14 }}>
+                <label className="inv-label">Select Bank Account</label>
+                <select
+                  className="inv-input"
+                  value={bankAccountId ?? ""}
+                  onChange={(e) => setBankAccountId(Number(e.target.value) || null)}
+                  required
+                >
+                  <option value="">Select account</option>
+                  {bankAccounts.map(b => (
+                    <option key={b.id} value={b.id}>{b.bank_name} – {b.account_number}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="inv-row" style={{ marginTop: 14 }}>
               <div>
                 <label className="inv-label">Reference</label>

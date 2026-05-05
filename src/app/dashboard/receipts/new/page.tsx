@@ -20,6 +20,8 @@ export default function NewReceiptPage() {
   const [date, setDate] = useState(new Date().toISOString().split("T")[0])
   const [reference, setReference] = useState("")
   const [notes, setNotes] = useState("")
+  const [bankAccounts, setBankAccounts] = useState<any[]>([])
+  const [bankAccountId, setBankAccountId] = useState<number | null>(null)
 
   // Invoices
   const [unpaidInvoices, setUnpaidInvoices] = useState<any[]>([])
@@ -29,7 +31,7 @@ export default function NewReceiptPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState<string | null>(null)
-  const [refreshKey, setRefreshKey] = useState(0)   // ⚡ forces re‑fetch after receipt
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -40,10 +42,14 @@ export default function NewReceiptPage() {
         .eq("company_id", cid)
         .order("name")
         .then(r => r.data && setCustomers(r.data))
+      supabase.from("bank_accounts")
+        .select("id, bank_name, account_number")
+        .eq("company_id", cid)
+        .order("bank_name")
+        .then(r => r.data && setBankAccounts(r.data))
     })
   }, [])
 
-  // ⚡ refetch invoices when customer, company, or refreshKey changes
   useEffect(() => {
     if (!customerId || !companyId) return
     supabase.from("invoices")
@@ -84,7 +90,6 @@ export default function NewReceiptPage() {
     }))
   }
 
-  // Recalculate total allocated
   useEffect(() => {
     const total = Object.values(selectedInvoices).reduce((sum, a) => sum + (a.apply ? a.amount : 0), 0)
     setTotalAllocated(total)
@@ -96,6 +101,10 @@ export default function NewReceiptPage() {
     if (!customerId) { setError("Please select a customer"); return }
     if (Object.keys(selectedInvoices).length === 0) {
       setError("Select at least one invoice to apply payment to.")
+      return
+    }
+    if (paymentMethod === "Bank Transfer" && !bankAccountId) {
+      setError("Please select a bank account for the transfer.")
       return
     }
     const total = Object.values(selectedInvoices).reduce((s, a) => s + a.amount, 0)
@@ -114,6 +123,7 @@ export default function NewReceiptPage() {
         party_id: customerId,
         amount: total,
         payment_method: paymentMethod,
+        bank_account_id: bankAccountId,
         date,
         reference,
         notes,
@@ -127,7 +137,7 @@ export default function NewReceiptPage() {
       return
     }
     setSuccess(data.receipt_no)
-    setRefreshKey(k => k + 1)          // ⚡ force invoice list refresh
+    setRefreshKey(k => k + 1)
     setLoading(false)
   }
 
@@ -260,7 +270,7 @@ export default function NewReceiptPage() {
             <div className="inv-row">
               <div>
                 <label className="inv-label">Payment Method</label>
-                <select className="inv-input" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
+                <select className="inv-input" value={paymentMethod} onChange={e => { setPaymentMethod(e.target.value); setBankAccountId(null) }}>
                   <option value="Cash">Cash</option>
                   <option value="Bank Transfer">Bank Transfer</option>
                   <option value="Cheque">Cheque</option>
@@ -272,6 +282,24 @@ export default function NewReceiptPage() {
                 <input className="inv-input" type="date" value={date} onChange={e => setDate(e.target.value)} />
               </div>
             </div>
+
+            {paymentMethod === "Bank Transfer" && (
+              <div style={{ marginTop: 14 }}>
+                <label className="inv-label">Select Bank Account</label>
+                <select
+                  className="inv-input"
+                  value={bankAccountId ?? ""}
+                  onChange={(e) => setBankAccountId(Number(e.target.value) || null)}
+                  required
+                >
+                  <option value="">Select account</option>
+                  {bankAccounts.map(b => (
+                    <option key={b.id} value={b.id}>{b.bank_name} – {b.account_number}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="inv-row" style={{ marginTop: 14 }}>
               <div>
                 <label className="inv-label">Reference</label>
