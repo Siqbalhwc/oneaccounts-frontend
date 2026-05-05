@@ -3,8 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Upload, Save } from "lucide-react"
-import RoleGuard from "@/components/RoleGuard"
+import { ArrowLeft, Upload, Save, CheckCircle } from "lucide-react"
 
 export default function NewProductPage() {
   const router = useRouter()
@@ -21,7 +20,7 @@ export default function NewProductPage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const [success, setSuccess] = useState<{ id: number; code: string } | null>(null)
+  const [flash, setFlash] = useState<string | null>(null)
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -64,85 +63,119 @@ export default function NewProductPage() {
         cost_price: parseFloat(cost_price) || 0,
         opening_qty: parseFloat(opening_qty) || 0,
         image_url: imageUrl,
-        // code is intentionally omitted – API will auto‑generate it
       }),
     })
     const data = await res.json()
     if (data.error) { setError(data.error); setLoading(false); return }
-    setSuccess({ id: data.productId, code: data.code })
-    setLoading(false)
-  }
 
-  if (success) {
-    return (
-      <div style={{ padding: 24, maxWidth: 600, margin: "0 auto", textAlign: "center" }}>
-        <h2>✅ Product Created</h2>
-        <p style={{ fontSize: 14, marginBottom: 4 }}>Product code: <strong>{success.code}</strong></p>
-        <p style={{ fontSize: 13, color: "#64748B" }}>Opening inventory GL entry posted (if applicable).</p>
-        <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 16 }}>
-          <button className="inv-btn inv-btn-primary" onClick={() => router.push("/dashboard/products")}>View Products</button>
-          <button className="inv-btn inv-btn-outline" onClick={() => {
-            setSuccess(null); setName(""); setSalePrice(""); setCostPrice(""); setOpeningQty(""); setImageFile(null); setImagePreview(null)
-          }}>Add Another</button>
-        </div>
-      </div>
-    )
+    // Inline success + reset
+    setFlash(`✅ Product ${data.code} created successfully!`)
+    setName(""); setSalePrice(""); setCostPrice(""); setOpeningQty("")
+    setImageFile(null); setImagePreview(null)
+    setLoading(false)
+    setTimeout(() => setFlash(null), 4000)
   }
 
   return (
-    <RoleGuard allowedRoles={["admin", "accountant"]}>
-      <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
-        <div style={{ maxWidth: 700, margin: "0 auto" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-            <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/products")}>
-              <ArrowLeft size={16} />
-            </button>
-            <div>
-              <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", margin: 0 }}>Add New Product</h1>
-              <p style={{ fontSize: 13, color: "#94A3B8", margin: 0 }}>Product code will be generated automatically</p>
-            </div>
+    <div style={{ padding: "16px", background: "#F4F6FB", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      <style>{`
+        .inv-shell { max-width: 700px; margin: 0 auto; }
+        .inv-title { font-size: 18px; font-weight: 700; color: #1E293B; }
+        .inv-card {
+          background: white;
+          border-radius: 12px;
+          border: 1px solid #E5EAF2;
+          padding: 16px 20px;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .inv-label {
+          font-size: 10px;
+          font-weight: 600;
+          color: #6B7280;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          margin-bottom: 4px;
+          display: block;
+        }
+        .inv-input {
+          width: 100%; height: 38px;
+          border: 1.5px solid #E5EAF2;
+          border-radius: 8px; padding: 0 12px; font-size: 13px;
+          font-family: inherit; background: #FAFBFF; outline: none;
+          box-sizing: border-box; transition: border-color 0.15s;
+        }
+        .inv-input:focus { border-color: #1740C8; background: white; }
+        .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .inv-btn {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 8px 14px; border-radius: 8px; font-size: 13px;
+          font-weight: 600; cursor: pointer; border: none;
+          font-family: inherit; transition: all 0.15s; white-space: nowrap;
+        }
+        .inv-btn-primary { background: linear-gradient(135deg, #1740C8, #071352); color: white; }
+        .inv-btn-outline { background: white; border: 1.5px solid #E5EAF2; color: #475569; }
+        @media (max-width: 600px) {
+          .inv-row { grid-template-columns: 1fr; }
+        }
+      `}</style>
+
+      <div className="inv-shell">
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+          <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/products")}>
+            <ArrowLeft size={16} />
+          </button>
+          <div className="inv-title">📦 Add New Product</div>
+        </div>
+
+        {error && (
+          <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#B91C1C", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
+            {error}
           </div>
+        )}
 
-          {error && (
-            <div style={{ background: "#FEF2F2", color: "#B91C1C", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
-              {error}
-            </div>
-          )}
+        {flash && (
+          <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#15803D", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+            <CheckCircle size={16} /> {flash}
+          </div>
+        )}
 
-          <form onSubmit={handleSubmit} style={{ background: "white", borderRadius: 12, border: "1px solid #E2E8F0", padding: 24 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
+        <form onSubmit={handleSubmit}>
+          <div className="inv-card">
+            <div className="inv-row" style={{ marginBottom: 14 }}>
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>Product Name *</label>
+                <label className="inv-label">Product Name *</label>
                 <input className="inv-input" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Widget A" required />
               </div>
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>Sale Price (PKR)</label>
+                <label className="inv-label">Sale Price (PKR)</label>
                 <input className="inv-input" type="number" value={sale_price} onChange={e => setSalePrice(e.target.value)} placeholder="0" />
               </div>
+            </div>
+            <div className="inv-row" style={{ marginBottom: 14 }}>
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>Cost Price (PKR)</label>
+                <label className="inv-label">Cost Price (PKR)</label>
                 <input className="inv-input" type="number" value={cost_price} onChange={e => setCostPrice(e.target.value)} placeholder="0" />
               </div>
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>Opening Quantity</label>
+                <label className="inv-label">Opening Quantity</label>
                 <input className="inv-input" type="number" value={opening_qty} onChange={e => setOpeningQty(e.target.value)} placeholder="0" />
               </div>
             </div>
 
             <div style={{ marginBottom: 20 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>Product Image (optional)</label>
+              <label className="inv-label">Product Image (optional)</label>
               <input type="file" accept="image/*" onChange={handleImageChange} />
               {imagePreview && (
                 <img src={imagePreview} alt="Preview" style={{ marginTop: 10, maxWidth: 200, maxHeight: 200, borderRadius: 8 }} />
               )}
             </div>
 
-            <button className="inv-btn inv-btn-primary" type="submit" disabled={loading} style={{ width: "100%", justifyContent: "center", padding: 12 }}>
+            <button className="inv-btn inv-btn-primary" type="submit" disabled={loading} style={{ width: "100%", justifyContent: "center", padding: 10 }}>
               <Save size={16} /> {loading ? "Saving..." : "Save Product"}
             </button>
-          </form>
-        </div>
+          </div>
+        </form>
       </div>
-    </RoleGuard>
+    </div>
   )
 }
