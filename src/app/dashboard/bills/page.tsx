@@ -38,21 +38,18 @@ export default function BillsPage() {
   const [pageSize, setPageSize] = useState(25)
   const [total, setTotal] = useState(0)
 
-  // ── Bullet‑proof company ID retrieval ──────────────────────
+  // ── Company ID (hardcoded fallback) ─────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const claim = (user?.app_metadata as any)?.company_id
       if (claim) { setCompanyId(claim); return }
       const match = document.cookie.match(/(?:^| )active_company_id=([^;]+)/)
       if (match) { setCompanyId(match[2]); return }
-      if (user) {
-        supabase.from('user_roles')
-          .select('company_id').eq('user_id', user.id).limit(1).maybeSingle()
-          .then(({ data }) => { if (data) setCompanyId(data.company_id) })
-      }
+      setCompanyId('00000000-0000-0000-0000-000000000001')
     })
   }, [])
 
+  // ── Fetch bills ────────────────────────────────────────────
   useEffect(() => {
     if (!canView || !companyId) { setLoading(false); return }
 
@@ -104,6 +101,7 @@ export default function BillsPage() {
     fetchBills()
   }, [canView, companyId, page, pageSize])
 
+  // ── Search ─────────────────────────────────────────────────
   useEffect(() => {
     if (!search.trim()) { setFiltered(bills); return }
     const s = search.toLowerCase()
@@ -125,7 +123,7 @@ export default function BillsPage() {
     <RoleGuard allowedRoles={["admin", "accountant"]}>
       <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
         <style>{`
-          .bill-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+          .bill-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
           .bill-title { font-size: clamp(18px, 1.8vw, 24px); font-weight: 800; color: #1E293B; }
           .bill-subtitle { font-size: 13px; color: #94A3B8; margin-top: 2px; }
           .bill-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all 0.15s; white-space: nowrap; }
@@ -139,10 +137,7 @@ export default function BillsPage() {
           .bill-table-row:hover { background: #FAFBFF; }
           .bill-badge { padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; }
           .bill-empty { padding: 40px; text-align: center; color: #94A3B8; }
-          @media (max-width: 768px) {
-            .bill-table-header, .bill-table-row { grid-template-columns: 100px 1fr 100px 80px; }
-            .bill-hide-mobile { display: none; }
-          }
+          @media (max-width: 768px) { .bill-table-header, .bill-table-row { grid-template-columns: 100px 1fr 100px 80px; } .bill-hide-mobile { display: none; } }
         `}</style>
 
         <div className="bill-header">
