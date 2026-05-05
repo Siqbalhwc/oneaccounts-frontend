@@ -52,13 +52,17 @@ export default function NewReceiptPage() {
       .eq("party_id", customerId)
       .neq("status", "Paid")
       .order("date", { ascending: true })
-      .then(({ data }) => {
-        setUnpaidInvoices(data || [])
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("Failed to fetch invoices:", error)
+          setUnpaidInvoices([])
+        } else {
+          setUnpaidInvoices(data || [])
+        }
         setSelectedInvoices({})
         setTotalAllocated(0)
       })
   }, [customerId, companyId])
-
   const toggleInvoice = (inv: any) => {
     setSelectedInvoices(prev => {
       const next = { ...prev }

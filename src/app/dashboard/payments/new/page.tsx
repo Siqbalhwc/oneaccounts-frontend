@@ -51,8 +51,13 @@ export default function NewPaymentPage() {
       .eq("party_id", supplierId)
       .neq("status", "Paid")
       .order("date", { ascending: true })
-      .then(({ data }) => {
-        setUnpaidBills(data || [])
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("Failed to fetch bills:", error)
+          setUnpaidBills([])
+        } else {
+          setUnpaidBills(data || [])
+        }
         setSelectedBills({})
         setTotalAllocated(0)
       })
