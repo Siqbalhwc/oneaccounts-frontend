@@ -114,6 +114,15 @@ export default function SuppliersPage() {
     return `VEND-${String(max + 1).padStart(3, "0")}`
   }
 
+  // ── Phone validation helper ─────────────────────────────────
+  const formatPhoneForWhatsApp = (raw: string): { valid: boolean; formatted: string; error?: string } => {
+    const digits = raw.replace(/\D/g, "")
+    if (digits.length === 0) return { valid: true, formatted: "" }
+    if (digits.startsWith("92") && digits.length === 12) return { valid: true, formatted: digits }
+    if (digits.startsWith("0") && digits.length === 11) return { valid: true, formatted: "92" + digits.slice(1) }
+    return { valid: false, formatted: "", error: "Invalid WhatsApp number. Must be 03xx-xxxxxxx or 92xxxxxxxxxx." }
+  }
+
   const openNew = () => {
     setEditing(null); setCode(generateCode()); setName(""); setPhone(""); setEmail(""); setAddress(""); setOpeningBalance(0); setShowModal(true)
   }
@@ -124,12 +133,18 @@ export default function SuppliersPage() {
 
   const handleSave = async () => {
     if (!code.trim() || !name.trim() || !companyId) return
+    // Validate phone
+    const phoneCheck = formatPhoneForWhatsApp(phone)
+    if (!phoneCheck.valid) {
+      setFlash({ type: "error", msg: phoneCheck.error || "Invalid phone number" })
+      return
+    }
     setSaving(true)
     const payload = {
       company_id: companyId,
       code: code.trim(),
       name: name.trim(),
-      phone: phone.trim() || null,
+      phone: phoneCheck.formatted || null,
       email: email.trim() || null,
       address: address.trim() || null,
       balance: openingBalance,
@@ -172,9 +187,11 @@ export default function SuppliersPage() {
 
   const handleImport = async (rows: any[]) => {
     for (const row of rows) {
+      const phoneCheck = formatPhoneForWhatsApp(row.phone || "")
       await supabase.from("suppliers").insert({
         company_id: companyId,
-        code: row.code || `VEND-${Date.now()}`, name: row.name || "Unnamed", phone: row.phone || null, email: row.email || null,
+        code: row.code || `VEND-${Date.now()}`, name: row.name || "Unnamed",
+        phone: phoneCheck.formatted || null, email: row.email || null,
         address: row.address || null, balance: parseFloat(row.balance) || 0, opening_balance: parseFloat(row.opening_balance) || 0
       })
     }
@@ -234,7 +251,14 @@ export default function SuppliersPage() {
                   <input className="sp-field-input" value={name} onChange={e => setName(e.target.value)} />
                 </div>
               </div>
-              <div className="sp-field-row"><div><label className="sp-field-label">Phone</label><input className="sp-field-input" value={phone} onChange={e=>setPhone(e.target.value)}/></div><div><label className="sp-field-label">Email</label><input className="sp-field-input" value={email} onChange={e=>setEmail(e.target.value)}/></div></div>
+              <div className="sp-field-row">
+                <div>
+                  <label className="sp-field-label">Phone (WhatsApp)</label>
+                  <input className="sp-field-input" value={phone} onChange={e => setPhone(e.target.value)} placeholder="03xx-xxxxxxx" />
+                  <div style={{ fontSize: 10, color: "#94A3B8", marginTop: 2 }}>Must be a valid Pakistani mobile number (03xx or 92)</div>
+                </div>
+                <div><label className="sp-field-label">Email</label><input className="sp-field-input" value={email} onChange={e=>setEmail(e.target.value)}/></div>
+              </div>
               <div><label className="sp-field-label">Address</label><input className="sp-field-input" value={address} onChange={e=>setAddress(e.target.value)}/></div>
               <div><label className="sp-field-label">Opening Balance (PKR)</label><input className="sp-field-input" type="number" value={openingBalance} onChange={e=>setOpeningBalance(Number(e.target.value))}/></div>
             </div>

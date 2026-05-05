@@ -118,6 +118,20 @@ export default function CustomersPage() {
     return `CUST-${String(max + 1).padStart(3, "0")}`
   }
 
+  // ── Phone validation helper ─────────────────────────────────
+  const formatPhoneForWhatsApp = (raw: string): { valid: boolean; formatted: string; error?: string } => {
+    const digits = raw.replace(/\D/g, "")
+    if (digits.length === 0) return { valid: true, formatted: "" }   // empty is ok
+    // Must be a Pakistani mobile number
+    if (digits.startsWith("92") && digits.length === 12) {
+      return { valid: true, formatted: digits }                      // already intl format
+    }
+    if (digits.startsWith("0") && digits.length === 11) {
+      return { valid: true, formatted: "92" + digits.slice(1) }     // convert 03xx to 92
+    }
+    return { valid: false, formatted: "", error: "Invalid WhatsApp number. Must be 03xx-xxxxxxx or 92xxxxxxxxxx." }
+  }
+
   const openNew = () => {
     setEditing(null)
     setCode(generateCode()); setName(""); setPhone(""); setEmail(""); setAddress(""); setPaymentTerms("Net 30"); setOpeningBalance(0)
@@ -132,12 +146,18 @@ export default function CustomersPage() {
 
   const handleSave = async () => {
     if (!code.trim() || !name.trim() || !companyId) return
+    // Validate phone
+    const phoneCheck = formatPhoneForWhatsApp(phone)
+    if (!phoneCheck.valid) {
+      setFlash({ type: "error", msg: phoneCheck.error || "Invalid phone number" })
+      return
+    }
     setSaving(true)
     const payload = {
-      company_id: companyId,     // ⭐ always set
+      company_id: companyId,
       code: code.trim(),
       name: name.trim(),
-      phone: phone.trim() || null,
+      phone: phoneCheck.formatted || null,   // store formatted version
       email: email.trim() || null,
       address: address.trim() || null,
       payment_terms: paymentTerms,
@@ -156,7 +176,6 @@ export default function CustomersPage() {
       }
       setFlash({ type: "success", msg: `Customer '${name}' added!` })
 
-      // Post opening balance journal entry if > 0
       if (openingBalance > 0) {
         await fetch("/api/customers/opening-entry", {
           method: "POST",
@@ -182,9 +201,11 @@ export default function CustomersPage() {
 
   const handleImport = async (rows: any[]) => {
     for (const row of rows) {
+      const phoneCheck = formatPhoneForWhatsApp(row.phone || "")
       await supabase.from("customers").insert({
         company_id: companyId,
-        code: row.code || `CUST-${Date.now()}`, name: row.name || "Unnamed", phone: row.phone || null, email: row.email || null, address: row.address || null,
+        code: row.code || `CUST-${Date.now()}`, name: row.name || "Unnamed",
+        phone: phoneCheck.formatted || null, email: row.email || null, address: row.address || null,
         balance: parseFloat(row.balance) || 0, payment_terms: row.payment_terms || "Net 30"
       })
     }
@@ -236,7 +257,14 @@ export default function CustomersPage() {
             <div className="cp-modal-header"><div className="cp-modal-title">{editing ? "✏️ Edit Customer" : "➕ Add New Customer"}</div><button className="cp-icon-btn" onClick={() => setShowModal(false)}><X size={18} /></button></div>
             <div className="cp-modal-body">
               <div className="cp-field-row"><div><label className="cp-field-label">Customer Code *</label><input className="cp-field-input" value={code} onChange={e => setCode(e.target.value)} placeholder="CUST-001" /></div><div><label className="cp-field-label">Customer Name *</label><input className="cp-field-input" value={name} onChange={e => setName(e.target.value)} placeholder="Customer name" /></div></div>
-              <div className="cp-field-row"><div><label className="cp-field-label">Phone</label><input className="cp-field-input" value={phone} onChange={e => setPhone(e.target.value)} placeholder="0300-1234567" /></div><div><label className="cp-field-label">Email</label><input className="cp-field-input" value={email} onChange={e => setEmail(e.target.value)} placeholder="customer@email.com" /></div></div>
+              <div className="cp-field-row">
+                <div>
+                  <label className="cp-field-label">Phone (WhatsApp)</label>
+                  <input className="cp-field-input" value={phone} onChange={e => setPhone(e.target.value)} placeholder="03xx-xxxxxxx" />
+                  <div style={{ fontSize: 10, color: "#94A3B8", marginTop: 2 }}>Must be a valid Pakistani mobile number (03xx or 92)</div>
+                </div>
+                <div><label className="cp-field-label">Email</label><input className="cp-field-input" value={email} onChange={e => setEmail(e.target.value)} placeholder="customer@email.com" /></div>
+              </div>
               <div><label className="cp-field-label">Address</label><input className="cp-field-input" value={address} onChange={e => setAddress(e.target.value)} placeholder="Address" /></div>
               <div className="cp-field-row"><div><label className="cp-field-label">Payment Terms</label><input className="cp-field-input" value={paymentTerms} onChange={e => setPaymentTerms(e.target.value)} placeholder="Net 30" /></div><div><label className="cp-field-label">Opening Balance (PKR)</label><input className="cp-field-input" type="number" value={openingBalance} onChange={e => setOpeningBalance(Number(e.target.value))} /></div></div>
             </div>
