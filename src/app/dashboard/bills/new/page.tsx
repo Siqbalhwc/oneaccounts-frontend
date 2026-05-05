@@ -71,6 +71,26 @@ export default function NewBillPage() {
     p.code.toLowerCase().includes(productSearch.toLowerCase())
   )
 
+  // ⭐ Sequential bill numbering per supplier
+  const getNextBillNo = async (suppCode: string): Promise<string> => {
+    const { data } = await supabase
+      .from("invoices")
+      .select("invoice_no")
+      .like("invoice_no", `${suppCode}-%`)
+      .eq("type", "purchase")
+      .order("invoice_no", { ascending: false })
+      .limit(1)
+
+    let nextNum = 1
+    if (data && data.length > 0) {
+      const last = data[0].invoice_no
+      const parts = last.split("-")
+      const num = parseInt(parts[parts.length - 1])
+      if (!isNaN(num)) nextNum = num + 1
+    }
+    return `${suppCode}-${String(nextNum).padStart(2, "0")}`
+  }
+
   const addItem = (prod: any) => {
     setItems([...items, {
       product_id: prod.id,
@@ -98,11 +118,6 @@ export default function NewBillPage() {
 
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
 
-  const generateBillNo = () => {
-    const supp = suppliers.find(s => s.id === supplierId)
-    return supp ? `${supp.code}-01` : `BILL-${Date.now().toString(36).toUpperCase()}`
-  }
-
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
 
   const handleSubmit = async () => {
@@ -111,7 +126,9 @@ export default function NewBillPage() {
 
     setLoading(true); setError("")
 
-    const billNo = generateBillNo()
+    // ⭐ Get the next sequential bill number for this supplier
+    const suppCode = selectedSupplier?.code || "BILL"
+    const billNo = await getNextBillNo(suppCode)
 
     try {
       const res = await fetch("/api/bills", {
@@ -150,6 +167,19 @@ export default function NewBillPage() {
       setError("Network error")
       setLoading(false)
     }
+  }
+
+  const handleBeforeSavePdf = () => {
+    getNextBillNo(selectedSupplier?.code || "BILL").then(billNo => {
+      const tempBill = {
+        invoice_no: billNo,
+        date: billDate,
+        due_date: dueDate,
+        customers: selectedSupplier || {},
+      }
+      const doc = generateInvoicePDF(tempBill, items)
+      doc.save(`bill-preview-${billNo}.pdf`)
+    })
   }
 
   return (
@@ -213,9 +243,9 @@ export default function NewBillPage() {
 
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
-        .cust-search-icon { position: absolute; left: 10px; color: #94A3B8; pointer-events: none; }
-        .cust-clear { position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: #94A3B8; display: flex; align-items: center; padding: 4px; border-radius: 4px; }
-        .cust-clear:hover { color: #EF4444; background: #FEF2F2; }
+        .cust-search-icon { position: absolute; left: 10px; color: "#94A3B8"; pointer-events: none; }
+        .cust-clear { position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: "#94A3B8"; display: flex; align-items: center; padding: 4px; border-radius: 4px; }
+        .cust-clear:hover { color: "#EF4444"; background: "#FEF2F2"; }
         .cust-dropdown {
           position: absolute; top: calc(100% + 4px); left: 0; right: 0;
           background: white; border: 1.5px solid #C7D2FE; border-radius: 10px;
@@ -229,15 +259,15 @@ export default function NewBillPage() {
           transition: background 0.1s;
         }
         .cust-option:last-child { border-bottom: none; }
-        .cust-option:hover { background: #EEF2FF; }
-        .cust-option-name { font-size: 13px; font-weight: 600; color: #1E293B; }
-        .cust-option-meta { font-size: 11px; color: #94A3B8; margin-top: 2px; }
-        .cust-option-bal { font-size: 12px; font-weight: 600; color: #1E3A8A; white-space: nowrap; }
+        .cust-option:hover { background: "#EEF2FF"; }
+        .cust-option-name { font-size: 13px; font-weight: 600; color: "#1E293B"; }
+        .cust-option-meta { font-size: 11px; color: "#94A3B8"; margin-top: 2px; }
+        .cust-option-bal { font-size: 12px; font-weight: 600; color: "#1E3A8A"; white-space: nowrap; }
         .cust-selected-badge {
           display: inline-flex; align-items: center; gap: 6px;
-          background: #EEF2FF; border: 1.5px solid #C7D2FE;
+          background: "#EEF2FF"; border: 1.5px solid "#C7D2FE";
           border-radius: 8px; padding: 6px 12px; font-size: 13px;
-          font-weight: 600; color: #1E3A8A; width: 100%;
+          font-weight: 600; color: "#1E3A8A"; width: 100%;
         }
       `}</style>
 
@@ -400,6 +430,9 @@ export default function NewBillPage() {
             <div className="inv-card">
               <button className="inv-btn inv-btn-primary" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading}>
                 {loading ? "Posting..." : "💾 POST Bill"}
+              </button>
+              <button className="inv-btn inv-btn-outline" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleBeforeSavePdf}>
+                <Download size={14} /> PDF Preview
               </button>
             </div>
           </div>

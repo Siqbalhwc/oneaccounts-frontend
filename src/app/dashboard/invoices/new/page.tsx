@@ -89,6 +89,25 @@ export default function NewInvoicePage() {
     p.code.toLowerCase().includes(productSearch.toLowerCase())
   )
 
+  // ⭐ Fixed sequential invoice numbering
+  const getNextInvoiceNo = async (custCode: string): Promise<string> => {
+    const { data } = await supabase
+      .from("invoices")
+      .select("invoice_no")
+      .like("invoice_no", `${custCode}-%`)
+      .order("invoice_no", { ascending: false })
+      .limit(1)
+
+    let nextNum = 1
+    if (data && data.length > 0) {
+      const last = data[0].invoice_no
+      const parts = last.split("-")
+      const num = parseInt(parts[parts.length - 1])
+      if (!isNaN(num)) nextNum = num + 1
+    }
+    return `${custCode}-${String(nextNum).padStart(2, "0")}`
+  }
+
   const fetchPriceHistory = async (productId: number, custId: number) => {
     const { data: items } = await supabase
       .from("invoice_items")
@@ -150,11 +169,6 @@ export default function NewInvoicePage() {
 
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
 
-  const generateInvoiceNo = () => {
-    const cust = customers.find(c => c.id === customerId)
-    return cust ? `${cust.code}-01` : `INV-${Date.now().toString(36).toUpperCase()}`
-  }
-
   const totalAmount   = items.reduce((s, i) => s + i.total, 0)
   const totalCost     = items.reduce((s, i) => s + (i.qty * i.cost_price), 0)
   const totalSalary   = automationEnabled ? totalAmount * SALARY_RATE : 0
@@ -178,14 +192,16 @@ export default function NewInvoicePage() {
 
     setLoading(true); setError("")
 
-    const invoiceNo = generateInvoiceNo()
+    // ⭐ Get the next sequential invoice number for this customer
+    const custCode = selectedCustomer?.code || "INV"
+    const invoiceNo = await getNextInvoiceNo(custCode)
 
     try {
       const res = await fetch("/api/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          invoice_no: invoiceNo,
+          invoice_no:   invoiceNo,
           party_id:     customerId,
           invoice_date: invoiceDate,
           due_date:     dueDate,
@@ -204,7 +220,7 @@ export default function NewInvoicePage() {
         return
       }
 
-      // Show inline success message and reset form
+      // Show inline success and reset form
       setFlash(`✅ Invoice ${invoiceNo} saved successfully!`)
       setItems([])
       setCustomerId(null)
@@ -214,20 +230,11 @@ export default function NewInvoicePage() {
       setNotes("")
       setLoading(false)
 
-      // Auto‑clear flash after 4 seconds
       setTimeout(() => setFlash(null), 4000)
     } catch (e: any) {
       setError("Network error. Please try again.")
       setLoading(false)
     }
-  }
-
-  const handleDownloadPDF = async () => {
-    // Uses the last saved invoice data (we could store that, but since the form resets, we'll just use a generic preview)
-    // Actually, we lost the invoice id after reset. To support download after saving, we'd need to keep successInvoice state.
-    // Given the user's preference, they want instant reset. If they need PDF, they can download preview before posting.
-    // The PDF Preview button already works for the current unsaved data.
-    // We'll keep the existing preview that works on unsaved data.
   }
 
   const waLink = () => {
@@ -238,14 +245,16 @@ export default function NewInvoicePage() {
   }
 
   const handleBeforeSavePdf = () => {
-    const tempInvoice = {
-      invoice_no: generateInvoiceNo(),
-      date: invoiceDate,
-      due_date: dueDate,
-      customers: customers.find(c => c.id === customerId) || {},
-    }
-    const doc = generateInvoicePDF(tempInvoice, items)
-    doc.save(`invoice-preview-${tempInvoice.invoice_no}.pdf`)
+    getNextInvoiceNo(selectedCustomer?.code || "INV").then(invoiceNo => {
+      const tempInvoice = {
+        invoice_no: invoiceNo,
+        date: invoiceDate,
+        due_date: dueDate,
+        customers: selectedCustomer || {},
+      }
+      const doc = generateInvoicePDF(tempInvoice, items)
+      doc.save(`invoice-preview-${invoiceNo}.pdf`)
+    })
   }
 
   // ── UI ────────────────────────────────────────────────────
@@ -271,17 +280,11 @@ export default function NewInvoicePage() {
           display: block;
         }
         .inv-input {
-          width: 100%;
-          height: 38px;
+          width: 100%; height: 38px;
           border: 1.5px solid #E5EAF2;
-          border-radius: 8px;
-          padding: 0 12px;
-          font-size: 13px;
-          font-family: inherit;
-          background: #FAFBFF;
-          outline: none;
-          box-sizing: border-box;
-          transition: border-color 0.15s;
+          border-radius: 8px; padding: 0 12px; font-size: 13px;
+          font-family: inherit; background: #FAFBFF; outline: none;
+          box-sizing: border-box; transition: border-color 0.15s;
         }
         .inv-input:focus { border-color: #1740C8; background: white; }
         .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -328,9 +331,7 @@ export default function NewInvoicePage() {
           display: grid; grid-template-columns: 1fr 300px;
           gap: 16px; align-items: start;
         }
-        @media (max-width: 900px) {
-          .inv-grid { grid-template-columns: 1fr; }
-        }
+        @media (max-width: 900px) { .inv-grid { grid-template-columns: 1fr; } }
         @media (max-width: 600px) {
           .inv-row { grid-template-columns: 1fr; }
           .inv-item-row, .inv-item-header { grid-template-columns: 1fr 60px 70px 40px; }
@@ -377,9 +378,7 @@ export default function NewInvoicePage() {
               {automationEnabled ? "Automation enabled – expenses & profit allocation will be posted" : "Plain invoice (no automation)"}
             </div>
           </div>
-          <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/invoices")}>
-            View List
-          </button>
+          <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/invoices")}>View List</button>
         </div>
 
         {error && (
@@ -558,15 +557,9 @@ export default function NewInvoicePage() {
               </div>
               {automationEnabled ? (
                 <>
-                  <div className="inv-summary-row">
-                    <span>Salary (4%)</span><span>PKR {totalSalary.toLocaleString()}</span>
-                  </div>
-                  <div className="inv-summary-row">
-                    <span>Advertisement (0.5%)</span><span>PKR {totalAds.toLocaleString()}</span>
-                  </div>
-                  <div className="inv-summary-row">
-                    <span>Fuel (0.5%)</span><span>PKR {totalFuel.toLocaleString()}</span>
-                  </div>
+                  <div className="inv-summary-row"><span>Salary (4%)</span><span>PKR {totalSalary.toLocaleString()}</span></div>
+                  <div className="inv-summary-row"><span>Advertisement (0.5%)</span><span>PKR {totalAds.toLocaleString()}</span></div>
+                  <div className="inv-summary-row"><span>Fuel (0.5%)</span><span>PKR {totalFuel.toLocaleString()}</span></div>
                 </>
               ) : (
                 <div className="inv-summary-row" style={{ color: "#94A3B8", fontStyle: "italic" }}>
