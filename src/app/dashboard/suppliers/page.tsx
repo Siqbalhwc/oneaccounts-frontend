@@ -126,7 +126,7 @@ export default function SuppliersPage() {
     if (!code.trim() || !name.trim() || !companyId) return
     setSaving(true)
     const payload = {
-      company_id: companyId,     // ⭐ always set
+      company_id: companyId,
       code: code.trim(),
       name: name.trim(),
       phone: phone.trim() || null,
@@ -146,6 +146,19 @@ export default function SuppliersPage() {
         return
       }
       setFlash({ type: "success", msg: `Supplier '${name}' added!` })
+
+      // Post opening balance journal entry if > 0
+      if (openingBalance > 0) {
+        await fetch("/api/suppliers/opening-entry", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            supplierId: newSupp.id,
+            supplierName: name.trim(),
+            amount: openingBalance,
+          }),
+        }).catch(console.error)
+      }
     }
     setSaving(false); setShowModal(false); fetchSuppliers()
     setTimeout(() => setFlash(null), 3000)
