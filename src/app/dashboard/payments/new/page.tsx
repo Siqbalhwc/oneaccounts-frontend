@@ -229,6 +229,11 @@ export default function NewPaymentPage() {
                               onChange={e => updateAllocAmount(bill.id, Number(e.target.value))}
                               disabled={!sel}
                             />
+                            {sel && sel.amount > 0 && (
+                              <div style={{ fontSize: 10, color: balance - sel.amount >= 0 ? '#10B981' : '#EF4444', marginTop: 2 }}>
+                                Remaining: PKR {(balance - sel.amount).toLocaleString()}
+                              </div>
+                            )}
                           </td>
                         </tr>
                       )
