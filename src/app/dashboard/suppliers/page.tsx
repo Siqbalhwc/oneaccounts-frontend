@@ -81,16 +81,20 @@ export default function SuppliersPage() {
   const [total, setTotal] = useState(0)
   const [companyId, setCompanyId] = useState<string>("")
 
-  // ── Get company ID ────────────────────────────────────────
+  // ── Bullet‑proof company ID ────────────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
-      const cid = (user?.app_metadata as any)?.company_id
-        || '00000000-0000-0000-0000-000000000001'
-      setCompanyId(cid)
+      const claim = (user?.app_metadata as any)?.company_id
+      if (claim) { setCompanyId(claim); return }
+      const match = document.cookie.match(/(?:^| )active_company_id=([^;]+)/)
+      if (match) { setCompanyId(match[2]); return }
+      // Hardcoded fallback to your main company
+      setCompanyId('00000000-0000-0000-0000-000000000001')
     })
   }, [])
 
   const fetchSuppliers = async () => {
+    if (!companyId) return
     setLoading(true)
     const { count } = await supabase.from("suppliers").select("*", { count: "exact", head: true }).eq("company_id", companyId)
     setTotal(count || 0)
@@ -101,7 +105,7 @@ export default function SuppliersPage() {
     setLoading(false)
   }
 
-  useEffect(() => { if (companyId) fetchSuppliers() }, [companyId, page, pageSize])
+  useEffect(() => { fetchSuppliers() }, [companyId, page, pageSize])
 
   useEffect(() => {
     if (!search.trim()) { setFiltered(suppliers); return }
@@ -114,7 +118,6 @@ export default function SuppliersPage() {
     return `VEND-${String(max + 1).padStart(3, "0")}`
   }
 
-  // ── Phone validation helper ─────────────────────────────────
   const formatPhoneForWhatsApp = (raw: string): { valid: boolean; formatted: string; error?: string } => {
     const digits = raw.replace(/\D/g, "")
     if (digits.length === 0) return { valid: true, formatted: "" }
@@ -133,7 +136,6 @@ export default function SuppliersPage() {
 
   const handleSave = async () => {
     if (!code.trim() || !name.trim() || !companyId) return
-    // Validate phone
     const phoneCheck = formatPhoneForWhatsApp(phone)
     if (!phoneCheck.valid) {
       setFlash({ type: "error", msg: phoneCheck.error || "Invalid phone number" })
@@ -161,16 +163,11 @@ export default function SuppliersPage() {
         return
       }
       setFlash({ type: "success", msg: `Supplier '${name}' added!` })
-
       if (openingBalance > 0) {
         await fetch("/api/suppliers/opening-entry", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            supplierId: newSupp.id,
-            supplierName: name.trim(),
-            amount: openingBalance,
-          }),
+          body: JSON.stringify({ supplierId: newSupp.id, supplierName: name.trim(), amount: openingBalance }),
         }).catch(console.error)
       }
     }
