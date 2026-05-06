@@ -14,6 +14,8 @@ export default function NewBillPage() {
   )
 
   const [companyId, setCompanyId] = useState<string>("")
+  const [businessType, setBusinessType] = useState<string>("")   // ← new
+
   const [suppliers, setSuppliers] = useState<any[]>([])
   const [products, setProducts] = useState<any[]>([])
   const [supplierId, setSupplierId] = useState<number | null>(null)
@@ -34,21 +36,29 @@ export default function NewBillPage() {
   const [productSearch, setProductSearch] = useState("")
   const [showProductList, setShowProductList] = useState(false)
 
-  // ── Auto‑fill tags ──────────────────────────────────────────
+  // Tags
   const [expenseAccountId, setExpenseAccountId] = useState<number | null>(null)
   const [projectId, setProjectId] = useState<number | null>(null)
   const [locationId, setLocationId] = useState<number | null>(null)
   const [activityId, setActivityId] = useState<number | null>(null)
+  const [donorId, setDonorId] = useState<number | null>(null)
+
   const [expenseAccounts, setExpenseAccounts] = useState<any[]>([])
+  const [allAccounts, setAllAccounts] = useState<any[]>([])    // ← service/trading may need any account
   const [projects, setProjects] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
   const [activities, setActivities] = useState<any[]>([])
+  const [donors, setDonors] = useState<any[]>([])
 
-  // ── Load suppliers, products, and lookup lists ──────────────
+  // ── Load lookup data ─────────────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
+
+      // Fetch business type
+      supabase.from("companies").select("business_type").eq("id", cid).single()
+        .then(r => r.data && setBusinessType(r.data.business_type || ""))
 
       supabase.from("suppliers").select("id,code,name,phone,balance,default_project_id,default_location_id,default_activity_id")
         .eq("company_id", cid).order("name")
@@ -57,9 +67,16 @@ export default function NewBillPage() {
       supabase.from("products").select("id,code,name,cost_price,qty_on_hand").eq("company_id", cid).order("name")
         .then(r => r.data && setProducts(r.data))
 
-      // Expense accounts (for the main expense head)
-      supabase.from("accounts").select("id,code,name,type").eq("company_id", cid).eq("type","Expense").order("code")
-        .then(r => r.data && setExpenseAccounts(r.data))
+      // NGO: only expense accounts; Service/Trading: all accounts
+      const accountType = (businessType === "ngo") ? "Expense" : undefined
+      let accountQuery = supabase.from("accounts").select("id,code,name,type").eq("company_id", cid).order("code")
+      if (accountType) accountQuery = accountQuery.eq("type", accountType)
+      accountQuery.then(r => {
+        if (r.data) {
+          setExpenseAccounts(r.data)   // for NGO, it's expense; for others, it's all accounts
+          setAllAccounts(r.data)
+        }
+      })
 
       supabase.from("projects").select("id,name").eq("company_id", cid).order("name")
         .then(r => r.data && setProjects(r.data))
@@ -67,8 +84,10 @@ export default function NewBillPage() {
         .then(r => r.data && setLocations(r.data))
       supabase.from("activities").select("id,name").eq("company_id", cid).order("name")
         .then(r => r.data && setActivities(r.data))
+      supabase.from("donors").select("id,name").eq("company_id", cid).order("name")
+        .then(r => r.data && setDonors(r.data))
     })
-  }, [])
+  }, [businessType])   // reload accounts when type changes (initially empty, will re-run after first fetch)
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -86,23 +105,19 @@ export default function NewBillPage() {
     (s.phone || "").includes(supplierSearch)
   )
 
-  // ── When supplier changes, auto‑fill tags ──────────────────
   const selectSupplier = (s: any) => {
     setSupplierId(s.id)
     setSelectedSupplier(s)
     setSupplierSearch(s.name)
     setShowSupplierList(false)
-
-    // Auto‑fill from supplier defaults
     setProjectId(s.default_project_id || null)
     setLocationId(s.default_location_id || null)
     setActivityId(s.default_activity_id || null)
-
-    // If the supplier has a default expense account set, pre‑fill it
+    setDonorId(null)
     if (s.default_expense_account_id) {
       setExpenseAccountId(s.default_expense_account_id)
     } else {
-      setExpenseAccountId(null)   // user must pick manually
+      setExpenseAccountId(null)
     }
   }
 
@@ -114,6 +129,7 @@ export default function NewBillPage() {
     setProjectId(null)
     setLocationId(null)
     setActivityId(null)
+    setDonorId(null)
     setExpenseAccountId(null)
   }
 
@@ -135,7 +151,7 @@ export default function NewBillPage() {
   }
 
   const addManualItem = () => {
-    setItems([...items, { product_id: null, description: "Manual Item", qty: 1, unit_price: 0, total: 0 }])
+    setItems([...items, { product_id: null, description: "Manual Item", qty: 1, unit_price: 0, total: 0, account_id: null }])
   }
 
   const updateItem = (idx: number, field: string, value: any) => {
@@ -149,7 +165,6 @@ export default function NewBillPage() {
 
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
 
-  // ⭐ Sequential bill numbering per supplier
   const getNextBillNo = async (suppCode: string): Promise<string> => {
     const { data } = await supabase
       .from("invoices")
@@ -158,7 +173,6 @@ export default function NewBillPage() {
       .eq("type", "purchase")
       .order("invoice_no", { ascending: false })
       .limit(1)
-
     let nextNum = 1
     if (data && data.length > 0) {
       const last = data[0].invoice_no
@@ -172,11 +186,12 @@ export default function NewBillPage() {
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
 
   const handleSubmit = async () => {
-    if (!supplierId)       { setError("Please select a supplier"); return }
+    if (!supplierId) { setError("Please select a supplier"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
+    // NGO: donor required
+    if (businessType === "ngo" && !donorId) { setError("Donor is required for NGO bills"); return }
 
     setLoading(true); setError("")
-
     const suppCode = selectedSupplier?.code || "BILL"
     const billNo = await getNextBillNo(suppCode)
 
@@ -186,20 +201,23 @@ export default function NewBillPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           invoice_no: billNo,
-          party_id:     supplierId,
+          party_id: supplierId,
           invoice_date: billDate,
-          due_date:     dueDate,
+          due_date: dueDate,
           items: items.map(i => ({
-            product_id: i.product_id, description: i.description,
-            qty: i.qty, unit_price: i.unit_price,
+            product_id: i.product_id,
+            description: i.description,
+            qty: i.qty,
+            unit_price: i.unit_price,
+            account_id: i.account_id,   // manual items may specify account
           })),
           reference,
           notes,
-          // ⭐ Pass the budget tags to the API
-          expense_account_id: expenseAccountId,
+          expense_account_id: expenseAccountId,   // fallback if no per-item account
           project_id: projectId,
           location_id: locationId,
           activity_id: activityId,
+          donor_id: donorId,
         }),
       })
       const result = await res.json()
@@ -208,7 +226,6 @@ export default function NewBillPage() {
         setLoading(false)
         return
       }
-
       setFlash(`✅ Bill ${billNo} saved successfully!`)
       setItems([])
       setSupplierId(null)
@@ -219,6 +236,7 @@ export default function NewBillPage() {
       setProjectId(null)
       setLocationId(null)
       setActivityId(null)
+      setDonorId(null)
       setExpenseAccountId(null)
       setLoading(false)
       setTimeout(() => setFlash(null), 4000)
@@ -240,6 +258,9 @@ export default function NewBillPage() {
       doc.save(`bill-preview-${billNo}.pdf`)
     })
   }
+
+  // ── Dynamic label for GL dropdown ──
+  const getAccountLabel = () => businessType === "ngo" ? "Expense Account" : "GL Account"
 
   return (
     <div style={{ padding: "16px", background: "#F4F6FB", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -337,7 +358,9 @@ export default function NewBillPage() {
           </button>
           <div style={{ flex: 1 }}>
             <div className="inv-title">📦 New Purchase Bill</div>
-            <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 1 }}>Record a supplier purchase – tags auto‑fill from supplier defaults</div>
+            <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 1 }}>
+              {businessType === "ngo" ? "Donor‑funded expense – tags required" : "Record a supplier purchase"}
+            </div>
           </div>
           <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/bills")}>View List</button>
         </div>
@@ -347,7 +370,7 @@ export default function NewBillPage() {
 
         <div className="inv-grid">
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {/* Supplier & Dates */}
+            {/* Supplier & Tags */}
             <div className="inv-card">
               <label className="inv-label">Supplier *</label>
               <div className="cust-wrap" ref={supplierRef}>
@@ -363,7 +386,7 @@ export default function NewBillPage() {
                 ) : (
                   <>
                     <div className="cust-input-row">
-                      <Search size={14} className="cust-search-icon" style={{ position: "absolute", left: 10 }} />
+                      <Search size={14} style={{ position: "absolute", left: 10, color: "#94A3B8" }} />
                       <input
                         className="inv-input"
                         style={{ paddingLeft: 32, paddingRight: 32 }}
@@ -400,16 +423,20 @@ export default function NewBillPage() {
                 )}
               </div>
 
-              {/* ── Auto‑filled tags ─────────────────────────────── */}
+              {/* Tags section – adapted per business type */}
               {selectedSupplier && (
                 <div style={{ marginTop: 10, padding: "10px 12px", background: "#F8FAFC", borderRadius: 8, display: "flex", flexWrap: "wrap", gap: 10 }}>
+                  {/* GL Account (always visible) */}
                   <div style={{ flex: "1 1 200px" }}>
-                    <label className="inv-label">Expense Account</label>
+                    <label className="inv-label">{getAccountLabel()}</label>
                     <select className="inv-input" value={expenseAccountId ?? ""} onChange={e => setExpenseAccountId(e.target.value ? Number(e.target.value) : null)}>
                       <option value="">— Select —</option>
-                      {expenseAccounts.map(a => <option key={a.id} value={a.id}>{a.code} – {a.name}</option>)}
+                      {(businessType === "ngo" ? expenseAccounts : allAccounts).map(a => (
+                        <option key={a.id} value={a.id}>{a.code} – {a.name}</option>
+                      ))}
                     </select>
                   </div>
+                  {/* Project (always optional except NGO where we strongly suggest) */}
                   <div style={{ flex: "1 1 150px" }}>
                     <label className="inv-label">Project</label>
                     <select className="inv-input" value={projectId ?? ""} onChange={e => setProjectId(e.target.value ? Number(e.target.value) : null)}>
@@ -417,6 +444,17 @@ export default function NewBillPage() {
                       {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                   </div>
+                  {/* Donor – only for NGO; hidden for others */}
+                  {businessType === "ngo" && (
+                    <div style={{ flex: "1 1 150px" }}>
+                      <label className="inv-label">Donor *</label>
+                      <select className="inv-input" value={donorId ?? ""} onChange={e => setDonorId(e.target.value ? Number(e.target.value) : null)} required>
+                        <option value="">— Select Donor —</option>
+                        {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {/* Location (optional) */}
                   <div style={{ flex: "1 1 150px" }}>
                     <label className="inv-label">Location</label>
                     <select className="inv-input" value={locationId ?? ""} onChange={e => setLocationId(e.target.value ? Number(e.target.value) : null)}>
@@ -424,6 +462,7 @@ export default function NewBillPage() {
                       {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                     </select>
                   </div>
+                  {/* Activity (optional) */}
                   <div style={{ flex: "1 1 150px" }}>
                     <label className="inv-label">Activity</label>
                     <select className="inv-input" value={activityId ?? ""} onChange={e => setActivityId(e.target.value ? Number(e.target.value) : null)}>
@@ -456,42 +495,51 @@ export default function NewBillPage() {
               </div>
             </div>
 
-            {/* Product Search */}
-            <div className="inv-card">
-              <label className="inv-label">Add Product</label>
-              <div style={{ position: "relative" }}>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <div style={{ position: "relative", flex: 1 }}>
-                    <Search size={14} style={{ position: "absolute", left: 10, top: 12, color: "#94A3B8" }} />
-                    <input
-                      className="inv-input"
-                      style={{ paddingLeft: 32 }}
-                      placeholder="Search product by name or code..."
-                      value={productSearch}
-                      onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
-                      onFocus={() => setShowProductList(true)}
-                      onBlur={() => setTimeout(() => setShowProductList(false), 200)}
-                    />
+            {/* Product search – visible only for trading or if not NGO */}
+            {businessType !== "ngo" && (
+              <div className="inv-card">
+                <label className="inv-label">Add Product</label>
+                <div style={{ position: "relative" }}>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ position: "relative", flex: 1 }}>
+                      <Search size={14} style={{ position: "absolute", left: 10, top: 12, color: "#94A3B8" }} />
+                      <input
+                        className="inv-input"
+                        style={{ paddingLeft: 32 }}
+                        placeholder="Search product by name or code..."
+                        value={productSearch}
+                        onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
+                        onFocus={() => setShowProductList(true)}
+                        onBlur={() => setTimeout(() => setShowProductList(false), 200)}
+                      />
+                    </div>
+                    <button className="inv-btn inv-btn-outline" onClick={addManualItem}><Plus size={14} /> Manual</button>
                   </div>
-                  <button className="inv-btn inv-btn-outline" onClick={addManualItem}><Plus size={14} /> Manual</button>
+                  {showProductList && (
+                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid #E2E8F0", borderRadius: 8, maxHeight: 200, overflowY: "auto", zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", marginTop: 4 }}>
+                      {(productSearch ? filteredProducts : products).map((p: any) => (
+                        <div key={p.id}
+                          style={{ padding: "8px 12px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #F1F5F9", fontSize: 13 }}
+                          onClick={() => addItem(p)}>
+                          <span><strong>{p.code}</strong> — {p.name}</span>
+                          <span style={{ color: "#64748B", fontSize: 12 }}>Cost: PKR {p.cost_price} | Stock: {p.qty_on_hand}</span>
+                        </div>
+                      ))}
+                      {(productSearch ? filteredProducts : products).length === 0 && (
+                        <div style={{ padding: 10, color: "#94A3B8", fontSize: 12 }}>No products found</div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                {showProductList && (
-                  <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid #E2E8F0", borderRadius: 8, maxHeight: 200, overflowY: "auto", zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", marginTop: 4 }}>
-                    {(productSearch ? filteredProducts : products).map((p: any) => (
-                      <div key={p.id}
-                        style={{ padding: "8px 12px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #F1F5F9", fontSize: 13 }}
-                        onClick={() => addItem(p)}>
-                        <span><strong>{p.code}</strong> — {p.name}</span>
-                        <span style={{ color: "#64748B", fontSize: 12 }}>Cost: PKR {p.cost_price} | Stock: {p.qty_on_hand}</span>
-                      </div>
-                    ))}
-                    {(productSearch ? filteredProducts : products).length === 0 && (
-                      <div style={{ padding: 10, color: "#94A3B8", fontSize: 12 }}>No products found</div>
-                    )}
-                  </div>
-                )}
               </div>
-            </div>
+            )}
+
+            {/* Manual item button always available for all types */}
+            {businessType === "ngo" && (
+              <div className="inv-card" style={{ textAlign: "right" }}>
+                <button className="inv-btn inv-btn-outline" onClick={addManualItem}><Plus size={14} /> Add Manual Item</button>
+              </div>
+            )}
 
             {/* Items */}
             {items.length > 0 && (

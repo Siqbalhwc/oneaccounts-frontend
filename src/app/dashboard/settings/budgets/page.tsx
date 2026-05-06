@@ -15,6 +15,7 @@ export default function BudgetsPage() {
 
   const [companyId, setCompanyId] = useState<string>("")
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
+  const [businessType, setBusinessType] = useState<string>("") // "ngo", "service", "trading"
 
   // Master data
   const [accounts, setAccounts] = useState<any[]>([])
@@ -23,15 +24,12 @@ export default function BudgetsPage() {
   const [locations, setLocations] = useState<any[]>([])
   const [activities, setActivities] = useState<any[]>([])
 
-  // Selected context
+  // Context filters
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
-  const [selectedDonorId, setSelectedDonorId] = useState<string>("")
-  const [selectedLocationId, setSelectedLocationId] = useState<string>("")
+  const [selectedDonorId, setSelectedDonorId] = useState<string>("")     // required only for NGO
+  const [selectedLocationId, setSelectedLocationId] = useState<string>("") // optional
 
-  // Matrix columns (Activities or Locations)
-  const [columnDimension, setColumnDimension] = useState<"activity" | "location">("activity")
-
-  // Budget matrix: { [accountId]: { [colDimValueId]: amount } }
+  // Budget matrix: { [accountId]: { [activityId]: amount } }
   const [budgetMatrix, setBudgetMatrix] = useState<Record<string, Record<string, number>>>({})
   const [actualsMatrix, setActualsMatrix] = useState<Record<string, Record<string, number>>>({})
 
@@ -39,12 +37,16 @@ export default function BudgetsPage() {
   const [saving, setSaving] = useState(false)
   const [flash, setFlash] = useState<string>("")
 
-  // ── Fetch master data ──────────────────────────────
+  // ── Load master data & business type ──────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
         || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
+
+      // Business type
+      supabase.from("companies").select("business_type").eq("id", cid).single()
+        .then(r => r.data && setBusinessType(r.data.business_type || ""))
 
       supabase.from("accounts")
         .select("id, code, name")
@@ -64,12 +66,16 @@ export default function BudgetsPage() {
     })
   }, [])
 
-  const columnValues = columnDimension === "activity" ? activities : locations
-  const columnField = columnDimension === "activity" ? "activity_id" : "location_id"
-
-  // ── Load budgets & actuals when filters change ──────
+  // ── Load budgets & actuals ────────────────────────
   useEffect(() => {
-    if (!companyId || !selectedProjectId || !selectedDonorId) {
+    // For non‑NGO, donor is not required; matrix loads with any donor
+    if (!companyId || !selectedProjectId) {
+      setBudgetMatrix({})
+      setActualsMatrix({})
+      setLoading(false)
+      return
+    }
+    if (businessType === "ngo" && !selectedDonorId) {
       setBudgetMatrix({})
       setActualsMatrix({})
       setLoading(false)
@@ -77,15 +83,19 @@ export default function BudgetsPage() {
     }
     setLoading(true)
 
-    // 1. Budgets
+    // 1. Budgets – filter by project, donor (if NGO), and activity columns
     let budgetQuery = supabase.from("budgets")
       .select("*")
       .eq("company_id", companyId)
       .eq("fiscal_year", fiscalYear)
       .eq("project_id", selectedProjectId)
-      .eq("donor_id", selectedDonorId)
       .is("month", null)
+      .not("activity_id", "is", null)
 
+    if (businessType === "ngo") {
+      budgetQuery = budgetQuery.eq("donor_id", selectedDonorId)
+    }
+    // For other types, we don't filter by donor (show all)
     if (selectedLocationId) {
       budgetQuery = budgetQuery.eq("location_id", selectedLocationId)
     } else {
@@ -96,15 +106,15 @@ export default function BudgetsPage() {
       const bMatrix: Record<string, Record<string, number>> = {}
       data?.forEach((b: any) => {
         const acc = b.account_id
-        const colVal = b[columnField]  // activity_id or location_id
-        if (!acc || !colVal) return
+        const act = b.activity_id
+        if (!acc || !act) return
         if (!bMatrix[acc]) bMatrix[acc] = {}
-        bMatrix[acc][colVal] = b.budgeted_amount || 0
+        bMatrix[acc][act] = b.budgeted_amount || 0
       })
       setBudgetMatrix(bMatrix)
     })
 
-    // 2. Actuals – sum from journal_lines with matching tags
+    // 2. Actuals – sum journal_lines with matching tags
     const startDate = `${fiscalYear}-01-01`
     const endDate = `${fiscalYear}-12-31`
 
@@ -112,17 +122,19 @@ export default function BudgetsPage() {
       .from("journal_lines")
       .select(`
         account_id,
-        ${columnField},
+        activity_id,
         debit,
         credit,
         journal_entries!inner(date)
       `)
       .eq("company_id", companyId)
       .eq("project_id", selectedProjectId)
-      .eq("donor_id", selectedDonorId)
       .gte("journal_entries.date", startDate)
       .lte("journal_entries.date", endDate)
 
+    if (businessType === "ngo") {
+      actualQuery = actualQuery.eq("donor_id", selectedDonorId)
+    }
     if (selectedLocationId) {
       actualQuery = actualQuery.eq("location_id", selectedLocationId)
     }
@@ -131,59 +143,61 @@ export default function BudgetsPage() {
       const aMatrix: Record<string, Record<string, number>> = {}
       data?.forEach((line: any) => {
         const acc = line.account_id
-        const colVal = line[columnField]
-        if (!colVal || !acc) return
+        const act = line.activity_id
+        if (!act || !acc) return
         const net = (line.debit || 0) - (line.credit || 0) // expenses are debits
         if (!aMatrix[acc]) aMatrix[acc] = {}
-        aMatrix[acc][colVal] = (aMatrix[acc][colVal] || 0) + net
+        aMatrix[acc][act] = (aMatrix[acc][act] || 0) + net
       })
       setActualsMatrix(aMatrix)
       setLoading(false)
     })
-  }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, selectedLocationId, columnField])
+  }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, selectedLocationId, businessType])
 
-  const updateCell = (accountId: string, colValId: string, amount: number) => {
+  const updateCell = (accountId: string, activityId: string, amount: number) => {
     setBudgetMatrix(prev => {
       const updated = { ...prev }
       if (!updated[accountId]) updated[accountId] = {}
-      updated[accountId][colValId] = amount
+      updated[accountId][activityId] = amount
       return updated
     })
   }
 
   const handleSave = async () => {
     if (!companyId || !canEdit) return
-    if (!selectedProjectId || !selectedDonorId) {
-      setFlash("⚠️ Please select Project and Donor first.")
+    if (!selectedProjectId) {
+      setFlash("⚠️ Please select a Project first.")
+      return
+    }
+    if (businessType === "ngo" && !selectedDonorId) {
+      setFlash("⚠️ Please select a Donor for NGO budgeting.")
       return
     }
     setSaving(true)
     setFlash("")
 
     for (const accountId of Object.keys(budgetMatrix)) {
-      for (const colValId of Object.keys(budgetMatrix[accountId])) {
-        const amount = budgetMatrix[accountId][colValId]
+      for (const activityId of Object.keys(budgetMatrix[accountId])) {
+        const amount = budgetMatrix[accountId][activityId]
         if (amount > 0) {
-          const row: any = {
+          const payload: any = {
             company_id: companyId,
-            account_id: parseInt(accountId),  // accounts uses integer
+            account_id: parseInt(accountId),
             fiscal_year: fiscalYear,
             month: null,
-            project_id: selectedProjectId,    // bigint
-            donor_id: selectedDonorId,        // bigint
+            project_id: selectedProjectId,
+            activity_id: activityId,
             budgeted_amount: amount,
           }
-          // Set the column dimension field
-          row[columnField] = colValId          // bigint
-
-          // If location is not the column dimension, set it from the optional filter
-          if (columnField !== "location_id") {
-            row.location_id = selectedLocationId || null
+          // For NGO, include donor; for others, set donor to null or keep it out
+          if (businessType === "ngo") {
+            payload.donor_id = selectedDonorId
           } else {
-            // if columns are locations, colValId is the location, so no extra field needed
+            payload.donor_id = null   // no donor constraint for service/trading
           }
+          payload.location_id = selectedLocationId || null
 
-          await supabase.from("budgets").upsert(row, {
+          await supabase.from("budgets").upsert(payload, {
             onConflict: "company_id,account_id,project_id,activity_id,location_id,donor_id,fiscal_year,month"
           })
         }
@@ -197,7 +211,6 @@ export default function BudgetsPage() {
 
   if (!canView) return <div style={{ padding: 24, textAlign: "center" }}><h2>Access Denied</h2></div>
 
-  // ── JSX (identical to previous version, only filter bar changed) ──
   return (
     <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
       <style>{`
@@ -223,27 +236,32 @@ export default function BudgetsPage() {
 
       <div className="budget-shell">
         <div className="budget-title">💰 Budget vs Actuals</div>
-        <div className="budget-subtitle">Set budgets by Project, Donor, and Activity (or Location)</div>
+        <div className="budget-subtitle">
+          {businessType === "ngo"
+            ? "Enter budgets per Project, Donor, and Activity (optional Location filter)"
+            : "Enter budgets per Project and Activity (optional Location)"}
+        </div>
 
         <div className="filter-bar">
           <select className="filter-select" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
             {[2025, 2026, 2027, 2028].map(y => <option key={y} value={y}>{y}</option>)}
           </select>
+
           <select className="filter-select" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
             <option value="">-- Select Project --</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <select className="filter-select" value={selectedDonorId} onChange={e => setSelectedDonorId(e.target.value)}>
-            <option value="">-- Select Donor --</option>
-            {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
+
+          {businessType === "ngo" && (
+            <select className="filter-select" value={selectedDonorId} onChange={e => setSelectedDonorId(e.target.value)}>
+              <option value="">-- Select Donor --</option>
+              {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          )}
+
           <select className="filter-select" value={selectedLocationId} onChange={e => setSelectedLocationId(e.target.value)}>
             <option value="">-- All Locations (optional) --</option>
             {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-          </select>
-          <select className="filter-select" value={columnDimension} onChange={e => setColumnDimension(e.target.value as "activity" | "location")}>
-            <option value="activity">Columns: Activities</option>
-            <option value="location">Columns: Locations</option>
           </select>
         </div>
 
@@ -253,23 +271,25 @@ export default function BudgetsPage() {
           </div>
         )}
 
-        {!selectedProjectId || !selectedDonorId ? (
+        {!selectedProjectId || (businessType === "ngo" && !selectedDonorId) ? (
           <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>
-            Please select <strong>Project</strong> and <strong>Donor</strong> to display the budget matrix.
+            {businessType === "ngo"
+              ? "Please select Project and Donor to display the budget matrix."
+              : "Please select a Project to display the budget matrix."}
           </div>
         ) : loading ? (
           <div style={{ textAlign: "center", padding: 40 }}>Loading budgets & actuals...</div>
-        ) : columnValues.length === 0 ? (
+        ) : activities.length === 0 ? (
           <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>
-            No {columnDimension}s found. Create them in Settings.
+            No Activities found. Create them in Settings.
           </div>
         ) : (
           <div className="matrix-table">
             <div className="matrix-header">
               <div className="matrix-account-cell">Account</div>
-              {columnValues.map(col => (
-                <div key={col.id} className="matrix-cell" style={{ flex: 1, minWidth: 120, padding: "8px 8px", textAlign: "center" }}>
-                  {col.name}
+              {activities.map(act => (
+                <div key={act.id} className="matrix-cell" style={{ flex: 1, minWidth: 120, padding: "8px 8px", textAlign: "center" }}>
+                  {act.name}
                   <div style={{ display: "flex", marginTop: 4, fontSize: 8, color: "#94A3B8" }}>
                     <span style={{ flex: 1, textAlign: "right", paddingRight: 4 }}>Budget</span>
                     <span style={{ flex: 1, textAlign: "right", paddingRight: 4 }}>Actual</span>
@@ -278,22 +298,23 @@ export default function BudgetsPage() {
                 </div>
               ))}
             </div>
+
             {accounts.map(acc => (
               <div key={acc.id} className="matrix-row">
                 <div className="matrix-account-cell" title={acc.name}>{acc.code}</div>
-                {columnValues.map(col => {
-                  const budgetVal = (budgetMatrix[acc.id] && budgetMatrix[acc.id][col.id]) || 0
-                  const actualVal = (actualsMatrix[acc.id] && actualsMatrix[acc.id][col.id]) || 0
+                {activities.map(act => {
+                  const budgetVal = (budgetMatrix[acc.id] && budgetMatrix[acc.id][act.id]) || 0
+                  const actualVal = (actualsMatrix[acc.id] && actualsMatrix[acc.id][act.id]) || 0
                   const variance = actualVal - budgetVal
                   return (
-                    <div key={col.id} className="matrix-cell">
+                    <div key={act.id} className="matrix-cell">
                       <input
                         className="matrix-input"
                         type="number"
                         min="0"
                         step="100"
                         value={budgetVal || ""}
-                        onChange={e => updateCell(acc.id, col.id, Number(e.target.value))}
+                        onChange={e => updateCell(acc.id, act.id, Number(e.target.value))}
                         disabled={!canEdit}
                         placeholder="Budget"
                       />
@@ -309,7 +330,7 @@ export default function BudgetsPage() {
           </div>
         )}
 
-        {canEdit && selectedProjectId && selectedDonorId && (
+        {canEdit && selectedProjectId && (businessType !== "ngo" || selectedDonorId) && (
           <button className="btn-primary" onClick={handleSave} disabled={saving} style={{ marginTop: 16 }}>
             {saving ? "Saving..." : "💾 Save Budget"}
           </button>
