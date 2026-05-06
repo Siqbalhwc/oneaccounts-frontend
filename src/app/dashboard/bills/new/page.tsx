@@ -14,7 +14,7 @@ export default function NewBillPage() {
   )
 
   const [companyId, setCompanyId] = useState<string>("")
-  const [businessType, setBusinessType] = useState<string>("")   // "ngo", "service", "trading"
+  const [businessType, setBusinessType] = useState<string>("")
 
   const [suppliers, setSuppliers] = useState<any[]>([])
   const [products, setProducts] = useState<any[]>([])
@@ -41,15 +41,14 @@ export default function NewBillPage() {
   const [projectId, setProjectId] = useState<number | null>(null)
   const [locationId, setLocationId] = useState<number | null>(null)
   const [activityId, setActivityId] = useState<number | null>(null)
-  const [donorId, setDonorId] = useState<number | null>(null)          // <-- DONOR state
+  const [donorId, setDonorId] = useState<number | null>(null)
 
   // Master data lists
-  const [expenseAccounts, setExpenseAccounts] = useState<any[]>([])
-  const [allAccounts, setAllAccounts] = useState<any[]>([])            // for non‑NGO
+  const [allAccounts, setAllAccounts] = useState<any[]>([])
   const [projects, setProjects] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
   const [activities, setActivities] = useState<any[]>([])
-  const [donors, setDonors] = useState<any[]>([])                      // <-- DONORS list
+  const [donors, setDonors] = useState<any[]>([])
 
   // ── Load lookup data & business type ─────────────────
   useEffect(() => {
@@ -72,16 +71,9 @@ export default function NewBillPage() {
       supabase.from("products").select("id,code,name,cost_price,qty_on_hand").eq("company_id", cid).order("name")
         .then(r => r.data && setProducts(r.data))
 
-      // Accounts – only Expense for NGO, all for others
-      const accountType = "ngo" ? "Expense" : undefined   // we'll fetch conditionally in the effect after we know business type
-      // However business type is loaded in same effect, so we fetch both sets and filter in JSX.
+      // Accounts – load ALL accounts, then filter in JSX based on business type
       supabase.from("accounts").select("id,code,name,type").eq("company_id", cid).order("code")
-        .then(r => {
-          if (r.data) {
-            setAllAccounts(r.data)
-            // For NGO, we'll filter to Expense in the dropdown; for others, show all
-          }
-        })
+        .then(r => { if (r.data) setAllAccounts(r.data) })
 
       // Projects, Locations, Activities, Donors
       supabase.from("projects").select("id,name").eq("company_id", cid).order("name")
@@ -120,7 +112,7 @@ export default function NewBillPage() {
     setProjectId(s.default_project_id || null)
     setLocationId(s.default_location_id || null)
     setActivityId(s.default_activity_id || null)
-    setDonorId(null)   // Donor is not auto‑filled from supplier
+    setDonorId(null)
     if (s.default_expense_account_id) {
       setExpenseAccountId(s.default_expense_account_id)
     } else {
@@ -158,13 +150,13 @@ export default function NewBillPage() {
   }
 
   const addManualItem = () => {
-    setItems([...items, { 
-      product_id: null, 
-      description: "Manual Item", 
-      qty: 1, 
-      unit_price: 0, 
-      total: 0, 
-      account_id: null   // will use header expense account if not set per item
+    setItems([...items, {
+      product_id: null,
+      description: "Manual Item",
+      qty: 1,
+      unit_price: 0,
+      total: 0,
+      account_id: null
     }])
   }
 
@@ -222,15 +214,15 @@ export default function NewBillPage() {
             description: i.description,
             qty: i.qty,
             unit_price: i.unit_price,
-            account_id: i.account_id,   // per‑item account (for manual items)
+            account_id: i.account_id,
           })),
           reference,
           notes,
-          expense_account_id: expenseAccountId,   // header fallback
+          expense_account_id: expenseAccountId,
           project_id: projectId,
           location_id: locationId,
           activity_id: activityId,
-          donor_id: donorId,                       // ← sends donor to API
+          donor_id: donorId,
         }),
       })
       const result = await res.json()
@@ -272,7 +264,7 @@ export default function NewBillPage() {
     })
   }
 
-  // Helper: account list for dropdown based on business type
+  // Filter accounts for NGO (Expense only) vs others (all)
   const accountList = businessType === "ngo"
     ? allAccounts.filter(a => a.type === "Expense")
     : allAccounts
