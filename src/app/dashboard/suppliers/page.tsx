@@ -16,9 +16,11 @@ interface Supplier {
   email: string | null
   address: string | null
   balance: number
+  default_project_id?: number | null
+  default_location_id?: number | null
+  default_activity_id?: number | null
 }
 
-// ── Supported country codes for phone validation ──────────────
 const COUNTRIES = [
   { code: "+92",  pattern: /^92\d{10}$/,  label: "🇵🇰 Pakistan (+92)" },
   { code: "+44",  pattern: /^44\d{10}$/,  label: "🇬🇧 UK (+44)" },
@@ -47,7 +49,15 @@ export default function SuppliersPage() {
   const [email, setEmail] = useState("")
   const [address, setAddress] = useState("")
   const [openingBalance, setOpeningBalance] = useState(0)
+  const [defaultProjectId, setDefaultProjectId] = useState<number | null>(null)
+  const [defaultLocationId, setDefaultLocationId] = useState<number | null>(null)
+  const [defaultActivityId, setDefaultActivityId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
+
+  // Lookup lists
+  const [projects, setProjects] = useState<any[]>([])
+  const [locations, setLocations] = useState<any[]>([])
+  const [activities, setActivities] = useState<any[]>([])
 
   // Pagination
   const [page, setPage] = useState(1)
@@ -55,12 +65,17 @@ export default function SuppliersPage() {
   const [total, setTotal] = useState(0)
   const [companyId, setCompanyId] = useState<string>("")
 
-  // ── Get company ID ────────────────────────────────────────
+  // ── Get company ID and lookup lists ───────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
         || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
+
+      // Fetch the three lookup lists (company‑scoped)
+      supabase.from("projects").select("id, name").eq("company_id", cid).order("name").then(r => r.data && setProjects(r.data))
+      supabase.from("locations").select("id, name").eq("company_id", cid).order("name").then(r => r.data && setLocations(r.data))
+      supabase.from("activities").select("id, name").eq("company_id", cid).order("name").then(r => r.data && setActivities(r.data))
     })
   }, [])
 
@@ -98,7 +113,10 @@ export default function SuppliersPage() {
   }
 
   const openNew = () => {
-    setEditing(null); setCode(generateCode()); setName(""); setCountryCode("+92"); setPhone(""); setEmail(""); setAddress(""); setOpeningBalance(0); setShowModal(true)
+    setEditing(null)
+    setCode(generateCode()); setName(""); setCountryCode("+92"); setPhone(""); setEmail(""); setAddress("")
+    setOpeningBalance(0); setDefaultProjectId(null); setDefaultLocationId(null); setDefaultActivityId(null)
+    setShowModal(true)
   }
 
   const openEdit = (c: Supplier) => {
@@ -107,7 +125,12 @@ export default function SuppliersPage() {
     const found = COUNTRIES.find(cntry => savedPhone.startsWith(cntry.code.replace("+", "")))
     if (found) { setCountryCode(found.code); setPhone(savedPhone.slice(found.code.replace("+", "").length)) }
     else { setCountryCode("+92"); setPhone(savedPhone) }
-    setEmail(c.email || ""); setAddress(c.address || ""); setOpeningBalance(c.balance); setShowModal(true)
+    setEmail(c.email || ""); setAddress(c.address || "")
+    setOpeningBalance(c.balance)
+    setDefaultProjectId(c.default_project_id || null)
+    setDefaultLocationId(c.default_location_id || null)
+    setDefaultActivityId(c.default_activity_id || null)
+    setShowModal(true)
   }
 
   const handleSave = async () => {
@@ -124,6 +147,9 @@ export default function SuppliersPage() {
       address: address.trim() || null,
       balance: openingBalance,
       opening_balance: openingBalance,
+      default_project_id: defaultProjectId,
+      default_location_id: defaultLocationId,
+      default_activity_id: defaultActivityId,
     }
     if (editing) {
       await supabase.from("suppliers").update(payload).eq("id", editing.id).eq("company_id", companyId)
@@ -284,6 +310,36 @@ export default function SuppliersPage() {
                 <div><label className="sp-field-label">Email</label><input className="sp-field-input" value={email} onChange={e => setEmail(e.target.value)} /></div>
                 <div><label className="sp-field-label">Address</label><input className="sp-field-input" value={address} onChange={e => setAddress(e.target.value)} /></div>
               </div>
+
+              {/* ── NEW: Default Project / Location / Activity ─── */}
+              <div className="sp-field-label" style={{ marginTop: 8 }}>Default Budget Tags</div>
+              <div className="sp-field-row">
+                <div>
+                  <label className="sp-field-label">Project</label>
+                  <select className="sp-field-input" value={defaultProjectId ?? ""} onChange={e => setDefaultProjectId(e.target.value ? Number(e.target.value) : null)}>
+                    <option value="">— None —</option>
+                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="sp-field-label">Location</label>
+                  <select className="sp-field-input" value={defaultLocationId ?? ""} onChange={e => setDefaultLocationId(e.target.value ? Number(e.target.value) : null)}>
+                    <option value="">— None —</option>
+                    {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="sp-field-row">
+                <div>
+                  <label className="sp-field-label">Activity</label>
+                  <select className="sp-field-input" value={defaultActivityId ?? ""} onChange={e => setDefaultActivityId(e.target.value ? Number(e.target.value) : null)}>
+                    <option value="">— None —</option>
+                    {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              {/* ── End of new fields ── */}
+
               <div><label className="sp-field-label">Opening Balance (PKR)</label><input className="sp-field-input" type="number" value={openingBalance} onChange={e => setOpeningBalance(Number(e.target.value))} /></div>
             </div>
             <div className="sp-modal-footer">
