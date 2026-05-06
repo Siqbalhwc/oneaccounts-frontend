@@ -10,6 +10,7 @@ interface Entity {
   name: string
   is_active: boolean
   description?: string
+  code?: string   // for donors
 }
 
 export default function ProjectsPage() {
@@ -21,7 +22,7 @@ export default function ProjectsPage() {
   const canEdit = role === "admin" || role === "accountant"
   const canView = role === "admin" || role === "accountant"
 
-  const [activeTab, setActiveTab] = useState<"projects" | "locations" | "activities">("projects")
+  const [activeTab, setActiveTab] = useState<"projects" | "locations" | "activities" | "donors">("projects")
   const [items, setItems] = useState<Entity[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -30,6 +31,7 @@ export default function ProjectsPage() {
   const [flash, setFlash] = useState("")
   const [formName, setFormName] = useState("")
   const [formDesc, setFormDesc] = useState("")
+  const [formCode, setFormCode] = useState("")   // for donors
   const [formActive, setFormActive] = useState(true)
   const [saving, setSaving] = useState(false)
   const [companyId, setCompanyId] = useState<string>("")
@@ -46,13 +48,14 @@ export default function ProjectsPage() {
   const fetchData = async () => {
     if (!companyId) return
     setLoading(true)
-    const table = activeTab === "projects" ? "projects" : activeTab === "locations" ? "locations" : "activities"
-    const { data } = await supabase
+    const table = activeTab === "projects" ? "projects" : activeTab === "locations" ? "locations" : activeTab === "activities" ? "activities" : "donors"
+    const query = supabase
       .from(table)
       .select("*")
       .eq("company_id", companyId)
       .order("name")
 
+    const { data } = await query
     setItems(data || [])
     setLoading(false)
   }
@@ -66,6 +69,7 @@ export default function ProjectsPage() {
     setEditingItem(null)
     setFormName("")
     setFormDesc("")
+    setFormCode("")
     setFormActive(true)
     setShowModal(true)
   }
@@ -74,6 +78,7 @@ export default function ProjectsPage() {
     setEditingItem(item)
     setFormName(item.name)
     setFormDesc((item as any).description || "")
+    setFormCode((item as any).code || "")
     setFormActive(item.is_active)
     setShowModal(true)
   }
@@ -82,13 +87,19 @@ export default function ProjectsPage() {
     if (!formName.trim() || !companyId) return
     setSaving(true)
 
-    const table = activeTab === "projects" ? "projects" : activeTab === "locations" ? "locations" : "activities"
+    const table = activeTab === "projects" ? "projects" : activeTab === "locations" ? "locations" : activeTab === "activities" ? "activities" : "donors"
     const payload: any = {
       company_id: companyId,
       name: formName.trim(),
       is_active: formActive,
     }
-    if (activeTab === "projects") payload.description = formDesc.trim()
+
+    if (activeTab === "projects") {
+      payload.description = formDesc.trim()
+    } else if (activeTab === "donors") {
+      payload.code = formCode.trim() || null   // optional code
+    }
+    // locations and activities have no extra fields
 
     if (editingItem) {
       await supabase.from(table).update(payload).eq("id", editingItem.id).eq("company_id", companyId)
@@ -107,7 +118,7 @@ export default function ProjectsPage() {
 
   const handleDelete = async () => {
     if (!deleteId || !companyId) return
-    const table = activeTab === "projects" ? "projects" : activeTab === "locations" ? "locations" : "activities"
+    const table = activeTab === "projects" ? "projects" : activeTab === "locations" ? "locations" : activeTab === "activities" ? "activities" : "donors"
     await supabase.from(table).delete().eq("id", deleteId).eq("company_id", companyId)
     setDeleteId(null)
     setFlash("✅ Deleted.")
@@ -119,7 +130,25 @@ export default function ProjectsPage() {
     { key: "projects", label: "Projects" },
     { key: "locations", label: "Locations" },
     { key: "activities", label: "Activities" },
+    { key: "donors", label: "Donors" },
   ]
+
+  // Dynamically adjust table grid based on active tab
+  const getTableHeaderStyle = () => {
+    if (activeTab === "donors") {
+      return { gridTemplateColumns: "1fr 80px 60px 60px 60px" } // name, code, active, edit, delete
+    }
+    return { gridTemplateColumns: "1fr 100px 60px 60px" } // name, active, edit, delete
+  }
+
+  const getEntityLabel = () => {
+    switch (activeTab) {
+      case "projects": return "Project"
+      case "locations": return "Location"
+      case "activities": return "Activity"
+      case "donors": return "Donor"
+    }
+  }
 
   return (
     <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
@@ -134,8 +163,8 @@ export default function ProjectsPage() {
         .pr-tab { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid #E2E8F0; background: white; color: #475569; }
         .pr-tab.active { background: #1E3A8A; color: white; border-color: #1E3A8A; }
         .pr-table { background: white; border-radius: 10px; border: 1px solid #E2E8F0; overflow: hidden; }
-        .pr-table-header { display: grid; grid-template-columns: 1fr 100px 60px 60px; padding: 10px 16px; border-bottom: 2px solid #E2E8F0; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #94A3B8; align-items: center; }
-        .pr-table-row { display: grid; grid-template-columns: 1fr 100px 60px 60px; padding: 10px 16px; border-bottom: 1px solid #F1F5F9; align-items: center; font-size: 13px; }
+        .pr-table-header { display: grid; padding: 10px 16px; border-bottom: 2px solid #E2E8F0; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #94A3B8; align-items: center; }
+        .pr-table-row { display: grid; padding: 10px 16px; border-bottom: 1px solid #F1F5F9; align-items: center; font-size: 13px; }
         .pr-table-row:hover { background: #FAFBFF; }
         .pr-icon-btn { background: none; border: none; cursor: pointer; padding: 6px; border-radius: 6px; color: #94A3B8; display: inline-flex; }
         .pr-icon-btn:hover { background: #F1F5F9; color: #475569; }
@@ -154,7 +183,7 @@ export default function ProjectsPage() {
       <div className="pr-header">
         <div>
           <div className="pr-title">📁 Projects & Activities</div>
-          <div className="pr-subtitle">Manage projects, locations, and activities for budgeting and tracking</div>
+          <div className="pr-subtitle">Manage projects, locations, activities, and donors for budgeting and tracking</div>
         </div>
       </div>
 
@@ -175,14 +204,15 @@ export default function ProjectsPage() {
       <div style={{ marginBottom: 12 }}>
         {canEdit && (
           <button className="pr-btn pr-btn-primary" onClick={openNew}>
-            <Plus size={16} /> Add {activeTab === "projects" ? "Project" : activeTab === "locations" ? "Location" : "Activity"}
+            <Plus size={16} /> Add {getEntityLabel()}
           </button>
         )}
       </div>
 
       <div className="pr-table">
-        <div className="pr-table-header">
+        <div className="pr-table-header" style={getTableHeaderStyle()}>
           <span>Name</span>
+          {activeTab === "donors" && <span>Code</span>}
           <span>Active</span>
           <span></span>
           <span></span>
@@ -190,11 +220,12 @@ export default function ProjectsPage() {
         {loading ? (
           <div className="pr-empty">Loading...</div>
         ) : items.length === 0 ? (
-          <div className="pr-empty">No {activeTab} found. Create one above.</div>
+          <div className="pr-empty">No {getEntityLabel().toLowerCase()}s found. Create one above.</div>
         ) : (
           items.map((item) => (
-            <div key={item.id} className="pr-table-row">
+            <div key={item.id} className="pr-table-row" style={getTableHeaderStyle()}>
               <span style={{ fontWeight: 600 }}>{item.name}{item.description ? <span style={{ fontSize: 11, color: "#64748B", marginLeft: 8 }}>({item.description})</span> : ""}</span>
+              {activeTab === "donors" && <span style={{ fontFamily: "monospace", fontSize: 12 }}>{(item as any).code || "—"}</span>}
               <span>{item.is_active ? "✅" : "❌"}</span>
               <button className="pr-icon-btn" onClick={() => openEdit(item)}><Edit size={14} /></button>
               <button className="pr-icon-btn danger" onClick={() => setDeleteId(item.id)}><Trash2 size={14} /></button>
@@ -208,7 +239,7 @@ export default function ProjectsPage() {
         <div className="pr-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="pr-modal" onClick={e => e.stopPropagation()}>
             <div className="pr-modal-header">
-              <div className="pr-modal-title">{editingItem ? "✏️ Edit" : "➕ Add"} {activeTab === "projects" ? "Project" : activeTab === "locations" ? "Location" : "Activity"}</div>
+              <div className="pr-modal-title">{editingItem ? "✏️ Edit" : "➕ Add"} {getEntityLabel()}</div>
               <button className="pr-icon-btn" onClick={() => setShowModal(false)}><X size={18} /></button>
             </div>
             <div className="pr-modal-body">
@@ -220,6 +251,12 @@ export default function ProjectsPage() {
                 <div>
                   <label className="pr-field-label">Description (optional)</label>
                   <input className="pr-field-input" value={formDesc} onChange={e => setFormDesc(e.target.value)} placeholder="Brief description" />
+                </div>
+              )}
+              {activeTab === "donors" && (
+                <div>
+                  <label className="pr-field-label">Code (optional)</label>
+                  <input className="pr-field-input" value={formCode} onChange={e => setFormCode(e.target.value)} placeholder="e.g., UNICEF, GIZ" />
                 </div>
               )}
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
