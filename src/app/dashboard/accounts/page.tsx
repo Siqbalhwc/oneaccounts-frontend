@@ -25,15 +25,23 @@ export default function AccountsPage() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [companyId, setCompanyId] = useState<string>("")
 
-  // ── Bank mapping (account_id -> { bankName, bankId }) ──
+  // ── Bank mapping ──
   const [bankMap, setBankMap] = useState<Record<number, any>>({})
 
-  // ── Modal state ─────────────────────────────────────────────────────
+  // ── Lookup lists for default tags ──
+  const [projects, setProjects] = useState<any[]>([])
+  const [locations, setLocations] = useState<any[]>([])
+  const [activities, setActivities] = useState<any[]>([])
+
+  // ── Modal state ──
   const [showModal, setShowModal] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [formCode, setFormCode] = useState("")
   const [formName, setFormName] = useState("")
   const [formType, setFormType] = useState("Asset")
+  const [defaultProjectId, setDefaultProjectId] = useState<number | null>(null)
+  const [defaultLocationId, setDefaultLocationId] = useState<number | null>(null)
+  const [defaultActivityId, setDefaultActivityId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [modalError, setModalError] = useState("")
 
@@ -43,7 +51,7 @@ export default function AccountsPage() {
         || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
 
-      // Fetch accounts – explicitly scoped to the active company
+      // Fetch accounts
       supabase
         .from("accounts")
         .select("*")
@@ -54,7 +62,7 @@ export default function AccountsPage() {
           setLoading(false)
         })
 
-      // Check if the current user is an admin
+      // Check admin
       supabase.auth.getUser().then(({ data: { user } }) => {
         if (!user) return
         supabase
@@ -68,7 +76,7 @@ export default function AccountsPage() {
           })
       })
 
-      // Fetch linked bank accounts – also scoped
+      // Fetch linked bank accounts
       supabase
         .from("bank_accounts")
         .select("account_id, bank_name, id")
@@ -82,6 +90,11 @@ export default function AccountsPage() {
             setBankMap(map)
           }
         })
+
+      // Fetch lookup lists for default tags
+      supabase.from("projects").select("id, name").eq("company_id", cid).order("name").then(r => r.data && setProjects(r.data))
+      supabase.from("locations").select("id, name").eq("company_id", cid).order("name").then(r => r.data && setLocations(r.data))
+      supabase.from("activities").select("id, name").eq("company_id", cid).order("name").then(r => r.data && setActivities(r.data))
     })
   }, [])
 
@@ -101,6 +114,9 @@ export default function AccountsPage() {
     setFormCode("")
     setFormName("")
     setFormType("Asset")
+    setDefaultProjectId(null)
+    setDefaultLocationId(null)
+    setDefaultActivityId(null)
     setModalError("")
     setShowModal(true)
   }
@@ -110,6 +126,9 @@ export default function AccountsPage() {
     setFormCode(String(acct.code))
     setFormName(acct.name)
     setFormType(acct.type)
+    setDefaultProjectId(acct.default_project_id || null)
+    setDefaultLocationId(acct.default_location_id || null)
+    setDefaultActivityId(acct.default_activity_id || null)
     setModalError("")
     setShowModal(true)
   }
@@ -123,6 +142,9 @@ export default function AccountsPage() {
       code: formCode.trim(),
       name: formName.trim(),
       type: formType,
+      default_project_id: defaultProjectId,
+      default_location_id: defaultLocationId,
+      default_activity_id: defaultActivityId,
     }
 
     if (editId) {
@@ -172,7 +194,8 @@ export default function AccountsPage() {
         }
         .modal-box {
           background: white; border-radius: 12px; padding: 24px;
-          max-width: 400px; width: 90%; box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+          max-width: 480px; width: 90%; max-height: 90vh; overflow-y: auto;
+          box-shadow: 0 10px 25px rgba(0,0,0,0.15);
         }
         .input-field {
           width: 100%; padding: 8px 12px; border: 1px solid #E2E8F0;
@@ -188,6 +211,8 @@ export default function AccountsPage() {
           border: 1px solid #CBD5E1; border-radius: 8px; cursor: pointer;
           font-weight: 600; font-size: 14px; margin-right: 8px;
         }
+        .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+        .field-label { font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; display: block; }
       `}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -299,7 +324,8 @@ export default function AccountsPage() {
             <p style={{ fontSize: 12, color: "#94A3B8", marginBottom: 16 }}>
               {editId ? "Update the account name, code, or type." : "Create a new account. Choose a code within the recommended range."}
             </p>
-            <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Account Type</label>
+
+            <label className="field-label">Account Type</label>
             <select className="input-field" value={formType} onChange={e => { setFormType(e.target.value); setFormCode("") }}>
               {Object.keys(CODE_RANGES).map(t => <option key={t} value={t}>{t}</option>)}
             </select>
@@ -308,10 +334,47 @@ export default function AccountsPage() {
                 Recommended range: {range.min} – {range.max}
               </p>
             )}
-            <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Account Code</label>
-            <input className="input-field" type="text" placeholder={range ? `e.g., ${range.min + 1}` : "Enter code"} value={formCode} onChange={e => setFormCode(e.target.value)} />
-            <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>Account Name</label>
-            <input className="input-field" type="text" placeholder="e.g., Office Supplies" value={formName} onChange={e => setFormName(e.target.value)} />
+
+            <div className="field-row">
+              <div>
+                <label className="field-label">Account Code</label>
+                <input className="input-field" type="text" placeholder={range ? `e.g., ${range.min + 1}` : "Enter code"} value={formCode} onChange={e => setFormCode(e.target.value)} />
+              </div>
+              <div>
+                <label className="field-label">Account Name</label>
+                <input className="input-field" type="text" placeholder="e.g., Office Supplies" value={formName} onChange={e => setFormName(e.target.value)} />
+              </div>
+            </div>
+
+            {/* ── NEW: Default Budget Tags ── */}
+            <div className="field-label" style={{ marginBottom: 8 }}>Default Budget Tags</div>
+            <div className="field-row">
+              <div>
+                <label className="field-label">Project</label>
+                <select className="input-field" value={defaultProjectId ?? ""} onChange={e => setDefaultProjectId(e.target.value ? Number(e.target.value) : null)}>
+                  <option value="">— None —</option>
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="field-label">Location</label>
+                <select className="input-field" value={defaultLocationId ?? ""} onChange={e => setDefaultLocationId(e.target.value ? Number(e.target.value) : null)}>
+                  <option value="">— None —</option>
+                  {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="field-row">
+              <div>
+                <label className="field-label">Activity</label>
+                <select className="input-field" value={defaultActivityId ?? ""} onChange={e => setDefaultActivityId(e.target.value ? Number(e.target.value) : null)}>
+                  <option value="">— None —</option>
+                  {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
+            </div>
+            {/* ── End of new fields ── */}
+
             {modalError && <div style={{ color: "#B91C1C", fontSize: 12, marginBottom: 10 }}>{modalError}</div>}
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
               <button className="btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
