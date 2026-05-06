@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Get active company ID
+  // Get active company
   const { data: roleData } = await supabase
     .from('user_roles')
     .select('company_id')
@@ -38,12 +38,12 @@ export async function POST(request: NextRequest) {
   if (!roleData?.company_id) return NextResponse.json({ error: 'No company found' }, { status: 400 })
   const companyId = roleData.company_id
 
-  const { invoice_no, party_id, invoice_date, due_date, items, reference, notes } = await request.json()
+  const { invoice_no, party_id, invoice_date, due_date, items, reference, notes, expense_account_id, project_id, location_id, activity_id } = await request.json()
   if (!party_id || !items || items.length === 0) {
     return NextResponse.json({ error: 'Supplier and at least one item are required' }, { status: 400 })
   }
 
-  // Generate bill number (same logic as invoices)
+  // Generate bill number
   let finalInvoiceNo = invoice_no?.trim() || `BILL-${Date.now().toString(36).toUpperCase()}`
   let tries = 0
   while (tries < 5) {
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 
   const totalAmount = items.reduce((s: number, i: any) => s + (i.qty * i.unit_price), 0)
 
-  // 1. Insert the bill into invoices (type = purchase)
+  // 1. Insert the bill
   const { data: bill, error: billErr } = await supabaseAdmin.from("invoices").insert({
     company_id: companyId,
     invoice_no: finalInvoiceNo,
@@ -136,9 +136,28 @@ export async function POST(request: NextRequest) {
     }).select("id").single()
 
     if (entry) {
+      // ⭐ Include the new tags in the journal lines
       await supabaseAdmin.from("journal_lines").insert([
-        { company_id: companyId, entry_id: entry.id, account_id: invAcc.data.id, debit: totalAmount, credit: 0 },
-        { company_id: companyId, entry_id: entry.id, account_id: apAcc.data.id, debit: 0, credit: totalAmount },
+        {
+          company_id: companyId,
+          entry_id: entry.id,
+          account_id: invAcc.data.id,
+          debit: totalAmount,
+          credit: 0,
+          project_id: project_id || null,
+          location_id: location_id || null,
+          activity_id: activity_id || null,
+        },
+        {
+          company_id: companyId,
+          entry_id: entry.id,
+          account_id: apAcc.data.id,
+          debit: 0,
+          credit: totalAmount,
+          project_id: project_id || null,
+          location_id: location_id || null,
+          activity_id: activity_id || null,
+        },
       ])
       await supabaseAdmin.from("accounts").update({ balance: (invAcc.data.balance || 0) + totalAmount }).eq("id", invAcc.data.id)
       await supabaseAdmin.from("accounts").update({ balance: (apAcc.data.balance || 0) + totalAmount }).eq("id", apAcc.data.id)

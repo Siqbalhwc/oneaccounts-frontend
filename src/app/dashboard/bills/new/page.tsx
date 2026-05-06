@@ -13,27 +13,61 @@ export default function NewBillPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  const [suppliers,            setSuppliers]            = useState<any[]>([])
-  const [products,             setProducts]             = useState<any[]>([])
-  const [supplierId,           setSupplierId]           = useState<number | null>(null)
-  const [supplierSearch,       setSupplierSearch]       = useState("")
-  const [showSupplierList,     setShowSupplierList]     = useState(false)
-  const [selectedSupplier,     setSelectedSupplier]     = useState<any>(null)
-  const supplierRef                                     = useRef<HTMLDivElement>(null)
-  const [billDate,             setBillDate]             = useState(new Date().toISOString().split("T")[0])
-  const [dueDate,              setDueDate]              = useState(new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0])
-  const [reference,            setReference]            = useState("")
-  const [notes,                setNotes]                = useState("")
-  const [items,                setItems]                = useState<any[]>([])
-  const [loading,              setLoading]              = useState(false)
-  const [error,                setError]                = useState("")
-  const [flash,                setFlash]                = useState<string | null>(null)
-  const [productSearch,        setProductSearch]        = useState("")
-  const [showProductList,      setShowProductList]      = useState(false)
+  const [companyId, setCompanyId] = useState<string>("")
+  const [suppliers, setSuppliers] = useState<any[]>([])
+  const [products, setProducts] = useState<any[]>([])
+  const [supplierId, setSupplierId] = useState<number | null>(null)
+  const [supplierSearch, setSupplierSearch] = useState("")
+  const [showSupplierList, setShowSupplierList] = useState(false)
+  const [selectedSupplier, setSelectedSupplier] = useState<any>(null)
+  const supplierRef = useRef<HTMLDivElement>(null)
 
+  const [billDate, setBillDate] = useState(new Date().toISOString().split("T")[0])
+  const [dueDate, setDueDate] = useState(new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0])
+  const [reference, setReference] = useState("")
+  const [notes, setNotes] = useState("")
+  const [items, setItems] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [flash, setFlash] = useState<string | null>(null)
+
+  const [productSearch, setProductSearch] = useState("")
+  const [showProductList, setShowProductList] = useState(false)
+
+  // ── Auto‑fill tags ──────────────────────────────────────────
+  const [expenseAccountId, setExpenseAccountId] = useState<number | null>(null)
+  const [projectId, setProjectId] = useState<number | null>(null)
+  const [locationId, setLocationId] = useState<number | null>(null)
+  const [activityId, setActivityId] = useState<number | null>(null)
+  const [expenseAccounts, setExpenseAccounts] = useState<any[]>([])
+  const [projects, setProjects] = useState<any[]>([])
+  const [locations, setLocations] = useState<any[]>([])
+  const [activities, setActivities] = useState<any[]>([])
+
+  // ── Load suppliers, products, and lookup lists ──────────────
   useEffect(() => {
-    supabase.from("suppliers").select("id,code,name,phone,balance").order("name").then(r => r.data && setSuppliers(r.data))
-    supabase.from("products").select("id,code,name,cost_price,qty_on_hand").order("name").then(r => r.data && setProducts(r.data))
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
+      setCompanyId(cid)
+
+      supabase.from("suppliers").select("id,code,name,phone,balance,default_project_id,default_location_id,default_activity_id")
+        .eq("company_id", cid).order("name")
+        .then(r => r.data && setSuppliers(r.data))
+
+      supabase.from("products").select("id,code,name,cost_price,qty_on_hand").eq("company_id", cid).order("name")
+        .then(r => r.data && setProducts(r.data))
+
+      // Expense accounts (for the main expense head)
+      supabase.from("accounts").select("id,code,name,type").eq("company_id", cid).eq("type","Expense").order("code")
+        .then(r => r.data && setExpenseAccounts(r.data))
+
+      supabase.from("projects").select("id,name").eq("company_id", cid).order("name")
+        .then(r => r.data && setProjects(r.data))
+      supabase.from("locations").select("id,name").eq("company_id", cid).order("name")
+        .then(r => r.data && setLocations(r.data))
+      supabase.from("activities").select("id,name").eq("company_id", cid).order("name")
+        .then(r => r.data && setActivities(r.data))
+    })
   }, [])
 
   useEffect(() => {
@@ -52,11 +86,24 @@ export default function NewBillPage() {
     (s.phone || "").includes(supplierSearch)
   )
 
+  // ── When supplier changes, auto‑fill tags ──────────────────
   const selectSupplier = (s: any) => {
     setSupplierId(s.id)
     setSelectedSupplier(s)
     setSupplierSearch(s.name)
     setShowSupplierList(false)
+
+    // Auto‑fill from supplier defaults
+    setProjectId(s.default_project_id || null)
+    setLocationId(s.default_location_id || null)
+    setActivityId(s.default_activity_id || null)
+
+    // If the supplier has a default expense account set, pre‑fill it
+    if (s.default_expense_account_id) {
+      setExpenseAccountId(s.default_expense_account_id)
+    } else {
+      setExpenseAccountId(null)   // user must pick manually
+    }
   }
 
   const clearSupplier = () => {
@@ -64,32 +111,16 @@ export default function NewBillPage() {
     setSelectedSupplier(null)
     setSupplierSearch("")
     setShowSupplierList(true)
+    setProjectId(null)
+    setLocationId(null)
+    setActivityId(null)
+    setExpenseAccountId(null)
   }
 
   const filteredProducts = products.filter(p =>
     p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
     p.code.toLowerCase().includes(productSearch.toLowerCase())
   )
-
-  // ⭐ Sequential bill numbering per supplier
-  const getNextBillNo = async (suppCode: string): Promise<string> => {
-    const { data } = await supabase
-      .from("invoices")
-      .select("invoice_no")
-      .like("invoice_no", `${suppCode}-%`)
-      .eq("type", "purchase")
-      .order("invoice_no", { ascending: false })
-      .limit(1)
-
-    let nextNum = 1
-    if (data && data.length > 0) {
-      const last = data[0].invoice_no
-      const parts = last.split("-")
-      const num = parseInt(parts[parts.length - 1])
-      if (!isNaN(num)) nextNum = num + 1
-    }
-    return `${suppCode}-${String(nextNum).padStart(2, "0")}`
-  }
 
   const addItem = (prod: any) => {
     setItems([...items, {
@@ -118,6 +149,26 @@ export default function NewBillPage() {
 
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
 
+  // ⭐ Sequential bill numbering per supplier
+  const getNextBillNo = async (suppCode: string): Promise<string> => {
+    const { data } = await supabase
+      .from("invoices")
+      .select("invoice_no")
+      .like("invoice_no", `${suppCode}-%`)
+      .eq("type", "purchase")
+      .order("invoice_no", { ascending: false })
+      .limit(1)
+
+    let nextNum = 1
+    if (data && data.length > 0) {
+      const last = data[0].invoice_no
+      const parts = last.split("-")
+      const num = parseInt(parts[parts.length - 1])
+      if (!isNaN(num)) nextNum = num + 1
+    }
+    return `${suppCode}-${String(nextNum).padStart(2, "0")}`
+  }
+
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
 
   const handleSubmit = async () => {
@@ -126,7 +177,6 @@ export default function NewBillPage() {
 
     setLoading(true); setError("")
 
-    // ⭐ Get the next sequential bill number for this supplier
     const suppCode = selectedSupplier?.code || "BILL"
     const billNo = await getNextBillNo(suppCode)
 
@@ -145,6 +195,11 @@ export default function NewBillPage() {
           })),
           reference,
           notes,
+          // ⭐ Pass the budget tags to the API
+          expense_account_id: expenseAccountId,
+          project_id: projectId,
+          location_id: locationId,
+          activity_id: activityId,
         }),
       })
       const result = await res.json()
@@ -161,6 +216,10 @@ export default function NewBillPage() {
       setSupplierSearch("")
       setReference("")
       setNotes("")
+      setProjectId(null)
+      setLocationId(null)
+      setActivityId(null)
+      setExpenseAccountId(null)
       setLoading(false)
       setTimeout(() => setFlash(null), 4000)
     } catch (e: any) {
@@ -243,9 +302,9 @@ export default function NewBillPage() {
 
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
-        .cust-search-icon { position: absolute; left: 10px; color: "#94A3B8"; pointer-events: none; }
-        .cust-clear { position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: "#94A3B8"; display: flex; align-items: center; padding: 4px; border-radius: 4px; }
-        .cust-clear:hover { color: "#EF4444"; background: "#FEF2F2"; }
+        .cust-search-icon { position: absolute; left: 10px; color: #94A3B8; pointer-events: none; }
+        .cust-clear { position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: #94A3B8; display: flex; align-items: center; padding: 4px; border-radius: 4px; }
+        .cust-clear:hover { color: #EF4444; background: #FEF2F2; }
         .cust-dropdown {
           position: absolute; top: calc(100% + 4px); left: 0; right: 0;
           background: white; border: 1.5px solid #C7D2FE; border-radius: 10px;
@@ -259,15 +318,15 @@ export default function NewBillPage() {
           transition: background 0.1s;
         }
         .cust-option:last-child { border-bottom: none; }
-        .cust-option:hover { background: "#EEF2FF"; }
-        .cust-option-name { font-size: 13px; font-weight: 600; color: "#1E293B"; }
-        .cust-option-meta { font-size: 11px; color: "#94A3B8"; margin-top: 2px; }
-        .cust-option-bal { font-size: 12px; font-weight: 600; color: "#1E3A8A"; white-space: nowrap; }
+        .cust-option:hover { background: #EEF2FF; }
+        .cust-option-name { font-size: 13px; font-weight: 600; color: #1E293B; }
+        .cust-option-meta { font-size: 11px; color: #94A3B8; margin-top: 2px; }
+        .cust-option-bal { font-size: 12px; font-weight: 600; color: #1E3A8A; white-space: nowrap; }
         .cust-selected-badge {
           display: inline-flex; align-items: center; gap: 6px;
-          background: "#EEF2FF"; border: 1.5px solid "#C7D2FE";
+          background: #EEF2FF; border: 1.5px solid #C7D2FE;
           border-radius: 8px; padding: 6px 12px; font-size: 13px;
-          font-weight: 600; color: "#1E3A8A"; width: 100%;
+          font-weight: 600; color: #1E3A8A; width: 100%;
         }
       `}</style>
 
@@ -278,7 +337,7 @@ export default function NewBillPage() {
           </button>
           <div style={{ flex: 1 }}>
             <div className="inv-title">📦 New Purchase Bill</div>
-            <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 1 }}>Record a supplier purchase – inventory will be increased</div>
+            <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 1 }}>Record a supplier purchase – tags auto‑fill from supplier defaults</div>
           </div>
           <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/bills")}>View List</button>
         </div>
@@ -340,6 +399,40 @@ export default function NewBillPage() {
                   </>
                 )}
               </div>
+
+              {/* ── Auto‑filled tags ─────────────────────────────── */}
+              {selectedSupplier && (
+                <div style={{ marginTop: 10, padding: "10px 12px", background: "#F8FAFC", borderRadius: 8, display: "flex", flexWrap: "wrap", gap: 10 }}>
+                  <div style={{ flex: "1 1 200px" }}>
+                    <label className="inv-label">Expense Account</label>
+                    <select className="inv-input" value={expenseAccountId ?? ""} onChange={e => setExpenseAccountId(e.target.value ? Number(e.target.value) : null)}>
+                      <option value="">— Select —</option>
+                      {expenseAccounts.map(a => <option key={a.id} value={a.id}>{a.code} – {a.name}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: "1 1 150px" }}>
+                    <label className="inv-label">Project</label>
+                    <select className="inv-input" value={projectId ?? ""} onChange={e => setProjectId(e.target.value ? Number(e.target.value) : null)}>
+                      <option value="">— None —</option>
+                      {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: "1 1 150px" }}>
+                    <label className="inv-label">Location</label>
+                    <select className="inv-input" value={locationId ?? ""} onChange={e => setLocationId(e.target.value ? Number(e.target.value) : null)}>
+                      <option value="">— None —</option>
+                      {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: "1 1 150px" }}>
+                    <label className="inv-label">Activity</label>
+                    <select className="inv-input" value={activityId ?? ""} onChange={e => setActivityId(e.target.value ? Number(e.target.value) : null)}>
+                      <option value="">— None —</option>
+                      {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+              )}
 
               <div className="inv-row" style={{ marginTop: 10 }}>
                 <div>
