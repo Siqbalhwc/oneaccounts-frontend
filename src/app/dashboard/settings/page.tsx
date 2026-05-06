@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { Settings, Database, Cog, Shield, Bell, CreditCard, ArrowRight, Briefcase } from "lucide-react"
+import { Settings, Database, Cog, Shield, Bell, CreditCard, ArrowRight, Briefcase, Wallet } from "lucide-react"
 
 export default function SettingsHubPage() {
   const router = useRouter()
