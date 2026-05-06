@@ -35,6 +35,13 @@ export default function SettingsHubPage() {
       href: "/dashboard/settings/projects",
       color: "#8B5CF6",
     },
+{
+  title: "Budget Entry",
+  desc: "Set annual expense budgets per account",
+  icon: <Wallet size={22} />,
+  href: "/dashboard/settings/budgets",
+  color: "#F59E0B",
+},
     {
       title: "Payment Settings",
       desc: "JazzCash merchant credentials and gateway config",
