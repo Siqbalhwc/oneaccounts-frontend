@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRole } from "@/contexts/RoleContext"
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+type DimensionType = "activity" | "project" | "location"
 
 export default function BudgetsPage() {
   const supabase = createBrowserClient(
@@ -17,30 +17,26 @@ export default function BudgetsPage() {
 
   const [companyId, setCompanyId] = useState<string>("")
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
+  const [dimension, setDimension] = useState<DimensionType>("activity")
+
   const [accounts, setAccounts] = useState<any[]>([])
   const [projects, setProjects] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
   const [activities, setActivities] = useState<any[]>([])
 
-  const [selectedAccount, setSelectedAccount] = useState<string>("")
-  const [selectedProject, setSelectedProject] = useState<string>("")
-  const [selectedLocation, setSelectedLocation] = useState<string>("")
-  const [selectedActivity, setSelectedActivity] = useState<string>("")
-
-  // Budget grid: key = accountId, value = array of 12 monthly amounts
-  const [budgetGrid, setBudgetGrid] = useState<Record<string, number[]>>({})
+  // Matrix: { [accountId]: { [dimValueId]: amount } }
+  const [matrix, setMatrix] = useState<Record<string, Record<string, number>>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [flash, setFlash] = useState<string>("")
 
-  // ── Get company ID and lookup data ───────────────────────
+  // ── Get company and lookup data ───────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
         || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
 
-      // Fetch expense accounts only (budget typically for expenses)
       supabase.from("accounts")
         .select("id, code, name")
         .eq("company_id", cid)
@@ -57,69 +53,67 @@ export default function BudgetsPage() {
     })
   }, [])
 
-  // ── Load existing budgets for the selected year ─────────
+  // ── Load existing budgets and build matrix ────────────────
   useEffect(() => {
     if (!companyId) return
     setLoading(true)
 
-    let query = supabase.from("budgets").select("*")
+    const dimField = dimension === "activity" ? "activity_id" : dimension === "project" ? "project_id" : "location_id"
+
+    supabase.from("budgets")
+      .select("*")
       .eq("company_id", companyId)
       .eq("fiscal_year", fiscalYear)
-      .is("month", null)   // fetch annual budgets only (month=NULL)
-    // We'll display annual budget; you can later add monthly breakdown
-
-    if (selectedAccount) query = query.eq("account_id", selectedAccount)
-    if (selectedProject) query = query.eq("project_id", selectedProject)
-    if (selectedLocation) query = query.eq("location_id", selectedLocation)
-    if (selectedActivity) query = query.eq("activity_id", selectedActivity)
-
-    query.then(({ data }) => {
-      const grid: Record<string, number[]> = {}
-      data?.forEach((b: any) => {
-        if (!grid[b.account_id]) grid[b.account_id] = Array(12).fill(0)
-        // For annual, set the total budget in the first month (you can distribute equally later)
-        grid[b.account_id][0] = b.budgeted_amount || 0
+      .is("month", null)            // annual budgets
+      .neq(dimField, null)          // only rows that have this dimension set
+      .then(({ data }) => {
+        const newMatrix: Record<string, Record<string, number>> = {}
+        data?.forEach((b: any) => {
+          const accId = b.account_id
+          const dimValId = b[dimField]
+          if (!newMatrix[accId]) newMatrix[accId] = {}
+          newMatrix[accId][dimValId] = b.budgeted_amount || 0
+        })
+        setMatrix(newMatrix)
+        setLoading(false)
       })
-      setBudgetGrid(grid)
-      setLoading(false)
-    })
-  }, [companyId, fiscalYear, selectedAccount, selectedProject, selectedLocation, selectedActivity])
+  }, [companyId, fiscalYear, dimension])
 
-  // ── Update cell value ───────────────────────────────────
-  const updateCell = (accountId: string, monthIdx: number, value: number) => {
-    setBudgetGrid(prev => {
+  const dimensionValues = dimension === "activity" ? activities : dimension === "project" ? projects : locations
+
+  const updateCell = (accountId: string, dimValId: string, amount: number) => {
+    setMatrix(prev => {
       const updated = { ...prev }
-      if (!updated[accountId]) updated[accountId] = Array(12).fill(0)
-      updated[accountId][monthIdx] = value
+      if (!updated[accountId]) updated[accountId] = {}
+      updated[accountId][dimValId] = amount
       return updated
     })
   }
 
-  // ── Save all budgets ────────────────────────────────────
   const handleSave = async () => {
     if (!companyId || !canEdit) return
     setSaving(true)
     setFlash("")
 
-    for (const accountId of Object.keys(budgetGrid)) {
-      const monthly = budgetGrid[accountId]
-      // Upsert a single annual budget row (month = NULL)
-      const totalAnnual = monthly.reduce((sum, v) => sum + (v || 0), 0)
-      if (totalAnnual > 0) {
-        await supabase.from("budgets").upsert({
-          company_id: companyId,
-          account_id: accountId,
-          project_id: selectedProject || null,
-          location_id: selectedLocation || null,
-          activity_id: selectedActivity || null,
-          fiscal_year: fiscalYear,
-          month: null,
-          budgeted_amount: totalAnnual,
-        }, { onConflict: "company_id,account_id,project_id,location_id,activity_id,fiscal_year,month" })
+    const dimField = dimension === "activity" ? "activity_id" : dimension === "project" ? "project_id" : "location_id"
+
+    for (const accountId of Object.keys(matrix)) {
+      for (const dimValId of Object.keys(matrix[accountId])) {
+        const amount = matrix[accountId][dimValId]
+        if (amount > 0) {
+          await supabase.from("budgets").upsert({
+            company_id: companyId,
+            account_id: accountId,
+            fiscal_year: fiscalYear,
+            month: null,
+            [dimField]: dimValId,
+            budgeted_amount: amount,
+          }, { onConflict: "company_id,account_id,project_id,location_id,activity_id,fiscal_year,month" })
+        }
       }
     }
 
-    setFlash("✅ Budget saved successfully!")
+    setFlash("✅ Budget saved!")
     setSaving(false)
     setTimeout(() => setFlash(""), 4000)
   }
@@ -129,44 +123,35 @@ export default function BudgetsPage() {
   return (
     <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
       <style>{`
-        .budget-shell { max-width: 1200px; margin: 0 auto; }
+        .budget-shell { max-width: 100%; overflow-x: auto; }
         .budget-title { font-size: 22px; font-weight: 800; color: #1E293B; }
         .budget-subtitle { font-size: 13px; color: #94A3B8; margin-top: 2px; }
-        .filter-bar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+        .filter-bar { display: flex; gap: 10px; margin: 16px 0; flex-wrap: wrap; align-items: center; }
         .filter-select { padding: 8px 12px; border: 1px solid #E2E8F0; border-radius: 8px; font-size: 13px; background: white; }
-        .budget-table { background: white; border-radius: 10px; border: 1px solid #E2E8F0; overflow-x: auto; }
-        .budget-header { display: grid; grid-template-columns: 120px repeat(12, 1fr); padding: 10px 16px; background: #F8FAFC; font-size: 9px; font-weight: 700; text-transform: uppercase; color: #94A3B8; position: sticky; top: 0; }
-        .budget-row { display: grid; grid-template-columns: 120px repeat(12, 1fr); padding: 8px 16px; border-bottom: 1px solid #F1F5F9; align-items: center; font-size: 12px; }
-        .budget-row:hover { background: #FAFBFF; }
-        .budget-input { width: 100%; padding: 6px 4px; border: 1px solid #E2E8F0; border-radius: 6px; font-size: 11px; text-align: right; box-sizing: border-box; }
-        .budget-input:focus { border-color: #1740C8; outline: none; }
+        .matrix-table { background: white; border-radius: 10px; border: 1px solid #E2E8F0; overflow: auto; }
+        .matrix-header { display: flex; font-size: 9px; font-weight: 700; text-transform: uppercase; color: #94A3B8; background: #F8FAFC; position: sticky; top: 0; z-index: 1; }
+        .matrix-row { display: flex; border-bottom: 1px solid #F1F5F9; align-items: center; }
+        .matrix-row:hover { background: #FAFBFF; }
+        .matrix-account-cell { width: 130px; flex-shrink: 0; padding: 8px 12px; font-size: 12px; font-weight: 600; color: #1E3A8A; border-right: 1px solid #F1F5F9; }
+        .matrix-header-cell { flex: 1; min-width: 100px; text-align: right; padding: 8px 10px; }
+        .matrix-cell { flex: 1; min-width: 100px; padding: 6px 10px; text-align: right; }
+        .matrix-input { width: 100%; padding: 6px 4px; border: 1px solid #E2E8F0; border-radius: 6px; font-size: 11px; text-align: right; box-sizing: border-box; }
+        .matrix-input:focus { border-color: #1740C8; outline: none; }
         .btn-primary { padding: 10px 20px; background: #1D4ED8; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; }
       `}</style>
 
       <div className="budget-shell">
-        <div className="budget-title">💰 Budget Entry</div>
-        <div className="budget-subtitle">Set expense budgets per account for the fiscal year</div>
+        <div className="budget-title">💰 Budget Matrix</div>
+        <div className="budget-subtitle">Assign one expense account to multiple {dimension}s at once</div>
 
-        {/* Filters */}
-        <div className="filter-bar" style={{ marginTop: 16 }}>
+        <div className="filter-bar">
           <select className="filter-select" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
             {[2025, 2026, 2027, 2028].map(y => <option key={y} value={y}>{y}</option>)}
           </select>
-          <select className="filter-select" value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)}>
-            <option value="">All Accounts</option>
-            {accounts.map(a => <option key={a.id} value={a.id}>{a.code} – {a.name}</option>)}
-          </select>
-          <select className="filter-select" value={selectedProject} onChange={e => setSelectedProject(e.target.value)}>
-            <option value="">All Projects</option>
-            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          <select className="filter-select" value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)}>
-            <option value="">All Locations</option>
-            {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-          </select>
-          <select className="filter-select" value={selectedActivity} onChange={e => setSelectedActivity(e.target.value)}>
-            <option value="">All Activities</option>
-            {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          <select className="filter-select" value={dimension} onChange={e => setDimension(e.target.value as DimensionType)}>
+            <option value="activity">Pivot by Activity</option>
+            <option value="project">Pivot by Project</option>
+            <option value="location">Pivot by Location</option>
           </select>
         </div>
 
@@ -178,32 +163,42 @@ export default function BudgetsPage() {
 
         {loading ? (
           <div style={{ textAlign: "center", padding: 40 }}>Loading budgets...</div>
+        ) : dimensionValues.length === 0 ? (
+          <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>
+            No {dimension}s found. Create them in <a href="/dashboard/settings/projects">Settings → Projects & Activities</a>.
+          </div>
         ) : (
-          <div className="budget-table">
-            <div className="budget-header">
-              <span>Account</span>
-              {MONTHS.map(m => <span key={m} style={{ textAlign: "right" }}>{m}</span>)}
+          <div className="matrix-table">
+            {/* Header */}
+            <div className="matrix-header">
+              <div className="matrix-account-cell">Account</div>
+              {dimensionValues.map(dv => (
+                <div key={dv.id} className="matrix-header-cell">{dv.name}</div>
+              ))}
             </div>
-            {accounts.map(a => {
-              const row = budgetGrid[a.id] || Array(12).fill(0)
-              return (
-                <div key={a.id} className="budget-row">
-                  <span style={{ fontWeight: 600, color: "#1E3A8A", fontSize: 11 }}>{a.code}</span>
-                  {row.map((val, idx) => (
-                    <input
-                      key={idx}
-                      className="budget-input"
-                      type="number"
-                      min="0"
-                      step="100"
-                      value={val || ""}
-                      onChange={e => updateCell(a.id, idx, Number(e.target.value))}
-                      disabled={!canEdit}
-                    />
-                  ))}
-                </div>
-              )
-            })}
+
+            {/* Rows */}
+            {accounts.map(acc => (
+              <div key={acc.id} className="matrix-row">
+                <div className="matrix-account-cell" title={acc.name}>{acc.code}</div>
+                {dimensionValues.map(dv => {
+                  const val = (matrix[acc.id] && matrix[acc.id][dv.id]) || 0
+                  return (
+                    <div key={dv.id} className="matrix-cell">
+                      <input
+                        className="matrix-input"
+                        type="number"
+                        min="0"
+                        step="100"
+                        value={val || ""}
+                        onChange={e => updateCell(acc.id, dv.id, Number(e.target.value))}
+                        disabled={!canEdit}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
           </div>
         )}
 
