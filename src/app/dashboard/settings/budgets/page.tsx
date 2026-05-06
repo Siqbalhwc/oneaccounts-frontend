@@ -24,8 +24,11 @@ export default function BudgetsPage() {
   const [locations, setLocations] = useState<any[]>([])
   const [activities, setActivities] = useState<any[]>([])
 
-  // Matrix: { [accountId]: { [dimValueId]: amount } }
-  const [matrix, setMatrix] = useState<Record<string, Record<string, number>>>({})
+  // Budget matrix: { [accountId]: { [dimValueId]: amount } }
+  const [budgetMatrix, setBudgetMatrix] = useState<Record<string, Record<string, number>>>({})
+  // Actuals matrix: same shape, pulled from journal_lines
+  const [actualsMatrix, setActualsMatrix] = useState<Record<string, Record<string, number>>>({})
+
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [flash, setFlash] = useState<string>("")
@@ -53,36 +56,65 @@ export default function BudgetsPage() {
     })
   }, [])
 
-  // ── Load existing budgets and build matrix ────────────────
+  const dimensionValues = dimension === "activity" ? activities : dimension === "project" ? projects : locations
+  const dimField = dimension === "activity" ? "activity_id" : dimension === "project" ? "project_id" : "location_id"
+
+  // ── Load budgets and actuals ──────────────────────────────
   useEffect(() => {
     if (!companyId) return
     setLoading(true)
 
-    const dimField = dimension === "activity" ? "activity_id" : dimension === "project" ? "project_id" : "location_id"
-
+    // 1. Budgets
     supabase.from("budgets")
       .select("*")
       .eq("company_id", companyId)
       .eq("fiscal_year", fiscalYear)
-      .is("month", null)            // annual budgets
-      .neq(dimField, null)          // only rows that have this dimension set
+      .is("month", null)
+      .neq(dimField, null)
       .then(({ data }) => {
-        const newMatrix: Record<string, Record<string, number>> = {}
+        const bMatrix: Record<string, Record<string, number>> = {}
         data?.forEach((b: any) => {
-          const accId = b.account_id
-          const dimValId = b[dimField]
-          if (!newMatrix[accId]) newMatrix[accId] = {}
-          newMatrix[accId][dimValId] = b.budgeted_amount || 0
+          const acc = b.account_id
+          const dv = b[dimField]
+          if (!bMatrix[acc]) bMatrix[acc] = {}
+          bMatrix[acc][dv] = b.budgeted_amount || 0
         })
-        setMatrix(newMatrix)
+        setBudgetMatrix(bMatrix)
+      })
+
+    // 2. Actuals – sum of journal_lines for each account + dimension value
+    const startDate = `${fiscalYear}-01-01`
+    const endDate = `${fiscalYear}-12-31`
+
+    supabase
+      .from("journal_lines")
+      .select(`
+        account_id,
+        ${dimField},
+        debit,
+        credit,
+        journal_entries!inner(date)
+      `)
+      .eq("company_id", companyId)
+      .gte("journal_entries.date", startDate)
+      .lte("journal_entries.date", endDate)
+      .then(({ data }) => {
+        const aMatrix: Record<string, Record<string, number>> = {}
+        data?.forEach((line: any) => {
+          const acc = line.account_id
+          const dv = line[dimField]
+          if (!dv) return   // skip lines without dimension
+          const net = (line.debit || 0) - (line.credit || 0)   // expense is a debit
+          if (!aMatrix[acc]) aMatrix[acc] = {}
+          aMatrix[acc][dv] = (aMatrix[acc][dv] || 0) + net
+        })
+        setActualsMatrix(aMatrix)
         setLoading(false)
       })
-  }, [companyId, fiscalYear, dimension])
-
-  const dimensionValues = dimension === "activity" ? activities : dimension === "project" ? projects : locations
+  }, [companyId, fiscalYear, dimField])
 
   const updateCell = (accountId: string, dimValId: string, amount: number) => {
-    setMatrix(prev => {
+    setBudgetMatrix(prev => {
       const updated = { ...prev }
       if (!updated[accountId]) updated[accountId] = {}
       updated[accountId][dimValId] = amount
@@ -95,11 +127,9 @@ export default function BudgetsPage() {
     setSaving(true)
     setFlash("")
 
-    const dimField = dimension === "activity" ? "activity_id" : dimension === "project" ? "project_id" : "location_id"
-
-    for (const accountId of Object.keys(matrix)) {
-      for (const dimValId of Object.keys(matrix[accountId])) {
-        const amount = matrix[accountId][dimValId]
+    for (const accountId of Object.keys(budgetMatrix)) {
+      for (const dimValId of Object.keys(budgetMatrix[accountId])) {
+        const amount = budgetMatrix[accountId][dimValId]
         if (amount > 0) {
           await supabase.from("budgets").upsert({
             company_id: companyId,
@@ -128,21 +158,29 @@ export default function BudgetsPage() {
         .budget-subtitle { font-size: 13px; color: #94A3B8; margin-top: 2px; }
         .filter-bar { display: flex; gap: 10px; margin: 16px 0; flex-wrap: wrap; align-items: center; }
         .filter-select { padding: 8px 12px; border: 1px solid #E2E8F0; border-radius: 8px; font-size: 13px; background: white; }
-        .matrix-table { background: white; border-radius: 10px; border: 1px solid #E2E8F0; overflow: auto; }
+        .matrix-table { background: white; border-radius: 10px; border: 1px solid #E2E8F0; overflow: auto; min-width: 800px; }
         .matrix-header { display: flex; font-size: 9px; font-weight: 700; text-transform: uppercase; color: #94A3B8; background: #F8FAFC; position: sticky; top: 0; z-index: 1; }
-        .matrix-row { display: flex; border-bottom: 1px solid #F1F5F9; align-items: center; }
+        .matrix-row { display: flex; border-bottom: 1px solid #F1F5F9; align-items: stretch; }
         .matrix-row:hover { background: #FAFBFF; }
-        .matrix-account-cell { width: 130px; flex-shrink: 0; padding: 8px 12px; font-size: 12px; font-weight: 600; color: #1E3A8A; border-right: 1px solid #F1F5F9; }
-        .matrix-header-cell { flex: 1; min-width: 100px; text-align: right; padding: 8px 10px; }
-        .matrix-cell { flex: 1; min-width: 100px; padding: 6px 10px; text-align: right; }
-        .matrix-input { width: 100%; padding: 6px 4px; border: 1px solid #E2E8F0; border-radius: 6px; font-size: 11px; text-align: right; box-sizing: border-box; }
+        .matrix-account-cell { width: 120px; flex-shrink: 0; padding: 8px 10px; font-size: 11px; font-weight: 600; color: #1E3A8A; border-right: 2px solid #E2E8F0; display: flex; align-items: center; }
+        .matrix-dims-cell { display: flex; flex: 1; flex-direction: column; }
+        .matrix-dim-row { display: flex; border-bottom: 1px solid #F1F5F9; }
+        .matrix-dim-row:last-child { border-bottom: none; }
+        .matrix-dim-name { width: 100%; padding: 4px 8px; font-size: 10px; font-weight: 600; color: #64748B; background: #F8FAFC; border-right: 1px solid #E2E8F0; display: flex; align-items: center; }
+        .matrix-cell-group { display: flex; flex: 1; }
+        .matrix-cell { flex: 1; min-width: 120px; padding: 4px 8px; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+        .matrix-input { width: 100%; padding: 4px; border: 1px solid #E2E8F0; border-radius: 6px; font-size: 11px; text-align: right; box-sizing: border-box; }
         .matrix-input:focus { border-color: #1740C8; outline: none; }
+        .matrix-actual { font-size: 10px; color: #64748B; text-align: right; }
+        .matrix-variance { font-size: 10px; text-align: right; font-weight: 600; }
+        .variance-negative { color: #EF4444; }
+        .variance-positive { color: #10B981; }
         .btn-primary { padding: 10px 20px; background: #1D4ED8; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; }
       `}</style>
 
       <div className="budget-shell">
-        <div className="budget-title">💰 Budget Matrix</div>
-        <div className="budget-subtitle">Assign one expense account to multiple {dimension}s at once</div>
+        <div className="budget-title">💰 Budget vs Actuals</div>
+        <div className="budget-subtitle">Compare budgeted amounts with actual spending</div>
 
         <div className="filter-bar">
           <select className="filter-select" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
@@ -162,7 +200,7 @@ export default function BudgetsPage() {
         )}
 
         {loading ? (
-          <div style={{ textAlign: "center", padding: 40 }}>Loading budgets...</div>
+          <div style={{ textAlign: "center", padding: 40 }}>Loading budgets & actuals...</div>
         ) : dimensionValues.length === 0 ? (
           <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>
             No {dimension}s found. Create them in <a href="/dashboard/settings/projects">Settings → Projects & Activities</a>.
@@ -173,7 +211,14 @@ export default function BudgetsPage() {
             <div className="matrix-header">
               <div className="matrix-account-cell">Account</div>
               {dimensionValues.map(dv => (
-                <div key={dv.id} className="matrix-header-cell">{dv.name}</div>
+                <div key={dv.id} className="matrix-cell" style={{ flex: 1, minWidth: 120, padding: "8px 8px", textAlign: "center" }}>
+                  {dv.name}
+                  <div style={{ display: "flex", marginTop: 4, fontSize: 8, color: "#94A3B8" }}>
+                    <span style={{ flex: 1, textAlign: "right", paddingRight: 4 }}>Budget</span>
+                    <span style={{ flex: 1, textAlign: "right", paddingRight: 4 }}>Actual</span>
+                    <span style={{ flex: 1, textAlign: "right" }}>Var</span>
+                  </div>
+                </div>
               ))}
             </div>
 
@@ -182,7 +227,9 @@ export default function BudgetsPage() {
               <div key={acc.id} className="matrix-row">
                 <div className="matrix-account-cell" title={acc.name}>{acc.code}</div>
                 {dimensionValues.map(dv => {
-                  const val = (matrix[acc.id] && matrix[acc.id][dv.id]) || 0
+                  const budgetVal = (budgetMatrix[acc.id] && budgetMatrix[acc.id][dv.id]) || 0
+                  const actualVal = (actualsMatrix[acc.id] && actualsMatrix[acc.id][dv.id]) || 0
+                  const variance = actualVal - budgetVal
                   return (
                     <div key={dv.id} className="matrix-cell">
                       <input
@@ -190,10 +237,15 @@ export default function BudgetsPage() {
                         type="number"
                         min="0"
                         step="100"
-                        value={val || ""}
+                        value={budgetVal || ""}
                         onChange={e => updateCell(acc.id, dv.id, Number(e.target.value))}
                         disabled={!canEdit}
+                        placeholder="Budget"
                       />
+                      <div className="matrix-actual">{actualVal.toLocaleString()}</div>
+                      <div className={`matrix-variance ${variance < 0 ? "variance-negative" : "variance-positive"}`}>
+                        {variance === 0 ? "—" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
+                      </div>
                     </div>
                   )
                 })}
