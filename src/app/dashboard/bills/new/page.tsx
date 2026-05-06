@@ -14,7 +14,7 @@ export default function NewBillPage() {
   )
 
   const [companyId, setCompanyId] = useState<string>("")
-  const [businessType, setBusinessType] = useState<string>("")   // ← new
+  const [businessType, setBusinessType] = useState<string>("")   // "ngo", "service", "trading"
 
   const [suppliers, setSuppliers] = useState<any[]>([])
   const [products, setProducts] = useState<any[]>([])
@@ -36,21 +36,22 @@ export default function NewBillPage() {
   const [productSearch, setProductSearch] = useState("")
   const [showProductList, setShowProductList] = useState(false)
 
-  // Tags
+  // Analytic tags
   const [expenseAccountId, setExpenseAccountId] = useState<number | null>(null)
   const [projectId, setProjectId] = useState<number | null>(null)
   const [locationId, setLocationId] = useState<number | null>(null)
   const [activityId, setActivityId] = useState<number | null>(null)
-  const [donorId, setDonorId] = useState<number | null>(null)
+  const [donorId, setDonorId] = useState<number | null>(null)          // <-- DONOR state
 
+  // Master data lists
   const [expenseAccounts, setExpenseAccounts] = useState<any[]>([])
-  const [allAccounts, setAllAccounts] = useState<any[]>([])    // ← service/trading may need any account
+  const [allAccounts, setAllAccounts] = useState<any[]>([])            // for non‑NGO
   const [projects, setProjects] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
   const [activities, setActivities] = useState<any[]>([])
-  const [donors, setDonors] = useState<any[]>([])
+  const [donors, setDonors] = useState<any[]>([])                      // <-- DONORS list
 
-  // ── Load lookup data ─────────────────────────────────
+  // ── Load lookup data & business type ─────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -58,26 +59,31 @@ export default function NewBillPage() {
 
       // Fetch business type
       supabase.from("companies").select("business_type").eq("id", cid).single()
-        .then(r => r.data && setBusinessType(r.data.business_type || ""))
+        .then(r => {
+          if (r.data) setBusinessType(r.data.business_type || "")
+        })
 
+      // Suppliers
       supabase.from("suppliers").select("id,code,name,phone,balance,default_project_id,default_location_id,default_activity_id")
         .eq("company_id", cid).order("name")
         .then(r => r.data && setSuppliers(r.data))
 
+      // Products
       supabase.from("products").select("id,code,name,cost_price,qty_on_hand").eq("company_id", cid).order("name")
         .then(r => r.data && setProducts(r.data))
 
-      // NGO: only expense accounts; Service/Trading: all accounts
-      const accountType = (businessType === "ngo") ? "Expense" : undefined
-      let accountQuery = supabase.from("accounts").select("id,code,name,type").eq("company_id", cid).order("code")
-      if (accountType) accountQuery = accountQuery.eq("type", accountType)
-      accountQuery.then(r => {
-        if (r.data) {
-          setExpenseAccounts(r.data)   // for NGO, it's expense; for others, it's all accounts
-          setAllAccounts(r.data)
-        }
-      })
+      // Accounts – only Expense for NGO, all for others
+      const accountType = "ngo" ? "Expense" : undefined   // we'll fetch conditionally in the effect after we know business type
+      // However business type is loaded in same effect, so we fetch both sets and filter in JSX.
+      supabase.from("accounts").select("id,code,name,type").eq("company_id", cid).order("code")
+        .then(r => {
+          if (r.data) {
+            setAllAccounts(r.data)
+            // For NGO, we'll filter to Expense in the dropdown; for others, show all
+          }
+        })
 
+      // Projects, Locations, Activities, Donors
       supabase.from("projects").select("id,name").eq("company_id", cid).order("name")
         .then(r => r.data && setProjects(r.data))
       supabase.from("locations").select("id,name").eq("company_id", cid).order("name")
@@ -87,8 +93,9 @@ export default function NewBillPage() {
       supabase.from("donors").select("id,name").eq("company_id", cid).order("name")
         .then(r => r.data && setDonors(r.data))
     })
-  }, [businessType])   // reload accounts when type changes (initially empty, will re-run after first fetch)
+  }, [])
 
+  // Close supplier dropdown when clicking outside
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (supplierRef.current && !supplierRef.current.contains(e.target as Node)) {
@@ -113,7 +120,7 @@ export default function NewBillPage() {
     setProjectId(s.default_project_id || null)
     setLocationId(s.default_location_id || null)
     setActivityId(s.default_activity_id || null)
-    setDonorId(null)
+    setDonorId(null)   // Donor is not auto‑filled from supplier
     if (s.default_expense_account_id) {
       setExpenseAccountId(s.default_expense_account_id)
     } else {
@@ -151,7 +158,14 @@ export default function NewBillPage() {
   }
 
   const addManualItem = () => {
-    setItems([...items, { product_id: null, description: "Manual Item", qty: 1, unit_price: 0, total: 0, account_id: null }])
+    setItems([...items, { 
+      product_id: null, 
+      description: "Manual Item", 
+      qty: 1, 
+      unit_price: 0, 
+      total: 0, 
+      account_id: null   // will use header expense account if not set per item
+    }])
   }
 
   const updateItem = (idx: number, field: string, value: any) => {
@@ -188,7 +202,6 @@ export default function NewBillPage() {
   const handleSubmit = async () => {
     if (!supplierId) { setError("Please select a supplier"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
-    // NGO: donor required
     if (businessType === "ngo" && !donorId) { setError("Donor is required for NGO bills"); return }
 
     setLoading(true); setError("")
@@ -209,15 +222,15 @@ export default function NewBillPage() {
             description: i.description,
             qty: i.qty,
             unit_price: i.unit_price,
-            account_id: i.account_id,   // manual items may specify account
+            account_id: i.account_id,   // per‑item account (for manual items)
           })),
           reference,
           notes,
-          expense_account_id: expenseAccountId,   // fallback if no per-item account
+          expense_account_id: expenseAccountId,   // header fallback
           project_id: projectId,
           location_id: locationId,
           activity_id: activityId,
-          donor_id: donorId,
+          donor_id: donorId,                       // ← sends donor to API
         }),
       })
       const result = await res.json()
@@ -259,8 +272,10 @@ export default function NewBillPage() {
     })
   }
 
-  // ── Dynamic label for GL dropdown ──
-  const getAccountLabel = () => businessType === "ngo" ? "Expense Account" : "GL Account"
+  // Helper: account list for dropdown based on business type
+  const accountList = businessType === "ngo"
+    ? allAccounts.filter(a => a.type === "Expense")
+    : allAccounts
 
   return (
     <div style={{ padding: "16px", background: "#F4F6FB", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -423,20 +438,16 @@ export default function NewBillPage() {
                 )}
               </div>
 
-              {/* Tags section – adapted per business type */}
+              {/* ── Tags section ─────────────────────────────── */}
               {selectedSupplier && (
                 <div style={{ marginTop: 10, padding: "10px 12px", background: "#F8FAFC", borderRadius: 8, display: "flex", flexWrap: "wrap", gap: 10 }}>
-                  {/* GL Account (always visible) */}
                   <div style={{ flex: "1 1 200px" }}>
-                    <label className="inv-label">{getAccountLabel()}</label>
+                    <label className="inv-label">Expense Account</label>
                     <select className="inv-input" value={expenseAccountId ?? ""} onChange={e => setExpenseAccountId(e.target.value ? Number(e.target.value) : null)}>
                       <option value="">— Select —</option>
-                      {(businessType === "ngo" ? expenseAccounts : allAccounts).map(a => (
-                        <option key={a.id} value={a.id}>{a.code} – {a.name}</option>
-                      ))}
+                      {accountList.map(a => <option key={a.id} value={a.id}>{a.code} – {a.name}</option>)}
                     </select>
                   </div>
-                  {/* Project (always optional except NGO where we strongly suggest) */}
                   <div style={{ flex: "1 1 150px" }}>
                     <label className="inv-label">Project</label>
                     <select className="inv-input" value={projectId ?? ""} onChange={e => setProjectId(e.target.value ? Number(e.target.value) : null)}>
@@ -444,7 +455,8 @@ export default function NewBillPage() {
                       {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                   </div>
-                  {/* Donor – only for NGO; hidden for others */}
+
+                  {/* DONOR – only for NGO */}
                   {businessType === "ngo" && (
                     <div style={{ flex: "1 1 150px" }}>
                       <label className="inv-label">Donor *</label>
@@ -454,7 +466,7 @@ export default function NewBillPage() {
                       </select>
                     </div>
                   )}
-                  {/* Location (optional) */}
+
                   <div style={{ flex: "1 1 150px" }}>
                     <label className="inv-label">Location</label>
                     <select className="inv-input" value={locationId ?? ""} onChange={e => setLocationId(e.target.value ? Number(e.target.value) : null)}>
@@ -462,7 +474,6 @@ export default function NewBillPage() {
                       {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                     </select>
                   </div>
-                  {/* Activity (optional) */}
                   <div style={{ flex: "1 1 150px" }}>
                     <label className="inv-label">Activity</label>
                     <select className="inv-input" value={activityId ?? ""} onChange={e => setActivityId(e.target.value ? Number(e.target.value) : null)}>
@@ -495,7 +506,7 @@ export default function NewBillPage() {
               </div>
             </div>
 
-            {/* Product search – visible only for trading or if not NGO */}
+            {/* Product search – only for non‑NGO */}
             {businessType !== "ngo" && (
               <div className="inv-card">
                 <label className="inv-label">Add Product</label>
@@ -534,7 +545,7 @@ export default function NewBillPage() {
               </div>
             )}
 
-            {/* Manual item button always available for all types */}
+            {/* Manual item button for NGO */}
             {businessType === "ngo" && (
               <div className="inv-card" style={{ textAlign: "right" }}>
                 <button className="inv-btn inv-btn-outline" onClick={addManualItem}><Plus size={14} /> Add Manual Item</button>
