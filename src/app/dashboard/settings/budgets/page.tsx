@@ -1,8 +1,10 @@
 "use client"
 
-import { useState, useEffect, Fragment } from "react"
+import { useState, useEffect, Fragment, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRole } from "@/contexts/RoleContext"
+import { Upload } from "lucide-react"
+import * as XLSX from "xlsx"
 
 export default function BudgetsPage() {
   const supabase = createBrowserClient(
@@ -30,12 +32,15 @@ export default function BudgetsPage() {
   const [filterActivityId, setFilterActivityId] = useState<string>("")
   const [filterLocationId, setFilterLocationId] = useState<string>("")
 
-  // Data: { [activityId]: { [locationId]: { [accountId]: { budget: number, actual: number } } } }
+  // Data
   const [data, setData] = useState<Record<string, Record<string, Record<string, { budget: number; actual: number }>>>>({})
-
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [flash, setFlash] = useState<string>("")
+
+  // ── Budget import state ─────────────────────────────
+  const [budgetImportFile, setBudgetImportFile] = useState<File | null>(null)
+  const [importingBudget, setImportingBudget] = useState(false)
 
   // ── Load master data ─────────────────────────────────
   useEffect(() => {
@@ -66,7 +71,7 @@ export default function BudgetsPage() {
       .then(r => r.data && setAllActivities(r.data))
   }, [companyId, selectedProjectId])
 
-  // ── Load budgets and actuals ──────────────────────────
+  // ── Load budgets and actuals ─────────────────────────
   useEffect(() => {
     if (!companyId || !selectedProjectId) { setData({}); setLoading(false); return }
     if (businessType === "ngo" && !selectedDonorId) { setData({}); setLoading(false); return }
@@ -183,6 +188,51 @@ export default function BudgetsPage() {
     setFlash("✅ Budget saved!"); setSaving(false); setTimeout(() => setFlash(""), 4000)
   }
 
+  // ── Budget import handler ────────────────────────────
+  const handleBudgetImport = async () => {
+    if (!budgetImportFile || !selectedProjectId || (businessType === "ngo" && !selectedDonorId)) {
+      setFlash("⚠️ Please select a project and donor (if NGO) before importing.")
+      return
+    }
+    setImportingBudget(true)
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      const data = e.target?.result
+      const workbook = XLSX.read(data, { type: 'binary' })
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json(sheet)
+      let inserted = 0
+      for (const row of rows as any[]) {
+        const { Activity, Location, AccountCode, BudgetAmount } = row
+        if (Activity && Location && AccountCode && BudgetAmount) {
+          const { data: act } = await supabase.from("activities").select("id").eq("company_id", companyId).eq("project_id", selectedProjectId).ilike("name", Activity).maybeSingle()
+          const { data: loc } = await supabase.from("locations").select("id").eq("company_id", companyId).ilike("name", Location).maybeSingle()
+          const { data: acc } = await supabase.from("accounts").select("id").eq("company_id", companyId).eq("code", AccountCode).single()
+          if (act && loc && acc) {
+            await supabase.from("budgets").upsert({
+              company_id: companyId,
+              account_id: acc.id,
+              project_id: selectedProjectId,
+              activity_id: act.id,
+              location_id: loc.id,
+              donor_id: businessType === "ngo" ? selectedDonorId : null,
+              fiscal_year: fiscalYear,
+              month: null,
+              budgeted_amount: parseFloat(BudgetAmount)
+            }, { onConflict: "company_id,account_id,project_id,activity_id,location_id,donor_id,fiscal_year,month" })
+            inserted++
+          }
+        }
+      }
+      setFlash(`✅ Imported ${inserted} budget rows!`)
+      setImportingBudget(false)
+      setBudgetImportFile(null)
+      // Refresh data by reloading the page (simple approach)
+      window.location.reload()
+    }
+    reader.readAsBinaryString(budgetImportFile)
+  }
+
   const displayActivities = filterActivityId ? allActivities.filter(a => a.id == filterActivityId) : allActivities
 
   if (!canView) return <div style={{ padding: 24, textAlign: "center" }}><h2>Access Denied</h2></div>
@@ -200,6 +250,9 @@ export default function BudgetsPage() {
         .input-budget { width: 70px; text-align: right; border: 1px solid #E2E8F0; border-radius: 4px; padding: 2px 4px; font-size: 10px; }
         .total-row td { font-weight: 700; background: #F8FAFC; }
         .btn-primary { padding: 10px 20px; background: #1D4ED8; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; margin-top: 16px; }
+        .btn-secondary { background: #059669; }
+        .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; padding: 8px 16px; border-radius: 8px; }
+        .file-input { display: none; }
       `}</style>
 
       <div className="budget-shell">
@@ -249,174 +302,186 @@ export default function BudgetsPage() {
             No Activities found for this project. Create them in Settings.
           </div>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th rowSpan={2} style={{ width: 100 }}>Activity / Location</th>
-                {accounts.map(acc => (
-                  <th key={acc.id} colSpan={3} style={{ fontSize: 10 }}>{acc.code}<br/>{acc.name}</th>
-                ))}
-                <th colSpan={3} style={{ fontSize: 10 }}>TOTAL</th>
-              </tr>
-              <tr className="sub-header">
-                {accounts.map(acc => (
-                  <Fragment key={acc.id}>
-                    <th>Budget</th><th>Actual</th><th>Var</th>
-                  </Fragment>
-                ))}
-                <th>Budget</th><th>Actual</th><th>Var</th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayActivities.map(act => {
-                const actData = data[act.id] || {}
-                const locationsInAct = Object.keys(actData)
-                let actTotalBudget = 0, actTotalActual = 0
-                locationsInAct.forEach(lid => {
-                  Object.keys(actData[lid]).forEach(accId => {
-                    actTotalBudget += actData[lid][accId]?.budget || 0
-                    actTotalActual += actData[lid][accId]?.actual || 0
+          <>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th rowSpan={2} style={{ width: 100 }}>Activity / Location</th>
+                  {accounts.map(acc => (
+                    <th key={acc.id} colSpan={3} style={{ fontSize: 10 }}>{acc.code}<br/>{acc.name}</th>
+                  ))}
+                  <th colSpan={3} style={{ fontSize: 10 }}>TOTAL</th>
+                </tr>
+                <tr className="sub-header">
+                  {accounts.map(acc => (
+                    <Fragment key={acc.id}>
+                      <th>Budget</th><th>Actual</th><th>Var</th>
+                    </Fragment>
+                  ))}
+                  <th>Budget</th><th>Actual</th><th>Var</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayActivities.map(act => {
+                  const actData = data[act.id] || {}
+                  const locationsInAct = Object.keys(actData)
+                  let actTotalBudget = 0, actTotalActual = 0
+                  locationsInAct.forEach(lid => {
+                    Object.keys(actData[lid]).forEach(accId => {
+                      actTotalBudget += actData[lid][accId]?.budget || 0
+                      actTotalActual += actData[lid][accId]?.actual || 0
+                    })
                   })
-                })
-                return (
-                  <Fragment key={act.id}>
-                    <tr className="act-header">
-                      <td colSpan={1 + accounts.length * 3 + 3}>{act.name}</td>
-                    </tr>
-                    {locationsInAct.map(lid => {
-                      const loc = locations.find(l => l.id == lid)
-                      let rowBudget = 0, rowActual = 0
-                      return (
-                        <tr key={lid}>
-                          <td style={{ fontWeight: 600, textAlign: "left", paddingLeft: 16 }}>{loc?.name || lid}</td>
-                          {accounts.map(acc => {
-                            const cell = actData[lid]?.[acc.id] || { budget: 0, actual: 0 }
-                            rowBudget += cell.budget
-                            rowActual += cell.actual
-                            const variance = cell.actual - cell.budget
-                            return (
-                              <Fragment key={acc.id}>
-                                <td>
-                                  <input
-                                    className="input-budget"
-                                    type="number"
-                                    min="0"
-                                    step="100"
-                                    value={cell.budget || ""}
-                                    onChange={e => updateBudget(act.id, lid, acc.id, Number(e.target.value))}
-                                    disabled={!canEdit}
-                                    placeholder="0"
-                                  />
-                                </td>
-                                <td style={{ fontSize: 10 }}>{cell.actual.toLocaleString()}</td>
-                                <td style={{ fontSize: 10, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "#64748B" }}>
-                                  {variance === 0 ? "—" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
-                                </td>
-                              </Fragment>
-                            )
-                          })}
-                          <td style={{ fontWeight: 600 }}>{rowBudget.toLocaleString()}</td>
-                          <td style={{ fontWeight: 600 }}>{rowActual.toLocaleString()}</td>
-                          <td style={{ fontWeight: 600, color: (rowActual - rowBudget) < 0 ? "#EF4444" : (rowActual - rowBudget) > 0 ? "#10B981" : "#64748B" }}>
-                            {(rowActual - rowBudget) === 0 ? "—" : (rowActual - rowBudget > 0 ? "+" : "") + (rowActual - rowBudget).toLocaleString()}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                    {/* Add location row */}
-                    <tr>
-                      <td>
-                        <select
-                          style={{ width: "100%", padding: "2px 4px", fontSize: 10 }}
-                          value=""
-                          onChange={e => { if (e.target.value) addLocationRow(act.id, e.target.value) }}
-                        >
-                          <option value="">+ Add Location</option>
-                          {locations.filter(l => !locationsInAct.includes(l.id.toString())).map(l => (
-                            <option key={l.id} value={l.id}>{l.name}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td colSpan={accounts.length * 3 + 3}></td>
-                    </tr>
-                    {/* Activity subtotal */}
-                    <tr className="total-row">
-                      <td style={{ textAlign: "left", paddingLeft: 16 }}>Sub Total</td>
-                      {accounts.map(acc => {
-                        let sb = 0, sa = 0
-                        locationsInAct.forEach(lid => {
-                          sb += actData[lid][acc.id]?.budget || 0
-                          sa += actData[lid][acc.id]?.actual || 0
-                        })
-                        const sv = sa - sb
+                  return (
+                    <Fragment key={act.id}>
+                      <tr className="act-header">
+                        <td colSpan={1 + accounts.length * 3 + 3}>{act.name}</td>
+                      </tr>
+                      {locationsInAct.map(lid => {
+                        const loc = locations.find(l => l.id == lid)
+                        let rowBudget = 0, rowActual = 0
                         return (
-                          <Fragment key={acc.id}>
-                            <td>{sb.toLocaleString()}</td>
-                            <td>{sa.toLocaleString()}</td>
-                            <td style={{ color: sv < 0 ? "#EF4444" : sv > 0 ? "#10B981" : "#64748B" }}>
-                              {sv === 0 ? "—" : (sv > 0 ? "+" : "") + sv.toLocaleString()}
+                          <tr key={lid}>
+                            <td style={{ fontWeight: 600, textAlign: "left", paddingLeft: 16 }}>{loc?.name || lid}</td>
+                            {accounts.map(acc => {
+                              const cell = actData[lid]?.[acc.id] || { budget: 0, actual: 0 }
+                              rowBudget += cell.budget
+                              rowActual += cell.actual
+                              const variance = cell.actual - cell.budget
+                              return (
+                                <Fragment key={acc.id}>
+                                  <td>
+                                    <input
+                                      className="input-budget"
+                                      type="number"
+                                      min="0"
+                                      step="100"
+                                      value={cell.budget || ""}
+                                      onChange={e => updateBudget(act.id, lid, acc.id, Number(e.target.value))}
+                                      disabled={!canEdit}
+                                      placeholder="0"
+                                    />
+                                  </td>
+                                  <td style={{ fontSize: 10 }}>{cell.actual.toLocaleString()}</td>
+                                  <td style={{ fontSize: 10, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "#64748B" }}>
+                                    {variance === 0 ? "—" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
+                                  </td>
+                                </Fragment>
+                              )
+                            })}
+                            <td style={{ fontWeight: 600 }}>{rowBudget.toLocaleString()}</td>
+                            <td style={{ fontWeight: 600 }}>{rowActual.toLocaleString()}</td>
+                            <td style={{ fontWeight: 600, color: (rowActual - rowBudget) < 0 ? "#EF4444" : (rowActual - rowBudget) > 0 ? "#10B981" : "#64748B" }}>
+                              {(rowActual - rowBudget) === 0 ? "—" : (rowActual - rowBudget > 0 ? "+" : "") + (rowActual - rowBudget).toLocaleString()}
                             </td>
-                          </Fragment>
+                          </tr>
                         )
                       })}
-                      <td>{actTotalBudget.toLocaleString()}</td>
-                      <td>{actTotalActual.toLocaleString()}</td>
-                      <td style={{ color: (actTotalActual - actTotalBudget) < 0 ? "#EF4444" : (actTotalActual - actTotalBudget) > 0 ? "#10B981" : "#64748B" }}>
-                        {(actTotalActual - actTotalBudget) === 0 ? "—" : (actTotalActual - actTotalBudget > 0 ? "+" : "") + (actTotalActual - actTotalBudget).toLocaleString()}
-                      </td>
-                    </tr>
-                  </Fragment>
-                )
-              })}
-              {/* Grand total */}
-              {displayActivities.length > 0 && (
-                <tr className="total-row" style={{ fontSize: 12 }}>
-                  <td>GRAND TOTAL</td>
-                  {accounts.map(acc => {
-                    let gb = 0, ga = 0
-                    displayActivities.forEach(act => {
-                      const actData = data[act.id] || {}
-                      Object.keys(actData).forEach(lid => {
-                        gb += actData[lid][acc.id]?.budget || 0
-                        ga += actData[lid][acc.id]?.actual || 0
-                      })
-                    })
-                    const gv = ga - gb
-                    return (
-                      <Fragment key={acc.id}>
-                        <td>{gb.toLocaleString()}</td>
-                        <td>{ga.toLocaleString()}</td>
-                        <td style={{ color: gv < 0 ? "#EF4444" : gv > 0 ? "#10B981" : "#64748B" }}>
-                          {gv === 0 ? "—" : (gv > 0 ? "+" : "") + gv.toLocaleString()}
+                      <tr>
+                        <td>
+                          <select
+                            style={{ width: "100%", padding: "2px 4px", fontSize: 10 }}
+                            value=""
+                            onChange={e => { if (e.target.value) addLocationRow(act.id, e.target.value) }}
+                          >
+                            <option value="">+ Add Location</option>
+                            {locations.filter(l => !locationsInAct.includes(l.id.toString())).map(l => (
+                              <option key={l.id} value={l.id}>{l.name}</option>
+                            ))}
+                          </select>
                         </td>
-                      </Fragment>
-                    )
-                  })}
-                  <td>
-                    {displayActivities.reduce((sum, act) => {
-                      const ad = data[act.id] || {}
-                      Object.keys(ad).forEach(l => Object.keys(ad[l]).forEach(a => sum += ad[l][a].budget || 0))
-                      return sum
-                    }, 0).toLocaleString()}
-                  </td>
-                  <td>
-                    {displayActivities.reduce((sum, act) => {
-                      const ad = data[act.id] || {}
-                      Object.keys(ad).forEach(l => Object.keys(ad[l]).forEach(a => sum += ad[l][a].actual || 0))
-                      return sum
-                    }, 0).toLocaleString()}
-                  </td>
-                  <td>—</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        )}
+                        <td colSpan={accounts.length * 3 + 3}></td>
+                      </tr>
+                      <tr className="total-row">
+                        <td style={{ textAlign: "left", paddingLeft: 16 }}>Sub Total</td>
+                        {accounts.map(acc => {
+                          let sb = 0, sa = 0
+                          locationsInAct.forEach(lid => {
+                            sb += actData[lid][acc.id]?.budget || 0
+                            sa += actData[lid][acc.id]?.actual || 0
+                          })
+                          const sv = sa - sb
+                          return (
+                            <Fragment key={acc.id}>
+                              <td>{sb.toLocaleString()}</td>
+                              <td>{sa.toLocaleString()}</td>
+                              <td style={{ color: sv < 0 ? "#EF4444" : sv > 0 ? "#10B981" : "#64748B" }}>
+                                {sv === 0 ? "—" : (sv > 0 ? "+" : "") + sv.toLocaleString()}
+                              </td>
+                            </Fragment>
+                          )
+                        })}
+                        <td>{actTotalBudget.toLocaleString()}</td>
+                        <td>{actTotalActual.toLocaleString()}</td>
+                        <td style={{ color: (actTotalActual - actTotalBudget) < 0 ? "#EF4444" : (actTotalActual - actTotalBudget) > 0 ? "#10B981" : "#64748B" }}>
+                          {(actTotalActual - actTotalBudget) === 0 ? "—" : (actTotalActual - actTotalBudget > 0 ? "+" : "") + (actTotalActual - actTotalBudget).toLocaleString()}
+                        </td>
+                      </tr>
+                    </Fragment>
+                  )
+                })}
+                {displayActivities.length > 0 && (
+                  <tr className="total-row" style={{ fontSize: 12 }}>
+                    <td>GRAND TOTAL</td>
+                    {accounts.map(acc => {
+                      let gb = 0, ga = 0
+                      displayActivities.forEach(act => {
+                        const actData = data[act.id] || {}
+                        Object.keys(actData).forEach(lid => {
+                          gb += actData[lid][acc.id]?.budget || 0
+                          ga += actData[lid][acc.id]?.actual || 0
+                        })
+                      })
+                      const gv = ga - gb
+                      return (
+                        <Fragment key={acc.id}>
+                          <td>{gb.toLocaleString()}</td>
+                          <td>{ga.toLocaleString()}</td>
+                          <td style={{ color: gv < 0 ? "#EF4444" : gv > 0 ? "#10B981" : "#64748B" }}>
+                            {gv === 0 ? "—" : (gv > 0 ? "+" : "") + gv.toLocaleString()}
+                          </td>
+                        </Fragment>
+                      )
+                    })}
+                    <td>
+                      {displayActivities.reduce((sum, act) => {
+                        const ad = data[act.id] || {}
+                        Object.keys(ad).forEach(l => Object.keys(ad[l]).forEach(a => sum += ad[l][a].budget || 0))
+                        return sum
+                      }, 0).toLocaleString()}
+                    </td>
+                    <td>
+                      {displayActivities.reduce((sum, act) => {
+                        const ad = data[act.id] || {}
+                        Object.keys(ad).forEach(l => Object.keys(ad[l]).forEach(a => sum += ad[l][a].actual || 0))
+                        return sum
+                      }, 0).toLocaleString()}
+                    </td>
+                    <td>—</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
 
-        {canEdit && selectedProjectId && (businessType !== "ngo" || selectedDonorId) && (
-          <button className="btn-primary" onClick={handleSave} disabled={saving}>
-            {saving ? "Saving..." : "💾 Save Budget"}
-          </button>
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              {canEdit && (
+                <>
+                  <button className="btn-primary" onClick={handleSave} disabled={saving}>
+                    {saving ? "Saving..." : "💾 Save Budget"}
+                  </button>
+                  <button className="btn-primary btn-secondary" onClick={() => document.getElementById('budget-file-input')?.click()} disabled={importingBudget}>
+                    <Upload size={14} /> Import Budget
+                  </button>
+                  <input id="budget-file-input" type="file" accept=".xlsx,.xls" className="file-input" onChange={e => setBudgetImportFile(e.target.files?.[0] || null)} />
+                  {budgetImportFile && (
+                    <button className="btn-primary btn-outline" onClick={handleBudgetImport} disabled={importingBudget}>
+                      Start Import
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>

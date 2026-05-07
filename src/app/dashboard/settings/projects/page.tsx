@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { Plus, Edit, Trash2, X } from "lucide-react"
+import { Plus, Edit, Trash2, X, Upload } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
+import * as XLSX from "xlsx"
 
 interface Entity {
   id: number
@@ -41,14 +42,20 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
 
-  // ── Activity project filter ──────────────────────────
+  // Activity project filter
   const [activityProjectFilter, setActivityProjectFilter] = useState<string>("")
+
+  // ── Import state ────────────────────────────────────
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importType, setImportType] = useState<"donor" | "project" | "location" | "activity">("donor")
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importing, setImporting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
-      // Load projects and locations for dropdowns
       supabase.from("projects").select("id,name").eq("company_id", cid).order("name")
         .then(r => r.data && setProjects(r.data))
       supabase.from("locations").select("id,name").eq("company_id", cid).order("name")
@@ -66,7 +73,7 @@ export default function ProjectsPage() {
       query = supabase.from("locations").select("*").eq("company_id", companyId).order("name")
     } else if (activeTab === "donors") {
       query = supabase.from("donors").select("*").eq("company_id", companyId).order("name")
-    } else { // activities – with optional project filter
+    } else { // activities
       query = supabase.from("activities")
         .select("*, projects(name)")
         .eq("company_id", companyId)
@@ -98,7 +105,6 @@ export default function ProjectsPage() {
     setFormDesc("")
     setFormCode("")
     setFormActive(true)
-    // Pre‑select project from filter if we're on Activities tab
     setFormProjectId(activeTab === "activities" && activityProjectFilter ? Number(activityProjectFilter) : null)
     setShowModal(true)
   }
@@ -155,6 +161,61 @@ export default function ProjectsPage() {
     setFlash("✅ Deleted.")
     fetchData()
     setTimeout(() => setFlash(""), 3000)
+  }
+
+  // ── Import handler ──────────────────────────────────
+  const handleImport = async () => {
+    if (!importFile || !companyId) return
+    setImporting(true)
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      const data = e.target?.result
+      const workbook = XLSX.read(data, { type: 'binary' })
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json(sheet)
+      let successCount = 0
+      try {
+        for (const row of rows as any[]) {
+          if (importType === "donor") {
+            const { Name, Code } = row
+            if (Name) {
+              await supabase.from("donors").insert({ company_id: companyId, name: Name, code: Code || null, is_active: true })
+              successCount++
+            }
+          } else if (importType === "project") {
+            const { Name, Description, DonorCode } = row
+            if (Name) {
+              // Donor linking is informational for now; donor is not stored on projects
+              await supabase.from("projects").insert({ company_id: companyId, name: Name, description: Description || null, is_active: true })
+              successCount++
+            }
+          } else if (importType === "location") {
+            const { Name } = row
+            if (Name) {
+              await supabase.from("locations").insert({ company_id: companyId, name: Name, is_active: true })
+              successCount++
+            }
+          } else if (importType === "activity") {
+            const { Name, ProjectName, LocationName } = row
+            if (Name && ProjectName && LocationName) {
+              const { data: proj } = await supabase.from("projects").select("id").eq("company_id", companyId).ilike("name", ProjectName).maybeSingle()
+              const { data: loc } = await supabase.from("locations").select("id").eq("company_id", companyId).ilike("name", LocationName).maybeSingle()
+              if (proj && loc) {
+                await supabase.from("activities").insert({ company_id: companyId, name: Name, project_id: proj.id, is_active: true })
+                successCount++
+              }
+            }
+          }
+        }
+        setFlash(`✅ Imported ${successCount} ${importType}s successfully!`)
+      } catch (err) {
+        setFlash("Import failed: " + (err as any).message)
+      }
+      setImporting(false)
+      setShowImportModal(false)
+      fetchData()
+    }
+    reader.readAsBinaryString(importFile)
   }
 
   const tabs: { key: typeof activeTab; label: string }[] = [
@@ -232,11 +293,16 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      <div style={{ marginBottom: 12 }}>
+      <div style={{ marginBottom: 12, display: "flex", gap: 10 }}>
         {canEdit && (
-          <button className="pr-btn pr-btn-primary" onClick={openNew}>
-            <Plus size={16} /> Add {getEntityLabel().slice(0, -1)}
-          </button>
+          <>
+            <button className="pr-btn pr-btn-primary" onClick={openNew}>
+              <Plus size={16} /> Add {getEntityLabel().slice(0, -1)}
+            </button>
+            <button className="pr-btn pr-btn-outline" onClick={() => setShowImportModal(true)}>
+              <Upload size={16} /> Import {getEntityLabel()}
+            </button>
+          </>
         )}
       </div>
 
@@ -325,6 +391,50 @@ export default function ProjectsPage() {
             <div className="pr-modal-footer" style={{ justifyContent: "center" }}>
               <button className="pr-btn pr-btn-outline" onClick={() => setDeleteId(null)}>Cancel</button>
               <button className="pr-btn pr-btn-primary" style={{ background: "#EF4444" }} onClick={handleDelete}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="pr-modal-overlay" onClick={() => setShowImportModal(false)}>
+          <div className="pr-modal" onClick={e => e.stopPropagation()}>
+            <div className="pr-modal-header">
+              <h3>Import {importType}</h3>
+              <button className="pr-icon-btn" onClick={() => setShowImportModal(false)}><X size={18} /></button>
+            </div>
+            <div className="pr-modal-body">
+              <div>
+                <label className="pr-field-label">Type</label>
+                <select className="pr-field-input" value={importType} onChange={e => setImportType(e.target.value as any)}>
+                  <option value="donor">Donor</option>
+                  <option value="project">Project</option>
+                  <option value="location">Location</option>
+                  <option value="activity">Activity</option>
+                </select>
+              </div>
+              <div>
+                <label className="pr-field-label">Excel File (*.xlsx, *.xls)</label>
+                <input
+                  type="file"
+                  accept=".xlsx, .xls"
+                  onChange={e => setImportFile(e.target.files ? e.target.files[0] : null)}
+                  style={{ padding: "8px 0" }}
+                />
+                <p style={{ fontSize: 10, color: "#64748B", marginTop: 4 }}>
+                  {importType === "donor" && "Columns: Name, Code (optional)"}
+                  {importType === "project" && "Columns: Name, Description (optional), DonorCode"}
+                  {importType === "location" && "Columns: Name"}
+                  {importType === "activity" && "Columns: Name, ProjectName, LocationName"}
+                </p>
+              </div>
+            </div>
+            <div className="pr-modal-footer">
+              <button className="pr-btn pr-btn-outline" onClick={() => setShowImportModal(false)}>Cancel</button>
+              <button className="pr-btn pr-btn-primary" onClick={handleImport} disabled={!importFile || importing}>
+                {importing ? "Importing..." : "Import"}
+              </button>
             </div>
           </div>
         </div>
