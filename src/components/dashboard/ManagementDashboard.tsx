@@ -387,7 +387,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Monthly Spending Review</h3>
           <p style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>Last 6 months — PKR thousands</p>
           <div style={{ height: 200 }}>
-            {monthlyChartData && <Bar data={monthlyChartData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, grid: { color: '#f1f5f9' }, ticks: { callback: (v) => v >= 1000 ? (v/1000)+'M' : v+'K' } } } }} />}
+            {monthlyChartData && <Bar data={monthlyChartData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, grid: { color: '#f1f5f9' }, ticks: { callback: (v: string | number) => { const n = Number(v); return n >= 1000 ? (n/1000)+'M' : n+'K'; } } } } }} />}
           </div>
         </div>
         <div style={{ background: "white", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
