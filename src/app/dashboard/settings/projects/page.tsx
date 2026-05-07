@@ -162,7 +162,7 @@ export default function ProjectsPage() {
     setTimeout(() => setFlash(""), 3000)
   }
 
-  // ── Import handler ──────────────────────────────────
+  // ── Import handler with upsert (prevents duplicates) ──
   const handleImport = async () => {
     if (!importFile || !companyId) return
     setImporting(true)
@@ -178,29 +178,41 @@ export default function ProjectsPage() {
           if (importType === "donor") {
             const { Name, Code } = row
             if (Name) {
-              await supabase.from("donors").insert({ company_id: companyId, name: Name, code: Code || null, is_active: true })
-              successCount++
+              const { error } = await supabase.from("donors").upsert(
+                { company_id: companyId, name: Name, code: Code || null, is_active: true },
+                { onConflict: "company_id, name" }
+              )
+              if (!error) successCount++
             }
           } else if (importType === "project") {
-            const { Name, Description, DonorCode } = row
+            const { Name, Description } = row
             if (Name) {
-              await supabase.from("projects").insert({ company_id: companyId, name: Name, description: Description || null, is_active: true })
-              successCount++
+              const { error } = await supabase.from("projects").upsert(
+                { company_id: companyId, name: Name, description: Description || null, is_active: true },
+                { onConflict: "company_id, name" }
+              )
+              if (!error) successCount++
             }
           } else if (importType === "location") {
             const { Name } = row
             if (Name) {
-              await supabase.from("locations").insert({ company_id: companyId, name: Name, is_active: true })
-              successCount++
+              const { error } = await supabase.from("locations").upsert(
+                { company_id: companyId, name: Name, is_active: true },
+                { onConflict: "company_id, name" }
+              )
+              if (!error) successCount++
             }
           } else if (importType === "activity") {
-            const { Name, ProjectName, LocationName } = row
-            if (Name && ProjectName && LocationName) {
+            const { Name, ProjectName } = row
+            if (Name && ProjectName) {
+              // Find project by name
               const { data: proj } = await supabase.from("projects").select("id").eq("company_id", companyId).ilike("name", ProjectName).maybeSingle()
-              const { data: loc } = await supabase.from("locations").select("id").eq("company_id", companyId).ilike("name", LocationName).maybeSingle()
-              if (proj && loc) {
-                await supabase.from("activities").insert({ company_id: companyId, name: Name, project_id: proj.id, is_active: true })
-                successCount++
+              if (proj) {
+                const { error } = await supabase.from("activities").upsert(
+                  { company_id: companyId, name: Name, project_id: proj.id, is_active: true },
+                  { onConflict: "project_id, name" }
+                )
+                if (!error) successCount++
               }
             }
           }
@@ -211,7 +223,7 @@ export default function ProjectsPage() {
       }
       setImporting(false)
       setShowImportModal(false)
-      // Switch to the imported tab so the list appears immediately
+      // Switch to the correct tab so the list refreshes
       const typeToTab: Record<string, typeof activeTab> = {
         donor: "donors",
         project: "projects",
@@ -432,7 +444,7 @@ export default function ProjectsPage() {
                   {importType === "donor" && "Columns: Name, Code (optional)"}
                   {importType === "project" && "Columns: Name, Description (optional), DonorCode"}
                   {importType === "location" && "Columns: Name"}
-                  {importType === "activity" && "Columns: Name, ProjectName, LocationName"}
+                  {importType === "activity" && "Columns: Name, ProjectName"}
                 </p>
               </div>
             </div>
