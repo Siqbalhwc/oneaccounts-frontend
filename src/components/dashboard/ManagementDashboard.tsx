@@ -2,17 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { Bar } from "react-chartjs-2"
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Tooltip,
-  Legend,
-} from "chart.js"
-
-ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend)
 
 export default function ManagementDashboard({ role }: { role: string }) {
   const supabase = createBrowserClient(
@@ -30,19 +19,27 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [overspentCount, setOverspentCount] = useState(0)
   const [projectRows, setProjectRows] = useState<any[]>([])
   const [donorBalances, setDonorBalances] = useState<any[]>([])
-  const [monthlyChartData, setMonthlyChartData] = useState<any>(null)
   const [categoryVariance, setCategoryVariance] = useState<any[]>([])
   const [alerts, setAlerts] = useState<any[]>([])
 
+  // ── 1. Get real company ID from user_roles ──────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        const cid = (user.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
-        setCompanyId(cid)
-      }
+      if (!user) return
+      // Fetch the company this user belongs to
+      supabase.from("user_roles")
+        .select("company_id")
+        .eq("user_id", user.id)
+        .maybeSingle()
+        .then(r => {
+          if (r.data?.company_id) {
+            setCompanyId(r.data.company_id)
+          }
+        })
     })
   }, [])
 
+  // ── 2. Fetch all dashboard data once we have a company ID ──
   useEffect(() => {
     if (!companyId) return
     const fetchDashboard = async () => {
@@ -50,7 +47,15 @@ export default function ManagementDashboard({ role }: { role: string }) {
       const startDate = `${fiscalYear}-01-01`
       const endDate = `${fiscalYear}-12-31`
 
-      // Total budget
+      // Helper: get all expense account IDs
+      const { data: expenseAccs } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("type", "Expense")
+      const expenseAccountIds = expenseAccs?.map(a => a.id) || []
+
+      // Total budget (annual, activity not null)
       const { data: budgets } = await supabase
         .from("budgets")
         .select("budgeted_amount")
@@ -62,20 +67,21 @@ export default function ManagementDashboard({ role }: { role: string }) {
       const totalBudgetValue = budgets?.reduce((s, b) => s + (b.budgeted_amount || 0), 0) || 0
       setTotalBudget(totalBudgetValue)
 
-      // Total spent (expense accounts)
-      const { data: actuals } = await supabase
-        .from("journal_lines")
-        .select("debit, credit")
-        .eq("company_id", companyId)
-        .gte("journal_entries.date", startDate)
-        .lte("journal_entries.date", endDate)
-        .in("account_id", (await supabase.from("accounts").select("id").eq("type", "Expense").eq("company_id", companyId)).data?.map(a => a.id) || [])
+      // Total spent (all expense accounts YTD)
+      const { data: actuals } = await (expenseAccountIds.length > 0
+        ? supabase.from("journal_lines")
+            .select("debit, credit")
+            .eq("company_id", companyId)
+            .gte("journal_entries.date", startDate)
+            .lte("journal_entries.date", endDate)
+            .in("account_id", expenseAccountIds)
+        : { data: [] })
 
       const totalSpentValue = actuals?.reduce((s, a) => s + ((a.debit || 0) - (a.credit || 0)), 0) || 0
       setTotalSpent(totalSpentValue)
 
       // Project budget utilization
-      const { data: projectBudgets } = await supabase
+      const { data: projBudgets } = await supabase
         .from("budgets")
         .select("project_id, budgeted_amount")
         .eq("company_id", companyId)
@@ -83,7 +89,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .is("month", null)
         .not("activity_id", "is", null)
 
-      const { data: projectActuals } = await supabase
+      const { data: projActuals } = await supabase
         .from("journal_lines")
         .select("project_id, debit, credit")
         .eq("company_id", companyId)
@@ -91,9 +97,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .lte("journal_entries.date", endDate)
 
       const projectBudgetMap: Record<string, number> = {}
-      projectBudgets?.forEach(b => { projectBudgetMap[b.project_id] = (projectBudgetMap[b.project_id] || 0) + b.budgeted_amount })
+      projBudgets?.forEach(b => { projectBudgetMap[b.project_id] = (projectBudgetMap[b.project_id] || 0) + b.budgeted_amount })
       const projectActualMap: Record<string, number> = {}
-      projectActuals?.forEach(a => { if (a.project_id) projectActualMap[a.project_id] = (projectActualMap[a.project_id] || 0) + ((a.debit || 0) - (a.credit || 0)) })
+      projActuals?.forEach(a => { if (a.project_id) projectActualMap[a.project_id] = (projectActualMap[a.project_id] || 0) + ((a.debit || 0) - (a.credit || 0)) })
 
       const projectRowsTemp: any[] = []
       let overspentCountTemp = 0
@@ -104,7 +110,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
         const { data: proj } = await supabase.from("projects").select("name").eq("id", pid).single()
         projectRowsTemp.push({
           name: proj?.name || pid,
-          donor: "",
           budget: bud,
           actual: act,
           pct: bud ? Math.round((act / bud) * 100) : 0,
@@ -170,7 +175,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
       const catActMap: Record<string, number> = {}
       catActuals?.forEach(a => { catActMap[a.account_id] = (catActMap[a.account_id] || 0) + ((a.debit || 0) - (a.credit || 0)) })
 
-      const { data: accounts } = await supabase.from("accounts").select("id, code, name").eq("type", "Expense").eq("company_id", companyId).order("code")
+      const { data: accounts } = await supabase.from("accounts").select("id, code, name").eq("company_id", companyId).eq("type", "Expense").order("code")
       const catRows: any[] = []
       accounts?.forEach(acc => {
         const bud = catBudMap[acc.id] || 0
@@ -186,9 +191,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
         else if (p.pct < 50) alertList.push({ type: 'info', msg: `${p.name} — only ${p.pct}% spent, risk of underutilization.` })
       })
       setAlerts(alertList.slice(0, 5))
-
-      // Monthly chart (still mock – to be implemented later if needed)
-      setMonthlyChartData(null)
 
       setLoading(false)
     }
@@ -242,7 +244,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         </div>
       </div>
 
-      {/* KPIs */}
+      {/* KPI Cards */}
       <div className="responsive-grid kpi-grid" style={{ marginBottom: 24 }}>
         <div className="kpi-card blue">
           <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Total Budget</div>
@@ -269,7 +271,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
       {/* Project Utilization & Donor Balances */}
       <div className="responsive-grid row-grid" style={{ marginBottom: 24 }}>
         <div style={{ background: "white", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-          <h3>Project Budget Utilization</h3>
+          <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 4px 0" }}>Project Budget Utilization</h3>
           <p style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>Sorted by utilization rate</p>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
@@ -311,7 +313,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         </div>
 
         <div style={{ background: "white", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-          <h3>Donor Fund Balances</h3>
+          <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 4px 0" }}>Donor Fund Balances</h3>
           <p style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>Remaining unspent per donor source</p>
           {donorBalances.map((d, idx) => (
             <div key={idx} style={{ marginBottom: 12 }}>
@@ -332,7 +334,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
       {/* Category variance */}
       <div style={{ background: "white", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)", marginBottom: 24 }}>
-        <h3>Actual vs Budget — Q2 FY{fiscalYear}</h3>
+        <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Actual vs Budget — Q2 FY{fiscalYear}</h3>
         <p style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>By expenditure category</p>
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, fontWeight: 700, textTransform: "uppercase", color: "#94a3b8", borderBottom: "1px solid #e2e8f0", paddingBottom: 6, marginBottom: 6 }}>
@@ -354,7 +356,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
       {/* Alerts */}
       <div style={{ background: "white", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)", marginBottom: 24 }}>
-        <h3>Alerts & Management Actions</h3>
+        <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Alerts & Management Actions</h3>
         <p style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>Critical issues requiring attention</p>
         <div>
           {alerts.map((alert, idx) => (
