@@ -43,7 +43,7 @@ export default function NewBillPage() {
   const [activityId, setActivityId] = useState<number | null>(null)
   const [donorId, setDonorId] = useState<number | null>(null)
 
-  // Master data lists
+  // Master data
   const [allAccounts, setAllAccounts] = useState<any[]>([])
   const [projects, setProjects] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
@@ -67,11 +67,11 @@ export default function NewBillPage() {
         .eq("company_id", cid).order("name")
         .then(r => r.data && setSuppliers(r.data))
 
-      // Products
+      // Products (always loaded but only shown for non‑NGO)
       supabase.from("products").select("id,code,name,cost_price,qty_on_hand").eq("company_id", cid).order("name")
         .then(r => r.data && setProducts(r.data))
 
-      // Accounts – load ALL accounts, then filter in JSX based on business type
+      // Accounts – load all, filter for NGO in JSX
       supabase.from("accounts").select("id,code,name,type").eq("company_id", cid).order("code")
         .then(r => { if (r.data) setAllAccounts(r.data) })
 
@@ -87,7 +87,7 @@ export default function NewBillPage() {
     })
   }, [])
 
-  // Close supplier dropdown when clicking outside
+  // Close supplier dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (supplierRef.current && !supplierRef.current.contains(e.target as Node)) {
@@ -137,7 +137,7 @@ export default function NewBillPage() {
     p.code.toLowerCase().includes(productSearch.toLowerCase())
   )
 
-  const addItem = (prod: any) => {
+  const addProductItem = (prod: any) => {
     setItems([...items, {
       product_id: prod.id,
       description: `${prod.code} - ${prod.name}`,
@@ -152,11 +152,11 @@ export default function NewBillPage() {
   const addManualItem = () => {
     setItems([...items, {
       product_id: null,
-      description: "Manual Item",
+      description: "",
       qty: 1,
       unit_price: 0,
       total: 0,
-      account_id: null
+      account_id: null,
     }])
   }
 
@@ -264,7 +264,7 @@ export default function NewBillPage() {
     })
   }
 
-  // Filter accounts for NGO (Expense only) vs others (all)
+  // For NGO, only expense accounts; for others, all accounts
   const accountList = businessType === "ngo"
     ? allAccounts.filter(a => a.type === "Expense")
     : allAccounts
@@ -430,7 +430,7 @@ export default function NewBillPage() {
                 )}
               </div>
 
-              {/* ── Tags section ─────────────────────────────── */}
+              {/* ── TAGS SECTION (always visible after supplier selected) ── */}
               {selectedSupplier && (
                 <div style={{ marginTop: 10, padding: "10px 12px", background: "#F8FAFC", borderRadius: 8, display: "flex", flexWrap: "wrap", gap: 10 }}>
                   <div style={{ flex: "1 1 200px" }}>
@@ -448,7 +448,7 @@ export default function NewBillPage() {
                     </select>
                   </div>
 
-                  {/* DONOR – only for NGO */}
+                  {/* ── DONOR (only for NGO) ── */}
                   {businessType === "ngo" && (
                     <div style={{ flex: "1 1 150px" }}>
                       <label className="inv-label">Donor *</label>
@@ -498,8 +498,8 @@ export default function NewBillPage() {
               </div>
             </div>
 
-            {/* Product search – only for non‑NGO */}
-            {businessType !== "ngo" && (
+            {/* ── PRODUCT SEARCH (only for non‑NGO) ── */}
+            {businessType !== "ngo" ? (
               <div className="inv-card">
                 <label className="inv-label">Add Product</label>
                 <div style={{ position: "relative" }}>
@@ -523,7 +523,7 @@ export default function NewBillPage() {
                       {(productSearch ? filteredProducts : products).map((p: any) => (
                         <div key={p.id}
                           style={{ padding: "8px 12px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #F1F5F9", fontSize: 13 }}
-                          onClick={() => addItem(p)}>
+                          onClick={() => addProductItem(p)}>
                           <span><strong>{p.code}</strong> — {p.name}</span>
                           <span style={{ color: "#64748B", fontSize: 12 }}>Cost: PKR {p.cost_price} | Stock: {p.qty_on_hand}</span>
                         </div>
@@ -535,16 +535,14 @@ export default function NewBillPage() {
                   )}
                 </div>
               </div>
-            )}
-
-            {/* Manual item button for NGO */}
-            {businessType === "ngo" && (
+            ) : (
+              /* ── NGO: only manual items ── */
               <div className="inv-card" style={{ textAlign: "right" }}>
-                <button className="inv-btn inv-btn-outline" onClick={addManualItem}><Plus size={14} /> Add Manual Item</button>
+                <button className="inv-btn inv-btn-outline" onClick={addManualItem}><Plus size={14} /> Add Item</button>
               </div>
             )}
 
-            {/* Items */}
+            {/* Items table */}
             {items.length > 0 && (
               <div className="inv-card">
                 <div className="inv-item-header">
@@ -552,7 +550,7 @@ export default function NewBillPage() {
                 </div>
                 {items.map((item: any, idx: number) => (
                   <div key={idx} className="inv-item-row">
-                    <input className="inv-input" style={{ height: 34, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} />
+                    <input className="inv-input" style={{ height: 34, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Item description" />
                     <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
                     <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
                     <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13 }}>PKR {item.total.toLocaleString()}</span>
