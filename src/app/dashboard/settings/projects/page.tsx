@@ -33,20 +33,26 @@ export default function ProjectsPage() {
   const [flash, setFlash] = useState("")
   const [formName, setFormName] = useState("")
   const [formDesc, setFormDesc] = useState("")
-  const [formCode, setFormCode] = useState("")   // for donors
+  const [formCode, setFormCode] = useState("")
   const [formActive, setFormActive] = useState(true)
-  const [formProjectId, setFormProjectId] = useState<number | null>(null)   // for activities
+  const [formProjectId, setFormProjectId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [companyId, setCompanyId] = useState<string>("")
   const [projects, setProjects] = useState<any[]>([])
+  const [locations, setLocations] = useState<any[]>([])
+
+  // ── Activity project filter ──────────────────────────
+  const [activityProjectFilter, setActivityProjectFilter] = useState<string>("")
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
-      // Load projects for activity dropdown
+      // Load projects and locations for dropdowns
       supabase.from("projects").select("id,name").eq("company_id", cid).order("name")
         .then(r => r.data && setProjects(r.data))
+      supabase.from("locations").select("id,name").eq("company_id", cid).order("name")
+        .then(r => r.data && setLocations(r.data))
     })
   }, [])
 
@@ -60,11 +66,14 @@ export default function ProjectsPage() {
       query = supabase.from("locations").select("*").eq("company_id", companyId).order("name")
     } else if (activeTab === "donors") {
       query = supabase.from("donors").select("*").eq("company_id", companyId).order("name")
-    } else { // activities – join with projects to show project name
+    } else { // activities – with optional project filter
       query = supabase.from("activities")
         .select("*, projects(name)")
         .eq("company_id", companyId)
-        .order("name")
+      if (activityProjectFilter) {
+        query = query.eq("project_id", activityProjectFilter)
+      }
+      query = query.order("name")
     }
     const { data } = await query
     if (activeTab === "activities" && data) {
@@ -78,7 +87,7 @@ export default function ProjectsPage() {
     setLoading(false)
   }
 
-  useEffect(() => { fetchData() }, [companyId, activeTab])
+  useEffect(() => { fetchData() }, [companyId, activeTab, activityProjectFilter])
 
   if (!companyId) return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center" }}><h2>Access Denied</h2></div>
@@ -89,7 +98,8 @@ export default function ProjectsPage() {
     setFormDesc("")
     setFormCode("")
     setFormActive(true)
-    setFormProjectId(null)
+    // Pre‑select project from filter if we're on Activities tab
+    setFormProjectId(activeTab === "activities" && activityProjectFilter ? Number(activityProjectFilter) : null)
     setShowModal(true)
   }
 
@@ -176,6 +186,8 @@ export default function ProjectsPage() {
         .pr-icon-btn:hover { background: #F1F5F9; color: #475569; }
         .pr-icon-btn.danger:hover { background: #FEE2E2; color: #EF4444; }
         .pr-empty { padding: 40px; textAlign: center; color: #94A3B8; }
+        .filter-row { margin-bottom: 12px; display: flex; gap: 10px; align-items: center; }
+        .filter-select { padding: 6px 12px; border: 1px solid #E2E8F0; border-radius: 6px; font-size: 12px; background: white; }
         .pr-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
         .pr-modal { background: white; border-radius: 14px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
         .pr-modal-header { padding: 20px 24px; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; }
@@ -200,6 +212,19 @@ export default function ProjectsPage() {
           </button>
         ))}
       </div>
+
+      {activeTab === "activities" && (
+        <div className="filter-row">
+          <select
+            className="filter-select"
+            value={activityProjectFilter}
+            onChange={e => setActivityProjectFilter(e.target.value)}
+          >
+            <option value="">All Projects</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+      )}
 
       {flash && (
         <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#15803D", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
