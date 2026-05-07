@@ -173,7 +173,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
       const projectMonthlyMap: Record<string, number[]> = {}
       monthlyActuals?.forEach(a => {
-        const m = new Date(a.journal_entries?.date).getMonth()
+        const m = new Date((a.journal_entries as any)?.[0]?.date).getMonth()
         const idx = months.indexOf(new Date(2025, m, 1).toLocaleString('default', { month: 'short' }))
         if (idx !== -1) {
           if (!projectMonthlyMap[a.project_id]) projectMonthlyMap[a.project_id] = new Array(6).fill(0)
