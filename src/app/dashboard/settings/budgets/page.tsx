@@ -45,10 +45,10 @@ export default function BudgetsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createType, setCreateType] = useState<"project" | "donor" | "location" | "activity">("project")
   const [createName, setCreateName] = useState("")
-  const [createCode, setCreateCode] = useState("")          // for donors
-  const [createDesc, setCreateDesc] = useState("")          // for projects
-  const [createProjectId, setCreateProjectId] = useState<string>("") // for activities
-  const [createLocationId, setCreateLocationId] = useState<string>("") // for activities
+  const [createCode, setCreateCode] = useState("")
+  const [createDesc, setCreateDesc] = useState("")
+  const [createProjectId, setCreateProjectId] = useState<string>("")
+  const [createLocationId, setCreateLocationId] = useState<string>("")
 
   const openCreateModal = (type: "project" | "donor" | "location" | "activity") => {
     setCreateType(type)
@@ -72,7 +72,7 @@ export default function BudgetsPage() {
       payload.location_id = createLocationId
     }
 
-    const { data, error } = await supabase.from(table).insert(payload).select(createType === "activity" ? "id, name, project_id, location_id, projects(name), locations(name)" : "*").single()
+    const { data, error } = await supabase.from(table).insert(payload).select("*").single()
 
     if (error) { setFlash("Error: " + error.message); return }
     setFlash("✅ Created!")
@@ -80,30 +80,37 @@ export default function BudgetsPage() {
     // Refresh the corresponding list
     if (createType === "project") {
       const fresh = await supabase.from("projects").select("id, name").eq("company_id", companyId).order("name")
-      if (fresh.data) setProjects(fresh.data)
-      setSelectedProjectId(data.id)
+      if (fresh.data) {
+        setProjects(fresh.data)
+        const created = fresh.data.find((p: any) => p.id === (data as any).id)
+        if (created) setSelectedProjectId(created.id)
+      }
     } else if (createType === "donor") {
       const fresh = await supabase.from("donors").select("id, name").eq("company_id", companyId).order("name")
-      if (fresh.data) setDonors(fresh.data)
-      setSelectedDonorId(data.id)
+      if (fresh.data) {
+        setDonors(fresh.data)
+        const created = fresh.data.find((d: any) => d.id === (data as any).id)
+        if (created) setSelectedDonorId(created.id)
+      }
     } else if (createType === "location") {
       const fresh = await supabase.from("locations").select("id, name").eq("company_id", companyId).order("name")
-      if (fresh.data) setLocations(fresh.data)
-      setSelectedLocationId(data.id)
+      if (fresh.data) {
+        setLocations(fresh.data)
+        const created = fresh.data.find((l: any) => l.id === (data as any).id)
+        if (created) setSelectedLocationId(created.id)
+      }
     } else if (createType === "activity") {
-      // Reload all activities to include the new one
       const fresh = await supabase.from("activities")
         .select("id, name, project_id, location_id, projects(name), locations(name)")
         .eq("company_id", companyId).order("name")
       if (fresh.data) {
         const flat = fresh.data.map((a: any) => ({
           ...a,
-          project_name: a.projects?.name,
-          location_name: a.locations?.name,
+          project_name: (a as any).projects?.name,
+          location_name: (a as any).locations?.name,
         }))
         setAllActivities(flat)
       }
-      // Auto-select the project/location used for the activity if not set
       if (!selectedProjectId) setSelectedProjectId(createProjectId)
       if (!selectedLocationId) setSelectedLocationId(createLocationId)
     }
@@ -315,7 +322,6 @@ export default function BudgetsPage() {
             <button className="inline-btn" onClick={() => openCreateModal("location")} title="Add Location"><Plus size={14} /></button>
           </div>
 
-          {/* Quick add Activity */}
           <button className="inline-btn" onClick={() => openCreateModal("activity")} title="Add Activity" style={{ padding: "8px 12px", fontWeight: 600 }}>
             <Plus size={14} /> Activity
           </button>
@@ -327,8 +333,111 @@ export default function BudgetsPage() {
           </div>
         )}
 
-        {/* Budget matrix unchanged */}
-        {/* ... (rest of matrix JSX identical to previously provided) ... */}
+        {!selectedProjectId || (businessType === "ngo" && !selectedDonorId) ? (
+          <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>
+            {businessType === "ngo"
+              ? "Please select Project and Donor to display the budget matrix."
+              : "Please select a Project to display the budget matrix."}
+          </div>
+        ) : loading ? (
+          <div style={{ textAlign: "center", padding: 40 }}>Loading budgets & actuals...</div>
+        ) : columnActivities.length === 0 ? (
+          <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>
+            No Activities found for this project/location. Create them above.
+          </div>
+        ) : (
+          <div className="matrix-table">
+            <div className="matrix-header">
+              <div className="matrix-account-cell">Account</div>
+              {columnActivities.map(act => (
+                <div key={act.id} className="matrix-cell" style={{ flex: 1, minWidth: 120, padding: "8px 8px", textAlign: "center" }}>
+                  <div style={{ fontWeight: 700, fontSize: 10, color: "#1E293B" }}>{act.name}</div>
+                  <div style={{ fontSize: 8, color: "#64748B" }}>{act.location_name}</div>
+                  <div style={{ display: "flex", marginTop: 4, fontSize: 8, color: "#94A3B8" }}>
+                    <span style={{ flex: 1, textAlign: "right", paddingRight: 4 }}>Budget</span>
+                    <span style={{ flex: 1, textAlign: "right", paddingRight: 4 }}>Actual</span>
+                    <span style={{ flex: 1, textAlign: "right" }}>Var</span>
+                  </div>
+                </div>
+              ))}
+              <div className="matrix-cell total-cell" style={{ flex: "0 0 100px", padding: "8px 8px", textAlign: "center", borderLeft: "2px solid #E2E8F0" }}>
+                <div style={{ fontWeight: 700, fontSize: 10 }}>Total</div>
+                <div style={{ display: "flex", marginTop: 4, fontSize: 8, color: "#94A3B8" }}>
+                  <span style={{ flex: 1, textAlign: "right", paddingRight: 4 }}>Budget</span>
+                  <span style={{ flex: 1, textAlign: "right", paddingRight: 4 }}>Actual</span>
+                  <span style={{ flex: 1, textAlign: "right" }}>Var</span>
+                </div>
+              </div>
+            </div>
+
+            {accounts.map(acc => {
+              let rowBudget = 0, rowActual = 0
+              return (
+                <div key={acc.id} className="matrix-row">
+                  <div className="matrix-account-cell" title={acc.name}>{acc.code}</div>
+                  {columnActivities.map(act => {
+                    const budgetVal = (budgetMatrix[acc.id] && budgetMatrix[acc.id][act.id]) || 0
+                    const actualVal = (actualsMatrix[acc.id] && actualsMatrix[acc.id][act.id]) || 0
+                    const variance = actualVal - budgetVal
+                    rowBudget += budgetVal
+                    rowActual += actualVal
+                    return (
+                      <div key={act.id} className="matrix-cell">
+                        <input
+                          className="matrix-input"
+                          type="number"
+                          min="0"
+                          step="100"
+                          value={budgetVal || ""}
+                          onChange={e => updateCell(acc.id, act.id, Number(e.target.value))}
+                          disabled={!canEdit}
+                          placeholder="Budget"
+                        />
+                        <div className="matrix-actual">{actualVal.toLocaleString()}</div>
+                        <div className={`matrix-variance ${variance < 0 ? "variance-negative" : "variance-positive"}`}>
+                          {variance === 0 ? "—" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  <div className="matrix-cell total-cell" style={{ flex: "0 0 100px", borderLeft: "2px solid #E2E8F0" }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, textAlign: "right" }}>{rowBudget.toLocaleString()}</div>
+                    <div style={{ fontSize: 10, textAlign: "right" }}>{rowActual.toLocaleString()}</div>
+                    <div className={`matrix-variance ${(rowActual - rowBudget) < 0 ? "variance-negative" : "variance-positive"}`} style={{ textAlign: "right" }}>
+                      {(rowActual - rowBudget) === 0 ? "—" : (rowActual - rowBudget > 0 ? "+" : "") + (rowActual - rowBudget).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+
+            <div className="matrix-row" style={{ background: "#F8FAFC", fontWeight: 700 }}>
+              <div className="matrix-account-cell" style={{ fontWeight: 700 }}>Total</div>
+              {columnActivities.map(act => {
+                const colData = columnTotals[act.id] || { budget: 0, actual: 0 }
+                const colBudget = colData.budget
+                const colActual = colData.actual
+                const colVar = colActual - colBudget
+                return (
+                  <div key={act.id} className="matrix-cell total-cell">
+                    <div style={{ fontSize: 11, fontWeight: 700, textAlign: "right" }}>{colBudget.toLocaleString()}</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, textAlign: "right" }}>{colActual.toLocaleString()}</div>
+                    <div className={`matrix-variance ${colVar < 0 ? "variance-negative" : "variance-positive"}`} style={{ textAlign: "right", fontWeight: 700 }}>
+                      {colVar === 0 ? "—" : (colVar > 0 ? "+" : "") + colVar.toLocaleString()}
+                    </div>
+                  </div>
+                )
+              })}
+              <div className="matrix-cell total-cell" style={{ flex: "0 0 100px", borderLeft: "2px solid #E2E8F0" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textAlign: "right" }}>{grandTotalBudget.toLocaleString()}</div>
+                <div style={{ fontSize: 10, fontWeight: 700, textAlign: "right" }}>{grandTotalActual.toLocaleString()}</div>
+                <div className={`matrix-variance ${(grandTotalActual - grandTotalBudget) < 0 ? "variance-negative" : "variance-positive"}`} style={{ textAlign: "right", fontWeight: 700 }}>
+                  {(grandTotalActual - grandTotalBudget) === 0 ? "—" : (grandTotalActual - grandTotalBudget > 0 ? "+" : "") + (grandTotalActual - grandTotalBudget).toLocaleString()}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {canEdit && selectedProjectId && (businessType !== "ngo" || selectedDonorId) && (
           <button className="btn-primary" onClick={handleSave} disabled={saving} style={{ marginTop: 16 }}>
