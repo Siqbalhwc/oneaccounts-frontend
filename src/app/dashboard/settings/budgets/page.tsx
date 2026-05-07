@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useEffect, Fragment, useRef } from "react"
+import { useState, useEffect, Fragment } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRole } from "@/contexts/RoleContext"
-import { Upload } from "lucide-react"
 import * as XLSX from "xlsx"
+import { Upload } from "lucide-react"
 
 export default function BudgetsPage() {
   const supabase = createBrowserClient(
@@ -34,11 +34,12 @@ export default function BudgetsPage() {
 
   // Data
   const [data, setData] = useState<Record<string, Record<string, Record<string, { budget: number; actual: number }>>>>({})
+
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [flash, setFlash] = useState<string>("")
 
-  // ── Budget import state ─────────────────────────────
+  // Budget import
   const [budgetImportFile, setBudgetImportFile] = useState<File | null>(null)
   const [importingBudget, setImportingBudget] = useState(false)
 
@@ -188,7 +189,6 @@ export default function BudgetsPage() {
     setFlash("✅ Budget saved!"); setSaving(false); setTimeout(() => setFlash(""), 4000)
   }
 
-  // ── Budget import handler ────────────────────────────
   const handleBudgetImport = async () => {
     if (!budgetImportFile || !selectedProjectId || (businessType === "ngo" && !selectedDonorId)) {
       setFlash("⚠️ Please select a project and donor (if NGO) before importing.")
@@ -227,13 +227,15 @@ export default function BudgetsPage() {
       setFlash(`✅ Imported ${inserted} budget rows!`)
       setImportingBudget(false)
       setBudgetImportFile(null)
-      // Refresh data by reloading the page (simple approach)
       window.location.reload()
     }
     reader.readAsBinaryString(budgetImportFile)
   }
 
   const displayActivities = filterActivityId ? allActivities.filter(a => a.id == filterActivityId) : allActivities
+
+  // Helper to format actual as negative
+  const fmtActual = (val: number) => (-val).toLocaleString()
 
   if (!canView) return <div style={{ padding: 24, textAlign: "center" }}><h2>Access Denied</h2></div>
 
@@ -250,9 +252,6 @@ export default function BudgetsPage() {
         .input-budget { width: 70px; text-align: right; border: 1px solid #E2E8F0; border-radius: 4px; padding: 2px 4px; font-size: 10px; }
         .total-row td { font-weight: 700; background: #F8FAFC; }
         .btn-primary { padding: 10px 20px; background: #1D4ED8; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; margin-top: 16px; }
-        .btn-secondary { background: #059669; }
-        .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; padding: 8px 16px; border-radius: 8px; }
-        .file-input { display: none; }
       `}</style>
 
       <div className="budget-shell">
@@ -315,10 +314,10 @@ export default function BudgetsPage() {
                 <tr className="sub-header">
                   {accounts.map(acc => (
                     <Fragment key={acc.id}>
-                      <th>Budget</th><th>Actual</th><th>Var</th>
+                      <th>Budget</th><th>Actual (-)</th><th>Var</th>
                     </Fragment>
                   ))}
-                  <th>Budget</th><th>Actual</th><th>Var</th>
+                  <th>Budget</th><th>Actual (-)</th><th>Var</th>
                 </tr>
               </thead>
               <tbody>
@@ -362,7 +361,7 @@ export default function BudgetsPage() {
                                       placeholder="0"
                                     />
                                   </td>
-                                  <td style={{ fontSize: 10 }}>{cell.actual.toLocaleString()}</td>
+                                  <td style={{ fontSize: 10 }}>{fmtActual(cell.actual)}</td>
                                   <td style={{ fontSize: 10, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "#64748B" }}>
                                     {variance === 0 ? "—" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
                                   </td>
@@ -370,13 +369,14 @@ export default function BudgetsPage() {
                               )
                             })}
                             <td style={{ fontWeight: 600 }}>{rowBudget.toLocaleString()}</td>
-                            <td style={{ fontWeight: 600 }}>{rowActual.toLocaleString()}</td>
+                            <td style={{ fontWeight: 600 }}>{fmtActual(rowActual)}</td>
                             <td style={{ fontWeight: 600, color: (rowActual - rowBudget) < 0 ? "#EF4444" : (rowActual - rowBudget) > 0 ? "#10B981" : "#64748B" }}>
                               {(rowActual - rowBudget) === 0 ? "—" : (rowActual - rowBudget > 0 ? "+" : "") + (rowActual - rowBudget).toLocaleString()}
                             </td>
                           </tr>
                         )
                       })}
+                      {/* Add location row */}
                       <tr>
                         <td>
                           <select
@@ -392,6 +392,7 @@ export default function BudgetsPage() {
                         </td>
                         <td colSpan={accounts.length * 3 + 3}></td>
                       </tr>
+                      {/* Activity subtotal */}
                       <tr className="total-row">
                         <td style={{ textAlign: "left", paddingLeft: 16 }}>Sub Total</td>
                         {accounts.map(acc => {
@@ -404,7 +405,7 @@ export default function BudgetsPage() {
                           return (
                             <Fragment key={acc.id}>
                               <td>{sb.toLocaleString()}</td>
-                              <td>{sa.toLocaleString()}</td>
+                              <td>{fmtActual(sa)}</td>
                               <td style={{ color: sv < 0 ? "#EF4444" : sv > 0 ? "#10B981" : "#64748B" }}>
                                 {sv === 0 ? "—" : (sv > 0 ? "+" : "") + sv.toLocaleString()}
                               </td>
@@ -412,7 +413,7 @@ export default function BudgetsPage() {
                           )
                         })}
                         <td>{actTotalBudget.toLocaleString()}</td>
-                        <td>{actTotalActual.toLocaleString()}</td>
+                        <td>{fmtActual(actTotalActual)}</td>
                         <td style={{ color: (actTotalActual - actTotalBudget) < 0 ? "#EF4444" : (actTotalActual - actTotalBudget) > 0 ? "#10B981" : "#64748B" }}>
                           {(actTotalActual - actTotalBudget) === 0 ? "—" : (actTotalActual - actTotalBudget > 0 ? "+" : "") + (actTotalActual - actTotalBudget).toLocaleString()}
                         </td>
@@ -420,6 +421,7 @@ export default function BudgetsPage() {
                     </Fragment>
                   )
                 })}
+                {/* Grand total */}
                 {displayActivities.length > 0 && (
                   <tr className="total-row" style={{ fontSize: 12 }}>
                     <td>GRAND TOTAL</td>
@@ -436,7 +438,7 @@ export default function BudgetsPage() {
                       return (
                         <Fragment key={acc.id}>
                           <td>{gb.toLocaleString()}</td>
-                          <td>{ga.toLocaleString()}</td>
+                          <td>{fmtActual(ga)}</td>
                           <td style={{ color: gv < 0 ? "#EF4444" : gv > 0 ? "#10B981" : "#64748B" }}>
                             {gv === 0 ? "—" : (gv > 0 ? "+" : "") + gv.toLocaleString()}
                           </td>
@@ -451,11 +453,13 @@ export default function BudgetsPage() {
                       }, 0).toLocaleString()}
                     </td>
                     <td>
-                      {displayActivities.reduce((sum, act) => {
-                        const ad = data[act.id] || {}
-                        Object.keys(ad).forEach(l => Object.keys(ad[l]).forEach(a => sum += ad[l][a].actual || 0))
-                        return sum
-                      }, 0).toLocaleString()}
+                      {fmtActual(
+                        displayActivities.reduce((sum, act) => {
+                          const ad = data[act.id] || {}
+                          Object.keys(ad).forEach(l => Object.keys(ad[l]).forEach(a => sum += ad[l][a].actual || 0))
+                          return sum
+                        }, 0)
+                      )}
                     </td>
                     <td>—</td>
                   </tr>
@@ -469,14 +473,12 @@ export default function BudgetsPage() {
                   <button className="btn-primary" onClick={handleSave} disabled={saving}>
                     {saving ? "Saving..." : "💾 Save Budget"}
                   </button>
-                  <button className="btn-primary btn-secondary" onClick={() => document.getElementById('budget-file-input')?.click()} disabled={importingBudget}>
+                  <button className="btn-primary" style={{ background: '#059669' }} onClick={() => document.getElementById('budget-file-input')?.click()}>
                     <Upload size={14} /> Import Budget
                   </button>
-                  <input id="budget-file-input" type="file" accept=".xlsx,.xls" className="file-input" onChange={e => setBudgetImportFile(e.target.files?.[0] || null)} />
+                  <input id="budget-file-input" type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={e => setBudgetImportFile(e.target.files?.[0] || null)} />
                   {budgetImportFile && (
-                    <button className="btn-primary btn-outline" onClick={handleBudgetImport} disabled={importingBudget}>
-                      Start Import
-                    </button>
+                    <button className="btn-primary" style={{ background: '#059669' }} onClick={handleBudgetImport} disabled={importingBudget}>Start Import</button>
                   )}
                 </>
               )}

@@ -14,19 +14,17 @@ import {
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend)
 
-const getFiscalYearStart = (year: number) => `${year}-01-01`
-const getFiscalYearEnd = (year: number) => `${year}-12-31`
-
 export default function ManagementDashboard({ role }: { role: string }) {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  const [companyId, setCompanyId] = useState("00000000-0000-0000-0000-000000000001")
+  const [companyId, setCompanyId] = useState("")
   const [fiscalYear] = useState(new Date().getFullYear())
-  const [businessType, setBusinessType] = useState("")
+  const [loading, setLoading] = useState(true)
 
+  // KPIs
   const [totalBudget, setTotalBudget] = useState(0)
   const [totalSpent, setTotalSpent] = useState(0)
   const [overspentCount, setOverspentCount] = useState(0)
@@ -35,24 +33,24 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [monthlyChartData, setMonthlyChartData] = useState<any>(null)
   const [categoryVariance, setCategoryVariance] = useState<any[]>([])
   const [alerts, setAlerts] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true)
-
-      const { data: { user } } = await supabase.auth.getUser()
+    supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
-        const cid = (user.app_metadata as any)?.company_id || companyId
+        const cid = (user.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
         setCompanyId(cid)
-        const { data: comp } = await supabase.from("companies").select("business_type").eq("id", cid).single()
-        if (comp) setBusinessType(comp.business_type || "")
       }
+    })
+  }, [])
 
-      const startDate = getFiscalYearStart(fiscalYear)
-      const endDate = getFiscalYearEnd(fiscalYear)
+  useEffect(() => {
+    if (!companyId) return
+    const fetchDashboard = async () => {
+      setLoading(true)
+      const startDate = `${fiscalYear}-01-01`
+      const endDate = `${fiscalYear}-12-31`
 
-      // 1. Total budget
+      // Total budget
       const { data: budgets } = await supabase
         .from("budgets")
         .select("budgeted_amount")
@@ -61,23 +59,23 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .is("month", null)
         .not("activity_id", "is", null)
 
-      const budgetTotal = budgets?.reduce((s, b) => s + (b.budgeted_amount || 0), 0) || 0
-      setTotalBudget(budgetTotal)
+      const totalBudgetValue = budgets?.reduce((s, b) => s + (b.budgeted_amount || 0), 0) || 0
+      setTotalBudget(totalBudgetValue)
 
-      // 2. Total spent
+      // Total spent (expense accounts)
       const { data: actuals } = await supabase
         .from("journal_lines")
         .select("debit, credit")
         .eq("company_id", companyId)
         .gte("journal_entries.date", startDate)
         .lte("journal_entries.date", endDate)
-        .filter("account_id", "in", "(select id from accounts where type='Expense')")
+        .in("account_id", (await supabase.from("accounts").select("id").eq("type", "Expense").eq("company_id", companyId)).data?.map(a => a.id) || [])
 
-      const spent = actuals?.reduce((s, a) => s + ((a.debit || 0) - (a.credit || 0)), 0) || 0
-      setTotalSpent(spent)
+      const totalSpentValue = actuals?.reduce((s, a) => s + ((a.debit || 0) - (a.credit || 0)), 0) || 0
+      setTotalSpent(totalSpentValue)
 
-      // 3. Overspent projects
-      const { data: projBudgets } = await supabase
+      // Project budget utilization
+      const { data: projectBudgets } = await supabase
         .from("budgets")
         .select("project_id, budgeted_amount")
         .eq("company_id", companyId)
@@ -85,7 +83,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .is("month", null)
         .not("activity_id", "is", null)
 
-      const { data: projActuals } = await supabase
+      const { data: projectActuals } = await supabase
         .from("journal_lines")
         .select("project_id, debit, credit")
         .eq("company_id", companyId)
@@ -93,30 +91,29 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .lte("journal_entries.date", endDate)
 
       const projectBudgetMap: Record<string, number> = {}
-      projBudgets?.forEach(b => { projectBudgetMap[b.project_id] = (projectBudgetMap[b.project_id] || 0) + b.budgeted_amount })
+      projectBudgets?.forEach(b => { projectBudgetMap[b.project_id] = (projectBudgetMap[b.project_id] || 0) + b.budgeted_amount })
       const projectActualMap: Record<string, number> = {}
-      projActuals?.forEach(a => { if (a.project_id) projectActualMap[a.project_id] = (projectActualMap[a.project_id] || 0) + ((a.debit || 0) - (a.credit || 0)) })
+      projectActuals?.forEach(a => { if (a.project_id) projectActualMap[a.project_id] = (projectActualMap[a.project_id] || 0) + ((a.debit || 0) - (a.credit || 0)) })
 
-      let overspent = 0
       const projectRowsTemp: any[] = []
+      let overspentCountTemp = 0
       for (const pid of Object.keys(projectBudgetMap)) {
         const bud = projectBudgetMap[pid]
         const act = projectActualMap[pid] || 0
-        if (act > bud) overspent++
+        if (act > bud) overspentCountTemp++
         const { data: proj } = await supabase.from("projects").select("name").eq("id", pid).single()
-        const { data: donor } = await supabase.from("donors").select("name").eq("id", (await supabase.from("budgets").select("donor_id").eq("project_id", pid).limit(1).single())?.data?.donor_id ?? "").maybeSingle()
         projectRowsTemp.push({
           name: proj?.name || pid,
-          donor: donor?.name || "-",
+          donor: "",
           budget: bud,
           actual: act,
           pct: bud ? Math.round((act / bud) * 100) : 0,
         })
       }
-      setOverspentCount(overspent)
+      setOverspentCount(overspentCountTemp)
       setProjectRows(projectRowsTemp.sort((a, b) => b.pct - a.pct))
 
-      // 4. Donor fund balances
+      // Donor fund balances
       const { data: donorBudgets } = await supabase
         .from("budgets")
         .select("donor_id, budgeted_amount")
@@ -145,8 +142,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
         const { data: donor } = await supabase.from("donors").select("name").eq("id", did).single()
         donorBalRows.push({
           name: donor?.name || did,
-          budget: bud,
-          spent: act,
           remaining,
           pct: bud ? Math.round((act / bud) * 100) : 0,
           overspent: remaining < 0,
@@ -154,60 +149,13 @@ export default function ManagementDashboard({ role }: { role: string }) {
       }
       setDonorBalances(donorBalRows)
 
-      // 5. Monthly spending chart (last 6 months)
-      const months: string[] = []
-      const today = new Date()
-      for (let i = 5; i >= 0; i--) {
-        const d = new Date(today.getFullYear(), today.getMonth() - i, 1)
-        months.push(d.toLocaleString('default', { month: 'short' }))
-      }
-
-      const chartStartDate = new Date(today.getFullYear(), today.getMonth() - 5, 1).toISOString().split('T')[0]
-
-      const { data: monthlyActuals } = await supabase
-        .from("journal_lines")
-        .select("project_id, debit, credit, journal_entries(date)")
-        .eq("company_id", companyId)
-        .gte("journal_entries.date", chartStartDate)
-        .lte("journal_entries.date", endDate)
-
-      const projectMonthlyMap: Record<string, number[]> = {}
-      monthlyActuals?.forEach(a => {
-        const m = new Date((a.journal_entries as any)?.[0]?.date).getMonth()
-        const idx = months.indexOf(new Date(2025, m, 1).toLocaleString('default', { month: 'short' }))
-        if (idx !== -1) {
-          if (!projectMonthlyMap[a.project_id]) projectMonthlyMap[a.project_id] = new Array(6).fill(0)
-          projectMonthlyMap[a.project_id][idx] += ((a.debit || 0) - (a.credit || 0))
-        }
-      })
-
-      const topProjects = Object.entries(projectMonthlyMap)
-        .sort(([, a], [, b]) => b.reduce((s, v) => s + v, 0) - a.reduce((s, v) => s + v, 0))
-        .slice(0, 4)
-
-      const colors = ['#1d4ed8', '#16a34a', '#d97706', '#7c3aed']
-      const datasets = []
-      for (const [pid, vals] of topProjects) {
-        const { data: proj } = await supabase.from("projects").select("name").eq("id", pid).single()
-        datasets.push({
-          label: proj?.name || pid,
-          data: vals,
-          backgroundColor: colors[datasets.length % colors.length],
-          borderRadius: 4,
-        })
-      }
-      setMonthlyChartData({ labels: months, datasets })
-
-      // 6. Category variance
+      // Category variance
       const { data: catActuals } = await supabase
         .from("journal_lines")
         .select("account_id, debit, credit")
         .eq("company_id", companyId)
         .gte("journal_entries.date", startDate)
         .lte("journal_entries.date", endDate)
-
-      const catActMap: Record<string, number> = {}
-      catActuals?.forEach(a => { catActMap[a.account_id] = (catActMap[a.account_id] || 0) + ((a.debit || 0) - (a.credit || 0)) })
 
       const { data: catBudgets } = await supabase
         .from("budgets")
@@ -219,6 +167,8 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
       const catBudMap: Record<string, number> = {}
       catBudgets?.forEach(b => { catBudMap[b.account_id] = (catBudMap[b.account_id] || 0) + b.budgeted_amount })
+      const catActMap: Record<string, number> = {}
+      catActuals?.forEach(a => { catActMap[a.account_id] = (catActMap[a.account_id] || 0) + ((a.debit || 0) - (a.credit || 0)) })
 
       const { data: accounts } = await supabase.from("accounts").select("id, code, name").eq("type", "Expense").eq("company_id", companyId).order("code")
       const catRows: any[] = []
@@ -229,7 +179,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
       })
       setCategoryVariance(catRows)
 
-      // 7. Alerts
+      // Alerts
       const alertList: any[] = []
       projectRowsTemp.forEach(p => {
         if (p.pct > 100) alertList.push({ type: 'danger', msg: `${p.name} — overspent by PKR ${(p.actual - p.budget).toLocaleString()} (${p.pct}%).` })
@@ -237,16 +187,19 @@ export default function ManagementDashboard({ role }: { role: string }) {
       })
       setAlerts(alertList.slice(0, 5))
 
+      // Monthly chart (still mock – to be implemented later if needed)
+      setMonthlyChartData(null)
+
       setLoading(false)
     }
 
-    fetchData()
-  }, [])
+    fetchDashboard()
+  }, [companyId, fiscalYear])
+
+  if (loading) return <div style={{ padding: 40, textAlign: "center", background: "#f0f4f8", minHeight: "100vh" }}>Loading management dashboard...</div>
 
   const remainingFunds = totalBudget - totalSpent
   const spentPct = totalBudget ? Math.round((totalSpent / totalBudget) * 100) : 0
-
-  if (loading) return <div style={{ padding: 40, textAlign: "center", background: "#f0f4f8", minHeight: "100vh" }}>Loading management dashboard...</div>
 
   return (
     <div style={{ background: "#f0f4f8", minHeight: "100vh", fontFamily: "Segoe UI, system-ui, sans-serif", padding: "20px 24px" }}>
@@ -263,7 +216,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .badge-danger { background: #fef2f2; color: #991b1b; }
         .badge-warning { background: #fffbeb; color: #92400e; }
         .badge-success { background: #f0fdf4; color: #166534; }
-        .badge-info { background: #f0f9ff; color: #0369a1; }
         .alert { padding: 10px 14px; border-radius: 8px; border: 1px solid; font-size: 13px; display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
         .alert-danger { background: #fef2f2; border-color: #fecaca; }
         .alert-warning { background: #fffbeb; border-color: #fde68a; }
@@ -271,11 +223,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .responsive-grid { display: grid; gap: 16px; }
         .kpi-grid { grid-template-columns: repeat(4, 1fr); }
         .row-grid { grid-template-columns: 1.5fr 1fr; }
-        .chart-grid { grid-template-columns: 1fr 1fr; }
         @media (max-width: 900px) {
           .kpi-grid { grid-template-columns: repeat(2, 1fr); }
           .row-grid { grid-template-columns: 1fr; }
-          .chart-grid { grid-template-columns: 1fr; }
         }
         @media (max-width: 500px) {
           .kpi-grid { grid-template-columns: 1fr; }
@@ -292,7 +242,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPIs */}
       <div className="responsive-grid kpi-grid" style={{ marginBottom: 24 }}>
         <div className="kpi-card blue">
           <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Total Budget</div>
@@ -319,7 +269,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
       {/* Project Utilization & Donor Balances */}
       <div className="responsive-grid row-grid" style={{ marginBottom: 24 }}>
         <div style={{ background: "white", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 4px 0" }}>Project Budget Utilization</h3>
+          <h3>Project Budget Utilization</h3>
           <p style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>Sorted by utilization rate</p>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
@@ -337,7 +287,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
                 <tr key={idx} style={{ borderBottom: "1px solid #f8fafc" }}>
                   <td style={{ padding: "8px 0" }}>
                     <div style={{ fontWeight: 700, fontSize: 13 }}>{p.name}</div>
-                    <div style={{ fontSize: 11, color: "#64748b" }}>{p.donor}</div>
                   </td>
                   <td style={{ padding: "8px 0", fontSize: 12 }}>{(p.budget / 1_000_000).toFixed(1)}M</td>
                   <td style={{ padding: "8px 0", fontSize: 12, fontWeight: 700 }}>{(p.actual / 1_000_000).toFixed(1)}M</td>
@@ -362,7 +311,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         </div>
 
         <div style={{ background: "white", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 4px 0" }}>Donor Fund Balances</h3>
+          <h3>Donor Fund Balances</h3>
           <p style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>Remaining unspent per donor source</p>
           {donorBalances.map((d, idx) => (
             <div key={idx} style={{ marginBottom: 12 }}>
@@ -381,48 +330,31 @@ export default function ManagementDashboard({ role }: { role: string }) {
         </div>
       </div>
 
-      {/* Monthly chart & Category variance */}
-      <div className="responsive-grid chart-grid" style={{ marginBottom: 24 }}>
-        <div style={{ background: "white", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Monthly Spending Review</h3>
-          <p style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>Last 6 months — PKR thousands</p>
-          <div style={{ height: 200 }}>
-            {monthlyChartData && <Bar data={monthlyChartData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, grid: { color: '#f1f5f9' }, ticks: { callback: (v: string | number) => { const n = Number(v); return n >= 1000 ? (n/1000)+'M' : n+'K'; } } } } }} />}
+      {/* Category variance */}
+      <div style={{ background: "white", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)", marginBottom: 24 }}>
+        <h3>Actual vs Budget — Q2 FY{fiscalYear}</h3>
+        <p style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>By expenditure category</p>
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, fontWeight: 700, textTransform: "uppercase", color: "#94a3b8", borderBottom: "1px solid #e2e8f0", paddingBottom: 6, marginBottom: 6 }}>
+            <span>Category</span><span>Budget</span><span>Actual</span><span>Variance</span>
           </div>
-        </div>
-        <div style={{ background: "white", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Actual vs Budget — Q2 FY{fiscalYear}</h3>
-          <p style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>By expenditure category</p>
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, fontWeight: 700, textTransform: "uppercase", color: "#94a3b8", borderBottom: "1px solid #e2e8f0", paddingBottom: 6, marginBottom: 6 }}>
-              <span>Category</span><span>Budget</span><span>Actual</span><span>Variance</span>
-            </div>
-            {categoryVariance.map((cat, idx) => (
-              <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0", borderBottom: "1px solid #f8fafc" }}>
-                <span>{cat.name}</span>
-                <span>{(cat.budget / 1_000_000).toFixed(1)}M</span>
-                <span style={{ fontWeight: 700 }}>{(cat.actual / 1_000_000).toFixed(1)}M</span>
-                <span style={{ fontWeight: 600, color: cat.variance >= 0 ? "#16a34a" : "#dc2626" }}>
-                  {cat.variance >= 0 ? "+" : ""}{(cat.variance / 1_000_000).toFixed(1)}M
-                </span>
-              </div>
-            ))}
-            {categoryVariance.length === 0 && <p style={{ color: "#94a3b8", textAlign: "center" }}>No category data.</p>}
-            <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, borderTop: "2px solid #e2e8f0", paddingTop: 6, marginTop: 4, fontSize: 13 }}>
-              <span>Total</span>
-              <span>{(categoryVariance.reduce((s, c) => s + c.budget, 0) / 1_000_000).toFixed(1)}M</span>
-              <span>{(categoryVariance.reduce((s, c) => s + c.actual, 0) / 1_000_000).toFixed(1)}M</span>
-              <span style={{ color: (categoryVariance.reduce((s, c) => s + c.variance, 0) >= 0) ? "#16a34a" : "#dc2626" }}>
-                {(categoryVariance.reduce((s, c) => s + c.variance, 0) / 1_000_000).toFixed(1)}M
+          {categoryVariance.map((cat, idx) => (
+            <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0", borderBottom: "1px solid #f8fafc" }}>
+              <span>{cat.name}</span>
+              <span>{(cat.budget / 1_000_000).toFixed(1)}M</span>
+              <span style={{ fontWeight: 700 }}>{(cat.actual / 1_000_000).toFixed(1)}M</span>
+              <span style={{ fontWeight: 600, color: cat.variance >= 0 ? "#16a34a" : "#dc2626" }}>
+                {cat.variance >= 0 ? "+" : ""}{(cat.variance / 1_000_000).toFixed(1)}M
               </span>
             </div>
-          </div>
+          ))}
+          {categoryVariance.length === 0 && <p style={{ color: "#94a3b8", textAlign: "center" }}>No category data.</p>}
         </div>
       </div>
 
       {/* Alerts */}
       <div style={{ background: "white", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)", marginBottom: 24 }}>
-        <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Alerts & Management Actions</h3>
+        <h3>Alerts & Management Actions</h3>
         <p style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>Critical issues requiring attention</p>
         <div>
           {alerts.map((alert, idx) => (
