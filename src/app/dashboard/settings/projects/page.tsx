@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { Plus, Edit, Trash2, X, Upload } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
@@ -50,7 +50,6 @@ export default function ProjectsPage() {
   const [importType, setImportType] = useState<"donor" | "project" | "location" | "activity">("donor")
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importing, setImporting] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -165,65 +164,64 @@ export default function ProjectsPage() {
 
   // ── Import handler ──────────────────────────────────
   const handleImport = async () => {
-  if (!importFile || !companyId) return
-  setImporting(true)
-  const reader = new FileReader()
-  reader.onload = async (e) => {
-    const data = e.target?.result
-    const workbook = XLSX.read(data, { type: 'binary' })
-    const sheet = workbook.Sheets[workbook.SheetNames[0]]
-    const rows = XLSX.utils.sheet_to_json(sheet)
-    let successCount = 0
-    try {
-      for (const row of rows as any[]) {
-        if (importType === "donor") {
-          const { Name, Code } = row
-          if (Name) {
-            await supabase.from("donors").insert({ company_id: companyId, name: Name, code: Code || null, is_active: true })
-            successCount++
-          }
-        } else if (importType === "project") {
-          const { Name, Description, DonorCode } = row
-          if (Name) {
-            await supabase.from("projects").insert({ company_id: companyId, name: Name, description: Description || null, is_active: true })
-            successCount++
-          }
-        } else if (importType === "location") {
-          const { Name } = row
-          if (Name) {
-            await supabase.from("locations").insert({ company_id: companyId, name: Name, is_active: true })
-            successCount++
-          }
-        } else if (importType === "activity") {
-          const { Name, ProjectName, LocationName } = row
-          if (Name && ProjectName && LocationName) {
-            const { data: proj } = await supabase.from("projects").select("id").eq("company_id", companyId).ilike("name", ProjectName).maybeSingle()
-            const { data: loc } = await supabase.from("locations").select("id").eq("company_id", companyId).ilike("name", LocationName).maybeSingle()
-            if (proj && loc) {
-              await supabase.from("activities").insert({ company_id: companyId, name: Name, project_id: proj.id, is_active: true })
+    if (!importFile || !companyId) return
+    setImporting(true)
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      const data = e.target?.result
+      const workbook = XLSX.read(data, { type: 'binary' })
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json(sheet)
+      let successCount = 0
+      try {
+        for (const row of rows as any[]) {
+          if (importType === "donor") {
+            const { Name, Code } = row
+            if (Name) {
+              await supabase.from("donors").insert({ company_id: companyId, name: Name, code: Code || null, is_active: true })
               successCount++
+            }
+          } else if (importType === "project") {
+            const { Name, Description, DonorCode } = row
+            if (Name) {
+              await supabase.from("projects").insert({ company_id: companyId, name: Name, description: Description || null, is_active: true })
+              successCount++
+            }
+          } else if (importType === "location") {
+            const { Name } = row
+            if (Name) {
+              await supabase.from("locations").insert({ company_id: companyId, name: Name, is_active: true })
+              successCount++
+            }
+          } else if (importType === "activity") {
+            const { Name, ProjectName, LocationName } = row
+            if (Name && ProjectName && LocationName) {
+              const { data: proj } = await supabase.from("projects").select("id").eq("company_id", companyId).ilike("name", ProjectName).maybeSingle()
+              const { data: loc } = await supabase.from("locations").select("id").eq("company_id", companyId).ilike("name", LocationName).maybeSingle()
+              if (proj && loc) {
+                await supabase.from("activities").insert({ company_id: companyId, name: Name, project_id: proj.id, is_active: true })
+                successCount++
+              }
             }
           }
         }
+        setFlash(`✅ Imported ${successCount} ${importType}s successfully!`)
+      } catch (err) {
+        setFlash("Import failed: " + (err as any).message)
       }
-      setFlash(`✅ Imported ${successCount} ${importType}s successfully!`)
-    } catch (err) {
-      setFlash("Import failed: " + (err as any).message)
+      setImporting(false)
+      setShowImportModal(false)
+      // Switch to the imported tab so the list appears immediately
+      const typeToTab: Record<string, typeof activeTab> = {
+        donor: "donors",
+        project: "projects",
+        location: "locations",
+        activity: "activities",
+      }
+      setActiveTab(typeToTab[importType] || "projects")
+      fetchData()
     }
-    setImporting(false)
-    setShowImportModal(false)
-    // 🔁 Switch to the correct tab so the list refreshes immediately
-    const typeToTab: Record<string, typeof activeTab> = {
-      donor: "donors",
-      project: "projects",
-      location: "locations",
-      activity: "activities",
-    }
-    setActiveTab(typeToTab[importType] || "projects")
-    fetchData()
-  }
-  reader.readAsBinaryString(importFile)
-}
+    reader.readAsBinaryString(importFile)
   }
 
   const tabs: { key: typeof activeTab; label: string }[] = [
