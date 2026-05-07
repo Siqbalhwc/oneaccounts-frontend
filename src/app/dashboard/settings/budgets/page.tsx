@@ -15,7 +15,7 @@ export default function BudgetsPage() {
 
   const [companyId, setCompanyId] = useState<string>("")
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
-  const [businessType, setBusinessType] = useState<string>("") // "ngo", "service", "trading"
+  const [businessType, setBusinessType] = useState<string>("")
 
   // Master data
   const [accounts, setAccounts] = useState<any[]>([])
@@ -26,8 +26,8 @@ export default function BudgetsPage() {
 
   // Context filters
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
-  const [selectedDonorId, setSelectedDonorId] = useState<string>("")     // required only for NGO
-  const [selectedLocationId, setSelectedLocationId] = useState<string>("") // optional
+  const [selectedDonorId, setSelectedDonorId] = useState<string>("")
+  const [selectedLocationId, setSelectedLocationId] = useState<string>("")
 
   // Budget matrix: { [accountId]: { [activityId]: amount } }
   const [budgetMatrix, setBudgetMatrix] = useState<Record<string, Record<string, number>>>({})
@@ -68,7 +68,6 @@ export default function BudgetsPage() {
 
   // ── Load budgets & actuals ────────────────────────
   useEffect(() => {
-    // For non‑NGO, donor is not required; matrix loads with any donor
     if (!companyId || !selectedProjectId) {
       setBudgetMatrix({})
       setActualsMatrix({})
@@ -83,7 +82,6 @@ export default function BudgetsPage() {
     }
     setLoading(true)
 
-    // 1. Budgets – filter by project, donor (if NGO), and activity columns
     let budgetQuery = supabase.from("budgets")
       .select("*")
       .eq("company_id", companyId)
@@ -95,7 +93,6 @@ export default function BudgetsPage() {
     if (businessType === "ngo") {
       budgetQuery = budgetQuery.eq("donor_id", selectedDonorId)
     }
-    // For other types, we don't filter by donor (show all)
     if (selectedLocationId) {
       budgetQuery = budgetQuery.eq("location_id", selectedLocationId)
     } else {
@@ -114,7 +111,6 @@ export default function BudgetsPage() {
       setBudgetMatrix(bMatrix)
     })
 
-    // 2. Actuals – sum journal_lines with matching tags
     const startDate = `${fiscalYear}-01-01`
     const endDate = `${fiscalYear}-12-31`
 
@@ -145,7 +141,7 @@ export default function BudgetsPage() {
         const acc = line.account_id
         const act = line.activity_id
         if (!act || !acc) return
-        const net = (line.debit || 0) - (line.credit || 0) // expenses are debits
+        const net = (line.debit || 0) - (line.credit || 0)
         if (!aMatrix[acc]) aMatrix[acc] = {}
         aMatrix[acc][act] = (aMatrix[acc][act] || 0) + net
       })
@@ -176,31 +172,50 @@ export default function BudgetsPage() {
     setSaving(true)
     setFlash("")
 
+    const rowsToInsert: any[] = []
     for (const accountId of Object.keys(budgetMatrix)) {
       for (const activityId of Object.keys(budgetMatrix[accountId])) {
         const amount = budgetMatrix[accountId][activityId]
-        if (amount > 0) {
-          const payload: any = {
-            company_id: companyId,
-            account_id: parseInt(accountId),
-            fiscal_year: fiscalYear,
-            month: null,
-            project_id: selectedProjectId,
-            activity_id: activityId,
-            budgeted_amount: amount,
-          }
-          // For NGO, include donor; for others, set donor to null or keep it out
-          if (businessType === "ngo") {
-            payload.donor_id = selectedDonorId
-          } else {
-            payload.donor_id = null   // no donor constraint for service/trading
-          }
-          payload.location_id = selectedLocationId || null
+        if (amount <= 0) continue
+        rowsToInsert.push({
+          company_id: companyId,
+          account_id: parseInt(accountId),
+          project_id: selectedProjectId,
+          activity_id: activityId,
+          donor_id: (businessType === "ngo") ? selectedDonorId : null,
+          location_id: selectedLocationId || null,
+          fiscal_year: fiscalYear,
+          month: null,
+          budgeted_amount: amount,
+        })
+      }
+    }
 
-          await supabase.from("budgets").upsert(payload, {
-            onConflict: "company_id,account_id,project_id,activity_id,location_id,donor_id,fiscal_year,month"
-          })
-        }
+    let deleteQuery = supabase
+      .from("budgets")
+      .delete()
+      .eq("company_id", companyId)
+      .eq("project_id", selectedProjectId)
+      .eq("fiscal_year", fiscalYear)
+      .is("month", null)
+
+    if (businessType === "ngo") {
+      deleteQuery = deleteQuery.eq("donor_id", selectedDonorId)
+    }
+    if (selectedLocationId) {
+      deleteQuery = deleteQuery.eq("location_id", selectedLocationId)
+    } else {
+      deleteQuery = deleteQuery.is("location_id", null)
+    }
+
+    await deleteQuery
+
+    if (rowsToInsert.length > 0) {
+      const { error } = await supabase.from("budgets").insert(rowsToInsert)
+      if (error) {
+        setFlash("❌ Error: " + error.message)
+        setSaving(false)
+        return
       }
     }
 
