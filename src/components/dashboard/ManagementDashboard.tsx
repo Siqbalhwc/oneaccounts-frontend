@@ -14,7 +14,6 @@ import {
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend)
 
-// Helper to get current fiscal year start
 const getFiscalYearStart = (year: number) => `${year}-01-01`
 const getFiscalYearEnd = (year: number) => `${year}-12-31`
 
@@ -28,7 +27,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [fiscalYear] = useState(new Date().getFullYear())
   const [businessType, setBusinessType] = useState("")
 
-  // KPI states
   const [totalBudget, setTotalBudget] = useState(0)
   const [totalSpent, setTotalSpent] = useState(0)
   const [overspentCount, setOverspentCount] = useState(0)
@@ -43,7 +41,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
     const fetchData = async () => {
       setLoading(true)
 
-      // Get company and business type
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const cid = (user.app_metadata as any)?.company_id || companyId
@@ -55,7 +52,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
       const startDate = getFiscalYearStart(fiscalYear)
       const endDate = getFiscalYearEnd(fiscalYear)
 
-      // 1. Total budget (annual, activity not null)
+      // 1. Total budget
       const { data: budgets } = await supabase
         .from("budgets")
         .select("budgeted_amount")
@@ -67,7 +64,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
       const budgetTotal = budgets?.reduce((s, b) => s + (b.budgeted_amount || 0), 0) || 0
       setTotalBudget(budgetTotal)
 
-      // 2. Total spent (all expense account debits minus credits for the fiscal year)
+      // 2. Total spent
       const { data: actuals } = await supabase
         .from("journal_lines")
         .select("debit, credit")
@@ -79,7 +76,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
       const spent = actuals?.reduce((s, a) => s + ((a.debit || 0) - (a.credit || 0)), 0) || 0
       setTotalSpent(spent)
 
-      // 3. Overspent projects: projects where total actual > total budget
+      // 3. Overspent projects
       const { data: projBudgets } = await supabase
         .from("budgets")
         .select("project_id, budgeted_amount")
@@ -106,7 +103,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
         const bud = projectBudgetMap[pid]
         const act = projectActualMap[pid] || 0
         if (act > bud) overspent++
-        // get project name and donor (if any, from budgets donor_id)
         const { data: proj } = await supabase.from("projects").select("name").eq("id", pid).single()
         const { data: donor } = await supabase.from("donors").select("name").eq("id", (await supabase.from("budgets").select("donor_id").eq("project_id", pid).limit(1).single())?.data?.donor_id ?? "").maybeSingle()
         projectRowsTemp.push({
@@ -158,31 +154,31 @@ export default function ManagementDashboard({ role }: { role: string }) {
       }
       setDonorBalances(donorBalRows)
 
-      // 5. Monthly spending chart (last 6 months) – top 4 projects by spending
-      const monthlyData: any = { labels: [] }
-      const months = []
+      // 5. Monthly spending chart (last 6 months)
+      const months: string[] = []
+      const today = new Date()
       for (let i = 5; i >= 0; i--) {
-        const d = new Date()
-        d.setMonth(d.getMonth() - i)
+        const d = new Date(today.getFullYear(), today.getMonth() - i, 1)
         months.push(d.toLocaleString('default', { month: 'short' }))
       }
-      monthlyData.labels = months
+
+      const chartStartDate = new Date(today.getFullYear(), today.getMonth() - 5, 1).toISOString().split('T')[0]
 
       const { data: monthlyActuals } = await supabase
         .from("journal_lines")
         .select("project_id, debit, credit, journal_entries(date)")
         .eq("company_id", companyId)
-        .gte("journal_entries.date", new Date(new Date().setMonth(new Date().getMonth() - 5)).toISOString().split('T')[0])
+        .gte("journal_entries.date", chartStartDate)
         .lte("journal_entries.date", endDate)
 
       const projectMonthlyMap: Record<string, number[]> = {}
       monthlyActuals?.forEach(a => {
-        const month = new Date(a.journal_entries?.date).getMonth()
-        const idx = months.indexOf(new Date(2025, month, 1).toLocaleString('default', { month: 'short' })) // approximate
-        // simpler: use month index
         const m = new Date(a.journal_entries?.date).getMonth()
-        if (!projectMonthlyMap[a.project_id]) projectMonthlyMap[a.project_id] = new Array(6).fill(0)
-        projectMonthlyMap[a.project_id][5 - (new Date().getMonth() - m)] += ((a.debit || 0) - (a.credit || 0))
+        const idx = months.indexOf(new Date(2025, m, 1).toLocaleString('default', { month: 'short' }))
+        if (idx !== -1) {
+          if (!projectMonthlyMap[a.project_id]) projectMonthlyMap[a.project_id] = new Array(6).fill(0)
+          projectMonthlyMap[a.project_id][idx] += ((a.debit || 0) - (a.credit || 0))
+        }
       })
 
       const topProjects = Object.entries(projectMonthlyMap)
@@ -202,7 +198,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
       }
       setMonthlyChartData({ labels: months, datasets })
 
-      // 6. Category variance (by expense account)
+      // 6. Category variance
       const { data: catActuals } = await supabase
         .from("journal_lines")
         .select("account_id, debit, credit")
@@ -272,6 +268,18 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .alert-danger { background: #fef2f2; border-color: #fecaca; }
         .alert-warning { background: #fffbeb; border-color: #fde68a; }
         .alert-info { background: #f0f9ff; border-color: #bae6fd; }
+        .responsive-grid { display: grid; gap: 16px; }
+        .kpi-grid { grid-template-columns: repeat(4, 1fr); }
+        .row-grid { grid-template-columns: 1.5fr 1fr; }
+        .chart-grid { grid-template-columns: 1fr 1fr; }
+        @media (max-width: 900px) {
+          .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+          .row-grid { grid-template-columns: 1fr; }
+          .chart-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 500px) {
+          .kpi-grid { grid-template-columns: 1fr; }
+        }
       `}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -285,7 +293,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
       </div>
 
       {/* KPI Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
+      <div className="responsive-grid kpi-grid" style={{ marginBottom: 24 }}>
         <div className="kpi-card blue">
           <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Total Budget</div>
           <div style={{ fontSize: 28, fontWeight: 800 }}>PKR {(totalBudget / 1_000_000).toFixed(1)}M</div>
@@ -309,7 +317,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
       </div>
 
       {/* Project Utilization & Donor Balances */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 20, marginBottom: 24 }}>
+      <div className="responsive-grid row-grid" style={{ marginBottom: 24 }}>
         <div style={{ background: "white", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 4px 0" }}>Project Budget Utilization</h3>
           <p style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>Sorted by utilization rate</p>
@@ -374,7 +382,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
       </div>
 
       {/* Monthly chart & Category variance */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24 }}>
+      <div className="responsive-grid chart-grid" style={{ marginBottom: 24 }}>
         <div style={{ background: "white", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Monthly Spending Review</h3>
           <p style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>Last 6 months — PKR thousands</p>
@@ -400,7 +408,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
               </div>
             ))}
             {categoryVariance.length === 0 && <p style={{ color: "#94a3b8", textAlign: "center" }}>No category data.</p>}
-            {/* Totals */}
             <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, borderTop: "2px solid #e2e8f0", paddingTop: 6, marginTop: 4, fontSize: 13 }}>
               <span>Total</span>
               <span>{(categoryVariance.reduce((s, c) => s + c.budget, 0) / 1_000_000).toFixed(1)}M</span>
@@ -429,12 +436,12 @@ export default function ManagementDashboard({ role }: { role: string }) {
       </div>
 
       {/* Footer */}
-      <div style={{ background: "white", borderRadius: 12, padding: "12px 20px", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "#64748b" }}>
+      <div style={{ background: "white", borderRadius: 12, padding: "12px 20px", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "#64748b", flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#16a34a", boxShadow: "0 0 0 3px rgba(22,163,74,0.2)" }}></div>
           <span>Portfolio Health: <strong style={{ color: "#0f172a" }}>{overspentCount > 0 ? "Needs Attention" : "Healthy"}</strong></span>
         </div>
-        <div style={{ display: "flex", gap: 24 }}>
+        <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
           <span>Total Budget: <strong>PKR {(totalBudget / 1_000_000).toFixed(1)}M</strong></span>
           <span>Spent: <strong>PKR {(totalSpent / 1_000_000).toFixed(1)}M ({spentPct}%)</strong></span>
           <span>Overspent Projects: <strong style={{ color: "#dc2626" }}>{overspentCount}</strong></span>

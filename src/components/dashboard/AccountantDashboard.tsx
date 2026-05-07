@@ -90,6 +90,12 @@ export default function AccountantDashboard({ role }: { role: string }) {
         table { width: 100%; border-collapse: collapse; }
         th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; text-align: left; padding-bottom: 8px; border-bottom: 1px solid #f1f5f9; }
         td { padding: 8px 0; border-bottom: 1px solid #f8fafc; font-size: 13px; }
+        .resp-grid { display: grid; gap: 16px; grid-template-columns: repeat(3, 1fr); }
+        .quick-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+        @media (max-width: 700px) {
+          .resp-grid { grid-template-columns: 1fr; }
+          .quick-actions { flex-direction: column; }
+        }
       `}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -103,7 +109,7 @@ export default function AccountantDashboard({ role }: { role: string }) {
       </div>
 
       {/* Today's work counters */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 24 }}>
+      <div className="resp-grid" style={{ marginBottom: 24 }}>
         <div className="acc-card" style={{ textAlign: "center" }}>
           <div style={{ fontSize: 28, fontWeight: 800, color: "#0d9488" }}>{todayCounts.bills}</div>
           <div style={{ fontSize: 12, color: "#64748b" }}>Bills Entered Today</div>
@@ -121,7 +127,7 @@ export default function AccountantDashboard({ role }: { role: string }) {
       {/* Quick Actions */}
       <div style={{ marginBottom: 24 }}>
         <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Quick Actions</h3>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <div className="quick-actions">
           <button className="acc-btn btn-teal" onClick={() => router.push("/dashboard/bills/new")}>📄 New Purchase Bill</button>
           <button className="acc-btn btn-teal" onClick={() => router.push("/dashboard/invoices/new")}>🧾 New Invoice</button>
           <button className="acc-btn btn-teal" onClick={() => router.push("/dashboard/receipts/new")}>✅ New Receipt</button>

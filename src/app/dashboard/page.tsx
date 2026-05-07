@@ -25,7 +25,13 @@ export default function DashboardPage() {
 
   if (!role) return <div style={{ padding: 40, textAlign: "center" }}>Loading...</div>
 
-  // Management roles see the management dashboard
+  // 🔁 TEMPORARY: Add ?view=accountant to see the accountant dashboard
+  const url = new URL(window.location.href)
+  if (url.searchParams.get('view') === 'accountant') {
+    return <AccountantDashboard role={role} />
+  }
+
+  // Default: Management roles see the management dashboard
   if (role === "admin" || role === "manager" || role === "director") {
     return <ManagementDashboard role={role} />
   }
