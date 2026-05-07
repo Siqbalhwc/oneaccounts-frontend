@@ -18,22 +18,18 @@ export default function BudgetsPage() {
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
   const [businessType, setBusinessType] = useState<string>("")
 
-  // Master data lists
   const [accounts, setAccounts] = useState<any[]>([])
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
   const [allActivities, setAllActivities] = useState<any[]>([])
 
-  // Context filters
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [selectedDonorId, setSelectedDonorId] = useState<string>("")
   const [selectedLocationId, setSelectedLocationId] = useState<string>("")
 
-  // Derived column list
   const [columnActivities, setColumnActivities] = useState<any[]>([])
 
-  // Budget matrix
   const [budgetMatrix, setBudgetMatrix] = useState<Record<string, Record<string, number>>>({})
   const [actualsMatrix, setActualsMatrix] = useState<Record<string, Record<string, number>>>({})
 
@@ -41,7 +37,6 @@ export default function BudgetsPage() {
   const [saving, setSaving] = useState(false)
   const [flash, setFlash] = useState<string>("")
 
-  // ── Inline creation states ────────────────────────
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createType, setCreateType] = useState<"project" | "donor" | "location" | "activity">("project")
   const [createName, setCreateName] = useState("")
@@ -77,7 +72,6 @@ export default function BudgetsPage() {
     if (error) { setFlash("Error: " + error.message); return }
     setFlash("✅ Created!")
 
-    // Refresh the corresponding list
     if (createType === "project") {
       const fresh = await supabase.from("projects").select("id, name").eq("company_id", companyId).order("name")
       if (fresh.data) {
@@ -118,7 +112,6 @@ export default function BudgetsPage() {
     setTimeout(() => setFlash(""), 3000)
   }
 
-  // ── Load master data & business type ──────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -149,7 +142,6 @@ export default function BudgetsPage() {
     })
   }, [])
 
-  // Filter activities
   useEffect(() => {
     let filtered = allActivities
     if (selectedProjectId) filtered = filtered.filter(a => a.project_id == selectedProjectId)
@@ -157,7 +149,6 @@ export default function BudgetsPage() {
     setColumnActivities(filtered)
   }, [selectedProjectId, selectedLocationId, allActivities])
 
-  // Load budgets & actuals (same as before)
   useEffect(() => {
     if (!companyId || !selectedProjectId) { setBudgetMatrix({}); setActualsMatrix({}); setLoading(false); return }
     if (businessType === "ngo" && !selectedDonorId) { setBudgetMatrix({}); setActualsMatrix({}); setLoading(false); return }
@@ -187,7 +178,7 @@ export default function BudgetsPage() {
         const acc = line.account_id
         const act = line.activity_id
         if (!act || !acc) return
-        const net = (line.debit || 0) - (line.credit || 0)
+        const net = (line.debit || 0) - (line.credit || 0) // positive for expense
         if (!aMatrix[acc]) aMatrix[acc] = {}
         aMatrix[acc][act] = (aMatrix[acc][act] || 0) + net
       })
@@ -266,14 +257,16 @@ export default function BudgetsPage() {
         .matrix-row { display: flex; border-bottom: 1px solid #F1F5F9; align-items: stretch; }
         .matrix-row:hover { background: #FAFBFF; }
         .matrix-account-cell { width: 120px; flex-shrink: 0; padding: 8px 10px; font-size: 11px; font-weight: 600; color: #1E3A8A; border-right: 2px solid #E2E8F0; display: flex; align-items: center; }
-        .matrix-cell { flex: 1; min-width: 120px; padding: 4px 8px; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
-        .matrix-input { width: 100%; padding: 4px; border: 1px solid #E2E8F0; border-radius: 6px; font-size: 11px; text-align: right; box-sizing: border-box; }
+        .matrix-cell { flex: 1; min-width: 120px; display: flex; flex-wrap: nowrap; justify-content: space-between; padding: 4px 6px; }
+        .matrix-sub-col { display: flex; flex-direction: column; align-items: flex-end; min-width: 50px; padding: 0 2px; }
+        .matrix-sub-col span { font-size: 10px; white-space: nowrap; }
+        .matrix-input { width: 100%; padding: 2px 4px; border: 1px solid #E2E8F0; border-radius: 4px; font-size: 10px; text-align: right; box-sizing: border-box; }
         .matrix-input:focus { border-color: #1740C8; outline: none; }
-        .matrix-actual { font-size: 10px; color: #64748B; text-align: right; }
         .matrix-variance { font-size: 10px; text-align: right; font-weight: 600; }
         .variance-negative { color: #EF4444; }
         .variance-positive { color: #10B981; }
         .total-cell { font-weight: 700; background: #F8FAFC; }
+        .total-cell-flex { display: flex; gap: 4px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
         .btn-primary { padding: 10px 20px; background: #1D4ED8; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; }
         .pr-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
         .pr-modal { background: white; border-radius: 14px; width: 100%; max-width: 450px; max-height: 90vh; overflow-y: auto; }
@@ -301,7 +294,7 @@ export default function BudgetsPage() {
               <option value="">-- Select Project --</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
-            <button className="inline-btn" onClick={() => openCreateModal("project")} title="Add Project"><Plus size={14} /></button>
+            <button className="inline-btn" onClick={() => openCreateModal("project")}><Plus size={14} /></button>
           </div>
 
           {businessType === "ngo" && (
@@ -310,7 +303,7 @@ export default function BudgetsPage() {
                 <option value="">-- Select Donor --</option>
                 {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
-              <button className="inline-btn" onClick={() => openCreateModal("donor")} title="Add Donor"><Plus size={14} /></button>
+              <button className="inline-btn" onClick={() => openCreateModal("donor")}><Plus size={14} /></button>
             </div>
           )}
 
@@ -319,7 +312,7 @@ export default function BudgetsPage() {
               <option value="">-- All Locations (optional) --</option>
               {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
-            <button className="inline-btn" onClick={() => openCreateModal("location")} title="Add Location"><Plus size={14} /></button>
+            <button className="inline-btn" onClick={() => openCreateModal("location")}><Plus size={14} /></button>
           </div>
 
           <button className="inline-btn" onClick={() => openCreateModal("activity")} title="Add Activity" style={{ padding: "8px 12px", fontWeight: 600 }}>
@@ -350,22 +343,22 @@ export default function BudgetsPage() {
             <div className="matrix-header">
               <div className="matrix-account-cell">Account</div>
               {columnActivities.map(act => (
-                <div key={act.id} className="matrix-cell" style={{ flex: 1, minWidth: 120, padding: "8px 8px", textAlign: "center" }}>
+                <div key={act.id} className="matrix-cell" style={{ flex: 1, minWidth: 120, display: "flex", flexDirection: "column", alignItems: "center", padding: "4px" }}>
                   <div style={{ fontWeight: 700, fontSize: 10, color: "#1E293B" }}>{act.name}</div>
                   <div style={{ fontSize: 8, color: "#64748B" }}>{act.location_name}</div>
-                  <div style={{ display: "flex", marginTop: 4, fontSize: 8, color: "#94A3B8" }}>
-                    <span style={{ flex: 1, textAlign: "right", paddingRight: 4 }}>Budget</span>
-                    <span style={{ flex: 1, textAlign: "right", paddingRight: 4 }}>Actual</span>
-                    <span style={{ flex: 1, textAlign: "right" }}>Var</span>
+                  <div style={{ display: "flex", justifyContent: "space-around", width: "100%", marginTop: 4, fontSize: 8, color: "#94A3B8" }}>
+                    <span>Budget</span>
+                    <span>Actual</span>
+                    <span>Var</span>
                   </div>
                 </div>
               ))}
-              <div className="matrix-cell total-cell" style={{ flex: "0 0 100px", padding: "8px 8px", textAlign: "center", borderLeft: "2px solid #E2E8F0" }}>
+              <div className="matrix-cell total-cell" style={{ flex: "0 0 120px", display: "flex", flexDirection: "column", alignItems: "center", borderLeft: "2px solid #E2E8F0", padding: "4px" }}>
                 <div style={{ fontWeight: 700, fontSize: 10 }}>Total</div>
-                <div style={{ display: "flex", marginTop: 4, fontSize: 8, color: "#94A3B8" }}>
-                  <span style={{ flex: 1, textAlign: "right", paddingRight: 4 }}>Budget</span>
-                  <span style={{ flex: 1, textAlign: "right", paddingRight: 4 }}>Actual</span>
-                  <span style={{ flex: 1, textAlign: "right" }}>Var</span>
+                <div style={{ display: "flex", justifyContent: "space-around", width: "100%", marginTop: 4, fontSize: 8, color: "#94A3B8" }}>
+                  <span>Budget</span>
+                  <span>Actual</span>
+                  <span>Var</span>
                 </div>
               </div>
             </div>
@@ -382,29 +375,41 @@ export default function BudgetsPage() {
                     rowBudget += budgetVal
                     rowActual += actualVal
                     return (
-                      <div key={act.id} className="matrix-cell">
-                        <input
-                          className="matrix-input"
-                          type="number"
-                          min="0"
-                          step="100"
-                          value={budgetVal || ""}
-                          onChange={e => updateCell(acc.id, act.id, Number(e.target.value))}
-                          disabled={!canEdit}
-                          placeholder="Budget"
-                        />
-                        <div className="matrix-actual">{actualVal.toLocaleString()}</div>
-                        <div className={`matrix-variance ${variance < 0 ? "variance-negative" : "variance-positive"}`}>
-                          {variance === 0 ? "—" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
+                      <div key={act.id} className="matrix-cell" style={{ flex: 1, minWidth: 120, display: "flex", justifyContent: "space-around", padding: "4px" }}>
+                        <div className="matrix-sub-col" style={{ minWidth: 50, alignItems: "flex-end" }}>
+                          <input
+                            className="matrix-input"
+                            type="number"
+                            min="0"
+                            step="100"
+                            value={budgetVal || ""}
+                            onChange={e => updateCell(acc.id, act.id, Number(e.target.value))}
+                            disabled={!canEdit}
+                            placeholder="0"
+                          />
+                        </div>
+                        <div className="matrix-sub-col" style={{ minWidth: 50, alignItems: "flex-end" }}>
+                          <span style={{ fontWeight: 500 }}>{actualVal.toLocaleString()}</span>
+                        </div>
+                        <div className="matrix-sub-col" style={{ minWidth: 50, alignItems: "flex-end" }}>
+                          <span className={`matrix-variance ${variance < 0 ? "variance-negative" : "variance-positive"}`}>
+                            {variance === 0 ? "—" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
+                          </span>
                         </div>
                       </div>
                     )
                   })}
-                  <div className="matrix-cell total-cell" style={{ flex: "0 0 100px", borderLeft: "2px solid #E2E8F0" }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, textAlign: "right" }}>{rowBudget.toLocaleString()}</div>
-                    <div style={{ fontSize: 10, textAlign: "right" }}>{rowActual.toLocaleString()}</div>
-                    <div className={`matrix-variance ${(rowActual - rowBudget) < 0 ? "variance-negative" : "variance-positive"}`} style={{ textAlign: "right" }}>
-                      {(rowActual - rowBudget) === 0 ? "—" : (rowActual - rowBudget > 0 ? "+" : "") + (rowActual - rowBudget).toLocaleString()}
+                  <div className="matrix-cell total-cell" style={{ flex: "0 0 120px", display: "flex", justifyContent: "space-around", padding: "4px", borderLeft: "2px solid #E2E8F0" }}>
+                    <div className="matrix-sub-col" style={{ minWidth: 50, alignItems: "flex-end" }}>
+                      <span style={{ fontWeight: 700, fontSize: 11 }}>{rowBudget.toLocaleString()}</span>
+                    </div>
+                    <div className="matrix-sub-col" style={{ minWidth: 50, alignItems: "flex-end" }}>
+                      <span style={{ fontWeight: 700, fontSize: 11 }}>{rowActual.toLocaleString()}</span>
+                    </div>
+                    <div className="matrix-sub-col" style={{ minWidth: 50, alignItems: "flex-end" }}>
+                      <span className={`matrix-variance ${(rowActual - rowBudget) < 0 ? "variance-negative" : "variance-positive"}`} style={{ fontWeight: 700, fontSize: 11 }}>
+                        {(rowActual - rowBudget) === 0 ? "—" : (rowActual - rowBudget > 0 ? "+" : "") + (rowActual - rowBudget).toLocaleString()}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -419,20 +424,32 @@ export default function BudgetsPage() {
                 const colActual = colData.actual
                 const colVar = colActual - colBudget
                 return (
-                  <div key={act.id} className="matrix-cell total-cell">
-                    <div style={{ fontSize: 11, fontWeight: 700, textAlign: "right" }}>{colBudget.toLocaleString()}</div>
-                    <div style={{ fontSize: 10, fontWeight: 700, textAlign: "right" }}>{colActual.toLocaleString()}</div>
-                    <div className={`matrix-variance ${colVar < 0 ? "variance-negative" : "variance-positive"}`} style={{ textAlign: "right", fontWeight: 700 }}>
-                      {colVar === 0 ? "—" : (colVar > 0 ? "+" : "") + colVar.toLocaleString()}
+                  <div key={act.id} className="matrix-cell total-cell" style={{ flex: 1, minWidth: 120, display: "flex", justifyContent: "space-around", padding: "4px" }}>
+                    <div className="matrix-sub-col" style={{ minWidth: 50, alignItems: "flex-end" }}>
+                      <span style={{ fontWeight: 700, fontSize: 11 }}>{colBudget.toLocaleString()}</span>
+                    </div>
+                    <div className="matrix-sub-col" style={{ minWidth: 50, alignItems: "flex-end" }}>
+                      <span style={{ fontWeight: 700, fontSize: 11 }}>{colActual.toLocaleString()}</span>
+                    </div>
+                    <div className="matrix-sub-col" style={{ minWidth: 50, alignItems: "flex-end" }}>
+                      <span className={`matrix-variance ${colVar < 0 ? "variance-negative" : "variance-positive"}`} style={{ fontWeight: 700, fontSize: 11 }}>
+                        {colVar === 0 ? "—" : (colVar > 0 ? "+" : "") + colVar.toLocaleString()}
+                      </span>
                     </div>
                   </div>
                 )
               })}
-              <div className="matrix-cell total-cell" style={{ flex: "0 0 100px", borderLeft: "2px solid #E2E8F0" }}>
-                <div style={{ fontSize: 11, fontWeight: 700, textAlign: "right" }}>{grandTotalBudget.toLocaleString()}</div>
-                <div style={{ fontSize: 10, fontWeight: 700, textAlign: "right" }}>{grandTotalActual.toLocaleString()}</div>
-                <div className={`matrix-variance ${(grandTotalActual - grandTotalBudget) < 0 ? "variance-negative" : "variance-positive"}`} style={{ textAlign: "right", fontWeight: 700 }}>
-                  {(grandTotalActual - grandTotalBudget) === 0 ? "—" : (grandTotalActual - grandTotalBudget > 0 ? "+" : "") + (grandTotalActual - grandTotalBudget).toLocaleString()}
+              <div className="matrix-cell total-cell" style={{ flex: "0 0 120px", display: "flex", justifyContent: "space-around", padding: "4px", borderLeft: "2px solid #E2E8F0" }}>
+                <div className="matrix-sub-col" style={{ minWidth: 50, alignItems: "flex-end" }}>
+                  <span style={{ fontWeight: 700, fontSize: 11 }}>{grandTotalBudget.toLocaleString()}</span>
+                </div>
+                <div className="matrix-sub-col" style={{ minWidth: 50, alignItems: "flex-end" }}>
+                  <span style={{ fontWeight: 700, fontSize: 11 }}>{grandTotalActual.toLocaleString()}</span>
+                </div>
+                <div className="matrix-sub-col" style={{ minWidth: 50, alignItems: "flex-end" }}>
+                  <span className={`matrix-variance ${(grandTotalActual - grandTotalBudget) < 0 ? "variance-negative" : "variance-positive"}`} style={{ fontWeight: 700, fontSize: 11 }}>
+                    {(grandTotalActual - grandTotalBudget) === 0 ? "—" : (grandTotalActual - grandTotalBudget > 0 ? "+" : "") + (grandTotalActual - grandTotalBudget).toLocaleString()}
+                  </span>
                 </div>
               </div>
             </div>
@@ -446,7 +463,6 @@ export default function BudgetsPage() {
         )}
       </div>
 
-      {/* Inline Creation Modal */}
       {showCreateModal && (
         <div className="pr-modal-overlay" onClick={() => setShowCreateModal(false)}>
           <div className="pr-modal" onClick={e => e.stopPropagation()}>
