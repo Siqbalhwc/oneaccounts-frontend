@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { Plus, Edit, Trash2, X, Check } from "lucide-react"
+import { Plus, Edit, Trash2, X } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 
 interface Entity {
@@ -10,7 +10,9 @@ interface Entity {
   name: string
   is_active: boolean
   description?: string
-  code?: string   // for donors
+  code?: string
+  project_name?: string
+  location_name?: string
 }
 
 export default function ProjectsPage() {
@@ -33,30 +35,54 @@ export default function ProjectsPage() {
   const [formDesc, setFormDesc] = useState("")
   const [formCode, setFormCode] = useState("")   // for donors
   const [formActive, setFormActive] = useState(true)
+  const [formProjectId, setFormProjectId] = useState<number | null>(null)   // for activities
+  const [formLocationId, setFormLocationId] = useState<number | null>(null) // for activities
   const [saving, setSaving] = useState(false)
   const [companyId, setCompanyId] = useState<string>("")
 
-  // ── Get company ID ────────────────────────────────────────
+  const [projects, setProjects] = useState<any[]>([])
+  const [locations, setLocations] = useState<any[]>([])
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
-      const cid = (user?.app_metadata as any)?.company_id
-        || '00000000-0000-0000-0000-000000000001'
+      const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
+
+      // Load projects and locations for dropdowns
+      supabase.from("projects").select("id,name").eq("company_id", cid).order("name")
+        .then(r => r.data && setProjects(r.data))
+      supabase.from("locations").select("id,name").eq("company_id", cid).order("name")
+        .then(r => r.data && setLocations(r.data))
     })
   }, [])
 
   const fetchData = async () => {
     if (!companyId) return
     setLoading(true)
-    const table = activeTab === "projects" ? "projects" : activeTab === "locations" ? "locations" : activeTab === "activities" ? "activities" : "donors"
-    const query = supabase
-      .from(table)
-      .select("*")
-      .eq("company_id", companyId)
-      .order("name")
-
+    let query: any
+    if (activeTab === "projects") {
+      query = supabase.from("projects").select("*").eq("company_id", companyId).order("name")
+    } else if (activeTab === "locations") {
+      query = supabase.from("locations").select("*").eq("company_id", companyId).order("name")
+    } else if (activeTab === "donors") {
+      query = supabase.from("donors").select("*").eq("company_id", companyId).order("name")
+    } else { // activities
+      query = supabase.from("activities")
+        .select("*, projects(name), locations(name)")
+        .eq("company_id", companyId)
+        .order("name")
+    }
     const { data } = await query
-    setItems(data || [])
+    if (activeTab === "activities" && data) {
+      // Flatten the joined data
+      setItems(data.map((a: any) => ({
+        ...a,
+        project_name: a.projects?.name,
+        location_name: a.locations?.name,
+      })))
+    } else {
+      setItems(data || [])
+    }
     setLoading(false)
   }
 
@@ -71,6 +97,8 @@ export default function ProjectsPage() {
     setFormDesc("")
     setFormCode("")
     setFormActive(true)
+    setFormProjectId(null)
+    setFormLocationId(null)
     setShowModal(true)
   }
 
@@ -80,26 +108,33 @@ export default function ProjectsPage() {
     setFormDesc((item as any).description || "")
     setFormCode((item as any).code || "")
     setFormActive(item.is_active)
+    setFormProjectId((item as any).project_id || null)
+    setFormLocationId((item as any).location_id || null)
     setShowModal(true)
   }
 
   const handleSave = async () => {
     if (!formName.trim() || !companyId) return
+    if (activeTab === "activities" && (!formProjectId || !formLocationId)) {
+      setFlash("⚠️ Project and Location are required for activities.")
+      return
+    }
     setSaving(true)
 
-    const table = activeTab === "projects" ? "projects" : activeTab === "locations" ? "locations" : activeTab === "activities" ? "activities" : "donors"
     const payload: any = {
       company_id: companyId,
       name: formName.trim(),
       is_active: formActive,
     }
 
-    if (activeTab === "projects") {
-      payload.description = formDesc.trim()
-    } else if (activeTab === "donors") {
-      payload.code = formCode.trim() || null   // optional code
+    if (activeTab === "projects") payload.description = formDesc.trim()
+    else if (activeTab === "donors") payload.code = formCode.trim() || null
+    else if (activeTab === "activities") {
+      payload.project_id = formProjectId
+      payload.location_id = formLocationId
     }
-    // locations and activities have no extra fields
+
+    const table = activeTab === "projects" ? "projects" : activeTab === "locations" ? "locations" : activeTab === "activities" ? "activities" : "donors"
 
     if (editingItem) {
       await supabase.from(table).update(payload).eq("id", editingItem.id).eq("company_id", companyId)
@@ -133,22 +168,7 @@ export default function ProjectsPage() {
     { key: "donors", label: "Donors" },
   ]
 
-  // Dynamically adjust table grid based on active tab
-  const getTableHeaderStyle = () => {
-    if (activeTab === "donors") {
-      return { gridTemplateColumns: "1fr 80px 60px 60px 60px" } // name, code, active, edit, delete
-    }
-    return { gridTemplateColumns: "1fr 100px 60px 60px" } // name, active, edit, delete
-  }
-
-  const getEntityLabel = () => {
-    switch (activeTab) {
-      case "projects": return "Project"
-      case "locations": return "Location"
-      case "activities": return "Activity"
-      case "donors": return "Donor"
-    }
-  }
+  const getEntityLabel = () => activeTab.charAt(0).toUpperCase() + activeTab.slice(1)
 
   return (
     <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
@@ -163,8 +183,8 @@ export default function ProjectsPage() {
         .pr-tab { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid #E2E8F0; background: white; color: #475569; }
         .pr-tab.active { background: #1E3A8A; color: white; border-color: #1E3A8A; }
         .pr-table { background: white; border-radius: 10px; border: 1px solid #E2E8F0; overflow: hidden; }
-        .pr-table-header { display: grid; padding: 10px 16px; border-bottom: 2px solid #E2E8F0; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #94A3B8; align-items: center; }
-        .pr-table-row { display: grid; padding: 10px 16px; border-bottom: 1px solid #F1F5F9; align-items: center; font-size: 13px; }
+        .pr-table-header { display: grid; grid-template-columns: ${activeTab === "activities" ? "1fr 100px 100px 60px 60px 60px" : activeTab === "donors" ? "1fr 80px 60px 60px 60px" : "1fr 100px 60px 60px"}; padding: 10px 16px; border-bottom: 2px solid #E2E8F0; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #94A3B8; align-items: center; }
+        .pr-table-row { display: grid; grid-template-columns: ${activeTab === "activities" ? "1fr 100px 100px 60px 60px 60px" : activeTab === "donors" ? "1fr 80px 60px 60px 60px" : "1fr 100px 60px 60px"}; padding: 10px 16px; border-bottom: 1px solid #F1F5F9; align-items: center; font-size: 13px; }
         .pr-table-row:hover { background: #FAFBFF; }
         .pr-icon-btn { background: none; border: none; cursor: pointer; padding: 6px; border-radius: 6px; color: #94A3B8; display: inline-flex; }
         .pr-icon-btn:hover { background: #F1F5F9; color: #475569; }
@@ -204,14 +224,15 @@ export default function ProjectsPage() {
       <div style={{ marginBottom: 12 }}>
         {canEdit && (
           <button className="pr-btn pr-btn-primary" onClick={openNew}>
-            <Plus size={16} /> Add {getEntityLabel()}
+            <Plus size={16} /> Add {getEntityLabel().slice(0, -1)}
           </button>
         )}
       </div>
 
       <div className="pr-table">
-        <div className="pr-table-header" style={getTableHeaderStyle()}>
+        <div className="pr-table-header">
           <span>Name</span>
+          {activeTab === "activities" && <><span>Project</span><span>Location</span></>}
           {activeTab === "donors" && <span>Code</span>}
           <span>Active</span>
           <span></span>
@@ -220,11 +241,12 @@ export default function ProjectsPage() {
         {loading ? (
           <div className="pr-empty">Loading...</div>
         ) : items.length === 0 ? (
-          <div className="pr-empty">No {getEntityLabel().toLowerCase()}s found. Create one above.</div>
+          <div className="pr-empty">No {getEntityLabel().toLowerCase()} found. Create one above.</div>
         ) : (
           items.map((item) => (
-            <div key={item.id} className="pr-table-row" style={getTableHeaderStyle()}>
+            <div key={item.id} className="pr-table-row">
               <span style={{ fontWeight: 600 }}>{item.name}{item.description ? <span style={{ fontSize: 11, color: "#64748B", marginLeft: 8 }}>({item.description})</span> : ""}</span>
+              {activeTab === "activities" && <><span>{item.project_name}</span><span>{item.location_name}</span></>}
               {activeTab === "donors" && <span style={{ fontFamily: "monospace", fontSize: 12 }}>{(item as any).code || "—"}</span>}
               <span>{item.is_active ? "✅" : "❌"}</span>
               <button className="pr-icon-btn" onClick={() => openEdit(item)}><Edit size={14} /></button>
@@ -239,7 +261,7 @@ export default function ProjectsPage() {
         <div className="pr-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="pr-modal" onClick={e => e.stopPropagation()}>
             <div className="pr-modal-header">
-              <div className="pr-modal-title">{editingItem ? "✏️ Edit" : "➕ Add"} {getEntityLabel()}</div>
+              <div className="pr-modal-title">{editingItem ? "✏️ Edit" : "➕ Add"} {getEntityLabel().slice(0, -1)}</div>
               <button className="pr-icon-btn" onClick={() => setShowModal(false)}><X size={18} /></button>
             </div>
             <div className="pr-modal-body">
@@ -259,6 +281,24 @@ export default function ProjectsPage() {
                   <input className="pr-field-input" value={formCode} onChange={e => setFormCode(e.target.value)} placeholder="e.g., UNICEF, GIZ" />
                 </div>
               )}
+              {activeTab === "activities" && (
+                <>
+                  <div>
+                    <label className="pr-field-label">Project *</label>
+                    <select className="pr-field-input" value={formProjectId ?? ""} onChange={e => setFormProjectId(e.target.value ? Number(e.target.value) : null)}>
+                      <option value="">— Select Project —</option>
+                      {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="pr-field-label">Location *</label>
+                    <select className="pr-field-input" value={formLocationId ?? ""} onChange={e => setFormLocationId(e.target.value ? Number(e.target.value) : null)}>
+                      <option value="">— Select Location —</option>
+                      {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    </select>
+                  </div>
+                </>
+              )}
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <input type="checkbox" checked={formActive} onChange={e => setFormActive(e.target.checked)} />
                 <span style={{ fontSize: 13 }}>Active</span>
@@ -266,7 +306,7 @@ export default function ProjectsPage() {
             </div>
             <div className="pr-modal-footer">
               <button className="pr-btn pr-btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
-              <button className="pr-btn pr-btn-primary" onClick={handleSave} disabled={saving || !formName.trim()}>
+              <button className="pr-btn pr-btn-primary" onClick={handleSave} disabled={saving || !formName.trim() || (activeTab === "activities" && (!formProjectId || !formLocationId))}>
                 {saving ? "Saving..." : "💾 Save"}
               </button>
             </div>
