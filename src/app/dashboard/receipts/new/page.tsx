@@ -81,6 +81,7 @@ export default function NewReceiptPage() {
       .then(r => {
         const invs = r.data || []
         setInvoices(invs)
+        // Initialize allocations to 0 for each invoice
         const initAlloc: Record<number, number> = {}
         invs.forEach(inv => { initAlloc[inv.id] = 0 })
         setAllocations(initAlloc)
@@ -137,6 +138,21 @@ export default function NewReceiptPage() {
     setAllocations({})
   }
 
+  // ── Toggle checkbox for an invoice ───────────────
+  const toggleInvoice = (invId: number, due: number) => {
+    setAllocations(prev => {
+      const current = prev[invId] || 0
+      const newVal = current > 0 ? 0 : due   // if already allocated, set to 0; else set to full due
+      return { ...prev, [invId]: newVal }
+    })
+  }
+
+  // ── Update allocation manually ───────────────────
+  const updateAllocation = (invId: number, value: number, due: number) => {
+    const clamped = Math.min(Math.max(value, 0), due)
+    setAllocations(prev => ({ ...prev, [invId]: clamped }))
+  }
+
   const totalAllocated = Object.values(allocations).reduce((s, v) => s + v, 0)
 
   const handleSubmit = async () => {
@@ -149,13 +165,12 @@ export default function NewReceiptPage() {
     setLoading(true); setError("")
 
     try {
-      // Generate receipt number
       const receiptNo = await getNextReceiptNo()
 
       // 1. Create receipt record
       const { data: rec, error: recErr } = await supabase.from("receipts").insert({
         company_id: companyId,
-        receipt_no: receiptNo,          // ✅ NOT NULL now satisfied
+        receipt_no: receiptNo,
         date: receiptDate,
         amount: amt,
         party_id: customerId,
@@ -293,12 +308,13 @@ export default function NewReceiptPage() {
         }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
         th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8; text-align: left; padding: 8px 6px; border-bottom: 1px solid #E2E8F0; }
-        td { padding: 8px 6px; border-bottom: 1px solid #F1F5F9; }
+        td { padding: 8px 6px; border-bottom: 1px solid #F1F5F9; vertical-align: middle; }
         .alloc-input { width: 80px; height: 28px; border: 1px solid #E2E8F0; border-radius: 4px; padding: 2px 6px; text-align: right; }
         .error-box { background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; }
         .flash-box { background: #F0FDF4; border: 1px solid #BBF7D0; color: #15803D; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; }
         .inv-summary-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; }
         .inv-summary-row.bold { font-weight: 700; font-size: 14px; border-top: 2px solid #E2E8F0; padding-top: 8px; margin-top: 4px; }
+        .chk-box { width: 18px; height: 18px; cursor: pointer; accent-color: #1D4ED8; }
       `}</style>
 
       <div className="inv-shell">
@@ -316,7 +332,7 @@ export default function NewReceiptPage() {
         {flash && <div className="flash-box"><CheckCircle size={16} /> {flash}</div>}
 
         <div className="inv-grid">
-          {/* LEFT COLUMN — Customer, Bank, Date, Notes, and Allocation Table */}
+          {/* LEFT COLUMN */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="inv-card">
               <label className="inv-label">Customer *</label>
@@ -392,13 +408,14 @@ export default function NewReceiptPage() {
               </div>
             </div>
 
-            {/* Allocation Table – now in left column */}
+            {/* Allocation Table with per‑invoice checkboxes */}
             {customerId && invoices.length > 0 && (
               <div className="inv-card">
                 <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 12px 0" }}>Allocate Amount to Invoices</h3>
                 <table>
                   <thead>
                     <tr>
+                      <th style={{ width: 30 }}></th>
                       <th>Invoice #</th>
                       <th>Total</th>
                       <th>Paid</th>
@@ -409,8 +426,18 @@ export default function NewReceiptPage() {
                   <tbody>
                     {invoices.map(inv => {
                       const due = inv.total - (inv.paid || 0)
+                      const alloc = allocations[inv.id] || 0
+                      const checked = alloc > 0
                       return (
                         <tr key={inv.id}>
+                          <td>
+                            <input
+                              className="chk-box"
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleInvoice(inv.id, due)}
+                            />
+                          </td>
                           <td>{inv.invoice_no}</td>
                           <td>{inv.total.toLocaleString()}</td>
                           <td>{(inv.paid || 0).toLocaleString()}</td>
@@ -421,16 +448,17 @@ export default function NewReceiptPage() {
                               type="number"
                               min="0"
                               max={due}
-                              value={allocations[inv.id] || 0}
-                              onChange={e => {
-                                const val = Math.min(parseFloat(e.target.value) || 0, due)
-                                setAllocations({ ...allocations, [inv.id]: val })
-                              }}
+                              value={alloc}
+                              onChange={e => updateAllocation(inv.id, parseFloat(e.target.value) || 0, due)}
                             />
                           </td>
                         </tr>
                       )
                     })}
+                    <tr style={{ borderTop: "2px solid #E2E8F0", fontWeight: 700 }}>
+                      <td colSpan={5} style={{ textAlign: "right" }}>Total Allocated</td>
+                      <td style={{ textAlign: "right" }}>PKR {totalAllocated.toLocaleString()}</td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
@@ -442,7 +470,7 @@ export default function NewReceiptPage() {
             )}
           </div>
 
-          {/* RIGHT COLUMN — Summary (same as invoice form) */}
+          {/* RIGHT COLUMN — Summary */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 16 }}>
             <div className="inv-card">
               <h3 style={{ fontSize: 15, fontWeight: 700, color: "#1E293B", margin: "0 0 10px 0" }}>Summary</h3>
