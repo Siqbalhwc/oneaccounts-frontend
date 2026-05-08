@@ -15,6 +15,11 @@ export default function BudgetsPage() {
   const canEdit = role === "admin" || role === "accountant"
   const canView = role === "admin" || role === "accountant"
 
+  // ── Avoid "Access Denied" flash while role is loading ──
+  if (role === null || role === undefined) {
+    return <div style={{ padding: 40, textAlign: "center" }}>Loading permissions…</div>
+  }
+
   const [companyId, setCompanyId] = useState<string>("")
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
   const [businessType, setBusinessType] = useState<string>("")
@@ -73,14 +78,15 @@ export default function BudgetsPage() {
       .then(r => r.data && setAllActivities(r.data))
   }, [companyId, selectedProjectId])
 
-  // ── Load budgets and actuals ─────────────────────────
+  // ── Load budgets and actuals (optimised columns) ──────────
   useEffect(() => {
     if (!companyId || !selectedProjectId) { setData({}); setLoading(false); return }
     if (businessType === "ngo" && !selectedDonorId) { setData({}); setLoading(false); return }
     setLoading(true)
 
+    // Request only the columns we need – much faster
     let budgetQuery = supabase.from("budgets")
-      .select("*")
+      .select("account_id, activity_id, location_id, donor_id, budgeted_amount")
       .eq("company_id", companyId)
       .eq("fiscal_year", fiscalYear)
       .eq("project_id", selectedProjectId)
@@ -105,7 +111,7 @@ export default function BudgetsPage() {
         const newData: Record<string, Record<string, Record<string, { budget: number; actual: number }>>> = {}
 
         budgetRows?.forEach((b: any) => {
-          const { activity_id, location_id, account_id, budgeted_amount } = b
+          const { account_id, activity_id, location_id, budgeted_amount } = b
           if (!activity_id || !location_id || !account_id) return
           if (!newData[activity_id]) newData[activity_id] = {}
           if (!newData[activity_id][location_id]) newData[activity_id][location_id] = {}
@@ -179,7 +185,7 @@ export default function BudgetsPage() {
       }
     }
 
-    // Soft delete all existing budget rows for this filter combination
+    // Soft delete existing budget rows for this filter combination
     let updateQuery = supabase
       .from("budgets")
       .update({ deleted_at: new Date().toISOString() })
