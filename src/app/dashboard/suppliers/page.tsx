@@ -14,6 +14,9 @@ interface Supplier {
   address: string
   payment_terms: string
   balance: number
+  default_project_id: number | null
+  default_location_id: number | null
+  default_activity_id: number | null
 }
 
 export default function SuppliersPage() {
@@ -33,7 +36,6 @@ export default function SuppliersPage() {
   const [total, setTotal] = useState(0)
   const pageSize = 25
 
-  // Modal states
   const [showModal, setShowModal] = useState(false)
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null)
   const [form, setForm] = useState({
@@ -43,12 +45,19 @@ export default function SuppliersPage() {
     address: "",
     payment_terms: "Net 30",
     opening_balance: 0,
+    default_project_id: null as number | null,
+    default_location_id: null as number | null,
+    default_activity_id: null as number | null,
   })
   const [saving, setSaving] = useState(false)
   const [flash, setFlash] = useState("")
   const [formError, setFormError] = useState("")
 
-  // ── 1. Get real company ID ──────────────────────
+  // Master data for dropdowns
+  const [projects, setProjects] = useState<any[]>([])
+  const [locations, setLocations] = useState<any[]>([])
+  const [activities, setActivities] = useState<any[]>([])
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -57,7 +66,17 @@ export default function SuppliersPage() {
     })
   }, [])
 
-  // ── 2. Fetch suppliers ──────────────────────────
+  // Load dropdown options
+  useEffect(() => {
+    if (!companyId) return
+    supabase.from("projects").select("id, name").eq("company_id", companyId).is("deleted_at", null).order("name")
+      .then(r => r.data && setProjects(r.data))
+    supabase.from("locations").select("id, name").eq("company_id", companyId).is("deleted_at", null).order("name")
+      .then(r => r.data && setLocations(r.data))
+    supabase.from("activities").select("id, name").eq("company_id", companyId).is("deleted_at", null).order("name")
+      .then(r => r.data && setActivities(r.data))
+  }, [companyId])
+
   const fetchSuppliers = () => {
     if (!companyId) return
     setLoading(true)
@@ -83,7 +102,6 @@ export default function SuppliersPage() {
 
   useEffect(() => { fetchSuppliers() }, [companyId, search, page])
 
-  // ── Generate unique supplier code per company ────
   const getNextCode = async (): Promise<string> => {
     const { data } = await supabase
       .from("suppliers")
@@ -101,7 +119,17 @@ export default function SuppliersPage() {
 
   const openNew = () => {
     setEditingSupplier(null)
-    setForm({ name: "", phone: "", email: "", address: "", payment_terms: "Net 30", opening_balance: 0 })
+    setForm({
+      name: "",
+      phone: "",
+      email: "",
+      address: "",
+      payment_terms: "Net 30",
+      opening_balance: 0,
+      default_project_id: null,
+      default_location_id: null,
+      default_activity_id: null,
+    })
     setFormError("")
     setShowModal(true)
   }
@@ -115,6 +143,9 @@ export default function SuppliersPage() {
       address: s.address || "",
       payment_terms: s.payment_terms || "Net 30",
       opening_balance: (s as any).opening_balance || 0,
+      default_project_id: s.default_project_id || null,
+      default_location_id: s.default_location_id || null,
+      default_activity_id: s.default_activity_id || null,
     })
     setFormError("")
     setShowModal(true)
@@ -133,6 +164,9 @@ export default function SuppliersPage() {
       email: form.email.trim(),
       address: form.address.trim(),
       payment_terms: form.payment_terms,
+      default_project_id: form.default_project_id,
+      default_location_id: form.default_location_id,
+      default_activity_id: form.default_activity_id,
     }
 
     let errorMsg = ""
@@ -165,7 +199,7 @@ export default function SuppliersPage() {
     fetchSuppliers()
   }
 
-  if (!companyId) return <div style={{ padding: 40 }}>Loading company data…</div>
+  if (!companyId) return <div style={{ padding: 40 }}>Loading…</div>
   if (!canView) return <div style={{ padding: 40 }}><h2>Access Denied</h2></div>
 
   return (
@@ -248,6 +282,29 @@ export default function SuppliersPage() {
               <div><label>Address</label><input className="input" value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></div>
               <div><label>Payment Terms</label><input className="input" value={form.payment_terms} onChange={e => setForm({...form, payment_terms: e.target.value})} /></div>
               <div><label>Opening Balance</label><input className="input" type="number" value={form.opening_balance} onChange={e => setForm({...form, opening_balance: parseFloat(e.target.value) || 0})} /></div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div>
+                  <label>Default Project</label>
+                  <select className="input" value={form.default_project_id ?? ""} onChange={e => setForm({...form, default_project_id: e.target.value ? Number(e.target.value) : null})}>
+                    <option value="">— None —</option>
+                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label>Default Location</label>
+                  <select className="input" value={form.default_location_id ?? ""} onChange={e => setForm({...form, default_location_id: e.target.value ? Number(e.target.value) : null})}>
+                    <option value="">— None —</option>
+                    {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label>Default Activity</label>
+                <select className="input" value={form.default_activity_id ?? ""} onChange={e => setForm({...form, default_activity_id: e.target.value ? Number(e.target.value) : null})}>
+                  <option value="">— None —</option>
+                  {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
             </div>
             <div style={{ padding: "16px 24px", borderTop: "1px solid #E2E8F0", display: "flex", justifyContent: "flex-end", gap: 8 }}>
               <button className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>

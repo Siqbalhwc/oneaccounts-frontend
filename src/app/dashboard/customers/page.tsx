@@ -3,12 +3,14 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRole } from "@/contexts/RoleContext"
-import { Plus, Search, Edit, Trash2, X } from "lucide-react"
+import { usePlan } from "@/contexts/PlanContext"
+import { Plus, Search, Edit, Trash2, X, Send } from "lucide-react"
 
 interface Customer {
   id: number
   code: string
   name: string
+  country_code: string
   phone: string
   email: string
   address: string
@@ -17,12 +19,39 @@ interface Customer {
   balance: number
 }
 
+const COUNTRY_CODES = [
+  "+1", "+7", "+20", "+27", "+30", "+31", "+32", "+33", "+34", "+36",
+  "+39", "+40", "+41", "+43", "+44", "+45", "+46", "+47", "+48", "+49",
+  "+51", "+52", "+54", "+55", "+56", "+57", "+58", "+60", "+61", "+62",
+  "+63", "+64", "+65", "+66", "+81", "+82", "+84", "+86", "+90", "+91",
+  "+92", "+93", "+94", "+95", "+98", "+212", "+213", "+216", "+218",
+  "+220", "+221", "+222", "+223", "+224", "+225", "+226", "+227", "+228",
+  "+229", "+230", "+231", "+232", "+233", "+234", "+235", "+236", "+237",
+  "+238", "+239", "+240", "+241", "+242", "+243", "+244", "+245", "+246",
+  "+247", "+248", "+249", "+250", "+251", "+252", "+253", "+254", "+255",
+  "+256", "+257", "+258", "+260", "+261", "+262", "+263", "+264", "+265",
+  "+266", "+267", "+268", "+269", "+290", "+291", "+297", "+298", "+299",
+  "+350", "+351", "+352", "+353", "+354", "+355", "+356", "+357", "+358",
+  "+359", "+370", "+371", "+372", "+373", "+374", "+375", "+376", "+377",
+  "+378", "+379", "+380", "+381", "+382", "+383", "+385", "+386", "+387",
+  "+389", "+420", "+421", "+423", "+500", "+501", "+502", "+503", "+504",
+  "+505", "+506", "+507", "+508", "+509", "+590", "+591", "+592", "+593",
+  "+594", "+595", "+596", "+597", "+598", "+599", "+670", "+672", "+673",
+  "+674", "+675", "+676", "+677", "+678", "+679", "+680", "+681", "+682",
+  "+683", "+685", "+686", "+687", "+688", "+689", "+690", "+691", "+692",
+  "+850", "+852", "+853", "+855", "+856", "+880", "+886", "+960", "+961",
+  "+962", "+963", "+964", "+965", "+966", "+967", "+968", "+970", "+971",
+  "+972", "+973", "+974", "+975", "+976", "+977", "+992", "+993", "+994",
+  "+995", "+996", "+998"
+]
+
 export default function CustomersPage() {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
   const { role } = useRole()
+  const { hasFeature } = usePlan()
   const canEdit = role === "admin" || role === "accountant"
   const canView = role === "admin" || role === "accountant"
 
@@ -39,6 +68,7 @@ export default function CustomersPage() {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
   const [form, setForm] = useState({
     name: "",
+    country_code: "+92",
     phone: "",
     email: "",
     address: "",
@@ -47,7 +77,7 @@ export default function CustomersPage() {
   })
   const [saving, setSaving] = useState(false)
   const [flash, setFlash] = useState("")
-  const [formError, setFormError] = useState("")   // NEW – inline error inside modal
+  const [formError, setFormError] = useState("")
 
   // ── 1. Get real company ID from user metadata ────────
   useEffect(() => {
@@ -58,7 +88,7 @@ export default function CustomersPage() {
     })
   }, [])
 
-  // ── 2. Fetch customers when companyId is known ───────
+  // ── 2. Fetch customers when companyId is known ────────
   const fetchCustomers = () => {
     if (!companyId) return
     setLoading(true)
@@ -89,11 +119,21 @@ export default function CustomersPage() {
     fetchCustomers()
   }, [companyId, search, page])
 
+  // ── WhatsApp helper (feature‑gated) ─────────────
+  const getWhatsAppLink = (cust: Customer) => {
+    if (!hasFeature("whatsapp_invoice")) return ""
+    const phone = (cust.country_code || "").replace(/\D/g, "") + (cust.phone || "").replace(/\D/g, "")
+    if (!phone) return ""
+    const msg = `Dear ${cust.name},\n\nThank you for your business. Please find your invoice details attached or contact us for any queries.\n\n– OneAccounts`
+    return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
+  }
+
   // ── Open modal for new customer ──────────────────────
   const openNew = () => {
     setEditingCustomer(null)
     setForm({
       name: "",
+      country_code: "+92",
       phone: "",
       email: "",
       address: "",
@@ -109,6 +149,7 @@ export default function CustomersPage() {
     setEditingCustomer(cust)
     setForm({
       name: cust.name,
+      country_code: cust.country_code || "+92",
       phone: cust.phone || "",
       email: cust.email || "",
       address: cust.address || "",
@@ -147,6 +188,7 @@ export default function CustomersPage() {
     const payload = {
       company_id: companyId,
       name: form.name.trim(),
+      country_code: form.country_code,
       phone: form.phone.trim(),
       email: form.email.trim(),
       address: form.address.trim(),
@@ -177,9 +219,8 @@ export default function CustomersPage() {
     setSaving(false)
 
     if (errorMsg) {
-      setFormError(errorMsg)                // show inside the modal
-      setFlash("Error: " + errorMsg)        // also show in flash
-      // keep the modal open so the user can see the error
+      setFormError(errorMsg)
+      setFlash("Error: " + errorMsg)
     } else {
       setShowModal(false)
       fetchCustomers()
@@ -223,6 +264,7 @@ export default function CustomersPage() {
         .btn-primary { background: #1D4ED8; color: white; }
         .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
         .btn-danger { background: #EF4444; color: white; }
+        .btn-success { background: #25D366; color: white; }
         table { width: 100%; border-collapse: collapse; }
         th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8; text-align: left; padding: 8px 6px; border-bottom: 1px solid #E2E8F0; }
         td { padding: 10px 6px; border-bottom: 1px solid #F1F5F9; font-size: 13px; }
@@ -292,40 +334,51 @@ export default function CustomersPage() {
               <th style={{ textAlign: "right" }}>Balance</th>
               <th></th>
               <th></th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} style={{ textAlign: "center", padding: 20 }}>Loading...</td></tr>
+              <tr><td colSpan={9} style={{ textAlign: "center", padding: 20 }}>Loading...</td></tr>
             ) : customers.length === 0 ? (
-              <tr><td colSpan={8} style={{ textAlign: "center", padding: 20, color: "#94A3B8" }}>
+              <tr><td colSpan={9} style={{ textAlign: "center", padding: 20, color: "#94A3B8" }}>
                 {search ? "No matching customers found." : "No customers yet. Add your first customer above."}
               </td></tr>
             ) : (
-              customers.map((cust) => (
-                <tr key={cust.id}>
-                  <td style={{ fontWeight: 600 }}>{cust.code}</td>
-                  <td>{cust.name}</td>
-                  <td>{cust.phone}</td>
-                  <td>{cust.email || "—"}</td>
-                  <td>{cust.payment_terms}</td>
-                  <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {cust.balance?.toLocaleString()}</td>
-                  <td>
-                    {canEdit && (
-                      <button className="btn btn-outline" style={{ padding: "4px 8px" }} onClick={() => openEdit(cust)}>
-                        <Edit size={14} />
-                      </button>
-                    )}
-                  </td>
-                  <td>
-                    {canEdit && (
-                      <button className="btn btn-outline" style={{ padding: "4px 8px", color: "#EF4444", borderColor: "#FECACA" }} onClick={() => handleDelete(cust.id)}>
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))
+              customers.map((cust) => {
+                const waLink = getWhatsAppLink(cust)
+                return (
+                  <tr key={cust.id}>
+                    <td style={{ fontWeight: 600 }}>{cust.code}</td>
+                    <td>{cust.name}</td>
+                    <td>{cust.country_code} {cust.phone}</td>
+                    <td>{cust.email || "—"}</td>
+                    <td>{cust.payment_terms}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {cust.balance?.toLocaleString()}</td>
+                    <td>
+                      {waLink && (
+                        <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success" style={{ padding: "4px 8px" }}>
+                          <Send size={14} />
+                        </a>
+                      )}
+                    </td>
+                    <td>
+                      {canEdit && (
+                        <button className="btn btn-outline" style={{ padding: "4px 8px" }} onClick={() => openEdit(cust)}>
+                          <Edit size={14} />
+                        </button>
+                      )}
+                    </td>
+                    <td>
+                      {canEdit && (
+                        <button className="btn btn-outline" style={{ padding: "4px 8px", color: "#EF4444", borderColor: "#FECACA" }} onClick={() => handleDelete(cust.id)}>
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })
             )}
           </tbody>
         </table>
@@ -357,9 +410,17 @@ export default function CustomersPage() {
                 <label className="pr-field-label">Name *</label>
                 <input className="input" value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Customer name" />
               </div>
-              <div>
-                <label className="pr-field-label">Phone</label>
-                <input className="input" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} />
+              <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 10 }}>
+                <div>
+                  <label className="pr-field-label">Country Code</label>
+                  <select className="input" value={form.country_code} onChange={e => setForm({...form, country_code: e.target.value})}>
+                    {COUNTRY_CODES.map(code => <option key={code} value={code}>{code}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="pr-field-label">Phone (for WhatsApp)</label>
+                  <input className="input" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} placeholder="3001234567" />
+                </div>
               </div>
               <div>
                 <label className="pr-field-label">Email</label>
