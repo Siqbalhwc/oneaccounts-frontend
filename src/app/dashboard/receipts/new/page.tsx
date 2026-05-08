@@ -32,7 +32,7 @@ export default function NewReceiptPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  // ── 1. Get company ID & banks ──────────────────────
+  // ── 1. Get company ID ─────────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -41,13 +41,25 @@ export default function NewReceiptPage() {
     })
   }, [])
 
+  // ── 2. Load banks with linked GL account code ─────
   useEffect(() => {
     if (!companyId) return
-    supabase.from("bank_accounts").select("id, name").eq("company_id", companyId).order("name")
-      .then(r => r.data && setBanks(r.data))
+    supabase.from("bank_accounts")
+      .select("id, bank_name, accounts(code)")
+      .eq("company_id", companyId)
+      .order("bank_name")
+      .then(r => {
+        if (r.data) {
+          setBanks(r.data.map((b: any) => ({
+            id: b.id,
+            name: b.bank_name,
+            glCode: b.accounts?.code,
+          })))
+        }
+      })
   }, [companyId])
 
-  // ── 2. Load customers ──────────────────────────────
+  // ── 3. Load customers ─────────────────────────────
   useEffect(() => {
     if (!companyId) return
     supabase.from("customers")
@@ -57,7 +69,7 @@ export default function NewReceiptPage() {
       .then(r => r.data && setCustomers(r.data))
   }, [companyId])
 
-  // ── 3. Load unpaid invoices for selected customer ──
+  // ── 4. Load unpaid invoices for selected customer ──
   useEffect(() => {
     if (!companyId || !customerId) return
     supabase.from("invoices")
@@ -69,7 +81,6 @@ export default function NewReceiptPage() {
       .then(r => {
         const invs = r.data || []
         setInvoices(invs)
-        // Initialize allocations to 0 for each invoice
         const initAlloc: Record<number, number> = {}
         invs.forEach(inv => { initAlloc[inv.id] = 0 })
         setAllocations(initAlloc)
@@ -261,12 +272,14 @@ export default function NewReceiptPage() {
         </div>
       </div>
 
-      {/* Bank selection */}
+      {/* Bank selection with GL code */}
       <div className="card">
         <label className="label">Bank Account *</label>
         <select className="input" value={selectedBankId ?? ""} onChange={e => setSelectedBankId(e.target.value ? Number(e.target.value) : null)}>
           <option value="">— Select Bank —</option>
-          {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          {banks.map((b: any) => (
+            <option key={b.id} value={b.id}>{b.name}{b.glCode ? ` (${b.glCode})` : ""}</option>
+          ))}
         </select>
       </div>
 
