@@ -18,7 +18,6 @@ export default function ReceiptsListPage() {
   const [receipts, setReceipts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  // ── 1. Get real company ID ─────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -27,27 +26,49 @@ export default function ReceiptsListPage() {
     })
   }, [])
 
-  // ── 2. Fetch receipts only for this company ────────
   useEffect(() => {
     if (!companyId) return
     setLoading(true)
+
     supabase
       .from("receipts")
-      .select("id, receipt_no, date, amount, notes, party_id, bank_id, customers(name), bank_accounts(bank_name)")
+      .select("id, receipt_no, date, amount, notes, party_id, bank_id")
       .eq("company_id", companyId)
       .order("date", { ascending: false })
       .then(({ data }) => {
-        setReceipts(data || [])
-        setLoading(false)
+        if (!data || data.length === 0) {
+          setReceipts([])
+          setLoading(false)
+          return
+        }
+
+        const customerIds = [...new Set(data.map(r => r.party_id))]
+        const bankIds = [...new Set(data.map(r => r.bank_id).filter(Boolean))]
+
+        Promise.all([
+          customerIds.length > 0
+            ? supabase.from("customers").select("id, name").in("id", customerIds).eq("company_id", companyId)
+            : { data: [] },
+          bankIds.length > 0
+            ? supabase.from("bank_accounts").select("id, bank_name").in("id", bankIds).eq("company_id", companyId)
+            : { data: [] },
+        ]).then(([custRes, bankRes]) => {
+          const customerMap = new Map(custRes.data?.map((c: any) => [c.id, c.name]) || [])
+          const bankMap = new Map(bankRes.data?.map((b: any) => [b.id, b.bank_name]) || [])
+
+          const enriched = data.map(r => ({
+            ...r,
+            customer_name: customerMap.get(r.party_id) || "—",
+            bank_name: bankMap.get(r.bank_id) || "—",
+          }))
+          setReceipts(enriched)
+          setLoading(false)
+        })
       })
   }, [companyId])
 
-  if (!companyId) {
-    return <div style={{ padding: 40, textAlign: "center" }}>Loading your company data…</div>
-  }
-  if (!canView) {
-    return <div style={{ padding: 40, textAlign: "center" }}><h2>Access Denied</h2></div>
-  }
+  if (!companyId) return <div style={{ padding: 40, textAlign: "center" }}>Loading company data…</div>
+  if (!canView) return <div style={{ padding: 40, textAlign: "center" }}><h2>Access Denied</h2></div>
 
   return (
     <div style={{ padding: 24, fontFamily: "Arial", background: "#EFF4FB", minHeight: "100vh" }}>
@@ -95,8 +116,8 @@ export default function ReceiptsListPage() {
                 <tr key={r.id}>
                   <td style={{ fontWeight: 600 }}>{r.receipt_no}</td>
                   <td>{r.date}</td>
-                  <td>{r.customers?.name || "—"}</td>
-                  <td>{r.bank_accounts?.bank_name || "—"}</td>
+                  <td>{r.customer_name}</td>
+                  <td>{r.bank_name}</td>
                   <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {r.amount?.toLocaleString()}</td>
                   <td>{r.notes || "—"}</td>
                 </tr>
