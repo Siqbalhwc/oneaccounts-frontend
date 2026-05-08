@@ -4,7 +4,9 @@ import { useState, useEffect, Fragment } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRole } from "@/contexts/RoleContext"
 import * as XLSX from "xlsx"
-import { Upload } from "lucide-react"
+import { Upload, Download } from "lucide-react"
+import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
 
 export default function BudgetsPage() {
   const supabase = createBrowserClient(
@@ -14,11 +16,6 @@ export default function BudgetsPage() {
   const { role } = useRole()
   const canEdit = role === "admin" || role === "accountant"
   const canView = role === "admin" || role === "accountant"
-
-  // ── Avoid "Access Denied" flash while role is loading ──
-  if (role === null || role === undefined) {
-    return <div style={{ padding: 40, textAlign: "center" }}>Loading permissions…</div>
-  }
 
   const [companyId, setCompanyId] = useState<string>("")
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
@@ -39,7 +36,6 @@ export default function BudgetsPage() {
 
   // Data
   const [data, setData] = useState<Record<string, Record<string, Record<string, { budget: number; actual: number }>>>>({})
-
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [flash, setFlash] = useState<string>("")
@@ -78,13 +74,12 @@ export default function BudgetsPage() {
       .then(r => r.data && setAllActivities(r.data))
   }, [companyId, selectedProjectId])
 
-  // ── Load budgets and actuals (optimised columns) ──────────
+  // ── Load budgets and actuals ──────────────────────────
   useEffect(() => {
     if (!companyId || !selectedProjectId) { setData({}); setLoading(false); return }
     if (businessType === "ngo" && !selectedDonorId) { setData({}); setLoading(false); return }
     setLoading(true)
 
-    // Request only the columns we need – much faster
     let budgetQuery = supabase.from("budgets")
       .select("account_id, activity_id, location_id, donor_id, budgeted_amount")
       .eq("company_id", companyId)
@@ -185,24 +180,10 @@ export default function BudgetsPage() {
       }
     }
 
-    // Soft delete existing budget rows for this filter combination
-    let updateQuery = supabase
-      .from("budgets")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("company_id", companyId)
-      .eq("project_id", selectedProjectId)
-      .eq("fiscal_year", fiscalYear)
-      .is("month", null)
-      .is("deleted_at", null)
-
-    if (businessType === "ngo") {
-      updateQuery = updateQuery.eq("donor_id", selectedDonorId)
-    }
-    if (filterLocationId) {
-      updateQuery = updateQuery.eq("location_id", filterLocationId)
-    } else {
-      updateQuery = updateQuery.is("location_id", null)
-    }
+    let updateQuery = supabase.from("budgets").update({ deleted_at: new Date().toISOString() }).eq("company_id", companyId).eq("project_id", selectedProjectId).eq("fiscal_year", fiscalYear).is("month", null).is("deleted_at", null)
+    if (businessType === "ngo") updateQuery = updateQuery.eq("donor_id", selectedDonorId)
+    if (filterLocationId) updateQuery = updateQuery.eq("location_id", filterLocationId)
+    else updateQuery = updateQuery.is("location_id", null)
     await updateQuery
 
     if (rowsToInsert.length > 0) {
@@ -210,6 +191,79 @@ export default function BudgetsPage() {
       if (error) { setFlash("❌ Error: " + error.message); setSaving(false); return }
     }
     setFlash("✅ Budget saved!"); setSaving(false); setTimeout(() => setFlash(""), 4000)
+  }
+
+  // ── Export functions ──────────────────────────────────
+  const exportExcel = () => {
+    const rows: any[] = []
+    // Header
+    const header = ["Activity / Location", ...accounts.flatMap(acc => [`${acc.code} Budget`, `${acc.code} Actual`, `${acc.code} Var`]), "Total Budget", "Total Actual", "Total Var"]
+    // Data
+    for (const actId of Object.keys(data)) {
+      const actName = allActivities.find(a => a.id == actId)?.name || actId
+      rows.push({ type: "header", name: actName })
+      for (const locId of Object.keys(data[actId])) {
+        const locName = locations.find(l => l.id == locId)?.name || locId
+        const row: any = { "Activity / Location": locName }
+        let rowBudget = 0, rowActual = 0
+        accounts.forEach(acc => {
+          const cell = data[actId][locId]?.[acc.id] || { budget: 0, actual: 0 }
+          row[`${acc.code} Budget`] = cell.budget
+          row[`${acc.code} Actual`] = cell.actual
+          row[`${acc.code} Var`] = cell.budget - cell.actual
+          rowBudget += cell.budget
+          rowActual += cell.actual
+        })
+        row["Total Budget"] = rowBudget
+        row["Total Actual"] = rowActual
+        row["Total Var"] = rowBudget - rowActual
+        rows.push(row)
+      }
+    }
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Budget vs Actual")
+    XLSX.writeFile(wb, `budget_vs_actual_${fiscalYear}.xlsx`)
+  }
+
+  const exportPDF = () => {
+    const doc = new jsPDF()
+    doc.setFontSize(16)
+    doc.text("Budget vs Actual Report", 14, 20)
+    doc.setFontSize(10)
+    doc.text(`Project: ${projects.find(p => p.id == selectedProjectId)?.name || ""}  Fiscal Year: ${fiscalYear}`, 14, 28)
+
+    const tableData: any[] = []
+    const tableColumns = ["Activity / Location", ...accounts.map(acc => `${acc.code} Budget`), ...accounts.map(acc => `${acc.code} Actual`), ...accounts.map(acc => `${acc.code} Var`), "Total Budget", "Total Actual", "Total Var"]
+
+    for (const actId of Object.keys(data)) {
+      const actName = allActivities.find(a => a.id == actId)?.name || actId
+      tableData.push({ isHeader: true, name: actName })
+      for (const locId of Object.keys(data[actId])) {
+        const locName = locations.find(l => l.id == locId)?.name || locId
+        const row: any = { "Activity / Location": locName }
+        let rowBudget = 0, rowActual = 0
+        accounts.forEach(acc => {
+          const cell = data[actId][locId]?.[acc.id] || { budget: 0, actual: 0 }
+          row[`${acc.code} Budget`] = cell.budget
+          row[`${acc.code} Actual`] = cell.actual
+          row[`${acc.code} Var`] = cell.budget - cell.actual
+          rowBudget += cell.budget
+          rowActual += cell.actual
+        })
+        row["Total Budget"] = rowBudget
+        row["Total Actual"] = rowActual
+        row["Total Var"] = rowBudget - rowActual
+        tableData.push(row)
+      }
+    }
+
+    autoTable(doc, {
+      head: [tableColumns],
+      body: tableData.map(row => tableColumns.map(col => row[col] || (row.isHeader ? row.name : ""))),
+      startY: 35,
+    })
+    doc.save(`budget_vs_actual_${fiscalYear}.pdf`)
   }
 
   const handleBudgetImport = async () => {
@@ -256,9 +310,6 @@ export default function BudgetsPage() {
   }
 
   const displayActivities = filterActivityId ? allActivities.filter(a => a.id == filterActivityId) : allActivities
-
-  // Helper to format actual as negative
-  const fmtActual = (val: number) => (-val).toLocaleString()
 
   if (!canView) return <div style={{ padding: 24, textAlign: "center" }}><h2>Access Denied</h2></div>
 
@@ -307,6 +358,12 @@ export default function BudgetsPage() {
             <option value="">All Locations</option>
             {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
+          <button className="btn-primary" style={{ margin: 0, padding: "6px 12px", background: "#059669" }} onClick={exportExcel}>
+            <Download size={14} /> Excel
+          </button>
+          <button className="btn-primary" style={{ margin: 0, padding: "6px 12px", background: "#dc2626" }} onClick={exportPDF}>
+            <Download size={14} /> PDF
+          </button>
         </div>
 
         {flash && <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#15803D", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{flash}</div>}
@@ -337,10 +394,10 @@ export default function BudgetsPage() {
                 <tr className="sub-header">
                   {accounts.map(acc => (
                     <Fragment key={acc.id}>
-                      <th>Budget</th><th>Actual (-)</th><th>Var</th>
+                      <th>Budget</th><th>Actual</th><th>Var</th>
                     </Fragment>
                   ))}
-                  <th>Budget</th><th>Actual (-)</th><th>Var</th>
+                  <th>Budget</th><th>Actual</th><th>Var</th>
                 </tr>
               </thead>
               <tbody>
@@ -369,7 +426,7 @@ export default function BudgetsPage() {
                               const cell = actData[lid]?.[acc.id] || { budget: 0, actual: 0 }
                               rowBudget += cell.budget
                               rowActual += cell.actual
-                              const variance = cell.actual - cell.budget
+                              const variance = cell.budget - cell.actual   // ✅ Budget - Actual
                               return (
                                 <Fragment key={acc.id}>
                                   <td>
@@ -384,7 +441,7 @@ export default function BudgetsPage() {
                                       placeholder="0"
                                     />
                                   </td>
-                                  <td style={{ fontSize: 10 }}>{fmtActual(cell.actual)}</td>
+                                  <td style={{ fontSize: 10 }}>{cell.actual.toLocaleString()}</td>
                                   <td style={{ fontSize: 10, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "#64748B" }}>
                                     {variance === 0 ? "—" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
                                   </td>
@@ -392,9 +449,9 @@ export default function BudgetsPage() {
                               )
                             })}
                             <td style={{ fontWeight: 600 }}>{rowBudget.toLocaleString()}</td>
-                            <td style={{ fontWeight: 600 }}>{fmtActual(rowActual)}</td>
-                            <td style={{ fontWeight: 600, color: (rowActual - rowBudget) < 0 ? "#EF4444" : (rowActual - rowBudget) > 0 ? "#10B981" : "#64748B" }}>
-                              {(rowActual - rowBudget) === 0 ? "—" : (rowActual - rowBudget > 0 ? "+" : "") + (rowActual - rowBudget).toLocaleString()}
+                            <td style={{ fontWeight: 600 }}>{rowActual.toLocaleString()}</td>
+                            <td style={{ fontWeight: 600, color: (rowBudget - rowActual) < 0 ? "#EF4444" : (rowBudget - rowActual) > 0 ? "#10B981" : "#64748B" }}>
+                              {(rowBudget - rowActual) === 0 ? "—" : (rowBudget - rowActual > 0 ? "+" : "") + (rowBudget - rowActual).toLocaleString()}
                             </td>
                           </tr>
                         )
@@ -424,11 +481,11 @@ export default function BudgetsPage() {
                             sb += actData[lid][acc.id]?.budget || 0
                             sa += actData[lid][acc.id]?.actual || 0
                           })
-                          const sv = sa - sb
+                          const sv = sb - sa
                           return (
                             <Fragment key={acc.id}>
                               <td>{sb.toLocaleString()}</td>
-                              <td>{fmtActual(sa)}</td>
+                              <td>{sa.toLocaleString()}</td>
                               <td style={{ color: sv < 0 ? "#EF4444" : sv > 0 ? "#10B981" : "#64748B" }}>
                                 {sv === 0 ? "—" : (sv > 0 ? "+" : "") + sv.toLocaleString()}
                               </td>
@@ -436,9 +493,9 @@ export default function BudgetsPage() {
                           )
                         })}
                         <td>{actTotalBudget.toLocaleString()}</td>
-                        <td>{fmtActual(actTotalActual)}</td>
-                        <td style={{ color: (actTotalActual - actTotalBudget) < 0 ? "#EF4444" : (actTotalActual - actTotalBudget) > 0 ? "#10B981" : "#64748B" }}>
-                          {(actTotalActual - actTotalBudget) === 0 ? "—" : (actTotalActual - actTotalBudget > 0 ? "+" : "") + (actTotalActual - actTotalBudget).toLocaleString()}
+                        <td>{actTotalActual.toLocaleString()}</td>
+                        <td style={{ color: (actTotalBudget - actTotalActual) < 0 ? "#EF4444" : (actTotalBudget - actTotalActual) > 0 ? "#10B981" : "#64748B" }}>
+                          {(actTotalBudget - actTotalActual) === 0 ? "—" : (actTotalBudget - actTotalActual > 0 ? "+" : "") + (actTotalBudget - actTotalActual).toLocaleString()}
                         </td>
                       </tr>
                     </Fragment>
@@ -457,11 +514,11 @@ export default function BudgetsPage() {
                           ga += actData[lid][acc.id]?.actual || 0
                         })
                       })
-                      const gv = ga - gb
+                      const gv = gb - ga
                       return (
                         <Fragment key={acc.id}>
                           <td>{gb.toLocaleString()}</td>
-                          <td>{fmtActual(ga)}</td>
+                          <td>{ga.toLocaleString()}</td>
                           <td style={{ color: gv < 0 ? "#EF4444" : gv > 0 ? "#10B981" : "#64748B" }}>
                             {gv === 0 ? "—" : (gv > 0 ? "+" : "") + gv.toLocaleString()}
                           </td>
@@ -476,13 +533,11 @@ export default function BudgetsPage() {
                       }, 0).toLocaleString()}
                     </td>
                     <td>
-                      {fmtActual(
-                        displayActivities.reduce((sum, act) => {
-                          const ad = data[act.id] || {}
-                          Object.keys(ad).forEach(l => Object.keys(ad[l]).forEach(a => sum += ad[l][a].actual || 0))
-                          return sum
-                        }, 0)
-                      )}
+                      {displayActivities.reduce((sum, act) => {
+                        const ad = data[act.id] || {}
+                        Object.keys(ad).forEach(l => Object.keys(ad[l]).forEach(a => sum += ad[l][a].actual || 0))
+                        return sum
+                      }, 0).toLocaleString()}
                     </td>
                     <td>—</td>
                   </tr>
