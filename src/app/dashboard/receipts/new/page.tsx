@@ -132,13 +132,13 @@ export default function NewReceiptPage() {
     setLoading(true); setError("")
 
     try {
-      // 1. Create receipt record
+      // 1. Create receipt record (uses party_id and bank_id)
       const { data: rec, error: recErr } = await supabase.from("receipts").insert({
         company_id: companyId,
         date: receiptDate,
         amount: amt,
-        customer_id: customerId,
-        bank_id: selectedBankId,
+        party_id: customerId,          // ✅ correct column
+        bank_id: selectedBankId,       // ✅ correct column
         notes,
       }).select("id").single()
 
@@ -209,150 +209,232 @@ export default function NewReceiptPage() {
   if (!companyId) return <div style={{ padding: 40, textAlign: "center" }}>Loading company data…</div>
 
   return (
-    <div style={{ padding: 24, fontFamily: "Arial", background: "#EFF4FB", minHeight: "100vh" }}>
+    <div style={{ padding: "16px", background: "#F4F6FB", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <style>{`
-        .card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); margin-bottom: 12px; }
-        .label { font-size: 10px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; display: block; }
-        .input { width: 100%; height: 38px; border: 1.5px solid #E5EAF2; border-radius: 8px; padding: 0 12px; font-size: 13px; background: #FAFBFF; outline: none; box-sizing: border-box; }
-        .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-        .btn-primary { background: #1D4ED8; color: white; }
-        .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
-        .error-box { background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; }
-        .flash-box { background: #F0FDF4; border: 1px solid #BBF7D0; color: #15803D; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; }
+        .inv-shell { max-width: 1200px; margin: 0 auto; }
+        .inv-title { font-size: 18px; font-weight: 700; color: #1E293B; }
+        .inv-card {
+          background: white; border-radius: 12px;
+          border: 1px solid #E5EAF2; padding: 16px 20px;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .inv-label {
+          font-size: 10px; font-weight: 600; color: #6B7280;
+          text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block;
+        }
+        .inv-input {
+          width: 100%; height: 38px; border: 1.5px solid #E5EAF2;
+          border-radius: 8px; padding: 0 12px; font-size: 13px;
+          font-family: inherit; background: #FAFBFF; outline: none; box-sizing: border-box;
+        }
+        .inv-input:focus { border-color: #1740C8; background: white; }
+        .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .inv-btn {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 8px 14px; border-radius: 8px; font-size: 13px;
+          font-weight: 600; cursor: pointer; border: none;
+          font-family: inherit; transition: all 0.15s; white-space: nowrap;
+        }
+        .inv-btn-primary { background: linear-gradient(135deg, #1740C8, #071352); color: white; }
+        .inv-btn-outline { background: white; border: 1.5px solid #E5EAF2; color: #475569; }
+        .inv-grid {
+          display: grid; grid-template-columns: 1fr 300px;
+          gap: 16px; align-items: start;
+        }
+        @media (max-width: 900px) { .inv-grid { grid-template-columns: 1fr; } }
+        .cust-wrap { position: relative; }
+        .cust-input-row { position: relative; display: flex; align-items: center; }
+        .cust-search-icon { position: absolute; left: 10px; color: #94A3B8; pointer-events: none; }
+        .cust-clear { position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: #94A3B8; display: flex; align-items: center; padding: 4px; border-radius: 4px; }
+        .cust-clear:hover { color: #EF4444; background: #FEF2F2; }
+        .cust-dropdown {
+          position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+          background: white; border: 1.5px solid #C7D2FE; border-radius: 10px;
+          max-height: 220px; overflow-y: auto; z-index: 100;
+          box-shadow: 0 8px 24px rgba(30,58,138,0.12);
+        }
+        .cust-option {
+          padding: 8px 12px; cursor: pointer;
+          border-bottom: 1px solid #F1F5F9;
+          display: flex; justify-content: space-between; align-items: center;
+          transition: background 0.1s;
+        }
+        .cust-option:last-child { border-bottom: none; }
+        .cust-option:hover { background: #EEF2FF; }
+        .cust-option-name { font-size: 13px; font-weight: 600; color: #1E293B; }
+        .cust-option-meta { font-size: 11px; color: #94A3B8; margin-top: 2px; }
+        .cust-option-bal { font-size: 12px; font-weight: 600; color: #1E3A8A; white-space: nowrap; }
+        .cust-selected-badge {
+          display: inline-flex; align-items: center; gap: 6px;
+          background: #EEF2FF; border: 1.5px solid #C7D2FE;
+          border-radius: 8px; padding: 6px 12px; font-size: 13px;
+          font-weight: 600; color: #1E3A8A; width: 100%;
+        }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
         th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8; text-align: left; padding: 8px 6px; border-bottom: 1px solid #E2E8F0; }
         td { padding: 8px 6px; border-bottom: 1px solid #F1F5F9; }
         .alloc-input { width: 80px; height: 28px; border: 1px solid #E2E8F0; border-radius: 4px; padding: 2px 6px; text-align: right; }
+        .error-box { background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; }
+        .flash-box { background: #F0FDF4; border: 1px solid #BBF7D0; color: #15803D; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; }
       `}</style>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-        <button className="btn btn-outline" onClick={() => router.push("/dashboard/receipts")}>
-          <ArrowLeft size={16} />
-        </button>
-        <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>📥 Receive Payment</h2>
-      </div>
-
-      {error && <div className="error-box">{error}</div>}
-      {flash && <div className="flash-box"><CheckCircle size={16} /> {flash}</div>}
-
-      {/* Customer selection */}
-      <div className="card">
-        <label className="label">Customer *</label>
-        <div ref={customerRef} style={{ position: "relative" }}>
-          {selectedCustomer ? (
-            <div style={{ padding: 8, border: "1px solid #E5EAF2", borderRadius: 8, cursor: "pointer", display: "flex", justifyContent: "space-between" }} onClick={clearCustomer}>
-              <span>{selectedCustomer.code} — {selectedCustomer.name}</span>
-              <X size={14} />
-            </div>
-          ) : (
-            <>
-              <input
-                className="input"
-                placeholder="Search customer..."
-                value={customerSearch}
-                onChange={e => { setCustomerSearch(e.target.value); setShowCustomerList(true) }}
-                onFocus={() => setShowCustomerList(true)}
-                autoComplete="off"
-              />
-              {showCustomerList && (
-                <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid #E2E8F0", borderRadius: 6, maxHeight: 200, overflowY: "auto", zIndex: 10 }}>
-                  {filteredCustomers.length === 0 ? (
-                    <div style={{ padding: 8 }}>No customers found</div>
-                  ) : (
-                    filteredCustomers.map(c => (
-                      <div key={c.id} onClick={() => selectCustomer(c)} style={{ padding: 8, cursor: "pointer", borderBottom: "1px solid #F1F5F9" }}>
-                        {c.code} — {c.name}
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </>
-          )}
+      <div className="inv-shell">
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+          <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/receipts")}>
+            <ArrowLeft size={16} />
+          </button>
+          <div style={{ flex: 1 }}>
+            <div className="inv-title">📥 Receive Payment</div>
+            <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 1 }}>Record a customer receipt and allocate to invoices</div>
+          </div>
         </div>
-      </div>
 
-      {/* Bank selection with GL code */}
-      <div className="card">
-        <label className="label">Bank Account *</label>
-        <select className="input" value={selectedBankId ?? ""} onChange={e => setSelectedBankId(e.target.value ? Number(e.target.value) : null)}>
-          <option value="">— Select Bank —</option>
-          {banks.map((b: any) => (
-            <option key={b.id} value={b.id}>{b.name}{b.glCode ? ` (${b.glCode})` : ""}</option>
-          ))}
-        </select>
-      </div>
+        {error && <div className="error-box">{error}</div>}
+        {flash && <div className="flash-box"><CheckCircle size={16} /> {flash}</div>}
 
-      {/* Date */}
-      <div className="card">
-        <label className="label">Receipt Date</label>
-        <input className="input" type="date" value={receiptDate} onChange={e => setReceiptDate(e.target.value)} />
-      </div>
-
-      {/* Notes */}
-      <div className="card">
-        <label className="label">Notes</label>
-        <input className="input" value={notes} onChange={e => setNotes(e.target.value)} />
-      </div>
-
-      {/* Invoices allocation table */}
-      {customerId && invoices.length > 0 && (
-        <div className="card" style={{ overflowX: "auto" }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Allocate Amount to Invoices</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Invoice #</th>
-                <th>Date</th>
-                <th style={{ textAlign: "right" }}>Total</th>
-                <th style={{ textAlign: "right" }}>Paid</th>
-                <th style={{ textAlign: "right" }}>Due</th>
-                <th style={{ textAlign: "right" }}>Allocate</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map(inv => {
-                const due = inv.total - (inv.paid || 0)
-                return (
-                  <tr key={inv.id}>
-                    <td>{inv.invoice_no}</td>
-                    <td>{inv.date}</td>
-                    <td style={{ textAlign: "right" }}>{inv.total.toLocaleString()}</td>
-                    <td style={{ textAlign: "right" }}>{(inv.paid || 0).toLocaleString()}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>{due.toLocaleString()}</td>
-                    <td style={{ textAlign: "right" }}>
+        <div className="inv-grid">
+          {/* LEFT COLUMN — Customer, Bank, Date, Notes */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div className="inv-card">
+              <label className="inv-label">Customer *</label>
+              <div className="cust-wrap" ref={customerRef}>
+                {selectedCustomer ? (
+                  <div className="cust-selected-badge" onClick={clearCustomer}>
+                    <span>👤</span>
+                    <span style={{ flex: 1 }}>{selectedCustomer.code} — {selectedCustomer.name}</span>
+                    <span style={{ fontSize: 11, color: "#64748B" }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
+                    <button className="cust-clear" onClick={(e) => { e.stopPropagation(); clearCustomer(); }}>
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="cust-input-row">
+                      <Search size={14} className="cust-search-icon" style={{ position: "absolute", left: 10 }} />
                       <input
-                        className="alloc-input"
-                        type="number"
-                        min="0"
-                        max={due}
-                        value={allocations[inv.id] || 0}
-                        onChange={e => {
-                          const val = Math.min(parseFloat(e.target.value) || 0, due)
-                          setAllocations({ ...allocations, [inv.id]: val })
-                        }}
+                        className="inv-input"
+                        style={{ paddingLeft: 32, paddingRight: 32 }}
+                        placeholder="Search by name, code or phone..."
+                        value={customerSearch}
+                        onChange={e => { setCustomerSearch(e.target.value); setShowCustomerList(true) }}
+                        onFocus={() => setShowCustomerList(true)}
+                        autoComplete="off"
                       />
-                    </td>
-                  </tr>
-                )
-              })}
-              <tr style={{ borderTop: "2px solid #E2E8F0", fontWeight: 700 }}>
-                <td colSpan={5} style={{ textAlign: "right" }}>Total Allocated</td>
-                <td style={{ textAlign: "right" }}>PKR {totalAllocated.toLocaleString()}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
+                      {customerSearch && (
+                        <button className="cust-clear" onClick={() => setCustomerSearch("")}>
+                          <X size={13} />
+                        </button>
+                      )}
+                    </div>
+                    {showCustomerList && (
+                      <div className="cust-dropdown">
+                        {filteredCustomers.length === 0 ? (
+                          <div style={{ padding: "10px 14px", color: "#94A3B8", fontSize: 13 }}>No customers found</div>
+                        ) : (
+                          filteredCustomers.map(c => (
+                            <div key={c.id} className="cust-option" onMouseDown={() => selectCustomer(c)}>
+                              <div>
+                                <div className="cust-option-name">{c.name}</div>
+                                <div className="cust-option-meta">{c.code}{c.phone ? ` · ${c.phone}` : ""}</div>
+                              </div>
+                              <div className="cust-option-bal">PKR {(c.balance || 0).toLocaleString()}</div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
 
-      <button
-        className="btn btn-primary"
-        onClick={handleSubmit}
-        disabled={loading}
-        style={{ width: "100%", justifyContent: "center", padding: 10, marginTop: 12 }}
-      >
-        {loading ? "Posting..." : "💾 Save Payment"}
-      </button>
+              {/* Bank (with GL code) */}
+              <div style={{ marginTop: 10 }}>
+                <label className="inv-label">Bank Account *</label>
+                <select className="inv-input" value={selectedBankId ?? ""} onChange={e => setSelectedBankId(e.target.value ? Number(e.target.value) : null)}>
+                  <option value="">— Select Bank —</option>
+                  {banks.map((b: any) => (
+                    <option key={b.id} value={b.id}>{b.name}{b.glCode ? ` (${b.glCode})` : ""}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="inv-row" style={{ marginTop: 10 }}>
+                <div>
+                  <label className="inv-label">Receipt Date</label>
+                  <input className="inv-input" type="date" value={receiptDate} onChange={e => setReceiptDate(e.target.value)} />
+                </div>
+                <div>
+                  <label className="inv-label">Notes</label>
+                  <input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT COLUMN — Invoice Allocation */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 16 }}>
+            {customerId && invoices.length > 0 && (
+              <div className="inv-card">
+                <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Allocate Amount to Invoices</h3>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Invoice #</th>
+                      <th>Total</th>
+                      <th>Paid</th>
+                      <th>Due</th>
+                      <th style={{ textAlign: "right" }}>Allocate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoices.map(inv => {
+                      const due = inv.total - (inv.paid || 0)
+                      return (
+                        <tr key={inv.id}>
+                          <td>{inv.invoice_no}</td>
+                          <td>{inv.total.toLocaleString()}</td>
+                          <td>{(inv.paid || 0).toLocaleString()}</td>
+                          <td style={{ fontWeight: 600 }}>{due.toLocaleString()}</td>
+                          <td style={{ textAlign: "right" }}>
+                            <input
+                              className="alloc-input"
+                              type="number"
+                              min="0"
+                              max={due}
+                              value={allocations[inv.id] || 0}
+                              onChange={e => {
+                                const val = Math.min(parseFloat(e.target.value) || 0, due)
+                                setAllocations({ ...allocations, [inv.id]: val })
+                              }}
+                            />
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    <tr style={{ borderTop: "2px solid #E2E8F0", fontWeight: 700 }}>
+                      <td colSpan={4} style={{ textAlign: "right" }}>Total Allocated</td>
+                      <td style={{ textAlign: "right" }}>PKR {totalAllocated.toLocaleString()}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {customerId && invoices.length === 0 && (
+              <div className="inv-card" style={{ textAlign: "center", color: "#94A3B8" }}>
+                No unpaid invoices for this customer.
+              </div>
+            )}
+            <button
+              className="inv-btn inv-btn-primary"
+              onClick={handleSubmit}
+              disabled={loading}
+              style={{ justifyContent: "center", padding: 10, width: "100%" }}
+            >
+              {loading ? "Posting..." : "💾 Save Payment"}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
