@@ -5,38 +5,29 @@ import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft } from "lucide-react"
 
-interface InvoiceItem {
+interface Receipt {
   id: number
-  description: string
-  qty: number
-  unit_price: number
-  total: number
-}
-
-interface Invoice {
-  id: number
-  invoice_no: string
   date: string
-  due_date: string
-  total: number
-  paid: number
-  status: string
-  party_id: number
+  amount: number
+  customer_id: number
+  bank_id: number
+  notes: string
   customers?: { name: string; code: string }
-  items?: InvoiceItem[]
+  bank_accounts?: { name: string }
+  allocations?: { invoice_no: string; amount: number }[]
   journal_entries?: { id: number; entry_no: string; date: string }[]
 }
 
-export default function InvoiceDetailPage() {
+export default function ReceiptDetailPage() {
   const router = useRouter()
   const params = useParams()
-  const invoiceId = params?.id as string
+  const receiptId = params?.id as string
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  const [invoice, setInvoice] = useState<Invoice | null>(null)
+  const [receipt, setReceipt] = useState<Receipt | null>(null)
   const [loading, setLoading] = useState(true)
   const [companyId, setCompanyId] = useState<string>("")
 
@@ -49,34 +40,37 @@ export default function InvoiceDetailPage() {
   }, [])
 
   useEffect(() => {
-    if (!companyId || !invoiceId) return
+    if (!companyId || !receiptId) return
     supabase
-      .from("invoices")
-      .select("*, customers(name, code)")
-      .eq("id", invoiceId)
+      .from("receipts")
+      .select("*, customers(name, code), bank_accounts(name)")
+      .eq("id", receiptId)
       .eq("company_id", companyId)
       .single()
       .then(({ data }) => {
         if (data) {
-          const inv: Invoice = data
-          // Fetch items
+          const rec: Receipt = data
+          // Fetch allocations with invoice numbers
           supabase
-            .from("invoice_items")
-            .select("*")
-            .eq("invoice_id", inv.id)
+            .from("payment_allocations")
+            .select("amount, invoices(invoice_no)")
+            .eq("receipt_id", rec.id)
             .eq("company_id", companyId)
-            .then(({ data: items }) => {
-              inv.items = items || []
-              // Fetch linked journal entries (by searching description)
+            .then(({ data: allocs }) => {
+              rec.allocations = allocs?.map((a: any) => ({
+                invoice_no: a.invoices?.invoice_no,
+                amount: a.amount,
+              })) || []
+              // Fetch related journal entries
               supabase
                 .from("journal_entries")
                 .select("id, entry_no, date")
                 .eq("company_id", companyId)
-                .like("description", `%${inv.invoice_no}%`)
+                .like("description", `%${rec.id}%`)   // entry_no contains JE-REC-xxxx
                 .order("date", { ascending: false })
                 .then(({ data: entries }) => {
-                  inv.journal_entries = entries || []
-                  setInvoice(inv)
+                  rec.journal_entries = entries || []
+                  setReceipt(rec)
                   setLoading(false)
                 })
             })
@@ -84,12 +78,10 @@ export default function InvoiceDetailPage() {
           setLoading(false)
         }
       })
-  }, [companyId, invoiceId])
+  }, [companyId, receiptId])
 
   if (loading) return <div style={{ padding: 24, textAlign: "center" }}>Loading…</div>
-  if (!invoice) return <div style={{ padding: 24, textAlign: "center" }}>Invoice not found</div>
-
-  const balanceDue = invoice.total - (invoice.paid || 0)
+  if (!receipt) return <div style={{ padding: 24, textAlign: "center" }}>Receipt not found</div>
 
   return (
     <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
@@ -105,43 +97,35 @@ export default function InvoiceDetailPage() {
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        <button className="btn btn-outline" onClick={() => router.push("/dashboard/invoices")}>
+        <button className="btn btn-outline" onClick={() => router.push("/dashboard/receipts")}>
           <ArrowLeft size={16} />
         </button>
-        <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>Invoice #{invoice.invoice_no}</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>Receipt #{receipt.id}</h1>
       </div>
 
-      {/* Info card */}
       <div className="card">
-        <div className="row"><span className="label">Date</span><span className="value">{invoice.date}</span></div>
-        <div className="row"><span className="label">Due Date</span><span className="value">{invoice.due_date}</span></div>
-        <div className="row"><span className="label">Customer</span><span className="value">{invoice.customers?.code} – {invoice.customers?.name}</span></div>
-        <div className="row"><span className="label">Total</span><span className="value">PKR {invoice.total?.toLocaleString()}</span></div>
-        <div className="row"><span className="label">Paid</span><span className="value">PKR {invoice.paid?.toLocaleString()}</span></div>
-        <div className="row"><span className="label">Due</span><span className="value">PKR {balanceDue.toLocaleString()}</span></div>
-        <div className="row"><span className="label">Status</span><span className="value">{invoice.status}</span></div>
+        <div className="row"><span className="label">Date</span><span className="value">{receipt.date}</span></div>
+        <div className="row"><span className="label">Customer</span><span className="value">{receipt.customers?.code} – {receipt.customers?.name}</span></div>
+        <div className="row"><span className="label">Bank</span><span className="value">{receipt.bank_accounts?.name}</span></div>
+        <div className="row"><span className="label">Amount</span><span className="value">PKR {receipt.amount?.toLocaleString()}</span></div>
+        <div className="row"><span className="label">Notes</span><span className="value">{receipt.notes || "—"}</span></div>
       </div>
 
-      {/* Items */}
-      {invoice.items && invoice.items.length > 0 && (
+      {receipt.allocations && receipt.allocations.length > 0 && (
         <div className="card">
-          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700 }}>Items</h3>
+          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700 }}>Applied to Invoices</h3>
           <table>
             <thead>
               <tr>
-                <th>Description</th>
-                <th style={{ textAlign: "center" }}>Qty</th>
-                <th style={{ textAlign: "right" }}>Unit Price</th>
-                <th style={{ textAlign: "right" }}>Total</th>
+                <th>Invoice #</th>
+                <th style={{ textAlign: "right" }}>Amount</th>
               </tr>
             </thead>
             <tbody>
-              {invoice.items.map(item => (
-                <tr key={item.id}>
-                  <td>{item.description}</td>
-                  <td style={{ textAlign: "center" }}>{item.qty}</td>
-                  <td style={{ textAlign: "right" }}>{item.unit_price?.toLocaleString()}</td>
-                  <td style={{ textAlign: "right" }}>{item.total?.toLocaleString()}</td>
+              {receipt.allocations.map((alloc, idx) => (
+                <tr key={idx}>
+                  <td>{alloc.invoice_no}</td>
+                  <td style={{ textAlign: "right" }}>{alloc.amount.toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -149,8 +133,7 @@ export default function InvoiceDetailPage() {
         </div>
       )}
 
-      {/* Journal entries */}
-      {invoice.journal_entries && invoice.journal_entries.length > 0 && (
+      {receipt.journal_entries && receipt.journal_entries.length > 0 && (
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700 }}>Related Journal Entries</h3>
           <table>
@@ -161,7 +144,7 @@ export default function InvoiceDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {invoice.journal_entries.map(entry => (
+              {receipt.journal_entries.map(entry => (
                 <tr key={entry.id}>
                   <td>{entry.entry_no}</td>
                   <td>{entry.date}</td>

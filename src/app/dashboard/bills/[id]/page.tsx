@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft } from "lucide-react"
 
-interface InvoiceItem {
+interface BillItem {
   id: number
   description: string
   qty: number
@@ -13,7 +13,7 @@ interface InvoiceItem {
   total: number
 }
 
-interface Invoice {
+interface PurchaseBill {
   id: number
   invoice_no: string
   date: string
@@ -22,21 +22,21 @@ interface Invoice {
   paid: number
   status: string
   party_id: number
-  customers?: { name: string; code: string }
-  items?: InvoiceItem[]
+  suppliers?: { name: string; code: string }
+  items?: BillItem[]
   journal_entries?: { id: number; entry_no: string; date: string }[]
 }
 
-export default function InvoiceDetailPage() {
+export default function BillDetailPage() {
   const router = useRouter()
   const params = useParams()
-  const invoiceId = params?.id as string
+  const billId = params?.id as string
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  const [invoice, setInvoice] = useState<Invoice | null>(null)
+  const [bill, setBill] = useState<PurchaseBill | null>(null)
   const [loading, setLoading] = useState(true)
   const [companyId, setCompanyId] = useState<string>("")
 
@@ -49,34 +49,32 @@ export default function InvoiceDetailPage() {
   }, [])
 
   useEffect(() => {
-    if (!companyId || !invoiceId) return
+    if (!companyId || !billId) return
     supabase
-      .from("invoices")
-      .select("*, customers(name, code)")
-      .eq("id", invoiceId)
+      .from("invoices")           // bills are stored in invoices table with type='purchase'
+      .select("*, suppliers(name, code)")
+      .eq("id", billId)
       .eq("company_id", companyId)
       .single()
       .then(({ data }) => {
         if (data) {
-          const inv: Invoice = data
-          // Fetch items
+          const b: PurchaseBill = data
           supabase
             .from("invoice_items")
             .select("*")
-            .eq("invoice_id", inv.id)
+            .eq("invoice_id", b.id)
             .eq("company_id", companyId)
             .then(({ data: items }) => {
-              inv.items = items || []
-              // Fetch linked journal entries (by searching description)
+              b.items = items || []
               supabase
                 .from("journal_entries")
                 .select("id, entry_no, date")
                 .eq("company_id", companyId)
-                .like("description", `%${inv.invoice_no}%`)
+                .like("description", `%${b.invoice_no}%`)
                 .order("date", { ascending: false })
                 .then(({ data: entries }) => {
-                  inv.journal_entries = entries || []
-                  setInvoice(inv)
+                  b.journal_entries = entries || []
+                  setBill(b)
                   setLoading(false)
                 })
             })
@@ -84,12 +82,12 @@ export default function InvoiceDetailPage() {
           setLoading(false)
         }
       })
-  }, [companyId, invoiceId])
+  }, [companyId, billId])
 
   if (loading) return <div style={{ padding: 24, textAlign: "center" }}>Loading…</div>
-  if (!invoice) return <div style={{ padding: 24, textAlign: "center" }}>Invoice not found</div>
+  if (!bill) return <div style={{ padding: 24, textAlign: "center" }}>Bill not found</div>
 
-  const balanceDue = invoice.total - (invoice.paid || 0)
+  const balanceDue = bill.total - (bill.paid || 0)
 
   return (
     <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
@@ -105,25 +103,23 @@ export default function InvoiceDetailPage() {
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        <button className="btn btn-outline" onClick={() => router.push("/dashboard/invoices")}>
+        <button className="btn btn-outline" onClick={() => router.push("/dashboard/bills")}>
           <ArrowLeft size={16} />
         </button>
-        <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>Invoice #{invoice.invoice_no}</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>Bill #{bill.invoice_no}</h1>
       </div>
 
-      {/* Info card */}
       <div className="card">
-        <div className="row"><span className="label">Date</span><span className="value">{invoice.date}</span></div>
-        <div className="row"><span className="label">Due Date</span><span className="value">{invoice.due_date}</span></div>
-        <div className="row"><span className="label">Customer</span><span className="value">{invoice.customers?.code} – {invoice.customers?.name}</span></div>
-        <div className="row"><span className="label">Total</span><span className="value">PKR {invoice.total?.toLocaleString()}</span></div>
-        <div className="row"><span className="label">Paid</span><span className="value">PKR {invoice.paid?.toLocaleString()}</span></div>
+        <div className="row"><span className="label">Date</span><span className="value">{bill.date}</span></div>
+        <div className="row"><span className="label">Due Date</span><span className="value">{bill.due_date}</span></div>
+        <div className="row"><span className="label">Supplier</span><span className="value">{bill.suppliers?.code} – {bill.suppliers?.name}</span></div>
+        <div className="row"><span className="label">Total</span><span className="value">PKR {bill.total?.toLocaleString()}</span></div>
+        <div className="row"><span className="label">Paid</span><span className="value">PKR {bill.paid?.toLocaleString()}</span></div>
         <div className="row"><span className="label">Due</span><span className="value">PKR {balanceDue.toLocaleString()}</span></div>
-        <div className="row"><span className="label">Status</span><span className="value">{invoice.status}</span></div>
+        <div className="row"><span className="label">Status</span><span className="value">{bill.status}</span></div>
       </div>
 
-      {/* Items */}
-      {invoice.items && invoice.items.length > 0 && (
+      {bill.items && bill.items.length > 0 && (
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700 }}>Items</h3>
           <table>
@@ -136,7 +132,7 @@ export default function InvoiceDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {invoice.items.map(item => (
+              {bill.items.map(item => (
                 <tr key={item.id}>
                   <td>{item.description}</td>
                   <td style={{ textAlign: "center" }}>{item.qty}</td>
@@ -149,8 +145,7 @@ export default function InvoiceDetailPage() {
         </div>
       )}
 
-      {/* Journal entries */}
-      {invoice.journal_entries && invoice.journal_entries.length > 0 && (
+      {bill.journal_entries && bill.journal_entries.length > 0 && (
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700 }}>Related Journal Entries</h3>
           <table>
@@ -161,7 +156,7 @@ export default function InvoiceDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {invoice.journal_entries.map(entry => (
+              {bill.journal_entries.map(entry => (
                 <tr key={entry.id}>
                   <td>{entry.entry_no}</td>
                   <td>{entry.date}</td>
