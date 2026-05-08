@@ -14,6 +14,7 @@ export default function SignupPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [companyName, setCompanyName] = useState("")
+  const [businessType, setBusinessType] = useState("ngo")   // default: NGO
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState("")
 
@@ -34,7 +35,6 @@ export default function SignupPage() {
       return
     }
 
-    // If email confirmation is required, inform the user
     if (!authData.session) {
       setErrorMsg(
         "✅ Account created! Please check your email to confirm, then sign in to create your company."
@@ -43,12 +43,12 @@ export default function SignupPage() {
       return
     }
 
-    // 2. User is logged in – create the company via trial API
+    // 2. Create company via trial API, including business_type
     try {
       const res = await fetch("/api/trial/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyName }),
+        body: JSON.stringify({ companyName, businessType }),
       })
       const data = await res.json()
       if (!data.success) {
@@ -57,7 +57,7 @@ export default function SignupPage() {
         return
       }
 
-      // 3. ✨ Force a session refresh so the JWT picks up the new company_id
+      // 3. Refresh session
       await supabase.auth.refreshSession()
 
       // 4. Redirect to dashboard
@@ -131,6 +131,29 @@ export default function SignupPage() {
               boxSizing: "border-box",
             }}
           />
+
+          {/* Business Type Selector */}
+          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>
+            Business Type
+          </label>
+          <select
+            value={businessType}
+            onChange={(e) => setBusinessType(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "8px 12px",
+              border: "1px solid #E2E8F0",
+              borderRadius: 6,
+              fontSize: 13,
+              marginBottom: 12,
+              boxSizing: "border-box",
+              background: "white",
+            }}
+          >
+            <option value="ngo">NGO</option>
+            <option value="service">Service Business</option>
+            <option value="trading">Trading Business</option>
+          </select>
 
           <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>
             Email

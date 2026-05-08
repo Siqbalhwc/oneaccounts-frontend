@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { companyName } = await request.json()
+  const { companyName, businessType } = await request.json()
   if (!companyName?.trim()) {
     return NextResponse.json({ error: 'Company name is required' }, { status: 400 })
   }
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Professional plan not found' }, { status: 500 })
   }
 
-  // Create company with 14‑day trial
+  // Create company with 14‑day trial and business type
   const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
   const { data: company, error: companyError } = await supabaseAdmin
     .from('companies')
@@ -49,6 +49,7 @@ export async function POST(request: Request) {
       plan_id: plan.id,
       trial_ends_at: trialEnd,
       is_trial: true,
+      business_type: businessType || 'ngo',   // ✅ new field
     })
     .select('id')
     .single()
@@ -60,13 +61,14 @@ export async function POST(request: Request) {
     )
   }
 
-  // Seed accounts with the new safe function (pass user ID)
+  // Seed accounts with business type awareness
   await supabaseAdmin.rpc('seed_accounts_for_company', {
     target_company_id: company.id,
     actor_user_id: user.id,
+    business_type: businessType || 'ngo',
   })
 
-  // Upsert admin role and mark as active
+  // Upsert admin role
   await supabaseAdmin.from('user_roles')
     .update({ is_active: false })
     .eq('user_id', user.id)
