@@ -18,6 +18,9 @@ export default function InvoicesListPage() {
   const [invoices, setInvoices] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const pageSize = 20
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -33,58 +36,87 @@ export default function InvoicesListPage() {
 
     let query = supabase
       .from("invoices")
-      .select("id, invoice_no, party_id, date, due_date, total, status")
+      .select("id, invoice_no, party_id, date, due_date, total, status", { count: "exact" })
       .eq("company_id", companyId)
       .order("date", { ascending: false })
+      .range((page - 1) * pageSize, page * pageSize - 1)
 
     if (search.trim()) {
       query = query.or(`invoice_no.ilike.%${search}%`)
     }
 
-    query.then(({ data }) => {
+    query.then(({ data, count }) => {
       setInvoices(data || [])
+      setTotal(count || 0)
       setLoading(false)
     })
-  }, [companyId, search])
+  }, [companyId, search, page])
 
-  if (!companyId) return <div style={{ padding: 40 }}>Loading…</div>
-  if (!canView) return <div style={{ padding: 40 }}><h2>Access Denied</h2></div>
+  if (!companyId) return <div style={{ padding: 40, textAlign: "center" }}>Loading company data…</div>
+  if (!canView) return <div style={{ padding: 40, textAlign: "center" }}><h2>Access Denied</h2></div>
 
   return (
     <div style={{ padding: 24, fontFamily: "Arial", background: "#EFF4FB", minHeight: "100vh" }}>
-      <h2>📄 Invoices</h2>
-      <button onClick={() => router.push("/dashboard/invoices/new")} style={{ marginBottom: 12 }}>+ New Invoice</button>
-      <input
-        style={{ width: "100%", padding: 8, marginBottom: 12, borderRadius: 6, border: "1px solid #ccc" }}
-        placeholder="Search by invoice number..."
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-      />
-      {loading ? <p>Loading...</p> : (
-        <table style={{ width: "100%", borderCollapse: "collapse", background: "white" }}>
+      <style>{`
+        .card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+        .input { width: 100%; height: 38px; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0 12px; font-size: 13px; box-sizing: border-box; }
+        .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-primary { background: #1D4ED8; color: white; }
+        table { width: 100%; border-collapse: collapse; }
+        th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8; text-align: left; padding: 10px 6px; border-bottom: 1px solid #E2E8F0; }
+        td { padding: 10px 6px; border-bottom: 1px solid #F1F5F9; font-size: 13px; }
+        tr:hover td { background: #FAFBFF; }
+        .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; font-size: 13px; }
+      `}</style>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <div>
+          <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>📄 Invoices</h2>
+          <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>All sales invoices for your company</p>
+        </div>
+        <button className="btn btn-primary" onClick={() => router.push("/dashboard/invoices/new")}>
+          + New Invoice
+        </button>
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <input
+          className="input"
+          placeholder="Search by invoice number..."
+          value={search}
+          onChange={e => { setSearch(e.target.value); setPage(1) }}
+        />
+      </div>
+
+      <div className="card" style={{ overflowX: "auto" }}>
+        <table>
           <thead>
-            <tr style={{ background: "#F1F5F9" }}>
-              <th style={{ padding: 8 }}>Invoice No.</th>
-              <th style={{ padding: 8 }}>Date</th>
-              <th style={{ padding: 8 }}>Due Date</th>
-              <th style={{ padding: 8 }}>Total</th>
-              <th style={{ padding: 8 }}>Status</th>
-              <th style={{ padding: 8 }}>View</th>
+            <tr>
+              <th>Invoice No.</th>
+              <th>Date</th>
+              <th>Due Date</th>
+              <th>Total</th>
+              <th>Status</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
-            {invoices.length === 0 ? (
-              <tr><td colSpan={6} style={{ textAlign: "center", padding: 20 }}>No invoices yet.</td></tr>
+            {loading ? (
+              <tr><td colSpan={6} style={{ textAlign: "center", padding: 20 }}>Loading...</td></tr>
+            ) : invoices.length === 0 ? (
+              <tr><td colSpan={6} style={{ textAlign: "center", padding: 20, color: "#94A3B8" }}>
+                {search ? "No matching invoices found." : "No invoices yet. Create your first invoice above."}
+              </td></tr>
             ) : (
               invoices.map(inv => (
                 <tr key={inv.id}>
-                  <td>{inv.invoice_no}</td>
+                  <td style={{ fontWeight: 600 }}>{inv.invoice_no}</td>
                   <td>{inv.date}</td>
                   <td>{inv.due_date}</td>
-                  <td>PKR {inv.total?.toLocaleString()}</td>
+                  <td style={{ fontWeight: 600 }}>PKR {inv.total?.toLocaleString()}</td>
                   <td>{inv.status}</td>
                   <td>
-                    <button onClick={() => router.push(`/dashboard/invoices/${inv.id}`)} style={{ padding: "4px 8px", cursor: "pointer" }}>
+                    <button className="btn" style={{ padding: "4px 8px", background: "#F1F5F9" }} onClick={() => router.push(`/dashboard/invoices/${inv.id}`)}>
                       View
                     </button>
                   </td>
@@ -93,6 +125,16 @@ export default function InvoicesListPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {total > pageSize && (
+        <div className="pagination">
+          <span>Showing {Math.min(pageSize, total - (page-1)*pageSize)} of {total}</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-outline" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</button>
+            <button className="btn btn-outline" disabled={page * pageSize >= total} onClick={() => setPage(p => p + 1)}>Next</button>
+          </div>
+        </div>
       )}
     </div>
   )

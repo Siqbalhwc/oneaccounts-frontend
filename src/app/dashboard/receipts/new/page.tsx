@@ -20,16 +20,19 @@ export default function NewReceiptPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
   const customerRef = useRef<HTMLDivElement>(null)
 
+  const [banks, setBanks] = useState<any[]>([])
+  const [selectedBankId, setSelectedBankId] = useState<number | null>(null)
+
   const [invoices, setInvoices] = useState<any[]>([])
-  const [selectedInvoiceId, setSelectedInvoiceId] = useState<number | null>(null)
+  const [allocations, setAllocations] = useState<Record<number, number>>({})
 
   const [receiptDate, setReceiptDate] = useState(new Date().toISOString().split("T")[0])
-  const [amount, setAmount] = useState<number | "">("")       // ✅ no default 0
   const [notes, setNotes] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
+  // ── 1. Get company ID & banks ──────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -40,24 +43,40 @@ export default function NewReceiptPage() {
 
   useEffect(() => {
     if (!companyId) return
+    supabase.from("bank_accounts").select("id, name").eq("company_id", companyId).order("name")
+      .then(r => r.data && setBanks(r.data))
+  }, [companyId])
+
+  // ── 2. Load customers ──────────────────────────────
+  useEffect(() => {
+    if (!companyId) return
     supabase.from("customers")
-      .select("id,code,name,phone,balance")
+      .select("id, code, name, phone, balance")
       .eq("company_id", companyId)
       .order("name")
       .then(r => r.data && setCustomers(r.data))
   }, [companyId])
 
+  // ── 3. Load unpaid invoices for selected customer ──
   useEffect(() => {
     if (!companyId || !customerId) return
     supabase.from("invoices")
-      .select("id,invoice_no,date,total,paid")
+      .select("id, invoice_no, date, due_date, total, paid")
       .eq("company_id", companyId)
       .eq("party_id", customerId)
       .eq("status", "Unpaid")
       .order("date")
-      .then(r => setInvoices(r.data || []))
+      .then(r => {
+        const invs = r.data || []
+        setInvoices(invs)
+        // Initialize allocations to 0 for each invoice
+        const initAlloc: Record<number, number> = {}
+        invs.forEach(inv => { initAlloc[inv.id] = 0 })
+        setAllocations(initAlloc)
+      })
   }, [companyId, customerId])
 
+  // ── Close customer dropdown on outside click ──────
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (customerRef.current && !customerRef.current.contains(e.target as Node)) {
@@ -79,7 +98,6 @@ export default function NewReceiptPage() {
     setSelectedCustomer(c)
     setCustomerSearch(c.name)
     setShowCustomerList(false)
-    setSelectedInvoiceId(null)
   }
 
   const clearCustomer = () => {
@@ -87,46 +105,92 @@ export default function NewReceiptPage() {
     setSelectedCustomer(null)
     setCustomerSearch("")
     setShowCustomerList(true)
-    setSelectedInvoiceId(null)
+    setInvoices([])
+    setAllocations({})
   }
 
+  const totalAllocated = Object.values(allocations).reduce((s, v) => s + v, 0)
+
   const handleSubmit = async () => {
-    const amt = Number(amount)
+    const amt = totalAllocated
     if (!companyId) { setError("Company not loaded yet."); return }
     if (!customerId) { setError("Please select a customer"); return }
-    if (amt <= 0) { setError("Enter a valid receipt amount"); return }
+    if (!selectedBankId) { setError("Please select a bank account"); return }
+    if (amt <= 0) { setError("Allocate at least PKR 1 to invoices"); return }
 
     setLoading(true); setError("")
 
     try {
-      const res = await fetch("/api/receipts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customer_id: customerId,
-          invoice_id: selectedInvoiceId,
-          date: receiptDate,
-          amount: amt,
-          notes,
-        }),
-      })
-      const result = await res.json()
-      if (!result.success) {
-        setError(result.error || "Failed to create receipt")
-        setLoading(false)
-        return
+      // 1. Create receipt record
+      const { data: rec, error: recErr } = await supabase.from("receipts").insert({
+        company_id: companyId,
+        date: receiptDate,
+        amount: amt,
+        customer_id: customerId,
+        bank_id: selectedBankId,
+        notes,
+      }).select("id").single()
+
+      if (recErr || !rec) throw new Error(recErr?.message || "Receipt creation failed")
+
+      // 2. Insert payment allocations & update invoice.paid
+      for (const [invId, allocAmt] of Object.entries(allocations)) {
+        if (allocAmt <= 0) continue
+        const inv = invoices.find(i => i.id === parseInt(invId))
+        if (!inv) continue
+
+        await supabase.from("payment_allocations").insert({
+          company_id: companyId,
+          receipt_id: rec.id,
+          invoice_id: parseInt(invId),
+          amount: allocAmt,
+        })
+
+        const newPaid = (inv.paid || 0) + allocAmt
+        const newStatus = newPaid >= inv.total ? "Paid" : "Partial"
+        await supabase.from("invoices").update({
+          paid: newPaid,
+          status: newStatus,
+        }).eq("id", inv.id).eq("company_id", companyId)
       }
-      setFlash("✅ Receipt saved!")
+
+      // 3. Update customer balance (reduce by receipt amount)
+      if (selectedCustomer) {
+        const newCustBal = (selectedCustomer.balance || 0) - amt
+        await supabase.from("customers").update({ balance: newCustBal }).eq("id", customerId).eq("company_id", companyId)
+      }
+
+      // 4. Post journal entry (DR Bank, CR Accounts Receivable)
+      const arAcc = await supabase.from("accounts").select("id").eq("code", "1100").eq("company_id", companyId).single()
+      const bankAcc = await supabase.from("accounts").select("id").eq("id", selectedBankId).eq("company_id", companyId).single()
+      if (arAcc.data && bankAcc.data) {
+        const { data: entry } = await supabase.from("journal_entries").insert({
+          company_id: companyId,
+          entry_no: `JE-REC-${String(rec.id).padStart(4, "0")}`,
+          date: receiptDate,
+          description: `Customer Receipt - ${selectedCustomer?.name}`,
+        }).select("id").single()
+
+        if (entry) {
+          await supabase.from("journal_lines").insert([
+            { company_id: companyId, entry_id: entry.id, account_id: bankAcc.data.id, debit: amt, credit: 0 },
+            { company_id: companyId, entry_id: entry.id, account_id: arAcc.data.id, debit: 0, credit: amt },
+          ])
+        }
+      }
+
+      setFlash("✅ Receipt saved & invoices updated!")
       setCustomerId(null)
       setSelectedCustomer(null)
       setCustomerSearch("")
-      setSelectedInvoiceId(null)
-      setAmount("")
+      setSelectedBankId(null)
+      setInvoices([])
+      setAllocations({})
       setNotes("")
       setLoading(false)
       setTimeout(() => setFlash(null), 4000)
-    } catch (e) {
-      setError("Network error")
+    } catch (e: any) {
+      setError(e.message || "Posting failed")
       setLoading(false)
     }
   }
@@ -138,23 +202,29 @@ export default function NewReceiptPage() {
       <style>{`
         .card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); margin-bottom: 12px; }
         .label { font-size: 10px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; display: block; }
-        .input { width: 100%; height: 38px; border: 1.5px solid #E5EAF2; border-radius: 8px; padding: 0 12px; font-size: 13px; font-family: inherit; background: #FAFBFF; outline: none; box-sizing: border-box; }
+        .input { width: 100%; height: 38px; border: 1.5px solid #E5EAF2; border-radius: 8px; padding: 0 12px; font-size: 13px; background: #FAFBFF; outline: none; box-sizing: border-box; }
         .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
         .btn-primary { background: #1D4ED8; color: white; }
+        .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
         .error-box { background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; }
         .flash-box { background: #F0FDF4; border: 1px solid #BBF7D0; color: #15803D; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8; text-align: left; padding: 8px 6px; border-bottom: 1px solid #E2E8F0; }
+        td { padding: 8px 6px; border-bottom: 1px solid #F1F5F9; }
+        .alloc-input { width: 80px; height: 28px; border: 1px solid #E2E8F0; border-radius: 4px; padding: 2px 6px; text-align: right; }
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-        <button className="btn" onClick={() => router.push("/dashboard/receipts")} style={{ background: "white", border: "1px solid #E2E8F0" }}>
+        <button className="btn btn-outline" onClick={() => router.push("/dashboard/receipts")}>
           <ArrowLeft size={16} />
         </button>
-        <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>📥 New Receipt</h2>
+        <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>📥 Receive Payment</h2>
       </div>
 
       {error && <div className="error-box">{error}</div>}
       {flash && <div className="flash-box"><CheckCircle size={16} /> {flash}</div>}
 
+      {/* Customer selection */}
       <div className="card">
         <label className="label">Customer *</label>
         <div ref={customerRef} style={{ position: "relative" }}>
@@ -191,35 +261,84 @@ export default function NewReceiptPage() {
         </div>
       </div>
 
-      {customerId && (
-        <div className="card">
-          <label className="label">Invoice (optional)</label>
-          <select className="input" value={selectedInvoiceId ?? ""} onChange={e => setSelectedInvoiceId(e.target.value ? Number(e.target.value) : null)}>
-            <option value="">-- No specific invoice --</option>
-            {invoices.map(inv => (
-              <option key={inv.id} value={inv.id}>{inv.invoice_no} — PKR {inv.total.toLocaleString()} (Paid: PKR {inv.paid?.toLocaleString() || 0})</option>
-            ))}
-          </select>
-        </div>
-      )}
-
+      {/* Bank selection */}
       <div className="card">
-        <label className="label">Amount *</label>
-        <input className="input" type="number" value={amount} onChange={e => setAmount(e.target.value ? Number(e.target.value) : "")} placeholder="0" />
+        <label className="label">Bank Account *</label>
+        <select className="input" value={selectedBankId ?? ""} onChange={e => setSelectedBankId(e.target.value ? Number(e.target.value) : null)}>
+          <option value="">— Select Bank —</option>
+          {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </select>
       </div>
 
+      {/* Date */}
       <div className="card">
-        <label className="label">Date</label>
+        <label className="label">Receipt Date</label>
         <input className="input" type="date" value={receiptDate} onChange={e => setReceiptDate(e.target.value)} />
       </div>
 
+      {/* Notes */}
       <div className="card">
         <label className="label">Notes</label>
         <input className="input" value={notes} onChange={e => setNotes(e.target.value)} />
       </div>
 
-      <button className="btn btn-primary" onClick={handleSubmit} disabled={loading} style={{ justifyContent: "center", width: "100%", padding: 10 }}>
-        {loading ? "Saving..." : "💾 Save Receipt"}
+      {/* Invoices allocation table */}
+      {customerId && invoices.length > 0 && (
+        <div className="card" style={{ overflowX: "auto" }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Allocate Amount to Invoices</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Invoice #</th>
+                <th>Date</th>
+                <th style={{ textAlign: "right" }}>Total</th>
+                <th style={{ textAlign: "right" }}>Paid</th>
+                <th style={{ textAlign: "right" }}>Due</th>
+                <th style={{ textAlign: "right" }}>Allocate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.map(inv => {
+                const due = inv.total - (inv.paid || 0)
+                return (
+                  <tr key={inv.id}>
+                    <td>{inv.invoice_no}</td>
+                    <td>{inv.date}</td>
+                    <td style={{ textAlign: "right" }}>{inv.total.toLocaleString()}</td>
+                    <td style={{ textAlign: "right" }}>{(inv.paid || 0).toLocaleString()}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600 }}>{due.toLocaleString()}</td>
+                    <td style={{ textAlign: "right" }}>
+                      <input
+                        className="alloc-input"
+                        type="number"
+                        min="0"
+                        max={due}
+                        value={allocations[inv.id] || 0}
+                        onChange={e => {
+                          const val = Math.min(parseFloat(e.target.value) || 0, due)
+                          setAllocations({ ...allocations, [inv.id]: val })
+                        }}
+                      />
+                    </td>
+                  </tr>
+                )
+              })}
+              <tr style={{ borderTop: "2px solid #E2E8F0", fontWeight: 700 }}>
+                <td colSpan={5} style={{ textAlign: "right" }}>Total Allocated</td>
+                <td style={{ textAlign: "right" }}>PKR {totalAllocated.toLocaleString()}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <button
+        className="btn btn-primary"
+        onClick={handleSubmit}
+        disabled={loading}
+        style={{ width: "100%", justifyContent: "center", padding: 10, marginTop: 12 }}
+      >
+        {loading ? "Posting..." : "💾 Save Payment"}
       </button>
     </div>
   )
