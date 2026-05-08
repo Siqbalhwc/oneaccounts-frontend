@@ -155,7 +155,7 @@ export default function ProjectsPage() {
   const handleDelete = async () => {
     if (!deleteId || !companyId) return
     const table = activeTab === "projects" ? "projects" : activeTab === "locations" ? "locations" : activeTab === "activities" ? "activities" : "donors"
-    await supabase.from(table).delete().eq("id", deleteId).eq("company_id", companyId)
+    await supabase.from(table).update({ deleted_at: new Date().toISOString() }).eq("id", deleteId).eq("company_id", companyId)
     setDeleteId(null)
     setFlash("✅ Deleted.")
     fetchData()
