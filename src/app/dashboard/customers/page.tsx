@@ -9,7 +9,6 @@ interface Customer {
   id: number
   code: string
   name: string
-  country_code: string
   phone: string
   email: string
   address: string
@@ -40,7 +39,6 @@ export default function CustomersPage() {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
   const [form, setForm] = useState({
     name: "",
-    country_code: "+92",
     phone: "",
     email: "",
     address: "",
@@ -95,7 +93,6 @@ export default function CustomersPage() {
     setEditingCustomer(null)
     setForm({
       name: "",
-      country_code: "+92",
       phone: "",
       email: "",
       address: "",
@@ -110,7 +107,6 @@ export default function CustomersPage() {
     setEditingCustomer(cust)
     setForm({
       name: cust.name,
-      country_code: cust.country_code || "+92",
       phone: cust.phone || "",
       email: cust.email || "",
       address: cust.address || "",
@@ -146,7 +142,6 @@ export default function CustomersPage() {
     const payload = {
       company_id: companyId,
       name: form.name.trim(),
-      country_code: form.country_code,
       phone: form.phone.trim(),
       email: form.email.trim(),
       address: form.address.trim(),
@@ -171,7 +166,7 @@ export default function CustomersPage() {
       const code = await getNextCode()
       const { error } = await supabase
         .from("customers")
-        .insert({ ...payload, code, opening_balance: form.opening_balance, balance: form.opening_balance })
+        .insert({ ...payload, code })
       if (error) {
         setFlash("Error: " + error.message)
         setSaving(false)
@@ -227,7 +222,6 @@ export default function CustomersPage() {
         td { padding: 10px 6px; border-bottom: 1px solid #F1F5F9; font-size: 13px; }
         tr:hover td { background: #FAFBFF; }
         .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; font-size: 13px; }
-        /* Modal styles */
         .pr-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
         .pr-modal { background: white; border-radius: 14px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
         .pr-modal-header { padding: 20px 24px; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; }
@@ -240,9 +234,7 @@ export default function CustomersPage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div>
           <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>👥 Customers</h2>
-          <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>
-            Manage customer accounts, view balances, and transactions
-          </p>
+          <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>Manage customer accounts, view balances, and transactions</p>
         </div>
         {canEdit && (
           <button className="btn btn-primary" onClick={openNew}>
@@ -251,14 +243,12 @@ export default function CustomersPage() {
         )}
       </div>
 
-      {/* Flash */}
       {flash && (
         <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#15803D", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
           {flash}
         </div>
       )}
 
-      {/* KPIs */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
         <div className="card">
           <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Customers</div>
@@ -272,7 +262,6 @@ export default function CustomersPage() {
         </div>
       </div>
 
-      {/* Search */}
       <div style={{ marginBottom: 12, position: "relative" }}>
         <Search size={14} style={{ position: "absolute", left: 10, top: 12, color: "#94A3B8" }} />
         <input
@@ -284,7 +273,6 @@ export default function CustomersPage() {
         />
       </div>
 
-      {/* Table */}
       <div className="card" style={{ overflowX: "auto" }}>
         <table>
           <thead>
@@ -311,7 +299,7 @@ export default function CustomersPage() {
                 <tr key={cust.id}>
                   <td style={{ fontWeight: 600 }}>{cust.code}</td>
                   <td>{cust.name}</td>
-                  <td>{cust.country_code} {cust.phone}</td>
+                  <td>{cust.phone}</td>
                   <td>{cust.email || "—"}</td>
                   <td>{cust.payment_terms}</td>
                   <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {cust.balance?.toLocaleString()}</td>
@@ -336,7 +324,6 @@ export default function CustomersPage() {
         </table>
       </div>
 
-      {/* Pagination */}
       {total > pageSize && (
         <div className="pagination">
           <span>Showing {Math.min(pageSize, total - (page-1)*pageSize)} of {total}</span>
@@ -347,7 +334,6 @@ export default function CustomersPage() {
         </div>
       )}
 
-      {/* Add/Edit Modal */}
       {showModal && canEdit && (
         <div className="pr-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="pr-modal" onClick={e => e.stopPropagation()}>
@@ -362,15 +348,9 @@ export default function CustomersPage() {
                 <label className="pr-field-label">Name *</label>
                 <input className="input" value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Customer name" />
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <div>
-                  <label className="pr-field-label">Country Code</label>
-                  <input className="input" value={form.country_code} onChange={e => setForm({...form, country_code: e.target.value})} />
-                </div>
-                <div>
-                  <label className="pr-field-label">Phone</label>
-                  <input className="input" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} />
-                </div>
+              <div>
+                <label className="pr-field-label">Phone</label>
+                <input className="input" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} />
               </div>
               <div>
                 <label className="pr-field-label">Email</label>
