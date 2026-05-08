@@ -98,6 +98,23 @@ export default function NewReceiptPage() {
     return () => document.removeEventListener("mousedown", handler)
   }, [])
 
+  // ── Generate next receipt number (e.g., REC-001) ──
+  const getNextReceiptNo = async (): Promise<string> => {
+    const { data } = await supabase
+      .from("receipts")
+      .select("receipt_no")
+      .eq("company_id", companyId)
+      .order("receipt_no", { ascending: false })
+      .limit(1)
+
+    let nextNum = 1
+    if (data && data.length > 0) {
+      const match = data[0].receipt_no.match(/REC-(\d+)/)
+      if (match) nextNum = parseInt(match[1]) + 1
+    }
+    return `REC-${String(nextNum).padStart(3, "0")}`
+  }
+
   const filteredCustomers = customers.filter(c =>
     c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
     c.code.toLowerCase().includes(customerSearch.toLowerCase()) ||
@@ -132,13 +149,17 @@ export default function NewReceiptPage() {
     setLoading(true); setError("")
 
     try {
-      // 1. Create receipt record (uses party_id and bank_id)
+      // Generate receipt number
+      const receiptNo = await getNextReceiptNo()
+
+      // 1. Create receipt record
       const { data: rec, error: recErr } = await supabase.from("receipts").insert({
         company_id: companyId,
+        receipt_no: receiptNo,          // ✅ NOT NULL now satisfied
         date: receiptDate,
         amount: amt,
-        party_id: customerId,          // ✅ correct column
-        bank_id: selectedBankId,       // ✅ correct column
+        party_id: customerId,
+        bank_id: selectedBankId,
         notes,
       }).select("id").single()
 
@@ -276,6 +297,8 @@ export default function NewReceiptPage() {
         .alloc-input { width: 80px; height: 28px; border: 1px solid #E2E8F0; border-radius: 4px; padding: 2px 6px; text-align: right; }
         .error-box { background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; }
         .flash-box { background: #F0FDF4; border: 1px solid #BBF7D0; color: #15803D; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; }
+        .inv-summary-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; }
+        .inv-summary-row.bold { font-weight: 700; font-size: 14px; border-top: 2px solid #E2E8F0; padding-top: 8px; margin-top: 4px; }
       `}</style>
 
       <div className="inv-shell">
@@ -285,7 +308,7 @@ export default function NewReceiptPage() {
           </button>
           <div style={{ flex: 1 }}>
             <div className="inv-title">📥 Receive Payment</div>
-            <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 1 }}>Record a customer receipt and allocate to invoices</div>
+            <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 1 }}>Record customer receipt and allocate to unpaid invoices</div>
           </div>
         </div>
 
@@ -293,7 +316,7 @@ export default function NewReceiptPage() {
         {flash && <div className="flash-box"><CheckCircle size={16} /> {flash}</div>}
 
         <div className="inv-grid">
-          {/* LEFT COLUMN — Customer, Bank, Date, Notes */}
+          {/* LEFT COLUMN — Customer, Bank, Date, Notes, and Allocation Table */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="inv-card">
               <label className="inv-label">Customer *</label>
@@ -347,7 +370,6 @@ export default function NewReceiptPage() {
                 )}
               </div>
 
-              {/* Bank (with GL code) */}
               <div style={{ marginTop: 10 }}>
                 <label className="inv-label">Bank Account *</label>
                 <select className="inv-input" value={selectedBankId ?? ""} onChange={e => setSelectedBankId(e.target.value ? Number(e.target.value) : null)}>
@@ -369,13 +391,11 @@ export default function NewReceiptPage() {
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* RIGHT COLUMN — Invoice Allocation */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 16 }}>
+            {/* Allocation Table – now in left column */}
             {customerId && invoices.length > 0 && (
               <div className="inv-card">
-                <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Allocate Amount to Invoices</h3>
+                <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 12px 0" }}>Allocate Amount to Invoices</h3>
                 <table>
                   <thead>
                     <tr>
@@ -411,10 +431,6 @@ export default function NewReceiptPage() {
                         </tr>
                       )
                     })}
-                    <tr style={{ borderTop: "2px solid #E2E8F0", fontWeight: 700 }}>
-                      <td colSpan={4} style={{ textAlign: "right" }}>Total Allocated</td>
-                      <td style={{ textAlign: "right" }}>PKR {totalAllocated.toLocaleString()}</td>
-                    </tr>
                   </tbody>
                 </table>
               </div>
@@ -424,14 +440,27 @@ export default function NewReceiptPage() {
                 No unpaid invoices for this customer.
               </div>
             )}
-            <button
-              className="inv-btn inv-btn-primary"
-              onClick={handleSubmit}
-              disabled={loading}
-              style={{ justifyContent: "center", padding: 10, width: "100%" }}
-            >
-              {loading ? "Posting..." : "💾 Save Payment"}
-            </button>
+          </div>
+
+          {/* RIGHT COLUMN — Summary (same as invoice form) */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 16 }}>
+            <div className="inv-card">
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: "#1E293B", margin: "0 0 10px 0" }}>Summary</h3>
+              <div className="inv-summary-row bold">
+                <span>Total Allocated</span>
+                <span>PKR {totalAllocated.toLocaleString()}</span>
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <button
+                  className="inv-btn inv-btn-primary"
+                  onClick={handleSubmit}
+                  disabled={loading}
+                  style={{ width: "100%", justifyContent: "center", padding: 10 }}
+                >
+                  {loading ? "Posting..." : "💾 Save Payment"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
