@@ -28,6 +28,8 @@ export default function NewInvoicePage() {
   const automationEnabled = hasFeature('invoice_automation')
   const profitAllocEnabled = hasFeature('profit_allocation')
 
+  const [companyId, setCompanyId] = useState<string>("")   // ✅ NEW
+
   const [customers,            setCustomers]            = useState<any[]>([])
   const [products,             setProducts]             = useState<any[]>([])
   const [customerId,           setCustomerId]           = useState<number | null>(null)
@@ -49,11 +51,31 @@ export default function NewInvoicePage() {
   const [showHistory,          setShowHistory]          = useState(false)
   const [lastSelectedProduct,  setLastSelectedProduct]  = useState<any>(null)
 
+  // ── 1. Get real company ID ──────────────────────────
   useEffect(() => {
-    supabase.from("customers").select("id,code,name,phone,balance").order("name").then(r => r.data && setCustomers(r.data))
-    supabase.from("products").select("id,code,name,sale_price,cost_price,qty_on_hand").order("name").then(r => r.data && setProducts(r.data))
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      const cid = (user?.app_metadata as any)?.company_id
+      if (cid) setCompanyId(cid)
+    })
   }, [])
 
+  // ── 2. Fetch customers & products only after companyId is known ──
+  useEffect(() => {
+    if (!companyId) return
+    supabase.from("customers")
+      .select("id,code,name,phone,balance")
+      .eq("company_id", companyId)
+      .order("name")
+      .then(r => r.data && setCustomers(r.data))
+    supabase.from("products")
+      .select("id,code,name,sale_price,cost_price,qty_on_hand")
+      .eq("company_id", companyId)
+      .order("name")
+      .then(r => r.data && setProducts(r.data))
+  }, [companyId])
+
+  // ── Close customer dropdown on outside click ────────
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (customerRef.current && !customerRef.current.contains(e.target as Node)) {
@@ -89,11 +111,11 @@ export default function NewInvoicePage() {
     p.code.toLowerCase().includes(productSearch.toLowerCase())
   )
 
-  // ⭐ Fixed sequential invoice numbering
   const getNextInvoiceNo = async (custCode: string): Promise<string> => {
     const { data } = await supabase
       .from("invoices")
       .select("invoice_no")
+      .eq("company_id", companyId)      // ✅ added
       .like("invoice_no", `${custCode}-%`)
       .order("invoice_no", { ascending: false })
       .limit(1)
@@ -109,9 +131,11 @@ export default function NewInvoicePage() {
   }
 
   const fetchPriceHistory = async (productId: number, custId: number) => {
+    if (!companyId) return       // ✅ guard
     const { data: items } = await supabase
       .from("invoice_items")
       .select("unit_price, invoice_id")
+      .eq("company_id", companyId)    // ✅ added
       .eq("product_id", productId)
 
     if (!items || items.length === 0) { setPriceHistory([]); setShowHistory(true); return }
@@ -178,6 +202,7 @@ export default function NewInvoicePage() {
   const netProfit     = totalAmount - totalCost - totalExpenses
 
   const handleSubmit = async () => {
+    if (!companyId) { setError("Company not loaded yet. Please wait."); return }   // ✅
     if (!customerId)       { setError("Please select a customer"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
 
@@ -192,7 +217,6 @@ export default function NewInvoicePage() {
 
     setLoading(true); setError("")
 
-    // ⭐ Get the next sequential invoice number for this customer
     const custCode = selectedCustomer?.code || "INV"
     const invoiceNo = await getNextInvoiceNo(custCode)
 
@@ -220,7 +244,6 @@ export default function NewInvoicePage() {
         return
       }
 
-      // Show inline success and reset form
       setFlash(`✅ Invoice ${invoiceNo} saved successfully!`)
       setItems([])
       setCustomerId(null)
@@ -257,7 +280,11 @@ export default function NewInvoicePage() {
     })
   }
 
-  // ── UI ────────────────────────────────────────────────────
+  if (!companyId) {
+    return <div style={{ padding: 40, textAlign: "center", fontFamily: "Arial" }}>Loading your company data…</div>
+  }
+
+  // ── UI (unchanged from here) ────────────────────────────
   return (
     <div style={{ padding: "16px", background: "#F4F6FB", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <style>{`
