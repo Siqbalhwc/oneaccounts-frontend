@@ -52,11 +52,11 @@ export default function BudgetsPage() {
         .then(r => r.data && setBusinessType(r.data.business_type || ""))
       supabase.from("accounts").select("id, code, name").eq("company_id", cid).eq("type", "Expense").order("code")
         .then(r => r.data && setAccounts(r.data))
-      supabase.from("projects").select("id, name").eq("company_id", cid).order("name")
+      supabase.from("projects").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
         .then(r => r.data && setProjects(r.data))
-      supabase.from("donors").select("id, name").eq("company_id", cid).order("name")
+      supabase.from("donors").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
         .then(r => r.data && setDonors(r.data))
-      supabase.from("locations").select("id, name").eq("company_id", cid).order("name")
+      supabase.from("locations").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
         .then(r => r.data && setLocations(r.data))
     })
   }, [])
@@ -68,6 +68,7 @@ export default function BudgetsPage() {
       .select("id, name")
       .eq("company_id", companyId)
       .eq("project_id", selectedProjectId)
+      .is("deleted_at", null)
       .order("name")
       .then(r => r.data && setAllActivities(r.data))
   }, [companyId, selectedProjectId])
@@ -84,8 +85,7 @@ export default function BudgetsPage() {
       .eq("fiscal_year", fiscalYear)
       .eq("project_id", selectedProjectId)
       .is("month", null)
-.is("month", null)
-.is("deleted_at", null)
+      .is("deleted_at", null)
     if (businessType === "ngo") budgetQuery = budgetQuery.eq("donor_id", selectedDonorId)
     if (filterLocationId) budgetQuery = budgetQuery.eq("location_id", filterLocationId)
 
@@ -179,27 +179,25 @@ export default function BudgetsPage() {
       }
     }
 
+    // Soft delete all existing budget rows for this filter combination
     let updateQuery = supabase
-  .from("budgets")
-  .update({ deleted_at: new Date().toISOString() })
-  .eq("company_id", companyId)
-  .eq("project_id", selectedProjectId)
-  .eq("fiscal_year", fiscalYear)
-  .is("month", null)
-  .is("deleted_at", null)
+      .from("budgets")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("company_id", companyId)
+      .eq("project_id", selectedProjectId)
+      .eq("fiscal_year", fiscalYear)
+      .is("month", null)
+      .is("deleted_at", null)
 
-if (businessType === "ngo") {
-  updateQuery = updateQuery.eq("donor_id", selectedDonorId)
-}
-if (selectedLocationId) {
-  updateQuery = updateQuery.eq("location_id", selectedLocationId)
-} else {
-  updateQuery = updateQuery.is("location_id", null)
-}
-await updateQuery
-    if (businessType === "ngo") deleteQuery = deleteQuery.eq("donor_id", selectedDonorId)
-    if (filterLocationId) deleteQuery = deleteQuery.eq("location_id", filterLocationId)
-    await deleteQuery
+    if (businessType === "ngo") {
+      updateQuery = updateQuery.eq("donor_id", selectedDonorId)
+    }
+    if (filterLocationId) {
+      updateQuery = updateQuery.eq("location_id", filterLocationId)
+    } else {
+      updateQuery = updateQuery.is("location_id", null)
+    }
+    await updateQuery
 
     if (rowsToInsert.length > 0) {
       const { error } = await supabase.from("budgets").insert(rowsToInsert)
