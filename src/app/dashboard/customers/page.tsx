@@ -47,8 +47,9 @@ export default function CustomersPage() {
   })
   const [saving, setSaving] = useState(false)
   const [flash, setFlash] = useState("")
+  const [formError, setFormError] = useState("")   // NEW – inline error inside modal
 
-  // ── 1. Get REAL company ID from user metadata ────────
+  // ── 1. Get real company ID from user metadata ────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -57,7 +58,7 @@ export default function CustomersPage() {
     })
   }, [])
 
-  // ── 2. Fetch customers when companyId is known ────────
+  // ── 2. Fetch customers when companyId is known ───────
   const fetchCustomers = () => {
     if (!companyId) return
     setLoading(true)
@@ -99,6 +100,7 @@ export default function CustomersPage() {
       payment_terms: "Net 30",
       opening_balance: 0,
     })
+    setFormError("")
     setShowModal(true)
   }
 
@@ -113,6 +115,7 @@ export default function CustomersPage() {
       payment_terms: cust.payment_terms || "Net 30",
       opening_balance: cust.opening_balance || 0,
     })
+    setFormError("")
     setShowModal(true)
   }
 
@@ -138,6 +141,8 @@ export default function CustomersPage() {
   const handleSave = async () => {
     if (!form.name.trim() || !companyId) return
     setSaving(true)
+    setFormError("")
+    setFlash("")
 
     const payload = {
       company_id: companyId,
@@ -147,8 +152,10 @@ export default function CustomersPage() {
       address: form.address.trim(),
       payment_terms: form.payment_terms,
       opening_balance: form.opening_balance,
-      balance: form.opening_balance, // set initial balance = opening
+      balance: form.opening_balance,
     }
+
+    let errorMsg = ""
 
     if (editingCustomer) {
       const { error } = await supabase
@@ -156,29 +163,28 @@ export default function CustomersPage() {
         .update(payload)
         .eq("id", editingCustomer.id)
         .eq("company_id", companyId)
-      if (error) {
-        setFlash("Error: " + error.message)
-        setSaving(false)
-        return
-      }
-      setFlash("✅ Customer updated!")
+      if (error) errorMsg = error.message
+      else setFlash("✅ Customer updated!")
     } else {
       const code = await getNextCode()
       const { error } = await supabase
         .from("customers")
         .insert({ ...payload, code })
-      if (error) {
-        setFlash("Error: " + error.message)
-        setSaving(false)
-        return
-      }
-      setFlash("✅ Customer created!")
+      if (error) errorMsg = error.message
+      else setFlash("✅ Customer created!")
     }
 
     setSaving(false)
-    setShowModal(false)
-    fetchCustomers()
-    setTimeout(() => setFlash(""), 3000)
+
+    if (errorMsg) {
+      setFormError(errorMsg)                // show inside the modal
+      setFlash("Error: " + errorMsg)        // also show in flash
+      // keep the modal open so the user can see the error
+    } else {
+      setShowModal(false)
+      fetchCustomers()
+      setTimeout(() => setFlash(""), 3000)
+    }
   }
 
   // ── Soft delete ─────────────────────────────────────
@@ -229,6 +235,7 @@ export default function CustomersPage() {
         .pr-modal-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
         .pr-field-label { font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; }
         .pr-modal-footer { padding: 16px 24px; border-top: 1px solid #E2E8F0; display: flex; justify-content: flex-end; gap: 8px; }
+        .form-error { background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; padding: 8px 12px; border-radius: 6px; font-size: 13px; }
       `}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -244,7 +251,7 @@ export default function CustomersPage() {
       </div>
 
       {flash && (
-        <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#15803D", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
+        <div style={{ background: flash.startsWith("Error") ? "#FEF2F2" : "#F0FDF4", border: flash.startsWith("Error") ? "1px solid #FECACA" : "1px solid #BBF7D0", color: flash.startsWith("Error") ? "#B91C1C" : "#15803D", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
           {flash}
         </div>
       )}
@@ -334,6 +341,7 @@ export default function CustomersPage() {
         </div>
       )}
 
+      {/* Add/Edit Modal */}
       {showModal && canEdit && (
         <div className="pr-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="pr-modal" onClick={e => e.stopPropagation()}>
@@ -344,6 +352,7 @@ export default function CustomersPage() {
               </button>
             </div>
             <div className="pr-modal-body">
+              {formError && <div className="form-error">{formError}</div>}
               <div>
                 <label className="pr-field-label">Name *</label>
                 <input className="input" value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Customer name" />
