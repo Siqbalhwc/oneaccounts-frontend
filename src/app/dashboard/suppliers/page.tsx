@@ -12,7 +12,7 @@ interface Supplier {
   phone: string
   email: string
   address: string
-  payment_terms: string
+  opening_balance: number
   balance: number
   default_project_id: number | null
   default_location_id: number | null
@@ -36,6 +36,7 @@ export default function SuppliersPage() {
   const [total, setTotal] = useState(0)
   const pageSize = 25
 
+  // Modal state
   const [showModal, setShowModal] = useState(false)
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null)
   const [form, setForm] = useState({
@@ -43,7 +44,6 @@ export default function SuppliersPage() {
     phone: "",
     email: "",
     address: "",
-    payment_terms: "Net 30",
     opening_balance: 0,
     default_project_id: null as number | null,
     default_location_id: null as number | null,
@@ -124,7 +124,6 @@ export default function SuppliersPage() {
       phone: "",
       email: "",
       address: "",
-      payment_terms: "Net 30",
       opening_balance: 0,
       default_project_id: null,
       default_location_id: null,
@@ -141,8 +140,7 @@ export default function SuppliersPage() {
       phone: s.phone || "",
       email: s.email || "",
       address: s.address || "",
-      payment_terms: s.payment_terms || "Net 30",
-      opening_balance: (s as any).opening_balance || 0,
+      opening_balance: s.opening_balance || 0,
       default_project_id: s.default_project_id || null,
       default_location_id: s.default_location_id || null,
       default_activity_id: s.default_activity_id || null,
@@ -163,7 +161,7 @@ export default function SuppliersPage() {
       phone: form.phone.trim(),
       email: form.email.trim(),
       address: form.address.trim(),
-      payment_terms: form.payment_terms,
+      opening_balance: form.opening_balance,
       default_project_id: form.default_project_id,
       default_location_id: form.default_location_id,
       default_activity_id: form.default_activity_id,
@@ -177,7 +175,7 @@ export default function SuppliersPage() {
       else setFlash("✅ Supplier updated!")
     } else {
       const code = await getNextCode()
-      const { error } = await supabase.from("suppliers").insert({ ...payload, code, opening_balance: form.opening_balance, balance: form.opening_balance })
+      const { error } = await supabase.from("suppliers").insert({ ...payload, code, balance: form.opening_balance })
       if (error) errorMsg = error.message
       else setFlash("✅ Supplier created!")
     }
@@ -220,7 +218,7 @@ export default function SuppliersPage() {
       `}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
-        <h2>🚚 Suppliers</h2>
+        <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>🚚 Suppliers</h2>
         {canEdit && <button className="btn btn-primary" onClick={openNew}><Plus size={16} /> Add Supplier</button>}
       </div>
 
@@ -238,7 +236,6 @@ export default function SuppliersPage() {
               <th>Name</th>
               <th>Phone</th>
               <th>Email</th>
-              <th>Terms</th>
               <th style={{ textAlign: "right" }}>Balance</th>
               <th></th>
               <th></th>
@@ -246,9 +243,9 @@ export default function SuppliersPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} style={{ textAlign: "center" }}>Loading...</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: "center" }}>Loading...</td></tr>
             ) : suppliers.length === 0 ? (
-              <tr><td colSpan={8} style={{ textAlign: "center", color: "#94A3B8" }}>No suppliers yet.</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: "center", color: "#94A3B8" }}>No suppliers yet.</td></tr>
             ) : (
               suppliers.map(s => (
                 <tr key={s.id}>
@@ -256,7 +253,6 @@ export default function SuppliersPage() {
                   <td>{s.name}</td>
                   <td>{s.phone}</td>
                   <td>{s.email || "—"}</td>
-                  <td>{s.payment_terms}</td>
                   <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {s.balance?.toLocaleString()}</td>
                   <td><button className="btn btn-outline" style={{ padding: 4 }} onClick={() => openEdit(s)}><Edit size={14} /></button></td>
                   <td><button className="btn btn-outline" style={{ padding: 4, color: "#EF4444" }} onClick={() => handleDelete(s.id)}><Trash2 size={14} /></button></td>
@@ -267,11 +263,12 @@ export default function SuppliersPage() {
         </table>
       </div>
 
+      {/* Add/Edit Modal */}
       {showModal && canEdit && (
         <div className="pr-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="pr-modal" onClick={e => e.stopPropagation()}>
             <div style={{ padding: "20px 24px", borderBottom: "1px solid #E2E8F0", display: "flex", justifyContent: "space-between" }}>
-              <h3>{editingSupplier ? "Edit Supplier" : "Add Supplier"}</h3>
+              <h3 style={{ margin: 0 }}>{editingSupplier ? "Edit Supplier" : "Add Supplier"}</h3>
               <button className="btn-outline" onClick={() => setShowModal(false)}><X size={18} /></button>
             </div>
             <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
@@ -280,7 +277,6 @@ export default function SuppliersPage() {
               <div><label>Phone</label><input className="input" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></div>
               <div><label>Email</label><input className="input" type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></div>
               <div><label>Address</label><input className="input" value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></div>
-              <div><label>Payment Terms</label><input className="input" value={form.payment_terms} onChange={e => setForm({...form, payment_terms: e.target.value})} /></div>
               <div><label>Opening Balance</label><input className="input" type="number" value={form.opening_balance} onChange={e => setForm({...form, opening_balance: parseFloat(e.target.value) || 0})} /></div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <div>
