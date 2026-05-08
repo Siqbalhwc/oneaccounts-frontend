@@ -1,329 +1,193 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { Plus, Search, Edit, Trash2, X, Check } from "lucide-react"
-import { CsvExport } from "@/components/CsvExport"
-import { CsvImport } from "@/components/CsvImport"
-import { usePlan } from "@/contexts/PlanContext"
-import Pagination from "@/components/Pagination"
+import { useRole } from "@/contexts/RoleContext"
+import { Plus, Search, X, Edit, Trash2 } from "lucide-react"
 
 interface Customer {
   id: number
   code: string
   name: string
-  phone: string | null
-  email: string | null
-  address: string | null
-  balance: number
+  phone: string
+  email: string
   payment_terms: string
+  balance: number
 }
 
-// ── Supported countries ──────────────────────────────────────
-const COUNTRIES = [
-  { code: "+92", pattern: /^92\d{10}$/, label: "🇵🇰 Pakistan (+92)" },
-  { code: "+44", pattern: /^44\d{10}$/, label: "🇬🇧 UK (+44)" },
-  { code: "+971", pattern: /^971\d{9}$/, label: "🇦🇪 UAE (+971)" },
-  { code: "+91", pattern: /^91\d{10}$/, label: "🇮🇳 India (+91)" },
-  { code: "+1", pattern: /^1\d{10}$/, label: "🇺🇸 USA (+1)" },
-]
-
-const styles = `
-  .cp-shell { padding: clamp(16px, 2.5vw, 24px); background: #EFF4FB; min-height: 100%; font-family: 'Plus Jakarta Sans', sans-serif; }
-  .cp-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
-  .cp-title { font-size: clamp(18px, 1.8vw, 24px); font-weight: 800; color: #1E293B; }
-  .cp-subtitle { font-size: 13px; color: #94A3B8; margin-top: 2px; }
-  .cp-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .cp-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all 0.15s; white-space: nowrap; }
-  .cp-btn-primary { background: linear-gradient(135deg, #1740C8, #071352); color: white; box-shadow: 0 2px 8px rgba(7,19,82,0.25); }
-  .cp-btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
-  .cp-search { position: relative; max-width: 320px; }
-  .cp-search input { width: 100%; height: 40px; border: 1.5px solid #E2E8F0; border-radius: 9px; padding: 0 14px 0 38px; font-size: 13px; font-family: inherit; background: white; outline: none; }
-  .cp-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94A3B8; }
-  .cp-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 20px; }
-  .cp-stat-card { background: white; border-radius: 10px; border: 1px solid #E2E8F0; padding: 14px 16px; }
-  .cp-stat-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #94A3B8; margin-bottom: 4px; }
-  .cp-stat-value { font-size: 22px; font-weight: 800; color: #1E3A8A; }
-  .cp-table-wrap { background: white; border-radius: 10px; border: 1px solid #E2E8F0; overflow: hidden; }
-  .cp-table-header { display: grid; grid-template-columns: 100px 1fr 130px 1fr 100px 100px 60px 60px; padding: 10px 16px; background: "#F8FAFC"; border-bottom: 2px solid #E2E8F0; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #94A3B8; align-items: center; }
-  .cp-table-row { display: grid; grid-template-columns: 100px 1fr 130px 1fr 100px 100px 60px 60px; padding: 10px 16px; border-bottom: 1px solid #F1F5F9; align-items: center; font-size: 13px; }
-  .cp-table-row:hover { background: #FAFBFF; }
-  .cp-code { font-weight: 700; color: #1E3A8A; font-size: 12px; }
-  .cp-name { font-weight: 600; color: #1E293B; }
-  .cp-balance { font-weight: 700; color: #F59E0B; text-align: right; }
-  .cp-icon-btn { background: none; border: none; cursor: pointer; padding: 6px; border-radius: 6px; color: #94A3B8; transition: all 0.15s; display: inline-flex; }
-  .cp-icon-btn:hover { background: #F1F5F9; color: #475569; }
-  .cp-icon-btn.danger:hover { background: #FEE2E2; color: #EF4444; }
-  .cp-empty { padding: 40px; text-align: center; color: #94A3B8; }
-  .cp-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
-  .cp-modal { background: white; border-radius: 14px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
-  .cp-modal-header { padding: 20px 24px; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; }
-  .cp-modal-title { font-size: 18px; font-weight: 700; color: #1E293B; }
-  .cp-modal-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
-  .cp-field-label { font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; }
-  .cp-field-input { width: 100%; height: 40px; border: 1.5px solid #E5EAF2; border-radius: 9px; padding: 0 14px; font-size: 13px; font-family: inherit; background: #FAFBFF; outline: none; }
-  .cp-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .cp-modal-footer { padding: 16px 24px; border-top: 1px solid #E2E8F0; display: flex; justify-content: flex-end; gap: 8px; }
-  @media (max-width: 768px) { .cp-table-header, .cp-table-row { grid-template-columns: 80px 1fr 100px 60px 60px; } .cp-hide-mobile { display: none; } }
-  @media (max-width: 480px) { .cp-table-header, .cp-table-row { grid-template-columns: 1fr 80px 50px 50px; } }
-`
-
 export default function CustomersPage() {
-  const router = useRouter()
-  const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
-  const { hasFeature } = usePlan()
-  const [customers, setCustomers] = useState<Customer[]>([])
-  const [filtered, setFiltered] = useState<Customer[]>([])
-  const [search, setSearch] = useState("")
-  const [loading, setLoading] = useState(true)
-  const [showModal, setShowModal] = useState(false)
-  const [editing, setEditing] = useState<Customer | null>(null)
-  const [deleteId, setDeleteId] = useState<number | null>(null)
-  const [flash, setFlash] = useState<{type: string, msg: string} | null>(null)
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+  const { role } = useRole()
+  const canEdit = role === "admin" || role === "accountant"
+  const canView = role === "admin" || role === "accountant"
 
-  // Form fields
-  const [code, setCode] = useState("")
-  const [name, setName] = useState("")
-  const [countryCode, setCountryCode] = useState("+92")
-  const [phone, setPhone] = useState("")
-  const [email, setEmail] = useState("")
-  const [address, setAddress] = useState("")
-  const [paymentTerms, setPaymentTerms] = useState("Net 30")
-  const [openingBalance, setOpeningBalance] = useState(0)
-  const [saving, setSaving] = useState(false)
-
-  // List pagination
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(25)
-  const [total, setTotal] = useState(0)
   const [companyId, setCompanyId] = useState<string>("")
+  const [loading, setLoading] = useState(true)
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [search, setSearch] = useState("")
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const pageSize = 25
 
-  // ── Get company ID ────────────────────────────────────────
+  // ── 1. Get REAL company ID from user metadata ────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
       const cid = (user?.app_metadata as any)?.company_id
-        || '00000000-0000-0000-0000-000000000001'
-      setCompanyId(cid)
+      if (cid) setCompanyId(cid)
+      else setCompanyId("") // will show a message later
     })
   }, [])
 
-  const fetchCustomers = async () => {
-    setLoading(true)
-    const { count } = await supabase.from("customers").select("*", { count: "exact", head: true }).eq("company_id", companyId)
-    setTotal(count || 0)
-    const from = (page - 1) * pageSize
-    const to = from + pageSize - 1
-    const { data } = await supabase.from("customers").select("*").eq("company_id", companyId).order("code").range(from, to)
-    if (data) { setCustomers(data); setFiltered(data) }
-    setLoading(false)
-  }
-
-  useEffect(() => { if (companyId) fetchCustomers() }, [companyId, page, pageSize])
-
+  // ── 2. Fetch customers only when companyId is known ───
   useEffect(() => {
-    if (!search.trim()) { setFiltered(customers); return }
-    const s = search.toLowerCase()
-    setFiltered(customers.filter(c => c.code.toLowerCase().includes(s) || c.name.toLowerCase().includes(s) || (c.phone && c.phone.includes(s)) || (c.email && c.email.toLowerCase().includes(s))))
-  }, [search, customers])
+    if (!companyId) return
+    setLoading(true)
 
-  const generateCode = () => {
-    const max = customers.reduce((m, c) => { const n = parseInt(c.code?.split("-")[1]) || 0; return n > m ? n : m }, 0)
-    return `CUST-${String(max + 1).padStart(3, "0")}`
-  }
+    const start = (page - 1) * pageSize
+    const end = start + pageSize - 1
 
-  // ── Country‑aware phone validation ─────────────────────────
-  const validatePhone = (): { valid: boolean; formatted: string; error?: string } => {
-    const raw = phone.trim()
-    if (!raw) return { valid: true, formatted: "" }   // phone is optional
+    let query = supabase
+      .from("customers")
+      .select("*", { count: "exact" })
+      .eq("company_id", companyId)
+      .order("name")
 
-    const digits = raw.replace(/\D/g, "")
-    const country = COUNTRIES.find(c => c.code === countryCode)
-    if (!country) return { valid: false, formatted: "", error: "Unknown country code" }
-
-    // Already in international format?
-    if (digits.startsWith(country.code.replace("+", "")) && country.pattern.test(digits)) {
-      return { valid: true, formatted: digits }
-    }
-    // Local number without prefix – try auto‑prepend
-    const prefix = country.code.replace("+", "")
-    const testNumber = prefix + digits
-    if (country.pattern.test(testNumber)) {
-      return { valid: true, formatted: testNumber }
-    }
-    return { valid: false, formatted: "", error: `Invalid ${country.label} number. Expected ${country.code} followed by valid digits.` }
-  }
-
-  const openNew = () => {
-    setEditing(null)
-    setCode(generateCode()); setName(""); setCountryCode("+92"); setPhone(""); setEmail(""); setAddress(""); setPaymentTerms("Net 30"); setOpeningBalance(0)
-    setShowModal(true)
-  }
-
-  const openEdit = (c: Customer) => {
-    setEditing(c)
-    setCode(c.code); setName(c.name)
-    // Try to detect country from existing phone
-    const savedPhone = c.phone || ""
-    const found = COUNTRIES.find(cntry => savedPhone.startsWith(cntry.code.replace("+", "")))
-    if (found) {
-      setCountryCode(found.code)
-      setPhone(savedPhone.slice(found.code.replace("+", "").length))
-    } else {
-      setCountryCode("+92")
-      setPhone(savedPhone)
-    }
-    setEmail(c.email || ""); setAddress(c.address || ""); setPaymentTerms(c.payment_terms || "Net 30"); setOpeningBalance(c.balance)
-    setShowModal(true)
-  }
-
-  const handleSave = async () => {
-    if (!code.trim() || !name.trim() || !companyId) return
-
-    const phoneCheck = validatePhone()
-    if (!phoneCheck.valid) {
-      setFlash({ type: "error", msg: phoneCheck.error || "Invalid phone number" })
-      return
+    if (search.trim()) {
+      query = query.or(
+        `name.ilike.%${search}%,code.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`
+      )
     }
 
-    setSaving(true)
-    const payload = {
-      company_id: companyId,
-      code: code.trim(),
-      name: name.trim(),
-      phone: phoneCheck.formatted || null,
-      email: email.trim() || null,
-      address: address.trim() || null,
-      payment_terms: paymentTerms,
-      balance: openingBalance,
-      opening_balance: openingBalance,
-    }
-    if (editing) {
-      await supabase.from("customers").update(payload).eq("id", editing.id).eq("company_id", companyId)
-      setFlash({ type: "success", msg: `Customer '${name}' updated!` })
-    } else {
-      const { data: newCust, error: insertErr } = await supabase.from("customers").insert(payload).select("id").single()
-      if (insertErr || !newCust) {
-        setFlash({ type: "error", msg: insertErr?.message || "Insert failed" })
-        setSaving(false)
-        return
-      }
-      setFlash({ type: "success", msg: `Customer '${name}' added!` })
+    query.range(start, end).then(({ data, count }) => {
+      setCustomers(data || [])
+      setTotal(count || 0)
+      setLoading(false)
+    })
+  }, [companyId, search, page])
 
-      if (openingBalance > 0) {
-        await fetch("/api/customers/opening-entry", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            customerId: newCust.id,
-            customerName: name.trim(),
-            amount: openingBalance,
-          }),
-        }).catch(console.error)
-      }
-    }
-    setSaving(false); setShowModal(false); fetchCustomers()
-    setTimeout(() => setFlash(null), 3000)
+  // ── While company ID is loading, show a clean message ──
+  if (!companyId) {
+    return (
+      <div style={{ padding: 40, textAlign: "center", fontFamily: "Arial" }}>
+        <p>Loading your company data…</p>
+      </div>
+    )
   }
 
-  const handleDelete = async () => {
-    if (!deleteId) return
-    await supabase.from("customers").delete().eq("id", deleteId).eq("company_id", companyId)
-    setDeleteId(null); setFlash({ type: "success", msg: "Customer deleted." }); fetchCustomers()
-    setTimeout(() => setFlash(null), 3000)
+  if (!canView) {
+    return (
+      <div style={{ padding: 40, textAlign: "center" }}>
+        <h2>Access Denied</h2>
+      </div>
+    )
   }
-
-  const handleImport = async (rows: any[]) => {
-    for (const row of rows) {
-      // For simplicity, expect the phone to be already in international format in the CSV
-      await supabase.from("customers").insert({
-        company_id: companyId,
-        code: row.code || `CUST-${Date.now()}`, name: row.name || "Unnamed",
-        phone: row.phone || null, email: row.email || null, address: row.address || null,
-        balance: parseFloat(row.balance) || 0, payment_terms: row.payment_terms || "Net 30"
-      })
-    }
-    fetchCustomers()
-    setFlash({ type: "success", msg: "Import completed!" })
-    setTimeout(() => setFlash(null), 3000)
-  }
-
-  const totalReceivables = filtered.reduce((s, c) => s + (c.balance || 0), 0)
 
   return (
-    <>
-      <style>{styles}</style>
-      <div className="cp-shell">
-        {flash && <div style={{ background: flash.type === "success" ? "#F0FDF4" : "#FEF2F2", border: `1px solid ${flash.type === "success" ? "#BBF7D0" : "#FECACA"}`, color: flash.type === "success" ? "#15803D" : "#B91C1C", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>{flash.type === "success" ? <Check size={16} /> : <X size={16} />} {flash.msg}</div>}
-        <div className="cp-header">
-          <div><div className="cp-title">👥 Customers</div><div className="cp-subtitle">Manage customer accounts, view balances, and transactions</div></div>
-          <div className="cp-actions">
-            <button className="cp-btn cp-btn-primary" onClick={openNew}><Plus size={16} /> Add Customer</button>
-            {hasFeature('csv_import_export') && <><CsvExport data={customers} filename="customers" /><CsvImport onImport={handleImport} /></>}
+    <div style={{ padding: 24, fontFamily: "Arial", background: "#EFF4FB", minHeight: "100vh" }}>
+      <style>{`
+        .card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+        .input { width: 100%; height: 38px; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0 12px; font-size: 13px; }
+        .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; }
+        .btn-primary { background: #1D4ED8; color: white; }
+        table { width: 100%; border-collapse: collapse; }
+        th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8; text-align: left; padding: 8px 6px; border-bottom: 1px solid #E2E8F0; }
+        td { padding: 10px 6px; border-bottom: 1px solid #F1F5F9; font-size: 13px; }
+        tr:hover td { background: #FAFBFF; }
+        .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; font-size: 13px; }
+      `}</style>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <div>
+          <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>👥 Customers</h2>
+          <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>
+            Manage customer accounts, view balances, and transactions
+          </p>
+        </div>
+        {canEdit && (
+          <button className="btn btn-primary" onClick={() => alert("Add customer modal – implement similar to Projects page")}>
+            <Plus size={16} /> Add Customer
+          </button>
+        )}
+      </div>
+
+      {/* KPIs */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+        <div className="card">
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Customers</div>
+          <div style={{ fontSize: 24, fontWeight: 800 }}>{total}</div>
+        </div>
+        <div className="card">
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Receivables</div>
+          <div style={{ fontSize: 24, fontWeight: 800 }}>
+            PKR {customers.reduce((s, c) => s + (c.balance || 0), 0).toLocaleString()}
           </div>
-        </div>
-        <div className="cp-stats">
-          <div className="cp-stat-card"><div className="cp-stat-label">Total Customers</div><div className="cp-stat-value">{filtered.length}</div></div>
-          <div className="cp-stat-card"><div className="cp-stat-label">Total Receivables</div><div className="cp-stat-value" style={{ color: "#F59E0B" }}>PKR {totalReceivables.toLocaleString()}</div></div>
-        </div>
-        <div className="cp-search" style={{ marginBottom: 16 }}><Search size={16} /><input type="text" placeholder="Search by code, name, phone or email..." value={search} onChange={e => setSearch(e.target.value)} /></div>
-        <div className="cp-table-wrap">
-          <div className="cp-table-header"><span>Code</span><span>Name</span><span className="cp-hide-mobile">Phone</span><span className="cp-hide-mobile">Email</span><span>Terms</span><span style={{ textAlign: "right" }}>Balance</span><span></span><span></span></div>
-          {loading ? <div className="cp-empty">Loading...</div> : filtered.length === 0 ? <div className="cp-empty">No customers found.</div> :
-            filtered.map(c => (
-              <div key={c.id} className="cp-table-row">
-                <span className="cp-code">{c.code}</span><span className="cp-name">{c.name}</span>
-                <span className="cp-hide-mobile" style={{ fontSize: 12, color: "#64748B" }}>{c.phone || "-"}</span>
-                <span className="cp-hide-mobile" style={{ fontSize: 12, color: "#64748B" }}>{c.email || "-"}</span>
-                <span style={{ fontSize: 12, color: "#64748B" }}>{c.payment_terms || "Net 30"}</span>
-                <span className="cp-balance">PKR {(c.balance || 0).toLocaleString()}</span>
-                <button className="cp-icon-btn" onClick={() => openEdit(c)}><Edit size={14} /></button>
-                <button className="cp-icon-btn danger" onClick={() => setDeleteId(c.id)}><Trash2 size={14} /></button>
-              </div>
-            ))
-          }
-          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1) }} />
         </div>
       </div>
-      {showModal && (
-        <div className="cp-modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="cp-modal" onClick={e => e.stopPropagation()}>
-            <div className="cp-modal-header"><div className="cp-modal-title">{editing ? "✏️ Edit Customer" : "➕ Add New Customer"}</div><button className="cp-icon-btn" onClick={() => setShowModal(false)}><X size={18} /></button></div>
-            <div className="cp-modal-body">
-              <div className="cp-field-row"><div><label className="cp-field-label">Customer Code *</label><input className="cp-field-input" value={code} onChange={e => setCode(e.target.value)} placeholder="CUST-001" /></div><div><label className="cp-field-label">Customer Name *</label><input className="cp-field-input" value={name} onChange={e => setName(e.target.value)} placeholder="Customer name" /></div></div>
-              <div>
-                <label className="cp-field-label">Phone (WhatsApp)</label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <select
-                    className="cp-field-input"
-                    style={{ width: 160, background: "#FAFBFF" }}
-                    value={countryCode}
-                    onChange={e => setCountryCode(e.target.value)}
-                  >
-                    {COUNTRIES.map(c => (
-                      <option key={c.code} value={c.code}>{c.label}</option>
-                    ))}
-                  </select>
-                  <input
-                    className="cp-field-input"
-                    value={phone}
-                    onChange={e => setPhone(e.target.value)}
-                    placeholder="Enter local number"
-                    style={{ flex: 1 }}
-                  />
-                </div>
-                <div style={{ fontSize: 10, color: "#94A3B8", marginTop: 2 }}>Select country code and enter the local number</div>
-              </div>
-              <div className="cp-field-row"><div><label className="cp-field-label">Email</label><input className="cp-field-input" value={email} onChange={e => setEmail(e.target.value)} placeholder="customer@email.com" /></div><div><label className="cp-field-label">Address</label><input className="cp-field-input" value={address} onChange={e => setAddress(e.target.value)} placeholder="Address" /></div></div>
-              <div className="cp-field-row"><div><label className="cp-field-label">Payment Terms</label><input className="cp-field-input" value={paymentTerms} onChange={e => setPaymentTerms(e.target.value)} placeholder="Net 30" /></div><div><label className="cp-field-label">Opening Balance (PKR)</label><input className="cp-field-input" type="number" value={openingBalance} onChange={e => setOpeningBalance(Number(e.target.value))} /></div></div>
-            </div>
-            <div className="cp-modal-footer"><button className="cp-btn cp-btn-outline" onClick={() => setShowModal(false)}>Cancel</button><button className="cp-btn cp-btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "💾 Save Customer"}</button></div>
+
+      {/* Search */}
+      <div style={{ marginBottom: 12, position: "relative" }}>
+        <Search size={14} style={{ position: "absolute", left: 10, top: 12, color: "#94A3B8" }} />
+        <input
+          className="input"
+          style={{ paddingLeft: 32 }}
+          placeholder="Search by code, name, phone or email..."
+          value={search}
+          onChange={e => { setSearch(e.target.value); setPage(1) }}
+        />
+      </div>
+
+      {/* Table */}
+      <div className="card" style={{ overflowX: "auto" }}>
+        <table>
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Phone</th>
+              <th>Email</th>
+              <th>Terms</th>
+              <th style={{ textAlign: "right" }}>Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={6} style={{ textAlign: "center", padding: 20 }}>Loading...</td></tr>
+            ) : customers.length === 0 ? (
+              <tr><td colSpan={6} style={{ textAlign: "center", padding: 20, color: "#94A3B8" }}>
+                {search ? "No matching customers found." : "No customers yet. Add your first customer above."}
+              </td></tr>
+            ) : (
+              customers.map((cust) => (
+                <tr key={cust.id}>
+                  <td style={{ fontWeight: 600 }}>{cust.code}</td>
+                  <td>{cust.name}</td>
+                  <td>{cust.phone}</td>
+                  <td>{cust.email || "—"}</td>
+                  <td>{cust.payment_terms}</td>
+                  <td style={{ textAlign: "right", fontWeight: 600 }}>
+                    PKR {cust.balance?.toLocaleString()}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      {total > pageSize && (
+        <div className="pagination">
+          <span>Showing {Math.min(pageSize, total - (page-1)*pageSize)} of {total}</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</button>
+            <button className="btn" disabled={page * pageSize >= total} onClick={() => setPage(p => p + 1)}>Next</button>
           </div>
         </div>
       )}
-      {deleteId && (
-        <div className="cp-modal-overlay"><div className="cp-modal" style={{ maxWidth: 400 }}><div className="cp-modal-header"><div className="cp-modal-title">⚠️ Delete Customer?</div></div><div className="cp-modal-body" style={{ textAlign: "center" }}><p style={{ color: "#EF4444", marginBottom: 8 }}>This action cannot be undone.</p></div><div className="cp-modal-footer" style={{ justifyContent: "center" }}><button className="cp-btn cp-btn-outline" onClick={() => setDeleteId(null)}>Cancel</button><button className="cp-btn cp-btn-primary" style={{ background: "#EF4444" }} onClick={handleDelete}>Delete</button></div></div></div>
-      )}
-    </>
+    </div>
   )
 }
