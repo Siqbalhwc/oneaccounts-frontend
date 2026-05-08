@@ -165,10 +165,7 @@ export async function POST(request: NextRequest) {
       }
       debitAccountId = invAcc.data.id
       // Update inventory balance
-      await supabaseAdmin.from("accounts")
-        .update({ balance: (invAcc.data.balance || 0) + itemAmount })
-        .eq("id", invAcc.data.id)
-    } else {
+          } else {
       // Manual: use item.account_id or fallback to header expense_account_id
       const accountId = item.account_id || expense_account_id
       if (!accountId) {
@@ -181,9 +178,7 @@ export async function POST(request: NextRequest) {
       }
       debitAccountId = acc.id
       // Update account balance
-      await supabaseAdmin.from("accounts")
-        .update({ balance: (acc.balance || 0) + itemAmount })
-        .eq("id", acc.id)
+      
     }
 
     // Insert debit line for this item with all tags
