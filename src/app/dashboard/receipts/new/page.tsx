@@ -27,6 +27,7 @@ export default function NewReceiptPage() {
   const [allocations, setAllocations] = useState<Record<number, number>>({})
 
   const [receiptDate, setReceiptDate] = useState(new Date().toISOString().split("T")[0])
+  const [receiptAmount, setReceiptAmount] = useState<number | "">("")   // ✅ NEW separate amount field
   const [notes, setNotes] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -81,7 +82,6 @@ export default function NewReceiptPage() {
       .then(r => {
         const invs = r.data || []
         setInvoices(invs)
-        // Initialize allocations to 0 for each invoice
         const initAlloc: Record<number, number> = {}
         invs.forEach(inv => { initAlloc[inv.id] = 0 })
         setAllocations(initAlloc)
@@ -142,7 +142,7 @@ export default function NewReceiptPage() {
   const toggleInvoice = (invId: number, due: number) => {
     setAllocations(prev => {
       const current = prev[invId] || 0
-      const newVal = current > 0 ? 0 : due   // if already allocated, set to 0; else set to full due
+      const newVal = current > 0 ? 0 : due
       return { ...prev, [invId]: newVal }
     })
   }
@@ -156,11 +156,17 @@ export default function NewReceiptPage() {
   const totalAllocated = Object.values(allocations).reduce((s, v) => s + v, 0)
 
   const handleSubmit = async () => {
-    const amt = totalAllocated
+    const amt = Number(receiptAmount)
     if (!companyId) { setError("Company not loaded yet."); return }
     if (!customerId) { setError("Please select a customer"); return }
     if (!selectedBankId) { setError("Please select a bank account"); return }
-    if (amt <= 0) { setError("Allocate at least PKR 1 to invoices"); return }
+    if (amt <= 0) { setError("Enter a valid receipt amount"); return }
+
+    // Optional: ensure allocations don't exceed amount
+    if (totalAllocated > amt) {
+      setError("Allocated amount exceeds receipt amount.")
+      return
+    }
 
     setLoading(true); setError("")
 
@@ -180,7 +186,7 @@ export default function NewReceiptPage() {
 
       if (recErr || !rec) throw new Error(recErr?.message || "Receipt creation failed")
 
-      // 2. Insert payment allocations & update invoice.paid
+      // 2. Insert payment allocations & update invoice.paid (only if allocated)
       for (const [invId, allocAmt] of Object.entries(allocations)) {
         if (allocAmt <= 0) continue
         const inv = invoices.find(i => i.id === parseInt(invId))
@@ -201,7 +207,7 @@ export default function NewReceiptPage() {
         }).eq("id", inv.id).eq("company_id", companyId)
       }
 
-      // 3. Update customer balance (reduce by receipt amount)
+      // 3. Update customer balance (reduce by full receipt amount)
       if (selectedCustomer) {
         const newCustBal = (selectedCustomer.balance || 0) - amt
         await supabase.from("customers").update({ balance: newCustBal }).eq("id", customerId).eq("company_id", companyId)
@@ -233,6 +239,7 @@ export default function NewReceiptPage() {
       setSelectedBankId(null)
       setInvoices([])
       setAllocations({})
+      setReceiptAmount("")
       setNotes("")
       setLoading(false)
       setTimeout(() => setFlash(null), 4000)
@@ -398,9 +405,24 @@ export default function NewReceiptPage() {
 
               <div className="inv-row" style={{ marginTop: 10 }}>
                 <div>
+                  <label className="inv-label">Receipt Amount *</label>
+                  <input
+                    className="inv-input"
+                    type="number"
+                    min="0"
+                    step="100"
+                    value={receiptAmount}
+                    onChange={e => setReceiptAmount(e.target.value ? Number(e.target.value) : "")}
+                    placeholder="0"
+                  />
+                </div>
+                <div>
                   <label className="inv-label">Receipt Date</label>
                   <input className="inv-input" type="date" value={receiptDate} onChange={e => setReceiptDate(e.target.value)} />
                 </div>
+              </div>
+
+              <div className="inv-row" style={{ marginTop: 10 }}>
                 <div>
                   <label className="inv-label">Notes</label>
                   <input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes" />
@@ -411,7 +433,7 @@ export default function NewReceiptPage() {
             {/* Allocation Table with per‑invoice checkboxes */}
             {customerId && invoices.length > 0 && (
               <div className="inv-card">
-                <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 12px 0" }}>Allocate Amount to Invoices</h3>
+                <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 12px 0" }}>Allocate to Invoices</h3>
                 <table>
                   <thead>
                     <tr>
@@ -456,16 +478,23 @@ export default function NewReceiptPage() {
                       )
                     })}
                     <tr style={{ borderTop: "2px solid #E2E8F0", fontWeight: 700 }}>
-                      <td colSpan={5} style={{ textAlign: "right" }}>Total Allocated</td>
+                      <td colSpan={5} style={{ textAlign: "right" }}>Allocated</td>
                       <td style={{ textAlign: "right" }}>PKR {totalAllocated.toLocaleString()}</td>
                     </tr>
+                    {Number(receiptAmount) > 0 && totalAllocated < Number(receiptAmount) && (
+                      <tr style={{ fontSize: 12, color: "#64748B" }}>
+                        <td colSpan={6} style={{ textAlign: "right", paddingTop: 4 }}>
+                          Unallocated (advance): PKR {(Number(receiptAmount) - totalAllocated).toLocaleString()}
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
             )}
             {customerId && invoices.length === 0 && (
               <div className="inv-card" style={{ textAlign: "center", color: "#94A3B8" }}>
-                No unpaid invoices for this customer.
+                No unpaid invoices for this customer. Any amount entered will be recorded as an advance.
               </div>
             )}
           </div>
@@ -474,9 +503,17 @@ export default function NewReceiptPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 16 }}>
             <div className="inv-card">
               <h3 style={{ fontSize: 15, fontWeight: 700, color: "#1E293B", margin: "0 0 10px 0" }}>Summary</h3>
-              <div className="inv-summary-row bold">
-                <span>Total Allocated</span>
+              <div className="inv-summary-row">
+                <span>Receipt Amount</span>
+                <span>PKR {Number(receiptAmount || 0).toLocaleString()}</span>
+              </div>
+              <div className="inv-summary-row">
+                <span>Allocated</span>
                 <span>PKR {totalAllocated.toLocaleString()}</span>
+              </div>
+              <div className="inv-summary-row bold">
+                <span>Unallocated</span>
+                <span>PKR {(Number(receiptAmount || 0) - totalAllocated).toLocaleString()}</span>
               </div>
               <div style={{ marginTop: 10 }}>
                 <button

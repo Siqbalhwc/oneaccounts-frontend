@@ -74,12 +74,13 @@ export default function CustomersPage() {
     address: "",
     payment_terms: "Net 30",
     opening_balance: 0,
+    post_as_invoice: true,   // ✅ NEW checkbox
   })
   const [saving, setSaving] = useState(false)
   const [flash, setFlash] = useState("")
   const [formError, setFormError] = useState("")
 
-  // ── 1. Get real company ID from user metadata ────────
+  // ── 1. Get real company ID ────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -88,7 +89,7 @@ export default function CustomersPage() {
     })
   }, [])
 
-  // ── 2. Fetch customers when companyId is known ────────
+  // ── 2. Fetch customers ────────────────────────────
   const fetchCustomers = () => {
     if (!companyId) return
     setLoading(true)
@@ -128,7 +129,7 @@ export default function CustomersPage() {
     return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
   }
 
-  // ── Open modal for new customer ──────────────────────
+  // ── Open modal for new customer ──────────────────
   const openNew = () => {
     setEditingCustomer(null)
     setForm({
@@ -139,12 +140,13 @@ export default function CustomersPage() {
       address: "",
       payment_terms: "Net 30",
       opening_balance: 0,
+      post_as_invoice: true,
     })
     setFormError("")
     setShowModal(true)
   }
 
-  // ── Open modal for editing ───────────────────────────
+  // ── Open modal for editing ───────────────────────
   const openEdit = (cust: Customer) => {
     setEditingCustomer(cust)
     setForm({
@@ -155,12 +157,13 @@ export default function CustomersPage() {
       address: cust.address || "",
       payment_terms: cust.payment_terms || "Net 30",
       opening_balance: cust.opening_balance || 0,
+      post_as_invoice: false, // editing does not automatically post invoice
     })
     setFormError("")
     setShowModal(true)
   }
 
-  // ── Generate unique code per company ──────────────────
+  // ── Generate unique code per company ──────────────
   const getNextCode = async (): Promise<string> => {
     const { data } = await supabase
       .from("customers")
@@ -178,7 +181,7 @@ export default function CustomersPage() {
     return `CUST-${String(nextNum).padStart(3, "0")}`
   }
 
-  // ── Save (insert or update) ─────────────────────────
+  // ── Save (insert or update) ──────────────────────
   const handleSave = async () => {
     if (!form.name.trim() || !companyId) return
     setSaving(true)
@@ -198,6 +201,7 @@ export default function CustomersPage() {
     }
 
     let errorMsg = ""
+    let createdCustomerId: number | null = null
 
     if (editingCustomer) {
       const { error } = await supabase
@@ -206,14 +210,81 @@ export default function CustomersPage() {
         .eq("id", editingCustomer.id)
         .eq("company_id", companyId)
       if (error) errorMsg = error.message
-      else setFlash("✅ Customer updated!")
+      else {
+        setFlash("✅ Customer updated!")
+        createdCustomerId = editingCustomer.id
+      }
     } else {
       const code = await getNextCode()
-      const { error } = await supabase
+      const { data: newCust, error } = await supabase
         .from("customers")
         .insert({ ...payload, code })
+        .select("id")
+        .single()
       if (error) errorMsg = error.message
-      else setFlash("✅ Customer created!")
+      else {
+        setFlash("✅ Customer created!")
+        createdCustomerId = newCust.id
+      }
+    }
+
+    // ── If opening balance > 0 and checkbox is on, create an opening invoice ──
+    if (!errorMsg && createdCustomerId && form.opening_balance > 0 && form.post_as_invoice) {
+      try {
+        // Get the customer code
+        const { data: custData } = await supabase
+          .from("customers")
+          .select("code")
+          .eq("id", createdCustomerId)
+          .single()
+
+        const custCode = custData?.code || "CUST"
+        const invNo = `OPEN-${custCode}-01`
+
+        // Insert invoice
+        const { data: inv, error: invErr } = await supabase
+          .from("invoices")
+          .insert({
+            company_id: companyId,
+            invoice_no: invNo,
+            type: "sale",
+            party_id: createdCustomerId,
+            date: new Date().toISOString().split("T")[0],
+            due_date: new Date().toISOString().split("T")[0],  // due immediately
+            total: form.opening_balance,
+            paid: 0,
+            status: "Unpaid",
+            reference: "Opening Balance",
+          })
+          .select("id")
+          .single()
+
+        if (invErr) throw new Error(invErr.message)
+
+        // Journal entries: Dr AR (1100), Cr Opening Equity (3100)
+        const arAcc = await supabase.from("accounts").select("id").eq("code", "1100").eq("company_id", companyId).single()
+        const equityAcc = await supabase.from("accounts").select("id").eq("code", "3100").eq("company_id", companyId).single()
+        if (arAcc.data && equityAcc.data) {
+          const { data: entry } = await supabase.from("journal_entries").insert({
+            company_id: companyId,
+            entry_no: `JE-OPEN-${createdCustomerId}`,
+            date: new Date().toISOString().split("T")[0],
+            description: `Opening Balance - Customer ${custCode}`,
+          }).select("id").single()
+
+          if (entry) {
+            await supabase.from("journal_lines").insert([
+              { company_id: companyId, entry_id: entry.id, account_id: arAcc.data.id, debit: form.opening_balance, credit: 0 },
+              { company_id: companyId, entry_id: entry.id, account_id: equityAcc.data.id, debit: 0, credit: form.opening_balance },
+            ])
+          }
+        }
+
+        setFlash("✅ Customer created & opening invoice posted!")
+      } catch (e: any) {
+        // Customer was created, but invoice failed – we'll still show success for customer
+        setFlash("✅ Customer created, but opening invoice failed: " + e.message)
+      }
     }
 
     setSaving(false)
@@ -224,11 +295,11 @@ export default function CustomersPage() {
     } else {
       setShowModal(false)
       fetchCustomers()
-      setTimeout(() => setFlash(""), 3000)
+      setTimeout(() => setFlash(""), 4000)
     }
   }
 
-  // ── Soft delete ─────────────────────────────────────
+  // ── Soft delete ─────────────────────────────────
   const handleDelete = async (id: number) => {
     if (!companyId || !canEdit) return
     if (!window.confirm("Delete this customer?")) return
@@ -247,7 +318,7 @@ export default function CustomersPage() {
     }
   }
 
-  // ── Guard clauses ──────────────────────────────────
+  // ── Guard clauses ──────────────────────────────
   if (!companyId) {
     return <div style={{ padding: 40, textAlign: "center", fontFamily: "Arial" }}>Loading your company data…</div>
   }
@@ -278,6 +349,8 @@ export default function CustomersPage() {
         .pr-field-label { font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; }
         .pr-modal-footer { padding: 16px 24px; border-top: 1px solid #E2E8F0; display: flex; justify-content: flex-end; gap: 8px; }
         .form-error { background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; padding: 8px 12px; border-radius: 6px; font-size: 13px; }
+        .chk-label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #1E293B; }
+        .chk-label input { width: 18px; height: 18px; accent-color: #1D4ED8; }
       `}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -438,6 +511,16 @@ export default function CustomersPage() {
                 <label className="pr-field-label">Opening Balance</label>
                 <input className="input" type="number" value={form.opening_balance} onChange={e => setForm({...form, opening_balance: parseFloat(e.target.value) || 0})} />
               </div>
+              {form.opening_balance > 0 && !editingCustomer && (
+                <div className="chk-label">
+                  <input
+                    type="checkbox"
+                    checked={form.post_as_invoice}
+                    onChange={e => setForm({...form, post_as_invoice: e.target.checked})}
+                  />
+                  <span>Post as Opening Invoice</span>
+                </div>
+              )}
             </div>
             <div className="pr-modal-footer">
               <button className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
