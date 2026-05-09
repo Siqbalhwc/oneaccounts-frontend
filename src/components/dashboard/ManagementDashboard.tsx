@@ -59,6 +59,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
     const fetchData = async () => {
       setLoading(true)
 
+      // Total Budget
       const { data: budgets } = await supabase
         .from("budgets")
         .select("budgeted_amount")
@@ -68,9 +69,11 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .not("activity_id", "is", null)
       setTotalBudget(budgets?.reduce((s, b) => s + (b.budgeted_amount || 0), 0) || 0)
 
+      // Total Spent (RPC)
       const { data: spentData } = await supabase.rpc("total_spent", { cid: companyId, fy: fiscalYear })
       setTotalSpent(spentData?.[0]?.total || 0)
 
+      // Donor Balances (RPC)
       const { data: donorData } = await supabase.rpc("dashboard_donor_balances", { cid: companyId, fy: fiscalYear })
       setDonorBalances(donorData?.map((d: any) => ({
         donor_id: d.donor_id, name: d.donor_name,
@@ -80,6 +83,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         overspent: (d.actual_spent || 0) > (d.budget || 0),
       })) || [])
 
+      // Project Utilization (RPC)
       const { data: projData } = await supabase.rpc("dashboard_project_utilization", {
         p_company_id: companyId, p_fiscal_year: fiscalYear,
       })
@@ -91,6 +95,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
       setProjectRows(projectsArr.sort((a: any, b: any) => b.pct - a.pct))
       setOverspentCount(projectsArr.filter((p: any) => p.actual > p.budget).length)
 
+      // Quick stats
       const { count: unpaidCount } = await supabase.from("invoices")
         .select("*", { count: "exact", head: true }).eq("company_id", companyId).eq("status", "Unpaid")
       setUnpaidInvoices(unpaidCount || 0)
@@ -133,12 +138,22 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const remainingFunds = filteredTotalBudget - filteredTotalSpent
   const spentPct = filteredTotalBudget ? Math.round((filteredTotalSpent / filteredTotalBudget) * 100) : 0
 
+  // ── Professional greeting ─────────────────────────────
+  const getGreeting = () => {
+    const hour = new Date().getHours()
+    if (hour < 12) return "Good morning"
+    if (hour < 18) return "Good afternoon"
+    return "Good evening"
+  }
+
+  // ── Formatting ───────────────────────────────────────
   const formatPKR = (v: number) => {
     if (v >= 1_000_000) return `PKR ${(v / 1_000_000).toFixed(1)}M`
     if (v >= 1_000) return `PKR ${(v / 1_000).toFixed(0)}K`
     return `PKR ${v.toLocaleString()}`
   }
 
+  // ── Build query string for detail pages ──────────────
   const detailQuery = (extra: Record<string, string> = {}) => {
     const params = new URLSearchParams({ fy: String(fiscalYear) })
     if (selectedProjectId) params.set("project", selectedProjectId)
@@ -148,12 +163,52 @@ export default function ManagementDashboard({ role }: { role: string }) {
   }
 
   if (loading) {
-    return <div style={{ padding: 40, textAlign: "center", background: "#f0f4f8", minHeight: "100vh" }}>Loading dashboard…</div>
+    return (
+      <div style={{ padding: 40, textAlign: "center", background: "#f0f4f8", minHeight: "100vh" }}>
+        <p style={{ color: "#64748b", fontSize: 16 }}>Loading dashboard…</p>
+      </div>
+    )
   }
 
   return (
-    <div style={{ background: "#f0f4f8", minHeight: "100vh", fontFamily: "Segoe UI, system-ui, sans-serif", padding: "20px 24px" }}>
+    <div style={{ background: "#f0f4f8", minHeight: "100vh", fontFamily: "Segoe UI, system-ui, sans-serif" }}>
       <style>{`
+        .dashboard-header {
+          background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+          padding: 20px 28px;
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 16px;
+        }
+        .dashboard-header .welcome h2 {
+          font-size: 20px; font-weight: 700; margin: 0;
+        }
+        .dashboard-header .welcome p {
+          font-size: 13px; color: rgba(255,255,255,0.7); margin: 4px 0 0 0;
+        }
+        .dashboard-header .stats {
+          display: flex; gap: 12px; flex-wrap: wrap;
+        }
+        .dashboard-header .stat-card {
+          background: rgba(255,255,255,0.1); backdrop-filter: blur(6px);
+          border: 1px solid rgba(255,255,255,0.15);
+          border-radius: 12px; padding: 10px 16px;
+          min-width: 100px; text-align: center;
+          cursor: pointer; transition: 0.2s;
+        }
+        .dashboard-header .stat-card:hover {
+          background: rgba(255,255,255,0.2);
+        }
+        .dashboard-header .stat-label {
+          font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+          color: rgba(255,255,255,0.65); margin-bottom: 4px;
+        }
+        .dashboard-header .stat-value {
+          font-size: 18px; font-weight: 700; color: white;
+        }
         .kpi-card { background: white; border-radius: 16px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); position: relative; overflow: hidden; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; }
         .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
         .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; border-radius: 16px 16px 0 0; }
@@ -176,170 +231,173 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .hero-badge .value { color: white; font-size: 40px; font-weight: 800; line-height: 1; }
         .responsive-grid { display: grid; gap: 16px; }
         .kpi-grid { grid-template-columns: repeat(4, 1fr); }
-        .stats-grid { grid-template-columns: repeat(4, 1fr); }
         .row-grid { grid-template-columns: 1.5fr 1fr; }
         @media (max-width: 900px) {
+          .dashboard-header { flex-direction: column; align-items: flex-start; }
           .kpi-grid { grid-template-columns: repeat(2, 1fr); }
-          .stats-grid { grid-template-columns: repeat(2, 1fr); }
           .row-grid { grid-template-columns: 1fr; }
           .filter-bar { flex-direction: column; }
         }
         @media (max-width: 500px) {
           .kpi-grid { grid-template-columns: 1fr; }
-          .stats-grid { grid-template-columns: 1fr; }
         }
       `}</style>
 
-      {/* Header & Filters */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, color: "#0f172a", margin: 0 }}>Management Dashboard</h1>
-          <p style={{ fontSize: 14, color: "#64748b", margin: 0 }}>Project & Budget Overview</p>
+      {/* ── Dashboard‑wide header (greeting + status pills) ── */}
+      <div className="dashboard-header">
+        <div className="welcome">
+          <h2>👋 {getGreeting()}, siqbalhwc</h2>
+          <p>Here's what's happening with your NGO portfolio today</p>
         </div>
-        <div className="filter-bar" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="stats">
+          <div className="stat-card" onClick={() => router.push("/dashboard/invoices")} title="View unpaid invoices">
+            <div className="stat-label">Unpaid Invoices</div>
+            <div className="stat-value">{unpaidInvoices}</div>
+          </div>
+          <div className="stat-card" onClick={() => router.push("/dashboard/customers")} title="View customers">
+            <div className="stat-label">Receivables</div>
+            <div className="stat-value">{formatPKR(totalReceivables)}</div>
+          </div>
+          <div className="stat-card" onClick={() => router.push("/dashboard/suppliers")} title="View suppliers">
+            <div className="stat-label">Payables</div>
+            <div className="stat-value">{formatPKR(totalPayables)}</div>
+          </div>
+          <div className="stat-card" onClick={() => router.push("/dashboard/reports/overspent" + detailQuery())} title="View overspent projects">
+            <div className="stat-label">Overspent</div>
+            <div className="stat-value" style={{ color: filteredOverspentCount > 0 ? '#fecaca' : 'white' }}>
+              {filteredOverspentCount} {filteredOverspentCount === 1 ? "proj" : "projs"}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Rest of the dashboard content with padding */}
+      <div style={{ padding: "16px 20px 20px" }}>
+        {/* Filters row */}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }} className="filter-bar">
           <select className="filter-select" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
             {[2024,2025,2026,2027].map(y => <option key={y} value={y}>FY {y}</option>)}
           </select>
-          <select className="filter-select" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
+          <select className="filter-select" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)} style={{ marginLeft: 8 }}>
             <option value="">All Projects</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <select className="filter-select" value={selectedDonorId} onChange={e => setSelectedDonorId(e.target.value)}>
+          <select className="filter-select" value={selectedDonorId} onChange={e => setSelectedDonorId(e.target.value)} style={{ marginLeft: 8 }}>
             <option value="">All Donors</option>
             {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
         </div>
-      </div>
 
-      {/* Hero Banner */}
-      <div className="hero-card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 20 }}>
-          <div>
-            <h2>Empowering Social Impact Through Smart Financial Governance</h2>
-            <p>Monitor donor utilization, project burn rates, receivables, payables and organizational performance from one centralized NGO management platform.</p>
-          </div>
-          <div className="hero-badge">
-            <div className="label">Portfolio Health</div>
-            <div className="value">{filteredTotalBudget ? Math.round((1 - filteredOverspentCount / Math.max(filteredProjectRows.length, 1)) * 100) : 100}%</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Stats Row */}
-      <div className="responsive-grid stats-grid" style={{ marginBottom: 24 }}>
-        <div style={{ background: "white", borderRadius: 12, padding: "14px 18px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", borderLeft: "4px solid #0d9488" }}>
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94a3b8", marginBottom: 4 }}>Unpaid Invoices</div>
-          <div style={{ fontSize: 22, fontWeight: 800 }}>{unpaidInvoices}</div>
-        </div>
-        <div style={{ background: "white", borderRadius: 12, padding: "14px 18px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", borderLeft: "4px solid #0d9488" }}>
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94a3b8", marginBottom: 4 }}>Total Receivables</div>
-          <div style={{ fontSize: 22, fontWeight: 800 }}>{formatPKR(totalReceivables)}</div>
-        </div>
-        <div style={{ background: "white", borderRadius: 12, padding: "14px 18px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", borderLeft: "4px solid #0d9488" }}>
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94a3b8", marginBottom: 4 }}>Total Payables</div>
-          <div style={{ fontSize: 22, fontWeight: 800 }}>{formatPKR(totalPayables)}</div>
-        </div>
-        <div style={{ background: "white", borderRadius: 12, padding: "14px 18px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", borderLeft: "4px solid #0d9488" }}>
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94a3b8", marginBottom: 4 }}>Remaining Funds</div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: remainingFunds < 0 ? "#dc2626" : "#16a34a" }}>{formatPKR(remainingFunds)}</div>
-        </div>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="responsive-grid kpi-grid" style={{ marginBottom: 24 }}>
-        <div className="kpi-card blue" onClick={() => router.push("/dashboard/reports/budget-summary" + detailQuery())}>
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Total Budget</div>
-          <div style={{ fontSize: 28, fontWeight: 800 }}>{formatPKR(filteredTotalBudget)}</div>
-          <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{filteredProjectRows.length} projects</div>
-          <span style={{ fontSize: 13, fontWeight: 600, color: "#1d4ed8", position: "absolute", bottom: 20, right: 24 }}>View →</span>
-        </div>
-        <div className="kpi-card green" onClick={() => router.push("/dashboard/reports/spending-detail" + detailQuery())}>
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Total Spent</div>
-          <div style={{ fontSize: 28, fontWeight: 800 }}>{formatPKR(filteredTotalSpent)}</div>
-          <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{spentPct}% of budget</div>
-          <span style={{ fontSize: 13, fontWeight: 600, color: "#1d4ed8", position: "absolute", bottom: 20, right: 24 }}>View →</span>
-        </div>
-        <div className="kpi-card amber">
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Remaining</div>
-          <div style={{ fontSize: 28, fontWeight: 800 }}>{formatPKR(remainingFunds)}</div>
-          <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{filteredTotalBudget ? Math.round((remainingFunds / filteredTotalBudget) * 100) : 0}% unspent</div>
-        </div>
-        <div className="kpi-card red" onClick={() => router.push("/dashboard/reports/overspent" + detailQuery())}>
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Overspent</div>
-          <div style={{ fontSize: 28, fontWeight: 800, color: "#dc2626" }}>{filteredOverspentCount}</div>
-          <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{filteredOverspentCount === 1 ? "project" : "projects"}</div>
-        </div>
-      </div>
-
-      {/* Project Utilization & Donor Balances */}
-      <div className="responsive-grid row-grid" style={{ marginBottom: 24 }}>
-        <div style={{ background: "white", borderRadius: 16, padding: 24, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-          <h3 style={{ fontSize: 18, fontWeight: 800, margin: "0 0 12px 0" }}>Project Utilization</h3>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94a3b8", borderBottom: "1px solid #e2e8f0" }}>
-                <th style={{ textAlign: "left", paddingBottom: 8 }}>Project</th>
-                <th style={{ textAlign: "left", paddingBottom: 8 }}>Budget</th>
-                <th style={{ textAlign: "left", paddingBottom: 8 }}>Spent</th>
-                <th style={{ textAlign: "left", paddingBottom: 8 }}>Utilization</th>
-                <th style={{ textAlign: "left", paddingBottom: 8 }}>%</th>
-                <th style={{ textAlign: "right", paddingBottom: 8 }}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredProjectRows.map((p, idx) => (
-                <tr key={idx} style={{ borderBottom: "1px solid #f8fafc", cursor: "pointer" }} onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}`)}>
-                  <td style={{ padding: "8px 0", fontWeight: 700, fontSize: 13 }}>{p.name}</td>
-                  <td style={{ padding: "8px 0", fontSize: 12 }}>{formatPKR(p.budget)}</td>
-                  <td style={{ padding: "8px 0", fontSize: 12, fontWeight: 700 }}>{formatPKR(p.actual)}</td>
-                  <td style={{ padding: "8px 0" }}>
-                    <div className="progress-bar">
-                      <div className="progress-fill" style={{ width: `${Math.min(p.pct, 100)}%`, background: p.pct > 100 ? "#dc2626" : p.pct > 80 ? "#d97706" : "#16a34a" }}></div>
-                    </div>
-                  </td>
-                  <td style={{ padding: "8px 0", fontSize: 12, fontWeight: 700, color: p.pct > 100 ? "#dc2626" : p.pct > 80 ? "#d97706" : "#16a34a" }}>{p.pct}%</td>
-                  <td style={{ padding: "8px 0", textAlign: "right" }}>
-                    <span className={`badge ${p.pct > 100 ? "badge-danger" : p.pct > 80 ? "badge-warning" : "badge-success"}`}>
-                      {p.pct > 100 ? "Overspent" : p.pct > 80 ? "Review" : "On Track"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {filteredProjectRows.length === 0 && (
-                <tr><td colSpan={6} style={{ textAlign: "center", padding: 20, color: "#94a3b8" }}>No projects found.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div style={{ background: "white", borderRadius: 16, padding: 24, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-          <h3 style={{ fontSize: 18, fontWeight: 800, margin: "0 0 12px 0" }}>Donor Balances</h3>
-          {filteredDonorBalances.map((d, idx) => (
-            <div key={idx} style={{ marginBottom: 12, cursor: "pointer" }} onClick={() => router.push(`/dashboard/settings/budgets?donor=${d.donor_id}`)}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 10, height: 10, borderRadius: "50%", background: d.overspent ? "#dc2626" : "#1d4ed8" }}></div>
-                <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{d.name}</span>
-                <span style={{ fontSize: 13, fontWeight: 700 }}>{formatPKR(d.remaining)}</span>
-                <span style={{ fontSize: 11, color: "#64748b", minWidth: 35, textAlign: "right" }}>{d.pct}%</span>
-              </div>
+        {/* Hero Banner */}
+        <div className="hero-card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 20 }}>
+            <div>
+              <h2>Empowering Social Impact Through Smart Financial Governance</h2>
+              <p>Monitor donor utilization, project burn rates, receivables, payables and organizational performance from one centralized NGO management platform.</p>
             </div>
-          ))}
-          {filteredDonorBalances.length === 0 && (
-            <p style={{ color: "#94a3b8", textAlign: "center" }}>No donor data available.</p>
-          )}
+            <div className="hero-badge">
+              <div className="label">Portfolio Health</div>
+              <div className="value">{filteredTotalBudget ? Math.round((1 - filteredOverspentCount / Math.max(filteredProjectRows.length, 1)) * 100) : 100}%</div>
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* Footer */}
-      <div style={{ background: "white", borderRadius: 12, padding: "12px 20px", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "#64748b", flexWrap: "wrap", gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#16a34a", boxShadow: "0 0 0 3px rgba(22,163,74,0.2)" }}></div>
-          <span>Portfolio Health: <strong style={{ color: "#0f172a" }}>{filteredOverspentCount > 0 ? "Needs Attention" : "Healthy"}</strong></span>
+        {/* KPI Cards */}
+        <div className="responsive-grid kpi-grid" style={{ marginBottom: 24 }}>
+          <div className="kpi-card blue" onClick={() => router.push("/dashboard/reports/budget-summary" + detailQuery())}>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Total Budget</div>
+            <div style={{ fontSize: 28, fontWeight: 800 }}>{formatPKR(filteredTotalBudget)}</div>
+            <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{filteredProjectRows.length} projects</div>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#1d4ed8", position: "absolute", bottom: 20, right: 24 }}>View →</span>
+          </div>
+          <div className="kpi-card green" onClick={() => router.push("/dashboard/reports/spending-detail" + detailQuery())}>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Total Spent</div>
+            <div style={{ fontSize: 28, fontWeight: 800 }}>{formatPKR(filteredTotalSpent)}</div>
+            <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{spentPct}% of budget</div>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#1d4ed8", position: "absolute", bottom: 20, right: 24 }}>View →</span>
+          </div>
+          <div className="kpi-card amber">
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Remaining</div>
+            <div style={{ fontSize: 28, fontWeight: 800 }}>{formatPKR(remainingFunds)}</div>
+            <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{filteredTotalBudget ? Math.round((remainingFunds / filteredTotalBudget) * 100) : 0}% unspent</div>
+          </div>
+          <div className="kpi-card red" onClick={() => router.push("/dashboard/reports/overspent" + detailQuery())}>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Overspent</div>
+            <div style={{ fontSize: 28, fontWeight: 800, color: "#dc2626" }}>{filteredOverspentCount}</div>
+            <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{filteredOverspentCount === 1 ? "project" : "projects"}</div>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-          <span>Total Budget: <strong>{formatPKR(filteredTotalBudget)}</strong></span>
-          <span>Utilized: <strong>{spentPct}%</strong></span>
-          <span>Projects: <strong>{filteredProjectRows.length}</strong></span>
+
+        {/* Project Utilization & Donor Balances */}
+        <div className="responsive-grid row-grid" style={{ marginBottom: 24 }}>
+          <div style={{ background: "white", borderRadius: 16, padding: 24, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+            <h3 style={{ fontSize: 18, fontWeight: 800, margin: "0 0 12px 0" }}>Project Utilization</h3>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94a3b8", borderBottom: "1px solid #e2e8f0" }}>
+                  <th style={{ textAlign: "left", paddingBottom: 8 }}>Project</th>
+                  <th style={{ textAlign: "left", paddingBottom: 8 }}>Budget</th>
+                  <th style={{ textAlign: "left", paddingBottom: 8 }}>Spent</th>
+                  <th style={{ textAlign: "left", paddingBottom: 8 }}>Utilization</th>
+                  <th style={{ textAlign: "left", paddingBottom: 8 }}>%</th>
+                  <th style={{ textAlign: "right", paddingBottom: 8 }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProjectRows.map((p, idx) => (
+                  <tr key={idx} style={{ borderBottom: "1px solid #f8fafc", cursor: "pointer" }} onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}`)}>
+                    <td style={{ padding: "8px 0", fontWeight: 700, fontSize: 13 }}>{p.name}</td>
+                    <td style={{ padding: "8px 0", fontSize: 12 }}>{formatPKR(p.budget)}</td>
+                    <td style={{ padding: "8px 0", fontSize: 12, fontWeight: 700 }}>{formatPKR(p.actual)}</td>
+                    <td style={{ padding: "8px 0" }}>
+                      <div className="progress-bar">
+                        <div className="progress-fill" style={{ width: `${Math.min(p.pct, 100)}%`, background: p.pct > 100 ? "#dc2626" : p.pct > 80 ? "#d97706" : "#16a34a" }}></div>
+                      </div>
+                    </td>
+                    <td style={{ padding: "8px 0", fontSize: 12, fontWeight: 700, color: p.pct > 100 ? "#dc2626" : p.pct > 80 ? "#d97706" : "#16a34a" }}>{p.pct}%</td>
+                    <td style={{ padding: "8px 0", textAlign: "right" }}>
+                      <span className={`badge ${p.pct > 100 ? "badge-danger" : p.pct > 80 ? "badge-warning" : "badge-success"}`}>
+                        {p.pct > 100 ? "Overspent" : p.pct > 80 ? "Review" : "On Track"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {filteredProjectRows.length === 0 && (
+                  <tr><td colSpan={6} style={{ textAlign: "center", padding: 20, color: "#94a3b8" }}>No projects found.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ background: "white", borderRadius: 16, padding: 24, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+            <h3 style={{ fontSize: 18, fontWeight: 800, margin: "0 0 12px 0" }}>Donor Balances</h3>
+            {filteredDonorBalances.map((d, idx) => (
+              <div key={idx} style={{ marginBottom: 12, cursor: "pointer" }} onClick={() => router.push(`/dashboard/settings/budgets?donor=${d.donor_id}`)}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: "50%", background: d.overspent ? "#dc2626" : "#1d4ed8" }}></div>
+                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{d.name}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700 }}>{formatPKR(d.remaining)}</span>
+                  <span style={{ fontSize: 11, color: "#64748b", minWidth: 35, textAlign: "right" }}>{d.pct}%</span>
+                </div>
+              </div>
+            ))}
+            {filteredDonorBalances.length === 0 && (
+              <p style={{ color: "#94a3b8", textAlign: "center" }}>No donor data available.</p>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ background: "white", borderRadius: 12, padding: "12px 20px", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "#64748b", flexWrap: "wrap", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#16a34a", boxShadow: "0 0 0 3px rgba(22,163,74,0.2)" }}></div>
+            <span>Portfolio Health: <strong style={{ color: "#0f172a" }}>{filteredOverspentCount > 0 ? "Needs Attention" : "Healthy"}</strong></span>
+          </div>
+          <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+            <span>Total Budget: <strong>{formatPKR(filteredTotalBudget)}</strong></span>
+            <span>Utilized: <strong>{spentPct}%</strong></span>
+            <span>Projects: <strong>{filteredProjectRows.length}</strong></span>
+          </div>
         </div>
       </div>
     </div>
