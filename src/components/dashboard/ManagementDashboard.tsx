@@ -88,8 +88,11 @@ export default function ManagementDashboard({ role }: { role: string }) {
       })) || []
       setDonorBalances(donorRows)
 
-      // Project Utilization (RPC)
-      const { data: projData } = await supabase.rpc("dashboard_project_utilization", { company_id: companyId, fiscal_year: fiscalYear })
+      // Project Utilization (RPC – FIXED PARAMETER NAMES)
+      const { data: projData } = await supabase.rpc("dashboard_project_utilization", {
+        p_company_id: companyId,
+        p_fiscal_year: fiscalYear,
+      })
       const projectsArr = projData?.map((p: any) => ({
         id: p.project_id,
         name: p.project_name,
