@@ -22,6 +22,7 @@ export default function SpendingDetailPage() {
   const [donors, setDonors] = useState<any[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState("")
   const [selectedDonorId, setSelectedDonorId] = useState("")
+  const [expenseAccountIds, setExpenseAccountIds] = useState<number[]>([])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -33,12 +34,22 @@ export default function SpendingDetailPage() {
           .then(r => r.data && setProjects(r.data))
         supabase.from("donors").select("id, name").eq("company_id", cid).order("name")
           .then(r => r.data && setDonors(r.data))
+        // fetch expense accounts for filtering later
+        supabase.from("accounts")
+          .select("id")
+          .eq("company_id", cid)
+          .eq("type", "Expense")
+          .then(r => {
+            if (r.data) {
+              setExpenseAccountIds(r.data.map((a: any) => a.id))
+            }
+          })
       }
     })
   }, [])
 
   useEffect(() => {
-    if (!companyId) return
+    if (!companyId || expenseAccountIds.length === 0) return
     setLoading(true)
 
     let query = supabase
@@ -61,7 +72,7 @@ export default function SpendingDetailPage() {
       .eq("company_id", companyId)
       .gte("journal_entries.date", `${fiscalYear}-01-01`)
       .lte("journal_entries.date", `${fiscalYear}-12-31`)
-      .in("account_id", (await supabase.from("accounts").select("id").eq("company_id", companyId).eq("type", "Expense")).data?.map(a => a.id) || [])
+      .in("account_id", expenseAccountIds)
       .order("journal_entries.date", { ascending: false })
 
     if (selectedProjectId) query = query.eq("project_id", selectedProjectId)
@@ -83,7 +94,7 @@ export default function SpendingDetailPage() {
       setRows(enriched)
       setLoading(false)
     })
-  }, [companyId, fiscalYear, selectedProjectId, selectedDonorId])
+  }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, expenseAccountIds])
 
   const exportExcel = () => {
     const sheet = rows.map(r => ({
