@@ -43,7 +43,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="dl-overlay open" onClick={closeSidebar} />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar (always visible) */}
       <aside className={`dl-sidebar ${sidebarOpen ? "mobile-open" : ""}`}>
         <div className="dl-sidebar-logo">
           <img src="/logo.png" alt="OneAccounts" style={{ width: 32, height: 32, borderRadius: 8 }} />
@@ -108,30 +108,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Main area */}
       <div className="dl-main">
         <header className="dl-topbar">
+          {/* Hamburger always visible (needed to open sidebar) */}
           <button className="dl-hamburger" aria-label="Open menu" onClick={toggleSidebar}>
             <span></span><span></span><span></span>
           </button>
 
-          <img src="/logo.png" alt="Logo" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "contain", marginRight: 8 }} />
-
-          <div className="dl-topbar-greeting">
-            <div className="dl-topbar-title">{greetingTime}, {userEmail?.split("@")[0] || "User"}!</div>
-            <div className="dl-topbar-subtitle">Here's what's happening with your business today</div>
-          </div>
-
-          <div style={{ flexShrink: 0 }}>
-            <button style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8, padding: "6px 10px", cursor: "pointer", color: "white" }}>
-              <Bell size={16} />
-            </button>
-          </div>
-
+          {/* The rest of the top bar is hidden ONLY on the dashboard */}
           {!isDashboard && (
-            <div className="dl-topbar-actions">
-              <Link href="/dashboard/invoices/new" className="dl-action-btn dl-btn-invoice">🧾 New Invoice</Link>
-              <Link href="/dashboard/bills/new" className="dl-action-btn dl-btn-bill">📦 New Bill</Link>
-              <Link href="/dashboard/receipts/new" className="dl-action-btn dl-btn-receipt">💰 Receipt</Link>
-              <Link href="/dashboard/payments/new" className="dl-action-btn dl-btn-payment">💳 Payment</Link>
-            </div>
+            <>
+              <img src="/logo.png" alt="Logo" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "contain", marginRight: 8 }} />
+              <div className="dl-topbar-greeting">
+                <div className="dl-topbar-title">{greetingTime}, {userEmail?.split("@")[0] || "User"}!</div>
+                <div className="dl-topbar-subtitle">Here's what's happening with your business today</div>
+              </div>
+              <div style={{ flexShrink: 0 }}>
+                <button style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8, padding: "6px 10px", cursor: "pointer", color: "white" }}>
+                  <Bell size={16} />
+                </button>
+              </div>
+              <div className="dl-topbar-actions">
+                <Link href="/dashboard/invoices/new" className="dl-action-btn dl-btn-invoice">🧾 New Invoice</Link>
+                <Link href="/dashboard/bills/new" className="dl-action-btn dl-btn-bill">📦 New Bill</Link>
+                <Link href="/dashboard/receipts/new" className="dl-action-btn dl-btn-receipt">💰 Receipt</Link>
+                <Link href="/dashboard/payments/new" className="dl-action-btn dl-btn-payment">💳 Payment</Link>
+              </div>
+            </>
           )}
         </header>
 
