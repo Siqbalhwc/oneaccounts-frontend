@@ -151,323 +151,175 @@ export default function ManagementDashboard({ role }: { role: string }) {
     v >= 1_000_000 ? `PKR ${(v / 1_000_000).toFixed(1)}M` : `PKR ${v.toLocaleString()}`
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-100">
-        <p className="text-slate-500 text-xl">Loading dashboard…</p>
-      </div>
-    )
+    return <div style={{ padding: 40, textAlign: "center", background: "#f0f4f8", minHeight: "100vh" }}>Loading dashboard…</div>
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 font-sans">
-      <main className="p-4 md:p-6 lg:p-8">
-        {/* Header & Filters */}
-        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6 mb-8">
-          <div>
-            <h2 className="text-4xl font-black text-slate-900">Management Dashboard</h2>
-            <p className="text-slate-500 mt-2 text-lg">NGO Budget, Donor & Project Intelligence Center</p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <select
-              className="bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-sm"
-              value={fiscalYear}
-              onChange={e => setFiscalYear(Number(e.target.value))}
-            >
-              {[2024,2025,2026,2027].map(y => <option key={y} value={y}>{y}</option>)}
-            </select>
-            <select
-              className="bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-sm"
-              value={selectedProjectId}
-              onChange={e => setSelectedProjectId(e.target.value)}
-            >
-              <option value="">All Projects</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-            <select
-              className="bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-sm"
-              value={selectedDonorId}
-              onChange={e => setSelectedDonorId(e.target.value)}
-            >
-              <option value="">All Donors</option>
-              {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          </div>
+    <div style={{ background: "#f0f4f8", minHeight: "100vh", fontFamily: "Segoe UI, system-ui, sans-serif", padding: "20px 24px" }}>
+      <style>{`
+        .kpi-card { background: white; border-radius: 28px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); position: relative; overflow: hidden; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; }
+        .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; border-radius: 28px 28px 0 0; }
+        .blue::before { background: linear-gradient(to right, #3b82f6, #06b6d4); }
+        .green::before { background: linear-gradient(to right, #22c55e, #10b981); }
+        .amber::before { background: linear-gradient(to right, #f97316, #f59e0b); }
+        .red::before { background: linear-gradient(to right, #ef4444, #ec4899); }
+        .progress-bar { height: 6px; border-radius: 3px; background: #f1f5f9; overflow: hidden; }
+        .progress-fill { height: 6px; border-radius: 3px; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 700; }
+        .badge-danger { background: #fef2f2; color: #991b1b; }
+        .badge-warning { background: #fffbeb; color: #92400e; }
+        .badge-success { background: #f0fdf4; color: #166534; }
+        .filter-select { padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; background: white; }
+        .responsive-grid { display: grid; gap: 16px; }
+        .kpi-grid { grid-template-columns: repeat(4, 1fr); }
+        .stats-grid { grid-template-columns: repeat(3, 1fr); }
+        .row-grid { grid-template-columns: 1.5fr 1fr; }
+        @media (max-width: 900px) {
+          .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+          .stats-grid { grid-template-columns: repeat(2, 1fr); }
+          .row-grid { grid-template-columns: 1fr; }
+          .filter-bar { flex-direction: column; }
+        }
+        @media (max-width: 500px) {
+          .kpi-grid { grid-template-columns: 1fr; }
+          .stats-grid { grid-template-columns: 1fr; }
+        }
+      `}</style>
+
+      {/* Header & Filters */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: 24, fontWeight: 800, color: "#0f172a", margin: 0 }}>Management Dashboard</h1>
+          <p style={{ fontSize: 14, color: "#64748b", margin: 0 }}>Project & Budget Overview</p>
         </div>
-
-        {/* KPI Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-4 gap-6 mb-8">
-          <button
-            className="group relative overflow-hidden bg-white rounded-[28px] p-6 text-left shadow-sm hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border border-slate-100"
-            onClick={() => router.push("/dashboard/reports/budget-summary")}
-          >
-            <div className="absolute top-0 left-0 h-2 w-full bg-gradient-to-r from-blue-500 to-cyan-500"></div>
-            <div className="flex items-start justify-between mb-6">
-              <div>
-                <p className="text-xs uppercase tracking-widest text-slate-400 font-bold mb-3">Total Budget</p>
-                <h3 className="text-4xl font-black text-slate-900">{formatPKR(filteredTotalBudget)}</h3>
-              </div>
-              <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-400 opacity-90"></div>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-green-600 font-bold text-sm">{filteredProjectRows.length} projects</p>
-              </div>
-              <span className="text-sm font-semibold text-slate-900 group-hover:translate-x-1 transition-transform">View →</span>
-            </div>
-          </button>
-
-          <button
-            className="group relative overflow-hidden bg-white rounded-[28px] p-6 text-left shadow-sm hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border border-slate-100"
-            onClick={() => router.push("/dashboard/reports/spending-detail")}
-          >
-            <div className="absolute top-0 left-0 h-2 w-full bg-gradient-to-r from-green-500 to-emerald-500"></div>
-            <div className="flex items-start justify-between mb-6">
-              <div>
-                <p className="text-xs uppercase tracking-widest text-slate-400 font-bold mb-3">Total Spent</p>
-                <h3 className="text-4xl font-black text-slate-900">{formatPKR(filteredTotalSpent)}</h3>
-              </div>
-              <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-400 opacity-90"></div>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-green-600 font-bold text-sm">{spentPct}% of budget</p>
-              </div>
-              <span className="text-sm font-semibold text-slate-900 group-hover:translate-x-1 transition-transform">View →</span>
-            </div>
-          </button>
-
-          <button
-            className="group relative overflow-hidden bg-white rounded-[28px] p-6 text-left shadow-sm hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border border-slate-100"
-            onClick={() => router.push("/dashboard/reports/remaining-funds")}
-          >
-            <div className="absolute top-0 left-0 h-2 w-full bg-gradient-to-r from-orange-500 to-amber-500"></div>
-            <div className="flex items-start justify-between mb-6">
-              <div>
-                <p className="text-xs uppercase tracking-widest text-slate-400 font-bold mb-3">Remaining</p>
-                <h3 className="text-4xl font-black text-slate-900">{formatPKR(remainingFunds)}</h3>
-              </div>
-              <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-400 opacity-90"></div>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-green-600 font-bold text-sm">{filteredTotalBudget ? Math.round((remainingFunds / filteredTotalBudget) * 100) : 0}% unspent</p>
-              </div>
-              <span className="text-sm font-semibold text-slate-900 group-hover:translate-x-1 transition-transform">View →</span>
-            </div>
-          </button>
-
-          <button
-            className="group relative overflow-hidden bg-white rounded-[28px] p-6 text-left shadow-sm hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border border-slate-100"
-            onClick={() => router.push("/dashboard/reports/overspent")}
-          >
-            <div className="absolute top-0 left-0 h-2 w-full bg-gradient-to-r from-red-500 to-pink-500"></div>
-            <div className="flex items-start justify-between mb-6">
-              <div>
-                <p className="text-xs uppercase tracking-widest text-slate-400 font-bold mb-3">Overspent</p>
-                <h3 className="text-4xl font-black text-slate-900">{filteredOverspentCount}</h3>
-              </div>
-              <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-red-500 to-pink-400 opacity-90"></div>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-red-600 font-bold text-sm">Attention</p>
-              </div>
-              <span className="text-sm font-semibold text-slate-900 group-hover:translate-x-1 transition-transform">View →</span>
-            </div>
-          </button>
+        <div className="filter-bar" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <select className="filter-select" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
+            {[2024,2025,2026,2027].map(y => <option key={y} value={y}>FY {y}</option>)}
+          </select>
+          <select className="filter-select" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
+            <option value="">All Projects</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <select className="filter-select" value={selectedDonorId} onChange={e => setSelectedDonorId(e.target.value)}>
+            <option value="">All Donors</option>
+            {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
         </div>
+      </div>
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
-          <button
-            className="bg-white rounded-[30px] p-6 shadow-sm border border-slate-100 hover:shadow-xl transition cursor-pointer text-left"
-            onClick={() => router.push("/dashboard/invoices")}
-          >
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <p className="uppercase text-xs tracking-widest text-slate-400 font-black mb-2">Unpaid Invoices</p>
-                <h3 className="text-4xl font-black text-slate-900">{unpaidInvoices}</h3>
-              </div>
-              <div className="h-16 w-16 rounded-3xl bg-blue-100"></div>
-            </div>
-            <p className="text-slate-500 leading-relaxed">Pending invoices requiring payment.</p>
-          </button>
-
-          <button
-            className="bg-white rounded-[30px] p-6 shadow-sm border border-slate-100 hover:shadow-xl transition cursor-pointer text-left"
-            onClick={() => router.push("/dashboard/customers")}
-          >
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <p className="uppercase text-xs tracking-widest text-slate-400 font-black mb-2">Total Receivables</p>
-                <h3 className="text-4xl font-black text-slate-900">{formatPKR(totalReceivables)}</h3>
-              </div>
-              <div className="h-16 w-16 rounded-3xl bg-green-100"></div>
-            </div>
-            <p className="text-slate-500 leading-relaxed">Outstanding customer receivables.</p>
-          </button>
-
-          <button
-            className="bg-white rounded-[30px] p-6 shadow-sm border border-slate-100 hover:shadow-xl transition cursor-pointer text-left"
-            onClick={() => router.push("/dashboard/suppliers")}
-          >
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <p className="uppercase text-xs tracking-widest text-slate-400 font-black mb-2">Total Payables</p>
-                <h3 className="text-4xl font-black text-slate-900">{formatPKR(totalPayables)}</h3>
-              </div>
-              <div className="h-16 w-16 rounded-3xl bg-orange-100"></div>
-            </div>
-            <p className="text-slate-500 leading-relaxed">Vendor liabilities and pending payments.</p>
-          </button>
+      {/* KPI Cards */}
+      <div className="responsive-grid kpi-grid" style={{ marginBottom: 24 }}>
+        <div className="kpi-card blue" onClick={() => router.push("/dashboard/reports/budget-summary")}>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Total Budget</div>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>{formatPKR(filteredTotalBudget)}</div>
+          <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{filteredProjectRows.length} projects</div>
+          <span style={{ fontSize: 13, fontWeight: 600, color: "#1d4ed8", position: "absolute", bottom: 20, right: 24 }}>View →</span>
         </div>
+        <div className="kpi-card green" onClick={() => router.push("/dashboard/reports/spending-detail")}>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Total Spent</div>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>{formatPKR(filteredTotalSpent)}</div>
+          <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{spentPct}% of budget</div>
+          <span style={{ fontSize: 13, fontWeight: 600, color: "#1d4ed8", position: "absolute", bottom: 20, right: 24 }}>View →</span>
+        </div>
+        <div className="kpi-card amber">
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Remaining</div>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>{formatPKR(remainingFunds)}</div>
+          <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{filteredTotalBudget ? Math.round((remainingFunds / filteredTotalBudget) * 100) : 0}% unspent</div>
+        </div>
+        <div className="kpi-card red" onClick={() => router.push("/dashboard/reports/overspent")}>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Overspent</div>
+          <div style={{ fontSize: 28, fontWeight: 800, color: "#dc2626" }}>{filteredOverspentCount}</div>
+        </div>
+      </div>
 
-        {/* Project Utilization & Donor Balances */}
-        <div className="grid grid-cols-1 2xl:grid-cols-3 gap-6 mb-8">
-          <div className="2xl:col-span-2 bg-white rounded-[30px] p-6 md:p-8 shadow-sm border border-slate-100">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-              <div>
-                <h3 className="text-2xl font-black text-slate-900">Project Utilization</h3>
-                <p className="text-slate-500 mt-1">Real‑time budget monitoring and burn rate analysis</p>
-              </div>
-              <button
-                className="px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 transition font-semibold"
-                onClick={() => router.push("/dashboard/reports/budget-vs-actual")}
-              >
-                Open Full Analytics
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[700px]">
-                <thead>
-                  <tr className="border-b border-slate-100 text-slate-400 uppercase text-xs tracking-widest">
-                    <th className="text-left pb-5">Project</th>
-                    <th className="text-left pb-5">Budget</th>
-                    <th className="text-left pb-5">Spent</th>
-                    <th className="text-left pb-5">Utilization</th>
-                    <th className="text-right pb-5">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredProjectRows.map((p, idx) => (
-                    <tr
-                      key={idx}
-                      className="border-b border-slate-50 hover:bg-slate-50 transition cursor-pointer"
-                      onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}`)}
-                    >
-                      <td className="py-6">
-                        <div>
-                          <div className="font-bold text-slate-900">{p.name}</div>
-                          <div className="text-sm text-slate-500 mt-1">Click to open project center</div>
-                        </div>
-                      </td>
-                      <td className="py-6 font-semibold text-slate-700">{formatPKR(p.budget)}</td>
-                      <td className="py-6 font-black text-slate-900">{formatPKR(p.actual)}</td>
-                      <td className="py-6 w-72">
-                        <div className="flex items-center gap-4">
-                          <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full ${
-                                p.pct > 100 ? 'bg-red-500' : p.pct > 80 ? 'bg-orange-500' : 'bg-green-500'
-                              }`}
-                              style={{ width: `${Math.min(p.pct, 100)}%` }}
-                            ></div>
-                          </div>
-                          <div
-                            className={`font-black text-sm ${
-                              p.pct > 100 ? 'text-red-500' : p.pct > 80 ? 'text-orange-500' : 'text-green-600'
-                            }`}
-                          >
-                            {p.pct}%
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-6 text-right">
-                        <span
-                          className={`inline-flex px-4 py-2 rounded-full text-xs font-black ${
-                            p.pct > 100 ? 'bg-red-100 text-red-700' : p.pct > 80 ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'
-                          }`}
-                        >
-                          {p.pct > 100 ? "Overspent" : p.pct > 80 ? "Review" : "On Track"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                  {filteredProjectRows.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="text-center py-10 text-slate-400">No projects found.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+      {/* Quick Stats */}
+      <div className="responsive-grid stats-grid" style={{ marginBottom: 24 }}>
+        <div className="kpi-card" style={{ borderTop: "3px solid #0d9488", cursor: "pointer" }} onClick={() => router.push("/dashboard/invoices")}>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Unpaid Invoices</div>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>{unpaidInvoices}</div>
+        </div>
+        <div className="kpi-card" style={{ borderTop: "3px solid #0d9488", cursor: "pointer" }} onClick={() => router.push("/dashboard/customers")}>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Total Receivables</div>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>{formatPKR(totalReceivables)}</div>
+        </div>
+        <div className="kpi-card" style={{ borderTop: "3px solid #0d9488", cursor: "pointer" }} onClick={() => router.push("/dashboard/suppliers")}>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Total Payables</div>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>{formatPKR(totalPayables)}</div>
+        </div>
+      </div>
 
-          <div className="bg-white rounded-[30px] p-6 md:p-8 shadow-sm border border-slate-100">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h3 className="text-2xl font-black text-slate-900">Donor Balances</h3>
-                <p className="text-slate-500 mt-1">Funding utilization overview</p>
-              </div>
-            </div>
-            <div className="space-y-6">
-              {filteredDonorBalances.map((d, idx) => (
-                <button
-                  key={idx}
-                  className="w-full text-left p-5 rounded-3xl hover:bg-slate-50 transition border border-slate-100"
-                  onClick={() => router.push(`/dashboard/settings/budgets?donor=${d.donor_id}`)}
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <div className="font-black text-slate-900 text-lg">{d.name}</div>
-                      <div className="text-sm text-slate-500 mt-1">Click to view donor projects</div>
+      {/* Project Utilization & Donor Balances */}
+      <div className="responsive-grid row-grid" style={{ marginBottom: 24 }}>
+        <div style={{ background: "white", borderRadius: 24, padding: 24, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+          <h3 style={{ fontSize: 18, fontWeight: 800, margin: "0 0 4px 0" }}>Project Utilization</h3>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94a3b8", borderBottom: "1px solid #e2e8f0" }}>
+                <th style={{ textAlign: "left", paddingBottom: 8 }}>Project</th>
+                <th style={{ textAlign: "left", paddingBottom: 8 }}>Budget</th>
+                <th style={{ textAlign: "left", paddingBottom: 8 }}>Spent</th>
+                <th style={{ textAlign: "left", paddingBottom: 8 }}>Utilization</th>
+                <th style={{ textAlign: "left", paddingBottom: 8 }}>%</th>
+                <th style={{ textAlign: "right", paddingBottom: 8 }}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredProjectRows.map((p, idx) => (
+                <tr key={idx} style={{ borderBottom: "1px solid #f8fafc", cursor: "pointer" }} onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}`)}>
+                  <td style={{ padding: "8px 0", fontWeight: 700 }}>{p.name}</td>
+                  <td style={{ padding: "8px 0" }}>{formatPKR(p.budget)}</td>
+                  <td style={{ padding: "8px 0", fontWeight: 700 }}>{formatPKR(p.actual)}</td>
+                  <td style={{ padding: "8px 0" }}>
+                    <div className="progress-bar">
+                      <div className="progress-fill" style={{ width: `${Math.min(p.pct, 100)}%`, background: p.pct > 100 ? "#dc2626" : p.pct > 80 ? "#d97706" : "#16a34a" }}></div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-black text-xl text-slate-900">{formatPKR(d.remaining)}</div>
-                      <div className="text-sm text-slate-500">Remaining</div>
-                    </div>
-                  </div>
-                  <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${
-                        d.pct > 90 ? 'bg-red-500' : d.pct > 80 ? 'bg-orange-500' : 'bg-blue-500'
-                      }`}
-                      style={{ width: `${Math.min(d.pct, 100)}%` }}
-                    ></div>
-                  </div>
-                  <div className="flex items-center justify-between mt-3 text-sm">
-                    <span className="text-slate-500">Utilization</span>
-                    <span className="font-black text-slate-900">{d.pct}%</span>
-                  </div>
-                </button>
+                  </td>
+                  <td style={{ padding: "8px 0", fontWeight: 700, color: p.pct > 100 ? "#dc2626" : p.pct > 80 ? "#d97706" : "#16a34a" }}>{p.pct}%</td>
+                  <td style={{ padding: "8px 0", textAlign: "right" }}>
+                    <span className={`badge ${p.pct > 100 ? "badge-danger" : p.pct > 80 ? "badge-warning" : "badge-success"}`}>
+                      {p.pct > 100 ? "Overspent" : p.pct > 80 ? "Review" : "On Track"}
+                    </span>
+                  </td>
+                </tr>
               ))}
-              {filteredDonorBalances.length === 0 && (
-                <p className="text-slate-400 text-center py-6">No donor data available.</p>
+              {filteredProjectRows.length === 0 && (
+                <tr><td colSpan={6} style={{ textAlign: "center", padding: 20, color: "#94a3b8" }}>No projects found.</td></tr>
               )}
-            </div>
-          </div>
+            </tbody>
+          </table>
         </div>
 
-        {/* Footer */}
-        <div className="bg-white rounded-[30px] px-6 py-5 border border-slate-100 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 shadow-sm">
-          <div className="flex flex-wrap items-center gap-4 text-sm">
-            <div className="flex items-center gap-3">
-              <div className="h-3 w-3 rounded-full bg-green-500 shadow-[0_0_0_6px_rgba(34,197,94,0.15)]"></div>
-              <span className="text-slate-500">
-                Portfolio Status:
-                <strong className="text-slate-900 ml-1">
-                  {filteredOverspentCount > 0 ? "Needs Attention" : "Healthy"}
-                </strong>
-              </span>
+        <div style={{ background: "white", borderRadius: 24, padding: 24, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+          <h3 style={{ fontSize: 18, fontWeight: 800, margin: "0 0 4px 0" }}>Donor Balances</h3>
+          {filteredDonorBalances.map((d, idx) => (
+            <div key={idx} style={{ marginBottom: 12, cursor: "pointer" }} onClick={() => router.push(`/dashboard/settings/budgets?donor=${d.donor_id}`)}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ width: 10, height: 10, borderRadius: "50%", background: d.overspent ? "#dc2626" : "#1d4ed8" }}></div>
+                <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{d.name}</span>
+                <span style={{ fontSize: 13, fontWeight: 700 }}>{formatPKR(d.remaining)}</span>
+                <span style={{ fontSize: 11, color: "#64748b", minWidth: 35, textAlign: "right" }}>{d.pct}%</span>
+              </div>
             </div>
-          </div>
-          <div className="flex flex-wrap gap-6 text-sm text-slate-500">
-            <span>Total Budget:<strong className="text-slate-900 ml-1">{formatPKR(filteredTotalBudget)}</strong></span>
-            <span>Utilized:<strong className="text-slate-900 ml-1">{spentPct}%</strong></span>
-            <span>Projects:<strong className="text-slate-900 ml-1">{filteredProjectRows.length}</strong></span>
-          </div>
+          ))}
+          {filteredDonorBalances.length === 0 && (
+            <p style={{ color: "#94a3b8", textAlign: "center" }}>No donor data available.</p>
+          )}
         </div>
-      </main>
+      </div>
+
+      {/* Footer */}
+      <div style={{ background: "white", borderRadius: 24, padding: "12px 20px", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "#64748b", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#16a34a", boxShadow: "0 0 0 3px rgba(22,163,74,0.2)" }}></div>
+          <span>Portfolio Health: <strong style={{ color: "#0f172a" }}>{filteredOverspentCount > 0 ? "Needs Attention" : "Healthy"}</strong></span>
+        </div>
+        <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+          <span>Total Budget: <strong>{formatPKR(filteredTotalBudget)}</strong></span>
+          <span>Utilized: <strong>{spentPct}%</strong></span>
+          <span>Projects: <strong>{filteredProjectRows.length}</strong></span>
+        </div>
+      </div>
     </div>
   )
 }
