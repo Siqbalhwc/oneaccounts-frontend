@@ -37,14 +37,13 @@ export async function POST(request: NextRequest) {
   if (!roleData?.company_id) return NextResponse.json({ error: 'No company found' }, { status: 400 })
   const companyId = roleData.company_id
 
-  // Get business type and validate donor requirement
   const { data: comp } = await supabaseAdmin.from("companies").select("business_type").eq("id", companyId).single()
   const businessType = comp?.business_type
 
   const {
     invoice_no, party_id, invoice_date, due_date,
     items, reference, notes,
-    expense_account_id,   // fallback header account
+    expense_account_id,    // header default
     project_id, location_id, activity_id, donor_id
   } = await request.json()
 
@@ -92,39 +91,89 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: billErr?.message || "Failed to create bill" }, { status: 500 })
   }
 
-  // 2. Insert items and increase stock (if product)
+  // 2. Insert items, stock, and journal lines per item
+  const fiscalYear = new Date().getFullYear()
+  const startDate = `${fiscalYear}-01-01`
+  const endDate   = `${fiscalYear}-12-31`
+
   for (const item of items) {
+    const itemAmount = item.qty * item.unit_price
+    const lineActivityId = item.activity_id || activity_id
+    const lineAccountId  = item.account_id  || expense_account_id
+
+    // Budget enforcement for this line
+    if (lineActivityId && lineAccountId) {
+      // Check budget remaining for this specific activity+account+location+project+donor
+      const { data: budgetRow } = await supabaseAdmin
+        .from("budgets")
+        .select("budgeted_amount")
+        .eq("company_id", companyId)
+        .eq("project_id", project_id)
+        .eq("activity_id", lineActivityId)
+        .eq("location_id", location_id)
+        .eq("account_id", lineAccountId)
+        .eq("fiscal_year", fiscalYear)
+        .eq("donor_id", donor_id || null)
+        .is("month", null)
+        .maybeSingle()
+
+      const budget = budgetRow?.budgeted_amount || 0
+
+      // Get actuals YTD for this line
+      const { data: actualRows } = await supabaseAdmin
+        .from("journal_lines")
+        .select("debit, credit")
+        .eq("company_id", companyId)
+        .eq("project_id", project_id)
+        .eq("activity_id", lineActivityId)
+        .eq("location_id", location_id)
+        .eq("account_id", lineAccountId)
+        .gte("journal_entries.date", startDate)
+        .lte("journal_entries.date", endDate)
+
+      const actualSpent = actualRows?.reduce((s, row) => s + ((row.debit || 0) - (row.credit || 0)), 0) || 0
+      const remaining = budget - actualSpent
+
+      if (itemAmount > remaining) {
+        return NextResponse.json({
+          error: `Budget exceeded for this item! Remaining: PKR ${remaining.toLocaleString()}, Requested: PKR ${itemAmount.toLocaleString()}`
+        }, { status: 400 })
+      }
+    }
+
+    // Save invoice item
     await supabaseAdmin.from("invoice_items").insert({
       company_id: companyId,
       invoice_id: bill.id,
-      product_id: item.product_id || null,
       description: item.description,
       qty: item.qty,
       unit_price: item.unit_price,
-      total: item.qty * item.unit_price,
+      total: itemAmount,
     })
 
-    if (item.product_id) {
-      const { data: prod } = await supabaseAdmin.from("products")
-        .select("qty_on_hand").eq("id", item.product_id).eq("company_id", companyId).single()
-      if (prod) {
-        await supabaseAdmin.from("products")
-          .update({ qty_on_hand: (prod.qty_on_hand || 0) + item.qty })
-          .eq("id", item.product_id).eq("company_id", companyId)
-        await supabaseAdmin.from("stock_moves").insert({
-          company_id: companyId,
-          product_id: item.product_id,
-          move_type: "purchase",
-          qty: item.qty,
-          unit_price: item.unit_price,
-          ref: finalInvoiceNo,
-          date: invoice_date || new Date().toISOString().split('T')[0],
-        })
-      }
+    // Update stock (if product, but here all items are manual; no product_id)
+    // No product stock update needed
+
+    // Post journal line
+    if (!lineAccountId) {
+      return NextResponse.json({ error: "Missing account for line" }, { status: 400 })
     }
+
+    // Debit the expense account
+    await supabaseAdmin.from("journal_lines").insert({
+      company_id: companyId,
+      entry_id: null,  // will update after entry is created
+      account_id: lineAccountId,
+      debit: itemAmount,
+      credit: 0,
+      project_id: project_id,
+      location_id: location_id,
+      activity_id: lineActivityId,
+      donor_id: donor_id || null,
+    })
   }
 
-  // 3. Update supplier balance
+  // Update supplier balance
   const { data: supp } = await supabaseAdmin.from("suppliers")
     .select("balance").eq("id", party_id).eq("company_id", companyId).single()
   if (supp) {
@@ -133,9 +182,10 @@ export async function POST(request: NextRequest) {
       .eq("id", party_id).eq("company_id", companyId)
   }
 
-  // 4. GL entries
+  // Create journal entry and link the lines
   const apAcc = await supabaseAdmin.from("accounts")
     .select("id,balance").eq("code", "2000").eq("company_id", companyId).single()
+
   if (!apAcc.data) {
     return NextResponse.json({ error: "AP account (2000) not found" }, { status: 500 })
   }
@@ -151,51 +201,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Failed to create journal entry" }, { status: 500 })
   }
 
-  // Group items: manual vs product; use per‑item account_id if present
-  for (const item of items) {
-    const itemAmount = item.qty * item.unit_price
-    let debitAccountId: number | null = null
+  // Update all journal lines of this bill with the entry ID
+  await supabaseAdmin.from("journal_lines")
+    .update({ entry_id: entry.id })
+    .is("entry_id", null)  // update only the lines we just inserted
+    .eq("company_id", companyId)
 
-    if (item.product_id) {
-      // Product: debit Inventory 1200
-      const invAcc = await supabaseAdmin.from("accounts")
-        .select("id,balance").eq("code", "1200").eq("company_id", companyId).single()
-      if (!invAcc.data) {
-        return NextResponse.json({ error: "Inventory account (1200) not found" }, { status: 500 })
-      }
-      debitAccountId = invAcc.data.id
-      // Update inventory balance
-          } else {
-      // Manual: use item.account_id or fallback to header expense_account_id
-      const accountId = item.account_id || expense_account_id
-      if (!accountId) {
-        return NextResponse.json({ error: "Missing account for manual item" }, { status: 400 })
-      }
-      // Verify account exists
-      const { data: acc } = await supabaseAdmin.from("accounts").select("id,balance").eq("id", accountId).single()
-      if (!acc) {
-        return NextResponse.json({ error: `Account ${accountId} not found` }, { status: 400 })
-      }
-      debitAccountId = acc.id
-      // Update account balance
-      
-    }
-
-    // Insert debit line for this item with all tags
-    await supabaseAdmin.from("journal_lines").insert({
-      company_id: companyId,
-      entry_id: entry.id,
-      account_id: debitAccountId,
-      debit: itemAmount,
-      credit: 0,
-      project_id: project_id || null,
-      location_id: location_id || null,
-      activity_id: activity_id || null,
-      donor_id: donor_id || null,
-    })
-  }
-
-  // Credit AP for total
+  // Credit AP
   await supabaseAdmin.from("journal_lines").insert({
     company_id: companyId,
     entry_id: entry.id,
@@ -207,7 +219,8 @@ export async function POST(request: NextRequest) {
     activity_id: activity_id || null,
     donor_id: donor_id || null,
   })
-  // Update AP balance
+
+  // Update AP balance (optional, kept for compatibility)
   await supabaseAdmin.from("accounts")
     .update({ balance: (apAcc.data.balance || 0) + totalAmount })
     .eq("id", apAcc.data.id)
