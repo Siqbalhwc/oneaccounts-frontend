@@ -174,14 +174,24 @@ export default function ManagementDashboard({ role }: { role: string }) {
     <div style={{ background: "#f0f4f8", minHeight: "100vh", fontFamily: "Segoe UI, system-ui, sans-serif" }}>
       <style>{`
         .dashboard-header {
-          background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
-          padding: 20px 28px;
+          background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #06b6d4 100%);
+          border-radius: 24px;
+          padding: 24px 28px;
           color: white;
           display: flex;
           align-items: center;
           justify-content: space-between;
           flex-wrap: wrap;
           gap: 16px;
+          margin: 0 16px 20px;
+        }
+        .dashboard-header .welcome {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .dashboard-header .welcome img {
+          width: 40px; height: 40px; border-radius: 10px; object-fit: contain;
         }
         .dashboard-header .welcome h2 {
           font-size: 20px; font-weight: 700; margin: 0;
@@ -223,7 +233,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .badge-warning { background: #fffbeb; color: #92400e; }
         .badge-success { background: #f0fdf4; color: #166534; }
         .filter-select { padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; background: white; box-sizing: border-box; }
-        .hero-card { background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #06b6d4 100%); border-radius: 24px; padding: 28px 32px; position: relative; overflow: hidden; margin-bottom: 24px; }
+        .hero-card { background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #06b6d4 100%); border-radius: 24px; padding: 28px 32px; position: relative; overflow: hidden; margin-bottom: 20px; }
         .hero-card h2 { color: white; font-size: 24px; font-weight: 800; margin: 0 0 8px 0; }
         .hero-card p { color: rgba(255,255,255,0.85); font-size: 14px; margin: 0; max-width: 550px; }
         .hero-badge { background: rgba(255,255,255,0.15); backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.2); border-radius: 16px; padding: 16px 24px; text-align: center; }
@@ -243,11 +253,14 @@ export default function ManagementDashboard({ role }: { role: string }) {
         }
       `}</style>
 
-      {/* ── Dashboard‑wide header (greeting + status pills) ── */}
+      {/* ── Top bar matching hero card design ── */}
       <div className="dashboard-header">
         <div className="welcome">
-          <h2>👋 {getGreeting()}, siqbalhwc</h2>
-          <p>Here's what's happening with your NGO portfolio today</p>
+          <img src="/logo.png" alt="OneAccounts" />
+          <div>
+            <h2>{getGreeting()}, siqbalhwc</h2>
+            <p>Here's what's happening with your NGO portfolio today</p>
+          </div>
         </div>
         <div className="stats">
           <div className="stat-card" onClick={() => router.push("/dashboard/invoices")} title="View unpaid invoices">
@@ -271,10 +284,10 @@ export default function ManagementDashboard({ role }: { role: string }) {
         </div>
       </div>
 
-      {/* Rest of the dashboard content with padding */}
-      <div style={{ padding: "16px 20px 20px" }}>
-        {/* Filters row */}
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }} className="filter-bar">
+      {/* Content area: filters + hero + cards + tables */}
+      <div style={{ padding: "0 16px 20px" }}>
+        {/* Filters */}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }} className="filter-bar">
           <select className="filter-select" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
             {[2024,2025,2026,2027].map(y => <option key={y} value={y}>FY {y}</option>)}
           </select>
@@ -303,7 +316,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         </div>
 
         {/* KPI Cards */}
-        <div className="responsive-grid kpi-grid" style={{ marginBottom: 24 }}>
+        <div className="responsive-grid kpi-grid" style={{ marginBottom: 16 }}>
           <div className="kpi-card blue" onClick={() => router.push("/dashboard/reports/budget-summary" + detailQuery())}>
             <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Total Budget</div>
             <div style={{ fontSize: 28, fontWeight: 800 }}>{formatPKR(filteredTotalBudget)}</div>
@@ -329,7 +342,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         </div>
 
         {/* Project Utilization & Donor Balances */}
-        <div className="responsive-grid row-grid" style={{ marginBottom: 24 }}>
+        <div className="responsive-grid row-grid" style={{ marginBottom: 16 }}>
           <div style={{ background: "white", borderRadius: 16, padding: 24, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
             <h3 style={{ fontSize: 18, fontWeight: 800, margin: "0 0 12px 0" }}>Project Utilization</h3>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
