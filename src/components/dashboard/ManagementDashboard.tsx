@@ -19,18 +19,23 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [selectedDonorId, setSelectedDonorId] = useState<string>("")
 
-  // Master data for filters
+  // Master data
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
 
-  // Dashboard data (raw arrays, we'll filter client‑side)
+  // Dashboard data
   const [donorBalances, setDonorBalances] = useState<any[]>([])
   const [projectRows, setProjectRows] = useState<any[]>([])
   const [totalBudget, setTotalBudget] = useState(0)
   const [totalSpent, setTotalSpent] = useState(0)
   const [overspentCount, setOverspentCount] = useState(0)
 
-  // ── Load company ID and master data ─────────────────
+  // Quick stats
+  const [unpaidInvoices, setUnpaidInvoices] = useState(0)
+  const [totalReceivables, setTotalReceivables] = useState(0)
+  const [totalPayables, setTotalPayables] = useState(0)
+
+  // ── Fetch company ID and master data ────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -47,14 +52,14 @@ export default function ManagementDashboard({ role }: { role: string }) {
       .then(r => r.data && setDonors(r.data))
   }, [companyId])
 
-  // ── Fetch all dashboard data (unfiltered) ───────────
+  // ── Fetch dashboard data ─────────────────────────────
   useEffect(() => {
     if (!companyId) return
 
     const fetchData = async () => {
       setLoading(true)
 
-      // Total Budget (only active, with activity)
+      // Total Budget
       const { data: budgets } = await supabase
         .from("budgets")
         .select("budgeted_amount")
@@ -65,7 +70,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
       const totalBudgetVal = budgets?.reduce((s, b) => s + (b.budgeted_amount || 0), 0) || 0
       setTotalBudget(totalBudgetVal)
 
-      // Total Spent (via RPC – only project‑linked)
+      // Total Spent (via RPC)
       const { data: totalSpentData } = await supabase.rpc("total_spent", {
         cid: companyId,
         fy: fiscalYear,
@@ -99,10 +104,27 @@ export default function ManagementDashboard({ role }: { role: string }) {
         name: p.project_name,
         budget: p.budget || 0,
         actual: p.actual || 0,
-        pct: p.budget ? Math.round(((p.actual || 0) / p.budget) * 100) : 0,
+        pct: p.budget ? Math.round(((p.actual || 0) / p.budget) * 100) : (p.actual ? 100 : 0),
       })) || []
       setProjectRows(projectsArr.sort((a: any, b: any) => b.pct - a.pct))
       setOverspentCount(projectsArr.filter((p: any) => p.actual > p.budget).length)
+
+      // Quick stats
+      const { count: unpaidCount } = await supabase.from("invoices")
+        .select("*", { count: "exact", head: true })
+        .eq("company_id", companyId)
+        .eq("status", "Unpaid")
+      setUnpaidInvoices(unpaidCount || 0)
+
+      const { data: custBals } = await supabase.from("customers")
+        .select("balance")
+        .eq("company_id", companyId)
+      setTotalReceivables(custBals?.reduce((s, c) => s + (c.balance || 0), 0) || 0)
+
+      const { data: suppBals } = await supabase.from("suppliers")
+        .select("balance")
+        .eq("company_id", companyId)
+      setTotalPayables(suppBals?.reduce((s, s2) => s + (s2.balance || 0), 0) || 0)
 
       setLoading(false)
     }
@@ -110,11 +132,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
     fetchData()
   }, [companyId, fiscalYear])
 
-  // ── Filter data based on selected project / donor ────
+  // ── Filtered data ─────────────────────────────────────
   const filteredDonorBalances = donorBalances.filter(d => {
     if (selectedDonorId && d.donor_id != selectedDonorId) return false
-    // If a project filter is active, we need to check if this donor has any budget for that project.
-    // For simplicity, we'll leave donor balance unfiltered by project (or we can filter later).
     return true
   })
 
@@ -151,22 +171,27 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .green::before { background: #16a34a; }
         .amber::before { background: #d97706; }
         .red::before { background: #dc2626; }
+        .teal::before { background: #0d9488; }
         .progress-bar { height: 6px; border-radius: 3px; background: #f1f5f9; overflow: hidden; }
         .progress-fill { height: 6px; border-radius: 3px; }
         .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 700; }
         .badge-danger { background: #fef2f2; color: #991b1b; }
         .badge-warning { background: #fffbeb; color: #92400e; }
         .badge-success { background: #f0fdf4; color: #166534; }
-        .filter-select { padding: 8px 12px; border: 1px solid #E2E8F0; border-radius: 8px; font-size: 13px; background: white; }
+        .filter-select { padding: 8px 12px; border: 1px solid #E2E8F0; border-radius: 8px; font-size: 13px; background: white; box-sizing: border-box; }
         .responsive-grid { display: grid; gap: 16px; }
         .kpi-grid { grid-template-columns: repeat(4, 1fr); }
+        .stats-grid { grid-template-columns: repeat(3, 1fr); }
         .row-grid { grid-template-columns: 1.5fr 1fr; }
         @media (max-width: 900px) {
           .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+          .stats-grid { grid-template-columns: repeat(2, 1fr); }
           .row-grid { grid-template-columns: 1fr; }
+          .filter-bar { flex-direction: column; }
         }
         @media (max-width: 500px) {
           .kpi-grid { grid-template-columns: 1fr; }
+          .stats-grid { grid-template-columns: 1fr; }
         }
       `}</style>
 
@@ -176,7 +201,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           <h1 style={{ fontSize: 24, fontWeight: 800, color: "#0f172a", margin: 0 }}>Management Dashboard</h1>
           <p style={{ fontSize: 14, color: "#64748b", margin: 0 }}>Project & Budget Overview</p>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="filter-bar" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <select className="filter-select" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
             {[2024,2025,2026,2027].map(y => <option key={y} value={y}>{y}</option>)}
           </select>
@@ -211,6 +236,22 @@ export default function ManagementDashboard({ role }: { role: string }) {
         <div className="kpi-card red">
           <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Overspent</div>
           <div style={{ fontSize: 28, fontWeight: 800, color: "#dc2626" }}>{filteredOverspentCount}</div>
+        </div>
+      </div>
+
+      {/* Quick Stats Row */}
+      <div className="responsive-grid stats-grid" style={{ marginBottom: 24 }}>
+        <div className="kpi-card teal">
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Unpaid Invoices</div>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>{unpaidInvoices}</div>
+        </div>
+        <div className="kpi-card teal">
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Total Receivables</div>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>PKR {(totalReceivables / 1_000_000).toFixed(1)}M</div>
+        </div>
+        <div className="kpi-card teal">
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Total Payables</div>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>PKR {(totalPayables / 1_000_000).toFixed(1)}M</div>
         </div>
       </div>
 
