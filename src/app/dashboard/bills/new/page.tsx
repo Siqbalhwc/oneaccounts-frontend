@@ -116,7 +116,7 @@ export default function NewBillPage() {
       .then(({ data }) => {
         if (data) {
           setFetchedProjectId(data.project_id)
-          setFetchedProjectName(data.projects?.name || "")
+          setFetchedProjectName((data.projects as any)?.name || "")
         }
       })
     // Get primary donor
