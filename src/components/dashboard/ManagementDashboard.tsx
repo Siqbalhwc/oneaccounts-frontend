@@ -70,19 +70,13 @@ export default function ManagementDashboard({ role }: { role: string }) {
       const totalBudgetVal = budgets?.reduce((s, b) => s + (b.budgeted_amount || 0), 0) || 0
       setTotalBudget(totalBudgetVal)
 
-      // Total Spent (via RPC)
-      const { data: totalSpentData } = await supabase.rpc("total_spent", {
-        cid: companyId,
-        fy: fiscalYear,
-      })
-      const totalSpentVal = totalSpentData?.[0]?.total || 0
+      // Total Spent (RPC)
+      const { data: spentData } = await supabase.rpc("total_spent", { cid: companyId, fy: fiscalYear })
+      const totalSpentVal = spentData?.[0]?.total || 0
       setTotalSpent(totalSpentVal)
 
-      // Donor Balances (via RPC)
-      const { data: donorData } = await supabase.rpc("dashboard_donor_balances", {
-        cid: companyId,
-        fy: fiscalYear,
-      })
+      // Donor Balances (RPC)
+      const { data: donorData } = await supabase.rpc("dashboard_donor_balances", { cid: companyId, fy: fiscalYear })
       const donorRows = donorData?.map((d: any) => ({
         donor_id: d.donor_id,
         name: d.donor_name,
@@ -94,36 +88,27 @@ export default function ManagementDashboard({ role }: { role: string }) {
       })) || []
       setDonorBalances(donorRows)
 
-      // Project Utilization (via RPC)
-      const { data: projectData } = await supabase.rpc("dashboard_project_utilization", {
-        company_id: companyId,
-        fiscal_year: fiscalYear,
-      })
-      const projectsArr = projectData?.map((p: any) => ({
+      // Project Utilization (RPC)
+      const { data: projData } = await supabase.rpc("dashboard_project_utilization", { company_id: companyId, fiscal_year: fiscalYear })
+      const projectsArr = projData?.map((p: any) => ({
         id: p.project_id,
         name: p.project_name,
         budget: p.budget || 0,
         actual: p.actual || 0,
-        pct: p.budget ? Math.round(((p.actual || 0) / p.budget) * 100) : (p.actual ? 100 : 0),
+        pct: p.budget ? Math.round(((p.actual || 0) / p.budget) * 100) : (p.actual > 0 ? 100 : 0),
       })) || []
       setProjectRows(projectsArr.sort((a: any, b: any) => b.pct - a.pct))
       setOverspentCount(projectsArr.filter((p: any) => p.actual > p.budget).length)
 
       // Quick stats
       const { count: unpaidCount } = await supabase.from("invoices")
-        .select("*", { count: "exact", head: true })
-        .eq("company_id", companyId)
-        .eq("status", "Unpaid")
+        .select("*", { count: "exact", head: true }).eq("company_id", companyId).eq("status", "Unpaid")
       setUnpaidInvoices(unpaidCount || 0)
 
-      const { data: custBals } = await supabase.from("customers")
-        .select("balance")
-        .eq("company_id", companyId)
+      const { data: custBals } = await supabase.from("customers").select("balance").eq("company_id", companyId)
       setTotalReceivables(custBals?.reduce((s, c) => s + (c.balance || 0), 0) || 0)
 
-      const { data: suppBals } = await supabase.from("suppliers")
-        .select("balance")
-        .eq("company_id", companyId)
+      const { data: suppBals } = await supabase.from("suppliers").select("balance").eq("company_id", companyId)
       setTotalPayables(suppBals?.reduce((s, s2) => s + (s2.balance || 0), 0) || 0)
 
       setLoading(false)
@@ -165,7 +150,8 @@ export default function ManagementDashboard({ role }: { role: string }) {
   return (
     <div style={{ background: "#f0f4f8", minHeight: "100vh", fontFamily: "Segoe UI, system-ui, sans-serif", padding: "20px 24px" }}>
       <style>{`
-        .kpi-card { background: white; border-radius: 12px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); position: relative; overflow: hidden; }
+        .kpi-card { background: white; border-radius: 12px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); position: relative; overflow: hidden; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; }
+        .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
         .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; border-radius: 12px 12px 0 0; }
         .blue::before { background: #1d4ed8; }
         .green::before { background: #16a34a; }
@@ -178,7 +164,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .badge-danger { background: #fef2f2; color: #991b1b; }
         .badge-warning { background: #fffbeb; color: #92400e; }
         .badge-success { background: #f0fdf4; color: #166534; }
-        .filter-select { padding: 8px 12px; border: 1px solid #E2E8F0; border-radius: 8px; font-size: 13px; background: white; box-sizing: border-box; }
+        .filter-select { padding: 8px 12px; border: 1px solid #E2E8F0; border-radius: 8px; font-size: 13px; background: white; }
         .responsive-grid { display: grid; gap: 16px; }
         .kpi-grid { grid-template-columns: repeat(4, 1fr); }
         .stats-grid { grid-template-columns: repeat(3, 1fr); }
@@ -218,12 +204,12 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
       {/* KPI Cards */}
       <div className="responsive-grid kpi-grid" style={{ marginBottom: 24 }}>
-        <div className="kpi-card blue">
+        <div className="kpi-card blue" onClick={() => router.push("/dashboard/settings/budgets")}>
           <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Total Budget</div>
           <div style={{ fontSize: 28, fontWeight: 800 }}>PKR {(filteredTotalBudget / 1_000_000).toFixed(1)}M</div>
           <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{filteredProjectRows.length} project{filteredProjectRows.length !== 1 ? "s" : ""}</div>
         </div>
-        <div className="kpi-card green">
+        <div className="kpi-card green" onClick={() => router.push("/dashboard/reports/project-pl")}>
           <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Total Spent</div>
           <div style={{ fontSize: 28, fontWeight: 800 }}>PKR {(filteredTotalSpent / 1_000_000).toFixed(1)}M</div>
           <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{spentPct}% of budget</div>
@@ -233,23 +219,23 @@ export default function ManagementDashboard({ role }: { role: string }) {
           <div style={{ fontSize: 28, fontWeight: 800 }}>PKR {(remainingFunds / 1_000_000).toFixed(1)}M</div>
           <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{filteredTotalBudget ? Math.round((remainingFunds / filteredTotalBudget) * 100) : 0}% unspent</div>
         </div>
-        <div className="kpi-card red">
+        <div className="kpi-card red" onClick={() => router.push("/dashboard/reports/budget-vs-actual")}>
           <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Overspent</div>
           <div style={{ fontSize: 28, fontWeight: 800, color: "#dc2626" }}>{filteredOverspentCount}</div>
         </div>
       </div>
 
-      {/* Quick Stats Row */}
+      {/* Quick Stats */}
       <div className="responsive-grid stats-grid" style={{ marginBottom: 24 }}>
-        <div className="kpi-card teal">
+        <div className="kpi-card teal" onClick={() => router.push("/dashboard/invoices")}>
           <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Unpaid Invoices</div>
           <div style={{ fontSize: 28, fontWeight: 800 }}>{unpaidInvoices}</div>
         </div>
-        <div className="kpi-card teal">
+        <div className="kpi-card teal" onClick={() => router.push("/dashboard/customers")}>
           <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Total Receivables</div>
           <div style={{ fontSize: 28, fontWeight: 800 }}>PKR {(totalReceivables / 1_000_000).toFixed(1)}M</div>
         </div>
-        <div className="kpi-card teal">
+        <div className="kpi-card teal" onClick={() => router.push("/dashboard/suppliers")}>
           <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 6 }}>Total Payables</div>
           <div style={{ fontSize: 28, fontWeight: 800 }}>PKR {(totalPayables / 1_000_000).toFixed(1)}M</div>
         </div>
@@ -299,7 +285,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         <div style={{ background: "white", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 4px 0" }}>Donor Balances</h3>
           {filteredDonorBalances.map((d, idx) => (
-            <div key={idx} style={{ marginBottom: 12 }}>
+            <div key={idx} style={{ marginBottom: 12, cursor: "pointer" }} onClick={() => router.push(`/dashboard/settings/budgets?donor=${d.donor_id}`)}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{ width: 10, height: 10, borderRadius: "50%", background: d.overspent ? "#dc2626" : "#1d4ed8" }}></div>
                 <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{d.name}</span>
