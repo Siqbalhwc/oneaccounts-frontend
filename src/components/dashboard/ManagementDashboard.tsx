@@ -88,7 +88,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
       })) || []
       setDonorBalances(donorRows)
 
-      // Project Utilization (RPC – FIXED PARAMETER NAMES)
+      // Project Utilization (RPC)
       const { data: projData } = await supabase.rpc("dashboard_project_utilization", {
         p_company_id: companyId,
         p_fiscal_year: fiscalYear,
@@ -146,7 +146,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const remainingFunds = filteredTotalBudget - filteredTotalSpent
   const spentPct = filteredTotalBudget ? Math.round((filteredTotalSpent / filteredTotalBudget) * 100) : 0
 
-  // Format large numbers
+  // Format PKR
   const formatPKR = (v: number) =>
     v >= 1_000_000 ? `PKR ${(v / 1_000_000).toFixed(1)}M` : `PKR ${v.toLocaleString()}`
 
@@ -160,7 +160,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
   return (
     <div className="min-h-screen bg-slate-100 font-sans">
-      {/* Since the sidebar is provided by the app layout, we only render the main area */}
       <main className="p-4 md:p-6 lg:p-8">
         {/* Header & Filters */}
         <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6 mb-8">
@@ -195,7 +194,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </div>
         </div>
 
-        {/* KPI Cards – template style with live data */}
+        {/* KPI Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-4 gap-6 mb-8">
           <button
             className="group relative overflow-hidden bg-white rounded-[28px] p-6 text-left shadow-sm hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border border-slate-100"
@@ -278,7 +277,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </button>
         </div>
 
-        {/* Quick Stats – lower cards */}
+        {/* Quick Stats */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
           <button
             className="bg-white rounded-[30px] p-6 shadow-sm border border-slate-100 hover:shadow-xl transition cursor-pointer text-left"
