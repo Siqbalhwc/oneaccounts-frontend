@@ -83,8 +83,8 @@ export default function ManagementDashboard({ role }: { role: string }) {
         actual: p.actual || 0,
         pct: p.budget ? Math.round(((p.actual || 0) / p.budget) * 100) : 0,
       })) || []
-      setProjectRows(projectsData.sort((a, b) => b.pct - a.pct))
-      setOverspentCount(projectsData.filter(p => p.actual > p.budget).length)
+      setProjectRows(projectsData.sort((a: any, b: any) => b.pct - a.pct))
+      setOverspentCount(projectsData.filter((p: any) => p.actual > p.budget).length)
 
       setLoading(false)
     }
