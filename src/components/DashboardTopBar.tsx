@@ -12,15 +12,20 @@ export default function DashboardTopBar({ email, greeting }: { email: string; gr
       style={
         isDashboard
           ? {
-              background: "rgba(255,255,255,0.15)",   // just a hint of colour
-              minHeight: 40,                           // even smaller
-              padding: "0 12px",
+              background: "rgba(255,255,255,0.12)",
+              minHeight: 38,
+              padding: "0 8px",
               borderBottom: "none",
             }
           : {}
       }
     >
-      <button className="dl-hamburger" id="dl-hamburger" aria-label="Open menu">
+      <button
+        className="dl-hamburger"
+        id="dl-hamburger"
+        aria-label="Open menu"
+        style={isDashboard ? { padding: "8px", marginRight: 4 } : {}}
+      >
         <span /><span /><span />
       </button>
 

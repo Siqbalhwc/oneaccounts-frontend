@@ -14,23 +14,28 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [companyId, setCompanyId] = useState("")
   const [loading, setLoading] = useState(true)
 
+  // Filters
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [selectedDonorId, setSelectedDonorId] = useState<string>("")
 
+  // Master data
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
 
+  // Dashboard data
   const [donorBalances, setDonorBalances] = useState<any[]>([])
   const [projectRows, setProjectRows] = useState<any[]>([])
   const [totalBudget, setTotalBudget] = useState(0)
   const [totalSpent, setTotalSpent] = useState(0)
   const [overspentCount, setOverspentCount] = useState(0)
 
+  // Quick stats
   const [unpaidInvoices, setUnpaidInvoices] = useState(0)
   const [totalReceivables, setTotalReceivables] = useState(0)
   const [totalPayables, setTotalPayables] = useState(0)
 
+  // ── Fetch company ID and master data ────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -47,17 +52,28 @@ export default function ManagementDashboard({ role }: { role: string }) {
       .then(r => r.data && setDonors(r.data))
   }, [companyId])
 
+  // ── Fetch dashboard data ─────────────────────────────
   useEffect(() => {
     if (!companyId) return
+
     const fetchData = async () => {
       setLoading(true)
-      const { data: budgets } = await supabase.from("budgets").select("budgeted_amount")
-        .eq("company_id", companyId).eq("fiscal_year", fiscalYear).is("month", null).not("activity_id", "is", null)
+
+      // Total Budget
+      const { data: budgets } = await supabase
+        .from("budgets")
+        .select("budgeted_amount")
+        .eq("company_id", companyId)
+        .eq("fiscal_year", fiscalYear)
+        .is("month", null)
+        .not("activity_id", "is", null)
       setTotalBudget(budgets?.reduce((s, b) => s + (b.budgeted_amount || 0), 0) || 0)
 
+      // Total Spent (RPC)
       const { data: spentData } = await supabase.rpc("total_spent", { cid: companyId, fy: fiscalYear })
       setTotalSpent(spentData?.[0]?.total || 0)
 
+      // Donor Balances (RPC)
       const { data: donorData } = await supabase.rpc("dashboard_donor_balances", { cid: companyId, fy: fiscalYear })
       setDonorBalances(donorData?.map((d: any) => ({
         donor_id: d.donor_id, name: d.donor_name,
@@ -67,6 +83,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         overspent: (d.actual_spent || 0) > (d.budget || 0),
       })) || [])
 
+      // Project Utilization (RPC)
       const { data: projData } = await supabase.rpc("dashboard_project_utilization", {
         p_company_id: companyId, p_fiscal_year: fiscalYear,
       })
@@ -78,6 +95,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
       setProjectRows(projectsArr.sort((a: any, b: any) => b.pct - a.pct))
       setOverspentCount(projectsArr.filter((p: any) => p.actual > p.budget).length)
 
+      // Quick stats
       const { count: unpaidCount } = await supabase.from("invoices")
         .select("*", { count: "exact", head: true }).eq("company_id", companyId).eq("status", "Unpaid")
       setUnpaidInvoices(unpaidCount || 0)
@@ -90,17 +108,37 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
       setLoading(false)
     }
+
     fetchData()
   }, [companyId, fiscalYear])
 
-  const filteredDonorBalances = donorBalances.filter(d => !selectedDonorId || d.donor_id == selectedDonorId)
-  const filteredProjectRows = projectRows.filter(p => !selectedProjectId || p.id == selectedProjectId)
-  const filteredTotalBudget = selectedProjectId ? filteredProjectRows.reduce((s, p) => s + p.budget, 0) : totalBudget
-  const filteredTotalSpent = selectedProjectId ? filteredProjectRows.reduce((s, p) => s + p.actual, 0) : totalSpent
-  const filteredOverspentCount = selectedProjectId ? filteredProjectRows.filter(p => p.actual > p.budget).length : overspentCount
+  // ── Filtered data ─────────────────────────────────────
+  const filteredDonorBalances = donorBalances.filter(d => {
+    if (selectedDonorId && d.donor_id != selectedDonorId) return false
+    return true
+  })
+
+  const filteredProjectRows = projectRows.filter(p => {
+    if (selectedProjectId && p.id != selectedProjectId) return false
+    return true
+  })
+
+  const filteredTotalBudget = selectedProjectId
+    ? filteredProjectRows.reduce((s, p) => s + p.budget, 0)
+    : totalBudget
+
+  const filteredTotalSpent = selectedProjectId
+    ? filteredProjectRows.reduce((s, p) => s + p.actual, 0)
+    : totalSpent
+
+  const filteredOverspentCount = selectedProjectId
+    ? filteredProjectRows.filter(p => p.actual > p.budget).length
+    : overspentCount
+
   const remainingFunds = filteredTotalBudget - filteredTotalSpent
   const spentPct = filteredTotalBudget ? Math.round((filteredTotalSpent / filteredTotalBudget) * 100) : 0
 
+  // ── Professional greeting ─────────────────────────────
   const getGreeting = () => {
     const hour = new Date().getHours()
     if (hour < 12) return "Good morning"
@@ -108,12 +146,14 @@ export default function ManagementDashboard({ role }: { role: string }) {
     return "Good evening"
   }
 
+  // ── Formatting ───────────────────────────────────────
   const formatPKR = (v: number) => {
     if (v >= 1_000_000) return `PKR ${(v / 1_000_000).toFixed(1)}M`
     if (v >= 1_000) return `PKR ${(v / 1_000).toFixed(0)}K`
     return `PKR ${v.toLocaleString()}`
   }
 
+  // ── Build query string for detail pages ──────────────
   const detailQuery = (extra: Record<string, string> = {}) => {
     const params = new URLSearchParams({ fy: String(fiscalYear) })
     if (selectedProjectId) params.set("project", selectedProjectId)
@@ -129,30 +169,31 @@ export default function ManagementDashboard({ role }: { role: string }) {
   return (
     <div style={{ background: "#f0f4f8", minHeight: "100vh", fontFamily: "Segoe UI, system-ui, sans-serif" }}>
       <style>{`
-        /* Compact reset */
-        .kpi-card { background: white; border-radius: 12px; padding: 14px 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); position: relative; overflow: hidden; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; }
+        /* ── Base card styles ── */
+        .kpi-card {
+          background: white; border-radius: 12px; padding: 14px 16px;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.03); position: relative;
+          overflow: hidden; cursor: pointer;
+          transition: transform 0.15s, box-shadow 0.15s;
+        }
         .kpi-card:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-        .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: 12px 12px 0 0; }
+        .kpi-card::before {
+          content: ''; position: absolute; top: 0; left: 0; right: 0;
+          height: 3px; border-radius: 12px 12px 0 0;
+        }
         .blue::before { background: linear-gradient(to right, #3b82f6, #06b6d4); }
         .green::before { background: linear-gradient(to right, #22c55e, #10b981); }
         .amber::before { background: linear-gradient(to right, #f97316, #f59e0b); }
         .red::before { background: linear-gradient(to right, #ef4444, #ec4899); }
+
         .progress-bar { height: 5px; border-radius: 3px; background: #f1f5f9; overflow: hidden; }
         .progress-fill { height: 5px; border-radius: 3px; }
         .badge { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 9px; font-weight: 700; }
         .badge-danger { background: #fef2f2; color: #991b1b; }
         .badge-warning { background: #fffbeb; color: #92400e; }
         .badge-success { background: #f0fdf4; color: #166534; }
-        .filter-select { padding: 6px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 12px; background: white; box-sizing: border-box; }
-        .hero-card { background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #06b6d4 100%); border-radius: 16px; padding: 18px 24px; position: relative; overflow: hidden; margin-bottom: 16px; }
-        .hero-card h2 { color: white; font-size: 20px; font-weight: 800; margin: 0 0 6px 0; }
-        .hero-card p { color: rgba(255,255,255,0.85); font-size: 13px; margin: 0; max-width: 550px; }
-        .hero-badge { background: rgba(255,255,255,0.15); backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.2); border-radius: 14px; padding: 12px 20px; text-align: center; }
-        .hero-badge .label { color: rgba(255,255,255,0.7); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
-        .hero-badge .value { color: white; font-size: 32px; font-weight: 800; line-height: 1; }
-        .responsive-grid { display: grid; gap: 12px; }
-        .kpi-grid { grid-template-columns: repeat(4, 1fr); }
-        .row-grid { grid-template-columns: 1.5fr 1fr; }
+
+        /* ── Header banner (dashboard header) ── */
         .dashboard-header {
           background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #06b6d4 100%);
           border-radius: 16px;
@@ -163,7 +204,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           justify-content: space-between;
           flex-wrap: wrap;
           gap: 12px;
-          margin: 8px 16px 16px;
+          margin: 8px 12px 16px;
         }
         .dashboard-header .welcome { display: flex; align-items: center; gap: 10px; }
         .dashboard-header .welcome img { width: 36px; height: 36px; border-radius: 8px; object-fit: contain; }
@@ -178,19 +219,83 @@ export default function ManagementDashboard({ role }: { role: string }) {
           cursor: pointer; transition: 0.2s;
         }
         .dashboard-header .stat-card:hover { background: rgba(255,255,255,0.2); }
-        .dashboard-header .stat-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255,255,255,0.65); margin-bottom: 3px; }
+        .dashboard-header .stat-label {
+          font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em;
+          color: rgba(255,255,255,0.65); margin-bottom: 3px;
+        }
         .dashboard-header .stat-value { font-size: 16px; font-weight: 700; color: white; }
+
+        /* ── Hero card ── */
+        .hero-card {
+          background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #06b6d4 100%);
+          border-radius: 16px; padding: 18px 24px;
+          position: relative; overflow: hidden;
+          margin-bottom: 16px;
+        }
+        .hero-card h2 { color: white; font-size: 20px; font-weight: 800; margin: 0 0 6px 0; }
+        .hero-card p { color: rgba(255,255,255,0.85); font-size: 13px; margin: 0; max-width: 550px; }
+        .hero-badge {
+          background: rgba(255,255,255,0.15); backdrop-filter: blur(4px);
+          border: 1px solid rgba(255,255,255,0.2);
+          border-radius: 14px; padding: 12px 20px; text-align: center;
+        }
+        .hero-badge .label {
+          color: rgba(255,255,255,0.7); font-size: 10px; font-weight: 600;
+          text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .hero-badge .value { color: white; font-size: 32px; font-weight: 800; line-height: 1; }
+
+        /* ── Layout grids ── */
+        .filter-select {
+          padding: 6px 10px; border: 1px solid #e2e8f0; border-radius: 6px;
+          font-size: 12px; background: white; box-sizing: border-box;
+        }
+        .responsive-grid { display: grid; gap: 12px; }
+        .kpi-grid { grid-template-columns: repeat(4, 1fr); }
+        .row-grid { grid-template-columns: 1.5fr 1fr; }
+
+        /* ── Table ── */
+        .proj-table { width: 100%; border-collapse: collapse; }
+        .proj-table th {
+          font-size: 9px; font-weight: 700; text-transform: uppercase;
+          color: #94a3b8; padding-bottom: 6px;
+        }
+        .proj-table td { font-size: 11px; padding: 4px 0; }
+
+        /* ── Responsive breakpoints ── */
         @media (max-width: 900px) {
-          .dashboard-header { flex-direction: column; align-items: flex-start; }
           .kpi-grid { grid-template-columns: repeat(2, 1fr); }
           .row-grid { grid-template-columns: 1fr; }
-          .filter-bar { flex-direction: column; }
         }
-        @media (max-width: 500px) {
+        @media (max-width: 600px) {
           .kpi-grid { grid-template-columns: 1fr; }
+          .dashboard-header { flex-direction: column; align-items: flex-start; }
+          .hero-card h2 { font-size: 17px; }
+          .hero-badge .value { font-size: 28px; }
+          .filter-bar { flex-direction: column; }
+          .filter-select { width: 100%; margin-bottom: 6px; }
+          .proj-table { font-size: 10px; }
+          /* sticky project column */
+          .proj-table td:first-child,
+          .proj-table th:first-child {
+            position: sticky; left: 0; background: white; z-index: 1;
+          }
+          .dashboard-header .stats {
+            width: 100%; gap: 4px;
+          }
+          .dashboard-header .stat-card {
+            flex: 1 1 40%; min-width: 70px; padding: 6px 8px;
+          }
+          .dashboard-header .stat-value { font-size: 14px; }
+        }
+        @media (max-width: 380px) {
+          .dashboard-header .stats { gap: 2px; }
+          .dashboard-header .stat-card { min-width: 60px; padding: 4px 6px; }
+          .dashboard-header .stat-value { font-size: 12px; }
         }
       `}</style>
 
+      {/* ── Dashboard header (greeting + quick stats) ── */}
       <div className="dashboard-header">
         <div className="welcome">
           <img src="/logo.png" alt="OneAccounts" />
@@ -221,8 +326,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
         </div>
       </div>
 
-      <div style={{ padding: "0 16px 20px" }}>
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }} className="filter-bar">
+      <div style={{ padding: "0 12px 16px" }}>
+        {/* Filters */}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10, flexWrap: "wrap" }} className="filter-bar">
           <select className="filter-select" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
             {[2024,2025,2026,2027].map(y => <option key={y} value={y}>FY {y}</option>)}
           </select>
@@ -236,6 +342,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </select>
         </div>
 
+        {/* Hero Banner */}
         <div className="hero-card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
             <div>
@@ -249,6 +356,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </div>
         </div>
 
+        {/* KPI Cards */}
         <div className="responsive-grid kpi-grid" style={{ marginBottom: 12 }}>
           <div className="kpi-card blue" onClick={() => router.push("/dashboard/reports/budget-summary" + detailQuery())}>
             <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 4 }}>Total Budget</div>
@@ -274,33 +382,34 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </div>
         </div>
 
+        {/* Project Utilization & Donor Balances */}
         <div className="responsive-grid row-grid" style={{ marginBottom: 12 }}>
-          <div style={{ background: "white", borderRadius: 12, padding: 16, boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
+          <div style={{ background: "white", borderRadius: 12, padding: 16, boxShadow: "0 1px 2px rgba(0,0,0,0.03)", overflow: "auto" }}>
             <h3 style={{ fontSize: 16, fontWeight: 800, margin: "0 0 8px 0" }}>Project Utilization</h3>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <table className="proj-table">
               <thead>
-                <tr style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", color: "#94a3b8", borderBottom: "1px solid #e2e8f0" }}>
-                  <th style={{ textAlign: "left", paddingBottom: 6 }}>Project</th>
-                  <th style={{ textAlign: "left", paddingBottom: 6 }}>Budget</th>
-                  <th style={{ textAlign: "left", paddingBottom: 6 }}>Spent</th>
-                  <th style={{ textAlign: "left", paddingBottom: 6 }}>Utilization</th>
-                  <th style={{ textAlign: "left", paddingBottom: 6 }}>%</th>
-                  <th style={{ textAlign: "right", paddingBottom: 6 }}>Status</th>
+                <tr>
+                  <th style={{ textAlign: "left" }}>Project</th>
+                  <th style={{ textAlign: "left" }}>Budget</th>
+                  <th style={{ textAlign: "left" }}>Spent</th>
+                  <th style={{ textAlign: "left" }}>Utilization</th>
+                  <th style={{ textAlign: "left" }}>%</th>
+                  <th style={{ textAlign: "right" }}>Status</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredProjectRows.map((p, idx) => (
                   <tr key={idx} style={{ borderBottom: "1px solid #f8fafc", cursor: "pointer" }} onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}`)}>
-                    <td style={{ padding: "4px 0", fontWeight: 700, fontSize: 12 }}>{p.name}</td>
-                    <td style={{ padding: "4px 0", fontSize: 11 }}>{formatPKR(p.budget)}</td>
-                    <td style={{ padding: "4px 0", fontSize: 11, fontWeight: 700 }}>{formatPKR(p.actual)}</td>
-                    <td style={{ padding: "4px 0" }}>
+                    <td style={{ fontWeight: 700 }}>{p.name}</td>
+                    <td>{formatPKR(p.budget)}</td>
+                    <td style={{ fontWeight: 700 }}>{formatPKR(p.actual)}</td>
+                    <td>
                       <div className="progress-bar">
                         <div className="progress-fill" style={{ width: `${Math.min(p.pct, 100)}%`, background: p.pct > 100 ? "#dc2626" : p.pct > 80 ? "#d97706" : "#16a34a" }}></div>
                       </div>
                     </td>
-                    <td style={{ padding: "4px 0", fontSize: 11, fontWeight: 700, color: p.pct > 100 ? "#dc2626" : p.pct > 80 ? "#d97706" : "#16a34a" }}>{p.pct}%</td>
-                    <td style={{ padding: "4px 0", textAlign: "right" }}>
+                    <td style={{ fontWeight: 700, color: p.pct > 100 ? "#dc2626" : p.pct > 80 ? "#d97706" : "#16a34a" }}>{p.pct}%</td>
+                    <td style={{ textAlign: "right" }}>
                       <span className={`badge ${p.pct > 100 ? "badge-danger" : p.pct > 80 ? "badge-warning" : "badge-success"}`}>
                         {p.pct > 100 ? "Overspent" : p.pct > 80 ? "Review" : "On Track"}
                       </span>
@@ -332,7 +441,8 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </div>
         </div>
 
-        <div style={{ background: "white", borderRadius: 10, padding: "8px 20px", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, color: "#64748b", flexWrap: "wrap", gap: 6 }}>
+        {/* Footer */}
+        <div style={{ background: "white", borderRadius: 10, padding: "8px 16px", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, color: "#64748b", flexWrap: "wrap", gap: 6 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#16a34a", boxShadow: "0 0 0 3px rgba(22,163,74,0.15)" }}></div>
             <span>Portfolio Health: <strong style={{ color: "#0f172a" }}>{filteredOverspentCount > 0 ? "Needs Attention" : "Healthy"}</strong></span>
