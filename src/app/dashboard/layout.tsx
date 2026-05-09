@@ -1,7 +1,7 @@
-import TopBarContent from "@/components/TopBarContent"
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import SidebarClient from './sidebar-client'
+import DashboardTopBar from "@/components/DashboardTopBar"
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
@@ -40,14 +40,7 @@ const styles = `
   .dl-sidebar-signout { color: rgba(255,255,255,0.4); font-size: 10px; cursor: pointer; background: none; border: none; font-family: inherit; padding: 0; margin-top: 2px; }
   .dl-sidebar-signout:hover { color: #EF4444; }
 
-  /* ── MAIN ──
-     THE FIX:
-     - flex: 1          → takes all remaining space after sidebar
-     - margin-left: 220px → offsets past the fixed sidebar
-     - min-width: 0     → CRITICAL: prevents flex child from overflowing
-     - NO width: calc() → that fights with flex:1 and causes the blank gap
-     - overflow-x: hidden → clips any accidental overflow
-  ── */
+  /* ── MAIN ── */
   .dl-main {
     flex: 1;
     margin-left: 220px;
@@ -186,12 +179,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </div>
         </aside>
         <div className="dl-main">
-          <header className="dl-topbar">
-  <button className="dl-hamburger" id="dl-hamburger" aria-label="Open menu">
-    <span/><span/><span/>
-  </button>
-  <TopBarContent email={email} greeting={getGreeting()} />
-</header>
+          <DashboardTopBar email={email} greeting={getGreeting()} />
           {children}
         </div>
       </div>
