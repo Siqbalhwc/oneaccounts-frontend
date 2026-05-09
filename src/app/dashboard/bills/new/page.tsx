@@ -132,7 +132,7 @@ export default function NewBillPage() {
       .then(({ data }) => {
         if (data && data.length > 0) {
           setFetchedDonorId(data[0].donor_id)
-          setFetchedDonorName(data[0].donors?.name || "")
+          setFetchedDonorName((data[0].donors as any)?.name || "")
         } else {
           setFetchedDonorId(null)
           setFetchedDonorName("")
