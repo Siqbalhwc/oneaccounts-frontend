@@ -155,69 +155,62 @@ export default function BudgetsPage() {
 
   // ── Save – hard‑delete then insert, no duplicates possible ──
   const handleSave = async () => {
-  if (!companyId || !canEdit) return
-  if (!selectedProjectId) { setFlash("⚠️ Please select a Project first."); return }
-  if (businessType === "ngo" && !selectedDonorId) { setFlash("⚠️ Please select a Donor for NGO budgeting."); return }
-  setSaving(true); setFlash("")
+    if (!companyId || !canEdit) return
+    if (!selectedProjectId) { setFlash("⚠️ Please select a Project first."); return }
+    if (businessType === "ngo" && !selectedDonorId) { setFlash("⚠️ Please select a Donor for NGO budgeting."); return }
+    setSaving(true); setFlash("")
 
-  // Build rows from the matrix, keeping each cell's actual location
-  const uniqueKeys = new Set<string>()
-  const rowsToInsert: any[] = []
-  for (const activityId of Object.keys(data)) {
-    for (const locationId of Object.keys(data[activityId])) {   // ← this is the actual location
-      for (const accountId of Object.keys(data[activityId][locationId])) {
-        const budget = data[activityId][locationId][accountId].budget
-        if (budget <= 0) continue
-
-        // Unique key based on actual cell location
-        const key = `${accountId}|${activityId}|${locationId}|${selectedDonorId || 'no-donor'}|${fiscalYear}`
-        if (uniqueKeys.has(key)) continue
-        uniqueKeys.add(key)
-
-        rowsToInsert.push({
-          company_id: companyId,
-          account_id: parseInt(accountId),
-          project_id: selectedProjectId,
-          activity_id: activityId,
-          donor_id: (businessType === "ngo") ? selectedDonorId : null,
-          location_id: locationId,                      // ← use the cell's real location
-          fiscal_year: fiscalYear,
-          month: null,
-          budgeted_amount: budget,
-        })
+    const uniqueKeys = new Set<string>()
+    const rowsToInsert: any[] = []
+    for (const activityId of Object.keys(data)) {
+      for (const locationId of Object.keys(data[activityId])) {
+        for (const accountId of Object.keys(data[activityId][locationId])) {
+          const budget = data[activityId][locationId][accountId].budget
+          if (budget <= 0) continue
+          const key = `${accountId}|${activityId}|${locationId}|${selectedDonorId || 'no-donor'}|${fiscalYear}`
+          if (uniqueKeys.has(key)) continue
+          uniqueKeys.add(key)
+          rowsToInsert.push({
+            company_id: companyId,
+            account_id: parseInt(accountId),
+            project_id: selectedProjectId,
+            activity_id: activityId,
+            donor_id: (businessType === "ngo") ? selectedDonorId : null,
+            location_id: locationId,
+            fiscal_year: fiscalYear,
+            month: null,
+            budgeted_amount: budget,
+          })
+        }
       }
     }
-  }
 
-  // Delete ALL existing rows for this project + donor + fiscal year (ignore location filter)
-  let deleteQuery = supabase
-    .from("budgets")
-    .delete()
-    .eq("company_id", companyId)
-    .eq("project_id", selectedProjectId)
-    .eq("fiscal_year", fiscalYear)
-    .is("month", null)
+    // Hard‑delete all active rows for this project + donor + fiscal year
+    let deleteQuery = supabase
+      .from("budgets")
+      .delete()
+      .eq("company_id", companyId)
+      .eq("project_id", selectedProjectId)
+      .eq("fiscal_year", fiscalYear)
+      .is("month", null)
 
-  if (businessType === "ngo") {
-    deleteQuery = deleteQuery.eq("donor_id", selectedDonorId)
-  }
-  // ⚠️ Do NOT filter by filterLocationId here
-  await deleteQuery
-
-  // Insert the new rows
-  if (rowsToInsert.length > 0) {
-    const { error } = await supabase.from("budgets").insert(rowsToInsert)
-    if (error) {
-      setFlash("❌ Error: " + error.message)
-      setSaving(false)
-      return
+    if (businessType === "ngo") {
+      deleteQuery = deleteQuery.eq("donor_id", selectedDonorId)
     }
-  }
+    await deleteQuery
 
-  setFlash("✅ Budget saved!")
-  setSaving(false)
-  setTimeout(() => setFlash(""), 4000)
-}
+    if (rowsToInsert.length > 0) {
+      const { error } = await supabase.from("budgets").insert(rowsToInsert)
+      if (error) {
+        setFlash("❌ Error: " + error.message)
+        setSaving(false)
+        return
+      }
+    }
+
+    setFlash("✅ Budget saved!")
+    setSaving(false)
+    setTimeout(() => setFlash(""), 4000)
   }
 
   // ── Export functions ──────────────────────────────────
