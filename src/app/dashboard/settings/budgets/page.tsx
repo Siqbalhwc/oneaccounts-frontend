@@ -172,17 +172,16 @@ export default function BudgetsPage() {
           if (uniqueKeys.has(key)) continue
           uniqueKeys.add(key)
           rowsToInsert.push({
-            company_id: companyId,
-            account_id: parseInt(accountId),
-            project_id: selectedProjectId,
-            activity_id: activityId,
-            location_id: locationId,
-            donor_id: (businessType === "ngo") ? selectedDonorId : null,
-            location_id: filterLocationId || null,
-            fiscal_year: fiscalYear,
-            month: null,
-            budgeted_amount: budget,
-          })
+  company_id: companyId,
+  account_id: parseInt(accountId),
+  project_id: selectedProjectId,
+  activity_id: activityId,
+  donor_id: (businessType === "ngo") ? selectedDonorId : null,
+  location_id: filterLocationId || null,
+  fiscal_year: fiscalYear,
+  month: null,
+  budgeted_amount: budget,
+})
         }
       }
     }
