@@ -1,43 +1,95 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { usePathname } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { createBrowserClient } from "@supabase/ssr"
-import { User, LayoutDashboard, Users, Building2, ShoppingCart, FileText, 
-  CreditCard, Banknote, ArrowLeftRight, Package, Settings, ChevronDown, 
-  ChevronRight, Bell } from "lucide-react"
+import { Bell } from "lucide-react"
+import SidebarClient from "./sidebar-client"
 
-// ... (all existing interfaces and helper functions remain unchanged)
+const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter()
   const pathname = usePathname()
   const isDashboard = pathname === "/dashboard" || pathname === "/dashboard/"
-  const router = useRouter()   // if already imported, keep it
 
-  // ... (keep all existing state, useEffect, etc. completely unchanged)
+  const [userEmail, setUserEmail] = useState("")
+  const [greetingTime, setGreetingTime] = useState("Good evening")
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [overlayOpen, setOverlayOpen] = useState(false)
+
+  // ── Get logged‑in user ──────────────────────────────
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user && user.email) {
+        setUserEmail(user.email)
+      }
+    })
+  }, [])
+
+  // ── Set greeting ────────────────────────────────────
+  useEffect(() => {
+    const hour = new Date().getHours()
+    if (hour < 12) setGreetingTime("Good morning")
+    else if (hour < 18) setGreetingTime("Good afternoon")
+    else setGreetingTime("Good evening")
+  }, [])
+
+  // ── Hamburger menu ──────────────────────────────────
+  const toggleSidebar = useCallback(() => {
+    if (window.innerWidth <= 640) {
+      setSidebarOpen(prev => !prev)
+      setOverlayOpen(prev => !prev)
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth > 640) {
+        setSidebarOpen(false)
+        setOverlayOpen(false)
+      }
+    }
+    window.addEventListener("resize", handleResize)
+    return () => window.removeEventListener("resize", handleResize)
+  }, [])
+
+  const closeSidebar = () => {
+    setSidebarOpen(false)
+    setOverlayOpen(false)
+  }
 
   return (
     <div className="dl-shell">
-      {/* ... (sidebar code unchanged) ... */}
+      {/* Sidebar */}
+      <SidebarClient email={userEmail} sidebarOpen={sidebarOpen} closeSidebar={closeSidebar} />
+
+      {/* Overlay for mobile */}
+      <div className={`dl-overlay ${overlayOpen ? "open" : ""}`} onClick={closeSidebar} />
 
       <div className="dl-main">
         <header className="dl-topbar">
-          <button className="dl-hamburger" id="dl-hamburger" aria-label="Open menu">
+          <button className="dl-hamburger" id="dl-hamburger" aria-label="Open menu" onClick={toggleSidebar}>
             <span></span><span></span><span></span>
           </button>
 
-          <img alt="Logo" src="data:image/png;base64,..." style={{ width: 24, height: 24, ... }} />
+          <img alt="Logo" src="/logo.png" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "contain", marginRight: 8 }} />
 
           <div className="dl-topbar-greeting">
-            <div className="dl-topbar-title">👋 Good evening, siqbalhwc!</div>
+            <div className="dl-topbar-title">👋 {greetingTime}, {userEmail?.split("@")[0] || "User"}!</div>
             <div className="dl-topbar-subtitle">Here's what's happening with your business today</div>
           </div>
 
-          {/* Notification bell (if any) */}
+          {/* Notification bell */}
           <div style={{ flexShrink: 0 }}>
             <div style={{ position: "relative" }}>
-              <button style={{ ... }}><Bell size={16} /></button>
+              <button style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8, padding: "6px 10px", cursor: "pointer", color: "white" }}>
+                <Bell size={16} />
+              </button>
             </div>
           </div>
 

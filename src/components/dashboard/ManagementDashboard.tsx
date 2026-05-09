@@ -59,7 +59,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
     const fetchData = async () => {
       setLoading(true)
 
-      // Total Budget
       const { data: budgets } = await supabase
         .from("budgets")
         .select("budgeted_amount")
@@ -67,43 +66,31 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .eq("fiscal_year", fiscalYear)
         .is("month", null)
         .not("activity_id", "is", null)
-      const totalBudgetVal = budgets?.reduce((s, b) => s + (b.budgeted_amount || 0), 0) || 0
-      setTotalBudget(totalBudgetVal)
+      setTotalBudget(budgets?.reduce((s, b) => s + (b.budgeted_amount || 0), 0) || 0)
 
-      // Total Spent (RPC)
       const { data: spentData } = await supabase.rpc("total_spent", { cid: companyId, fy: fiscalYear })
-      const totalSpentVal = spentData?.[0]?.total || 0
-      setTotalSpent(totalSpentVal)
+      setTotalSpent(spentData?.[0]?.total || 0)
 
-      // Donor Balances (RPC)
       const { data: donorData } = await supabase.rpc("dashboard_donor_balances", { cid: companyId, fy: fiscalYear })
-      const donorRows = donorData?.map((d: any) => ({
-        donor_id: d.donor_id,
-        name: d.donor_name,
-        budget: d.budget,
-        actual: d.actual_spent,
+      setDonorBalances(donorData?.map((d: any) => ({
+        donor_id: d.donor_id, name: d.donor_name,
+        budget: d.budget, actual: d.actual_spent,
         remaining: (d.budget || 0) - (d.actual_spent || 0),
         pct: d.budget ? Math.round(((d.actual_spent || 0) / d.budget) * 100) : 0,
         overspent: (d.actual_spent || 0) > (d.budget || 0),
-      })) || []
-      setDonorBalances(donorRows)
+      })) || [])
 
-      // Project Utilization (RPC)
       const { data: projData } = await supabase.rpc("dashboard_project_utilization", {
-        p_company_id: companyId,
-        p_fiscal_year: fiscalYear,
+        p_company_id: companyId, p_fiscal_year: fiscalYear,
       })
       const projectsArr = projData?.map((p: any) => ({
-        id: p.project_id,
-        name: p.project_name,
-        budget: p.budget || 0,
-        actual: p.actual || 0,
+        id: p.project_id, name: p.project_name,
+        budget: p.budget || 0, actual: p.actual || 0,
         pct: p.budget ? Math.round(((p.actual || 0) / p.budget) * 100) : (p.actual > 0 ? 100 : 0),
       })) || []
       setProjectRows(projectsArr.sort((a: any, b: any) => b.pct - a.pct))
       setOverspentCount(projectsArr.filter((p: any) => p.actual > p.budget).length)
 
-      // Quick stats
       const { count: unpaidCount } = await supabase.from("invoices")
         .select("*", { count: "exact", head: true }).eq("company_id", companyId).eq("status", "Unpaid")
       setUnpaidInvoices(unpaidCount || 0)
@@ -146,14 +133,12 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const remainingFunds = filteredTotalBudget - filteredTotalSpent
   const spentPct = filteredTotalBudget ? Math.round((filteredTotalSpent / filteredTotalBudget) * 100) : 0
 
-  // ── Unified formatting ────────────────────────────────
   const formatPKR = (v: number) => {
     if (v >= 1_000_000) return `PKR ${(v / 1_000_000).toFixed(1)}M`
     if (v >= 1_000) return `PKR ${(v / 1_000).toFixed(0)}K`
     return `PKR ${v.toLocaleString()}`
   }
 
-  // ── Build query string for detail pages ──────────────
   const detailQuery = (extra: Record<string, string> = {}) => {
     const params = new URLSearchParams({ fy: String(fiscalYear) })
     if (selectedProjectId) params.set("project", selectedProjectId)
@@ -183,6 +168,12 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .badge-warning { background: #fffbeb; color: #92400e; }
         .badge-success { background: #f0fdf4; color: #166534; }
         .filter-select { padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; background: white; box-sizing: border-box; }
+        .hero-card { background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #06b6d4 100%); border-radius: 24px; padding: 28px 32px; position: relative; overflow: hidden; margin-bottom: 24px; }
+        .hero-card h2 { color: white; font-size: 24px; font-weight: 800; margin: 0 0 8px 0; }
+        .hero-card p { color: rgba(255,255,255,0.85); font-size: 14px; margin: 0; max-width: 550px; }
+        .hero-badge { background: rgba(255,255,255,0.15); backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.2); border-radius: 16px; padding: 16px 24px; text-align: center; }
+        .hero-badge .label { color: rgba(255,255,255,0.7); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+        .hero-badge .value { color: white; font-size: 40px; font-weight: 800; line-height: 1; }
         .responsive-grid { display: grid; gap: 16px; }
         .kpi-grid { grid-template-columns: repeat(4, 1fr); }
         .stats-grid { grid-template-columns: repeat(4, 1fr); }
@@ -199,7 +190,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         }
       `}</style>
 
-      {/* ── Header & Quick Stats Bar (replaces the old action buttons) ── */}
+      {/* Header & Filters */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: "#0f172a", margin: 0 }}>Management Dashboard</h1>
@@ -220,7 +211,21 @@ export default function ManagementDashboard({ role }: { role: string }) {
         </div>
       </div>
 
-      {/* Quick Stats Row (replaces top bar action buttons) */}
+      {/* Hero Banner */}
+      <div className="hero-card">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 20 }}>
+          <div>
+            <h2>Empowering Social Impact Through Smart Financial Governance</h2>
+            <p>Monitor donor utilization, project burn rates, receivables, payables and organizational performance from one centralized NGO management platform.</p>
+          </div>
+          <div className="hero-badge">
+            <div className="label">Portfolio Health</div>
+            <div className="value">{filteredTotalBudget ? Math.round((1 - filteredOverspentCount / Math.max(filteredProjectRows.length, 1)) * 100) : 100}%</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Stats Row */}
       <div className="responsive-grid stats-grid" style={{ marginBottom: 24 }}>
         <div style={{ background: "white", borderRadius: 12, padding: "14px 18px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", borderLeft: "4px solid #0d9488" }}>
           <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94a3b8", marginBottom: 4 }}>Unpaid Invoices</div>
