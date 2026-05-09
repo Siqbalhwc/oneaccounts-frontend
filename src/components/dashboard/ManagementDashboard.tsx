@@ -9,8 +9,8 @@ export default function ManagementDashboard({ role }: { role: string }) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
+  // 1. Real company ID – same pattern as all your working pages
   const [companyId, setCompanyId] = useState("")
-  const [fiscalYear] = useState(new Date().getFullYear())
   const [loading, setLoading] = useState(true)
 
   // KPIs
@@ -19,30 +19,36 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [overspentCount, setOverspentCount] = useState(0)
   const [projectRows, setProjectRows] = useState<any[]>([])
   const [donorBalances, setDonorBalances] = useState<any[]>([])
-  const [categoryVariance, setCategoryVariance] = useState<any[]>([])
-  const [alerts, setAlerts] = useState<any[]>([])
 
-  // ── 1. Get company ID exactly like budget / bill pages ──
+  // Get company ID on mount
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
-      // This is the exact same pattern used in all your working pages
       const cid = (user?.app_metadata as any)?.company_id
-        || '00000000-0000-0000-0000-000000000001'
-      setCompanyId(cid)
+      if (cid) setCompanyId(cid)
     })
   }, [])
 
-  // ── 2. Fetch all dashboard KPIs ──────────────────────
+  // Fetch all dashboard data once we have a company ID
   useEffect(() => {
     if (!companyId) return
-    const fetchDashboard = async () => {
+    const fiscalYear = new Date().getFullYear()
+    const startDate = `${fiscalYear}-01-01`
+    const endDate   = `${fiscalYear}-12-31`
+
+    const fetchData = async () => {
       setLoading(true)
 
-      const startDate = `${fiscalYear}-01-01`
-      const endDate = `${fiscalYear}-12-31`
+      // ---- Prepare account IDs (only expense accounts) ----
+      const { data: expenseAccs } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("type", "Expense")
 
-      // ---- Total budget (annual, only rows with activity) ----
+      const expenseAccIds = expenseAccs?.map(a => a.id) || []
+
+      // ---- TOTAL BUDGET (annual, activity not null) ----
       const { data: budgets } = await supabase
         .from("budgets")
         .select("budgeted_amount")
@@ -51,32 +57,25 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .is("month", null)
         .not("activity_id", "is", null)
 
-      const totalBudgetValue = budgets?.reduce((s, b) => s + (b.budgeted_amount || 0), 0) || 0
-      setTotalBudget(totalBudgetValue)
+      const totalBudgetVal = budgets?.reduce((s, b) => s + (b.budgeted_amount || 0), 0) || 0
+      setTotalBudget(totalBudgetVal)
 
-      // ---- Total spent (all expense accounts) ----
-      // First get expense account IDs
-      const { data: expenseAccs } = await supabase
-        .from("accounts")
-        .select("id")
-        .eq("company_id", companyId)
-        .eq("type", "Expense")
-      const expenseIds = expenseAccs?.map(a => a.id) || []
-
-      let totalSpentValue = 0
-      if (expenseIds.length > 0) {
+      // ---- TOTAL SPENT (all expense accounts, current fiscal year) ----
+      let totalSpentVal = 0
+      if (expenseAccIds.length > 0) {
         const { data: actuals } = await supabase
           .from("journal_lines")
           .select("debit, credit")
           .eq("company_id", companyId)
           .gte("journal_entries.date", startDate)
           .lte("journal_entries.date", endDate)
-          .in("account_id", expenseIds)
-        totalSpentValue = actuals?.reduce((s, a) => s + ((a.debit || 0) - (a.credit || 0)), 0) || 0
-      }
-      setTotalSpent(totalSpentValue)
+          .in("account_id", expenseAccIds)
 
-      // ---- Project utilization ----
+        totalSpentVal = actuals?.reduce((s, a) => s + ((a.debit || 0) - (a.credit || 0)), 0) || 0
+      }
+      setTotalSpent(totalSpentVal)
+
+      // ---- PROJECT UTILIZATION ----
       const { data: projBudgets } = await supabase
         .from("budgets")
         .select("project_id, budgeted_amount")
@@ -92,20 +91,25 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .gte("journal_entries.date", startDate)
         .lte("journal_entries.date", endDate)
 
-      const projectBudgetMap: Record<string, number> = {}
-      projBudgets?.forEach(b => { projectBudgetMap[b.project_id] = (projectBudgetMap[b.project_id] || 0) + b.budgeted_amount })
+      const budgetMap: Record<string, number> = {}
+      projBudgets?.forEach(b => {
+        budgetMap[b.project_id] = (budgetMap[b.project_id] || 0) + b.budgeted_amount
+      })
 
-      const projectActualMap: Record<string, number> = {}
-      projActuals?.forEach(a => { if (a.project_id) projectActualMap[a.project_id] = (projectActualMap[a.project_id] || 0) + ((a.debit || 0) - (a.credit || 0)) })
+      const actualMap: Record<string, number> = {}
+      projActuals?.forEach(a => {
+        if (a.project_id) actualMap[a.project_id] = (actualMap[a.project_id] || 0) + ((a.debit || 0) - (a.credit || 0))
+      })
 
-      const projectRowsTemp: any[] = []
+      const projectsData: any[] = []
       let overspent = 0
-      for (const pid of Object.keys(projectBudgetMap)) {
-        const bud = projectBudgetMap[pid]
-        const act = projectActualMap[pid] || 0
+      for (const pid of Object.keys(budgetMap)) {
+        const bud = budgetMap[pid]
+        const act = actualMap[pid] || 0
         if (act > bud) overspent++
-        const { data: proj } = await supabase.from("projects").select("name").eq("id", pid).single()
-        projectRowsTemp.push({
+        const { data: proj } = await supabase.from("projects").select("name").eq("id", pid).maybeSingle()
+        projectsData.push({
+          id: pid,
           name: proj?.name || pid,
           budget: bud,
           actual: act,
@@ -113,9 +117,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
         })
       }
       setOverspentCount(overspent)
-      setProjectRows(projectRowsTemp.sort((a, b) => b.pct - a.pct))
+      setProjectRows(projectsData.sort((a, b) => b.pct - a.pct))
 
-      // ---- Donor fund balances ----
+      // ---- DONOR BALANCES ----
       const { data: donorBudgets } = await supabase
         .from("budgets")
         .select("donor_id, budgeted_amount")
@@ -132,76 +136,44 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .lte("journal_entries.date", endDate)
 
       const donorBudgetMap: Record<string, number> = {}
-      donorBudgets?.forEach(b => { if (b.donor_id) donorBudgetMap[b.donor_id] = (donorBudgetMap[b.donor_id] || 0) + b.budgeted_amount })
+      donorBudgets?.forEach(b => {
+        if (b.donor_id) donorBudgetMap[b.donor_id] = (donorBudgetMap[b.donor_id] || 0) + b.budgeted_amount
+      })
 
       const donorActualMap: Record<string, number> = {}
-      donorActuals?.forEach(a => { if (a.donor_id) donorActualMap[a.donor_id] = (donorActualMap[a.donor_id] || 0) + ((a.debit || 0) - (a.credit || 0)) })
+      donorActuals?.forEach(a => {
+        if (a.donor_id) donorActualMap[a.donor_id] = (donorActualMap[a.donor_id] || 0) + ((a.debit || 0) - (a.credit || 0))
+      })
 
-      const donorBalRows: any[] = []
+      const donorRows: any[] = []
       for (const did of Object.keys(donorBudgetMap)) {
         const bud = donorBudgetMap[did]
         const act = donorActualMap[did] || 0
         const remaining = bud - act
-        const { data: donor } = await supabase.from("donors").select("name").eq("id", did).single()
-        donorBalRows.push({
+        const { data: donor } = await supabase.from("donors").select("name").eq("id", did).maybeSingle()
+        donorRows.push({
           name: donor?.name || did,
           remaining,
           pct: bud ? Math.round((act / bud) * 100) : 0,
           overspent: remaining < 0,
         })
       }
-      setDonorBalances(donorBalRows)
-
-      // ---- Category variance ----
-      const { data: catBudgets } = await supabase
-        .from("budgets")
-        .select("account_id, budgeted_amount")
-        .eq("company_id", companyId)
-        .eq("fiscal_year", fiscalYear)
-        .is("month", null)
-        .not("activity_id", "is", null)
-
-      const { data: catActuals } = await supabase
-        .from("journal_lines")
-        .select("account_id, debit, credit")
-        .eq("company_id", companyId)
-        .gte("journal_entries.date", startDate)
-        .lte("journal_entries.date", endDate)
-
-      const catBudMap: Record<string, number> = {}
-      catBudgets?.forEach(b => { catBudMap[b.account_id] = (catBudMap[b.account_id] || 0) + b.budgeted_amount })
-
-      const catActMap: Record<string, number> = {}
-      catActuals?.forEach(a => { catActMap[a.account_id] = (catActMap[a.account_id] || 0) + ((a.debit || 0) - (a.credit || 0)) })
-
-      const { data: accounts } = await supabase.from("accounts").select("id, code, name").eq("company_id", companyId).eq("type", "Expense").order("code")
-
-      const catRows: any[] = []
-      accounts?.forEach(acc => {
-        const bud = catBudMap[acc.id] || 0
-        const act = catActMap[acc.id] || 0
-        catRows.push({ name: acc.name, budget: bud, actual: act, variance: bud - act })
-      })
-      setCategoryVariance(catRows)
-
-      // ---- Alerts ----
-      const alertList: any[] = []
-      projectRowsTemp.forEach(p => {
-        if (p.pct > 100) alertList.push({ type: 'danger', msg: `${p.name} — overspent by PKR ${(p.actual - p.budget).toLocaleString()} (${p.pct}%).` })
-        else if (p.pct < 50) alertList.push({ type: 'info', msg: `${p.name} — only ${p.pct}% spent, risk of underutilization.` })
-      })
-      setAlerts(alertList.slice(0, 5))
+      setDonorBalances(donorRows)
 
       setLoading(false)
     }
 
-    fetchDashboard()
-  }, [companyId, fiscalYear])
-
-  if (loading) return <div style={{ padding: 40, textAlign: "center", background: "#f0f4f8", minHeight: "100vh" }}>Loading management dashboard...</div>
+    fetchData()
+  }, [companyId])
 
   const remainingFunds = totalBudget - totalSpent
   const spentPct = totalBudget ? Math.round((totalSpent / totalBudget) * 100) : 0
+
+  if (loading) {
+    return <div style={{ padding: 40, textAlign: "center", background: "#f0f4f8", minHeight: "100vh" }}>
+      Loading management dashboard…
+    </div>
+  }
 
   return (
     <div style={{ background: "#f0f4f8", minHeight: "100vh", fontFamily: "Segoe UI, system-ui, sans-serif", padding: "20px 24px" }}>
@@ -218,10 +190,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .badge-danger { background: #fef2f2; color: #991b1b; }
         .badge-warning { background: #fffbeb; color: #92400e; }
         .badge-success { background: #f0fdf4; color: #166534; }
-        .alert { padding: 10px 14px; border-radius: 8px; border: 1px solid; font-size: 13px; display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
-        .alert-danger { background: #fef2f2; border-color: #fecaca; }
-        .alert-warning { background: #fffbeb; border-color: #fde68a; }
-        .alert-info { background: #f0f9ff; border-color: #bae6fd; }
         .responsive-grid { display: grid; gap: 16px; }
         .kpi-grid { grid-template-columns: repeat(4, 1fr); }
         .row-grid { grid-template-columns: 1.5fr 1fr; }
@@ -237,10 +205,12 @@ export default function ManagementDashboard({ role }: { role: string }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: "#0f172a", margin: 0 }}>Management Dashboard</h1>
-          <p style={{ fontSize: 14, color: "#64748b", margin: 0 }}>Project & Budget Overview — Fiscal Year {fiscalYear}-{String(fiscalYear+1).slice(2)}</p>
+          <p style={{ fontSize: 14, color: "#64748b", margin: 0 }}>Project & Budget Overview — Fiscal Year {new Date().getFullYear()}</p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <span style={{ padding: "6px 16px", borderRadius: 20, fontSize: 12, fontWeight: 600, background: "#1d4ed8", color: "white" }}>Q2 FY{fiscalYear}</span>
+          <span style={{ padding: "6px 16px", borderRadius: 20, fontSize: 12, fontWeight: 600, background: "#1d4ed8", color: "white" }}>
+            Q2 {new Date().getFullYear()}
+          </span>
         </div>
       </div>
 
@@ -323,49 +293,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
                 <span style={{ fontSize: 13, fontWeight: 700 }}>PKR {(d.remaining / 1_000_000).toFixed(1)}M</span>
                 <span style={{ fontSize: 11, color: "#64748b", minWidth: 35, textAlign: "right" }}>{d.overspent ? "Overspent" : `${d.pct}%`}</span>
               </div>
-              <div style={{ height: 4, borderRadius: 2, background: "#f1f5f9", marginTop: 4 }}>
-                <div style={{ width: `${Math.min(d.pct, 100)}%`, height: 4, borderRadius: 2, background: d.overspent ? "#dc2626" : "#1d4ed8" }}></div>
-              </div>
             </div>
           ))}
           {donorBalances.length === 0 && <p style={{ color: "#94a3b8", textAlign: "center" }}>No donor data available.</p>}
-        </div>
-      </div>
-
-      {/* Category variance */}
-      <div style={{ background: "white", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)", marginBottom: 24 }}>
-        <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Actual vs Budget — Q2 FY{fiscalYear}</h3>
-        <p style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>By expenditure category</p>
-        <div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, fontWeight: 700, textTransform: "uppercase", color: "#94a3b8", borderBottom: "1px solid #e2e8f0", paddingBottom: 6, marginBottom: 6 }}>
-            <span>Category</span><span>Budget</span><span>Actual</span><span>Variance</span>
-          </div>
-          {categoryVariance.map((cat, idx) => (
-            <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0", borderBottom: "1px solid #f8fafc" }}>
-              <span>{cat.name}</span>
-              <span>{(cat.budget / 1_000_000).toFixed(1)}M</span>
-              <span style={{ fontWeight: 700 }}>{(cat.actual / 1_000_000).toFixed(1)}M</span>
-              <span style={{ fontWeight: 600, color: cat.variance >= 0 ? "#16a34a" : "#dc2626" }}>
-                {cat.variance >= 0 ? "+" : ""}{(cat.variance / 1_000_000).toFixed(1)}M
-              </span>
-            </div>
-          ))}
-          {categoryVariance.length === 0 && <p style={{ color: "#94a3b8", textAlign: "center" }}>No category data.</p>}
-        </div>
-      </div>
-
-      {/* Alerts */}
-      <div style={{ background: "white", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)", marginBottom: 24 }}>
-        <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Alerts & Management Actions</h3>
-        <p style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>Critical issues requiring attention</p>
-        <div>
-          {alerts.map((alert, idx) => (
-            <div key={idx} className={`alert alert-${alert.type}`}>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", marginTop: 4, background: alert.type === 'danger' ? "#dc2626" : alert.type === 'warning' ? "#d97706" : "#1d4ed8" }}></div>
-              <div>{alert.msg}</div>
-            </div>
-          ))}
-          {alerts.length === 0 && <p style={{ color: "#94a3b8", textAlign: "center" }}>No alerts. All projects are on track.</p>}
         </div>
       </div>
 
@@ -379,8 +309,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           <span>Total Budget: <strong>PKR {(totalBudget / 1_000_000).toFixed(1)}M</strong></span>
           <span>Spent: <strong>PKR {(totalSpent / 1_000_000).toFixed(1)}M ({spentPct}%)</strong></span>
           <span>Overspent Projects: <strong style={{ color: "#dc2626" }}>{overspentCount}</strong></span>
-          <span>On Track: <strong style={{ color: "#16a34a" }}>{projectRows.length - overspentCount}</strong></span>
-          <span>Period: <strong>Q2 FY{fiscalYear}-{String(fiscalYear+1).slice(2)}</strong></span>
+          <span>Period: <strong>Q2 {new Date().getFullYear()}</strong></span>
         </div>
       </div>
     </div>
