@@ -34,19 +34,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
   useEffect(() => {
     if (!companyId) return
     const fiscalYear = new Date().getFullYear()
-    const startDate = `${fiscalYear}-01-01`
-    const endDate   = `${fiscalYear}-12-31`
 
     const fetchData = async () => {
       setLoading(true)
-
-      // ---- Expense account IDs ----
-      const { data: expenseAccs } = await supabase
-        .from("accounts")
-        .select("id")
-        .eq("company_id", companyId)
-        .eq("type", "Expense")
-      const expenseAccIds = expenseAccs?.map(a => a.id) || []
 
       // ---- TOTAL BUDGET ----
       const { data: budgets } = await supabase
@@ -59,105 +49,42 @@ export default function ManagementDashboard({ role }: { role: string }) {
       const totalBudgetVal = budgets?.reduce((s, b) => s + (b.budgeted_amount || 0), 0) || 0
       setTotalBudget(totalBudgetVal)
 
-      // ---- TOTAL SPENT (all expense accounts) ----
-      let totalSpentVal = 0
-      if (expenseAccIds.length > 0) {
-        const { data: actuals } = await supabase
-          .from("journal_lines")
-          .select("debit, credit")
-          .eq("company_id", companyId)
-          .gte("journal_entries.date", startDate)
-          .lte("journal_entries.date", endDate)
-          .in("account_id", expenseAccIds)
-        totalSpentVal = actuals?.reduce((s, a) => s + ((a.debit || 0) - (a.credit || 0)), 0) || 0
-      }
+      // ---- TOTAL SPENT (via RPC) ----
+      const { data: totalSpentData } = await supabase.rpc("total_spent", {
+        cid: companyId,
+        fy: fiscalYear,
+      })
+      const totalSpentVal = totalSpentData?.[0]?.total || 0
       setTotalSpent(totalSpentVal)
 
-      // ---- PROJECT UTILIZATION ----
-      const { data: projBudgets } = await supabase
-        .from("budgets")
-        .select("project_id, budgeted_amount")
-        .eq("company_id", companyId)
-        .eq("fiscal_year", fiscalYear)
-        .is("month", null)
-        .not("activity_id", "is", null)
-
-      const { data: projActuals } = await supabase
-        .from("journal_lines")
-        .select("project_id, debit, credit")
-        .eq("company_id", companyId)
-        .gte("journal_entries.date", startDate)
-        .lte("journal_entries.date", endDate)
-
-      const budgetMap: Record<string, number> = {}
-      projBudgets?.forEach(b => {
-        budgetMap[b.project_id] = (budgetMap[b.project_id] || 0) + b.budgeted_amount
+      // ---- DONOR BALANCES (via RPC) ----
+      const { data: donorData } = await supabase.rpc("dashboard_donor_balances", {
+        company_id: companyId,
+        fiscal_year: fiscalYear,
       })
-      const actualMap: Record<string, number> = {}
-      projActuals?.forEach(a => {
-        if (a.project_id) actualMap[a.project_id] = (actualMap[a.project_id] || 0) + ((a.debit || 0) - (a.credit || 0))
-      })
-
-      const projectsData: any[] = []
-      let overspent = 0
-      for (const pid of Object.keys(budgetMap)) {
-        const bud = budgetMap[pid]
-        const act = actualMap[pid] || 0
-        if (act > bud) overspent++
-        const { data: proj } = await supabase.from("projects").select("name").eq("id", pid).maybeSingle()
-        projectsData.push({
-          id: pid,
-          name: proj?.name || pid,
-          budget: bud,
-          actual: act,
-          pct: bud ? Math.round((act / bud) * 100) : 0,
-        })
-      }
-      setOverspentCount(overspent)
-      setProjectRows(projectsData.sort((a, b) => b.pct - a.pct))
-
-      // ---- DONOR BALANCES ----
-      const { data: donorBudgets } = await supabase
-        .from("budgets")
-        .select("donor_id, budgeted_amount")
-        .eq("company_id", companyId)
-        .eq("fiscal_year", fiscalYear)
-        .is("month", null)
-        .not("activity_id", "is", null)
-
-      const { data: donorActuals } = await supabase
-        .from("journal_lines")
-        .select("donor_id, debit, credit")
-        .eq("company_id", companyId)
-        .gte("journal_entries.date", startDate)
-        .lte("journal_entries.date", endDate)
-
-      const donorBudgetMap: Record<string, number> = {}
-      donorBudgets?.forEach(b => {
-        if (b.donor_id) donorBudgetMap[b.donor_id] = (donorBudgetMap[b.donor_id] || 0) + b.budgeted_amount
-      })
-      const donorActualMap: Record<string, number> = {}
-      donorActuals?.forEach(a => {
-        if (a.donor_id) donorActualMap[a.donor_id] = (donorActualMap[a.donor_id] || 0) + ((a.debit || 0) - (a.credit || 0))
-      })
-
-      const donorRows: any[] = []
-      for (const did of Object.keys(donorBudgetMap)) {
-        const bud = donorBudgetMap[did]
-        const act = donorActualMap[did] || 0
-        const remaining = bud - act
-        const { data: donor } = await supabase.from("donors").select("name").eq("id", did).maybeSingle()
-        donorRows.push({
-          name: donor?.name || did,
-          remaining,
-          pct: bud ? Math.round((act / bud) * 100) : 0,
-          overspent: remaining < 0,
-        })
-      }
+      const donorRows = donorData?.map((d: any) => ({
+        name: d.donor_name,
+        remaining: (d.budget || 0) - (d.actual_spent || 0),
+        pct: d.budget ? Math.round(((d.actual_spent || 0) / d.budget) * 100) : 0,
+        overspent: (d.actual_spent || 0) > (d.budget || 0),
+      })) || []
       setDonorBalances(donorRows)
-
-      // ---- DEBUG: see exactly what donor data was loaded ----
       console.log("Donor balances loaded:", donorRows)
+
+      // ---- PROJECT UTILIZATION (via RPC) ----
+      const { data: projectData } = await supabase.rpc("dashboard_project_utilization", {
+        company_id: companyId,
+        fiscal_year: fiscalYear,
+      })
+      const projectsData = projectData?.map((p: any) => ({
+        id: p.project_id,
+        name: p.project_name,
+        budget: p.budget || 0,
+        actual: p.actual || 0,
+        pct: p.budget ? Math.round(((p.actual || 0) / p.budget) * 100) : 0,
+      })) || []
+      setProjectRows(projectsData.sort((a, b) => b.pct - a.pct))
+      setOverspentCount(projectsData.filter(p => p.actual > p.budget).length)
 
       setLoading(false)
     }
