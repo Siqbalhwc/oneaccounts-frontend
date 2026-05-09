@@ -12,20 +12,18 @@ export default function DashboardTopBar({ email, greeting }: { email: string; gr
       style={
         isDashboard
           ? {
-              background: "transparent",
-              minHeight: 44,
-              padding: "0 16px",
+              background: "rgba(255,255,255,0.15)",   // just a hint of colour
+              minHeight: 40,                           // even smaller
+              padding: "0 12px",
               borderBottom: "none",
             }
           : {}
       }
     >
-      {/* Hamburger – always present */}
       <button className="dl-hamburger" id="dl-hamburger" aria-label="Open menu">
         <span /><span /><span />
       </button>
 
-      {/* The rest of the top bar content (hidden on dashboard) */}
       {!isDashboard && (
         <>
           <img
