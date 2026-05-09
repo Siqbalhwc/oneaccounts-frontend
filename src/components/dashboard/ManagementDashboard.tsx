@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
+import { useRouter } from "next/navigation"
 
 export default function ManagementDashboard({ role }: { role: string }) {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
+  const router = useRouter()
 
-  // 1. Real company ID – same pattern as all your working pages
   const [companyId, setCompanyId] = useState("")
   const [loading, setLoading] = useState(true)
 
@@ -39,16 +40,15 @@ export default function ManagementDashboard({ role }: { role: string }) {
     const fetchData = async () => {
       setLoading(true)
 
-      // ---- Prepare account IDs (only expense accounts) ----
+      // ---- Expense account IDs ----
       const { data: expenseAccs } = await supabase
         .from("accounts")
         .select("id")
         .eq("company_id", companyId)
         .eq("type", "Expense")
-
       const expenseAccIds = expenseAccs?.map(a => a.id) || []
 
-      // ---- TOTAL BUDGET (annual, activity not null) ----
+      // ---- TOTAL BUDGET ----
       const { data: budgets } = await supabase
         .from("budgets")
         .select("budgeted_amount")
@@ -56,11 +56,10 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .eq("fiscal_year", fiscalYear)
         .is("month", null)
         .not("activity_id", "is", null)
-
       const totalBudgetVal = budgets?.reduce((s, b) => s + (b.budgeted_amount || 0), 0) || 0
       setTotalBudget(totalBudgetVal)
 
-      // ---- TOTAL SPENT (all expense accounts, current fiscal year) ----
+      // ---- TOTAL SPENT (all expense accounts) ----
       let totalSpentVal = 0
       if (expenseAccIds.length > 0) {
         const { data: actuals } = await supabase
@@ -70,7 +69,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
           .gte("journal_entries.date", startDate)
           .lte("journal_entries.date", endDate)
           .in("account_id", expenseAccIds)
-
         totalSpentVal = actuals?.reduce((s, a) => s + ((a.debit || 0) - (a.credit || 0)), 0) || 0
       }
       setTotalSpent(totalSpentVal)
@@ -95,7 +93,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
       projBudgets?.forEach(b => {
         budgetMap[b.project_id] = (budgetMap[b.project_id] || 0) + b.budgeted_amount
       })
-
       const actualMap: Record<string, number> = {}
       projActuals?.forEach(a => {
         if (a.project_id) actualMap[a.project_id] = (actualMap[a.project_id] || 0) + ((a.debit || 0) - (a.credit || 0))
@@ -139,7 +136,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
       donorBudgets?.forEach(b => {
         if (b.donor_id) donorBudgetMap[b.donor_id] = (donorBudgetMap[b.donor_id] || 0) + b.budgeted_amount
       })
-
       const donorActualMap: Record<string, number> = {}
       donorActuals?.forEach(a => {
         if (a.donor_id) donorActualMap[a.donor_id] = (donorActualMap[a.donor_id] || 0) + ((a.debit || 0) - (a.credit || 0))
@@ -160,6 +156,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
       }
       setDonorBalances(donorRows)
 
+      // ---- DEBUG: see exactly what donor data was loaded ----
+      console.log("Donor balances loaded:", donorRows)
+
       setLoading(false)
     }
 
@@ -170,9 +169,11 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const spentPct = totalBudget ? Math.round((totalSpent / totalBudget) * 100) : 0
 
   if (loading) {
-    return <div style={{ padding: 40, textAlign: "center", background: "#f0f4f8", minHeight: "100vh" }}>
-      Loading management dashboard…
-    </div>
+    return (
+      <div style={{ padding: 40, textAlign: "center", background: "#f0f4f8", minHeight: "100vh" }}>
+        Loading management dashboard…
+      </div>
+    )
   }
 
   return (
@@ -256,7 +257,8 @@ export default function ManagementDashboard({ role }: { role: string }) {
             </thead>
             <tbody>
               {projectRows.map((p, idx) => (
-                <tr key={idx} style={{ borderBottom: "1px solid #f8fafc" }}>
+                <tr key={idx} style={{ borderBottom: "1px solid #f8fafc", cursor: "pointer" }}
+                    onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}`)}>
                   <td style={{ padding: "8px 0" }}>
                     <div style={{ fontWeight: 700, fontSize: 13 }}>{p.name}</div>
                   </td>
@@ -291,7 +293,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
                 <div style={{ width: 10, height: 10, borderRadius: "50%", background: d.overspent ? "#dc2626" : "#1d4ed8" }}></div>
                 <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{d.name}</span>
                 <span style={{ fontSize: 13, fontWeight: 700 }}>PKR {(d.remaining / 1_000_000).toFixed(1)}M</span>
-                <span style={{ fontSize: 11, color: "#64748b", minWidth: 35, textAlign: "right" }}>{d.overspent ? "Overspent" : `${d.pct}%`}</span>
+                <span style={{ fontSize: 11, color: "#64748b", minWidth: 35, textAlign: "right" }}>
+                  {d.pct === 0 ? "No spending" : d.overspent ? "Overspent" : `${d.pct}%`}
+                </span>
               </div>
             </div>
           ))}
