@@ -130,7 +130,7 @@ export default function BudgetsPage() {
     })
   }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, filterLocationId, businessType])
 
-  const updateBudget = (activityId: string, locationId: string, accountId: string, amount: number) => {
+  const updateCell = (accountId: string, activityId: string, locationId: string, amount: number) => {
     setData(prev => {
       const updated = { ...prev }
       if (!updated[activityId]) updated[activityId] = {}
@@ -153,18 +153,24 @@ export default function BudgetsPage() {
     })
   }
 
+  // ── Save – hard‑delete then insert, no duplicates possible ──
   const handleSave = async () => {
     if (!companyId || !canEdit) return
     if (!selectedProjectId) { setFlash("⚠️ Please select a Project first."); return }
     if (businessType === "ngo" && !selectedDonorId) { setFlash("⚠️ Please select a Donor for NGO budgeting."); return }
     setSaving(true); setFlash("")
 
+    // 1. Build a Set of unique keys to prevent duplicates in the insert payload
+    const uniqueKeys = new Set<string>()
     const rowsToInsert: any[] = []
     for (const activityId of Object.keys(data)) {
       for (const locationId of Object.keys(data[activityId])) {
         for (const accountId of Object.keys(data[activityId][locationId])) {
           const budget = data[activityId][locationId][accountId].budget
           if (budget <= 0) continue
+          const key = `${accountId}|${activityId}|${locationId}|${selectedDonorId || 'no-donor'}|${filterLocationId || 'no-loc'}|${fiscalYear}`
+          if (uniqueKeys.has(key)) continue
+          uniqueKeys.add(key)
           rowsToInsert.push({
             company_id: companyId,
             account_id: parseInt(accountId),
@@ -172,6 +178,7 @@ export default function BudgetsPage() {
             activity_id: activityId,
             location_id: locationId,
             donor_id: (businessType === "ngo") ? selectedDonorId : null,
+            location_id: filterLocationId || null,
             fiscal_year: fiscalYear,
             month: null,
             budgeted_amount: budget,
@@ -180,31 +187,46 @@ export default function BudgetsPage() {
       }
     }
 
-    let updateQuery = supabase.from("budgets").update({ deleted_at: new Date().toISOString() }).eq("company_id", companyId).eq("project_id", selectedProjectId).eq("fiscal_year", fiscalYear).is("month", null).is("deleted_at", null)
-    if (businessType === "ngo") updateQuery = updateQuery.eq("donor_id", selectedDonorId)
-    if (filterLocationId) updateQuery = updateQuery.eq("location_id", filterLocationId)
-    else updateQuery = updateQuery.is("location_id", null)
-    await updateQuery
+    // 2. Hard‑delete all rows matching the current project/donor/fiscal year
+    let deleteQuery = supabase
+      .from("budgets")
+      .delete()
+      .eq("company_id", companyId)
+      .eq("project_id", selectedProjectId)
+      .eq("fiscal_year", fiscalYear)
+      .is("month", null)
 
+    if (businessType === "ngo") {
+      deleteQuery = deleteQuery.eq("donor_id", selectedDonorId)
+    }
+    if (filterLocationId) {
+      deleteQuery = deleteQuery.eq("location_id", filterLocationId)
+    }
+    await deleteQuery
+
+    // 3. Insert the new rows (guaranteed unique)
     if (rowsToInsert.length > 0) {
       const { error } = await supabase.from("budgets").insert(rowsToInsert)
-      if (error) { setFlash("❌ Error: " + error.message); setSaving(false); return }
+      if (error) {
+        setFlash("❌ Error: " + error.message)
+        setSaving(false)
+        return
+      }
     }
-    setFlash("✅ Budget saved!"); setSaving(false); setTimeout(() => setFlash(""), 4000)
+
+    setFlash("✅ Budget saved!")
+    setSaving(false)
+    setTimeout(() => setFlash(""), 4000)
   }
 
   // ── Export functions ──────────────────────────────────
   const exportExcel = () => {
     const rows: any[] = []
-    // Header
-    const header = ["Activity / Location", ...accounts.flatMap(acc => [`${acc.code} Budget`, `${acc.code} Actual`, `${acc.code} Var`]), "Total Budget", "Total Actual", "Total Var"]
-    // Data
     for (const actId of Object.keys(data)) {
       const actName = allActivities.find(a => a.id == actId)?.name || actId
-      rows.push({ type: "header", name: actName })
       for (const locId of Object.keys(data[actId])) {
         const locName = locations.find(l => l.id == locId)?.name || locId
-        const row: any = { "Activity / Location": locName }
+        const row: any = { "Activity / Location": `${actName} - ${locName}` }
         let rowBudget = 0, rowActual = 0
         accounts.forEach(acc => {
           const cell = data[actId][locId]?.[acc.id] || { budget: 0, actual: 0 }
@@ -230,18 +252,14 @@ export default function BudgetsPage() {
     const doc = new jsPDF()
     doc.setFontSize(16)
     doc.text("Budget vs Actual Report", 14, 20)
-    doc.setFontSize(10)
-    doc.text(`Project: ${projects.find(p => p.id == selectedProjectId)?.name || ""}  Fiscal Year: ${fiscalYear}`, 14, 28)
-
     const tableData: any[] = []
     const tableColumns = ["Activity / Location", ...accounts.map(acc => `${acc.code} Budget`), ...accounts.map(acc => `${acc.code} Actual`), ...accounts.map(acc => `${acc.code} Var`), "Total Budget", "Total Actual", "Total Var"]
 
     for (const actId of Object.keys(data)) {
-      const actName = allActivities.find(a => a.id == actId)?.name || actId
-      tableData.push({ isHeader: true, name: actName })
       for (const locId of Object.keys(data[actId])) {
+        const actName = allActivities.find(a => a.id == actId)?.name || actId
         const locName = locations.find(l => l.id == locId)?.name || locId
-        const row: any = { "Activity / Location": locName }
+        const row: any = { "Activity / Location": `${actName} - ${locName}` }
         let rowBudget = 0, rowActual = 0
         accounts.forEach(acc => {
           const cell = data[actId][locId]?.[acc.id] || { budget: 0, actual: 0 }
@@ -258,11 +276,7 @@ export default function BudgetsPage() {
       }
     }
 
-    autoTable(doc, {
-      head: [tableColumns],
-      body: tableData.map(row => tableColumns.map(col => row[col] || (row.isHeader ? row.name : ""))),
-      startY: 35,
-    })
+    autoTable(doc, { head: [tableColumns], body: tableData.map(row => tableColumns.map(col => row[col] || "")), startY: 35 })
     doc.save(`budget_vs_actual_${fiscalYear}.pdf`)
   }
 
@@ -426,7 +440,7 @@ export default function BudgetsPage() {
                               const cell = actData[lid]?.[acc.id] || { budget: 0, actual: 0 }
                               rowBudget += cell.budget
                               rowActual += cell.actual
-                              const variance = cell.budget - cell.actual   // ✅ Budget - Actual
+                              const variance = cell.budget - cell.actual
                               return (
                                 <Fragment key={acc.id}>
                                   <td>
@@ -436,7 +450,7 @@ export default function BudgetsPage() {
                                       min="0"
                                       step="100"
                                       value={cell.budget || ""}
-                                      onChange={e => updateBudget(act.id, lid, acc.id, Number(e.target.value))}
+                                      onChange={e => updateCell(acc.id, act.id, lid, Number(e.target.value))}
                                       disabled={!canEdit}
                                       placeholder="0"
                                     />
