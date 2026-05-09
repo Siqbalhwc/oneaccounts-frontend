@@ -155,67 +155,69 @@ export default function BudgetsPage() {
 
   // ── Save – hard‑delete then insert, no duplicates possible ──
   const handleSave = async () => {
-    if (!companyId || !canEdit) return
-    if (!selectedProjectId) { setFlash("⚠️ Please select a Project first."); return }
-    if (businessType === "ngo" && !selectedDonorId) { setFlash("⚠️ Please select a Donor for NGO budgeting."); return }
-    setSaving(true); setFlash("")
+  if (!companyId || !canEdit) return
+  if (!selectedProjectId) { setFlash("⚠️ Please select a Project first."); return }
+  if (businessType === "ngo" && !selectedDonorId) { setFlash("⚠️ Please select a Donor for NGO budgeting."); return }
+  setSaving(true); setFlash("")
 
-    // 1. Build a Set of unique keys to prevent duplicates in the insert payload
-    const uniqueKeys = new Set<string>()
-    const rowsToInsert: any[] = []
-    for (const activityId of Object.keys(data)) {
-      for (const locationId of Object.keys(data[activityId])) {
-        for (const accountId of Object.keys(data[activityId][locationId])) {
-          const budget = data[activityId][locationId][accountId].budget
-          if (budget <= 0) continue
-          const key = `${accountId}|${activityId}|${locationId}|${selectedDonorId || 'no-donor'}|${filterLocationId || 'no-loc'}|${fiscalYear}`
-          if (uniqueKeys.has(key)) continue
-          uniqueKeys.add(key)
-          rowsToInsert.push({
-  company_id: companyId,
-  account_id: parseInt(accountId),
-  project_id: selectedProjectId,
-  activity_id: activityId,
-  donor_id: (businessType === "ngo") ? selectedDonorId : null,
-  location_id: filterLocationId || null,
-  fiscal_year: fiscalYear,
-  month: null,
-  budgeted_amount: budget,
-})
-        }
+  // Build rows from the matrix, keeping each cell's actual location
+  const uniqueKeys = new Set<string>()
+  const rowsToInsert: any[] = []
+  for (const activityId of Object.keys(data)) {
+    for (const locationId of Object.keys(data[activityId])) {   // ← this is the actual location
+      for (const accountId of Object.keys(data[activityId][locationId])) {
+        const budget = data[activityId][locationId][accountId].budget
+        if (budget <= 0) continue
+
+        // Unique key based on actual cell location
+        const key = `${accountId}|${activityId}|${locationId}|${selectedDonorId || 'no-donor'}|${fiscalYear}`
+        if (uniqueKeys.has(key)) continue
+        uniqueKeys.add(key)
+
+        rowsToInsert.push({
+          company_id: companyId,
+          account_id: parseInt(accountId),
+          project_id: selectedProjectId,
+          activity_id: activityId,
+          donor_id: (businessType === "ngo") ? selectedDonorId : null,
+          location_id: locationId,                      // ← use the cell's real location
+          fiscal_year: fiscalYear,
+          month: null,
+          budgeted_amount: budget,
+        })
       }
     }
+  }
 
-    // 2. Hard‑delete all rows matching the current project/donor/fiscal year
-    let deleteQuery = supabase
-      .from("budgets")
-      .delete()
-      .eq("company_id", companyId)
-      .eq("project_id", selectedProjectId)
-      .eq("fiscal_year", fiscalYear)
-      .is("month", null)
+  // Delete ALL existing rows for this project + donor + fiscal year (ignore location filter)
+  let deleteQuery = supabase
+    .from("budgets")
+    .delete()
+    .eq("company_id", companyId)
+    .eq("project_id", selectedProjectId)
+    .eq("fiscal_year", fiscalYear)
+    .is("month", null)
 
-    if (businessType === "ngo") {
-      deleteQuery = deleteQuery.eq("donor_id", selectedDonorId)
+  if (businessType === "ngo") {
+    deleteQuery = deleteQuery.eq("donor_id", selectedDonorId)
+  }
+  // ⚠️ Do NOT filter by filterLocationId here
+  await deleteQuery
+
+  // Insert the new rows
+  if (rowsToInsert.length > 0) {
+    const { error } = await supabase.from("budgets").insert(rowsToInsert)
+    if (error) {
+      setFlash("❌ Error: " + error.message)
+      setSaving(false)
+      return
     }
-    if (filterLocationId) {
-      deleteQuery = deleteQuery.eq("location_id", filterLocationId)
-    }
-    await deleteQuery
+  }
 
-    // 3. Insert the new rows (guaranteed unique)
-    if (rowsToInsert.length > 0) {
-      const { error } = await supabase.from("budgets").insert(rowsToInsert)
-      if (error) {
-        setFlash("❌ Error: " + error.message)
-        setSaving(false)
-        return
-      }
-    }
-
-    setFlash("✅ Budget saved!")
-    setSaving(false)
-    setTimeout(() => setFlash(""), 4000)
+  setFlash("✅ Budget saved!")
+  setSaving(false)
+  setTimeout(() => setFlash(""), 4000)
+}
   }
 
   // ── Export functions ──────────────────────────────────
