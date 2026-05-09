@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import * as XLSX from "xlsx"
 import jsPDF from "jspdf"
@@ -9,19 +9,24 @@ import autoTable from "jspdf-autotable"
 
 export default function SpendingDetailPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
+  const initialFiscalYear = parseInt(searchParams.get("fy") || "") || new Date().getFullYear()
+  const initialProject = searchParams.get("project") || ""
+  const initialDonor = searchParams.get("donor") || ""
+
   const [companyId, setCompanyId] = useState("")
-  const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
+  const [fiscalYear, setFiscalYear] = useState(initialFiscalYear)
   const [rows, setRows] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
-  const [selectedProjectId, setSelectedProjectId] = useState("")
-  const [selectedDonorId, setSelectedDonorId] = useState("")
+  const [selectedProjectId, setSelectedProjectId] = useState(initialProject)
+  const [selectedDonorId, setSelectedDonorId] = useState(initialDonor)
   const [expenseAccountIds, setExpenseAccountIds] = useState<number[]>([])
 
   useEffect(() => {
@@ -91,10 +96,7 @@ export default function SpendingDetailPage() {
       r.date, r.project, r.donor, r.activity, r.location,
       r.account_code, r.account_name, r.debit, r.credit, r.net
     ])
-    autoTable(doc, {
-      head: [["Date","Project","Donor","Activity","Loc","Code","Account","Debit","Credit","Net"]],
-      body, startY: 35,
-    })
+    autoTable(doc, { head: [["Date","Project","Donor","Activity","Loc","Code","Account","Debit","Credit","Net"]], body, startY: 35 })
     doc.save(`spending_detail_${fiscalYear}.pdf`)
   }
 
