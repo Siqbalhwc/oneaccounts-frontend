@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRole } from "@/contexts/RoleContext"
-import { Plus, Edit, Trash2, X, ArrowDown, ArrowUp } from "lucide-react"
+import { Plus, Edit, Trash2, X, ArrowDown, ArrowUp, ImagePlus } from "lucide-react"
 
 interface Product {
   id: number
@@ -17,6 +17,9 @@ interface Product {
   total_outflow: number
   image_path: string
 }
+
+type SortColumn = "code" | "name" | "cost_price" | "sale_price" | "opening_qty" | "qty_on_hand" | "total_inflow" | "total_outflow"
+type SortDir = "asc" | "desc"
 
 export default function StockRegisterPage() {
   const supabase = createBrowserClient(
@@ -35,10 +38,14 @@ export default function StockRegisterPage() {
   const [total, setTotal] = useState(0)
   const pageSize = 25
 
-  // Modal state for Add / Edit / Adjust
+  // Sorting
+  const [sortCol, setSortCol] = useState<SortColumn>("name")
+  const [sortDir, setSortDir] = useState<SortDir>("asc")
+
+  // Modal state
   const [showModal, setShowModal] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-  const [isAdjustment, setIsAdjustment] = useState(false) // true â†’ adjust stock only
+  const [isAdjustment, setIsAdjustment] = useState(false)
   const [form, setForm] = useState({
     name: "",
     cost_price: 0,
@@ -46,13 +53,15 @@ export default function StockRegisterPage() {
     opening_qty: 0,
     image_path: "",
   })
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [adjustQty, setAdjustQty] = useState(0)
   const [adjustReason, setAdjustReason] = useState("")
   const [saving, setSaving] = useState(false)
   const [flash, setFlash] = useState("")
   const [formError, setFormError] = useState("")
 
-  // â”€â”€ 1. Get real company ID â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Get company ID ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -61,7 +70,7 @@ export default function StockRegisterPage() {
     })
   }, [])
 
-  // â”€â”€ 2. Fetch products â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Fetch products with sorting ──
   const fetchProducts = () => {
     if (!companyId) return
     setLoading(true)
@@ -72,14 +81,13 @@ export default function StockRegisterPage() {
       .from("products")
       .select("*", { count: "exact" })
       .eq("company_id", companyId)
-      .order("name")
 
     if (search.trim()) {
       query = query.or(`name.ilike.%${search}%,code.ilike.%${search}%`)
     }
 
+    query = query.order(sortCol, { ascending: sortDir === "asc" })
     query.range(start, end).then(({ data, count }) => {
-      // Enrich each product with total inflow/outflow from stock_moves
       const enriched = (data || []).map((p: any) => ({
         ...p,
         total_inflow: p.total_inflow || 0,
@@ -91,34 +99,80 @@ export default function StockRegisterPage() {
     })
   }
 
-  useEffect(() => { fetchProducts() }, [companyId, search, page])
+  useEffect(() => { fetchProducts() }, [companyId, search, page, sortCol, sortDir])
 
-  // â”€â”€ Generate unique code per company â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Toggle sort
+  const handleSort = (col: SortColumn) => {
+    if (sortCol === col) {
+      setSortDir(prev => prev === "asc" ? "desc" : "asc")
+    } else {
+      setSortCol(col)
+      setSortDir("asc")
+    }
+  }
+
+  const SortIcon = ({ col }: { col: SortColumn }) => {
+    if (sortCol !== col) return null
+    return sortDir === "asc" ? <ArrowUp size={10} /> : <ArrowDown size={10} />
+  }
+
+  // ── Generate unique product code ──
   const getNextCode = async (): Promise<string> => {
     const { data } = await supabase
       .from("products")
       .select("code")
       .eq("company_id", companyId)
       .order("code", { ascending: false })
-      .limit(1)
-    let nextNum = 1
-    if (data && data.length > 0) {
-      const match = data[0].code.match(/PROD-(\d+)/)
-      if (match) nextNum = parseInt(match[1]) + 1
+      .limit(50)
+    let maxNum = 0
+    if (data) {
+      data.forEach(row => {
+        const match = row.code?.match(/PROD-(\d+)/)
+        if (match) {
+          const n = parseInt(match[1], 10)
+          if (!isNaN(n) && n > maxNum) maxNum = n
+        }
+      })
     }
-    return `PROD-${String(nextNum).padStart(3, "0")}`
+    return `PROD-${String(maxNum + 1).padStart(3, "0")}`
   }
 
-  // â”€â”€ Open modal for NEW product â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Image upload to existing product-images bucket ──
+  const uploadImage = async (file: File): Promise<string> => {
+    const ext = file.name.split('.').pop()
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${ext}`
+    const { data, error } = await supabase.storage
+      .from("product-images")
+      .upload(`public/${fileName}`, file, { cacheControl: "3600", upsert: false })
+
+    if (error) throw new Error("Image upload failed: " + error.message)
+    const { data: urlData } = supabase.storage
+      .from("product-images")
+      .getPublicUrl(`public/${fileName}`)
+    return urlData.publicUrl
+  }
+
+  // ── Handle file pick and preview ──
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImageFile(file)
+    const reader = new FileReader()
+    reader.onload = () => setImagePreview(reader.result as string)
+    reader.readAsDataURL(file)
+  }
+
+  // ── Modal open helpers ──
   const openNew = () => {
     setEditingProduct(null)
     setIsAdjustment(false)
     setForm({ name: "", cost_price: 0, sale_price: 0, opening_qty: 0, image_path: "" })
+    setImageFile(null)
+    setImagePreview(null)
     setFormError("")
     setShowModal(true)
   }
 
-  // â”€â”€ Open modal for EDIT product â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const openEdit = (prod: Product) => {
     setEditingProduct(prod)
     setIsAdjustment(false)
@@ -129,11 +183,12 @@ export default function StockRegisterPage() {
       opening_qty: prod.opening_qty || 0,
       image_path: prod.image_path || "",
     })
+    setImageFile(null)
+    setImagePreview(null)
     setFormError("")
     setShowModal(true)
   }
 
-  // â”€â”€ Open modal for STOCK ADJUSTMENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const openAdjust = (prod: Product) => {
     setEditingProduct(prod)
     setIsAdjustment(true)
@@ -143,14 +198,14 @@ export default function StockRegisterPage() {
     setShowModal(true)
   }
 
-  // â”€â”€ Save (Add / Edit / Adjust) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Save product or adjustment ──
   const handleSave = async () => {
     if (!companyId) return
     setSaving(true)
     setFormError("")
     setFlash("")
 
-    // ---------- STOCK ADJUSTMENT ----------
+    // Stock adjustment
     if (isAdjustment && editingProduct) {
       if (adjustQty === 0) {
         setFormError("Adjustment quantity cannot be zero")
@@ -168,8 +223,6 @@ export default function StockRegisterPage() {
         setSaving(false)
         return
       }
-
-      // Record stock movement
       await supabase.from("stock_moves").insert({
         company_id: companyId,
         product_id: editingProduct.id,
@@ -180,8 +233,7 @@ export default function StockRegisterPage() {
         date: new Date().toISOString().split("T")[0],
         notes: adjustReason,
       })
-
-      setFlash("âœ… Stock adjusted!")
+      setFlash("Stock adjusted!")
       setSaving(false)
       setShowModal(false)
       fetchProducts()
@@ -189,11 +241,24 @@ export default function StockRegisterPage() {
       return
     }
 
-    // ---------- ADD / EDIT ----------
+    // Add / Edit
     if (!form.name.trim()) {
       setFormError("Name is required")
       setSaving(false)
       return
+    }
+
+    let imagePath = form.image_path
+
+    // Upload new image if selected
+    if (imageFile) {
+      try {
+        imagePath = await uploadImage(imageFile)
+      } catch (err: any) {
+        setFormError(err.message)
+        setSaving(false)
+        return
+      }
     }
 
     const payload = {
@@ -203,7 +268,7 @@ export default function StockRegisterPage() {
       sale_price: form.sale_price,
       opening_qty: form.opening_qty,
       qty_on_hand: editingProduct ? editingProduct.qty_on_hand : form.opening_qty,
-      image_path: form.image_path || null,
+      image_path: imagePath || null,
     }
 
     if (editingProduct) {
@@ -213,14 +278,14 @@ export default function StockRegisterPage() {
         .eq("id", editingProduct.id)
         .eq("company_id", companyId)
       if (error) { setFormError(error.message); setSaving(false); return }
-      setFlash("âœ… Product updated!")
+      setFlash("Product updated!")
     } else {
       const code = await getNextCode()
       const { error } = await supabase
         .from("products")
         .insert({ ...payload, code, qty_on_hand: form.opening_qty })
       if (error) { setFormError(error.message); setSaving(false); return }
-      setFlash("âœ… Product created!")
+      setFlash("Product created!")
     }
 
     setSaving(false)
@@ -229,16 +294,26 @@ export default function StockRegisterPage() {
     setTimeout(() => setFlash(""), 3000)
   }
 
-  // â”€â”€ Soft delete â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Soft delete ──
   const handleDelete = async (id: number) => {
     if (!confirm("Delete this product?")) return
     await supabase.from("products").update({ deleted_at: new Date().toISOString() }).eq("id", id).eq("company_id", companyId)
     fetchProducts()
   }
 
-  if (!companyId) return <div style={{ padding: 40, textAlign: "center" }}>Loading company dataâ€¦</div>
-if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
-  if (!canView) return <div style={{ padding: 40, textAlign: "center" }}><h2>Access Denied</h2></div>
+  if (roleLoading || !role) {
+    return <div style={{ padding: 40, textAlign: "center" }}>Loading...</div>
+  }
+  if (!canView) {
+    return <div style={{ padding: 40, textAlign: "center" }}><h2>Access Denied</h2></div>
+  }
+  if (!companyId) {
+    return <div style={{ padding: 40, textAlign: "center" }}>Loading company data...</div>
+  }
+
+  // ── Compute summary stats ──
+  const totalStockValue = products.reduce((sum, p) => sum + (p.qty_on_hand || 0) * (p.cost_price || 0), 0)
+  const totalProducts = total
 
   return (
     <div style={{ padding: 24, fontFamily: "Arial", background: "#EFF4FB", minHeight: "100vh" }}>
@@ -249,7 +324,8 @@ if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" 
         .btn-primary { background: #1D4ED8; color: white; }
         .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
         table { width: 100%; border-collapse: collapse; }
-        th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8; text-align: left; padding: 8px 6px; border-bottom: 1px solid #E2E8F0; }
+        th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8; text-align: left; padding: 8px 6px; border-bottom: 1px solid #E2E8F0; cursor: pointer; user-select: none; }
+        th:hover { color: #1E293B; }
         td { padding: 10px 6px; border-bottom: 1px solid #F1F5F9; font-size: 13px; }
         tr:hover td { background: #FAFBFF; }
         .form-error { background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; padding: 8px 12px; border-radius: 6px; }
@@ -259,7 +335,7 @@ if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" 
 
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
-          <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>ðŸ“¦ Stock Register</h2>
+          <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>Stock Register</h2>
           <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>Manage inventory, view opening / inflow / outflow / closing</p>
         </div>
         {canEdit && (
@@ -269,13 +345,25 @@ if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" 
         )}
       </div>
 
+      {/* Summary cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+        <div className="card">
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Products</div>
+          <div style={{ fontSize: 24, fontWeight: 800 }}>{totalProducts}</div>
+        </div>
+        <div className="card">
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Stock Value</div>
+          <div style={{ fontSize: 24, fontWeight: 800 }}>PKR {totalStockValue.toLocaleString()}</div>
+        </div>
+      </div>
+
       {flash && (
         <div style={{ background: flash.startsWith("Error") ? "#FEF2F2" : "#F0FDF4", color: flash.startsWith("Error") ? "#B91C1C" : "#15803D", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
           {flash}
         </div>
       )}
 
-      <div style={{ marginBottom: 12 }}>
+      <div style={{ marginBottom: 12, maxWidth: 320 }}>
         <input className="input" placeholder="Search by name or code..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
       </div>
 
@@ -283,14 +371,14 @@ if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" 
         <table>
           <thead>
             <tr>
-              <th>Code</th>
-              <th>Name</th>
-              <th>Cost Price</th>
-              <th>Sale Price</th>
-              <th style={{ textAlign: "center" }}>Opening</th>
-              <th style={{ textAlign: "center" }}>Inflow</th>
-              <th style={{ textAlign: "center" }}>Outflow</th>
-              <th style={{ textAlign: "center" }}>Closing</th>
+              <th onClick={() => handleSort("code")}>Code <SortIcon col="code" /></th>
+              <th onClick={() => handleSort("name")}>Name <SortIcon col="name" /></th>
+              <th onClick={() => handleSort("cost_price")}>Cost Price <SortIcon col="cost_price" /></th>
+              <th onClick={() => handleSort("sale_price")}>Sale Price <SortIcon col="sale_price" /></th>
+              <th onClick={() => handleSort("opening_qty")} style={{ textAlign: "center" }}>Opening <SortIcon col="opening_qty" /></th>
+              <th onClick={() => handleSort("total_inflow")} style={{ textAlign: "center" }}>Inflow <SortIcon col="total_inflow" /></th>
+              <th onClick={() => handleSort("total_outflow")} style={{ textAlign: "center" }}>Outflow <SortIcon col="total_outflow" /></th>
+              <th onClick={() => handleSort("qty_on_hand")} style={{ textAlign: "center" }}>Closing <SortIcon col="qty_on_hand" /></th>
               <th style={{ textAlign: "center" }}>Image</th>
               <th></th>
               <th></th>
@@ -320,7 +408,7 @@ if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" 
                     <td style={{ textAlign: "center" }}>
                       {prod.image_path ? (
                         <img src={prod.image_path} alt="" style={{ width: 30, height: 30, objectFit: "cover", borderRadius: 4 }} />
-                      ) : "â€”"}
+                      ) : "—"}
                     </td>
                     <td>
                       <button className="btn btn-outline" style={{ padding: 4 }} onClick={() => openEdit(prod)}><Edit size={14} /></button>
@@ -341,13 +429,13 @@ if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" 
         </table>
       </div>
 
-      {/* Pagination (simple) */}
+      {/* Pagination */}
       {total > pageSize && (
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12, fontSize: 13 }}>
           <span>Showing {Math.min(pageSize, total - (page-1)*pageSize)} of {total}</span>
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn-outline" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</button>
-            <button className="btn-outline" disabled={page * pageSize >= total} onClick={() => setPage(p => p + 1)}>Next</button>
+            <button className="btn btn-outline" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</button>
+            <button className="btn btn-outline" disabled={page * pageSize >= total} onClick={() => setPage(p => p + 1)}>Next</button>
           </div>
         </div>
       )}
@@ -358,9 +446,9 @@ if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" 
           <div className="pr-modal" onClick={e => e.stopPropagation()}>
             <div style={{ padding: "20px 24px", borderBottom: "1px solid #E2E8F0", display: "flex", justifyContent: "space-between" }}>
               <h3 style={{ margin: 0 }}>
-                {isAdjustment ? "ðŸ”§ Adjust Stock" : editingProduct ? "âœï¸ Edit Product" : "âž• New Product"}
+                {isAdjustment ? "Adjust Stock" : editingProduct ? "Edit Product" : "New Product"}
               </h3>
-              <button className="btn-outline" onClick={() => setShowModal(false)}><X size={18} /></button>
+              <button className="btn btn-outline" onClick={() => setShowModal(false)}><X size={18} /></button>
             </div>
             <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
               {formError && <div className="form-error">{formError}</div>}
@@ -397,9 +485,21 @@ if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" 
                     <label>Opening Quantity</label>
                     <input className="input" type="number" value={form.opening_qty} onChange={e => setForm({...form, opening_qty: Number(e.target.value)})} />
                   </div>
+                  {/* Image upload */}
                   <div>
-                    <label>Image URL (optional)</label>
-                    <input className="input" value={form.image_path} onChange={e => setForm({...form, image_path: e.target.value})} placeholder="https://..." />
+                    <label>Product Image</label>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 4 }}>
+                      <label className="btn btn-outline" style={{ cursor: "pointer", padding: "8px 16px" }}>
+                        <ImagePlus size={14} /> Choose File
+                        <input type="file" accept="image/*" onChange={handleImageFileChange} style={{ display: "none" }} />
+                      </label>
+                      {imagePreview ? (
+                        <img src={imagePreview} alt="preview" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 6 }} />
+                      ) : form.image_path ? (
+                        <img src={form.image_path} alt="current" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 6 }} />
+                      ) : null}
+                      {imageFile && <span style={{ fontSize: 12, color: "#10B981" }}>New image selected</span>}
+                    </div>
                   </div>
                 </>
               )}
@@ -407,7 +507,7 @@ if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" 
             <div style={{ padding: "16px 24px", borderTop: "1px solid #E2E8F0", display: "flex", justifyContent: "flex-end", gap: 8 }}>
               <button className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                {saving ? "Saving..." : "ðŸ’¾ Save"}
+                {saving ? "Saving..." : "Save"}
               </button>
             </div>
           </div>
