@@ -186,10 +186,10 @@ export default function JournalPage() {
                   <span className="hide-mobile" style={{ color: "#64748B" }}>{new Date(je.date).toLocaleDateString()}</span>
                   <span>{je.description || "—"}</span>
                   <span style={{ textAlign: "right", fontWeight: 600, color: "#EF4444" }}>
-                    {je.total_debit > 0 ? `PKR ${je.total_debit.toLocaleString()}` : "—"}
+                    {(je.total_debit ?? 0) > 0 ? `PKR ${(je.total_debit ?? 0).toLocaleString()}` : "—"}
                   </span>
                   <span style={{ textAlign: "right", fontWeight: 600, color: "#10B981" }}>
-                    {je.total_credit > 0 ? `PKR ${je.total_credit.toLocaleString()}` : "—"}
+                    {(je.total_credit ?? 0) > 0 ? `PKR ${(je.total_credit ?? 0).toLocaleString()}` : "—"}
                   </span>
                   <span>
                     <button className="btn btn-outline" style={{ padding: 4 }} onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/journal/${je.id}`) }}>
