@@ -32,6 +32,10 @@ export default function NewInvoicePage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
+  // Automation & profit allocation (original settings)
+  const [enableAutomation, setEnableAutomation] = useState(true)
+  const [enableProfitAllocation, setEnableProfitAllocation] = useState(true)
+
   // Lookups
   const [locations, setLocations] = useState<any[]>([])
   const [activities, setActivities] = useState<any[]>([])
@@ -58,7 +62,7 @@ export default function NewInvoicePage() {
           else setCustomers([])
         })
 
-      // Fetch accounts (Revenue type for invoices)
+      // Fetch revenue accounts
       supabase.from("accounts")
         .select("id,code,name,type")
         .eq("company_id", cid)
@@ -66,41 +70,19 @@ export default function NewInvoicePage() {
         .order("code")
         .then(r => r.data && setAllAccounts(r.data))
 
-      // Fetch locations
-      supabase.from("locations")
-        .select("id,name")
+      // Fetch locations and activities
+      supabase.from("locations").select("id,name")
         .eq("company_id", cid)
         .order("name")
         .then(r => r.data && setLocations(r.data))
+      supabase.from("activities").select("id,name")
+        .eq("company_id", cid)
+        .order("name")
+        .then(r => r.data && setActivities(r.data))
 
       setLoading(false)
     })
   }, [])
-
-  // ── Fetch activities when a location is selected (optional) ──
-  useEffect(() => {
-    if (!companyId || !globalLocationId) {
-      setActivities([])
-      return
-    }
-    supabase.from("budgets")
-      .select("activity_id, activities!inner(id,name)")
-      .eq("company_id", companyId)
-      .eq("location_id", globalLocationId)
-      .eq("fiscal_year", new Date().getFullYear())
-      .is("month", null)
-      .then(({ data }) => {
-        if (data) {
-          const unique = new Map<number, string>()
-          data.forEach((d: any) => {
-            if (d.activity_id && d.activities) unique.set(d.activity_id, d.activities.name)
-          })
-          setActivities(Array.from(unique.entries()).map(([id, name]) => ({ id, name })))
-        } else {
-          setActivities([])
-        }
-      })
-  }, [companyId, globalLocationId])
 
   // ── Customer selection ──
   const filteredCustomers = customers.filter(c =>
@@ -126,7 +108,7 @@ export default function NewInvoicePage() {
     setGlobalAccountId(null)
   }
 
-  // ── Item management ──
+  // ── Item management (original style with automation) ──
   const addItem = () => {
     setItems([...items, {
       description: "",
@@ -150,7 +132,7 @@ export default function NewInvoicePage() {
 
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
 
-  // ── Invoice number generation ──
+  // ── Invoice number generation (original) ──
   const getNextInvoiceNo = async (custCode: string): Promise<string> => {
     const { data } = await supabase
       .from("invoices")
@@ -168,7 +150,7 @@ export default function NewInvoicePage() {
     return `${custCode}-${String(nextNum).padStart(2, "0")}`
   }
 
-  // ── Submit ──
+  // ── Submit (with automation / profit allocation) ──
   const handleSubmit = async () => {
     if (!customerId) { setError("Please select a customer"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
@@ -196,6 +178,8 @@ export default function NewInvoicePage() {
           notes,
           location_id: globalLocationId || null,
           activity_id: globalActivityId || null,
+          enable_automation: enableAutomation,
+          enable_profit_allocation: enableProfitAllocation,
         }),
       })
       const result = await res.json()
@@ -293,7 +277,7 @@ export default function NewInvoicePage() {
           <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/invoices")}><ArrowLeft size={16} /></button>
           <div style={{ flex:1 }}>
             <div className="inv-title">🧾 New Sales Invoice</div>
-            <div style={{ fontSize:12, color:"#94A3B8", marginTop:1 }}>Select customer → add items</div>
+            <div style={{ fontSize:12, color:"#94A3B8", marginTop:1 }}>Select customer → add items (automation enabled)</div>
           </div>
           <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/invoices")}>View List</button>
         </div>
@@ -362,6 +346,18 @@ export default function NewInvoicePage() {
                   <option value="">— Optional —</option>
                   {allAccounts.map(a => <option key={a.id} value={a.id}>{a.code} – {a.name}</option>)}
                 </select>
+              </div>
+
+              {/* Automation & Profit Allocation toggles */}
+              <div style={{ marginTop:10, display:"flex", gap:20 }}>
+                <label style={{ display:"flex", alignItems:"center", gap:6, fontSize:13 }}>
+                  <input type="checkbox" checked={enableAutomation} onChange={e => setEnableAutomation(e.target.checked)} />
+                  Invoice Automation
+                </label>
+                <label style={{ display:"flex", alignItems:"center", gap:6, fontSize:13 }}>
+                  <input type="checkbox" checked={enableProfitAllocation} onChange={e => setEnableProfitAllocation(e.target.checked)} />
+                  Profit Allocation
+                </label>
               </div>
 
               <div className="inv-row" style={{ marginTop:10 }}>
