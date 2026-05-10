@@ -130,7 +130,6 @@ export default function NewInvoicePage() {
     }
   }
 
-  // FIXED: single object argument
   const handleDownloadPDF = async () => {
     if (!successInvoice) return
     const { data: itemsData } = await supabase.from("invoice_items").select("*").eq("invoice_id", successInvoice.id)
@@ -166,16 +165,17 @@ export default function NewInvoicePage() {
     return `https://wa.me/92${cust.phone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`
   }
 
-  // FIXED: single object argument
+  // FIXED: proper InvoicePDFData structure
   const handleBeforeSavePdf = () => {
     const cust = customers.find((c: any) => c.id === customerId) || {}
-    const tempInvoice = {
-      invoice_no: generateInvoiceNo(),
+    const pdfData = {
+      companyName: "OneAccounts",
+      invoiceNo: generateInvoiceNo(),
       date: invoiceDate,
-      due_date: dueDate,
+      dueDate: dueDate,
       customerName: cust.name || "Customer",
       customerPhone: cust.phone || "",
-      items: items.map(i => ({
+      items: items.map((i: any) => ({
         description: i.description || "",
         qty: i.qty || 0,
         unit_price: i.unit_price || 0,
@@ -184,8 +184,8 @@ export default function NewInvoicePage() {
       subtotal: totalAmount,
       total: totalAmount,
     }
-    const doc = generateInvoicePDF(tempInvoice)
-    doc.save(`invoice-preview-${tempInvoice.invoice_no}.pdf`)
+    const doc = generateInvoicePDF(pdfData)
+    doc.save(`invoice-preview-${pdfData.invoiceNo}.pdf`)
   }
 
   return (
