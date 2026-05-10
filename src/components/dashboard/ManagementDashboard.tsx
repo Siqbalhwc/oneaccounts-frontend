@@ -35,7 +35,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [totalReceivables, setTotalReceivables] = useState(0)
   const [totalPayables, setTotalPayables] = useState(0)
 
-  // ── Fetch company ID and master data ────────────────
+  // ── Fetch company ID and master data ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -52,7 +52,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
       .then(r => r.data && setDonors(r.data))
   }, [companyId])
 
-  // ── Fetch dashboard data ─────────────────────────────
+  // ── Fetch dashboard data ──
   useEffect(() => {
     if (!companyId) return
 
@@ -112,7 +112,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
     fetchData()
   }, [companyId, fiscalYear])
 
-  // ── Filtered data ─────────────────────────────────────
+  // ── Filtered data ──
   const filteredDonorBalances = donorBalances.filter(d => {
     if (selectedDonorId && d.donor_id != selectedDonorId) return false
     return true
@@ -138,7 +138,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const remainingFunds = filteredTotalBudget - filteredTotalSpent
   const spentPct = filteredTotalBudget ? Math.round((filteredTotalSpent / filteredTotalBudget) * 100) : 0
 
-  // ── Professional greeting ─────────────────────────────
+  // ── Professional greeting ──
   const getGreeting = () => {
     const hour = new Date().getHours()
     if (hour < 12) return "Good morning"
@@ -146,14 +146,14 @@ export default function ManagementDashboard({ role }: { role: string }) {
     return "Good evening"
   }
 
-  // ── Formatting ───────────────────────────────────────
+  // ── Formatting ──
   const formatPKR = (v: number) => {
     if (v >= 1_000_000) return `PKR ${(v / 1_000_000).toFixed(1)}M`
     if (v >= 1_000) return `PKR ${(v / 1_000).toFixed(0)}K`
     return `PKR ${v.toLocaleString()}`
   }
 
-  // ── Build query string for detail pages ──────────────
+  // ── Build query string for detail pages ──
   const detailQuery = (extra: Record<string, string> = {}) => {
     const params = new URLSearchParams({ fy: String(fiscalYear) })
     if (selectedProjectId) params.set("project", selectedProjectId)
@@ -163,295 +163,260 @@ export default function ManagementDashboard({ role }: { role: string }) {
   }
 
   if (loading) {
-    return <div style={{ padding: 40, textAlign: "center", background: "#f0f4f8", minHeight: "100vh" }}>Loading…</div>
+    return <div style={{ padding: 40, textAlign: "center", background: "#f4f8fc", minHeight: "100vh" }}>Loading…</div>
   }
 
   return (
-    <div style={{ background: "#f0f4f8", minHeight: "100vh", fontFamily: "Segoe UI, system-ui, sans-serif" }}>
+    <div style={{ background: "#f4f8fc", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif", color: "#1e2b3c" }}>
       <style>{`
-        /* ── Base card styles ── */
-        .kpi-card {
-          background: white; border-radius: 12px; padding: 14px 16px;
-          box-shadow: 0 1px 2px rgba(0,0,0,0.03); position: relative;
-          overflow: hidden; cursor: pointer;
-          transition: transform 0.15s, box-shadow 0.15s;
-        }
-        .kpi-card:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-        .kpi-card::before {
-          content: ''; position: absolute; top: 0; left: 0; right: 0;
-          height: 3px; border-radius: 12px 12px 0 0;
-        }
-        .blue::before { background: linear-gradient(to right, #3b82f6, #06b6d4); }
-        .green::before { background: linear-gradient(to right, #22c55e, #10b981); }
-        .amber::before { background: linear-gradient(to right, #f97316, #f59e0b); }
-        .red::before { background: linear-gradient(to right, #ef4444, #ec4899); }
+        /* ── Global resets inside dashboard ── */
+        .mgmt * { box-sizing: border-box; margin: 0; padding: 0; }
 
-        .progress-bar { height: 5px; border-radius: 3px; background: #f1f5f9; overflow: hidden; }
-        .progress-fill { height: 5px; border-radius: 3px; }
-        .badge { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 9px; font-weight: 700; }
-        .badge-danger { background: #fef2f2; color: #991b1b; }
-        .badge-warning { background: #fffbeb; color: #92400e; }
-        .badge-success { background: #f0fdf4; color: #166534; }
+        /* ── New polished card design ── */
+        .mgmt .card {
+          background: #f5fafd; border: 1px solid #ddecf4;
+          border-radius: 18px; padding: 1.2rem 1.3rem;
+          box-shadow: 0 4px 12px rgba(0,60,80,0.04);
+          transition: all 0.2s;
+        }
+        .mgmt .card:hover { background: #f0f7fc; border-color: #b8d5e5; }
 
-        /* ── Header banner (dashboard header) ── */
-        .dashboard-header {
-          background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #06b6d4 100%);
-          border-radius: 16px;
-          padding: 12px 20px;
-          color: white;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
+        /* ── Filter bar (visible, theme aligned) ── */
+        .mgmt .filter-row {
+          display: flex; align-items: center; gap: 0.8rem;
+          background: white; border-radius: 24px; padding: 0.4rem 1.2rem;
+          border: 1px solid #d9e6f2; margin-bottom: 1rem;
           flex-wrap: wrap;
-          gap: 12px;
-          margin: 8px 12px 16px;
         }
-        .dashboard-header .welcome { display: flex; align-items: center; gap: 10px; }
-        .dashboard-header .welcome img { width: 36px; height: 36px; border-radius: 8px; object-fit: contain; }
-        .dashboard-header .welcome h2 { font-size: 18px; font-weight: 700; margin: 0; }
-        .dashboard-header .welcome p { font-size: 12px; color: rgba(255,255,255,0.7); margin: 2px 0 0 0; }
-        .dashboard-header .stats { display: flex; gap: 8px; flex-wrap: wrap; }
-        .dashboard-header .stat-card {
-          background: rgba(255,255,255,0.1); backdrop-filter: blur(4px);
-          border: 1px solid rgba(255,255,255,0.15);
-          border-radius: 10px; padding: 8px 14px;
-          min-width: 80px; text-align: center;
-          cursor: pointer; transition: 0.2s;
+        .mgmt .filter-label {
+          font-weight: 600; color: #1e3b4a; font-size: 0.8rem;
         }
-        .dashboard-header .stat-card:hover { background: rgba(255,255,255,0.2); }
-        .dashboard-header .stat-label {
-          font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em;
-          color: rgba(255,255,255,0.65); margin-bottom: 3px;
+        .mgmt .filter-pill {
+          background: #eaf2f7; border: 1px solid #cbdbe8;
+          padding: 0.3rem 1rem; border-radius: 30px;
+          font-size: 0.8rem; font-weight: 500; color: #0b2b3b;
+          display: flex; align-items: center; gap: 0.3rem;
+          cursor: pointer; transition: 0.15s;
         }
-        .dashboard-header .stat-value { font-size: 16px; font-weight: 700; color: white; }
+        .mgmt .filter-pill.active {
+          background: #c6dde8; border-color: #8bb3c9; font-weight: 600;
+        }
 
-        /* ── Hero card ── */
-        .hero-card {
-          background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #06b6d4 100%);
-          border-radius: 16px; padding: 18px 24px;
-          position: relative; overflow: hidden;
-          margin-bottom: 16px;
+        /* ── KPI cards (light tint, unified) ── */
+        .mgmt .kpi-card {
+          background: #f5fafd; border: 1px solid #ddecf4;
+          border-radius: 18px; padding: 1.2rem 1.3rem;
+          box-shadow: 0 4px 12px rgba(0,60,80,0.04);
+          display: flex; flex-direction: column; gap: 0.4rem;
+          cursor: pointer; transition: all 0.2s;
         }
-        .hero-card h2 { color: white; font-size: 20px; font-weight: 800; margin: 0 0 6px 0; }
-        .hero-card p { color: rgba(255,255,255,0.85); font-size: 13px; margin: 0; max-width: 550px; }
-        .hero-badge {
-          background: rgba(255,255,255,0.15); backdrop-filter: blur(4px);
-          border: 1px solid rgba(255,255,255,0.2);
-          border-radius: 14px; padding: 12px 20px; text-align: center;
-        }
-        .hero-badge .label {
-          color: rgba(255,255,255,0.7); font-size: 10px; font-weight: 600;
-          text-transform: uppercase; letter-spacing: 0.05em;
-        }
-        .hero-badge .value { color: white; font-size: 32px; font-weight: 800; line-height: 1; }
+        .mgmt .kpi-card:hover { background: #f0f7fc; }
+        .mgmt .kpi-label { text-transform: uppercase; font-size: 0.7rem; font-weight: 700; color: #2e5b6b; letter-spacing: 0.04em; }
+        .mgmt .kpi-value { font-size: 1.7rem; font-weight: 700; color: #0c2d3b; line-height: 1.2; }
+        .mgmt .kpi-meta { font-size: 0.8rem; color: #3d5a6b; display: flex; align-items: center; gap: 0.3rem; }
+        .mgmt .view-link { font-weight: 600; color: #1a5b6b; margin-top: 0.2rem; display: inline-flex; align-items: center; gap: 0.2rem; }
 
-        /* ── Layout grids ── */
-        .filter-select {
-          padding: 6px 10px; border: 1px solid #e2e8f0; border-radius: 6px;
-          font-size: 12px; background: white; box-sizing: border-box;
+        /* ── Hero banner (compact, same light tone) ── */
+        .mgmt .hero {
+          background: linear-gradient(115deg, #e3f2f9 0%, #d9ecf5 40%, #c9e4f1 100%);
+          padding: 1.2rem 1.8rem; border-radius: 16px;
+          margin-bottom: 1rem; display: flex; align-items: center;
+          justify-content: space-between; flex-wrap: wrap; gap: 1rem;
         }
-        .responsive-grid { display: grid; gap: 12px; }
-        .kpi-grid { grid-template-columns: repeat(4, 1fr); }
-        .row-grid { grid-template-columns: 1.5fr 1fr; }
+        .mgmt .hero-title {
+          font-size: 1.2rem; font-weight: 700; color: #0c3b4b;
+          border-left: 5px solid #2c7a8c; padding-left: 1rem;
+          background: rgba(255,255,255,0.5); border-radius: 0 20px 20px 0;
+          padding: 0.4rem 1.2rem 0.4rem 1rem;
+        }
+        .mgmt .hero-badge {
+          background: rgba(255,255,255,0.7); border: 1px solid #c5dce8;
+          border-radius: 14px; padding: 0.8rem 1.4rem;
+          text-align: center;
+        }
+        .mgmt .hero-badge .label { color: #2d5a6b; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.2rem; }
+        .mgmt .hero-badge .value { font-size: 2rem; font-weight: 800; color: #0e3b4a; line-height: 1; }
 
-        /* ── Table ── */
-        .proj-table { width: 100%; border-collapse: collapse; }
-        .proj-table th {
-          font-size: 9px; font-weight: 700; text-transform: uppercase;
-          color: #94a3b8; padding-bottom: 6px;
+        /* ── Donor & project tables ── */
+        .mgmt .section-title { font-weight: 700; font-size: 0.95rem; color: #123b45; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.3rem; }
+        .mgmt .donor-row {
+          display: flex; align-items: center; gap: 0.8rem;
+          background: white; border-radius: 12px; padding: 0.5rem 1rem;
+          border: 1px solid #e0edf5; cursor: pointer; margin-bottom: 0.5rem;
         }
-        .proj-table td { font-size: 11px; padding: 4px 0; }
+        .mgmt .progress-bg { height: 5px; background: #dde7ef; border-radius: 10px; width: 70px; overflow: hidden; }
+        .mgmt .progress-fill { height: 100%; border-radius: 10px; }
+        .mgmt .badge {
+          padding: 0.1rem 0.6rem; border-radius: 12px;
+          font-size: 0.7rem; font-weight: 700;
+        }
+        .mgmt .badge-danger { background: #fef2f2; color: #b91c1c; }
+        .mgmt .badge-warning { background: #fffbeb; color: #92400e; }
+        .mgmt .badge-success { background: #f0fdf4; color: #166534; }
 
-        /* ── Responsive breakpoints ── */
-        @media (max-width: 900px) {
-          .kpi-grid { grid-template-columns: repeat(2, 1fr); }
-          .row-grid { grid-template-columns: 1fr; }
-        }
+        /* ── Responsive grids ── */
+        .mgmt .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+        .mgmt .two-col { display: grid; grid-template-columns: 1.5fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+        @media (max-width: 800px) { .mgmt .two-col { grid-template-columns: 1fr; } }
         @media (max-width: 600px) {
-          .kpi-grid { grid-template-columns: 1fr; }
-          .dashboard-header { flex-direction: column; align-items: flex-start; }
-          .hero-card h2 { font-size: 17px; }
-          .hero-badge .value { font-size: 28px; }
-          .filter-bar { flex-direction: column; }
-          .filter-select { width: 100%; margin-bottom: 6px; }
-          .proj-table { font-size: 10px; }
-          /* sticky project column */
-          .proj-table td:first-child,
-          .proj-table th:first-child {
-            position: sticky; left: 0; background: white; z-index: 1;
-          }
-          .dashboard-header .stats {
-            width: 100%; gap: 4px;
-          }
-          .dashboard-header .stat-card {
-            flex: 1 1 40%; min-width: 70px; padding: 6px 8px;
-          }
-          .dashboard-header .stat-value { font-size: 14px; }
-        }
-        @media (max-width: 380px) {
-          .dashboard-header .stats { gap: 2px; }
-          .dashboard-header .stat-card { min-width: 60px; padding: 4px 6px; }
-          .dashboard-header .stat-value { font-size: 12px; }
+          .mgmt .hero { flex-direction: column; align-items: flex-start; }
+          .mgmt .hero-badge { width: 100%; text-align: center; }
+          .mgmt .filter-row { flex-direction: column; align-items: flex-start; }
         }
       `}</style>
 
-      {/* ── Dashboard header (greeting + quick stats) ── */}
-      <div className="dashboard-header">
-        <div className="welcome">
-          <img src="/logo.png" alt="OneAccounts" />
+      <div className="mgmt" style={{ padding: "0.8rem 1.2rem" }}>
+        {/* Greeting & compact hero */}
+        <div className="hero">
           <div>
-            <h2>{getGreeting()}, siqbalhwc</h2>
-            <p>Here's what's happening with your NGO portfolio today</p>
+            <h2 style={{ fontSize: "1.4rem", fontWeight: 700, color: "#0b2f3f", marginBottom: "0.2rem" }}>
+              {getGreeting()}, siqbalhwc
+            </h2>
+            <p style={{ color: "#1e4a5f", fontSize: "0.85rem" }}>Here's what's happening with your NGO portfolio today</p>
+          </div>
+          <div className="hero-title">
+            Empowering Social Impact Through Smart Financial Governance
           </div>
         </div>
-        <div className="stats">
-          <div className="stat-card" onClick={() => router.push("/dashboard/invoices")}>
-            <div className="stat-label">Unpaid Invoices</div>
-            <div className="stat-value">{unpaidInvoices}</div>
-          </div>
-          <div className="stat-card" onClick={() => router.push("/dashboard/customers")}>
-            <div className="stat-label">Receivables</div>
-            <div className="stat-value">{formatPKR(totalReceivables)}</div>
-          </div>
-          <div className="stat-card" onClick={() => router.push("/dashboard/suppliers")}>
-            <div className="stat-label">Payables</div>
-            <div className="stat-value">{formatPKR(totalPayables)}</div>
-          </div>
-          <div className="stat-card" onClick={() => router.push("/dashboard/reports/overspent" + detailQuery())}>
-            <div className="stat-label">Overspent</div>
-            <div className="stat-value" style={{ color: filteredOverspentCount > 0 ? '#fecaca' : 'white' }}>
-              {filteredOverspentCount} {filteredOverspentCount === 1 ? "proj" : "projs"}
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <div style={{ padding: "0 12px 16px" }}>
-        {/* Filters */}
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10, flexWrap: "wrap" }} className="filter-bar">
-          <select className="filter-select" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
-            {[2024,2025,2026,2027].map(y => <option key={y} value={y}>FY {y}</option>)}
+        {/* Filters (aligned, visible) */}
+        <div className="filter-row">
+          <span className="filter-label">Period:</span>
+          <select className="filter-pill active" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
+            {[2024,2025,2026,2027].map(y => <option key={y} value={y}>FY {y} ▾</option>)}
           </select>
-          <select className="filter-select" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)} style={{ marginLeft: 6 }}>
-            <option value="">All Projects</option>
+          <span style={{ color: "#a0b8c7" }}>|</span>
+          <span className="filter-label">Projects:</span>
+          <select className="filter-pill active" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
+            <option value="">All Projects ▾</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <select className="filter-select" value={selectedDonorId} onChange={e => setSelectedDonorId(e.target.value)} style={{ marginLeft: 6 }}>
-            <option value="">All Donors</option>
+          <span style={{ color: "#a0b8c7" }}>|</span>
+          <span className="filter-label">Donors:</span>
+          <select className="filter-pill active" value={selectedDonorId} onChange={e => setSelectedDonorId(e.target.value)}>
+            <option value="">All Donors ▾</option>
             {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
         </div>
 
-        {/* Hero Banner */}
-        <div className="hero-card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
-            <div>
-              <h2>Empowering Social Impact Through Smart Financial Governance</h2>
-              <p>Monitor donor utilization, project burn rates, receivables, payables and organizational performance from one centralized NGO management platform.</p>
+        {/* KPI row */}
+        <div className="kpi-grid">
+          <div className="kpi-card" onClick={() => router.push("/dashboard/reports/budget-summary" + detailQuery())}>
+            <div className="kpi-label">Total Budget</div>
+            <div className="kpi-value">{formatPKR(filteredTotalBudget)}</div>
+            <div className="kpi-meta">{filteredProjectRows.length} projects <span className="view-link">View →</span></div>
+          </div>
+          <div className="kpi-card" onClick={() => router.push("/dashboard/reports/spending-detail" + detailQuery())}>
+            <div className="kpi-label">Total Spent</div>
+            <div className="kpi-value">{formatPKR(filteredTotalSpent)}</div>
+            <div className="kpi-meta">{spentPct}% of budget <span className="view-link">View →</span></div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Remaining</div>
+            <div className="kpi-value">{formatPKR(remainingFunds)}</div>
+            <div className="kpi-meta">{filteredTotalBudget ? Math.round((remainingFunds / filteredTotalBudget) * 100) : 0}% unspent</div>
+          </div>
+          <div className="kpi-card" onClick={() => router.push("/dashboard/reports/overspent" + detailQuery())}>
+            <div className="kpi-label">Portfolio Health</div>
+            <div className="kpi-value" style={{ color: filteredOverspentCount > 0 ? "#c96e2c" : "#0c2d3b" }}>
+              {filteredOverspentCount > 0 ? "⚠️ Needs Attention" : "Healthy"}
             </div>
-            <div className="hero-badge">
-              <div className="label">Portfolio Health</div>
-              <div className="value">{filteredTotalBudget ? Math.round((1 - filteredOverspentCount / Math.max(filteredProjectRows.length, 1)) * 100) : 100}%</div>
-            </div>
-          </div>
-        </div>
-
-        {/* KPI Cards */}
-        <div className="responsive-grid kpi-grid" style={{ marginBottom: 12 }}>
-          <div className="kpi-card blue" onClick={() => router.push("/dashboard/reports/budget-summary" + detailQuery())}>
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 4 }}>Total Budget</div>
-            <div style={{ fontSize: 22, fontWeight: 800 }}>{formatPKR(filteredTotalBudget)}</div>
-            <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>{filteredProjectRows.length} projects</div>
-            <span style={{ fontSize: 12, fontWeight: 600, color: "#1d4ed8", position: "absolute", bottom: 14, right: 20 }}>View →</span>
-          </div>
-          <div className="kpi-card green" onClick={() => router.push("/dashboard/reports/spending-detail" + detailQuery())}>
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 4 }}>Total Spent</div>
-            <div style={{ fontSize: 22, fontWeight: 800 }}>{formatPKR(filteredTotalSpent)}</div>
-            <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>{spentPct}% of budget</div>
-            <span style={{ fontSize: 12, fontWeight: 600, color: "#1d4ed8", position: "absolute", bottom: 14, right: 20 }}>View →</span>
-          </div>
-          <div className="kpi-card amber">
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 4 }}>Remaining</div>
-            <div style={{ fontSize: 22, fontWeight: 800 }}>{formatPKR(remainingFunds)}</div>
-            <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>{filteredTotalBudget ? Math.round((remainingFunds / filteredTotalBudget) * 100) : 0}% unspent</div>
-          </div>
-          <div className="kpi-card red" onClick={() => router.push("/dashboard/reports/overspent" + detailQuery())}>
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: 4 }}>Overspent</div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: "#dc2626" }}>{filteredOverspentCount}</div>
-            <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>{filteredOverspentCount === 1 ? "project" : "projects"}</div>
+            <div className="kpi-meta">{Math.round((1 - filteredOverspentCount / Math.max(filteredProjectRows.length, 1)) * 100)}% health score</div>
           </div>
         </div>
 
         {/* Project Utilization & Donor Balances */}
-        <div className="responsive-grid row-grid" style={{ marginBottom: 12 }}>
-          <div style={{ background: "white", borderRadius: 12, padding: 16, boxShadow: "0 1px 2px rgba(0,0,0,0.03)", overflow: "auto" }}>
-            <h3 style={{ fontSize: 16, fontWeight: 800, margin: "0 0 8px 0" }}>Project Utilization</h3>
-            <table className="proj-table">
-              <thead>
-                <tr>
-                  <th style={{ textAlign: "left" }}>Project</th>
-                  <th style={{ textAlign: "left" }}>Budget</th>
-                  <th style={{ textAlign: "left" }}>Spent</th>
-                  <th style={{ textAlign: "left" }}>Utilization</th>
-                  <th style={{ textAlign: "left" }}>%</th>
-                  <th style={{ textAlign: "right" }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredProjectRows.map((p, idx) => (
-                  <tr key={idx} style={{ borderBottom: "1px solid #f8fafc", cursor: "pointer" }} onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}`)}>
-                    <td style={{ fontWeight: 700 }}>{p.name}</td>
-                    <td>{formatPKR(p.budget)}</td>
-                    <td style={{ fontWeight: 700 }}>{formatPKR(p.actual)}</td>
-                    <td>
-                      <div className="progress-bar">
-                        <div className="progress-fill" style={{ width: `${Math.min(p.pct, 100)}%`, background: p.pct > 100 ? "#dc2626" : p.pct > 80 ? "#d97706" : "#16a34a" }}></div>
-                      </div>
-                    </td>
-                    <td style={{ fontWeight: 700, color: p.pct > 100 ? "#dc2626" : p.pct > 80 ? "#d97706" : "#16a34a" }}>{p.pct}%</td>
-                    <td style={{ textAlign: "right" }}>
-                      <span className={`badge ${p.pct > 100 ? "badge-danger" : p.pct > 80 ? "badge-warning" : "badge-success"}`}>
-                        {p.pct > 100 ? "Overspent" : p.pct > 80 ? "Review" : "On Track"}
-                      </span>
-                    </td>
+        <div className="two-col">
+          {/* Projects */}
+          <div className="card">
+            <div className="section-title">📊 Project Utilization</div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
+                    <th style={{ textAlign: "left", padding: "6px 0", color: "#64748b", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase" }}>Project</th>
+                    <th style={{ textAlign: "left", padding: "6px 0", color: "#64748b", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase" }}>Budget</th>
+                    <th style={{ textAlign: "left", padding: "6px 0", color: "#64748b", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase" }}>Spent</th>
+                    <th style={{ textAlign: "left", padding: "6px 0", color: "#64748b", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase" }}>Util.</th>
+                    <th style={{ textAlign: "right", padding: "6px 0", color: "#64748b", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase" }}>Status</th>
                   </tr>
-                ))}
-                {filteredProjectRows.length === 0 && (
-                  <tr><td colSpan={6} style={{ textAlign: "center", padding: 12, color: "#94a3b8" }}>No projects found.</td></tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredProjectRows.map((p, idx) => (
+                    <tr key={idx}
+                        onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}`)}
+                        style={{ borderBottom: "1px solid #f1f5f9", cursor: "pointer" }}>
+                      <td style={{ fontWeight: 600, padding: "4px 0" }}>{p.name}</td>
+                      <td>{formatPKR(p.budget)}</td>
+                      <td>{formatPKR(p.actual)}</td>
+                      <td>
+                        <div className="progress-bg">
+                          <div className="progress-fill" style={{
+                            width: `${Math.min(p.pct, 100)}%`,
+                            background: p.pct > 100 ? "#e68b5c" : p.pct > 80 ? "#f59e0b" : "#22c55e"
+                          }}></div>
+                        </div>
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <span className={`badge ${p.pct > 100 ? "badge-danger" : p.pct > 80 ? "badge-warning" : "badge-success"}`}>
+                          {p.pct > 100 ? "Overspent" : p.pct > 80 ? "Review" : "On Track"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredProjectRows.length === 0 && (
+                    <tr><td colSpan={5} style={{ textAlign: "center", padding: 12, color: "#94a3b8" }}>No projects found.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          <div style={{ background: "white", borderRadius: 12, padding: 16, boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
-            <h3 style={{ fontSize: 16, fontWeight: 800, margin: "0 0 8px 0" }}>Donor Balances</h3>
+          {/* Donors */}
+          <div className="card">
+            <div className="section-title">💧 Donor Balances</div>
             {filteredDonorBalances.map((d, idx) => (
-              <div key={idx} style={{ marginBottom: 8, cursor: "pointer" }} onClick={() => router.push(`/dashboard/settings/budgets?donor=${d.donor_id}`)}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: d.overspent ? "#dc2626" : "#1d4ed8" }}></div>
-                  <span style={{ flex: 1, fontSize: 12, fontWeight: 600 }}>{d.name}</span>
-                  <span style={{ fontSize: 12, fontWeight: 700 }}>{formatPKR(d.remaining)}</span>
-                  <span style={{ fontSize: 10, color: "#64748b", minWidth: 30, textAlign: "right" }}>{d.pct}%</span>
-                </div>
+              <div key={idx} className="donor-row" onClick={() => router.push(`/dashboard/settings/budgets?donor=${d.donor_id}`)}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: d.overspent ? "#dc2626" : "#1d4ed8", flexShrink: 0 }}></div>
+                <span style={{ flex: 1, fontWeight: 600, fontSize: "0.85rem" }}>{d.name}</span>
+                <span style={{ fontWeight: 700, fontSize: "0.85rem" }}>{formatPKR(d.remaining)}</span>
+                <span style={{ fontSize: "0.75rem", color: "#64748b", minWidth: 30, textAlign: "right" }}>{d.pct}%</span>
               </div>
             ))}
             {filteredDonorBalances.length === 0 && (
-              <p style={{ color: "#94a3b8", textAlign: "center" }}>No donor data available.</p>
+              <p style={{ color: "#94a3b8", textAlign: "center" }}>No donor data.</p>
             )}
           </div>
         </div>
 
-        {/* Footer */}
-        <div style={{ background: "white", borderRadius: 10, padding: "8px 16px", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, color: "#64748b", flexWrap: "wrap", gap: 6 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#16a34a", boxShadow: "0 0 0 3px rgba(22,163,74,0.15)" }}></div>
-            <span>Portfolio Health: <strong style={{ color: "#0f172a" }}>{filteredOverspentCount > 0 ? "Needs Attention" : "Healthy"}</strong></span>
+        {/* Quick stats + CRM */}
+        <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+          <div className="card" style={{ flex: 1, minWidth: 140 }}>
+            <div className="kpi-label">📋 Payables</div>
+            <div className="kpi-value">{formatPKR(totalPayables)}</div>
           </div>
-          <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
-            <span>Total Budget: <strong>{formatPKR(filteredTotalBudget)}</strong></span>
-            <span>Utilized: <strong>{spentPct}%</strong></span>
-            <span>Projects: <strong>{filteredProjectRows.length}</strong></span>
+          <div className="card" style={{ flex: 1, minWidth: 140 }}>
+            <div className="kpi-label">🧾 Receivables</div>
+            <div className="kpi-value">{formatPKR(totalReceivables)}</div>
           </div>
+          <div className="card" style={{ flex: 1, minWidth: 140 }}>
+            <div className="kpi-label">📦 Unpaid Invoices</div>
+            <div className="kpi-value">{unpaidInvoices}</div>
+          </div>
+          <div className="card" style={{ flex: 1, minWidth: 140, display: "flex", alignItems: "center", gap: "0.8rem" }}>
+            <span style={{ fontWeight: 700, color: "#1d4b5a" }}>🧑‍🤝‍🧑 CRM</span>
+            <span style={{ background: "#e0eff5", borderRadius: 20, padding: "0.2rem 0.8rem", fontSize: "0.75rem", fontWeight: 600 }}>Customers</span>
+            <span style={{ background: "#e0eff5", borderRadius: 20, padding: "0.2rem 0.8rem", fontSize: "0.75rem", fontWeight: 600 }}>Suppliers</span>
+            <span style={{ background: "#e0eff5", borderRadius: 20, padding: "0.2rem 0.8rem", fontSize: "0.75rem", fontWeight: 600 }}>Investors</span>
+          </div>
+        </div>
+
+        {/* Footer summary */}
+        <div style={{ background: "white", borderRadius: 12, padding: "0.6rem 1.2rem", border: "1px solid #d6e6f0", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "0.8rem", fontSize: "0.8rem", color: "#1f4b59", fontWeight: 500 }}>
+          <span>⚠️ Portfolio Health: {filteredOverspentCount > 0 ? "Needs Attention" : "Healthy"}</span>
+          <span>💰 Total Budget: {formatPKR(filteredTotalBudget)}</span>
+          <span>📈 Utilized: {spentPct}%</span>
+          <span>📁 Projects: {filteredProjectRows.length}</span>
         </div>
       </div>
     </div>

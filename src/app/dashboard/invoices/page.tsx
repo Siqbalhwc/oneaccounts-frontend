@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useRole } from "@/contexts/RoleContext"
+import type { User } from "@supabase/supabase-js"
 
 export default function InvoicesListPage() {
   const router = useRouter()
@@ -15,12 +16,16 @@ export default function InvoicesListPage() {
   const [invoices, setInvoices] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  supabase.auth.getUser().then((response) => {
-      const user = response?.data?.user
+  useEffect(() => {
+    const loadUser = async () => {
+      const { data } = await supabase.auth.getUser()
+      const user: User | null = data?.user ?? null
       if (!user) return
-      const cid = user?.app_metadata?.company_id
+      const cid = (user.app_metadata as Record<string, string>)?.company_id
       if (cid) setCompanyId(cid)
-    })
+    }
+    loadUser()
+  }, [])
 
   useEffect(() => {
     if (!companyId) return
