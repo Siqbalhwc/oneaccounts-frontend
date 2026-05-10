@@ -1,10 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { Plus, Pencil } from "lucide-react"
+import { Plus, Pencil, Search } from "lucide-react"
 
-// ── Recommended code ranges for each account type ──────────────────────
 const CODE_RANGES: Record<string, { min: number; max: number }> = {
   Asset:    { min: 1000, max: 1999 },
   Liability:{ min: 2000, max: 2999 },
@@ -14,6 +14,7 @@ const CODE_RANGES: Record<string, { min: number; max: number }> = {
 }
 
 export default function AccountsPage() {
+  const router = useRouter()
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -24,16 +25,17 @@ export default function AccountsPage() {
   const [filter, setFilter] = useState("All")
   const [isAdmin, setIsAdmin] = useState(false)
   const [companyId, setCompanyId] = useState<string>("")
+  const [search, setSearch] = useState("")
 
-  // ── Bank mapping ──
+  // Bank mapping
   const [bankMap, setBankMap] = useState<Record<number, any>>({})
 
-  // ── Lookup lists for default tags ──
+  // Lookup lists
   const [projects, setProjects] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
   const [activities, setActivities] = useState<any[]>([])
 
-  // ── Modal state ──
+  // Modal state
   const [showModal, setShowModal] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [formCode, setFormCode] = useState("")
@@ -62,21 +64,17 @@ export default function AccountsPage() {
           setLoading(false)
         })
 
-      // Check admin
-      supabase.auth.getUser().then(({ data: { user } }) => {
-        if (!user) return
-        supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user.id)
-          .eq("company_id", cid)
-          .maybeSingle()
-          .then(({ data }) => {
-            if (data?.role === "admin") setIsAdmin(true)
-          })
-      })
+      // Admin check
+      supabase.from("user_roles")
+        .select("role")
+        .eq("user_id", user!.id)
+        .eq("company_id", cid)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data?.role === "admin") setIsAdmin(true)
+        })
 
-      // Fetch linked bank accounts
+      // Linked bank accounts
       supabase
         .from("bank_accounts")
         .select("account_id, bank_name, id")
@@ -91,7 +89,7 @@ export default function AccountsPage() {
           }
         })
 
-      // Fetch lookup lists for default tags
+      // Lookup lists
       supabase.from("projects").select("id, name").eq("company_id", cid).order("name").then(r => r.data && setProjects(r.data))
       supabase.from("locations").select("id, name").eq("company_id", cid).order("name").then(r => r.data && setLocations(r.data))
       supabase.from("activities").select("id, name").eq("company_id", cid).order("name").then(r => r.data && setActivities(r.data))
@@ -99,7 +97,13 @@ export default function AccountsPage() {
   }, [])
 
   const types = ["All", "Asset", "Liability", "Equity", "Revenue", "Expense"]
-  const filtered = filter === "All" ? accounts : accounts.filter(a => a.type === filter)
+
+  // Filter by type + search
+  let filtered = filter === "All" ? accounts : accounts.filter(a => a.type === filter)
+  if (search.trim()) {
+    const s = search.toLowerCase()
+    filtered = filtered.filter(a => a.code.includes(s) || a.name.toLowerCase().includes(s))
+  }
 
   const typeColors: Record<string, string> = {
     Asset: "#1E3A8A",
@@ -187,32 +191,19 @@ export default function AccountsPage() {
   return (
     <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
       <style>{`
-        .modal-overlay {
-          position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-          background: rgba(0,0,0,0.4); display: flex; justify-content: center;
-          align-items: center; z-index: 1000;
-        }
-        .modal-box {
-          background: white; border-radius: 12px; padding: 24px;
-          max-width: 480px; width: 90%; max-height: 90vh; overflow-y: auto;
-          box-shadow: 0 10px 25px rgba(0,0,0,0.15);
-        }
-        .input-field {
-          width: 100%; padding: 8px 12px; border: 1px solid #E2E8F0;
-          border-radius: 6px; font-size: 13px; margin-bottom: 12px; box-sizing: border-box;
-        }
-        .btn-primary {
-          padding: 10px 20px; background: #1D4ED8; color: white;
-          border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px;
-        }
-        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-secondary {
-          padding: 10px 20px; background: white; color: #475569;
-          border: 1px solid #CBD5E1; border-radius: 8px; cursor: pointer;
-          font-weight: 600; font-size: 14px; margin-right: 8px;
-        }
-        .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+        .card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+        .input { height: 38px; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0 12px; font-size: 13px; box-sizing: border-box; }
+        .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-primary { background: #1D4ED8; color: white; }
+        .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+        .modal-box { background: white; border-radius: 12px; padding: 24px; max-width: 480px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
         .field-label { font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; display: block; }
+        .pill { padding: 6px 14px; border-radius: 20px; border: 1px solid #E2E8F0; background: white; color: #64748B; font-size: 12px; font-weight: 600; cursor: pointer; }
+        .pill.active { background: #1E3A8A; color: white; border-color: #1E3A8A; }
+        .row { display: grid; grid-template-columns: 80px 1fr 100px 120px 120px 50px; padding: 10px 16px; border-bottom: 1px solid #F1F5F9; font-size: 13px; align-items: center; cursor: pointer; transition: background 0.1s; }
+        .row:hover { background: #FAFBFF; }
+        .row-header { display: grid; grid-template-columns: 80px 1fr 100px 120px 120px 50px; padding: 10px 16px; background: #F8FAFC; font-size: 9px; font-weight: 700; text-transform: uppercase; color: #94A3B8; }
       `}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -221,59 +212,57 @@ export default function AccountsPage() {
           <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>Manage your chart of accounts</p>
         </div>
         {isAdmin && (
-          <button
-            onClick={openAdd}
-            style={{
-              display: "inline-flex", alignItems: "center", gap: 6,
-              padding: "8px 16px", background: "#1D4ED8", color: "white",
-              border: "none", borderRadius: 8, cursor: "pointer",
-              fontWeight: 600, fontSize: 13,
-            }}
-          >
+          <button className="btn btn-primary" onClick={openAdd}>
             <Plus size={15} /> Add Account
           </button>
         )}
       </div>
 
+      {/* Summary Cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+        <div className="card">
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Accounts</div>
+          <div style={{ fontSize: 24, fontWeight: 800 }}>{filtered.length}</div>
+        </div>
+        <div className="card">
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Balance</div>
+          <div style={{ fontSize: 24, fontWeight: 800 }}>
+            PKR {filtered.reduce((sum, a) => sum + (a.balance || 0), 0).toLocaleString()}
+          </div>
+        </div>
+      </div>
+
+      {/* Type filter pills */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         {types.map(t => (
-          <button key={t} onClick={() => setFilter(t)}
-            style={{
-              padding: "6px 14px", borderRadius: 20, border: "1px solid #E2E8F0",
-              background: filter === t ? "#1E3A8A" : "white",
-              color: filter === t ? "white" : "#64748B",
-              fontSize: 12, fontWeight: 600, cursor: "pointer",
-            }}>
+          <button key={t} className={`pill ${filter === t ? "active" : ""}`} onClick={() => setFilter(t)}>
             {t}
           </button>
         ))}
       </div>
 
+      {/* Search */}
+      <div style={{ maxWidth: 300, marginBottom: 16 }}>
+        <div style={{ position: "relative" }}>
+          <Search size={14} style={{ position: "absolute", left: 10, top: 12, color: "#94A3B8" }} />
+          <input className="input" style={{ paddingLeft: 32, width: "100%" }} placeholder="Search code or name..." value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+      </div>
+
       {loading ? (
         <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading...</div>
       ) : (
-        <div style={{ background: "white", borderRadius: 10, border: "1px solid #E2E8F0", overflow: "hidden" }}>
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: isAdmin ? "80px 1fr 100px 120px 120px 50px" : "80px 1fr 100px 120px 120px",
-            padding: "10px 16px", background: "#F8FAFC",
-            fontSize: 9, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8",
-          }}>
+        <div className="card" style={{ padding: 0, overflowX: "auto" }}>
+          <div className="row-header" style={{ borderBottom: "2px solid #E2E8F0" }}>
             <span>Code</span>
             <span>Name</span>
             <span>Type</span>
-            <span style={{ textAlign: "right" }}>Balance</span>
+            <span style={{ textAlign: "right" }}>Current Balance</span>
             <span>Bank</span>
             {isAdmin && <span></span>}
           </div>
           {filtered.map((a, i) => (
-            <div key={a.id} style={{
-              display: "grid",
-              gridTemplateColumns: isAdmin ? "80px 1fr 100px 120px 120px 50px" : "80px 1fr 100px 120px 120px",
-              padding: "10px 16px",
-              borderBottom: i < filtered.length - 1 ? "1px solid #F1F5F9" : "none",
-              fontSize: 13, alignItems: "center",
-            }}>
+            <div key={a.id} className="row" onClick={() => router.push(`/dashboard/reports/ledger?accountId=${a.id}`)}>
               <span style={{ fontWeight: 700, color: "#1E3A8A" }}>{a.code}</span>
               <span>{a.name}</span>
               <span>
@@ -289,19 +278,13 @@ export default function AccountsPage() {
               <span style={{ fontSize: 12, color: "#1E3A8A" }}>
                 {bankMap[a.id]?.bankName || "—"}
                 {bankMap[a.id]?.bankId && (
-                  <button
-                    style={{ marginLeft: 6, background: 'none', border: 'none', cursor: 'pointer', color: '#1D4ED8', padding: 0 }}
-                    onClick={() => window.location.href = `/dashboard/banking/bank-accounts`}
-                    title="View bank details"
-                  >
-                    🔗
-                  </button>
+                  <span style={{ marginLeft: 6, cursor: "pointer", color: "#1D4ED8" }} onClick={(e) => { e.stopPropagation(); router.push("/dashboard/banking/bank-accounts") }}>🔗</span>
                 )}
               </span>
               {isAdmin && (
-                <span style={{ textAlign: "center" }}>
+                <span style={{ textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
                   <button
-                    onClick={() => openEdit(a)}
+                    onClick={(e) => { e.stopPropagation(); openEdit(a); }}
                     style={{ background: "none", border: "none", cursor: "pointer", color: "#64748B", padding: 0 }}
                     title="Edit account"
                   >
@@ -311,6 +294,9 @@ export default function AccountsPage() {
               )}
             </div>
           ))}
+          {filtered.length === 0 && (
+            <div style={{ padding: 20, textAlign: "center", color: "#94A3B8" }}>No accounts found.</div>
+          )}
         </div>
       )}
 
@@ -318,15 +304,13 @@ export default function AccountsPage() {
       {showModal && (
         <div className="modal-overlay">
           <div className="modal-box">
-            <h3 style={{ marginTop: 0, marginBottom: 4 }}>
-              {editId ? "Edit Account" : "Add New Account"}
-            </h3>
+            <h3 style={{ marginTop: 0, marginBottom: 4 }}>{editId ? "Edit Account" : "Add New Account"}</h3>
             <p style={{ fontSize: 12, color: "#94A3B8", marginBottom: 16 }}>
               {editId ? "Update the account name, code, or type." : "Create a new account. Choose a code within the recommended range."}
             </p>
 
             <label className="field-label">Account Type</label>
-            <select className="input-field" value={formType} onChange={e => { setFormType(e.target.value); setFormCode("") }}>
+            <select className="input" style={{ width: "100%", marginBottom: 10 }} value={formType} onChange={e => { setFormType(e.target.value); setFormCode("") }}>
               {Object.keys(CODE_RANGES).map(t => <option key={t} value={t}>{t}</option>)}
             </select>
             {range && (
@@ -335,50 +319,46 @@ export default function AccountsPage() {
               </p>
             )}
 
-            <div className="field-row">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
               <div>
                 <label className="field-label">Account Code</label>
-                <input className="input-field" type="text" placeholder={range ? `e.g., ${range.min + 1}` : "Enter code"} value={formCode} onChange={e => setFormCode(e.target.value)} />
+                <input className="input" style={{ width: "100%" }} type="text" placeholder={range ? `e.g., ${range.min + 1}` : "Enter code"} value={formCode} onChange={e => setFormCode(e.target.value)} />
               </div>
               <div>
                 <label className="field-label">Account Name</label>
-                <input className="input-field" type="text" placeholder="e.g., Office Supplies" value={formName} onChange={e => setFormName(e.target.value)} />
+                <input className="input" style={{ width: "100%" }} type="text" placeholder="e.g., Office Supplies" value={formName} onChange={e => setFormName(e.target.value)} />
               </div>
             </div>
 
-            {/* ── NEW: Default Budget Tags ── */}
             <div className="field-label" style={{ marginBottom: 8 }}>Default Budget Tags</div>
-            <div className="field-row">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
               <div>
                 <label className="field-label">Project</label>
-                <select className="input-field" value={defaultProjectId ?? ""} onChange={e => setDefaultProjectId(e.target.value ? Number(e.target.value) : null)}>
+                <select className="input" style={{ width: "100%" }} value={defaultProjectId ?? ""} onChange={e => setDefaultProjectId(e.target.value ? Number(e.target.value) : null)}>
                   <option value="">— None —</option>
                   {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </div>
               <div>
                 <label className="field-label">Location</label>
-                <select className="input-field" value={defaultLocationId ?? ""} onChange={e => setDefaultLocationId(e.target.value ? Number(e.target.value) : null)}>
+                <select className="input" style={{ width: "100%" }} value={defaultLocationId ?? ""} onChange={e => setDefaultLocationId(e.target.value ? Number(e.target.value) : null)}>
                   <option value="">— None —</option>
                   {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
               </div>
             </div>
-            <div className="field-row">
-              <div>
-                <label className="field-label">Activity</label>
-                <select className="input-field" value={defaultActivityId ?? ""} onChange={e => setDefaultActivityId(e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">— None —</option>
-                  {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
-              </div>
+            <div style={{ marginBottom: 12 }}>
+              <label className="field-label">Activity</label>
+              <select className="input" style={{ width: "100%" }} value={defaultActivityId ?? ""} onChange={e => setDefaultActivityId(e.target.value ? Number(e.target.value) : null)}>
+                <option value="">— None —</option>
+                {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
             </div>
-            {/* ── End of new fields ── */}
 
             {modalError && <div style={{ color: "#B91C1C", fontSize: 12, marginBottom: 10 }}>{modalError}</div>}
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-              <button className="btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
-              <button className="btn-primary" onClick={handleSave} disabled={saving || !formCode.trim() || !formName.trim()}>
+              <button className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleSave} disabled={saving || !formCode.trim() || !formName.trim()}>
                 {saving ? "Saving..." : editId ? "Update" : "Create"}
               </button>
             </div>
