@@ -120,7 +120,7 @@ function DashboardLayoutInner({
     { label: 'Inventory Adj.',     icon: '⚖️', href: '/dashboard/inventory/adjustments',    feature: "inventory", roles: ["admin","accountant"] },
     { label: 'Chart of Accounts',  icon: '📋', href: '/dashboard/accounts',           feature: null, roles: ["admin","accountant","viewer"] },
     { label: 'Journal Entries',    icon: '📓', href: '/dashboard/journal',            feature: null, roles: ["admin","accountant"] },
-    { label: 'All Reports',        icon: '📁', href: '/dashboard/reports',            feature: null, roles: ["admin","accountant","viewer"] },
+    { label: 'All Reports',        icon: '📈', href: '/dashboard/reports',            feature: null, roles: ["admin","accountant","viewer"] },
     { label: 'Invoice Automation', icon: '⚙️', href: '/dashboard/settings/invoice-automation', feature: "invoice_automation", roles: ["admin","accountant"] },
     { label: 'Investors',          icon: '💼', href: '/dashboard/investors',                        feature: "investors",           roles: ["admin","accountant"] },
     { label: 'Admin Panel',        icon: '👑', href: '/dashboard/admin/users',        feature: null, roles: ["admin"] },
@@ -131,7 +131,7 @@ function DashboardLayoutInner({
     { label: 'New Company',       icon: '🏢', href: '/dashboard/companies/new',       feature: null, roles: ["admin","accountant"] },
   ]
 
-  // ── Only add Super Admin link for the owner ──────────────────
+  // ── Only add Super Admin link for the owner
   if (email === 'siqbalhwc@gmail.com') {
     allNavItems.push({
       label: 'Super Admin',
@@ -142,7 +142,7 @@ function DashboardLayoutInner({
     })
   }
 
-  // ── Build navigation sections ─────────────────────────────────
+  // ── Build navigation sections
   const navSections: NavSection[] = [
     {
       section: "MAIN",
@@ -203,6 +203,176 @@ function DashboardLayoutInner({
 
   return (
     <>
+      {/* Inject updated navy‑themed sidebar styles */}
+      <style>{`
+        .dl-shell { display: flex; min-height: 100vh; background: #f4f8fc; }
+
+        /* Sidebar – navy gradient matching dashboard accent */
+        .dl-sidebar {
+          width: 220px; min-width: 220px;
+          background: linear-gradient(150deg, #0c2e4a 0%, #1e3a8a 100%);
+          display: flex; flex-direction: column;
+          position: fixed; top: 0; left: 0; bottom: 0; z-index: 40;
+          transition: transform 0.25s ease; overflow: hidden;
+          box-shadow: 2px 0 12px rgba(0,0,0,0.08);
+        }
+        .dl-sidebar::before {
+          content: ''; position: absolute; inset: 0;
+          background-image: radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px);
+          background-size: 24px 24px; pointer-events: none; z-index: 0;
+        }
+        .dl-sidebar-logo { 
+          display: flex; align-items: center; gap: 10px; 
+          padding: 16px 18px; border-bottom: 1px solid rgba(255,255,255,0.1); 
+          min-height: 58px; position: relative; z-index: 1; 
+        }
+        .dl-sidebar-logo-img { width: 32px; height: 32px; border-radius: 8px; object-fit: contain; flex-shrink: 0; }
+        .dl-sidebar-logo-name { color: white; font-size: 14px; font-weight: 700; line-height: 1.1; }
+        .dl-sidebar-logo-sub { color: rgba(255,255,255,0.5); font-size: 9px; }
+
+        /* Navigation */
+        .dl-sidebar-nav { flex: 1; padding: 8px 8px; overflow-y: auto; position: relative; z-index: 1; }
+
+        /* Collapsible section button */
+        .dl-section-btn {
+          width: 100%; display: flex; align-items: center; gap: 6px;
+          padding: 8px 10px; background: transparent; border: none;
+          color: rgba(255,255,255,0.6); font-size: 10px; font-weight: 700;
+          text-transform: uppercase; letter-spacing: 0.08em;
+          cursor: pointer; font-family: inherit;
+          border-radius: 6px;
+          transition: background 0.15s, color 0.15s;
+        }
+        .dl-section-btn:hover {
+          background: rgba(255,255,255,0.08);
+          color: white;
+        }
+
+        /* Nav items */
+        .dl-nav-item {
+          display: flex; align-items: center; gap: 10px;
+          padding: 8px 12px; border-radius: 8px;
+          color: rgba(255,255,255,0.7); font-size: 13px; font-weight: 500;
+          text-decoration: none; transition: all 0.15s; margin-bottom: 2px;
+        }
+        .dl-nav-item:hover {
+          background: rgba(255,255,255,0.1);
+          color: white;
+        }
+        .dl-nav-item.active {
+          background: rgba(255,255,255,0.15);
+          color: white; font-weight: 600;
+        }
+        .dl-nav-icon { width: 18px; text-align: center; flex-shrink: 0; }
+
+        /* Group sub‑label */
+        .dl-nav-group-label {
+          font-size: 8px; font-weight: 700; text-transform: uppercase;
+          color: rgba(255,255,255,0.25); padding: 4px 10px 2px;
+          letter-spacing: 0.05em;
+        }
+
+        /* Divider */
+        .dl-nav-divider {
+          height: 1px; background: rgba(255,255,255,0.08);
+          margin: 8px 14px;
+        }
+
+        /* User area */
+        .dl-sidebar-user { 
+          padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.1); 
+          display: flex; align-items: center; gap: 10px; 
+          position: relative; z-index: 1; 
+        }
+        .dl-sidebar-avatar {
+          width: 32px; height: 32px; border-radius: 50%;
+          background: rgba(255,255,255,0.15); color: white;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 13px; font-weight: 700; flex-shrink: 0;
+        }
+        .dl-sidebar-email { color: rgba(255,255,255,0.8); font-size: 11px; }
+        .dl-sidebar-signout {
+          color: rgba(255,255,255,0.5); font-size: 10px; cursor: pointer;
+          background: none; border: none; font-family: inherit; padding: 0; margin-top: 2px;
+        }
+        .dl-sidebar-signout:hover { color: #f87171; }
+
+        /* Main content area */
+        .dl-main {
+          flex: 1; margin-left: 220px;
+          display: flex; flex-direction: column;
+          min-height: 100vh; min-width: 0;
+          overflow-x: hidden;
+        }
+
+        /* Top bar (already matches dashboard palette) */
+        .dl-topbar {
+          background: white; border-bottom: 1px solid #d6e0eb;
+          padding: 0 20px; display: flex; align-items: center;
+          min-height: 56px; gap: 16px; position: sticky; top: 0; z-index: 30;
+        }
+        .dl-topbar-greeting { flex: 1; min-width: 0; }
+        .dl-topbar-title { font-size: clamp(12px, 1.1vw, 14px); font-weight: 700; color: #0a2940; line-height: 1.2; }
+        .dl-topbar-subtitle { font-size: clamp(10px, 0.8vw, 11px); color: #64748b; line-height: 1.2; }
+        .dl-topbar-actions { display: flex; gap: 8px; flex-shrink: 0; }
+        .dl-action-btn {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 7px clamp(10px, 1.2vw, 14px); border-radius: 8px;
+          font-size: clamp(10px, 0.78vw, 11.5px); font-weight: 600;
+          text-decoration: none; cursor: pointer;
+          border: 1.5px solid; font-family: inherit;
+          transition: all 0.15s; white-space: nowrap; height: 34px;
+        }
+        .dl-btn-invoice { background: #eef2ff; border-color: #c7d2fe; color: #4338ca; }
+        .dl-btn-bill    { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+        .dl-btn-receipt { background: #d1fae5; border-color: #a7f3d0; color: #065f46; }
+        .dl-btn-payment { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
+        .dl-btn-invoice:hover { background: #e0e7ff; }
+        .dl-btn-bill:hover    { background: #fef9c3; }
+        .dl-btn-receipt:hover { background: #a7f3d0; }
+        .dl-btn-payment:hover { background: #fecaca; }
+
+        /* Hamburger for mobile */
+        .dl-hamburger { display: none; background: none; border: none; cursor: pointer; padding: 6px; flex-shrink: 0; }
+        .dl-hamburger span { display: block; width: 20px; height: 2px; background: #475569; margin: 4px 0; border-radius: 2px; }
+        .dl-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 35; }
+        .dl-overlay.open { display: block; }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+          .dl-sidebar { width: 60px; min-width: 60px; }
+          .dl-sidebar-logo-name, .dl-sidebar-logo-sub, .dl-section-btn span,
+          .dl-nav-group-label, .dl-nav-item span:not(.dl-nav-icon),
+          .dl-sidebar-email, .dl-sidebar-signout { display: none; }
+          .dl-sidebar-logo { justify-content: center; padding: 14px 0; }
+          .dl-nav-item { justify-content: center; padding: 10px; }
+          .dl-sidebar-user { justify-content: center; }
+          .dl-main { margin-left: 60px; }
+        }
+        @media (max-width: 640px) {
+          .dl-sidebar { transform: translateX(-220px); width: 220px; min-width: 220px; }
+          .dl-sidebar.mobile-open { transform: translateX(0); }
+          .dl-sidebar.mobile-open .dl-sidebar-logo-name,
+          .dl-sidebar.mobile-open .dl-sidebar-logo-sub,
+          .dl-sidebar.mobile-open .dl-section-btn span,
+          .dl-sidebar.mobile-open .dl-nav-group-label,
+          .dl-sidebar.mobile-open .dl-nav-item span:not(.dl-nav-icon),
+          .dl-sidebar.mobile-open .dl-sidebar-email,
+          .dl-sidebar.mobile-open .dl-sidebar-signout { display: block; }
+          .dl-sidebar.mobile-open .dl-sidebar-logo { justify-content: flex-start; padding: 16px 18px; }
+          .dl-sidebar.mobile-open .dl-nav-item { justify-content: flex-start; padding: 8px 12px; }
+          .dl-main { margin-left: 0; }
+          .dl-hamburger { display: block; }
+          .dl-topbar { flex-wrap: wrap; min-height: auto; padding: 10px 14px; gap: 10px; }
+          .dl-topbar-actions { flex: 1 1 100%; gap: 6px; }
+          .dl-action-btn { flex: 1; justify-content: center; padding: 7px 8px; font-size: 10px; }
+        }
+        @media (max-width: 380px) {
+          .dl-topbar-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+          .dl-action-btn { padding: 6px 4px; font-size: 9px; }
+        }
+      `}</style>
+
       <div className="dl-shell">
         <SidebarClient />
         <aside className="dl-sidebar" id="dl-sidebar">
@@ -213,7 +383,7 @@ function DashboardLayoutInner({
               <div className="dl-sidebar-logo-sub">by Siqbal</div>
             </div>
           </div>
-          <nav className="dl-sidebar-nav" style={{ padding: "12px 8px" }}>
+          <nav className="dl-sidebar-nav">
             {navSections.map((sec) => {
               let visibleGroups: { groupLabel: string; items: NavLeaf[] }[] = []
               let visibleFlatItems: NavLeaf[] = []
@@ -235,35 +405,16 @@ function DashboardLayoutInner({
 
               return (
                 <div key={sec.section} style={{ marginBottom: 2 }}>
-                  <button
-                    onClick={() => toggleSection(sec.section)}
-                    style={{
-                      width: "100%", display: "flex", alignItems: "center", gap: 6,
-                      padding: "8px 10px", background: "transparent", border: "none",
-                      color: "rgba(255,255,255,0.55)", fontSize: 10, fontWeight: 700,
-                      textTransform: "uppercase", letterSpacing: "0.08em",
-                      cursor: "pointer", fontFamily: "inherit",
-                      borderRadius: 6,
-                      transition: "background 0.15s",
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
-                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                  >
+                  <button className="dl-section-btn" onClick={() => toggleSection(sec.section)}>
                     {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                    {sec.section}
+                    <span>{sec.section}</span>
                   </button>
 
                   {expanded && (
-                    <div style={{ marginLeft: 6, borderLeft: "1px solid rgba(255,255,255,0.06)", paddingLeft: 6 }}>
+                    <div style={{ marginLeft: 6, borderLeft: "1px solid rgba(255,255,255,0.08)", paddingLeft: 6 }}>
                       {visibleGroups.map(group => (
                         <div key={group.groupLabel} style={{ marginBottom: 2 }}>
-                          <div style={{
-                            fontSize: 8, fontWeight: 700, textTransform: "uppercase",
-                            color: "rgba(255,255,255,0.22)", padding: "4px 10px 2px",
-                            letterSpacing: "0.05em",
-                          }}>
-                            {group.groupLabel}
-                          </div>
+                          <div className="dl-nav-group-label">{group.groupLabel}</div>
                           {group.items.map(item => (
                             <a key={item.href} href={item.href}
                               className={`dl-nav-item${
