@@ -67,11 +67,11 @@ function DashboardLayoutInner({
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     MAIN: true,
-    CRM: false,
-    BANKING: false,
-    INVENTORY: false,
-    ACCOUNTING: false,
-    SYSTEM: false,
+    CRM: true,
+    BANKING: true,
+    INVENTORY: true,
+    ACCOUNTING: true,
+    SYSTEM: true,
   })
 
   useEffect(() => {
