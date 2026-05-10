@@ -10,7 +10,6 @@ export default function NewJournalPage() {
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
   const [accounts, setAccounts] = useState<any[]>([])
-  const [projects, setProjects] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
   const [activities, setActivities] = useState<any[]>([])
   const [companyId, setCompanyId] = useState<string>("")
@@ -19,27 +18,27 @@ export default function NewJournalPage() {
   const [entryDate, setEntryDate] = useState(new Date().toISOString().split("T")[0])
   const [description, setDescription] = useState("")
 
+  // Line structure: now includes optional line description, auto‑fetched project/donor names
   const [lines, setLines] = useState<any[]>([
-    { account_id: null, debit: 0, credit: 0, project_id: null, location_id: null, activity_id: null },
-    { account_id: null, debit: 0, credit: 0, project_id: null, location_id: null, activity_id: null },
+    { account_id: null, debit: 0, credit: 0, line_description: "", location_id: null, activity_id: null, project_id: null, project_name: "", donor_name: "" },
+    { account_id: null, debit: 0, credit: 0, line_description: "", location_id: null, activity_id: null, project_id: null, project_name: "", donor_name: "" },
   ])
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  // Load data
+  // ── Load data ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
 
-      supabase.from("accounts").select("id,code,name,type,default_project_id,default_location_id,default_activity_id")
+      supabase.from("accounts")
+        .select("id,code,name,type,default_location_id,default_activity_id")
         .eq("company_id", cid).order("code")
         .then(r => r.data && setAccounts(r.data))
 
-      supabase.from("projects").select("id,name").eq("company_id", cid).order("name")
-        .then(r => r.data && setProjects(r.data))
       supabase.from("locations").select("id,name").eq("company_id", cid).order("name")
         .then(r => r.data && setLocations(r.data))
       supabase.from("activities").select("id,name").eq("company_id", cid).order("name")
@@ -55,22 +54,61 @@ export default function NewJournalPage() {
     })
   }, [])
 
-  const addLine = () => setLines([...lines, { account_id: null, debit: 0, credit: 0, project_id: null, location_id: null, activity_id: null }])
+  const addLine = () => setLines([...lines, {
+    account_id: null, debit: 0, credit: 0, line_description: "",
+    location_id: null, activity_id: null, project_id: null,
+    project_name: "", donor_name: ""
+  }])
   const removeLine = (i: number) => lines.length > 2 && setLines(lines.filter((_, idx) => idx !== i))
 
-  const updateLine = (i: number, field: string, value: any) => {
+  // ── Fetch project & donor when activity is selected ──
+  const fetchActivityDetails = async (activityId: number) => {
+    try {
+      // Project from activity
+      const { data: actData } = await supabase.from("activities")
+        .select("project_id, projects(name)")
+        .eq("id", activityId).single()
+      const proj = { id: actData?.project_id ?? null, name: (actData?.projects as any)?.name || "" }
+
+      // Primary donor from budgets (most funded)
+      const { data: donorData } = await supabase.from("budgets")
+        .select("donor_id, donors(name)")
+        .eq("company_id", companyId)
+        .eq("activity_id", activityId)
+        .eq("fiscal_year", new Date().getFullYear())
+        .is("month", null)
+        .order("budgeted_amount", { ascending: false })
+        .limit(1)
+      const don = { id: donorData?.[0]?.donor_id ?? null, name: (donorData?.[0]?.donors as any)?.name || "" }
+
+      return { project_id: proj.id, project_name: proj.name, donor_name: don.name }
+    } catch {
+      return { project_id: null, project_name: "", donor_name: "" }
+    }
+  }
+
+  const updateLine = async (i: number, field: string, value: any) => {
     const updated = [...lines]
     updated[i] = { ...updated[i], [field]: field === "debit" || field === "credit" ? Number(value) : value }
 
+    // Account changed → fill default location/activity from account
     if (field === "account_id" && value) {
       const acc = accounts.find(a => a.id == value)
       if (acc) {
-        updated[i].project_id = acc.default_project_id || null
         updated[i].location_id = acc.default_location_id || null
         updated[i].activity_id = acc.default_activity_id || null
       }
     }
 
+    // Activity changed → auto‑fetch project & donor
+    if (field === "activity_id" && value) {
+      const { project_id, project_name, donor_name } = await fetchActivityDetails(Number(value))
+      updated[i].project_id = project_id
+      updated[i].project_name = project_name
+      updated[i].donor_name = donor_name
+    }
+
+    // Debit / Credit mutual exclusion
     if (field === "debit" && updated[i].debit > 0) updated[i].credit = 0
     if (field === "credit" && updated[i].credit > 0) updated[i].debit = 0
 
@@ -100,9 +138,10 @@ export default function NewJournalPage() {
           account_id: l.account_id,
           debit: l.debit,
           credit: l.credit,
-          project_id: l.project_id || null,
+          description: l.line_description || null,
           location_id: l.location_id || null,
           activity_id: l.activity_id || null,
+          project_id: l.project_id || null,
         }))
       )
 
@@ -123,7 +162,7 @@ export default function NewJournalPage() {
 
   return (
     <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-      <div style={{ maxWidth: 1000, margin: "0 auto" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
           <button onClick={() => router.push("/dashboard/journal")}
             style={{ background: "white", border: "1px solid #E2E8F0", borderRadius: 8, padding: "8px 12px", cursor: "pointer" }}>
@@ -139,7 +178,7 @@ export default function NewJournalPage() {
         {flash && <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#15803D", padding: "10px 14px", borderRadius: 8, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
 
         {/* Header card */}
-        <div className="card" style={{ background: "white", borderRadius: 12, padding: 24, border: "1px solid #E2E8F0", marginBottom: 16 }}>
+        <div style={{ background: "white", borderRadius: 12, padding: 24, border: "1px solid #E2E8F0", marginBottom: 16 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
             <div>
               <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 4 }}>Entry No *</label>
@@ -160,7 +199,7 @@ export default function NewJournalPage() {
         </div>
 
         {/* Lines card */}
-        <div className="card" style={{ background: "white", borderRadius: 12, padding: 24, border: "1px solid #E2E8F0", marginBottom: 16 }}>
+        <div style={{ background: "white", borderRadius: 12, padding: 24, border: "1px solid #E2E8F0", marginBottom: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <span style={{ fontWeight: 600, fontSize: 14 }}>Journal Lines</span>
             <button onClick={addLine} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", background: "#F1F5F9", border: "1px solid #E2E8F0", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>
@@ -168,19 +207,19 @@ export default function NewJournalPage() {
             </button>
           </div>
 
-          {/* Column headings perfectly aligned with inputs */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px 110px 100px 100px 40px", gap: 8, fontSize: 10, fontWeight: 700, color: "#94A3B8", padding: "0 0 8px", alignItems: "end" }}>
+          {/* Column headings: Account (same size), Debit, Credit, Description (takes over old Project space), Location, Activity, Delete */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px 1fr 110px 110px 40px", gap: 8, fontSize: 10, fontWeight: 700, color: "#94A3B8", padding: "0 0 8px", alignItems: "end" }}>
             <span>Account</span>
             <span style={{ textAlign: "right", paddingRight: 8 }}>Debit</span>
             <span style={{ textAlign: "right", paddingRight: 8 }}>Credit</span>
-            <span style={{ paddingLeft: 4 }}>Project</span>
-            <span style={{ paddingLeft: 4 }}>Location</span>
-            <span style={{ paddingLeft: 4 }}>Activity</span>
+            <span>Description</span>
+            <span>Location</span>
+            <span>Activity</span>
             <span></span>
           </div>
 
           {lines.map((l, i) => (
-            <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px 110px 100px 100px 40px", gap: 8, alignItems: "center", marginBottom: 8 }}>
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px 1fr 110px 110px 40px", gap: 8, alignItems: "start", marginBottom: 8 }}>
               <select value={l.account_id || ""} onChange={e => updateLine(i, "account_id", e.target.value)}
                 style={{ height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 8px", fontSize: 12, width: "100%" }}>
                 <option value="">Select account...</option>
@@ -190,11 +229,9 @@ export default function NewJournalPage() {
                 style={{ width: "100%", height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 8px", fontSize: 12, textAlign: "right" }} />
               <input type="number" value={l.credit || ""} onChange={e => updateLine(i, "credit", e.target.value)}
                 style={{ width: "100%", height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 8px", fontSize: 12, textAlign: "right" }} />
-              <select value={l.project_id || ""} onChange={e => updateLine(i, "project_id", e.target.value ? Number(e.target.value) : null)}
-                style={{ width: "100%", height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 4px", fontSize: 11 }}>
-                <option value="">—</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              <input type="text" value={l.line_description || ""} onChange={e => updateLine(i, "line_description", e.target.value)}
+                placeholder="Line description"
+                style={{ width: "100%", height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 8px", fontSize: 12 }} />
               <select value={l.location_id || ""} onChange={e => updateLine(i, "location_id", e.target.value ? Number(e.target.value) : null)}
                 style={{ width: "100%", height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 4px", fontSize: 11 }}>
                 <option value="">—</option>
@@ -205,17 +242,28 @@ export default function NewJournalPage() {
                 <option value="">—</option>
                 {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
-              <button onClick={() => removeLine(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444" }}>
+              <button onClick={() => removeLine(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", height: 38 }}>
                 <Trash2 size={14} />
               </button>
+              {/* Auto‑fetched project & donor info */}
+              {l.activity_id && (
+                <div style={{ gridColumn: "1 / -1", fontSize: 11, color: "#64748B", display: "flex", gap: 16, paddingLeft: 8 }}>
+                  <span>Project: <strong>{l.project_name || "—"}</strong></span>
+                  <span>Donor: <strong>{l.donor_name || "—"}</strong></span>
+                </div>
+              )}
             </div>
           ))}
 
-          {/* Totals – aligned under debit/credit columns */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px", gap: 8, marginTop: 12, paddingTop: 12, borderTop: "2px solid #E2E8F0", fontWeight: 700, fontSize: 14 }}>
+          {/* Totals – aligned exactly under Debit and Credit columns */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px 1fr 110px 110px 40px", gap: 8, marginTop: 12, paddingTop: 12, borderTop: "2px solid #E2E8F0", fontWeight: 700, fontSize: 14 }}>
             <span>Total</span>
             <span style={{ textAlign: "right", paddingRight: 8 }}>PKR {totalDebit.toLocaleString()}</span>
             <span style={{ textAlign: "right", paddingRight: 8 }}>PKR {totalCredit.toLocaleString()}</span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
           </div>
 
           {!isBalanced && totalDebit > 0 && (
