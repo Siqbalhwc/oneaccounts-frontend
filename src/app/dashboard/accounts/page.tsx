@@ -98,11 +98,39 @@ export default function AccountsPage() {
 
   const types = ["All", "Asset", "Liability", "Equity", "Revenue", "Expense"]
 
-  // Filter by type + search
+  // Filtered list (by type + search)
   let filtered = filter === "All" ? accounts : accounts.filter(a => a.type === filter)
   if (search.trim()) {
     const s = search.toLowerCase()
     filtered = filtered.filter(a => a.code.includes(s) || a.name.toLowerCase().includes(s))
+  }
+
+  // Compute summary from all accounts (not filtered)
+  const totalAssets = accounts.filter(a => a.type === "Asset").reduce((sum, a) => sum + (a.balance || 0), 0)
+  const totalLiabilities = accounts.filter(a => a.type === "Liability").reduce((sum, a) => sum + (a.balance || 0), 0)
+  const totalRevenue = accounts.filter(a => a.type === "Revenue").reduce((sum, a) => sum + (a.balance || 0), 0)
+  const totalExpense = accounts.filter(a => a.type === "Expense").reduce((sum, a) => sum + (a.balance || 0), 0)
+  const netProfit = totalRevenue - totalExpense
+
+  // ── Next available code suggestion ──
+  const getNextCodeForType = (type: string): string => {
+    const range = CODE_RANGES[type]
+    if (!range) return ""
+    // find max numeric code for this type among existing accounts
+    const codesOfType = accounts.filter(a => a.type === type).map(a => parseInt(a.code, 10)).filter(n => !isNaN(n))
+    const maxCode = codesOfType.length > 0 ? Math.max(...codesOfType) : range.min - 1
+    const next = Math.max(range.min, maxCode + 1)
+    if (next > range.max) return "" // range exhausted
+    return String(next)
+  }
+
+  const handleTypeChange = (newType: string) => {
+    setFormType(newType)
+    if (!editId) {
+      // only suggest when adding a new account
+      const suggested = getNextCodeForType(newType)
+      setFormCode(suggested || "")
+    }
   }
 
   const typeColors: Record<string, string> = {
@@ -122,6 +150,8 @@ export default function AccountsPage() {
     setDefaultLocationId(null)
     setDefaultActivityId(null)
     setModalError("")
+    // Auto‑suggest code for default type "Asset"
+    setFormCode(getNextCodeForType("Asset") || "")
     setShowModal(true)
   }
 
@@ -189,7 +219,7 @@ export default function AccountsPage() {
   const range = CODE_RANGES[formType]
 
   return (
-    <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
+    <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <style>{`
         .card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
         .input { height: 38px; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0 12px; font-size: 13px; box-sizing: border-box; }
@@ -204,6 +234,11 @@ export default function AccountsPage() {
         .row { display: grid; grid-template-columns: 80px 1fr 100px 120px 120px 50px; padding: 10px 16px; border-bottom: 1px solid #F1F5F9; font-size: 13px; align-items: center; cursor: pointer; transition: background 0.1s; }
         .row:hover { background: #FAFBFF; }
         .row-header { display: grid; grid-template-columns: 80px 1fr 100px 120px 120px 50px; padding: 10px 16px; background: #F8FAFC; font-size: 9px; font-weight: 700; text-transform: uppercase; color: #94A3B8; }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        @media (max-width: 600px) {
+          .row, .row-header { grid-template-columns: 80px 1fr 80px 80px; }
+          .hide-mobile { display: none; }
+        }
       `}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -219,15 +254,27 @@ export default function AccountsPage() {
       </div>
 
       {/* Summary Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+      <div className="summary-grid">
         <div className="card">
           <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Accounts</div>
-          <div style={{ fontSize: 24, fontWeight: 800 }}>{filtered.length}</div>
+          <div style={{ fontSize: 24, fontWeight: 800 }}>{accounts.length}</div>
         </div>
         <div className="card">
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Balance</div>
-          <div style={{ fontSize: 24, fontWeight: 800 }}>
-            PKR {filtered.reduce((sum, a) => sum + (a.balance || 0), 0).toLocaleString()}
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Net Profit</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: netProfit >= 0 ? "#059669" : "#dc2626" }}>
+            PKR {netProfit.toLocaleString()}
+          </div>
+        </div>
+        <div className="card">
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Assets</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: "#1E3A8A" }}>
+            PKR {totalAssets.toLocaleString()}
+          </div>
+        </div>
+        <div className="card">
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Liabilities</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: "#B91C1C" }}>
+            PKR {totalLiabilities.toLocaleString()}
           </div>
         </div>
       </div>
@@ -258,7 +305,7 @@ export default function AccountsPage() {
             <span>Name</span>
             <span>Type</span>
             <span style={{ textAlign: "right" }}>Current Balance</span>
-            <span>Bank</span>
+            <span className="hide-mobile">Bank</span>
             {isAdmin && <span></span>}
           </div>
           {filtered.map((a, i) => (
@@ -275,7 +322,7 @@ export default function AccountsPage() {
               <span style={{ textAlign: "right", fontWeight: 600 }}>
                 PKR {(a.balance || 0).toLocaleString()}
               </span>
-              <span style={{ fontSize: 12, color: "#1E3A8A" }}>
+              <span className="hide-mobile" style={{ fontSize: 12, color: "#1E3A8A" }}>
                 {bankMap[a.id]?.bankName || "—"}
                 {bankMap[a.id]?.bankId && (
                   <span style={{ marginLeft: 6, cursor: "pointer", color: "#1D4ED8" }} onClick={(e) => { e.stopPropagation(); router.push("/dashboard/banking/bank-accounts") }}>🔗</span>
@@ -306,26 +353,26 @@ export default function AccountsPage() {
           <div className="modal-box">
             <h3 style={{ marginTop: 0, marginBottom: 4 }}>{editId ? "Edit Account" : "Add New Account"}</h3>
             <p style={{ fontSize: 12, color: "#94A3B8", marginBottom: 16 }}>
-              {editId ? "Update the account name, code, or type." : "Create a new account. Choose a code within the recommended range."}
+              {editId ? "Update the account name, code, or type." : "Create a new account. The code is auto‑suggested for the type."}
             </p>
 
             <label className="field-label">Account Type</label>
-            <select className="input" style={{ width: "100%", marginBottom: 10 }} value={formType} onChange={e => { setFormType(e.target.value); setFormCode("") }}>
+            <select className="input" style={{ width: "100%", marginBottom: 10 }} value={formType} onChange={e => handleTypeChange(e.target.value)}>
               {Object.keys(CODE_RANGES).map(t => <option key={t} value={t}>{t}</option>)}
             </select>
             {range && (
               <p style={{ fontSize: 11, color: "#64748B", marginTop: -8, marginBottom: 10 }}>
-                Recommended range: {range.min} – {range.max}
+                Recommended range: {range.min} – {range.max} {!editId && formCode && `(Next available: ${formCode})`}
               </p>
             )}
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
               <div>
-                <label className="field-label">Account Code</label>
-                <input className="input" style={{ width: "100%" }} type="text" placeholder={range ? `e.g., ${range.min + 1}` : "Enter code"} value={formCode} onChange={e => setFormCode(e.target.value)} />
+                <label className="field-label">Account Code *</label>
+                <input className="input" style={{ width: "100%" }} type="text" placeholder={range ? `${range.min + 1}` : "Enter code"} value={formCode} onChange={e => setFormCode(e.target.value)} />
               </div>
               <div>
-                <label className="field-label">Account Name</label>
+                <label className="field-label">Account Name *</label>
                 <input className="input" style={{ width: "100%" }} type="text" placeholder="e.g., Office Supplies" value={formName} onChange={e => setFormName(e.target.value)} />
               </div>
             </div>
