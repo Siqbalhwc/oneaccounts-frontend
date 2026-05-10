@@ -33,22 +33,18 @@ export default function NewBillPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  const [selectedLocationId, setSelectedLocationId] = useState("")
-  const [selectedActivityId, setSelectedActivityId] = useState("")
-  const [fetchedProjectId, setFetchedProjectId] = useState<number | null>(null)
-  const [fetchedProjectName, setFetchedProjectName] = useState("")
-  const [fetchedDonorId, setFetchedDonorId] = useState<number | null>(null)
-  const [fetchedDonorName, setFetchedDonorName] = useState("")
-  const [headerExpenseAccountId, setHeaderExpenseAccountId] = useState<number | null>(null)
-
+  // ── Master data for selections ──
   const [locations, setLocations] = useState<any[]>([])
   const [activitiesForLocation, setActivitiesForLocation] = useState<any[]>([])
   const [allAccounts, setAllAccounts] = useState<any[]>([])
-  const [recommendedAccount, setRecommendedAccount] = useState<any>(null)
+
+  // ── Per‑line project & donor maps (key = activityId) ──
+  const [projectMap, setProjectMap] = useState<Record<number, { id: number | null; name: string }>>({})
+  const [donorMap, setDonorMap] = useState<Record<number, { id: number | null; name: string }>>({})
 
   const fiscalYear = new Date().getFullYear()
 
-  // ── Load master data ──
+  // ── Load master data once ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -57,35 +53,66 @@ export default function NewBillPage() {
       supabase.from("companies").select("business_type").eq("id", cid).single()
         .then(r => r.data && setBusinessType(r.data.business_type || ""))
 
-      // FIX: ensure suppliers are fetched and logged
+      // CORRECTED SELECT: only existing columns
       supabase.from("suppliers")
-        .select("id,code,name,phone,balance,default_project_id,default_location_id,default_activity_id,default_donor_id,default_expense_account_id")
-        .eq("company_id", cid).order("name")
+        .select("id,code,name,phone,balance,default_project_id,default_location_id,default_activity_id")
+        .eq("company_id", cid)
+        .order("name")
         .then(r => {
-          console.log("Suppliers fetched:", r.data)  // keep for debugging
+          console.log("Suppliers fetched:", r.data)
           if (r.data) setSuppliers(r.data)
+          else setSuppliers([])
         })
 
-      supabase.from("accounts").select("id,code,name,type").eq("company_id", cid).eq("type","Expense").order("code")
+      supabase.from("accounts").select("id,code,name,type")
+        .eq("company_id", cid)
+        .eq("type", "Expense")
+        .order("code")
         .then(r => r.data && setAllAccounts(r.data))
 
-      supabase.from("locations").select("id,name").eq("company_id", cid).order("name")
+      supabase.from("locations").select("id,name")
+        .eq("company_id", cid)
+        .order("name")
         .then(r => r.data && setLocations(r.data))
 
       setLoading(false)
     })
   }, [])
 
-  // ── Load activities for chosen location ──
-  useEffect(() => {
-    if (!companyId || !selectedLocationId) {
+  // ── Supplier helpers ──
+  const filteredSuppliers = suppliers.filter(s =>
+    s.name.toLowerCase().includes(supplierSearch.toLowerCase()) ||
+    s.code.toLowerCase().includes(supplierSearch.toLowerCase()) ||
+    (s.phone || "").includes(supplierSearch)
+  )
+
+  const selectSupplier = (s: any) => {
+    setSupplierId(s.id)
+    setSelectedSupplier(s)
+    setSupplierSearch(s.name)
+    setShowSupplierList(false)
+  }
+
+  const clearSupplier = () => {
+    setSupplierId(null)
+    setSelectedSupplier(null)
+    setSupplierSearch("")
+    setShowSupplierList(true)
+  }
+
+  // ── Fetch activities when a location is selected (shared across items) ──
+  const handleLocationChange = (newLocationId: string) => {
+    // update all items to use the new location if they don't have a custom one? we leave items as is.
+    // This is for the "default" location used when adding new items.
+    // Not storing a separate state; just fetch activities for the location.
+    if (!companyId || !newLocationId) {
       setActivitiesForLocation([])
       return
     }
     supabase.from("budgets")
       .select("activity_id, activities!inner(id,name)")
       .eq("company_id", companyId)
-      .eq("location_id", selectedLocationId)
+      .eq("location_id", newLocationId)
       .eq("fiscal_year", fiscalYear)
       .is("month", null)
       .then(({ data }) => {
@@ -99,117 +126,50 @@ export default function NewBillPage() {
           setActivitiesForLocation([])
         }
       })
-  }, [companyId, selectedLocationId])
-
-  // ── Auto‑fetch project & donor ──
-  useEffect(() => {
-    if (!companyId || !selectedActivityId || !selectedLocationId) {
-      setFetchedProjectId(null); setFetchedProjectName("")
-      setFetchedDonorId(null); setFetchedDonorName("")
-      return
-    }
-    supabase.from("activities").select("project_id, projects(name)")
-      .eq("id", selectedActivityId).single()
-      .then(({ data }) => {
-        if (data) {
-          setFetchedProjectId(data.project_id)
-          setFetchedProjectName((data.projects as any)?.name || "")
-        }
-      })
-    supabase.from("budgets")
-      .select("donor_id, donors(name)")
-      .eq("company_id", companyId)
-      .eq("activity_id", selectedActivityId)
-      .eq("location_id", selectedLocationId)
-      .eq("fiscal_year", fiscalYear)
-      .is("month", null)
-      .order("budgeted_amount", { ascending: false })
-      .limit(1)
-      .then(({ data }) => {
-        if (data && data.length > 0) {
-          setFetchedDonorId(data[0].donor_id)
-          setFetchedDonorName((data[0].donors as any)?.name || "")
-        } else {
-          setFetchedDonorId(null)
-          setFetchedDonorName("")
-        }
-      })
-  }, [companyId, selectedActivityId, selectedLocationId])
-
-  // ── Recommend account ──
-  useEffect(() => {
-    if (!supplierId || !selectedActivityId || !selectedLocationId || !companyId || !fetchedProjectId) {
-      setRecommendedAccount(null)
-      return
-    }
-    if (allAccounts.length === 0) return
-    supabase.from("journal_lines")
-      .select("account_id, accounts(code,name)")
-      .eq("company_id", companyId)
-      .eq("activity_id", selectedActivityId)
-      .eq("location_id", selectedLocationId)
-      .eq("project_id", fetchedProjectId)
-      .in("account_id", allAccounts.map(a => a.id))
-      .order("debit", { ascending: false })
-      .limit(1)
-      .then(({ data }) => {
-        if (data && data.length > 0) {
-          setRecommendedAccount(data[0].accounts)
-        } else {
-          setRecommendedAccount(null)
-        }
-      })
-  }, [supplierId, selectedActivityId, selectedLocationId, companyId, fetchedProjectId, allAccounts])
-
-  // ── Close dropdown on outside click, but not when clicking inside the component ──
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (supplierRef.current && !supplierRef.current.contains(e.target as Node)) {
-        setShowSupplierList(false)
-      }
-    }
-    document.addEventListener("mousedown", handler)
-    return () => document.removeEventListener("mousedown", handler)
-  }, [])
-
-  // ── Supplier list filtering ──
-  const filteredSuppliers = suppliers.filter(s =>
-    s.name.toLowerCase().includes(supplierSearch.toLowerCase()) ||
-    s.code.toLowerCase().includes(supplierSearch.toLowerCase()) ||
-    (s.phone || "").includes(supplierSearch)
-  )
-
-  const selectSupplier = (s: any) => {
-    setSupplierId(s.id)
-    setSelectedSupplier(s)
-    setSupplierSearch(s.name)
-    setShowSupplierList(false)
-    if (s.default_location_id) setSelectedLocationId(String(s.default_location_id))
-    if (s.default_activity_id) setSelectedActivityId(String(s.default_activity_id))
-    if (s.default_expense_account_id) setHeaderExpenseAccountId(s.default_expense_account_id)
-    else setHeaderExpenseAccountId(null)
-    setRecommendedAccount(null)
   }
 
-  const clearSupplier = () => {
-    setSupplierId(null)
-    setSelectedSupplier(null)
-    setSupplierSearch("")
-    setShowSupplierList(true)  // FIX: show list again after clearing
-    setSelectedLocationId("")
-    setSelectedActivityId("")
-    setFetchedProjectId(null); setFetchedProjectName("")
-    setFetchedDonorId(null); setFetchedDonorName("")
-    setHeaderExpenseAccountId(null)
+  // ── Fetch project & donor for a given activity ──
+  const fetchProjectAndDonor = async (activityId: number) => {
+    if (projectMap[activityId] && donorMap[activityId]) return // already cached
+    try {
+      // Project
+      const { data: actData } = await supabase.from("activities")
+        .select("project_id, projects(name)")
+        .eq("id", activityId).single()
+      const proj = { id: actData?.project_id ?? null, name: (actData?.projects as any)?.name || "" }
+      setProjectMap(prev => ({ ...prev, [activityId]: proj }))
+
+      // Donor (primary budget donor)
+      const { data: donorData } = await supabase.from("budgets")
+        .select("donor_id, donors(name)")
+        .eq("company_id", companyId)
+        .eq("activity_id", activityId)
+        .eq("fiscal_year", fiscalYear)
+        .is("month", null)
+        .order("budgeted_amount", { ascending: false })
+        .limit(1)
+      const don = { id: donorData?.[0]?.donor_id ?? null, name: (donorData?.[0]?.donors as any)?.name || "" }
+      setDonorMap(prev => ({ ...prev, [activityId]: don }))
+    } catch { /* ignore */ }
   }
 
   // ── Item management ──
-  const addManualItem = () => {
-    setItems([...items, {
-      description: "", qty: 1, unit_price: 0, total: 0,
-      activity_id: selectedActivityId || null,
-      account_id: headerExpenseAccountId || null,
-    }])
+  const addItem = () => {
+    // auto‑inherit from last item if exists
+    const last = items.length > 0 ? items[items.length - 1] : null
+    const newItem = {
+      description: "",
+      qty: 1,
+      unit_price: 0,
+      total: 0,
+      location_id: last?.location_id || "",
+      activity_id: last?.activity_id || "",
+      account_id: last?.account_id || null,
+    }
+    setItems([...items, newItem])
+
+    // If activity inherited, ensure project/donor are loaded
+    if (newItem.activity_id) fetchProjectAndDonor(Number(newItem.activity_id))
   }
 
   const updateItem = (idx: number, field: string, value: any) => {
@@ -217,6 +177,10 @@ export default function NewBillPage() {
     updated[idx] = { ...updated[idx], [field]: value }
     if (field === "qty" || field === "unit_price") {
       updated[idx].total = updated[idx].qty * updated[idx].unit_price
+    }
+    // If activity changed, fetch project/donor
+    if (field === "activity_id" && value) {
+      fetchProjectAndDonor(Number(value))
     }
     setItems(updated)
   }
@@ -244,11 +208,29 @@ export default function NewBillPage() {
   const handleSubmit = async () => {
     if (!supplierId)       { setError("Please select a supplier"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
-    if (!selectedLocationId || !selectedActivityId) { setError("Location and Activity are required"); return }
+    // check that each item has location + activity
+    for (const item of items) {
+      if (!item.location_id || !item.activity_id) {
+        setError("Each item must have Location and Activity selected")
+        return
+      }
+    }
 
     setSaving(true); setError("")
     const suppCode = selectedSupplier?.code || "BILL"
     const billNo = await getNextBillNo(suppCode)
+
+    // Build items with project/donor from maps
+    const enrichedItems = items.map(item => ({
+      description: item.description,
+      qty: item.qty,
+      unit_price: item.unit_price,
+      account_id: item.account_id,
+      activity_id: item.activity_id,
+      location_id: item.location_id,
+      project_id: projectMap[item.activity_id]?.id ?? null,
+      donor_id: donorMap[item.activity_id]?.id ?? null,
+    }))
 
     try {
       const res = await fetch("/api/bills", {
@@ -256,22 +238,16 @@ export default function NewBillPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           invoice_no: billNo,
-          party_id:     supplierId,
+          party_id: supplierId,
           invoice_date: billDate,
-          due_date:     dueDate,
-          items: items.map(i => ({
-            description: i.description,
-            qty: i.qty,
-            unit_price: i.unit_price,
-            account_id: i.account_id || headerExpenseAccountId,
-            activity_id: i.activity_id || selectedActivityId,
-          })),
+          due_date: dueDate,
+          items: enrichedItems,
           reference, notes,
-          expense_account_id: headerExpenseAccountId,
-          project_id: fetchedProjectId,
-          location_id: selectedLocationId,
-          activity_id: selectedActivityId,
-          donor_id: fetchedDonorId,
+          // header-level tags (optional, but we send first item's tags as header)
+          location_id: items[0]?.location_id,
+          activity_id: items[0]?.activity_id,
+          project_id: projectMap[items[0]?.activity_id]?.id ?? null,
+          donor_id: donorMap[items[0]?.activity_id]?.id ?? null,
         }),
       })
       const result = await res.json()
@@ -286,7 +262,7 @@ export default function NewBillPage() {
       clearSupplier()
       setSaving(false)
       setTimeout(() => setFlash(null), 4000)
-    } catch (e) {
+    } catch {
       setError("Network error")
       setSaving(false)
     }
@@ -299,6 +275,17 @@ export default function NewBillPage() {
       doc.save(`bill-preview-${billNo}.pdf`)
     })
   }
+
+  // Close supplier dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (supplierRef.current && !supplierRef.current.contains(e.target as Node)) {
+        setShowSupplierList(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
 
   if (loading) {
     return <div style={{ padding: 24, textAlign: "center" }}>Loading bill form…</div>
@@ -317,27 +304,30 @@ export default function NewBillPage() {
         .inv-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:none; font-family:inherit; transition:all 0.15s; white-space:nowrap; }
         .inv-btn-primary { background:linear-gradient(135deg,#1740C8,#071352); color:white; }
         .inv-btn-outline { background:white; border:1.5px solid #E5EAF2; color:#475569; }
-        .inv-item-row { display:grid; grid-template-columns:1fr 80px 100px 100px 100px 60px 40px; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid #F1F5F9; }
-        .inv-item-header { display:grid; grid-template-columns:1fr 80px 100px 100px 100px 60px 40px; gap:8px; font-size:9px; font-weight:700; text-transform:uppercase; color:#94A3B8; padding-bottom:6px; }
+        /* Item row grid: 1fr desc, 80px qty, 100px price, 120px location, 120px activity, 120px GL, 70px total, 30px delete */
+        .inv-item-row { display:grid; grid-template-columns:1fr 80px 100px 120px 120px 120px 70px 30px; gap:6px; align-items:center; padding:6px 0; border-bottom:1px solid #F1F5F9; }
+        .inv-item-header { display:grid; grid-template-columns:1fr 80px 100px 120px 120px 120px 70px 30px; gap:6px; font-size:9px; font-weight:700; text-transform:uppercase; color:#94A3B8; padding-bottom:6px; }
         .badge { display:inline-block; padding:2px 8px; border-radius:12px; font-size:10px; font-weight:600; margin-left:8px; }
         .badge-blue { background:#EEF2FF; color:#4338CA; }
         .badge-orange { background:#FFF7ED; color:#C2410C; }
         .cust-wrap { position:relative; }
         .cust-input-row { position:relative; display:flex; align-items:center; }
-        .cust-search-icon { position:absolute; left:10px; color:#94A3B8; pointer-events:none; }
-        .cust-clear { position:absolute; right:8px; background:none; border:none; cursor:pointer; color:#94A3B8; display:flex; align-items:center; padding:4px; border-radius:4px; }
-        .cust-clear:hover { color:#EF4444; background:#FEF2F2; }
         .cust-dropdown { position:absolute; top:calc(100% + 4px); left:0; right:0; background:white; border:1.5px solid #C7D2FE; border-radius:10px; max-height:220px; overflow-y:auto; z-index:100; box-shadow:0 8px 24px rgba(30,58,138,0.12); }
-        .cust-option { padding:8px 12px; cursor:pointer; border-bottom:1px solid #F1F5F9; display:flex; justify-content:space-between; align-items:center; transition:background 0.1s; }
+        .cust-option { padding:8px 12px; cursor:pointer; border-bottom:1px solid #F1F5F9; display:flex; justify-content:space-between; align-items:center; }
         .cust-option:last-child { border-bottom:none; }
         .cust-option:hover { background:#EEF2FF; }
         .cust-option-name { font-size:13px; font-weight:600; color:#1E293B; }
         .cust-option-meta { font-size:11px; color:#94A3B8; margin-top:2px; }
         .cust-option-bal { font-size:12px; font-weight:600; color:#1E3A8A; white-space:nowrap; }
-        .cust-selected-badge { display:inline-flex; align-items:center; gap:6px; background:#EEF2FF; border:1.5px solid #C7D2FE; border-radius:8px; padding:6px 12px; font-size:13px; font-weight:600; color:#1E3A8A; width:100%; }
+        .cust-selected-badge { display:inline-flex; align-items:center; gap:6px; background:#EEF2FF; border:1.5px solid #C7D2FE; border-radius:8px; padding:6px 12px; font-size:13px; font-weight:600; color:#1E3A8A; width:100%; cursor:pointer; }
         .inv-grid { display:grid; grid-template-columns:1fr 300px; gap:16px; align-items:start; }
-        @media (max-width:900px) { .inv-grid { grid-template-columns:1fr; } }
-        @media (max-width:600px) { .inv-item-row, .inv-item-header { grid-template-columns:1fr 60px 70px 40px; } }
+        @media (max-width:1000px) {
+          .inv-item-row, .inv-item-header { grid-template-columns:1fr 60px 60px 80px 80px 80px 50px 20px; font-size:0.65rem; }
+        }
+        @media (max-width:700px) {
+          .inv-grid { grid-template-columns:1fr; }
+          .inv-item-row, .inv-item-header { grid-template-columns:1fr 50px 50px 60px 60px 60px 40px 20px; }
+        }
       `}</style>
 
       <div className="inv-shell">
@@ -345,7 +335,7 @@ export default function NewBillPage() {
           <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/bills")}><ArrowLeft size={16} /></button>
           <div style={{ flex:1 }}>
             <div className="inv-title">📦 New Purchase Bill</div>
-            <div style={{ fontSize:12, color:"#94A3B8", marginTop:1 }}>Location + Activity → auto‑fills remaining tags</div>
+            <div style={{ fontSize:12, color:"#94A3B8", marginTop:1 }}>Select supplier, then add items with location, activity & GL</div>
           </div>
           <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/bills")}>View List</button>
         </div>
@@ -355,12 +345,12 @@ export default function NewBillPage() {
 
         <div className="inv-grid">
           <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-            {/* Supplier card */}
+            {/* Supplier + Bill details */}
             <div className="inv-card">
               <label className="inv-label">Supplier *</label>
               <div className="cust-wrap" ref={supplierRef}>
                 {selectedSupplier ? (
-                  <div className="cust-selected-badge" onClick={clearSupplier} style={{ cursor: "pointer" }}>
+                  <div className="cust-selected-badge" onClick={clearSupplier}>
                     <span>👤</span><span style={{ flex:1 }}>{selectedSupplier.code} — {selectedSupplier.name}</span>
                     <span style={{ fontSize:11, color:"#64748B" }}>Bal: PKR {(selectedSupplier.balance || 0).toLocaleString()}</span>
                     <button className="cust-clear" onClick={(e) => { e.stopPropagation(); clearSupplier(); }}><X size={14} /></button>
@@ -369,16 +359,7 @@ export default function NewBillPage() {
                   <>
                     <div className="cust-input-row">
                       <Search size={14} style={{ position:"absolute", left:10, color:"#94A3B8" }} />
-                      <input
-                        className="inv-input"
-                        style={{ paddingLeft:32, paddingRight:32 }}
-                        placeholder="Search by name, code or phone..."
-                        value={supplierSearch}
-                        onChange={e => { setSupplierSearch(e.target.value); setShowSupplierList(true) }}
-                        onFocus={() => setShowSupplierList(true)}
-                        onClick={() => setShowSupplierList(true)}  /* FIX: ensure click opens */
-                        autoComplete="off"
-                      />
+                      <input className="inv-input" style={{ paddingLeft:32, paddingRight:32 }} placeholder="Search by name, code or phone..." value={supplierSearch} onChange={e => { setSupplierSearch(e.target.value); setShowSupplierList(true) }} onFocus={() => setShowSupplierList(true)} onClick={() => setShowSupplierList(true)} autoComplete="off" />
                       {supplierSearch && <button className="cust-clear" onClick={() => setSupplierSearch("")}><X size={13} /></button>}
                     </div>
                     {showSupplierList && (
@@ -388,10 +369,7 @@ export default function NewBillPage() {
                         ) : (
                           filteredSuppliers.map(s => (
                             <div key={s.id} className="cust-option" onMouseDown={() => selectSupplier(s)}>
-                              <div>
-                                <div className="cust-option-name">{s.name}</div>
-                                <div className="cust-option-meta">{s.code}{s.phone ? ` · ${s.phone}` : ""}</div>
-                              </div>
+                              <div><div className="cust-option-name">{s.name}</div><div className="cust-option-meta">{s.code}{s.phone ? ` · ${s.phone}` : ""}</div></div>
                               <div className="cust-option-bal">PKR {(s.balance || 0).toLocaleString()}</div>
                             </div>
                           ))
@@ -402,93 +380,56 @@ export default function NewBillPage() {
                 )}
               </div>
 
-              {/* Location + Activity */}
-              <div style={{ marginTop:10, display:"flex", gap:10 }}>
-                <div style={{ flex:1 }}>
-                  <label className="inv-label">Location *</label>
-                  <select className="inv-input" value={selectedLocationId} onChange={e => setSelectedLocationId(e.target.value)}>
-                    <option value="">— Select —</option>
-                    {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                  </select>
-                </div>
-                <div style={{ flex:1 }}>
-                  <label className="inv-label">Activity *</label>
-                  <select className="inv-input" value={selectedActivityId} onChange={e => setSelectedActivityId(e.target.value)}>
-                    <option value="">— {selectedLocationId ? "Select" : "Pick Location first"} —</option>
-                    {activitiesForLocation.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              {/* Auto‑filled Project & Donor badges */}
-              {selectedActivityId && (
-                <div style={{ marginTop:10, display:"flex", gap:12, alignItems:"center" }}>
-                  <span><span style={{ fontSize:11, color:"#64748B" }}>Project:</span><span className="badge badge-blue">{fetchedProjectName || "?"}</span></span>
-                  <span><span style={{ fontSize:11, color:"#64748B" }}>Donor:</span><span className="badge badge-orange">{fetchedDonorName || (businessType === "ngo" ? "⚠ Not found" : "N/A")}</span></span>
-                </div>
-              )}
-
-              {/* Expense Account (with recommendation) */}
-              <div style={{ marginTop:10 }}>
-                <label className="inv-label">Expense Account</label>
-                <select className="inv-input" value={headerExpenseAccountId ?? ""} onChange={e => setHeaderExpenseAccountId(e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">— Select —</option>
-                  {recommendedAccount && (
-                    <option value={recommendedAccount.id}>⭐ {recommendedAccount.code} – {recommendedAccount.name} (Recommended)</option>
-                  )}
-                  {allAccounts.map(a => <option key={a.id} value={a.id}>{a.code} – {a.name}</option>)}
-                </select>
-                {recommendedAccount && <p style={{ fontSize:11, color:"#64748B", marginTop:4 }}>💡 This account was used in previous bills for this supplier, activity and location.</p>}
-              </div>
-
               <div className="inv-row" style={{ marginTop:10 }}>
-                <div>
-                  <label className="inv-label">Bill Date *</label>
-                  <input className="inv-input" type="date" value={billDate} onChange={e => setBillDate(e.target.value)} />
-                </div>
-                <div>
-                  <label className="inv-label">Due Date</label>
-                  <input className="inv-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
-                </div>
+                <div><label className="inv-label">Bill Date *</label><input className="inv-input" type="date" value={billDate} onChange={e => setBillDate(e.target.value)} /></div>
+                <div><label className="inv-label">Due Date</label><input className="inv-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} /></div>
               </div>
               <div className="inv-row" style={{ marginTop:10 }}>
-                <div>
-                  <label className="inv-label">Reference</label>
-                  <input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="Supplier Invoice #" />
-                </div>
-                <div>
-                  <label className="inv-label">Notes</label>
-                  <input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" />
-                </div>
+                <div><label className="inv-label">Reference</label><input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="Supplier Invoice #" /></div>
+                <div><label className="inv-label">Notes</label><input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" /></div>
               </div>
             </div>
 
-            {/* Add Item button */}
-            <div className="inv-card" style={{ textAlign:"right" }}>
-              <button className="inv-btn inv-btn-outline" onClick={addManualItem}><Plus size={14} /> Add Item</button>
+            {/* Add item button (compact) */}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <span style={{ fontSize:13, fontWeight:600, color:"#1E293B" }}>Items</span>
+              <button className="inv-btn inv-btn-outline" onClick={addItem}><Plus size={14} /> Add Item</button>
             </div>
 
             {/* Items table */}
             {items.length > 0 && (
-              <div className="inv-card">
+              <div className="inv-card" style={{ overflowX:"auto" }}>
                 <div className="inv-item-header">
-                  <span>Description</span><span>Qty</span><span>Price</span><span>Activity</span><span>Account</span><span>Total</span><span></span>
+                  <span>Description</span><span>Qty</span><span>Price</span><span>Location</span><span>Activity</span><span>GL Account</span><span>Total</span><span></span>
                 </div>
                 {items.map((item, idx) => (
-                  <div key={idx} className="inv-item-row">
-                    <input className="inv-input" style={{ height:34, fontSize:12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Item" />
-                    <input className="inv-input" style={{ height:34, fontSize:12, textAlign:"center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                    <input className="inv-input" style={{ height:34, fontSize:12, textAlign:"right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                    <select className="inv-input" style={{ height:34, fontSize:11 }} value={item.activity_id || ""} onChange={e => updateItem(idx, "activity_id", e.target.value || null)}>
-                      <option value="">— —</option>
-                      {activitiesForLocation.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                    </select>
-                    <select className="inv-input" style={{ height:34, fontSize:11 }} value={item.account_id || ""} onChange={e => updateItem(idx, "account_id", e.target.value ? Number(e.target.value) : null)}>
-                      <option value="">— —</option>
-                      {allAccounts.map(a => <option key={a.id} value={a.id}>{a.code}</option>)}
-                    </select>
-                    <span style={{ textAlign:"right", fontWeight:600, fontSize:13 }}>PKR {item.total.toLocaleString()}</span>
-                    <button className="inv-btn inv-btn-outline" style={{ padding:4 }} onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
+                  <div key={idx}>
+                    <div className="inv-item-row">
+                      <input className="inv-input" style={{ height:34, fontSize:12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Item" />
+                      <input className="inv-input" style={{ height:34, fontSize:12, textAlign:"center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                      <input className="inv-input" style={{ height:34, fontSize:12, textAlign:"right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                      <select className="inv-input" style={{ height:34, fontSize:11 }} value={item.location_id} onChange={e => { updateItem(idx, "location_id", e.target.value); if (idx === 0) handleLocationChange(e.target.value); }}>
+                        <option value="">—</option>
+                        {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                      </select>
+                      <select className="inv-input" style={{ height:34, fontSize:11 }} value={item.activity_id} onChange={e => updateItem(idx, "activity_id", e.target.value)}>
+                        <option value="">—</option>
+                        {activitiesForLocation.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      </select>
+                      <select className="inv-input" style={{ height:34, fontSize:11 }} value={item.account_id ?? ""} onChange={e => updateItem(idx, "account_id", e.target.value ? Number(e.target.value) : null)}>
+                        <option value="">—</option>
+                        {allAccounts.map(a => <option key={a.id} value={a.id}>{a.code}</option>)}
+                      </select>
+                      <span style={{ textAlign:"right", fontWeight:600, fontSize:13 }}>PKR {item.total.toLocaleString()}</span>
+                      <button className="inv-btn inv-btn-outline" style={{ padding:2 }} onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
+                    </div>
+                    {/* Show auto‑fetched project & donor for this line */}
+                    {item.activity_id && (
+                      <div style={{ fontSize:10, color:"#64748B", marginLeft:8, display:"flex", gap:12 }}>
+                        <span>Project: <strong>{projectMap[item.activity_id]?.name || "Fetching…"}</strong></span>
+                        <span>Donor: <strong>{donorMap[item.activity_id]?.name || "Fetching…"}</strong></span>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -499,7 +440,7 @@ export default function NewBillPage() {
           <div style={{ display:"flex", flexDirection:"column", gap:12, position:"sticky", top:16 }}>
             <div className="inv-card">
               <h3 style={{ fontSize:15, fontWeight:700, color:"#1E293B", marginBottom:10 }}>Summary</h3>
-              <div className="inv-summary-row bold">
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:14, fontWeight:600 }}>
                 <span>Total</span><span>PKR {totalAmount.toLocaleString()}</span>
               </div>
             </div>
