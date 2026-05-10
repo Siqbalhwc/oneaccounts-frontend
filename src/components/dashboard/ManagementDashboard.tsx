@@ -167,92 +167,91 @@ export default function ManagementDashboard({ role }: { role: string }) {
   }
 
   return (
-    <div style={{ background: "#f4f8fc", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif", color: "#1e2b3c" }}>
+    <div style={{ background: "#f4f8fc", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif", color: "#1a2636" }}>
       <style>{`
-        /* ── Global resets inside dashboard ── */
+        /* ── Navy-aligned color palette ── */
         .mgmt * { box-sizing: border-box; margin: 0; padding: 0; }
 
-        /* ── New polished card design ── */
         .mgmt .card {
-          background: #f5fafd; border: 1px solid #ddecf4;
+          background: #f8fafd; border: 1px solid #d6e0eb;
           border-radius: 18px; padding: 1.2rem 1.3rem;
-          box-shadow: 0 4px 12px rgba(0,60,80,0.04);
+          box-shadow: 0 4px 12px rgba(0,25,45,0.04);
           transition: all 0.2s;
         }
-        .mgmt .card:hover { background: #f0f7fc; border-color: #b8d5e5; }
+        .mgmt .card:hover { background: #f0f4fb; border-color: #b3c5da; }
 
-        /* ── Filter bar (visible, theme aligned) ── */
+        /* ── Filter bar ── */
         .mgmt .filter-row {
           display: flex; align-items: center; gap: 0.8rem;
           background: white; border-radius: 24px; padding: 0.4rem 1.2rem;
-          border: 1px solid #d9e6f2; margin-bottom: 1rem;
+          border: 1px solid #d6e0eb; margin-bottom: 1rem;
           flex-wrap: wrap;
         }
         .mgmt .filter-label {
-          font-weight: 600; color: #1e3b4a; font-size: 0.8rem;
+          font-weight: 600; color: #1a3a5c; font-size: 0.8rem;
         }
         .mgmt .filter-pill {
-          background: #eaf2f7; border: 1px solid #cbdbe8;
+          background: #eef3fa; border: 1px solid #c2d2e8;
           padding: 0.3rem 1rem; border-radius: 30px;
           font-size: 0.8rem; font-weight: 500; color: #0b2b3b;
           display: flex; align-items: center; gap: 0.3rem;
           cursor: pointer; transition: 0.15s;
         }
         .mgmt .filter-pill.active {
-          background: #c6dde8; border-color: #8bb3c9; font-weight: 600;
+          background: #d3e0f2; border-color: #8faac9; font-weight: 600;
         }
 
-        /* ── KPI cards (light tint, unified) ── */
+        /* ── KPI cards ── */
         .mgmt .kpi-card {
-          background: #f5fafd; border: 1px solid #ddecf4;
+          background: #f8fafd; border: 1px solid #d6e0eb;
           border-radius: 18px; padding: 1.2rem 1.3rem;
-          box-shadow: 0 4px 12px rgba(0,60,80,0.04);
+          box-shadow: 0 4px 12px rgba(0,25,45,0.04);
           display: flex; flex-direction: column; gap: 0.4rem;
           cursor: pointer; transition: all 0.2s;
         }
-        .mgmt .kpi-card:hover { background: #f0f7fc; }
-        .mgmt .kpi-label { text-transform: uppercase; font-size: 0.7rem; font-weight: 700; color: #2e5b6b; letter-spacing: 0.04em; }
-        .mgmt .kpi-value { font-size: 1.7rem; font-weight: 700; color: #0c2d3b; line-height: 1.2; }
-        .mgmt .kpi-meta { font-size: 0.8rem; color: #3d5a6b; display: flex; align-items: center; gap: 0.3rem; }
-        .mgmt .view-link { font-weight: 600; color: #1a5b6b; margin-top: 0.2rem; display: inline-flex; align-items: center; gap: 0.2rem; }
+        .mgmt .kpi-card:hover { background: #f0f4fb; }
+        .mgmt .kpi-label { text-transform: uppercase; font-size: 0.7rem; font-weight: 700; color: #2c5778; letter-spacing: 0.04em; }
+        .mgmt .kpi-value { font-size: 1.7rem; font-weight: 700; color: #0a2940; line-height: 1.2; }
+        .mgmt .kpi-meta { font-size: 0.8rem; color: #3d546b; display: flex; align-items: center; gap: 0.3rem; }
+        .mgmt .view-link { font-weight: 600; color: #1e3a8a; margin-top: 0.2rem; display: inline-flex; align-items: center; gap: 0.2rem; }
 
-        /* ── Hero banner (compact, same light tone) ── */
+        /* ── Hero banner (navy-tinted) ── */
         .mgmt .hero {
-          background: linear-gradient(115deg, #e3f2f9 0%, #d9ecf5 40%, #c9e4f1 100%);
+          background: linear-gradient(115deg, #e6eef8 0%, #dae5f2 40%, #cddcee 100%);
           padding: 1.2rem 1.8rem; border-radius: 16px;
           margin-bottom: 1rem; display: flex; align-items: center;
           justify-content: space-between; flex-wrap: wrap; gap: 1rem;
         }
         .mgmt .hero-title {
-          font-size: 1.2rem; font-weight: 700; color: #0c3b4b;
-          border-left: 5px solid #2c7a8c; padding-left: 1rem;
-          background: rgba(255,255,255,0.5); border-radius: 0 20px 20px 0;
+          font-size: 1.2rem; font-weight: 700; color: #0c2e4a;
+          border-left: 5px solid #1e3a8a; padding-left: 1rem;
+          background: rgba(255,255,255,0.6); border-radius: 0 20px 20px 0;
           padding: 0.4rem 1.2rem 0.4rem 1rem;
         }
         .mgmt .hero-badge {
-          background: rgba(255,255,255,0.7); border: 1px solid #c5dce8;
+          background: rgba(255,255,255,0.75); border: 1px solid #c2d2e8;
           border-radius: 14px; padding: 0.8rem 1.4rem;
           text-align: center;
         }
-        .mgmt .hero-badge .label { color: #2d5a6b; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.2rem; }
-        .mgmt .hero-badge .value { font-size: 2rem; font-weight: 800; color: #0e3b4a; line-height: 1; }
+        .mgmt .hero-badge .label { color: #2c5778; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.2rem; }
+        .mgmt .hero-badge .value { font-size: 2rem; font-weight: 800; color: #0a2940; line-height: 1; }
 
-        /* ── Donor & project tables ── */
-        .mgmt .section-title { font-weight: 700; font-size: 0.95rem; color: #123b45; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.3rem; }
+        /* ── Project & donor tables ── */
+        .mgmt .section-title { font-weight: 700; font-size: 0.95rem; color: #0c2e4a; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.3rem; }
         .mgmt .donor-row {
           display: flex; align-items: center; gap: 0.8rem;
           background: white; border-radius: 12px; padding: 0.5rem 1rem;
-          border: 1px solid #e0edf5; cursor: pointer; margin-bottom: 0.5rem;
+          border: 1px solid #d6e0eb; cursor: pointer; margin-bottom: 0.5rem;
         }
-        .mgmt .progress-bg { height: 5px; background: #dde7ef; border-radius: 10px; width: 70px; overflow: hidden; }
+        .mgmt .progress-bg { height: 5px; background: #e0e8f2; border-radius: 10px; width: 70px; overflow: hidden; }
         .mgmt .progress-fill { height: 100%; border-radius: 10px; }
         .mgmt .badge {
           padding: 0.1rem 0.6rem; border-radius: 12px;
           font-size: 0.7rem; font-weight: 700;
         }
-        .mgmt .badge-danger { background: #fef2f2; color: #b91c1c; }
-        .mgmt .badge-warning { background: #fffbeb; color: #92400e; }
-        .mgmt .badge-success { background: #f0fdf4; color: #166534; }
+        .mgmt .badge-danger { background: #fee2e2; color: #991b1b; }
+        .mgmt .badge-warning { background: #fef3c7; color: #92400e; }
+        .mgmt .badge-success { background: #dcfce7; color: #166534; }
 
         /* ── Responsive grids ── */
         .mgmt .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
@@ -269,10 +268,10 @@ export default function ManagementDashboard({ role }: { role: string }) {
         {/* Greeting & compact hero */}
         <div className="hero">
           <div>
-            <h2 style={{ fontSize: "1.4rem", fontWeight: 700, color: "#0b2f3f", marginBottom: "0.2rem" }}>
+            <h2 style={{ fontSize: "1.4rem", fontWeight: 700, color: "#0a2940", marginBottom: "0.2rem" }}>
               {getGreeting()}, siqbalhwc
             </h2>
-            <p style={{ color: "#1e4a5f", fontSize: "0.85rem" }}>Here's what's happening with your NGO portfolio today</p>
+            <p style={{ color: "#1a3a5c", fontSize: "0.85rem" }}>Here's what's happening with your NGO portfolio today</p>
           </div>
           <div className="hero-title">
             Empowering Social Impact Through Smart Financial Governance
@@ -285,13 +284,13 @@ export default function ManagementDashboard({ role }: { role: string }) {
           <select className="filter-pill active" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
             {[2024,2025,2026,2027].map(y => <option key={y} value={y}>FY {y} ▾</option>)}
           </select>
-          <span style={{ color: "#a0b8c7" }}>|</span>
+          <span style={{ color: "#8b9bb5" }}>|</span>
           <span className="filter-label">Projects:</span>
           <select className="filter-pill active" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
             <option value="">All Projects ▾</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <span style={{ color: "#a0b8c7" }}>|</span>
+          <span style={{ color: "#8b9bb5" }}>|</span>
           <span className="filter-label">Donors:</span>
           <select className="filter-pill active" value={selectedDonorId} onChange={e => setSelectedDonorId(e.target.value)}>
             <option value="">All Donors ▾</option>
@@ -318,7 +317,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </div>
           <div className="kpi-card" onClick={() => router.push("/dashboard/reports/overspent" + detailQuery())}>
             <div className="kpi-label">Portfolio Health</div>
-            <div className="kpi-value" style={{ color: filteredOverspentCount > 0 ? "#c96e2c" : "#0c2d3b" }}>
+            <div className="kpi-value" style={{ color: filteredOverspentCount > 0 ? "#b45309" : "#0a2940" }}>
               {filteredOverspentCount > 0 ? "⚠️ Needs Attention" : "Healthy"}
             </div>
             <div className="kpi-meta">{Math.round((1 - filteredOverspentCount / Math.max(filteredProjectRows.length, 1)) * 100)}% health score</div>
@@ -333,19 +332,19 @@ export default function ManagementDashboard({ role }: { role: string }) {
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
                 <thead>
-                  <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
-                    <th style={{ textAlign: "left", padding: "6px 0", color: "#64748b", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase" }}>Project</th>
-                    <th style={{ textAlign: "left", padding: "6px 0", color: "#64748b", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase" }}>Budget</th>
-                    <th style={{ textAlign: "left", padding: "6px 0", color: "#64748b", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase" }}>Spent</th>
-                    <th style={{ textAlign: "left", padding: "6px 0", color: "#64748b", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase" }}>Util.</th>
-                    <th style={{ textAlign: "right", padding: "6px 0", color: "#64748b", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase" }}>Status</th>
+                  <tr style={{ borderBottom: "1px solid #d6e0eb" }}>
+                    <th style={{ textAlign: "left", padding: "6px 0", color: "#2c5778", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase" }}>Project</th>
+                    <th style={{ textAlign: "left", padding: "6px 0", color: "#2c5778", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase" }}>Budget</th>
+                    <th style={{ textAlign: "left", padding: "6px 0", color: "#2c5778", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase" }}>Spent</th>
+                    <th style={{ textAlign: "left", padding: "6px 0", color: "#2c5778", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase" }}>Util.</th>
+                    <th style={{ textAlign: "right", padding: "6px 0", color: "#2c5778", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase" }}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredProjectRows.map((p, idx) => (
                     <tr key={idx}
                         onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}`)}
-                        style={{ borderBottom: "1px solid #f1f5f9", cursor: "pointer" }}>
+                        style={{ borderBottom: "1px solid #eef2f7", cursor: "pointer" }}>
                       <td style={{ fontWeight: 600, padding: "4px 0" }}>{p.name}</td>
                       <td>{formatPKR(p.budget)}</td>
                       <td>{formatPKR(p.actual)}</td>
@@ -353,7 +352,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
                         <div className="progress-bg">
                           <div className="progress-fill" style={{
                             width: `${Math.min(p.pct, 100)}%`,
-                            background: p.pct > 100 ? "#e68b5c" : p.pct > 80 ? "#f59e0b" : "#22c55e"
+                            background: p.pct > 100 ? "#e68b5c" : p.pct > 80 ? "#f59e0b" : "#1e3a8a"
                           }}></div>
                         </div>
                       </td>
@@ -365,7 +364,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
                     </tr>
                   ))}
                   {filteredProjectRows.length === 0 && (
-                    <tr><td colSpan={5} style={{ textAlign: "center", padding: 12, color: "#94a3b8" }}>No projects found.</td></tr>
+                    <tr><td colSpan={5} style={{ textAlign: "center", padding: 12, color: "#64748b" }}>No projects found.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -377,14 +376,14 @@ export default function ManagementDashboard({ role }: { role: string }) {
             <div className="section-title">💧 Donor Balances</div>
             {filteredDonorBalances.map((d, idx) => (
               <div key={idx} className="donor-row" onClick={() => router.push(`/dashboard/settings/budgets?donor=${d.donor_id}`)}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: d.overspent ? "#dc2626" : "#1d4ed8", flexShrink: 0 }}></div>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: d.overspent ? "#dc2626" : "#1e3a8a", flexShrink: 0 }}></div>
                 <span style={{ flex: 1, fontWeight: 600, fontSize: "0.85rem" }}>{d.name}</span>
                 <span style={{ fontWeight: 700, fontSize: "0.85rem" }}>{formatPKR(d.remaining)}</span>
-                <span style={{ fontSize: "0.75rem", color: "#64748b", minWidth: 30, textAlign: "right" }}>{d.pct}%</span>
+                <span style={{ fontSize: "0.75rem", color: "#2c5778", minWidth: 30, textAlign: "right" }}>{d.pct}%</span>
               </div>
             ))}
             {filteredDonorBalances.length === 0 && (
-              <p style={{ color: "#94a3b8", textAlign: "center" }}>No donor data.</p>
+              <p style={{ color: "#64748b", textAlign: "center" }}>No donor data.</p>
             )}
           </div>
         </div>
@@ -404,15 +403,15 @@ export default function ManagementDashboard({ role }: { role: string }) {
             <div className="kpi-value">{unpaidInvoices}</div>
           </div>
           <div className="card" style={{ flex: 1, minWidth: 140, display: "flex", alignItems: "center", gap: "0.8rem" }}>
-            <span style={{ fontWeight: 700, color: "#1d4b5a" }}>🧑‍🤝‍🧑 CRM</span>
-            <span style={{ background: "#e0eff5", borderRadius: 20, padding: "0.2rem 0.8rem", fontSize: "0.75rem", fontWeight: 600 }}>Customers</span>
-            <span style={{ background: "#e0eff5", borderRadius: 20, padding: "0.2rem 0.8rem", fontSize: "0.75rem", fontWeight: 600 }}>Suppliers</span>
-            <span style={{ background: "#e0eff5", borderRadius: 20, padding: "0.2rem 0.8rem", fontSize: "0.75rem", fontWeight: 600 }}>Investors</span>
+            <span style={{ fontWeight: 700, color: "#0a2940" }}>🧑‍🤝‍🧑 CRM</span>
+            <span style={{ background: "#e0eaf7", borderRadius: 20, padding: "0.2rem 0.8rem", fontSize: "0.75rem", fontWeight: 600, color: "#0a2940" }}>Customers</span>
+            <span style={{ background: "#e0eaf7", borderRadius: 20, padding: "0.2rem 0.8rem", fontSize: "0.75rem", fontWeight: 600, color: "#0a2940" }}>Suppliers</span>
+            <span style={{ background: "#e0eaf7", borderRadius: 20, padding: "0.2rem 0.8rem", fontSize: "0.75rem", fontWeight: 600, color: "#0a2940" }}>Investors</span>
           </div>
         </div>
 
         {/* Footer summary */}
-        <div style={{ background: "white", borderRadius: 12, padding: "0.6rem 1.2rem", border: "1px solid #d6e6f0", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "0.8rem", fontSize: "0.8rem", color: "#1f4b59", fontWeight: 500 }}>
+        <div style={{ background: "white", borderRadius: 12, padding: "0.6rem 1.2rem", border: "1px solid #d6e0eb", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "0.8rem", fontSize: "0.8rem", color: "#2c5778", fontWeight: 500 }}>
           <span>⚠️ Portfolio Health: {filteredOverspentCount > 0 ? "Needs Attention" : "Healthy"}</span>
           <span>💰 Total Budget: {formatPKR(filteredTotalBudget)}</span>
           <span>📈 Utilized: {spentPct}%</span>
