@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
@@ -23,7 +23,7 @@ export default function StockRegisterPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const { role } = useRole()
+  const { role, loading: roleLoading } = useRole()
   const canEdit = role === "admin" || role === "accountant"
   const canView = role === "admin" || role === "accountant"
 
@@ -38,7 +38,7 @@ export default function StockRegisterPage() {
   // Modal state for Add / Edit / Adjust
   const [showModal, setShowModal] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-  const [isAdjustment, setIsAdjustment] = useState(false) // true → adjust stock only
+  const [isAdjustment, setIsAdjustment] = useState(false) // true â†’ adjust stock only
   const [form, setForm] = useState({
     name: "",
     cost_price: 0,
@@ -52,7 +52,7 @@ export default function StockRegisterPage() {
   const [flash, setFlash] = useState("")
   const [formError, setFormError] = useState("")
 
-  // ── 1. Get real company ID ──────────────────────────
+  // â”€â”€ 1. Get real company ID â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -61,7 +61,7 @@ export default function StockRegisterPage() {
     })
   }, [])
 
-  // ── 2. Fetch products ─────────────────────────────
+  // â”€â”€ 2. Fetch products â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const fetchProducts = () => {
     if (!companyId) return
     setLoading(true)
@@ -93,7 +93,7 @@ export default function StockRegisterPage() {
 
   useEffect(() => { fetchProducts() }, [companyId, search, page])
 
-  // ── Generate unique code per company ──────────────
+  // â”€â”€ Generate unique code per company â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const getNextCode = async (): Promise<string> => {
     const { data } = await supabase
       .from("products")
@@ -109,7 +109,7 @@ export default function StockRegisterPage() {
     return `PROD-${String(nextNum).padStart(3, "0")}`
   }
 
-  // ── Open modal for NEW product ────────────────────
+  // â”€â”€ Open modal for NEW product â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const openNew = () => {
     setEditingProduct(null)
     setIsAdjustment(false)
@@ -118,7 +118,7 @@ export default function StockRegisterPage() {
     setShowModal(true)
   }
 
-  // ── Open modal for EDIT product ───────────────────
+  // â”€â”€ Open modal for EDIT product â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const openEdit = (prod: Product) => {
     setEditingProduct(prod)
     setIsAdjustment(false)
@@ -133,7 +133,7 @@ export default function StockRegisterPage() {
     setShowModal(true)
   }
 
-  // ── Open modal for STOCK ADJUSTMENT ────────────────
+  // â”€â”€ Open modal for STOCK ADJUSTMENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const openAdjust = (prod: Product) => {
     setEditingProduct(prod)
     setIsAdjustment(true)
@@ -143,7 +143,7 @@ export default function StockRegisterPage() {
     setShowModal(true)
   }
 
-  // ── Save (Add / Edit / Adjust) ────────────────────
+  // â”€â”€ Save (Add / Edit / Adjust) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleSave = async () => {
     if (!companyId) return
     setSaving(true)
@@ -181,7 +181,7 @@ export default function StockRegisterPage() {
         notes: adjustReason,
       })
 
-      setFlash("✅ Stock adjusted!")
+      setFlash("âœ… Stock adjusted!")
       setSaving(false)
       setShowModal(false)
       fetchProducts()
@@ -213,14 +213,14 @@ export default function StockRegisterPage() {
         .eq("id", editingProduct.id)
         .eq("company_id", companyId)
       if (error) { setFormError(error.message); setSaving(false); return }
-      setFlash("✅ Product updated!")
+      setFlash("âœ… Product updated!")
     } else {
       const code = await getNextCode()
       const { error } = await supabase
         .from("products")
         .insert({ ...payload, code, qty_on_hand: form.opening_qty })
       if (error) { setFormError(error.message); setSaving(false); return }
-      setFlash("✅ Product created!")
+      setFlash("âœ… Product created!")
     }
 
     setSaving(false)
@@ -229,14 +229,15 @@ export default function StockRegisterPage() {
     setTimeout(() => setFlash(""), 3000)
   }
 
-  // ── Soft delete ────────────────────────────────────
+  // â”€â”€ Soft delete â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleDelete = async (id: number) => {
     if (!confirm("Delete this product?")) return
     await supabase.from("products").update({ deleted_at: new Date().toISOString() }).eq("id", id).eq("company_id", companyId)
     fetchProducts()
   }
 
-  if (!companyId) return <div style={{ padding: 40, textAlign: "center" }}>Loading company data…</div>
+  if (!companyId) return <div style={{ padding: 40, textAlign: "center" }}>Loading company dataâ€¦</div>
+if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 40, textAlign: "center" }}><h2>Access Denied</h2></div>
 
   return (
@@ -258,7 +259,7 @@ export default function StockRegisterPage() {
 
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
-          <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>📦 Stock Register</h2>
+          <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>ðŸ“¦ Stock Register</h2>
           <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>Manage inventory, view opening / inflow / outflow / closing</p>
         </div>
         {canEdit && (
@@ -319,7 +320,7 @@ export default function StockRegisterPage() {
                     <td style={{ textAlign: "center" }}>
                       {prod.image_path ? (
                         <img src={prod.image_path} alt="" style={{ width: 30, height: 30, objectFit: "cover", borderRadius: 4 }} />
-                      ) : "—"}
+                      ) : "â€”"}
                     </td>
                     <td>
                       <button className="btn btn-outline" style={{ padding: 4 }} onClick={() => openEdit(prod)}><Edit size={14} /></button>
@@ -357,7 +358,7 @@ export default function StockRegisterPage() {
           <div className="pr-modal" onClick={e => e.stopPropagation()}>
             <div style={{ padding: "20px 24px", borderBottom: "1px solid #E2E8F0", display: "flex", justifyContent: "space-between" }}>
               <h3 style={{ margin: 0 }}>
-                {isAdjustment ? "🔧 Adjust Stock" : editingProduct ? "✏️ Edit Product" : "➕ New Product"}
+                {isAdjustment ? "ðŸ”§ Adjust Stock" : editingProduct ? "âœï¸ Edit Product" : "âž• New Product"}
               </h3>
               <button className="btn-outline" onClick={() => setShowModal(false)}><X size={18} /></button>
             </div>
@@ -406,7 +407,7 @@ export default function StockRegisterPage() {
             <div style={{ padding: "16px 24px", borderTop: "1px solid #E2E8F0", display: "flex", justifyContent: "flex-end", gap: 8 }}>
               <button className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                {saving ? "Saving..." : "💾 Save"}
+                {saving ? "Saving..." : "ðŸ’¾ Save"}
               </button>
             </div>
           </div>

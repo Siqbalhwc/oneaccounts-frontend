@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
@@ -10,7 +10,7 @@ export default function BudgetReportPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const { role } = useRole()
+  const { role, loading: roleLoading } = useRole()
   const canView = role === "admin" || role === "accountant"
 
   const [companyId, setCompanyId] = useState<string>("")
@@ -99,11 +99,12 @@ export default function BudgetReportPage() {
     XLSX.writeFile(wb, "budget_report.xlsx")
   }
 
+if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 24 }}><h2>Access Denied</h2></div>
 
   return (
     <div style={{ padding: 24, fontFamily: "Arial" }}>
-      <h2 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B" }}>📊 Budget Report</h2>
+      <h2 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B" }}>ðŸ“Š Budget Report</h2>
       <p style={{ fontSize: 13, color: "#94A3B8", marginBottom: 16 }}>
         All budget lines with activity assigned. GL codes without activity are hidden to save space.
       </p>
@@ -131,7 +132,7 @@ export default function BudgetReportPage() {
           {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
         <button onClick={handleExport} style={{ padding: "8px 16px", background: "#059669", color: "white", border: "none", borderRadius: 6, cursor: "pointer" }}>
-          📥 Export Excel
+          ðŸ“¥ Export Excel
         </button>
       </div>
 

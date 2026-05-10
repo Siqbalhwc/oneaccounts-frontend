@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect, Fragment } from "react"
 import { createBrowserClient } from "@supabase/ssr"
@@ -10,7 +10,7 @@ export default function BudgetVsActualReportPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const { role } = useRole()
+  const { role, loading: roleLoading } = useRole()
   const canView = role === "admin" || role === "accountant"
 
   const [companyId, setCompanyId] = useState<string>("")
@@ -133,11 +133,12 @@ export default function BudgetVsActualReportPage() {
     XLSX.writeFile(wb, "budget_vs_actual_report.xlsx")
   }
 
+if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 24 }}><h2>Access Denied</h2></div>
 
   return (
     <div style={{ padding: 24, fontFamily: "Arial" }}>
-      <h2 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B" }}>📉 Budget vs Actual Report</h2>
+      <h2 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B" }}>ðŸ“‰ Budget vs Actual Report</h2>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16, marginTop: 8 }}>
         <select value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))} style={{ padding: "6px 12px" }}>
           {[2025,2026,2027,2028].map(y => <option key={y} value={y}>{y}</option>)}
@@ -161,7 +162,7 @@ export default function BudgetVsActualReportPage() {
           {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
         <button onClick={handleExport} style={{ padding: "8px 16px", background: "#059669", color: "white", border: "none", borderRadius: 6, cursor: "pointer" }}>
-          📥 Export Excel
+          ðŸ“¥ Export Excel
         </button>
       </div>
 
@@ -201,7 +202,7 @@ export default function BudgetVsActualReportPage() {
                         <td style={{ border: "1px solid #eee", padding: 4, textAlign: "right" }}>{budget.toLocaleString()}</td>
                         <td style={{ border: "1px solid #eee", padding: 4, textAlign: "right" }}>{actual.toLocaleString()}</td>
                         <td style={{ border: "1px solid #eee", padding: 4, textAlign: "right", color: variance < 0 ? "#EF4444" : "#10B981" }}>
-                          {variance === 0 ? "—" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
+                          {variance === 0 ? "â€”" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
                         </td>
                       </tr>
                     )

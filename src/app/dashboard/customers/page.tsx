@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
@@ -50,7 +50,7 @@ export default function CustomersPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const { role } = useRole()
+  const { role, loading: roleLoading } = useRole()
   const { hasFeature } = usePlan()
   const canEdit = role === "admin" || role === "accountant"
   const canView = role === "admin" || role === "accountant"
@@ -74,13 +74,13 @@ export default function CustomersPage() {
     address: "",
     payment_terms: "Net 30",
     opening_balance: 0,
-    post_as_invoice: true,   // ✅ NEW checkbox
+    post_as_invoice: true,
   })
   const [saving, setSaving] = useState(false)
   const [flash, setFlash] = useState("")
   const [formError, setFormError] = useState("")
 
-  // ── 1. Get real company ID ────────────────────────
+  // get company ID
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -89,7 +89,7 @@ export default function CustomersPage() {
     })
   }, [])
 
-  // ── 2. Fetch customers ────────────────────────────
+  // fetch customers
   const fetchCustomers = () => {
     if (!companyId) return
     setLoading(true)
@@ -120,16 +120,14 @@ export default function CustomersPage() {
     fetchCustomers()
   }, [companyId, search, page])
 
-  // ── WhatsApp helper (feature‑gated) ─────────────
   const getWhatsAppLink = (cust: Customer) => {
     if (!hasFeature("whatsapp_invoice")) return ""
     const phone = (cust.country_code || "").replace(/\D/g, "") + (cust.phone || "").replace(/\D/g, "")
     if (!phone) return ""
-    const msg = `Dear ${cust.name},\n\nThank you for your business. Please find your invoice details attached or contact us for any queries.\n\n– OneAccounts`
+    const msg = `Dear ${cust.name},\n\nThank you for your business. Please find your invoice details attached or contact us for any queries.\n\n— OneAccounts`
     return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
   }
 
-  // ── Open modal for new customer ──────────────────
   const openNew = () => {
     setEditingCustomer(null)
     setForm({
@@ -146,7 +144,6 @@ export default function CustomersPage() {
     setShowModal(true)
   }
 
-  // ── Open modal for editing ───────────────────────
   const openEdit = (cust: Customer) => {
     setEditingCustomer(cust)
     setForm({
@@ -157,13 +154,12 @@ export default function CustomersPage() {
       address: cust.address || "",
       payment_terms: cust.payment_terms || "Net 30",
       opening_balance: cust.opening_balance || 0,
-      post_as_invoice: false, // editing does not automatically post invoice
+      post_as_invoice: false,
     })
     setFormError("")
     setShowModal(true)
   }
 
-  // ── Generate unique code per company ──────────────
   const getNextCode = async (): Promise<string> => {
     const { data } = await supabase
       .from("customers")
@@ -181,7 +177,6 @@ export default function CustomersPage() {
     return `CUST-${String(nextNum).padStart(3, "0")}`
   }
 
-  // ── Save (insert or update) ──────────────────────
   const handleSave = async () => {
     if (!form.name.trim() || !companyId) return
     setSaving(true)
@@ -228,10 +223,9 @@ export default function CustomersPage() {
       }
     }
 
-    // ── If opening balance > 0 and checkbox is on, create an opening invoice ──
+    // Opening invoice logic remains the same (intact from your original)
     if (!errorMsg && createdCustomerId && form.opening_balance > 0 && form.post_as_invoice) {
       try {
-        // Get the customer code
         const { data: custData } = await supabase
           .from("customers")
           .select("code")
@@ -241,7 +235,6 @@ export default function CustomersPage() {
         const custCode = custData?.code || "CUST"
         const invNo = `OPEN-${custCode}-01`
 
-        // Insert invoice
         const { data: inv, error: invErr } = await supabase
           .from("invoices")
           .insert({
@@ -250,7 +243,7 @@ export default function CustomersPage() {
             type: "sale",
             party_id: createdCustomerId,
             date: new Date().toISOString().split("T")[0],
-            due_date: new Date().toISOString().split("T")[0],  // due immediately
+            due_date: new Date().toISOString().split("T")[0],
             total: form.opening_balance,
             paid: 0,
             status: "Unpaid",
@@ -261,7 +254,6 @@ export default function CustomersPage() {
 
         if (invErr) throw new Error(invErr.message)
 
-        // Journal entries: Dr AR (1100), Cr Opening Equity (3100)
         const arAcc = await supabase.from("accounts").select("id").eq("code", "1100").eq("company_id", companyId).single()
         const equityAcc = await supabase.from("accounts").select("id").eq("code", "3100").eq("company_id", companyId).single()
         if (arAcc.data && equityAcc.data) {
@@ -282,7 +274,6 @@ export default function CustomersPage() {
 
         setFlash("✅ Customer created & opening invoice posted!")
       } catch (e: any) {
-        // Customer was created, but invoice failed – we'll still show success for customer
         setFlash("✅ Customer created, but opening invoice failed: " + e.message)
       }
     }
@@ -299,7 +290,6 @@ export default function CustomersPage() {
     }
   }
 
-  // ── Soft delete ─────────────────────────────────
   const handleDelete = async (id: number) => {
     if (!companyId || !canEdit) return
     if (!window.confirm("Delete this customer?")) return
@@ -318,14 +308,22 @@ export default function CustomersPage() {
     }
   }
 
-  // ── Guard clauses ──────────────────────────────
-  if (!companyId) {
-    return <div style={{ padding: 40, textAlign: "center", fontFamily: "Arial" }}>Loading your company data…</div>
+  // Combined guard – wait for company and role
+  if (!companyId || roleLoading || !role) {
+    return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
   }
   if (!canView) {
-    return <div style={{ padding: 40, textAlign: "center" }}><h2>Access Denied</h2></div>
+    return (
+      <div style={{ padding: 40, textAlign: "center" }}>
+        <h2>Access Denied</h2>
+        <p style={{ color: "#94A3B8" }}>You do not have permission to view this page.</p>
+      </div>
+    )
   }
 
+  // ... rest of the component (exactly the same JSX you already have, after the guards)
+  // The full JSX from your original customers page (the table, modal, etc.) should be here.
+  // For brevity, I'm including the return block from your original code immediately after the guard.
   return (
     <div style={{ padding: 24, fontFamily: "Arial", background: "#EFF4FB", minHeight: "100vh" }}>
       <style>{`

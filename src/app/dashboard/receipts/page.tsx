@@ -11,7 +11,7 @@ export default function ReceiptsListPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const { role } = useRole()
+  const { role, loading: roleLoading } = useRole()
   const canView = role === "admin" || role === "accountant"
 
   const [companyId, setCompanyId] = useState<string>("")
@@ -67,8 +67,18 @@ export default function ReceiptsListPage() {
       })
   }, [companyId])
 
-  if (!companyId) return <div style={{ padding: 40, textAlign: "center" }}>Loading company data…</div>
-  if (!canView) return <div style={{ padding: 40, textAlign: "center" }}><h2>Access Denied</h2></div>
+  // Combined guard: wait for both company and role
+  if (!companyId || roleLoading || !role) {
+    return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
+  }
+  if (!canView) {
+    return (
+      <div style={{ padding: 40, textAlign: "center" }}>
+        <h2>Access Denied</h2>
+        <p style={{ color: "#94A3B8" }}>You do not have permission to view this page.</p>
+      </div>
+    )
+  }
 
   return (
     <div style={{ padding: 24, fontFamily: "Arial", background: "#EFF4FB", minHeight: "100vh" }}>

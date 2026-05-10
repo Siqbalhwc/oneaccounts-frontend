@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
@@ -21,7 +21,7 @@ export default function ProjectsPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const { role } = useRole()
+  const { role, loading: roleLoading } = useRole()
   const canEdit = role === "admin" || role === "accountant"
   const canView = role === "admin" || role === "accountant"
 
@@ -45,7 +45,7 @@ export default function ProjectsPage() {
   // Activity project filter
   const [activityProjectFilter, setActivityProjectFilter] = useState<string>("")
 
-  // ── Import state ────────────────────────────────────
+  // â”€â”€ Import state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [showImportModal, setShowImportModal] = useState(false)
   const [importType, setImportType] = useState<"donor" | "project" | "location" | "activity">("donor")
   const [importFile, setImportFile] = useState<File | null>(null)
@@ -96,6 +96,7 @@ export default function ProjectsPage() {
   useEffect(() => { fetchData() }, [companyId, activeTab, activityProjectFilter])
 
   if (!companyId) return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
+if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center" }}><h2>Access Denied</h2></div>
 
   const openNew = () => {
@@ -121,7 +122,7 @@ export default function ProjectsPage() {
   const handleSave = async () => {
     if (!formName.trim() || !companyId) return
     if (activeTab === "activities" && !formProjectId) {
-      setFlash("⚠️ Project is required for activities.")
+      setFlash("âš ï¸ Project is required for activities.")
       return
     }
     setSaving(true)
@@ -139,11 +140,11 @@ export default function ProjectsPage() {
 
     if (editingItem) {
       await supabase.from(table).update(payload).eq("id", editingItem.id).eq("company_id", companyId)
-      setFlash("✅ Updated!")
+      setFlash("âœ… Updated!")
     } else {
       const { error } = await supabase.from(table).insert(payload)
       if (error) { setFlash("Error: " + error.message); setSaving(false); return }
-      setFlash("✅ Created!")
+      setFlash("âœ… Created!")
     }
 
     setSaving(false)
@@ -157,12 +158,12 @@ export default function ProjectsPage() {
     const table = activeTab === "projects" ? "projects" : activeTab === "locations" ? "locations" : activeTab === "activities" ? "activities" : "donors"
     await supabase.from(table).update({ deleted_at: new Date().toISOString() }).eq("id", deleteId).eq("company_id", companyId)
     setDeleteId(null)
-    setFlash("✅ Deleted.")
+    setFlash("âœ… Deleted.")
     fetchData()
     setTimeout(() => setFlash(""), 3000)
   }
 
-  // ── Import handler with upsert (prevents duplicates) ──
+  // â”€â”€ Import handler with upsert (prevents duplicates) â”€â”€
   const handleImport = async () => {
     if (!importFile || !companyId) return
     setImporting(true)
@@ -217,7 +218,7 @@ export default function ProjectsPage() {
             }
           }
         }
-        setFlash(`✅ Imported ${successCount} ${importType}s successfully!`)
+        setFlash(`âœ… Imported ${successCount} ${importType}s successfully!`)
       } catch (err) {
         setFlash("Import failed: " + (err as any).message)
       }
@@ -279,7 +280,7 @@ export default function ProjectsPage() {
 
       <div className="pr-header">
         <div>
-          <div className="pr-title">📁 Projects & Activities</div>
+          <div className="pr-title">ðŸ“ Projects & Activities</div>
           <div className="pr-subtitle">Manage projects, locations, activities, and donors for budgeting and tracking</div>
         </div>
       </div>
@@ -342,8 +343,8 @@ export default function ProjectsPage() {
             <div key={item.id} className="pr-table-row">
               <span style={{ fontWeight: 600 }}>{item.name}{item.description ? <span style={{ fontSize: 11, color: "#64748B", marginLeft: 8 }}>({item.description})</span> : ""}</span>
               {activeTab === "activities" && <span>{item.project_name}</span>}
-              {activeTab === "donors" && <span style={{ fontFamily: "monospace", fontSize: 12 }}>{(item as any).code || "—"}</span>}
-              <span>{item.is_active ? "✅" : "❌"}</span>
+              {activeTab === "donors" && <span style={{ fontFamily: "monospace", fontSize: 12 }}>{(item as any).code || "â€”"}</span>}
+              <span>{item.is_active ? "âœ…" : "âŒ"}</span>
               <button className="pr-icon-btn" onClick={() => openEdit(item)}><Edit size={14} /></button>
               <button className="pr-icon-btn danger" onClick={() => setDeleteId(item.id)}><Trash2 size={14} /></button>
             </div>
@@ -356,7 +357,7 @@ export default function ProjectsPage() {
         <div className="pr-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="pr-modal" onClick={e => e.stopPropagation()}>
             <div className="pr-modal-header">
-              <div className="pr-modal-title">{editingItem ? "✏️ Edit" : "➕ Add"} {getEntityLabel().slice(0, -1)}</div>
+              <div className="pr-modal-title">{editingItem ? "âœï¸ Edit" : "âž• Add"} {getEntityLabel().slice(0, -1)}</div>
               <button className="pr-icon-btn" onClick={() => setShowModal(false)}><X size={18} /></button>
             </div>
             <div className="pr-modal-body">
@@ -380,7 +381,7 @@ export default function ProjectsPage() {
                 <div>
                   <label className="pr-field-label">Project *</label>
                   <select className="pr-field-input" value={formProjectId ?? ""} onChange={e => setFormProjectId(e.target.value ? Number(e.target.value) : null)}>
-                    <option value="">— Select Project —</option>
+                    <option value="">â€” Select Project â€”</option>
                     {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
@@ -393,7 +394,7 @@ export default function ProjectsPage() {
             <div className="pr-modal-footer">
               <button className="pr-btn pr-btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
               <button className="pr-btn pr-btn-primary" onClick={handleSave} disabled={saving || !formName.trim() || (activeTab === "activities" && !formProjectId)}>
-                {saving ? "Saving..." : "💾 Save"}
+                {saving ? "Saving..." : "ðŸ’¾ Save"}
               </button>
             </div>
           </div>
@@ -404,7 +405,7 @@ export default function ProjectsPage() {
       {deleteId && canEdit && (
         <div className="pr-modal-overlay">
           <div className="pr-modal" style={{ maxWidth: 400 }}>
-            <div className="pr-modal-header"><div className="pr-modal-title">⚠️ Delete?</div></div>
+            <div className="pr-modal-header"><div className="pr-modal-title">âš ï¸ Delete?</div></div>
             <div className="pr-modal-body" style={{ textAlign: "center" }}><p style={{ color: "#EF4444" }}>This cannot be undone.</p></div>
             <div className="pr-modal-footer" style={{ justifyContent: "center" }}>
               <button className="pr-btn pr-btn-outline" onClick={() => setDeleteId(null)}>Cancel</button>

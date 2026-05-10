@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect, Fragment } from "react"
 import { createBrowserClient } from "@supabase/ssr"
@@ -13,7 +13,7 @@ export default function BudgetsPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const { role } = useRole()
+  const { role, loading: roleLoading } = useRole()
   const canEdit = role === "admin" || role === "accountant"
   const canView = role === "admin" || role === "accountant"
 
@@ -44,7 +44,7 @@ export default function BudgetsPage() {
   const [budgetImportFile, setBudgetImportFile] = useState<File | null>(null)
   const [importingBudget, setImportingBudget] = useState(false)
 
-  // ── Load master data ─────────────────────────────────
+  // â”€â”€ Load master data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -74,7 +74,7 @@ export default function BudgetsPage() {
       .then(r => r.data && setAllActivities(r.data))
   }, [companyId, selectedProjectId])
 
-  // ── Load budgets and actuals ──────────────────────────
+  // â”€â”€ Load budgets and actuals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!companyId || !selectedProjectId) { setData({}); setLoading(false); return }
     if (businessType === "ngo" && !selectedDonorId) { setData({}); setLoading(false); return }
@@ -153,11 +153,11 @@ export default function BudgetsPage() {
     })
   }
 
-  // ── Save – hard‑delete then insert, no duplicates possible ──
+  // â”€â”€ Save â€“ hardâ€‘delete then insert, no duplicates possible â”€â”€
   const handleSave = async () => {
     if (!companyId || !canEdit) return
-    if (!selectedProjectId) { setFlash("⚠️ Please select a Project first."); return }
-    if (businessType === "ngo" && !selectedDonorId) { setFlash("⚠️ Please select a Donor for NGO budgeting."); return }
+    if (!selectedProjectId) { setFlash("âš ï¸ Please select a Project first."); return }
+    if (businessType === "ngo" && !selectedDonorId) { setFlash("âš ï¸ Please select a Donor for NGO budgeting."); return }
     setSaving(true); setFlash("")
 
     const uniqueKeys = new Set<string>()
@@ -185,7 +185,7 @@ export default function BudgetsPage() {
       }
     }
 
-    // Hard‑delete all active rows for this project + donor + fiscal year
+    // Hardâ€‘delete all active rows for this project + donor + fiscal year
     let deleteQuery = supabase
       .from("budgets")
       .delete()
@@ -202,18 +202,18 @@ export default function BudgetsPage() {
     if (rowsToInsert.length > 0) {
       const { error } = await supabase.from("budgets").insert(rowsToInsert)
       if (error) {
-        setFlash("❌ Error: " + error.message)
+        setFlash("âŒ Error: " + error.message)
         setSaving(false)
         return
       }
     }
 
-    setFlash("✅ Budget saved!")
+    setFlash("âœ… Budget saved!")
     setSaving(false)
     setTimeout(() => setFlash(""), 4000)
   }
 
-  // ── Export functions ──────────────────────────────────
+  // â”€â”€ Export functions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const exportExcel = () => {
     const rows: any[] = []
     for (const actId of Object.keys(data)) {
@@ -276,7 +276,7 @@ export default function BudgetsPage() {
 
   const handleBudgetImport = async () => {
     if (!budgetImportFile || !selectedProjectId || (businessType === "ngo" && !selectedDonorId)) {
-      setFlash("⚠️ Please select a project and donor (if NGO) before importing.")
+      setFlash("âš ï¸ Please select a project and donor (if NGO) before importing.")
       return
     }
     setImportingBudget(true)
@@ -309,7 +309,7 @@ export default function BudgetsPage() {
           }
         }
       }
-      setFlash(`✅ Imported ${inserted} budget rows!`)
+      setFlash(`âœ… Imported ${inserted} budget rows!`)
       setImportingBudget(false)
       setBudgetImportFile(null)
       window.location.reload()
@@ -319,6 +319,7 @@ export default function BudgetsPage() {
 
   const displayActivities = filterActivityId ? allActivities.filter(a => a.id == filterActivityId) : allActivities
 
+if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center" }}><h2>Access Denied</h2></div>
 
   return (
@@ -337,7 +338,7 @@ export default function BudgetsPage() {
       `}</style>
 
       <div className="budget-shell">
-        <h2 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B" }}>💰 Budget vs Actuals</h2>
+        <h2 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B" }}>ðŸ’° Budget vs Actuals</h2>
         <p style={{ fontSize: 13, color: "#94A3B8", marginTop: 2 }}>
           {businessType === "ngo"
             ? "Enter budgets per Project, Donor, Activity, and Location"
@@ -451,7 +452,7 @@ export default function BudgetsPage() {
                                   </td>
                                   <td style={{ fontSize: 10 }}>{cell.actual.toLocaleString()}</td>
                                   <td style={{ fontSize: 10, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "#64748B" }}>
-                                    {variance === 0 ? "—" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
+                                    {variance === 0 ? "â€”" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
                                   </td>
                                 </Fragment>
                               )
@@ -459,7 +460,7 @@ export default function BudgetsPage() {
                             <td style={{ fontWeight: 600 }}>{rowBudget.toLocaleString()}</td>
                             <td style={{ fontWeight: 600 }}>{rowActual.toLocaleString()}</td>
                             <td style={{ fontWeight: 600, color: (rowBudget - rowActual) < 0 ? "#EF4444" : (rowBudget - rowActual) > 0 ? "#10B981" : "#64748B" }}>
-                              {(rowBudget - rowActual) === 0 ? "—" : (rowBudget - rowActual > 0 ? "+" : "") + (rowBudget - rowActual).toLocaleString()}
+                              {(rowBudget - rowActual) === 0 ? "â€”" : (rowBudget - rowActual > 0 ? "+" : "") + (rowBudget - rowActual).toLocaleString()}
                             </td>
                           </tr>
                         )
@@ -495,7 +496,7 @@ export default function BudgetsPage() {
                               <td>{sb.toLocaleString()}</td>
                               <td>{sa.toLocaleString()}</td>
                               <td style={{ color: sv < 0 ? "#EF4444" : sv > 0 ? "#10B981" : "#64748B" }}>
-                                {sv === 0 ? "—" : (sv > 0 ? "+" : "") + sv.toLocaleString()}
+                                {sv === 0 ? "â€”" : (sv > 0 ? "+" : "") + sv.toLocaleString()}
                               </td>
                             </Fragment>
                           )
@@ -503,7 +504,7 @@ export default function BudgetsPage() {
                         <td>{actTotalBudget.toLocaleString()}</td>
                         <td>{actTotalActual.toLocaleString()}</td>
                         <td style={{ color: (actTotalBudget - actTotalActual) < 0 ? "#EF4444" : (actTotalBudget - actTotalActual) > 0 ? "#10B981" : "#64748B" }}>
-                          {(actTotalBudget - actTotalActual) === 0 ? "—" : (actTotalBudget - actTotalActual > 0 ? "+" : "") + (actTotalBudget - actTotalActual).toLocaleString()}
+                          {(actTotalBudget - actTotalActual) === 0 ? "â€”" : (actTotalBudget - actTotalActual > 0 ? "+" : "") + (actTotalBudget - actTotalActual).toLocaleString()}
                         </td>
                       </tr>
                     </Fragment>
@@ -528,7 +529,7 @@ export default function BudgetsPage() {
                           <td>{gb.toLocaleString()}</td>
                           <td>{ga.toLocaleString()}</td>
                           <td style={{ color: gv < 0 ? "#EF4444" : gv > 0 ? "#10B981" : "#64748B" }}>
-                            {gv === 0 ? "—" : (gv > 0 ? "+" : "") + gv.toLocaleString()}
+                            {gv === 0 ? "â€”" : (gv > 0 ? "+" : "") + gv.toLocaleString()}
                           </td>
                         </Fragment>
                       )
@@ -547,7 +548,7 @@ export default function BudgetsPage() {
                         return sum
                       }, 0).toLocaleString()}
                     </td>
-                    <td>—</td>
+                    <td>â€”</td>
                   </tr>
                 )}
               </tbody>
@@ -557,7 +558,7 @@ export default function BudgetsPage() {
               {canEdit && (
                 <>
                   <button className="btn-primary" onClick={handleSave} disabled={saving}>
-                    {saving ? "Saving..." : "💾 Save Budget"}
+                    {saving ? "Saving..." : "ðŸ’¾ Save Budget"}
                   </button>
                   <button className="btn-primary" style={{ background: '#059669' }} onClick={() => document.getElementById('budget-file-input')?.click()}>
                     <Upload size={14} /> Import Budget

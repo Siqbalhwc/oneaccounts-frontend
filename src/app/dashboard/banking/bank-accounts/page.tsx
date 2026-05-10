@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
@@ -23,7 +23,7 @@ export default function BankAccountsPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const { role } = useRole()
+  const { role, loading: roleLoading } = useRole()
   const canEdit = role === "admin" || role === "accountant"
   const canView = role === "admin" || role === "accountant"
 
@@ -43,14 +43,14 @@ export default function BankAccountsPage() {
   const [isActive, setIsActive] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  // ⚡ New GL Account modal state
+  // âš¡ New GL Account modal state
   const [showNewAccountModal, setShowNewAccountModal] = useState(false)
   const [newAccountCode, setNewAccountCode] = useState("")
   const [newAccountName, setNewAccountName] = useState("")
   const [newAccountBalance, setNewAccountBalance] = useState("0")
   const [creatingAccount, setCreatingAccount] = useState(false)
 
-  // ── Bullet‑proof company ID ──────────────────────────────
+  // â”€â”€ Bulletâ€‘proof company ID â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
@@ -191,7 +191,7 @@ export default function BankAccountsPage() {
     if (error) {
       setFlash("Error creating account: " + error.message)
     } else {
-      setFlash("✅ Account created! You can now link bank details.")
+      setFlash("âœ… Account created! You can now link bank details.")
       setShowNewAccountModal(false)
       setNewAccountCode(""); setNewAccountName(""); setNewAccountBalance("0")
       fetchData()
@@ -234,7 +234,7 @@ export default function BankAccountsPage() {
 
       <div className="ba-header">
         <div>
-          <div className="ba-title">🏦 Bank Accounts</div>
+          <div className="ba-title">ðŸ¦ Bank Accounts</div>
           <div className="ba-subtitle">
             {canEdit ? "Manage your bank and cash accounts" : "View bank accounts"}
           </div>
@@ -254,7 +254,7 @@ export default function BankAccountsPage() {
       {flash && (
         <div
           style={{
-            background: flash.includes("✅") || flash.includes("updated") || flash.includes("deleted") ? "#F0FDF4" : "#FEF2F2",
+            background: flash.includes("âœ…") || flash.includes("updated") || flash.includes("deleted") ? "#F0FDF4" : "#FEF2F2",
             border: "1px solid #BBF7D0",
             color: "#15803D",
             padding: "10px 16px",
@@ -289,10 +289,10 @@ export default function BankAccountsPage() {
             <div key={b.id} className="ba-table-row">
               <span style={{ fontWeight: 600, color: "#1E3A8A" }}>{b.code} - {b.name}</span>
               <span>{b.bank_name}</span>
-              <span className="ba-hide-mobile" style={{ color: "#64748B" }}>{b.account_number || "—"}</span>
-              <span className="ba-hide-mobile" style={{ color: "#64748B" }}>{b.branch || "—"}</span>
+              <span className="ba-hide-mobile" style={{ color: "#64748B" }}>{b.account_number || "â€”"}</span>
+              <span className="ba-hide-mobile" style={{ color: "#64748B" }}>{b.branch || "â€”"}</span>
               <span style={{ fontWeight: 600 }}>PKR {(b.balance || 0).toLocaleString()}</span>
-              <span>{b.is_active ? "✅" : "❌"}</span>
+              <span>{b.is_active ? "âœ…" : "âŒ"}</span>
               {canEdit && (
                 <button className="ba-icon-btn" onClick={() => openEdit(b)}>
                   <Edit size={13} />
@@ -317,7 +317,7 @@ export default function BankAccountsPage() {
         <div className="ba-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="ba-modal" onClick={(e) => e.stopPropagation()}>
             <div className="ba-modal-header">
-              <div className="ba-modal-title">{editing ? "✏️ Edit Bank Account" : "➕ Add Bank Account"}</div>
+              <div className="ba-modal-title">{editing ? "âœï¸ Edit Bank Account" : "âž• Add Bank Account"}</div>
               <button className="ba-icon-btn" onClick={() => setShowModal(false)}><X size={18} /></button>
             </div>
             <div className="ba-modal-body">
@@ -352,7 +352,7 @@ export default function BankAccountsPage() {
             </div>
             <div className="ba-modal-footer">
               <button className="ba-btn ba-btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
-              <button className="ba-btn ba-btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "💾 Save"}</button>
+              <button className="ba-btn ba-btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "ðŸ’¾ Save"}</button>
             </div>
           </div>
         </div>
@@ -363,7 +363,7 @@ export default function BankAccountsPage() {
         <div className="ba-modal-overlay" onClick={() => setShowNewAccountModal(false)}>
           <div className="ba-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 450 }}>
             <div className="ba-modal-header">
-              <div className="ba-modal-title">➕ New Cash / Bank Account</div>
+              <div className="ba-modal-title">âž• New Cash / Bank Account</div>
               <button className="ba-icon-btn" onClick={() => setShowNewAccountModal(false)}><X size={18}/></button>
             </div>
             <div className="ba-modal-body">
@@ -394,7 +394,7 @@ export default function BankAccountsPage() {
       {deleteId && canEdit && (
         <div className="ba-modal-overlay">
           <div className="ba-modal" style={{ maxWidth: 400 }}>
-            <div className="ba-modal-header"><div className="ba-modal-title">⚠️ Delete Bank Account?</div></div>
+            <div className="ba-modal-header"><div className="ba-modal-title">âš ï¸ Delete Bank Account?</div></div>
             <div className="ba-modal-body" style={{ textAlign: "center" }}>
               <p style={{ color: "#EF4444" }}>This will remove the bank details but keep the GL account.</p>
             </div>

@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
@@ -24,7 +24,7 @@ export default function SuppliersPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const { role } = useRole()
+  const { role, loading: roleLoading } = useRole()
   const canEdit = role === "admin" || role === "accountant"
   const canView = role === "admin" || role === "accountant"
 
@@ -197,8 +197,18 @@ export default function SuppliersPage() {
     fetchSuppliers()
   }
 
-  if (!companyId) return <div style={{ padding: 40 }}>Loading…</div>
-  if (!canView) return <div style={{ padding: 40 }}><h2>Access Denied</h2></div>
+  // Combined guard – wait for both company and role
+  if (!companyId || roleLoading || !role) {
+    return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
+  }
+  if (!canView) {
+    return (
+      <div style={{ padding: 40, textAlign: "center" }}>
+        <h2>Access Denied</h2>
+        <p style={{ color: "#94A3B8" }}>You do not have permission to view this page.</p>
+      </div>
+    )
+  }
 
   return (
     <div style={{ padding: 24, fontFamily: "Arial", background: "#EFF4FB", minHeight: "100vh" }}>
