@@ -68,7 +68,7 @@ export default function BillDetailPage() {
     if (!companyId || !billId) return
     setLoading(true)
 
-    // 1. Fetch bill (no join)
+    // 1. Fetch bill
     supabase
       .from("invoices")
       .select("*")
@@ -77,11 +77,13 @@ export default function BillDetailPage() {
       .eq("type", "purchase")
       .single()
       .then(({ data }) => {
-        if (!data) { setLoading(false); return }
-
+        if (!data) {
+          setLoading(false)
+          return
+        }
         const b: Bill = data
 
-        // 2. Fetch supplier separately using party_id
+        // 2. Fetch supplier separately
         if (b.party_id) {
           supabase
             .from("suppliers")
@@ -91,7 +93,7 @@ export default function BillDetailPage() {
             .then(({ data: supp }) => {
               b.supplier = supp || undefined
             })
-            .finally(() => {
+            .then(() => {
               // 3. Fetch items
               supabase
                 .from("invoice_items")
@@ -105,9 +107,17 @@ export default function BillDetailPage() {
                 })
             })
         } else {
-          b.items = []
-          setBill(b)
-          setLoading(false)
+          // No party_id
+          supabase
+            .from("invoice_items")
+            .select("*")
+            .eq("invoice_id", b.id)
+            .eq("company_id", companyId)
+            .then(({ data: items }) => {
+              b.items = items || []
+              setBill(b)
+              setLoading(false)
+            })
         }
       })
 
@@ -134,7 +144,6 @@ export default function BillDetailPage() {
     if (!bill || !bill.supplier) return ""
     const phone = (bill.supplier.phone || "").replace(/\D/g, "")
     if (!phone) return ""
-    // Suppliers don't have country_code, default to +92
     const msg = `Dear ${bill.supplier.name},\n\nYour purchase bill ${bill.invoice_no} for PKR ${bill.total?.toLocaleString()} is ready.\nDate: ${bill.date}\nDue: ${bill.due_date}\n\nThank you for your business.\n— OneAccounts`
     return `https://wa.me/92${phone}?text=${encodeURIComponent(msg)}`
   }
