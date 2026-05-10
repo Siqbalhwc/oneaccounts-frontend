@@ -14,11 +14,9 @@ export default function NewJournalPage() {
   const [activities, setActivities] = useState<any[]>([])
   const [companyId, setCompanyId] = useState<string>("")
 
-  const [entryNo, setEntryNo] = useState("")
   const [entryDate, setEntryDate] = useState(new Date().toISOString().split("T")[0])
   const [description, setDescription] = useState("")
 
-  // Line structure: now includes optional line description, auto‑fetched project/donor names
   const [lines, setLines] = useState<any[]>([
     { account_id: null, debit: 0, credit: 0, line_description: "", location_id: null, activity_id: null, project_id: null, project_name: "", donor_name: "" },
     { account_id: null, debit: 0, credit: 0, line_description: "", location_id: null, activity_id: null, project_id: null, project_name: "", donor_name: "" },
@@ -28,7 +26,7 @@ export default function NewJournalPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  // ── Load data ──
+  // ── Load master data ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -44,15 +42,31 @@ export default function NewJournalPage() {
       supabase.from("activities").select("id,name").eq("company_id", cid).order("name")
         .then(r => r.data && setActivities(r.data))
     })
-
-    supabase.from("journal_entries").select("entry_no").order("entry_no", { ascending: false }).limit(1).then(r => {
-      if (r.data && r.data.length > 0) {
-        const parts = r.data[0].entry_no.split("-")
-        const num = parseInt(parts[parts.length - 1]) || 0
-        setEntryNo(`JE-${new Date().toISOString().split("T")[0].replace(/-/g, "")}-${String(num + 1).padStart(3, "0")}`)
-      } else setEntryNo(`JE-${new Date().toISOString().split("T")[0].replace(/-/g, "")}-001`)
-    })
   }, [])
+
+  // ── Generate a unique entry number just before insertion ──
+  const generateEntryNo = async (): Promise<string> => {
+    // Get the latest entry_no for today's date prefix to avoid duplicate
+    const datePrefix = new Date().toISOString().split("T")[0].replace(/-/g, "")
+    const { data } = await supabase
+      .from("journal_entries")
+      .select("entry_no")
+      .order("entry_no", { ascending: false })
+      .limit(5) // grab a few in case some are malformed
+
+    let maxNum = 0
+    if (data) {
+      for (const row of data) {
+        const match = row.entry_no?.match(new RegExp(`JE-${datePrefix}-(\\d+)`))
+        if (match) {
+          const num = parseInt(match[1], 10)
+          if (!isNaN(num) && num > maxNum) maxNum = num
+        }
+      }
+    }
+    const nextNum = maxNum + 1
+    return `JE-${datePrefix}-${String(nextNum).padStart(3, "0")}`
+  }
 
   const addLine = () => setLines([...lines, {
     account_id: null, debit: 0, credit: 0, line_description: "",
@@ -61,16 +75,14 @@ export default function NewJournalPage() {
   }])
   const removeLine = (i: number) => lines.length > 2 && setLines(lines.filter((_, idx) => idx !== i))
 
-  // ── Fetch project & donor when activity is selected ──
+  // ── Fetch project & donor when activity changes ──
   const fetchActivityDetails = async (activityId: number) => {
     try {
-      // Project from activity
       const { data: actData } = await supabase.from("activities")
         .select("project_id, projects(name)")
         .eq("id", activityId).single()
       const proj = { id: actData?.project_id ?? null, name: (actData?.projects as any)?.name || "" }
 
-      // Primary donor from budgets (most funded)
       const { data: donorData } = await supabase.from("budgets")
         .select("donor_id, donors(name)")
         .eq("company_id", companyId)
@@ -91,7 +103,6 @@ export default function NewJournalPage() {
     const updated = [...lines]
     updated[i] = { ...updated[i], [field]: field === "debit" || field === "credit" ? Number(value) : value }
 
-    // Account changed → fill default location/activity from account
     if (field === "account_id" && value) {
       const acc = accounts.find(a => a.id == value)
       if (acc) {
@@ -100,7 +111,6 @@ export default function NewJournalPage() {
       }
     }
 
-    // Activity changed → auto‑fetch project & donor
     if (field === "activity_id" && value) {
       const { project_id, project_name, donor_name } = await fetchActivityDetails(Number(value))
       updated[i].project_id = project_id
@@ -108,7 +118,6 @@ export default function NewJournalPage() {
       updated[i].donor_name = donor_name
     }
 
-    // Debit / Credit mutual exclusion
     if (field === "debit" && updated[i].debit > 0) updated[i].credit = 0
     if (field === "credit" && updated[i].credit > 0) updated[i].debit = 0
 
@@ -120,42 +129,63 @@ export default function NewJournalPage() {
   const isBalanced = Math.abs(totalDebit - totalCredit) < 0.01 && totalDebit > 0
 
   const handleSubmit = async () => {
-    if (!entryNo || !description) { setError("Entry No and Description required"); return }
+    if (!description) { setError("Description is required"); return }
     if (!isBalanced) { setError("Debits must equal Credits"); return }
     setLoading(true); setError("")
 
-    const { data: je } = await supabase.from("journal_entries").insert({
-      company_id: companyId,
-      entry_no: entryNo, date: entryDate, description
-    }).select("id").single()
+    // Generate number now, with fresh query
+    const entryNo = await generateEntryNo()
 
-    if (je) {
-      const validLines = lines.filter(l => l.account_id && (l.debit > 0 || l.credit > 0))
-      await supabase.from("journal_lines").insert(
-        validLines.map(l => ({
-          company_id: companyId,
-          entry_id: je.id,
-          account_id: l.account_id,
-          debit: l.debit,
-          credit: l.credit,
-          description: l.line_description || null,
-          location_id: l.location_id || null,
-          activity_id: l.activity_id || null,
-          project_id: l.project_id || null,
-        }))
-      )
+    try {
+      const { data: je, error: insertErr } = await supabase.from("journal_entries").insert({
+        company_id: companyId,
+        entry_no: entryNo,
+        date: entryDate,
+        description,
+      }).select("id").single()
 
-      for (const l of validLines) {
-        const { data: acc } = await supabase.from("accounts")
-          .select("balance").eq("id", l.account_id).eq("company_id", companyId).single()
-        if (acc) {
-          const newBal = acc.balance + (l.debit || 0) - (l.credit || 0)
-          await supabase.from("accounts").update({ balance: newBal }).eq("id", l.account_id).eq("company_id", companyId)
+      if (insertErr) {
+        if (insertErr.message.includes("duplicate key")) {
+          setError("Entry number conflict – please try again.")
+          setLoading(false)
+          return
         }
+        setError(insertErr.message)
+        setLoading(false)
+        return
       }
 
-      setFlash(`✅ Journal Entry ${entryNo} posted!`)
-      setTimeout(() => router.push("/dashboard/journal"), 1500)
+      if (je) {
+        const validLines = lines.filter(l => l.account_id && (l.debit > 0 || l.credit > 0))
+        await supabase.from("journal_lines").insert(
+          validLines.map(l => ({
+            company_id: companyId,
+            entry_id: je.id,
+            account_id: l.account_id,
+            debit: l.debit,
+            credit: l.credit,
+            description: l.line_description || null,
+            location_id: l.location_id || null,
+            activity_id: l.activity_id || null,
+            project_id: l.project_id || null,
+          }))
+        )
+
+        // Update balances
+        for (const l of validLines) {
+          const { data: acc } = await supabase.from("accounts")
+            .select("balance").eq("id", l.account_id).eq("company_id", companyId).single()
+          if (acc) {
+            const newBal = acc.balance + (l.debit || 0) - (l.credit || 0)
+            await supabase.from("accounts").update({ balance: newBal }).eq("id", l.account_id).eq("company_id", companyId)
+          }
+        }
+
+        setFlash(`✅ Journal Entry ${entryNo} posted!`)
+        setTimeout(() => router.push("/dashboard/journal"), 1500)
+      }
+    } catch (e: any) {
+      setError("Network error: " + e.message)
     }
     setLoading(false)
   }
@@ -181,9 +211,9 @@ export default function NewJournalPage() {
         <div style={{ background: "white", borderRadius: 12, padding: 24, border: "1px solid #E2E8F0", marginBottom: 16 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 4 }}>Entry No *</label>
-              <input value={entryNo} onChange={e => setEntryNo(e.target.value)}
-                style={{ width: "100%", height: 40, border: "1.5px solid #E2E8F0", borderRadius: 8, padding: "0 12px", fontSize: 13 }} />
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 4 }}>Entry No</label>
+              <input value="Auto‑generated" disabled
+                style={{ width: "100%", height: 40, border: "1.5px solid #E2E8F0", borderRadius: 8, padding: "0 12px", fontSize: 13, background: "#F8FAFC", color: "#94A3B8", cursor: "not-allowed" }} />
             </div>
             <div>
               <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 4 }}>Date *</label>
@@ -207,7 +237,6 @@ export default function NewJournalPage() {
             </button>
           </div>
 
-          {/* Column headings: Account (same size), Debit, Credit, Description (takes over old Project space), Location, Activity, Delete */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px 1fr 110px 110px 40px", gap: 8, fontSize: 10, fontWeight: 700, color: "#94A3B8", padding: "0 0 8px", alignItems: "end" }}>
             <span>Account</span>
             <span style={{ textAlign: "right", paddingRight: 8 }}>Debit</span>
@@ -219,35 +248,37 @@ export default function NewJournalPage() {
           </div>
 
           {lines.map((l, i) => (
-            <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px 1fr 110px 110px 40px", gap: 8, alignItems: "start", marginBottom: 8 }}>
-              <select value={l.account_id || ""} onChange={e => updateLine(i, "account_id", e.target.value)}
-                style={{ height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 8px", fontSize: 12, width: "100%" }}>
-                <option value="">Select account...</option>
-                {accounts.map(a => <option key={a.id} value={a.id}>{a.code} - {a.name}</option>)}
-              </select>
-              <input type="number" value={l.debit || ""} onChange={e => updateLine(i, "debit", e.target.value)}
-                style={{ width: "100%", height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 8px", fontSize: 12, textAlign: "right" }} />
-              <input type="number" value={l.credit || ""} onChange={e => updateLine(i, "credit", e.target.value)}
-                style={{ width: "100%", height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 8px", fontSize: 12, textAlign: "right" }} />
-              <input type="text" value={l.line_description || ""} onChange={e => updateLine(i, "line_description", e.target.value)}
-                placeholder="Line description"
-                style={{ width: "100%", height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 8px", fontSize: 12 }} />
-              <select value={l.location_id || ""} onChange={e => updateLine(i, "location_id", e.target.value ? Number(e.target.value) : null)}
-                style={{ width: "100%", height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 4px", fontSize: 11 }}>
-                <option value="">—</option>
-                {locations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
-              </select>
-              <select value={l.activity_id || ""} onChange={e => updateLine(i, "activity_id", e.target.value ? Number(e.target.value) : null)}
-                style={{ width: "100%", height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 4px", fontSize: 11 }}>
-                <option value="">—</option>
-                {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
-              <button onClick={() => removeLine(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", height: 38 }}>
-                <Trash2 size={14} />
-              </button>
-              {/* Auto‑fetched project & donor info */}
+            <div key={i} style={{ marginBottom: 8 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px 1fr 110px 110px 40px", gap: 8, alignItems: "start" }}>
+                <select value={l.account_id || ""} onChange={e => updateLine(i, "account_id", e.target.value)}
+                  style={{ height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 8px", fontSize: 12, width: "100%" }}>
+                  <option value="">Select account...</option>
+                  {accounts.map(a => <option key={a.id} value={a.id}>{a.code} - {a.name}</option>)}
+                </select>
+                <input type="number" value={l.debit || ""} onChange={e => updateLine(i, "debit", e.target.value)}
+                  style={{ width: "100%", height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 8px", fontSize: 12, textAlign: "right" }} />
+                <input type="number" value={l.credit || ""} onChange={e => updateLine(i, "credit", e.target.value)}
+                  style={{ width: "100%", height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 8px", fontSize: 12, textAlign: "right" }} />
+                <input type="text" value={l.line_description || ""} onChange={e => updateLine(i, "line_description", e.target.value)}
+                  placeholder="Line description"
+                  style={{ width: "100%", height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 8px", fontSize: 12 }} />
+                <select value={l.location_id || ""} onChange={e => updateLine(i, "location_id", e.target.value ? Number(e.target.value) : null)}
+                  style={{ width: "100%", height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 4px", fontSize: 11 }}>
+                  <option value="">—</option>
+                  {locations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+                </select>
+                <select value={l.activity_id || ""} onChange={e => updateLine(i, "activity_id", e.target.value ? Number(e.target.value) : null)}
+                  style={{ width: "100%", height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 4px", fontSize: 11 }}>
+                  <option value="">—</option>
+                  {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+                <button onClick={() => removeLine(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", height: 38 }}>
+                  <Trash2 size={14} />
+                </button>
+              </div>
+              {/* Auto‑fetched tags */}
               {l.activity_id && (
-                <div style={{ gridColumn: "1 / -1", fontSize: 11, color: "#64748B", display: "flex", gap: 16, paddingLeft: 8 }}>
+                <div style={{ fontSize: 11, color: "#64748B", display: "flex", gap: 16, paddingLeft: 8, marginTop: 2 }}>
                   <span>Project: <strong>{l.project_name || "—"}</strong></span>
                   <span>Donor: <strong>{l.donor_name || "—"}</strong></span>
                 </div>
@@ -255,15 +286,12 @@ export default function NewJournalPage() {
             </div>
           ))}
 
-          {/* Totals – aligned exactly under Debit and Credit columns */}
+          {/* Totals */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px 1fr 110px 110px 40px", gap: 8, marginTop: 12, paddingTop: 12, borderTop: "2px solid #E2E8F0", fontWeight: 700, fontSize: 14 }}>
             <span>Total</span>
             <span style={{ textAlign: "right", paddingRight: 8 }}>PKR {totalDebit.toLocaleString()}</span>
             <span style={{ textAlign: "right", paddingRight: 8 }}>PKR {totalCredit.toLocaleString()}</span>
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
+            <span></span><span></span><span></span><span></span>
           </div>
 
           {!isBalanced && totalDebit > 0 && (
