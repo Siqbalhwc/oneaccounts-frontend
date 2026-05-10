@@ -102,19 +102,30 @@ export default function SuppliersPage() {
 
   useEffect(() => { fetchSuppliers() }, [companyId, search, page])
 
+  // ── ROBUST unique code generator ──
   const getNextCode = async (): Promise<string> => {
+    // Fetch all codes for this company (only codes, order by code desc)
     const { data } = await supabase
       .from("suppliers")
       .select("code")
       .eq("company_id", companyId)
       .order("code", { ascending: false })
-      .limit(1)
-    let nextNum = 1
-    if (data && data.length > 0) {
-      const match = data[0].code.match(/SUP-(\d+)/)
-      if (match) nextNum = parseInt(match[1]) + 1
+      .limit(50)  // take the highest ones
+
+    if (!data || data.length === 0) return "SUP-001"
+
+    // Find the highest numeric suffix among codes that look like SUP-xxx
+    let maxNum = 0
+    for (const row of data) {
+      const match = row.code?.match(/SUP-(\d+)/)
+      if (match) {
+        const num = parseInt(match[1], 10)
+        if (!isNaN(num) && num > maxNum) maxNum = num
+      }
     }
-    return `SUP-${String(nextNum).padStart(3, "0")}`
+    // If no SUP codes found, fallback to treating any number as suffix? No, just start from 1.
+    const next = maxNum + 1
+    return `SUP-${String(next).padStart(3, "0")}`
   }
 
   const openNew = () => {
