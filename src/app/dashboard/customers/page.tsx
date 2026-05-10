@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
-import { Plus, Search, Edit, Trash2, X, Send } from "lucide-react"
+import { Plus, Search, Edit, Trash2, X } from "lucide-react"
 
 interface Customer {
   id: number
@@ -80,7 +80,6 @@ export default function CustomersPage() {
   const [flash, setFlash] = useState("")
   const [formError, setFormError] = useState("")
 
-  // get company ID
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -89,7 +88,6 @@ export default function CustomersPage() {
     })
   }, [])
 
-  // fetch customers
   const fetchCustomers = () => {
     if (!companyId) return
     setLoading(true)
@@ -104,9 +102,7 @@ export default function CustomersPage() {
       .order("name")
 
     if (search.trim()) {
-      query = query.or(
-        `name.ilike.%${search}%,code.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`
-      )
+      query = query.or(`name.ilike.%${search}%,code.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`)
     }
 
     query.range(start, end).then(({ data, count }) => {
@@ -120,12 +116,21 @@ export default function CustomersPage() {
     fetchCustomers()
   }, [companyId, search, page])
 
-  const getWhatsAppLink = (cust: Customer) => {
-    if (!hasFeature("whatsapp_invoice")) return ""
-    const phone = (cust.country_code || "").replace(/\D/g, "") + (cust.phone || "").replace(/\D/g, "")
-    if (!phone) return ""
-    const msg = `Dear ${cust.name},\n\nThank you for your business. Please find your invoice details attached or contact us for any queries.\n\n— OneAccounts`
-    return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
+  const getNextCode = async (): Promise<string> => {
+    const { data } = await supabase
+      .from("customers")
+      .select("code")
+      .eq("company_id", companyId)
+      .order("code", { ascending: false })
+      .limit(1)
+
+    let nextNum = 1
+    if (data && data.length > 0) {
+      const lastCode = data[0].code
+      const match = lastCode.match(/CUST-(\d+)/)
+      if (match) nextNum = parseInt(match[1]) + 1
+    }
+    return `CUST-${String(nextNum).padStart(3, "0")}`
   }
 
   const openNew = () => {
@@ -158,23 +163,6 @@ export default function CustomersPage() {
     })
     setFormError("")
     setShowModal(true)
-  }
-
-  const getNextCode = async (): Promise<string> => {
-    const { data } = await supabase
-      .from("customers")
-      .select("code")
-      .eq("company_id", companyId)
-      .order("code", { ascending: false })
-      .limit(1)
-
-    let nextNum = 1
-    if (data && data.length > 0) {
-      const lastCode = data[0].code
-      const match = lastCode.match(/CUST-(\d+)/)
-      if (match) nextNum = parseInt(match[1]) + 1
-    }
-    return `CUST-${String(nextNum).padStart(3, "0")}`
   }
 
   const handleSave = async () => {
@@ -223,7 +211,7 @@ export default function CustomersPage() {
       }
     }
 
-    // Opening invoice logic remains the same (intact from your original)
+    // Opening invoice logic (unchanged)
     if (!errorMsg && createdCustomerId && form.opening_balance > 0 && form.post_as_invoice) {
       try {
         const { data: custData } = await supabase
@@ -308,8 +296,7 @@ export default function CustomersPage() {
     }
   }
 
-  // Combined guard – wait for company and role
-  if (!companyId || roleLoading || !role) {
+  if (roleLoading || !role) {
     return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
   }
   if (!canView) {
@@ -320,10 +307,8 @@ export default function CustomersPage() {
       </div>
     )
   }
+  if (!companyId) return <div style={{ padding: 40, textAlign: "center" }}>Loading company data…</div>
 
-  // ... rest of the component (exactly the same JSX you already have, after the guards)
-  // The full JSX from your original customers page (the table, modal, etc.) should be here.
-  // For brevity, I'm including the return block from your original code immediately after the guard.
   return (
     <div style={{ padding: 24, fontFamily: "Arial", background: "#EFF4FB", minHeight: "100vh" }}>
       <style>{`
@@ -332,8 +317,6 @@ export default function CustomersPage() {
         .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
         .btn-primary { background: #1D4ED8; color: white; }
         .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
-        .btn-danger { background: #EF4444; color: white; }
-        .btn-success { background: #25D366; color: white; }
         table { width: 100%; border-collapse: collapse; }
         th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8; text-align: left; padding: 8px 6px; border-bottom: 1px solid #E2E8F0; }
         td { padding: 10px 6px; border-bottom: 1px solid #F1F5F9; font-size: 13px; }
@@ -405,51 +388,40 @@ export default function CustomersPage() {
               <th style={{ textAlign: "right" }}>Balance</th>
               <th></th>
               <th></th>
-              <th></th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={9} style={{ textAlign: "center", padding: 20 }}>Loading...</td></tr>
+              <tr><td colSpan={8} style={{ textAlign: "center", padding: 20 }}>Loading...</td></tr>
             ) : customers.length === 0 ? (
-              <tr><td colSpan={9} style={{ textAlign: "center", padding: 20, color: "#94A3B8" }}>
+              <tr><td colSpan={8} style={{ textAlign: "center", padding: 20, color: "#94A3B8" }}>
                 {search ? "No matching customers found." : "No customers yet. Add your first customer above."}
               </td></tr>
             ) : (
-              customers.map((cust) => {
-                const waLink = getWhatsAppLink(cust)
-                return (
-                  <tr key={cust.id}>
-                    <td style={{ fontWeight: 600 }}>{cust.code}</td>
-                    <td>{cust.name}</td>
-                    <td>{cust.country_code} {cust.phone}</td>
-                    <td>{cust.email || "—"}</td>
-                    <td>{cust.payment_terms}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {cust.balance?.toLocaleString()}</td>
-                    <td>
-                      {waLink && (
-                        <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success" style={{ padding: "4px 8px" }}>
-                          <Send size={14} />
-                        </a>
-                      )}
-                    </td>
-                    <td>
-                      {canEdit && (
-                        <button className="btn btn-outline" style={{ padding: "4px 8px" }} onClick={() => openEdit(cust)}>
-                          <Edit size={14} />
-                        </button>
-                      )}
-                    </td>
-                    <td>
-                      {canEdit && (
-                        <button className="btn btn-outline" style={{ padding: "4px 8px", color: "#EF4444", borderColor: "#FECACA" }} onClick={() => handleDelete(cust.id)}>
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })
+              customers.map((cust) => (
+                <tr key={cust.id}>
+                  <td style={{ fontWeight: 600 }}>{cust.code}</td>
+                  <td>{cust.name}</td>
+                  <td>{cust.country_code} {cust.phone}</td>
+                  <td>{cust.email || "—"}</td>
+                  <td>{cust.payment_terms}</td>
+                  <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {cust.balance?.toLocaleString()}</td>
+                  <td>
+                    {canEdit && (
+                      <button className="btn btn-outline" style={{ padding: "4px 8px" }} onClick={() => openEdit(cust)}>
+                        <Edit size={14} />
+                      </button>
+                    )}
+                  </td>
+                  <td>
+                    {canEdit && (
+                      <button className="btn btn-outline" style={{ padding: "4px 8px", color: "#EF4444", borderColor: "#FECACA" }} onClick={() => handleDelete(cust.id)}>
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))
             )}
           </tbody>
         </table>
