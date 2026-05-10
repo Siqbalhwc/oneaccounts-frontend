@@ -59,7 +59,7 @@ export default function InvoicesListPage() {
     fetchInvoices()
   }, [companyId, search, page])
 
-  // Calculate summary stats from all invoices (not just current page)
+  // Summary stats
   const totalAmount = invoices.reduce((sum, inv) => sum + (inv.total || 0), 0)
   const unpaidCount = invoices.filter(inv => inv.status === "Unpaid").length
   const overdueCount = invoices.filter(inv => inv.status === "Overdue").length
