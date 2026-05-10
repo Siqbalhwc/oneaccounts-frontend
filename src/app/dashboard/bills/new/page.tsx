@@ -33,7 +33,7 @@ export default function NewBillPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  // ── Global Location & Activity (applied to all items by default) ──
+  // Global Location & Activity (applied to all items by default)
   const [globalLocationId, setGlobalLocationId] = useState<string>("")
   const [globalActivityId, setGlobalActivityId] = useState<string>("")
   const [globalAccountId, setGlobalAccountId] = useState<number | null>(null)
@@ -239,7 +239,6 @@ export default function NewBillPage() {
       qty: item.qty,
       unit_price: item.unit_price,
       account_id: item.account_id,
-      // Each item uses the global location/activity (no per‑item override for now)
     }))
 
     try {
@@ -276,10 +275,27 @@ export default function NewBillPage() {
     }
   }
 
+  // ── PDF Preview (fixed) ──
   const handleBeforeSavePdf = () => {
-    getNextBillNo(selectedSupplier?.code || "BILL").then(billNo => {
-      const tempBill = { invoice_no: billNo, date: billDate, due_date: dueDate, customers: selectedSupplier || {} }
-      const doc = generateInvoicePDF(tempBill, items)
+    if (!selectedSupplier) return
+    getNextBillNo(selectedSupplier.code || "BILL").then(billNo => {
+      const pdfData = {
+        companyName: "OneAccounts",
+        invoiceNo: billNo,
+        date: billDate,
+        dueDate: dueDate,
+        customerName: selectedSupplier.name,
+        customerPhone: selectedSupplier.phone || "",
+        items: items.map(i => ({
+          description: i.description || "",
+          qty: i.qty || 0,
+          unit_price: i.unit_price || 0,
+          total: i.total || 0,
+        })),
+        subtotal: totalAmount,
+        total: totalAmount,
+      }
+      const doc = generateInvoicePDF(pdfData)
       doc.save(`bill-preview-${billNo}.pdf`)
     })
   }
