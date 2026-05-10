@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useRole } from "@/contexts/RoleContext"
 import type { User } from "@supabase/supabase-js"
+import { Search, Eye, Plus } from "lucide-react"
 
 export default function InvoicesListPage() {
   const router = useRouter()
@@ -15,6 +16,10 @@ export default function InvoicesListPage() {
   const [companyId, setCompanyId] = useState<string>("")
   const [invoices, setInvoices] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState("")
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const pageSize = 25
 
   useEffect(() => {
     const loadUser = async () => {
@@ -32,72 +37,151 @@ export default function InvoicesListPage() {
 
     const fetchInvoices = async () => {
       setLoading(true)
-      const { data }: { data: any[] | null } = await supabase
+      const start = (page - 1) * pageSize
+      const end = start + pageSize - 1
+
+      let query = supabase
         .from("invoices")
-        .select("id, invoice_no, date, due_date, total, status")
+        .select("id, invoice_no, date, due_date, total, status", { count: "exact" })
         .eq("company_id", companyId)
         .order("date", { ascending: false })
+
+      if (search.trim()) {
+        query = query.or(`invoice_no.ilike.%${search}%,status.ilike.%${search}%`)
+      }
+
+      const { data, count } = await query.range(start, end)
       setInvoices(data || [])
+      setTotal(count || 0)
       setLoading(false)
     }
 
     fetchInvoices()
-  }, [companyId])
+  }, [companyId, search, page])
 
-  if (roleLoading) return <div style={{ padding: 40, textAlign: "center" }}>Checking permissions...</div>
+  // Calculate summary stats from all invoices (not just current page)
+  const totalAmount = invoices.reduce((sum, inv) => sum + (inv.total || 0), 0)
+  const unpaidCount = invoices.filter(inv => inv.status === "Unpaid").length
+  const overdueCount = invoices.filter(inv => inv.status === "Overdue").length
+
+  if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" }}>Loading...</div>
   if (!canView) return <div style={{ padding: 40, textAlign: "center" }}><h2>Access Denied</h2><p style={{ color: "#94A3B8", marginTop: 8 }}>You do not have permission to view this page.</p></div>
   if (!companyId) return <div style={{ padding: 40 }}>Loading...</div>
 
   return (
-    <div style={{ padding: 24, fontFamily: "Arial", background: "#EFF4FB", minHeight: "100vh" }}>
+    <div style={{ padding: 24, fontFamily: "'Plus Jakarta Sans', sans-serif", background: "#EFF4FB", minHeight: "100vh" }}>
       <style>{`
-        .card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 16px 20px; }
-        .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; }
+        .card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+        .input { height: 38px; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0 12px; font-size: 13px; box-sizing: border-box; }
+        .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-primary { background: #1D4ED8; color: white; }
+        .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
         table { width: 100%; border-collapse: collapse; }
         th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8; text-align: left; padding: 8px 6px; border-bottom: 1px solid #E2E8F0; }
         td { padding: 10px 6px; border-bottom: 1px solid #F1F5F9; font-size: 13px; }
         tr:hover td { background: #FAFBFF; }
+        .badge { padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; display: inline-block; }
+        .badge-paid { background: #D1FAE5; color: #065F46; }
+        .badge-unpaid { background: #FEF3C7; color: #92400E; }
+        .badge-overdue { background: #FEE2E2; color: #991B1B; }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        @media (max-width: 600px) {
+          th:nth-child(3), td:nth-child(3) { display: none; }
+        }
       `}</style>
 
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
-        <h2>📄 Invoices</h2>
-        <button className="btn" style={{ background: "#1D4ED8", color: "white" }} onClick={() => router.push("/dashboard/invoices/new")}>+ New Invoice</button>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", margin: 0 }}>📄 Invoices</h1>
+          <p style={{ fontSize: 13, color: "#94A3B8", margin: 0 }}>Manage all sales invoices</p>
+        </div>
+        <button className="btn btn-primary" onClick={() => router.push("/dashboard/invoices/new")}>
+          <Plus size={16} /> New Invoice
+        </button>
       </div>
 
-      <div className="card">
-        {loading ? (
-          <p>Loading...</p>
-        ) : invoices.length === 0 ? (
-          <p style={{ color: "#94A3B8", textAlign: "center" }}>No invoices yet.</p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Invoice No.</th>
-                <th>Date</th>
-                <th>Due Date</th>
-                <th>Total</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map(inv => (
+      {/* Summary Cards */}
+      <div className="summary-grid">
+        <div className="card">
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Invoices</div>
+          <div style={{ fontSize: 24, fontWeight: 800 }}>{total}</div>
+        </div>
+        <div className="card">
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Amount</div>
+          <div style={{ fontSize: 24, fontWeight: 800 }}>PKR {totalAmount.toLocaleString()}</div>
+        </div>
+        <div className="card">
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Unpaid</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: "#B45309" }}>{unpaidCount}</div>
+        </div>
+        <div className="card">
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Overdue</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: "#DC2626" }}>{overdueCount}</div>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div style={{ maxWidth: 320, marginBottom: 16 }}>
+        <div style={{ position: "relative" }}>
+          <Search size={14} style={{ position: "absolute", left: 10, top: 12, color: "#94A3B8" }} />
+          <input className="input" style={{ paddingLeft: 32, width: "100%" }} placeholder="Search invoice no or status..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
+        </div>
+      </div>
+
+      <div className="card" style={{ padding: 0, overflowX: "auto" }}>
+        <table>
+          <thead>
+            <tr>
+              <th>Invoice No.</th>
+              <th>Date</th>
+              <th>Due Date</th>
+              <th>Total</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={6} style={{ textAlign: "center", padding: 20 }}>Loading...</td></tr>
+            ) : invoices.length === 0 ? (
+              <tr><td colSpan={6} style={{ textAlign: "center", padding: 20, color: "#94A3B8" }}>
+                {search ? "No invoices match your search." : "No invoices yet. Create your first invoice above."}
+              </td></tr>
+            ) : (
+              invoices.map(inv => (
                 <tr key={inv.id}>
-                  <td style={{ fontWeight: 600 }}>{inv.invoice_no}</td>
+                  <td style={{ fontWeight: 600, color: "#1E3A8A" }}>{inv.invoice_no}</td>
                   <td>{inv.date}</td>
                   <td>{inv.due_date}</td>
-                  <td>PKR {inv.total?.toLocaleString()}</td>
-                  <td>{inv.status}</td>
+                  <td style={{ fontWeight: 600 }}>PKR {inv.total?.toLocaleString()}</td>
                   <td>
-                    <button className="btn" style={{ padding: "4px 8px", background: "#F1F5F9" }} onClick={() => router.push(`/dashboard/invoices/${inv.id}`)}>View</button>
+                    <span className={`badge ${
+                      inv.status === "Paid" ? "badge-paid" :
+                      inv.status === "Overdue" ? "badge-overdue" : "badge-unpaid"
+                    }`}>{inv.status}</span>
+                  </td>
+                  <td>
+                    <button className="btn btn-outline" style={{ padding: "4px 8px" }} onClick={() => router.push(`/dashboard/invoices/${inv.id}`)}>
+                      <Eye size={14} />
+                    </button>
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
+
+      {/* Pagination */}
+      {total > pageSize && (
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12, fontSize: 13, color: "#64748B" }}>
+          <span>Showing {Math.min(pageSize, total - (page-1)*pageSize)} of {total}</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-outline" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</button>
+            <button className="btn btn-outline" disabled={page * pageSize >= total} onClick={() => setPage(p => p + 1)}>Next</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
