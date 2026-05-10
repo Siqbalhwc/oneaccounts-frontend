@@ -12,6 +12,7 @@ interface InvoiceItem {
   qty: number
   unit_price: number
   total: number
+  image_path?: string | null
 }
 
 interface Invoice {
@@ -76,35 +77,48 @@ export default function InvoiceDetailPage() {
       .eq("company_id", companyId)
       .single()
       .then(({ data }) => {
-        if (!data) { setLoading(false); return }
+        if (!data) {
+          setLoading(false)
+          return
+        }
+
         const inv: Invoice = data
 
-        if (inv.party_id) {
-          supabase
-            .from("customers")
-            .select("name, code, phone, country_code, address, email")
-            .eq("id", inv.party_id)
-            .single()
-            .then(({ data: cust }) => {
-              inv.customer = cust || undefined
-            })
-            .finally(() => {
-              supabase
-                .from("invoice_items")
-                .select("*")
-                .eq("invoice_id", inv.id)
-                .eq("company_id", companyId)
-                .then(({ data: items }) => {
-                  inv.items = items || []
-                  setInvoice(inv)
-                  setLoading(false)
-                })
-            })
-        } else {
-          inv.items = []
-          setInvoice(inv)
-          setLoading(false)
-        }
+        // Fetch customer and items in a safe chain (no .finally)
+        const fetchCustomer = inv.party_id
+          ? supabase
+              .from("customers")
+              .select("name, code, phone, country_code, address, email")
+              .eq("id", inv.party_id)
+              .single()
+              .then(({ data: cust }) => {
+                inv.customer = cust || undefined
+              })
+              .then(() => {
+                // After customer (or if skipped), fetch items
+                return supabase
+                  .from("invoice_items")
+                  .select("*")
+                  .eq("invoice_id", inv.id)
+                  .eq("company_id", companyId)
+                  .then(({ data: items }) => {
+                    inv.items = items || []
+                    setInvoice(inv)
+                    setLoading(false)
+                  })
+              })
+          : supabase
+              .from("invoice_items")
+              .select("*")
+              .eq("invoice_id", inv.id)
+              .eq("company_id", companyId)
+              .then(({ data: items }) => {
+                inv.items = items || []
+                setInvoice(inv)
+                setLoading(false)
+              })
+
+        return fetchCustomer
       })
 
     supabase
@@ -168,6 +182,7 @@ export default function InvoiceDetailPage() {
         qty: item.qty,
         unit_price: item.unit_price,
         total: item.total,
+        image_path: item.image_path || null,
       })),
       subtotal: subTotal,
       total: invoice.total,
