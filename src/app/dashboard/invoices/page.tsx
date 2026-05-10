@@ -29,16 +29,19 @@ export default function InvoicesListPage() {
 
   useEffect(() => {
     if (!companyId) return
-    setLoading(true)
-    supabase
-      .from("invoices")
-      .select("id, invoice_no, date, due_date, total, status")
-      .eq("company_id", companyId)
-      .order("date", { ascending: false })
-      .then(({ data }) => {
-        setInvoices(data || [])
-        setLoading(false)
-      })
+
+    const fetchInvoices = async () => {
+      setLoading(true)
+      const { data }: { data: any[] | null } = await supabase
+        .from("invoices")
+        .select("id, invoice_no, date, due_date, total, status")
+        .eq("company_id", companyId)
+        .order("date", { ascending: false })
+      setInvoices(data || [])
+      setLoading(false)
+    }
+
+    fetchInvoices()
   }, [companyId])
 
   if (roleLoading) return <div style={{ padding: 40, textAlign: "center" }}>Checking permissions...</div>
