@@ -178,7 +178,7 @@ export function generateInvoicePDF(data: InvoicePDFData) {
   }
 
   if (data.status) {
-    addText(`Status: ${data.status}`, margin, y, { fontSize: 10, fontStyle: "italic" })
+    addText(`Status: ${data.status}`, margin, y, { fontSize: 10, fontStyle: "normal" })
     y += 8
   }
 
