@@ -12,8 +12,6 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll()
         },
-        // This is the ONLY place where cookies are written.
-        // Middleware runs before every request — safe to write here.
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
@@ -27,8 +25,12 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Refresh session — keeps the user logged in across tab reloads
   const { data: { user } } = await supabase.auth.getUser()
+
+  // ✅ NEW: Redirect root / to login page
+  if (request.nextUrl.pathname === '/') {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
 
   // Redirect unauthenticated users away from /dashboard
   if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
@@ -49,7 +51,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Run on all routes except static files and Next.js internals
     '/((?!_next/static|_next/image|favicon.ico|logo.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

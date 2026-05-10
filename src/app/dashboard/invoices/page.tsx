@@ -2,16 +2,13 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { createBrowserClient } from "@supabase/ssr"
+import { createClient } from "@/lib/supabase/client"
 import { useRole } from "@/contexts/RoleContext"
 
 export default function InvoicesListPage() {
   const router = useRouter()
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-  const { role } = useRole()
+  const supabase = createClient()
+  const { role, loading: roleLoading } = useRole()
   const canView = role === "admin" || role === "accountant"
 
   const [companyId, setCompanyId] = useState<string>("")
@@ -40,8 +37,9 @@ export default function InvoicesListPage() {
       })
   }, [companyId])
 
-  if (!companyId) return <div style={{ padding: 40 }}>Loading…</div>
-  if (!canView) return <div style={{ padding: 40 }}><h2>Access Denied</h2></div>
+  if (roleLoading) return <div style={{ padding: 40, textAlign: "center" }}>Checking permissions...</div>
+  if (!canView) return <div style={{ padding: 40, textAlign: "center" }}><h2>Access Denied</h2><p style={{ color: "#94A3B8", marginTop: 8 }}>You do not have permission to view this page.</p></div>
+  if (!companyId) return <div style={{ padding: 40 }}>Loading...</div>
 
   return (
     <div style={{ padding: 24, fontFamily: "Arial", background: "#EFF4FB", minHeight: "100vh" }}>
