@@ -15,7 +15,7 @@ export default function NewBillPage() {
 
   const [companyId, setCompanyId] = useState("")
   const [businessType, setBusinessType] = useState("")
-  const [loading, setLoading] = useState(true)   // initial loading state
+  const [loading, setLoading] = useState(true)
 
   const [suppliers, setSuppliers] = useState<any[]>([])
   const [supplierId, setSupplierId] = useState<number | null>(null)
@@ -33,20 +33,14 @@ export default function NewBillPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  // Primary fields
   const [selectedLocationId, setSelectedLocationId] = useState("")
   const [selectedActivityId, setSelectedActivityId] = useState("")
-
-  // Auto‑fetched badges
   const [fetchedProjectId, setFetchedProjectId] = useState<number | null>(null)
   const [fetchedProjectName, setFetchedProjectName] = useState("")
   const [fetchedDonorId, setFetchedDonorId] = useState<number | null>(null)
   const [fetchedDonorName, setFetchedDonorName] = useState("")
-
-  // Header expense account (default)
   const [headerExpenseAccountId, setHeaderExpenseAccountId] = useState<number | null>(null)
 
-  // Lookup data
   const [locations, setLocations] = useState<any[]>([])
   const [activitiesForLocation, setActivitiesForLocation] = useState<any[]>([])
   const [allAccounts, setAllAccounts] = useState<any[]>([])
@@ -54,7 +48,7 @@ export default function NewBillPage() {
 
   const fiscalYear = new Date().getFullYear()
 
-  // ── Load master data once ───────────────────────────
+  // ── Load master data ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -63,10 +57,14 @@ export default function NewBillPage() {
       supabase.from("companies").select("business_type").eq("id", cid).single()
         .then(r => r.data && setBusinessType(r.data.business_type || ""))
 
+      // FIX: ensure suppliers are fetched and logged
       supabase.from("suppliers")
         .select("id,code,name,phone,balance,default_project_id,default_location_id,default_activity_id,default_donor_id,default_expense_account_id")
         .eq("company_id", cid).order("name")
-        .then(r => r.data && setSuppliers(r.data))
+        .then(r => {
+          console.log("Suppliers fetched:", r.data)  // keep for debugging
+          if (r.data) setSuppliers(r.data)
+        })
 
       supabase.from("accounts").select("id,code,name,type").eq("company_id", cid).eq("type","Expense").order("code")
         .then(r => r.data && setAllAccounts(r.data))
@@ -78,7 +76,7 @@ export default function NewBillPage() {
     })
   }, [])
 
-  // ── Load activities for the chosen location (stable) ──
+  // ── Load activities for chosen location ──
   useEffect(() => {
     if (!companyId || !selectedLocationId) {
       setActivitiesForLocation([])
@@ -103,14 +101,13 @@ export default function NewBillPage() {
       })
   }, [companyId, selectedLocationId])
 
-  // ── When activity changes, fetch project & donor ─────
+  // ── Auto‑fetch project & donor ──
   useEffect(() => {
     if (!companyId || !selectedActivityId || !selectedLocationId) {
       setFetchedProjectId(null); setFetchedProjectName("")
       setFetchedDonorId(null); setFetchedDonorName("")
       return
     }
-    // Get project
     supabase.from("activities").select("project_id, projects(name)")
       .eq("id", selectedActivityId).single()
       .then(({ data }) => {
@@ -119,7 +116,6 @@ export default function NewBillPage() {
           setFetchedProjectName((data.projects as any)?.name || "")
         }
       })
-    // Get primary donor
     supabase.from("budgets")
       .select("donor_id, donors(name)")
       .eq("company_id", companyId)
@@ -140,7 +136,7 @@ export default function NewBillPage() {
       })
   }, [companyId, selectedActivityId, selectedLocationId])
 
-  // Recommend account when supplier + activity + location exist
+  // ── Recommend account ──
   useEffect(() => {
     if (!supplierId || !selectedActivityId || !selectedLocationId || !companyId || !fetchedProjectId) {
       setRecommendedAccount(null)
@@ -165,7 +161,7 @@ export default function NewBillPage() {
       })
   }, [supplierId, selectedActivityId, selectedLocationId, companyId, fetchedProjectId, allAccounts])
 
-  // ── Close supplier dropdown on outside click ─────────
+  // ── Close dropdown on outside click, but not when clicking inside the component ──
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (supplierRef.current && !supplierRef.current.contains(e.target as Node)) {
@@ -176,7 +172,7 @@ export default function NewBillPage() {
     return () => document.removeEventListener("mousedown", handler)
   }, [])
 
-  // ── Supplier helpers ─────────────────────────────────
+  // ── Supplier list filtering ──
   const filteredSuppliers = suppliers.filter(s =>
     s.name.toLowerCase().includes(supplierSearch.toLowerCase()) ||
     s.code.toLowerCase().includes(supplierSearch.toLowerCase()) ||
@@ -188,7 +184,6 @@ export default function NewBillPage() {
     setSelectedSupplier(s)
     setSupplierSearch(s.name)
     setShowSupplierList(false)
-    // Pre‑fill from supplier defaults
     if (s.default_location_id) setSelectedLocationId(String(s.default_location_id))
     if (s.default_activity_id) setSelectedActivityId(String(s.default_activity_id))
     if (s.default_expense_account_id) setHeaderExpenseAccountId(s.default_expense_account_id)
@@ -200,7 +195,7 @@ export default function NewBillPage() {
     setSupplierId(null)
     setSelectedSupplier(null)
     setSupplierSearch("")
-    setShowSupplierList(true)
+    setShowSupplierList(true)  // FIX: show list again after clearing
     setSelectedLocationId("")
     setSelectedActivityId("")
     setFetchedProjectId(null); setFetchedProjectName("")
@@ -208,7 +203,7 @@ export default function NewBillPage() {
     setHeaderExpenseAccountId(null)
   }
 
-  // ── Item management ──────────────────────────────────
+  // ── Item management ──
   const addManualItem = () => {
     setItems([...items, {
       description: "", qty: 1, unit_price: 0, total: 0,
@@ -230,7 +225,7 @@ export default function NewBillPage() {
 
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
 
-  // ── Submit ────────────────────────────────────────────
+  // ── Bill number generation ──
   const getNextBillNo = async (suppCode: string): Promise<string> => {
     const { data } = await supabase
       .from("invoices").select("invoice_no")
@@ -365,7 +360,7 @@ export default function NewBillPage() {
               <label className="inv-label">Supplier *</label>
               <div className="cust-wrap" ref={supplierRef}>
                 {selectedSupplier ? (
-                  <div className="cust-selected-badge" onClick={clearSupplier}>
+                  <div className="cust-selected-badge" onClick={clearSupplier} style={{ cursor: "pointer" }}>
                     <span>👤</span><span style={{ flex:1 }}>{selectedSupplier.code} — {selectedSupplier.name}</span>
                     <span style={{ fontSize:11, color:"#64748B" }}>Bal: PKR {(selectedSupplier.balance || 0).toLocaleString()}</span>
                     <button className="cust-clear" onClick={(e) => { e.stopPropagation(); clearSupplier(); }}><X size={14} /></button>
@@ -374,7 +369,16 @@ export default function NewBillPage() {
                   <>
                     <div className="cust-input-row">
                       <Search size={14} style={{ position:"absolute", left:10, color:"#94A3B8" }} />
-                      <input className="inv-input" style={{ paddingLeft:32, paddingRight:32 }} placeholder="Search by name, code or phone..." value={supplierSearch} onChange={e => { setSupplierSearch(e.target.value); setShowSupplierList(true) }} onFocus={() => setShowSupplierList(true)} autoComplete="off" />
+                      <input
+                        className="inv-input"
+                        style={{ paddingLeft:32, paddingRight:32 }}
+                        placeholder="Search by name, code or phone..."
+                        value={supplierSearch}
+                        onChange={e => { setSupplierSearch(e.target.value); setShowSupplierList(true) }}
+                        onFocus={() => setShowSupplierList(true)}
+                        onClick={() => setShowSupplierList(true)}  /* FIX: ensure click opens */
+                        autoComplete="off"
+                      />
                       {supplierSearch && <button className="cust-clear" onClick={() => setSupplierSearch("")}><X size={13} /></button>}
                     </div>
                     {showSupplierList && (

@@ -253,10 +253,35 @@ export default function ManagementDashboard({ role }: { role: string }) {
         /* ── Responsive grids ── */
         .mgmt .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
         .mgmt .two-col { display: grid; grid-template-columns: 1.5fr 1fr; gap: 1rem; margin-bottom: 1rem; }
-        @media (max-width: 800px) { .mgmt .two-col { grid-template-columns: 1fr; } }
-        @media (max-width: 600px) {
+
+        /* ── EXTRA RESPONSIVE STYLES ── */
+        @media (max-width: 800px) {
+          .mgmt .two-col { grid-template-columns: 1fr; }
           .mgmt .hero { flex-direction: column; align-items: flex-start; }
-          .mgmt .filter-row { flex-direction: column; align-items: flex-start; }
+          .mgmt .hero-title { font-size: 1rem; }
+        }
+        @media (max-width: 640px) {
+          .mgmt .kpi-grid { grid-template-columns: 1fr; }
+          .mgmt .kpi-value { font-size: 1.4rem; }
+          .mgmt .card { padding: 1rem; }
+          .mgmt .hero { padding: 1rem; }
+          .mgmt .hero-title { border-left: 4px solid #1e3a8a; }
+          .mgmt .filter-row { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+          .mgmt .filter-pill { font-size: 0.75rem; padding: 0.2rem 0.8rem; }
+          .mgmt .project-row, .mgmt .donor-row { flex-wrap: wrap; gap: 0.5rem; }
+          .mgmt .project-cell, .mgmt .badge { font-size: 0.65rem !important; }
+          .mgmt .donor-row span { font-size: 0.75rem !important; }
+          .mgmt .section-title { font-size: 0.85rem; }
+        }
+        @media (max-width: 480px) {
+          .mgmt .kpi-card { padding: 0.9rem; }
+          .mgmt .kpi-value { font-size: 1.3rem; }
+          .mgmt .hero-title { font-size: 0.9rem; flex: 1; white-space: normal; }
+          .mgmt .filter-row { padding: 0.5rem 1rem; }
+          .mgmt .two-col { gap: 0.8rem; }
+          .mgmt .project-row, .mgmt .donor-row { flex-direction: column; align-items: flex-start; gap: 0.3rem; }
+          .mgmt .project-row .project-cell, .mgmt .donor-row span { width: 100%; display: flex; justify-content: space-between; }
+          .mgmt .progress-bg { width: 100px; }
         }
       `}</style>
 
@@ -325,7 +350,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
         {/* Project Utilization & Donor Balances */}
         <div className="two-col">
-          {/* Projects – now styled like donor balances */}
+          {/* Projects – styled like donor balances */}
           <div className="card">
             <div className="section-title">📊 Project Utilization</div>
             {filteredProjectRows.map((p, idx) => (
