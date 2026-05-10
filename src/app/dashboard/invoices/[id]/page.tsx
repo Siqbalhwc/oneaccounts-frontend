@@ -188,7 +188,7 @@ export default function InvoiceDetailPage() {
           <button className="btn btn-outline" onClick={() => router.push("/dashboard/invoices")}>
             <ArrowLeft size={16} />
           </button>
-          <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>Invoice #{invoice.invoice_no}</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>Invoice #{invoice.invoice_no} <span style={{ color: "red" }}>●</span></h1>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           {waLink && (
