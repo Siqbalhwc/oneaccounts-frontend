@@ -130,10 +130,26 @@ export default function NewInvoicePage() {
     }
   }
 
+  // FIXED: single object argument
   const handleDownloadPDF = async () => {
     if (!successInvoice) return
     const { data: itemsData } = await supabase.from("invoice_items").select("*").eq("invoice_id", successInvoice.id)
-    const doc = generateInvoicePDF(successInvoice, itemsData || [])
+    const doc = generateInvoicePDF({
+      companyName: "OneAccounts",
+      invoiceNo: successInvoice.invoice_no,
+      date: successInvoice.date,
+      dueDate: successInvoice.due_date,
+      customerName: successInvoice.customers?.name || "Customer",
+      customerPhone: successInvoice.customers?.phone || "",
+      items: (itemsData || []).map((i: any) => ({
+        description: i.description || "",
+        qty: i.qty || 0,
+        unit_price: i.unit_price || 0,
+        total: (i.qty || 0) * (i.unit_price || 0),
+      })),
+      subtotal: successInvoice.total || 0,
+      total: successInvoice.total || 0,
+    })
     doc.save(`invoice-${successInvoice.invoice_no}.pdf`)
   }
 
@@ -150,14 +166,25 @@ export default function NewInvoicePage() {
     return `https://wa.me/92${cust.phone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`
   }
 
+  // FIXED: single object argument
   const handleBeforeSavePdf = () => {
+    const cust = customers.find((c: any) => c.id === customerId) || {}
     const tempInvoice = {
       invoice_no: generateInvoiceNo(),
       date: invoiceDate,
       due_date: dueDate,
-      customers: customers.find((c: any) => c.id === customerId) || {},
+      customerName: cust.name || "Customer",
+      customerPhone: cust.phone || "",
+      items: items.map(i => ({
+        description: i.description || "",
+        qty: i.qty || 0,
+        unit_price: i.unit_price || 0,
+        total: i.total || 0,
+      })),
+      subtotal: totalAmount,
+      total: totalAmount,
     }
-    const doc = generateInvoicePDF(tempInvoice, items)
+    const doc = generateInvoicePDF(tempInvoice)
     doc.save(`invoice-preview-${tempInvoice.invoice_no}.pdf`)
   }
 
@@ -224,7 +251,6 @@ export default function NewInvoicePage() {
           <div className="inv-grid">
             {/* LEFT COLUMN – customer, products, items */}
             <div>
-              {/* Customer & Dates */}
               <div className="inv-card">
                 <div className="inv-row">
                   <div>
@@ -253,7 +279,6 @@ export default function NewInvoicePage() {
                 </div>
               </div>
 
-              {/* Product Search */}
               <div className="inv-card">
                 <label className="inv-label">Add Product</label>
                 <div style={{ position: "relative" }}>
@@ -298,7 +323,6 @@ export default function NewInvoicePage() {
                 )}
               </div>
 
-              {/* Items */}
               {items.length > 0 && (
                 <div className="inv-card">
                   <div className="inv-item-header">
