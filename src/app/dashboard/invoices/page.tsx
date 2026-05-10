@@ -60,7 +60,7 @@ export default function InvoicesListPage() {
       }
 
       // Fetch customer phone details for each invoice
-      const customerIds = [...new Set(data.map(inv => inv.party_id).filter(Boolean))]
+      const customerIds = [...new Set(data.map((inv: any) => inv.party_id).filter(Boolean))]
       let customerMap: Record<number, any> = {}
       if (customerIds.length > 0) {
         const { data: customers } = await supabase
@@ -73,7 +73,7 @@ export default function InvoicesListPage() {
         }
       }
 
-      const enriched = data.map(inv => ({
+      const enriched = data.map((inv: any) => ({
         ...inv,
         customer_phone: customerMap[inv.party_id]?.phone || null,
         customer_country_code: customerMap[inv.party_id]?.country_code || null,
@@ -96,9 +96,9 @@ export default function InvoicesListPage() {
     return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
   }
 
-  const totalAmount = invoices.reduce((sum, inv) => sum + (inv.total || 0), 0)
-  const unpaidCount = invoices.filter(inv => inv.status === "Unpaid").length
-  const overdueCount = invoices.filter(inv => inv.status === "Overdue").length
+  const totalAmount = invoices.reduce((sum: number, inv: any) => sum + (inv.total || 0), 0)
+  const unpaidCount = invoices.filter((inv: any) => inv.status === "Unpaid").length
+  const overdueCount = invoices.filter((inv: any) => inv.status === "Overdue").length
 
   if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" }}>Loading...</div>
   if (!canView) return <div style={{ padding: 40, textAlign: "center" }}><h2>Access Denied</h2><p style={{ color: "#94A3B8", marginTop: 8 }}>You do not have permission to view this page.</p></div>
@@ -184,7 +184,7 @@ export default function InvoicesListPage() {
                 {search ? "No invoices match your search." : "No invoices yet. Create your first invoice above."}
               </td></tr>
             ) : (
-              invoices.map(inv => {
+              invoices.map((inv: any) => {
                 const waLink = getWhatsAppLink(inv)
                 return (
                   <tr key={inv.id}>
