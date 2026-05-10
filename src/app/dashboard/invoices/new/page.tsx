@@ -32,7 +32,7 @@ export default function NewInvoicePage() {
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const [successInvoice, setSuccessInvoice] = useState<any>(null) // holds created invoice data after save
+  const [successInvoice, setSuccessInvoice] = useState<any>(null)
   const [productSearch, setProductSearch] = useState("")
   const [showProductList, setShowProductList] = useState(false)
   const [priceHistory, setPriceHistory] = useState<any[]>([])
@@ -70,6 +70,7 @@ export default function NewInvoicePage() {
     setItems([...items, { product_id: prod.id, description: `${prod.code} - ${prod.name}`, qty: 1, unit_price: prod.sale_price, cost_price: prod.cost_price, total: prod.sale_price }])
     setProductSearch("")
     setShowProductList(false)
+    setLastSelectedProduct(prod)
     if (customerId) fetchPriceHistory(prod.id, customerId)
   }
 
@@ -123,11 +124,9 @@ export default function NewInvoicePage() {
     const result = await res.json()
     if (result.error) { setError(result.error); setLoading(false) }
     else {
-      // fetch the created invoice to get full data for PDF
       const { data: createdInvoice } = await supabase.from("invoices").select("*, customers(name,phone)").eq("id", result.invoice_id).single()
       setSuccessInvoice(createdInvoice)
       setLoading(false)
-      // keep items and form visible; user can now download PDF or send WhatsApp
     }
   }
 
@@ -145,7 +144,6 @@ export default function NewInvoicePage() {
       const msg = `Assalam-u-Alaikum ${cust.name},\nInvoice ${successInvoice.invoice_no} of PKR ${totalAmount.toLocaleString()} is ready.\nDue date: ${dueDate}.\nKindly arrange payment. JazakAllah Khair.\n— OneAccounts by Siqbal`
       return `https://wa.me/92${cust.phone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`
     }
-    // before saving, use selected customer
     const cust = customers.find((c: any) => c.id === customerId)
     if (!cust?.phone) return ""
     const msg = `Assalam-u-Alaikum ${cust.name},\nInvoice of PKR ${totalAmount.toLocaleString()} is ready.\nDue date: ${dueDate}.\nKindly arrange payment. JazakAllah Khair.\n— OneAccounts by Siqbal`
@@ -153,7 +151,6 @@ export default function NewInvoicePage() {
   }
 
   const handleBeforeSavePdf = () => {
-    // Generate a temporary invoice object for PDF preview
     const tempInvoice = {
       invoice_no: generateInvoiceNo(),
       date: invoiceDate,
@@ -165,29 +162,36 @@ export default function NewInvoicePage() {
   }
 
   return (
-    <div style={{ padding: "clamp(16px,2.5vw,24px)", background: "#EFF4FB", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div style={{ padding: "clamp(16px,2.5vw,24px)", background: "#f4f8fc", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <style>{`
-        .inv-shell { max-width: 900px; margin: 0 auto; }
-        .inv-card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 20px 24px; margin-bottom: 16px; }
-        .inv-title { font-size: 20px; font-weight: 800; color: #1E293B; }
-        .inv-label { font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; display: block; }
-        .inv-input, .inv-select { width: 100%; height: 40px; border: 1.5px solid #E5EAF2; border-radius: 9px; padding: 0 14px; font-size: 13px; font-family: inherit; background: #FAFBFF; outline: none; }
-        .inv-input:focus, .inv-select:focus { border-color: #1740C8; background: white; }
+        .inv-shell { max-width: 1300px; margin: 0 auto; }
+        .inv-card {
+          background: #ffffff; border: 1px solid #d6e0eb; border-radius: 14px;
+          padding: 20px 24px; margin-bottom: 14px;
+          box-shadow: 0 2px 8px rgba(0,25,45,0.04);
+        }
+        .inv-title { font-size: 20px; font-weight: 800; color: #0a2940; }
+        .inv-label { font-size: 10px; font-weight: 600; color: #2c5778; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; display: block; }
+        .inv-input, .inv-select { width: 100%; height: 40px; border: 1.5px solid #d6e0eb; border-radius: 8px; padding: 0 14px; font-size: 13px; font-family: inherit; background: #f8fafd; outline: none; }
+        .inv-input:focus, .inv-select:focus { border-color: #1e3a8a; background: white; }
         .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-        .inv-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all 0.15s; white-space: nowrap; }
-        .inv-btn-primary { background: linear-gradient(135deg, #1740C8, #071352); color: white; }
-        .inv-btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
-        .inv-btn-danger { background: #EF4444; color: white; }
+        .inv-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all 0.15s; white-space: nowrap; }
+        .inv-btn-primary { background: #1e3a8a; color: white; }
+        .inv-btn-primary:disabled { background: #94a3b8; cursor: not-allowed; }
+        .inv-btn-outline { background: white; border: 1.5px solid #d6e0eb; color: #2c5778; }
+        .inv-btn-danger { background: #ef4444; color: white; }
         .inv-btn-success { background: #25D366; color: white; }
-        .inv-btn-sm { padding: 5px 10px; font-size: 11px; }
-        .inv-item-row { display: grid; grid-template-columns: 1fr 70px 90px 70px 40px; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid #F1F5F9; }
-        .inv-item-header { display: grid; grid-template-columns: 1fr 70px 90px 70px 40px; gap: 8px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: #94A3B8; padding-bottom: 8px; }
-        .inv-total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 13px; }
-        .inv-total-row.bold { font-weight: 700; font-size: 15px; border-top: 2px solid #E2E8F0; padding-top: 12px; }
+        .inv-btn-sm { padding: 6px 10px; font-size: 11px; }
+        .inv-item-row { display: grid; grid-template-columns: 1fr 70px 90px 70px 40px; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid #f0f3f7; }
+        .inv-item-header { display: grid; grid-template-columns: 1fr 70px 90px 70px 40px; gap: 8px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: #64748b; padding-bottom: 6px; }
+        .inv-total-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; color: #1a2636; }
+        .inv-total-row.bold { font-weight: 700; font-size: 15px; border-top: 2px solid #d6e0eb; padding-top: 10px; }
         .inv-profit { color: #10B981; }
         .inv-loss { color: #EF4444; }
-        .inv-price-history { background: #F8FAFC; border-radius: 8px; padding: 10px 14px; margin-top: 8px; font-size: 12px; }
-        .inv-price-history-item { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #E2E8F0; }
+        .inv-price-history { background: #f8fafc; border-radius: 8px; padding: 10px 14px; margin-top: 8px; font-size: 12px; }
+        .inv-price-history-item { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #e2e8f0; }
+        .inv-grid { display: grid; grid-template-columns: 1fr 350px; gap: 16px; align-items: start; }
+        @media (max-width: 1000px) { .inv-grid { grid-template-columns: 1fr; } }
         @media (max-width: 600px) {
           .inv-row { grid-template-columns: 1fr; }
           .inv-item-row, .inv-item-header { grid-template-columns: 1fr 60px 70px 40px; }
@@ -199,7 +203,7 @@ export default function NewInvoicePage() {
           <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/invoices")}><ArrowLeft size={16} /></button>
           <div>
             <div className="inv-title">🧾 New Sales Invoice</div>
-            <div style={{ fontSize: 13, color: "#94A3B8" }}>Create invoice with full accounting automation</div>
+            <div style={{ fontSize: 13, color: "#64748b" }}>Create invoice with full accounting automation</div>
           </div>
         </div>
 
@@ -217,102 +221,106 @@ export default function NewInvoicePage() {
             </div>
           </div>
         ) : (
-          <>
-            {/* Customer & Dates */}
-            <div className="inv-card">
-              <div className="inv-row">
-                <div>
-                  <label className="inv-label">Customer *</label>
-                  <select className="inv-select" value={customerId || ""} onChange={e => setCustomerId(Number(e.target.value) || null)}>
-                    <option value="">Select customer...</option>
-                    {customers.map((c: any) => <option key={c.id} value={c.id}>{c.code} - {c.name} (Bal: PKR {(c.balance || 0).toLocaleString()})</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="inv-label">Invoice Date *</label>
-                  <input className="inv-input" type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
-                </div>
-                <div>
-                  <label className="inv-label">Due Date</label>
-                  <input className="inv-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
-                </div>
-                <div>
-                  <label className="inv-label">Reference</label>
-                  <input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="PO #" />
-                </div>
-              </div>
-              <div style={{ marginTop: 14 }}>
-                <label className="inv-label">Notes</label>
-                <input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" />
-              </div>
-            </div>
-
-            {/* Product Search */}
-            <div className="inv-card">
-              <label className="inv-label">Add Product</label>
-              <div style={{ position: "relative" }}>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <div style={{ position: "relative", flex: 1 }}>
-                    <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "#94A3B8" }} />
-                    <input className="inv-input" style={{ paddingLeft: 36 }} placeholder="Search product..." value={productSearch}
-                      onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
-                      onFocus={() => setShowProductList(true)}
-                      onBlur={() => setTimeout(() => setShowProductList(false), 200)}
-                    />
+          <div className="inv-grid">
+            {/* LEFT COLUMN – customer, products, items */}
+            <div>
+              {/* Customer & Dates */}
+              <div className="inv-card">
+                <div className="inv-row">
+                  <div>
+                    <label className="inv-label">Customer *</label>
+                    <select className="inv-select" value={customerId || ""} onChange={e => setCustomerId(Number(e.target.value) || null)}>
+                      <option value="">Select customer...</option>
+                      {customers.map((c: any) => <option key={c.id} value={c.id}>{c.code} - {c.name} (Bal: PKR {(c.balance || 0).toLocaleString()})</option>)}
+                    </select>
                   </div>
-                  <button className="inv-btn inv-btn-outline" onClick={addManualItem}><Plus size={14} /> Manual</button>
+                  <div>
+                    <label className="inv-label">Invoice Date *</label>
+                    <input className="inv-input" type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="inv-label">Due Date</label>
+                    <input className="inv-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="inv-label">Reference</label>
+                    <input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="PO #" />
+                  </div>
                 </div>
-                {showProductList && (
-                  <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid #E2E8F0", borderRadius: 8, maxHeight: 200, overflowY: "auto", zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", marginTop: 4 }}>
-                    {(productSearch ? filteredProducts : products).map((p: any) => (
-                      <div key={p.id} style={{ padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #F1F5F9", fontSize: 13 }}
-                        onClick={() => { addItem(p); if (customerId) fetchPriceHistory(p.id, customerId) }}>
-                        <span><strong>{p.code}</strong> - {p.name}</span>
-                        <span style={{ color: "#64748B" }}>PKR {p.sale_price} | Stock: {p.qty_on_hand}</span>
+                <div style={{ marginTop: 14 }}>
+                  <label className="inv-label">Notes</label>
+                  <input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" />
+                </div>
+              </div>
+
+              {/* Product Search */}
+              <div className="inv-card">
+                <label className="inv-label">Add Product</label>
+                <div style={{ position: "relative" }}>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ position: "relative", flex: 1 }}>
+                      <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "#94a3b8" }} />
+                      <input className="inv-input" style={{ paddingLeft: 36 }} placeholder="Search product..." value={productSearch}
+                        onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
+                        onFocus={() => setShowProductList(true)}
+                        onBlur={() => setTimeout(() => setShowProductList(false), 200)}
+                      />
+                    </div>
+                    <button className="inv-btn inv-btn-outline" onClick={addManualItem}><Plus size={14} /> Manual</button>
+                  </div>
+                  {showProductList && (
+                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid #d6e0eb", borderRadius: 8, maxHeight: 200, overflowY: "auto", zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.08)", marginTop: 4 }}>
+                      {(productSearch ? filteredProducts : products).map((p: any) => (
+                        <div key={p.id} style={{ padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #f0f3f7", fontSize: 13 }}
+                          onClick={() => { addItem(p); if (customerId) fetchPriceHistory(p.id, customerId) }}>
+                          <span><strong>{p.code}</strong> - {p.name}</span>
+                          <span style={{ color: "#64748b" }}>PKR {p.sale_price} | Stock: {p.qty_on_hand}</span>
+                        </div>
+                      ))}
+                      {(productSearch ? filteredProducts : products).length === 0 && <div style={{ padding: 12, color: "#94a3b8", fontSize: 12 }}>No products found</div>}
+                    </div>
+                  )}
+                </div>
+
+                {showHistory && (
+                  <div className="inv-price-history" style={{ marginTop: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                      <span style={{ fontWeight: 600, fontSize: 12 }}>📋 Price history for {lastSelectedProduct?.name}</span>
+                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8" }} onClick={() => setShowHistory(false)}><X size={14} /></button>
+                    </div>
+                    {priceHistory.length > 0 ? priceHistory.map((h: any, i: number) => (
+                      <div key={i} className="inv-price-history-item">
+                        <span>{h.invoice_no} - {h.date}</span>
+                        <span style={{ fontWeight: 600 }}>PKR {h.unit_price.toLocaleString()}</span>
                       </div>
-                    ))}
-                    {(productSearch ? filteredProducts : products).length === 0 && <div style={{ padding: 12, color: "#94A3B8", fontSize: 12 }}>No products found</div>}
+                    )) : <div style={{ color: "#94a3b8", fontSize: 12 }}>No previous sales</div>}
                   </div>
                 )}
               </div>
 
-              {showHistory && (
-                <div className="inv-price-history" style={{ marginTop: 12 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                    <span style={{ fontWeight: 600, fontSize: 12 }}>📋 Price history for {lastSelectedProduct?.name}</span>
-                    <button style={{ background: "none", border: "none", cursor: "pointer", color: "#94A3B8" }} onClick={() => setShowHistory(false)}><X size={14} /></button>
+              {/* Items */}
+              {items.length > 0 && (
+                <div className="inv-card">
+                  <div className="inv-item-header">
+                    <span>Description</span><span>Qty</span><span>Price</span><span>Total</span><span></span>
                   </div>
-                  {priceHistory.length > 0 ? priceHistory.map((h: any, i: number) => (
-                    <div key={i} className="inv-price-history-item">
-                      <span>{h.invoice_no} - {h.date}</span>
-                      <span style={{ fontWeight: 600 }}>PKR {h.unit_price.toLocaleString()}</span>
+                  {items.map((item: any, idx: number) => (
+                    <div key={idx} className="inv-item-row">
+                      <input className="inv-input" style={{ height: 36, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} />
+                      <input className="inv-input" style={{ height: 36, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                      <input className="inv-input" style={{ height: 36, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                      <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13 }}>PKR {item.total.toLocaleString()}</span>
+                      <button className="inv-btn inv-btn-danger inv-btn-sm" onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
                     </div>
-                  )) : <div style={{ color: "#94A3B8", fontSize: 12 }}>No previous sales</div>}
+                  ))}
                 </div>
               )}
             </div>
 
-            {/* Items */}
-            {items.length > 0 && (
+            {/* RIGHT COLUMN – always visible */}
+            <div style={{ position: "sticky", top: 16 }}>
               <div className="inv-card">
-                <div className="inv-item-header">
-                  <span>Description</span><span>Qty</span><span>Price</span><span>Total</span><span></span>
-                </div>
-                {items.map((item: any, idx: number) => (
-                  <div key={idx} className="inv-item-row">
-                    <input className="inv-input" style={{ height: 36, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} />
-                    <input className="inv-input" style={{ height: 36, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                    <input className="inv-input" style={{ height: 36, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                    <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13 }}>PKR {item.total.toLocaleString()}</span>
-                    <button className="inv-btn inv-btn-danger inv-btn-sm" onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Totals & Profit Allocation */}
-            {items.length > 0 && (
-              <div className="inv-card">
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0a2940", margin: "0 0 14px 0" }}>Summary</h3>
                 <div className="inv-total-row"><span>Subtotal</span><span>PKR {totalAmount.toLocaleString()}</span></div>
                 <div className="inv-total-row"><span>COGS</span><span>PKR {totalCost.toLocaleString()}</span></div>
                 <div className="inv-total-row"><span>Salary (4%)</span><span>PKR {totalSalary.toLocaleString()}</span></div>
@@ -323,8 +331,8 @@ export default function NewInvoicePage() {
                   <span className={netProfit >= 0 ? "inv-profit" : "inv-loss"}>PKR {netProfit.toLocaleString()}</span>
                 </div>
                 {netProfit > 0 && (
-                  <div style={{ marginTop: 12, padding: "12px 14px", background: "#F0FDF4", borderRadius: 8, fontSize: 12 }}>
-                    <div style={{ fontWeight: 600, marginBottom: 6 }}>Profit Allocation:</div>
+                  <div style={{ marginTop: 12, padding: "12px 14px", background: "#f0fdf4", borderRadius: 8, fontSize: 12 }}>
+                    <div style={{ fontWeight: 600, marginBottom: 6, color: "#065f46" }}>Profit Allocation:</div>
                     {Object.entries(PARTNERS).map(([code, value]) => {
                       const [name, share] = value as [string, number];
                       return (
@@ -337,23 +345,36 @@ export default function NewInvoicePage() {
                   </div>
                 )}
               </div>
-            )}
 
-            {/* Actions: Save, PDF preview, WhatsApp preview */}
-            {items.length > 0 && (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-                <button className="inv-btn inv-btn-primary" onClick={handleSubmit} disabled={loading}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <button
+                  className="inv-btn inv-btn-primary"
+                  style={{ width: "100%", justifyContent: "center" }}
+                  onClick={handleSubmit}
+                  disabled={loading || items.length === 0 || !customerId}
+                >
                   {loading ? "Posting..." : "💾 POST Invoice"}
                 </button>
-                <button className="inv-btn inv-btn-outline" onClick={handleBeforeSavePdf}><Download size={14} /> PDF</button>
+                <button
+                  className="inv-btn inv-btn-outline"
+                  style={{ width: "100%", justifyContent: "center" }}
+                  onClick={handleBeforeSavePdf}
+                >
+                  <Download size={14} /> PDF Preview
+                </button>
                 {waLink() && (
-                  <a href={waLink()} target="_blank" className="inv-btn inv-btn-success" style={{ textDecoration: "none" }}>
+                  <a
+                    href={waLink()}
+                    target="_blank"
+                    className="inv-btn inv-btn-success"
+                    style={{ width: "100%", justifyContent: "center", textDecoration: "none" }}
+                  >
                     <Send size={14} /> WhatsApp
                   </a>
                 )}
               </div>
-            )}
-          </>
+            </div>
+          </div>
         )}
       </div>
     </div>

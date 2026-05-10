@@ -22,12 +22,17 @@ interface Bill {
   total: number
   paid: number
   status: string
-  party_id: number
   reference?: string
   notes?: string
-  suppliers?: { name: string; code: string; address?: string; phone?: string; email?: string }
+  party_id: number
   items?: BillItem[]
-  journal_entries?: { id: number; entry_no: string; date: string }[]
+  supplier?: {
+    name: string
+    code: string
+    phone?: string
+    address?: string
+    email?: string
+  }
 }
 
 export default function BillDetailPage() {
@@ -44,7 +49,11 @@ export default function BillDetailPage() {
   const [companyId, setCompanyId] = useState<string>("")
 
   const [companySettings, setCompanySettings] = useState<{
-    name?: string; address?: string; phone?: string; email?: string; logo_url?: string
+    name?: string
+    address?: string
+    phone?: string
+    email?: string
+    logo_url?: string
   }>({})
 
   useEffect(() => {
@@ -58,46 +67,55 @@ export default function BillDetailPage() {
   useEffect(() => {
     if (!companyId || !billId) return
     setLoading(true)
-    // Fetch bill with supplier details
+
+    // 1. Fetch bill (no join)
     supabase
       .from("invoices")
-      .select("*, suppliers(name, code, address, phone, email)")
+      .select("*")
       .eq("id", billId)
       .eq("company_id", companyId)
       .eq("type", "purchase")
       .single()
       .then(({ data }) => {
-        if (data) {
-          const b: Bill = data
+        if (!data) { setLoading(false); return }
+
+        const b: Bill = data
+
+        // 2. Fetch supplier separately using party_id
+        if (b.party_id) {
           supabase
-            .from("invoice_items")
-            .select("*")
-            .eq("invoice_id", b.id)
-            .eq("company_id", companyId)
-            .then(({ data: items }) => {
-              b.items = items || []
+            .from("suppliers")
+            .select("name, code, phone, address, email")
+            .eq("id", b.party_id)
+            .single()
+            .then(({ data: supp }) => {
+              b.supplier = supp || undefined
+            })
+            .finally(() => {
+              // 3. Fetch items
               supabase
-                .from("journal_entries")
-                .select("id, entry_no, date")
+                .from("invoice_items")
+                .select("*")
+                .eq("invoice_id", b.id)
                 .eq("company_id", companyId)
-                .like("description", `%${b.invoice_no}%`)
-                .order("date", { ascending: false })
-                .then(({ data: entries }) => {
-                  b.journal_entries = entries || []
+                .then(({ data: items }) => {
+                  b.items = items || []
                   setBill(b)
                   setLoading(false)
                 })
             })
         } else {
+          b.items = []
+          setBill(b)
           setLoading(false)
         }
       })
 
-    // Company settings
+    // 4. Fetch company settings
     supabase
       .from("company_settings")
-      .select("logo_url, company_name, address, phone, email")
-      .eq("id", 1)
+      .select("company_name, address, phone, email, logo_url")
+      .limit(1)
       .maybeSingle()
       .then(({ data }) => {
         if (data) {
@@ -112,20 +130,18 @@ export default function BillDetailPage() {
       })
   }, [companyId, billId])
 
-  // WhatsApp link generator
   const getWhatsAppLink = () => {
-    if (!bill || !bill.suppliers) return ""
-    const phone = (bill.suppliers.phone || "").replace(/\D/g, "")
+    if (!bill || !bill.supplier) return ""
+    const phone = (bill.supplier.phone || "").replace(/\D/g, "")
     if (!phone) return ""
-    const fullPhone = "92" + phone // assumes +92 default for suppliers
-    const msg = `Dear ${bill.suppliers.name},\n\nYour purchase bill ${bill.invoice_no} for PKR ${bill.total?.toLocaleString()} is ready.\nDate: ${bill.date}\nDue: ${bill.due_date}\n\nThank you for your business.\n— OneAccounts`
-    return `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`
+    // Suppliers don't have country_code, default to +92
+    const msg = `Dear ${bill.supplier.name},\n\nYour purchase bill ${bill.invoice_no} for PKR ${bill.total?.toLocaleString()} is ready.\nDate: ${bill.date}\nDue: ${bill.due_date}\n\nThank you for your business.\n— OneAccounts`
+    return `https://wa.me/92${phone}?text=${encodeURIComponent(msg)}`
   }
 
-  // PDF generation
   const handlePrintPDF = () => {
     if (!bill) return
-    const supplier = bill.suppliers
+    const supplier = bill.supplier
     const subTotal = bill.items?.reduce((s, i) => s + i.total, 0) || 0
 
     const pdfData = {
@@ -176,7 +192,6 @@ export default function BillDetailPage() {
         table { width: 100%; border-collapse: collapse; font-size: 12px; }
         th { text-align: left; padding: 8px 12px; border-bottom: 1px solid #E2E8F0; background: #F8FAFC; font-weight: 600; color: #475569; }
         td { padding: 8px 12px; border-bottom: 1px solid #F1F5F9; }
-        .total-row { font-weight: 700; }
         .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
         .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
         .btn-primary { background: #1D4ED8; color: white; }
@@ -202,18 +217,16 @@ export default function BillDetailPage() {
         </div>
       </div>
 
-      {/* Info card */}
       <div className="card">
         <div className="row"><span className="label">Date</span><span className="value">{bill.date}</span></div>
         <div className="row"><span className="label">Due Date</span><span className="value">{bill.due_date}</span></div>
-        <div className="row"><span className="label">Supplier</span><span className="value">{bill.suppliers?.code} – {bill.suppliers?.name}</span></div>
+        <div className="row"><span className="label">Supplier</span><span className="value">{bill.supplier?.code} – {bill.supplier?.name || "Unknown"}</span></div>
         <div className="row"><span className="label">Total</span><span className="value">PKR {bill.total?.toLocaleString()}</span></div>
         <div className="row"><span className="label">Paid</span><span className="value">PKR {bill.paid?.toLocaleString()}</span></div>
         <div className="row"><span className="label">Due</span><span className="value">PKR {balanceDue.toLocaleString()}</span></div>
         <div className="row"><span className="label">Status</span><span className="value">{bill.status}</span></div>
       </div>
 
-      {/* Items */}
       {bill.items && bill.items.length > 0 && (
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700 }}>Items</h3>
@@ -233,29 +246,6 @@ export default function BillDetailPage() {
                   <td style={{ textAlign: "center" }}>{item.qty}</td>
                   <td style={{ textAlign: "right" }}>{item.unit_price?.toLocaleString()}</td>
                   <td style={{ textAlign: "right" }}>{item.total?.toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Journal entries */}
-      {bill.journal_entries && bill.journal_entries.length > 0 && (
-        <div className="card">
-          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700 }}>Related Journal Entries</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Entry No</th>
-                <th>Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bill.journal_entries.map(entry => (
-                <tr key={entry.id}>
-                  <td>{entry.entry_no}</td>
-                  <td>{entry.date}</td>
                 </tr>
               ))}
             </tbody>
