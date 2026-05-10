@@ -16,9 +16,10 @@ export default function InvoicesListPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getUser().then(({ data }) => {
+      const user = (data as any)?.user
       if (!user) return
-      const cid = (user?.app_metadata as any)?.company_id
+      const cid = user?.app_metadata?.company_id
       if (cid) setCompanyId(cid)
     })
   }, [])
