@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Printer, Send } from "lucide-react"
+import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 
 interface BillItem {
   id: number
@@ -13,7 +14,7 @@ interface BillItem {
   total: number
 }
 
-interface PurchaseBill {
+interface Bill {
   id: number
   invoice_no: string
   date: string
@@ -22,7 +23,9 @@ interface PurchaseBill {
   paid: number
   status: string
   party_id: number
-  suppliers?: { name: string; code: string }
+  reference?: string
+  notes?: string
+  suppliers?: { name: string; code: string; address?: string; phone?: string; email?: string }
   items?: BillItem[]
   journal_entries?: { id: number; entry_no: string; date: string }[]
 }
@@ -36,9 +39,13 @@ export default function BillDetailPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  const [bill, setBill] = useState<PurchaseBill | null>(null)
+  const [bill, setBill] = useState<Bill | null>(null)
   const [loading, setLoading] = useState(true)
   const [companyId, setCompanyId] = useState<string>("")
+
+  const [companySettings, setCompanySettings] = useState<{
+    name?: string; address?: string; phone?: string; email?: string; logo_url?: string
+  }>({})
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -50,15 +57,18 @@ export default function BillDetailPage() {
 
   useEffect(() => {
     if (!companyId || !billId) return
+    setLoading(true)
+    // Fetch bill with supplier details
     supabase
-      .from("invoices")           // bills are stored in invoices table with type='purchase'
-      .select("*, suppliers(name, code)")
+      .from("invoices")
+      .select("*, suppliers(name, code, address, phone, email)")
       .eq("id", billId)
       .eq("company_id", companyId)
+      .eq("type", "purchase")
       .single()
       .then(({ data }) => {
         if (data) {
-          const b: PurchaseBill = data
+          const b: Bill = data
           supabase
             .from("invoice_items")
             .select("*")
@@ -82,12 +92,79 @@ export default function BillDetailPage() {
           setLoading(false)
         }
       })
+
+    // Company settings
+    supabase
+      .from("company_settings")
+      .select("logo_url, company_name, address, phone, email")
+      .eq("id", 1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setCompanySettings({
+            name: data.company_name || "OneAccounts",
+            address: data.address || "",
+            phone: data.phone || "",
+            email: data.email || "",
+            logo_url: data.logo_url || null,
+          })
+        }
+      })
   }, [companyId, billId])
+
+  // WhatsApp link generator
+  const getWhatsAppLink = () => {
+    if (!bill || !bill.suppliers) return ""
+    const phone = (bill.suppliers.phone || "").replace(/\D/g, "")
+    if (!phone) return ""
+    const fullPhone = "92" + phone // assumes +92 default for suppliers
+    const msg = `Dear ${bill.suppliers.name},\n\nYour purchase bill ${bill.invoice_no} for PKR ${bill.total?.toLocaleString()} is ready.\nDate: ${bill.date}\nDue: ${bill.due_date}\n\nThank you for your business.\n— OneAccounts`
+    return `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`
+  }
+
+  // PDF generation
+  const handlePrintPDF = () => {
+    if (!bill) return
+    const supplier = bill.suppliers
+    const subTotal = bill.items?.reduce((s, i) => s + i.total, 0) || 0
+
+    const pdfData = {
+      companyName: companySettings.name || "OneAccounts",
+      companyAddress: companySettings.address,
+      companyPhone: companySettings.phone,
+      companyEmail: companySettings.email,
+      logoUrl: companySettings.logo_url,
+      invoiceNo: bill.invoice_no,
+      date: bill.date,
+      dueDate: bill.due_date,
+      reference: bill.reference,
+      notes: bill.notes,
+      customerName: supplier?.name || "Unknown",
+      customerAddress: supplier?.address,
+      customerPhone: supplier?.phone,
+      customerEmail: supplier?.email,
+      items: (bill.items || []).map(item => ({
+        description: item.description,
+        qty: item.qty,
+        unit_price: item.unit_price,
+        total: item.total,
+      })),
+      subtotal: subTotal,
+      total: bill.total,
+      paid: bill.paid || 0,
+      balanceDue: bill.total - (bill.paid || 0),
+      status: bill.status,
+    }
+
+    const doc = generateInvoicePDF(pdfData)
+    doc.save(`Bill_${bill.invoice_no}.pdf`)
+  }
 
   if (loading) return <div style={{ padding: 24, textAlign: "center" }}>Loading…</div>
   if (!bill) return <div style={{ padding: 24, textAlign: "center" }}>Bill not found</div>
 
   const balanceDue = bill.total - (bill.paid || 0)
+  const waLink = getWhatsAppLink()
 
   return (
     <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
@@ -100,15 +177,32 @@ export default function BillDetailPage() {
         th { text-align: left; padding: 8px 12px; border-bottom: 1px solid #E2E8F0; background: #F8FAFC; font-weight: 600; color: #475569; }
         td { padding: 8px 12px; border-bottom: 1px solid #F1F5F9; }
         .total-row { font-weight: 700; }
+        .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
+        .btn-primary { background: #1D4ED8; color: white; }
+        .btn-success { background: #25D366; color: white; }
       `}</style>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        <button className="btn btn-outline" onClick={() => router.push("/dashboard/bills")}>
-          <ArrowLeft size={16} />
-        </button>
-        <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>Bill #{bill.invoice_no}</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button className="btn btn-outline" onClick={() => router.push("/dashboard/bills")}>
+            <ArrowLeft size={16} />
+          </button>
+          <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>Bill #{bill.invoice_no}</h1>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {waLink && (
+            <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success">
+              <Send size={16} /> WhatsApp
+            </a>
+          )}
+          <button className="btn btn-primary" onClick={handlePrintPDF}>
+            <Printer size={16} /> Print PDF
+          </button>
+        </div>
       </div>
 
+      {/* Info card */}
       <div className="card">
         <div className="row"><span className="label">Date</span><span className="value">{bill.date}</span></div>
         <div className="row"><span className="label">Due Date</span><span className="value">{bill.due_date}</span></div>
@@ -119,6 +213,7 @@ export default function BillDetailPage() {
         <div className="row"><span className="label">Status</span><span className="value">{bill.status}</span></div>
       </div>
 
+      {/* Items */}
       {bill.items && bill.items.length > 0 && (
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700 }}>Items</h3>
@@ -145,6 +240,7 @@ export default function BillDetailPage() {
         </div>
       )}
 
+      {/* Journal entries */}
       {bill.journal_entries && bill.journal_entries.length > 0 && (
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700 }}>Related Journal Entries</h3>

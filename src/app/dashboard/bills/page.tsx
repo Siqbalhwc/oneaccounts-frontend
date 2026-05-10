@@ -38,7 +38,7 @@ export default function BillsPage() {
   const [pageSize, setPageSize] = useState(25)
   const [total, setTotal] = useState(0)
 
-  // ── Company ID (hardcoded fallback) ─────────────────────────
+  // ── Company ID ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const claim = (user?.app_metadata as any)?.company_id
@@ -49,18 +49,20 @@ export default function BillsPage() {
     })
   }, [])
 
-  // ── Fetch bills ────────────────────────────────────────────
+  // ── Fetch bills ──
   useEffect(() => {
     if (!canView || !companyId) { setLoading(false); return }
 
     const fetchBills = async () => {
       setLoading(true)
 
-      const { count } = await supabase
+      let query = supabase
         .from("invoices")
         .select("*", { count: "exact", head: true })
         .eq("company_id", companyId)
-        .eq("type", "purchase")
+        .eq("type", "purchase")  // ← FIX: purchase bills only
+
+      const { count } = await query
       setTotal(count || 0)
 
       const from = (page - 1) * pageSize
@@ -69,7 +71,7 @@ export default function BillsPage() {
         .from("invoices")
         .select("*")
         .eq("company_id", companyId)
-        .eq("type", "purchase")
+        .eq("type", "purchase")  // ← FIX
         .order("date", { ascending: false })
         .range(from, to)
 
@@ -77,7 +79,6 @@ export default function BillsPage() {
         setBills([]); setFiltered([]); setLoading(false); return
       }
 
-      // Resolve supplier names separately
       const partyIds = [...new Set(data.map((b: any) => b.party_id).filter(Boolean))]
       let supplierMap: Record<number, string> = {}
       if (partyIds.length > 0) {
@@ -101,7 +102,7 @@ export default function BillsPage() {
     fetchBills()
   }, [canView, companyId, page, pageSize])
 
-  // ── Search ─────────────────────────────────────────────────
+  // ── Search ──
   useEffect(() => {
     if (!search.trim()) { setFiltered(bills); return }
     const s = search.toLowerCase()

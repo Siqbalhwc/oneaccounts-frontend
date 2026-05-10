@@ -187,7 +187,7 @@ export default function CustomersPage() {
       company_id: companyId,
       name: form.name.trim(),
       country_code: form.country_code,
-      phone: form.phone.trim(),
+      phone: form.phone.trim().replace(/^0+/, ''),
       email: form.email.trim(),
       address: form.address.trim(),
       payment_terms: form.payment_terms,

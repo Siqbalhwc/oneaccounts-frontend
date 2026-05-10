@@ -44,6 +44,7 @@ export default function InvoicesListPage() {
         .from("invoices")
         .select("id, invoice_no, date, due_date, total, status", { count: "exact" })
         .eq("company_id", companyId)
+        .eq("type", "sale")                    // ← FIX: filter sales only
         .order("date", { ascending: false })
 
       if (search.trim()) {
@@ -59,7 +60,6 @@ export default function InvoicesListPage() {
     fetchInvoices()
   }, [companyId, search, page])
 
-  // Summary stats
   const totalAmount = invoices.reduce((sum, inv) => sum + (inv.total || 0), 0)
   const unpaidCount = invoices.filter(inv => inv.status === "Unpaid").length
   const overdueCount = invoices.filter(inv => inv.status === "Overdue").length
@@ -100,7 +100,6 @@ export default function InvoicesListPage() {
         </button>
       </div>
 
-      {/* Summary Cards */}
       <div className="summary-grid">
         <div className="card">
           <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Invoices</div>
@@ -120,7 +119,6 @@ export default function InvoicesListPage() {
         </div>
       </div>
 
-      {/* Search */}
       <div style={{ maxWidth: 320, marginBottom: 16 }}>
         <div style={{ position: "relative" }}>
           <Search size={14} style={{ position: "absolute", left: 10, top: 12, color: "#94A3B8" }} />
@@ -172,7 +170,6 @@ export default function InvoicesListPage() {
         </table>
       </div>
 
-      {/* Pagination */}
       {total > pageSize && (
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12, fontSize: 13, color: "#64748B" }}>
           <span>Showing {Math.min(pageSize, total - (page-1)*pageSize)} of {total}</span>
