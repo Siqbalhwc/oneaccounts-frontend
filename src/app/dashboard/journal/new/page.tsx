@@ -19,7 +19,6 @@ export default function NewJournalPage() {
   const [entryDate, setEntryDate] = useState(new Date().toISOString().split("T")[0])
   const [description, setDescription] = useState("")
 
-  // Each line now has optional project_id, location_id, activity_id
   const [lines, setLines] = useState<any[]>([
     { account_id: null, debit: 0, credit: 0, project_id: null, location_id: null, activity_id: null },
     { account_id: null, debit: 0, credit: 0, project_id: null, location_id: null, activity_id: null },
@@ -29,7 +28,7 @@ export default function NewJournalPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  // ── Load accounts, lookup lists, and next entry number ─────
+  // Load data
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -63,7 +62,6 @@ export default function NewJournalPage() {
     const updated = [...lines]
     updated[i] = { ...updated[i], [field]: field === "debit" || field === "credit" ? Number(value) : value }
 
-    // If account changed, auto‑fill its default tags
     if (field === "account_id" && value) {
       const acc = accounts.find(a => a.id == value)
       if (acc) {
@@ -73,7 +71,6 @@ export default function NewJournalPage() {
       }
     }
 
-    // Debit / Credit mutual exclusion
     if (field === "debit" && updated[i].debit > 0) updated[i].credit = 0
     if (field === "credit" && updated[i].credit > 0) updated[i].debit = 0
 
@@ -109,7 +106,6 @@ export default function NewJournalPage() {
         }))
       )
 
-      // Update account balances (scoped to company)
       for (const l of validLines) {
         const { data: acc } = await supabase.from("accounts")
           .select("balance").eq("id", l.account_id).eq("company_id", companyId).single()
@@ -126,8 +122,8 @@ export default function NewJournalPage() {
   }
 
   return (
-    <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
-      <div style={{ maxWidth: 900, margin: "0 auto" }}>
+    <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      <div style={{ maxWidth: 1000, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
           <button onClick={() => router.push("/dashboard/journal")}
             style={{ background: "white", border: "1px solid #E2E8F0", borderRadius: 8, padding: "8px 12px", cursor: "pointer" }}>
@@ -142,8 +138,8 @@ export default function NewJournalPage() {
         {error && <div style={{ background: "#FEF2F2", color: "#B91C1C", padding: 12, borderRadius: 8, marginBottom: 16 }}>{error}</div>}
         {flash && <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#15803D", padding: "10px 14px", borderRadius: 8, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
 
-        {/* Header fields */}
-        <div style={{ background: "white", borderRadius: 12, padding: 24, border: "1px solid #E2E8F0", marginBottom: 16 }}>
+        {/* Header card */}
+        <div className="card" style={{ background: "white", borderRadius: 12, padding: 24, border: "1px solid #E2E8F0", marginBottom: 16 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
             <div>
               <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 4 }}>Entry No *</label>
@@ -163,46 +159,49 @@ export default function NewJournalPage() {
           </div>
         </div>
 
-        {/* Journal Lines */}
-        <div style={{ background: "white", borderRadius: 12, padding: 24, border: "1px solid #E2E8F0", marginBottom: 16 }}>
+        {/* Lines card */}
+        <div className="card" style={{ background: "white", borderRadius: 12, padding: 24, border: "1px solid #E2E8F0", marginBottom: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <span style={{ fontWeight: 600, fontSize: 14 }}>Journal Lines</span>
-            <button onClick={addLine}
-              style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", background: "#F1F5F9", border: "1px solid #E2E8F0", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>
+            <button onClick={addLine} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", background: "#F1F5F9", border: "1px solid #E2E8F0", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>
               <Plus size={14} /> Add Line
             </button>
           </div>
 
-          {/* Column header */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 100px 100px 100px 40px", gap: 8, fontSize: 10, fontWeight: 700, color: "#94A3B8", padding: "0 0 8px" }}>
-            <span>Account</span><span style={{ textAlign: "right" }}>Debit</span><span style={{ textAlign: "right" }}>Credit</span>
-            <span>Project</span><span>Location</span><span>Activity</span>
+          {/* Column headings perfectly aligned with inputs */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px 110px 100px 100px 40px", gap: 8, fontSize: 10, fontWeight: 700, color: "#94A3B8", padding: "0 0 8px", alignItems: "end" }}>
+            <span>Account</span>
+            <span style={{ textAlign: "right", paddingRight: 8 }}>Debit</span>
+            <span style={{ textAlign: "right", paddingRight: 8 }}>Credit</span>
+            <span style={{ paddingLeft: 4 }}>Project</span>
+            <span style={{ paddingLeft: 4 }}>Location</span>
+            <span style={{ paddingLeft: 4 }}>Activity</span>
             <span></span>
           </div>
 
           {lines.map((l, i) => (
-            <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 100px 100px 100px 40px", gap: 8, alignItems: "center", marginBottom: 8 }}>
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px 110px 100px 100px 40px", gap: 8, alignItems: "center", marginBottom: 8 }}>
               <select value={l.account_id || ""} onChange={e => updateLine(i, "account_id", e.target.value)}
-                style={{ height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 8px", fontSize: 12 }}>
+                style={{ height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 8px", fontSize: 12, width: "100%" }}>
                 <option value="">Select account...</option>
                 {accounts.map(a => <option key={a.id} value={a.id}>{a.code} - {a.name}</option>)}
               </select>
               <input type="number" value={l.debit || ""} onChange={e => updateLine(i, "debit", e.target.value)}
-                style={{ height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 8px", fontSize: 12, textAlign: "right" }} />
+                style={{ width: "100%", height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 8px", fontSize: 12, textAlign: "right" }} />
               <input type="number" value={l.credit || ""} onChange={e => updateLine(i, "credit", e.target.value)}
-                style={{ height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 8px", fontSize: 12, textAlign: "right" }} />
+                style={{ width: "100%", height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 8px", fontSize: 12, textAlign: "right" }} />
               <select value={l.project_id || ""} onChange={e => updateLine(i, "project_id", e.target.value ? Number(e.target.value) : null)}
-                style={{ height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 4px", fontSize: 11 }}>
+                style={{ width: "100%", height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 4px", fontSize: 11 }}>
                 <option value="">—</option>
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
               <select value={l.location_id || ""} onChange={e => updateLine(i, "location_id", e.target.value ? Number(e.target.value) : null)}
-                style={{ height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 4px", fontSize: 11 }}>
+                style={{ width: "100%", height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 4px", fontSize: 11 }}>
                 <option value="">—</option>
                 {locations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
               </select>
               <select value={l.activity_id || ""} onChange={e => updateLine(i, "activity_id", e.target.value ? Number(e.target.value) : null)}
-                style={{ height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 4px", fontSize: 11 }}>
+                style={{ width: "100%", height: 38, border: "1.5px solid #E2E8F0", borderRadius: 6, padding: "0 4px", fontSize: 11 }}>
                 <option value="">—</option>
                 {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
@@ -212,12 +211,13 @@ export default function NewJournalPage() {
             </div>
           ))}
 
-          {/* Totals */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px", gap: 8, marginTop: 12, paddingTop: 12, borderTop: "2px solid #E2E8F0", fontWeight: 700 }}>
+          {/* Totals – aligned under debit/credit columns */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px", gap: 8, marginTop: 12, paddingTop: 12, borderTop: "2px solid #E2E8F0", fontWeight: 700, fontSize: 14 }}>
             <span>Total</span>
-            <span style={{ textAlign: "right" }}>PKR {totalDebit.toLocaleString()}</span>
-            <span style={{ textAlign: "right" }}>PKR {totalCredit.toLocaleString()}</span>
+            <span style={{ textAlign: "right", paddingRight: 8 }}>PKR {totalDebit.toLocaleString()}</span>
+            <span style={{ textAlign: "right", paddingRight: 8 }}>PKR {totalCredit.toLocaleString()}</span>
           </div>
+
           {!isBalanced && totalDebit > 0 && (
             <div style={{ color: "#EF4444", fontSize: 13, marginTop: 8 }}>⚠️ Difference: PKR {Math.abs(totalDebit - totalCredit).toLocaleString()}</div>
           )}
