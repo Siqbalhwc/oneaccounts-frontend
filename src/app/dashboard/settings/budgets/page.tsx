@@ -49,7 +49,7 @@ export default function BudgetsPage() {
   const [budgetImportFile, setBudgetImportFile] = useState<File | null>(null)
   const [importingBudget, setImportingBudget] = useState(false)
 
-  // Load master data
+  // ── 1. Load master data ──────────────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -67,7 +67,7 @@ export default function BudgetsPage() {
     })
   }, [])
 
-  // Load activities of selected project
+  // ── 2. Activities of selected project ────────────────────────────────────
   useEffect(() => {
     if (!companyId || !selectedProjectId) { setAllActivities([]); return }
     supabase.from("activities")
@@ -79,7 +79,27 @@ export default function BudgetsPage() {
       .then(r => r.data && setAllActivities(r.data))
   }, [companyId, selectedProjectId])
 
-  // Load budgets and actuals
+  // ── 2b. Auto‑select donor if only one donor is linked to the project ──
+  useEffect(() => {
+    if (!companyId || !selectedProjectId || businessType !== "ngo") return
+    // If donor already set (from URL or user), don't override
+    if (initialDonor) return
+    supabase.from("budgets")
+      .select("donor_id")
+      .eq("company_id", companyId)
+      .eq("project_id", selectedProjectId)
+      .is("month", null)
+      .is("deleted_at", null)
+      .then(({ data: budgetRows }) => {
+        if (!budgetRows) return
+        const uniqueDonorIds = [...new Set(budgetRows.map((b: any) => b.donor_id).filter(Boolean))]
+        if (uniqueDonorIds.length === 1) {
+          setSelectedDonorId(String(uniqueDonorIds[0]))
+        }
+      })
+  }, [companyId, selectedProjectId, businessType, initialDonor])
+
+  // ── 3. Load budgets + actuals ────────────────────────────────────────────
   useEffect(() => {
     if (!companyId || !selectedProjectId) { setData({}); setLoading(false); return }
     if (businessType === "ngo" && !selectedDonorId) { setData({}); setLoading(false); return }
@@ -135,6 +155,7 @@ export default function BudgetsPage() {
     })
   }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, filterLocationId, businessType])
 
+  // ── 4. Helpers ───────────────────────────────────────────────────────────
   const updateCell = (accountId: string, activityId: string, locationId: string, amount: number) => {
     setData(prev => {
       const updated = { ...prev }
@@ -467,7 +488,6 @@ export default function BudgetsPage() {
                           </tr>
                         )
                       })}
-                      {/* Add location row */}
                       <tr>
                         <td>
                           <select
@@ -483,7 +503,6 @@ export default function BudgetsPage() {
                         </td>
                         <td colSpan={accounts.length * 3 + 3}></td>
                       </tr>
-                      {/* Activity subtotal */}
                       <tr className="total-row">
                         <td style={{ textAlign: "left", paddingLeft: 16 }}>Sub Total</td>
                         {accounts.map(acc => {
@@ -512,7 +531,6 @@ export default function BudgetsPage() {
                     </Fragment>
                   )
                 })}
-                {/* Grand total */}
                 {displayActivities.length > 0 && (
                   <tr className="total-row" style={{ fontSize: 12 }}>
                     <td>GRAND TOTAL</td>

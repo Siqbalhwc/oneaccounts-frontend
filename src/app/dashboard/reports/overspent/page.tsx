@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import * as XLSX from "xlsx"
 import jsPDF from "jspdf"
@@ -9,10 +9,15 @@ import autoTable from "jspdf-autotable"
 
 export default function OverspentPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
+
+  // Read URL params to sync with dashboard
+  const initialProject = searchParams.get("project") || ""
+  const initialDonor = searchParams.get("donor") || ""
 
   const [companyId, setCompanyId] = useState("")
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
@@ -33,16 +38,27 @@ export default function OverspentPage() {
     supabase.rpc("dashboard_project_utilization", {
       p_company_id: companyId, p_fiscal_year: fiscalYear,
     }).then(({ data }) => {
-      setRows((data || []).filter((p: any) => (p.actual || 0) > (p.budget || 0))
-        .map((p: any) => ({
-          project: p.project_name,
-          budget: p.budget || 0, actual: p.actual || 0,
-          over: (p.actual || 0) - (p.budget || 0),
-          pct: p.budget ? Math.round(((p.actual || 0) / p.budget) * 100) : 0,
-        })))
+      let filtered = (data || []).filter((p: any) => (p.actual || 0) > (p.budget || 0))
+
+      // Filter by dashboard selection if provided
+      if (initialProject) {
+        filtered = filtered.filter((p: any) => String(p.project_id) === initialProject)
+      }
+      if (initialDonor) {
+        // RPC may not return donor_id per project; this filter works if data includes donor_id
+        filtered = filtered.filter((p: any) => String(p.donor_id) === initialDonor)
+      }
+
+      setRows(filtered.map((p: any) => ({
+        project: p.project_name,
+        budget: p.budget || 0,
+        actual: p.actual || 0,
+        over: (p.actual || 0) - (p.budget || 0),
+        pct: p.budget ? Math.round(((p.actual || 0) / p.budget) * 100) : 0,
+      })))
       setLoading(false)
     })
-  }, [companyId, fiscalYear])
+  }, [companyId, fiscalYear, initialProject, initialDonor])
 
   const exportExcel = () => {
     const sheet = rows.map(r => ({
@@ -73,8 +89,9 @@ export default function OverspentPage() {
     <div style={{ padding: "20px 24px", fontFamily: "Segoe UI, system-ui, sans-serif", background: "#f0f4f8", minHeight: "100vh" }}>
       <style>{`
         .card { background: white; border-radius: 24px; border: 1px solid #e2e8f0; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-        .table th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; text-align: left; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; }
-        .table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+        .table { width: 100%; border-collapse: collapse; }
+        .table th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; text-align: left; padding: 12px 12px; border-bottom: 1px solid #e2e8f0; }
+        .table td { padding: 12px 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
         .filter-select { padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; background: white; box-sizing: border-box; }
         .btn { padding: 8px 16px; border: none; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
         .btn-secondary { background: #e2e8f0; color: #1e293b; }
@@ -102,10 +119,14 @@ export default function OverspentPage() {
             <p style={{ color: "#94a3b8", marginTop: 8 }}>All projects are within budget – great job!</p>
           </div>
         ) : (
-          <table className="table" style={{ width: "100%", borderCollapse: "collapse" }}>
+          <table className="table">
             <thead>
               <tr>
-                <th>Project</th><th>Budget</th><th>Actual</th><th>Overspent</th><th>Util %</th>
+                <th>Project</th>
+                <th style={{ textAlign: "right" }}>Budget</th>
+                <th style={{ textAlign: "right" }}>Actual</th>
+                <th style={{ textAlign: "right" }}>Overspent</th>
+                <th style={{ textAlign: "right" }}>Util %</th>
               </tr>
             </thead>
             <tbody>
