@@ -142,6 +142,7 @@ function DashboardLayoutInner({
     })
   }
 
+  // ── NAV SECTIONS WITH CORRECTED SYSTEM FILTER ──
   const navSections: NavSection[] = [
     {
       section: "MAIN",
@@ -190,13 +191,19 @@ function DashboardLayoutInner({
     },
     {
       section: "SYSTEM",
-      items: allNavItems.filter(i =>
-        !["/dashboard"].includes(i.href) &&
-        !["/dashboard/customers","/dashboard/invoices","/dashboard/receipts","/dashboard/suppliers","/dashboard/bills","/dashboard/payments"].includes(i.href) &&
-        !["/dashboard/banking/bank-accounts","/dashboard/banking/bank-transfers"].includes(i.href) &&
-        !["/dashboard/products","/dashboard/inventory/adjustments"].includes(i.href) &&
-        !["/dashboard/accounts","/dashboard/journal","/dashboard/reports","/dashboard/settings/invoice-automation","/dashboard/investors"].includes(i.href)
-      ),
+      items: allNavItems.filter(i => {
+        // Explicitly list every href that is already claimed by the other sections
+        const claimed = [
+          "/dashboard",
+          "/dashboard/customers", "/dashboard/invoices", "/dashboard/receipts",
+          "/dashboard/suppliers", "/dashboard/bills", "/dashboard/payments",
+          "/dashboard/banking/bank-accounts", "/dashboard/banking/bank-transfers",
+          "/dashboard/products", "/dashboard/inventory/adjustments",
+          "/dashboard/accounts", "/dashboard/journal", "/dashboard/reports",
+          "/dashboard/settings/invoice-automation", "/dashboard/investors",
+        ]
+        return !claimed.includes(i.href)
+      }),
     },
   ]
 
@@ -259,10 +266,6 @@ function DashboardLayoutInner({
           color: rgba(255,255,255,0.25); padding: 4px 10px 2px;
           letter-spacing: 0.05em;
         }
-        .dl-nav-divider {
-          height: 1px; background: rgba(255,255,255,0.08);
-          margin: 8px 14px;
-        }
         .dl-sidebar-user { 
           padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.1); 
           display: flex; align-items: center; gap: 10px; 
@@ -315,7 +318,7 @@ function DashboardLayoutInner({
         .dl-hamburger span { display: block; width: 20px; height: 2px; background: #475569; margin: 4px 0; border-radius: 2px; }
         .dl-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 35; }
         .dl-overlay.open { display: block; }
-        @media (max-width: 768px) {
+        @media (max-width: 900px) {
           .dl-sidebar { width: 60px; min-width: 60px; }
           .dl-sidebar-logo-name, .dl-sidebar-logo-sub, .dl-section-btn span,
           .dl-nav-group-label, .dl-nav-item span:not(.dl-nav-icon),
@@ -374,12 +377,10 @@ function DashboardLayoutInner({
                 visibleFlatItems = sec.items.filter(isVisible)
               }
 
-              // Force BANKING and SYSTEM to always appear
-              const alwaysShow = sec.section === "BANKING" || sec.section === "SYSTEM"
-              const hasContent = alwaysShow || visibleGroups.length > 0 || visibleFlatItems.length > 0
+              const hasContent = visibleGroups.length > 0 || visibleFlatItems.length > 0
               if (!hasContent) return null
 
-              const expanded = expandedSections[sec.section] ?? false
+              const expanded = expandedSections[sec.section] ?? true  // ← FIXED: default to true
 
               return (
                 <div key={sec.section} style={{ marginBottom: 2 }}>
