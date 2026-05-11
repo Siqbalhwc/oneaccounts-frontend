@@ -1,3 +1,4 @@
+// Deployment refresh
 "use client"
 
 import { useEffect, useState } from "react"
@@ -431,4 +432,4 @@ export default function ManagementDashboard({ role }: { role: string }) {
       </div>
     </div>
   )
-}
+}// Force deployment 
