@@ -53,7 +53,6 @@ export default function SuppliersPage() {
   const [flash, setFlash] = useState("")
   const [formError, setFormError] = useState("")
 
-  // Master data for dropdowns
   const [projects, setProjects] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
   const [activities, setActivities] = useState<any[]>([])
@@ -66,7 +65,6 @@ export default function SuppliersPage() {
     })
   }, [])
 
-  // Load dropdown options
   useEffect(() => {
     if (!companyId) return
     supabase.from("projects").select("id, name").eq("company_id", companyId).is("deleted_at", null).order("name")
@@ -102,30 +100,24 @@ export default function SuppliersPage() {
 
   useEffect(() => { fetchSuppliers() }, [companyId, search, page])
 
-  // ── ROBUST unique code generator ──
   const getNextCode = async (): Promise<string> => {
-    // Fetch all codes for this company (only codes, order by code desc)
     const { data } = await supabase
       .from("suppliers")
       .select("code")
       .eq("company_id", companyId)
       .order("code", { ascending: false })
-      .limit(50)  // take the highest ones
-
-    if (!data || data.length === 0) return "SUP-001"
-
-    // Find the highest numeric suffix among codes that look like SUP-xxx
+      .limit(50)
     let maxNum = 0
-    for (const row of data) {
-      const match = row.code?.match(/SUP-(\d+)/)
-      if (match) {
-        const num = parseInt(match[1], 10)
-        if (!isNaN(num) && num > maxNum) maxNum = num
-      }
+    if (data) {
+      data.forEach(row => {
+        const match = row.code?.match(/SUP-(\d+)/)
+        if (match) {
+          const n = parseInt(match[1], 10)
+          if (!isNaN(n) && n > maxNum) maxNum = n
+        }
+      })
     }
-    // If no SUP codes found, fallback to treating any number as suffix? No, just start from 1.
-    const next = maxNum + 1
-    return `SUP-${String(next).padStart(3, "0")}`
+    return `SUP-${String(maxNum + 1).padStart(3, "0")}`
   }
 
   const openNew = () => {
@@ -183,12 +175,12 @@ export default function SuppliersPage() {
     if (editingSupplier) {
       const { error } = await supabase.from("suppliers").update(payload).eq("id", editingSupplier.id).eq("company_id", companyId)
       if (error) errorMsg = error.message
-      else setFlash("✅ Supplier updated!")
+      else setFlash("Supplier updated!")
     } else {
       const code = await getNextCode()
       const { error } = await supabase.from("suppliers").insert({ ...payload, code, balance: form.opening_balance })
       if (error) errorMsg = error.message
-      else setFlash("✅ Supplier created!")
+      else setFlash("Supplier created!")
     }
 
     setSaving(false)
@@ -208,9 +200,8 @@ export default function SuppliersPage() {
     fetchSuppliers()
   }
 
-  // Combined guard – wait for both company and role
-  if (!companyId || roleLoading || !role) {
-    return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
+  if (roleLoading || !role) {
+    return <div style={{ padding: 40, textAlign: "center" }}>Loading...</div>
   }
   if (!canView) {
     return (
@@ -220,11 +211,12 @@ export default function SuppliersPage() {
       </div>
     )
   }
+  if (!companyId) return <div style={{ padding: 40, textAlign: "center" }}>Loading company data...</div>
 
   return (
-    <div style={{ padding: 24, fontFamily: "Arial", background: "#EFF4FB", minHeight: "100vh" }}>
+    <div style={{ padding: 24, fontFamily: "'Plus Jakarta Sans', sans-serif", background: "#EFF4FB", minHeight: "100vh" }}>
       <style>{`
-        .card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 16px 20px; }
+        .card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
         .input { width: 100%; height: 38px; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0 12px; font-size: 13px; box-sizing: border-box; }
         .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
         .btn-primary { background: #1D4ED8; color: white; }
@@ -236,20 +228,54 @@ export default function SuppliersPage() {
         .form-error { background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; padding: 8px 12px; border-radius: 6px; }
         .pr-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
         .pr-modal { background: white; border-radius: 14px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
       `}</style>
 
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>🚚 Suppliers</h2>
-        {canEdit && <button className="btn btn-primary" onClick={openNew}><Plus size={16} /> Add Supplier</button>}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", margin: 0 }}>🚚 Suppliers</h1>
+          <p style={{ fontSize: 13, color: "#94A3B8", margin: 0 }}>Manage your supplier accounts</p>
+        </div>
+        {canEdit && (
+          <button className="btn btn-primary" onClick={openNew}>
+            <Plus size={16} /> Add Supplier
+          </button>
+        )}
       </div>
 
-      {flash && <div style={{ marginBottom: 12, color: flash.startsWith("Error") ? "red" : "green" }}>{flash}</div>}
-
-      <div style={{ marginBottom: 12 }}>
-        <input className="input" placeholder="Search..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
+      <div className="summary-grid">
+        <div className="card">
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Suppliers</div>
+          <div style={{ fontSize: 24, fontWeight: 800 }}>{total}</div>
+        </div>
+        <div className="card">
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Payables</div>
+          <div style={{ fontSize: 24, fontWeight: 800 }}>
+            PKR {suppliers.reduce((s, c) => s + (c.balance || 0), 0).toLocaleString()}
+          </div>
+        </div>
       </div>
 
-      <div className="card">
+      {flash && (
+        <div style={{ background: flash.startsWith("Error") ? "#FEF2F2" : "#F0FDF4", border: flash.startsWith("Error") ? "1px solid #FECACA" : "1px solid #BBF7D0", color: flash.startsWith("Error") ? "#B91C1C" : "#15803D", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
+          {flash}
+        </div>
+      )}
+
+      <div style={{ marginBottom: 12, maxWidth: 320 }}>
+        <div style={{ position: "relative" }}>
+          <Search size={14} style={{ position: "absolute", left: 10, top: 12, color: "#94A3B8" }} />
+          <input
+            className="input"
+            style={{ paddingLeft: 32 }}
+            placeholder="Search by code, name, or phone..."
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1) }}
+          />
+        </div>
+      </div>
+
+      <div className="card" style={{ overflowX: "auto" }}>
         <table>
           <thead>
             <tr>
@@ -264,19 +290,33 @@ export default function SuppliersPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} style={{ textAlign: "center" }}>Loading...</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: "center", padding: 20 }}>Loading...</td></tr>
             ) : suppliers.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign: "center", color: "#94A3B8" }}>No suppliers yet.</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: "center", padding: 20, color: "#94A3B8" }}>
+                {search ? "No matching suppliers found." : "No suppliers yet. Add your first supplier above."}
+              </td></tr>
             ) : (
               suppliers.map(s => (
                 <tr key={s.id}>
                   <td style={{ fontWeight: 600 }}>{s.code}</td>
                   <td>{s.name}</td>
-                  <td>{s.phone}</td>
+                  <td>{s.phone || "—"}</td>
                   <td>{s.email || "—"}</td>
                   <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {s.balance?.toLocaleString()}</td>
-                  <td><button className="btn btn-outline" style={{ padding: 4 }} onClick={() => openEdit(s)}><Edit size={14} /></button></td>
-                  <td><button className="btn btn-outline" style={{ padding: 4, color: "#EF4444" }} onClick={() => handleDelete(s.id)}><Trash2 size={14} /></button></td>
+                  <td>
+                    {canEdit && (
+                      <button className="btn btn-outline" style={{ padding: "4px 8px" }} onClick={() => openEdit(s)}>
+                        <Edit size={14} />
+                      </button>
+                    )}
+                  </td>
+                  <td>
+                    {canEdit && (
+                      <button className="btn btn-outline" style={{ padding: "4px 8px", color: "#EF4444", borderColor: "#FECACA" }} onClick={() => handleDelete(s.id)}>
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))
             )}
@@ -284,31 +324,41 @@ export default function SuppliersPage() {
         </table>
       </div>
 
+      {total > pageSize && (
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16, fontSize: 13, color: "#64748B" }}>
+          <span>Showing {Math.min(pageSize, total - (page-1)*pageSize)} of {total}</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-outline" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</button>
+            <button className="btn btn-outline" disabled={page * pageSize >= total} onClick={() => setPage(p => p + 1)}>Next</button>
+          </div>
+        </div>
+      )}
+
       {/* Add/Edit Modal */}
       {showModal && canEdit && (
         <div className="pr-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="pr-modal" onClick={e => e.stopPropagation()}>
             <div style={{ padding: "20px 24px", borderBottom: "1px solid #E2E8F0", display: "flex", justifyContent: "space-between" }}>
               <h3 style={{ margin: 0 }}>{editingSupplier ? "Edit Supplier" : "Add Supplier"}</h3>
-              <button className="btn-outline" onClick={() => setShowModal(false)}><X size={18} /></button>
+              <button className="btn btn-outline" onClick={() => setShowModal(false)}><X size={18} /></button>
             </div>
             <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
               {formError && <div className="form-error">{formError}</div>}
-              <div><label>Name *</label><input className="input" value={form.name} onChange={e => setForm({...form, name: e.target.value})} /></div>
-              <div><label>Phone</label><input className="input" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></div>
-              <div><label>Email</label><input className="input" type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></div>
-              <div><label>Address</label><input className="input" value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></div>
-              <div><label>Opening Balance</label><input className="input" type="number" value={form.opening_balance} onChange={e => setForm({...form, opening_balance: parseFloat(e.target.value) || 0})} /></div>
+              <div><label className="inv-label">Name *</label><input className="input" value={form.name} onChange={e => setForm({...form, name: e.target.value})} /></div>
+              <div><label className="inv-label">Phone</label><input className="input" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></div>
+              <div><label className="inv-label">Email</label><input className="input" type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></div>
+              <div><label className="inv-label">Address</label><input className="input" value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></div>
+              <div><label className="inv-label">Opening Balance</label><input className="input" type="number" value={form.opening_balance} onChange={e => setForm({...form, opening_balance: parseFloat(e.target.value) || 0})} /></div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <div>
-                  <label>Default Project</label>
+                  <label className="inv-label">Default Project</label>
                   <select className="input" value={form.default_project_id ?? ""} onChange={e => setForm({...form, default_project_id: e.target.value ? Number(e.target.value) : null})}>
                     <option value="">— None —</option>
                     {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label>Default Location</label>
+                  <label className="inv-label">Default Location</label>
                   <select className="input" value={form.default_location_id ?? ""} onChange={e => setForm({...form, default_location_id: e.target.value ? Number(e.target.value) : null})}>
                     <option value="">— None —</option>
                     {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -316,7 +366,7 @@ export default function SuppliersPage() {
                 </div>
               </div>
               <div>
-                <label>Default Activity</label>
+                <label className="inv-label">Default Activity</label>
                 <select className="input" value={form.default_activity_id ?? ""} onChange={e => setForm({...form, default_activity_id: e.target.value ? Number(e.target.value) : null})}>
                   <option value="">— None —</option>
                   {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
