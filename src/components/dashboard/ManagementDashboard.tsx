@@ -1,4 +1,3 @@
-// Deployment refresh
 "use client"
 
 import { useEffect, useState } from "react"
@@ -147,13 +146,13 @@ export default function ManagementDashboard({ role }: { role: string }) {
     return "Good evening"
   }
 
-  // ── Formatting ──
+  // ── Formatting (always in millions for dashboard consistency) ──
   const formatPKR = (v: number) => {
-    const abs = Math.abs(v)
     const sign = v < 0 ? "-" : ""
+    const abs = Math.abs(v)
     if (abs >= 1_000_000) return `${sign}PKR ${(abs / 1_000_000).toFixed(1)}M`
-    if (abs >= 1_000) return `${sign}PKR ${(abs / 1_000).toFixed(0)}K`
-    return `${sign}PKR ${abs.toLocaleString()}`
+    // For values below 1M, still show in M with one decimal (e.g., 842K → 0.8M)
+    return `${sign}PKR ${(abs / 1_000_000).toFixed(1)}M`
   }
 
   // ── Build query string for detail pages ──
@@ -182,7 +181,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         }
         .mgmt .card:hover { background: #f0f4fb; border-color: #b3c5da; }
 
-        /* ── Hero / Greeting bar (filters integrated) ── */
+        /* ── Hero / Greeting bar ── */
         .mgmt .hero {
           background: linear-gradient(115deg, #e6eef8 0%, #dae5f2 40%, #cddcee 100%);
           border-radius: 16px; padding: 1rem 1.5rem;
@@ -352,10 +351,20 @@ export default function ManagementDashboard({ role }: { role: string }) {
             <div className="kpi-value">{formatPKR(filteredTotalSpent)}</div>
             <div className="kpi-meta">{spentPct}% of budget</div>
           </div>
-          <div className="kpi-card" style={{ cursor: "default" }}>
-            <div className="kpi-label">Remaining</div>
+          {/* Remaining / Overspent card – dynamic label */}
+          <div
+            className="kpi-card"
+            style={{ cursor: remainingFunds < 0 ? "pointer" : "default" }}
+            onClick={() => { if (remainingFunds < 0) router.push("/dashboard/reports/overspent" + detailQuery()) }}
+          >
+            <div className="kpi-label">{remainingFunds < 0 ? "Overspent" : "Remaining"}</div>
             <div className="kpi-value">{formatPKR(remainingFunds)}</div>
-            <div className="kpi-meta">{filteredTotalBudget ? Math.round((remainingFunds / filteredTotalBudget) * 100) : 0}% unspent</div>
+            <div className="kpi-meta">
+              {remainingFunds < 0
+                ? `${Math.abs(Math.round((remainingFunds / filteredTotalBudget) * 100))}% over budget`
+                : `${Math.round((remainingFunds / filteredTotalBudget) * 100)}% unspent`
+              }
+            </div>
           </div>
           <div className="kpi-card" onClick={() => router.push("/dashboard/reports/overspent" + detailQuery())}>
             <div className="kpi-label">Portfolio Health</div>
@@ -432,4 +441,4 @@ export default function ManagementDashboard({ role }: { role: string }) {
       </div>
     </div>
   )
-}// Force deployment 
+}
