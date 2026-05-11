@@ -26,8 +26,8 @@ export default function BudgetsPage() {
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
   const [businessType, setBusinessType] = useState<string>("")
 
-  // Master data
-  const [accounts, setAccounts] = useState<any[]>([])          // both Expense & Asset
+  // Master data – both Expense and Asset accounts
+  const [accounts, setAccounts] = useState<any[]>([])
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
@@ -56,7 +56,6 @@ export default function BudgetsPage() {
       setCompanyId(cid)
       supabase.from("companies").select("business_type").eq("id", cid).single()
         .then(r => r.data && setBusinessType(r.data.business_type || ""))
-      // Fetch both Expense and Asset accounts
       supabase.from("accounts")
         .select("id, code, name, type")
         .eq("company_id", cid)
@@ -103,7 +102,7 @@ export default function BudgetsPage() {
       })
   }, [companyId, selectedProjectId, businessType, initialDonor])
 
-  // ── 3. Load budgets + actuals ────────────────────────────────────────────
+  // ── 3. Load budgets + actuals (actual = debit - credit) ─────────────────
   useEffect(() => {
     if (!companyId || !selectedProjectId) { setData({}); setLoading(false); return }
     if (businessType === "ngo" && !selectedDonorId) { setData({}); setLoading(false); return }
@@ -134,23 +133,25 @@ export default function BudgetsPage() {
       actualQuery.then(({ data: actualRows }) => {
         const newData: Record<string, Record<string, Record<string, { budget: number; actual: number }>>> = {}
 
+        // Initialize from budget rows
         budgetRows?.forEach((b: any) => {
           const { account_id, activity_id, location_id, budgeted_amount } = b
           if (!activity_id || !location_id || !account_id) return
           if (!newData[activity_id]) newData[activity_id] = {}
           if (!newData[activity_id][location_id]) newData[activity_id][location_id] = {}
-          if (!newData[activity_id][location_id][account_id]) newData[activity_id][location_id][account_id] = { budget: 0, actual: 0 }
-          newData[activity_id][location_id][account_id].budget += budgeted_amount || 0
+          newData[activity_id][location_id][account_id] = { budget: budgeted_amount || 0, actual: 0 }
         })
 
+        // Add actuals: net amount = debit - credit (returns reduce spending)
         actualRows?.forEach((line: any) => {
           const { account_id, activity_id, location_id, debit, credit } = line
           if (!activity_id || !location_id || !account_id) return
-          const net = (debit || 0) - (credit || 0)
           if (!newData[activity_id]) newData[activity_id] = {}
           if (!newData[activity_id][location_id]) newData[activity_id][location_id] = {}
-          if (!newData[activity_id][location_id][account_id]) newData[activity_id][location_id][account_id] = { budget: 0, actual: 0 }
-          newData[activity_id][location_id][account_id].actual += net
+          if (!newData[activity_id][location_id][account_id]) {
+            newData[activity_id][location_id][account_id] = { budget: 0, actual: 0 }
+          }
+          newData[activity_id][location_id][account_id].actual += (debit || 0) - (credit || 0)
         })
 
         setData(newData)
@@ -159,7 +160,7 @@ export default function BudgetsPage() {
     })
   }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, filterLocationId, businessType])
 
-  // ── Determine which accounts actually appear in the current data ─────────
+  // ── Determine which accounts actually appear (budget > 0 or actual != 0) ─
   const usedAccountIds = new Set<string>()
   for (const actId of Object.keys(data)) {
     for (const locId of Object.keys(data[actId])) {
@@ -561,7 +562,7 @@ export default function BudgetsPage() {
                     </Fragment>
                   )
                 })}
-                {/* Grand total – now correctly sums */}
+                {/* Grand total */}
                 <tr className="total-row" style={{ fontSize: 12 }}>
                   <td>GRAND TOTAL</td>
                   {relevantAccounts.map(acc => {
