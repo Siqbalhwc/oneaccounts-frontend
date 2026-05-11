@@ -151,7 +151,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
     const sign = v < 0 ? "-" : ""
     const abs = Math.abs(v)
     if (abs >= 1_000_000) return `${sign}PKR ${(abs / 1_000_000).toFixed(1)}M`
-    // For values below 1M, still show in M with one decimal (e.g., 842K → 0.8M)
     return `${sign}PKR ${(abs / 1_000_000).toFixed(1)}M`
   }
 
@@ -288,6 +287,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .mgmt .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
         .mgmt .two-col { display: grid; grid-template-columns: 1.5fr 1fr; gap: 1rem; margin-bottom: 1rem; }
 
+        /* ── RESPONSIVE ── */
         @media (max-width: 800px) {
           .mgmt .two-col { grid-template-columns: 1fr; }
           .mgmt .hero { flex-direction: column; align-items: flex-start; }
@@ -295,7 +295,37 @@ export default function ManagementDashboard({ role }: { role: string }) {
         }
         @media (max-width: 600px) {
           .mgmt .kpi-grid { grid-template-columns: 1fr; }
-          .mgmt .hero-filters { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+          .mgmt .hero {
+            padding: 1rem;
+          }
+          .mgmt .hero-greeting h2 {
+            font-size: 1.1rem;
+            white-space: normal;   /* allow wrapping */
+          }
+          .mgmt .hero-greeting p {
+            font-size: 0.8rem;
+            white-space: normal;   /* allow wrapping */
+          }
+          .mgmt .hero-filters {
+            width: 100%;
+            justify-content: space-between;
+            gap: 0.4rem;
+          }
+          .mgmt .filter-label {
+            font-size: 0.7rem;
+          }
+          .mgmt .filter-pill {
+            font-size: 0.7rem;
+            padding: 0.2rem 0.5rem;
+            padding-right: 1.5rem;
+            background-position: right 0.3rem center;
+          }
+          .mgmt .card {
+            padding: 1rem;
+          }
+          .mgmt .kpi-value {
+            font-size: 1.4rem;
+          }
         }
       `}</style>
 
@@ -351,7 +381,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
             <div className="kpi-value">{formatPKR(filteredTotalSpent)}</div>
             <div className="kpi-meta">{spentPct}% of budget</div>
           </div>
-          {/* Remaining / Overspent card – dynamic label */}
           <div
             className="kpi-card"
             style={{ cursor: remainingFunds < 0 ? "pointer" : "default" }}
