@@ -138,7 +138,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const remainingFunds = filteredTotalBudget - filteredTotalSpent
   const spentPct = filteredTotalBudget ? Math.round((filteredTotalSpent / filteredTotalBudget) * 100) : 0
 
-  // ── Professional greeting ──
+  // ── Greeting ──
   const getGreeting = () => {
     const hour = new Date().getHours()
     if (hour < 12) return "Good morning"
@@ -146,7 +146,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
     return "Good evening"
   }
 
-  // ── Formatting (now handles negatives correctly) ──
+  // ── Formatting ──
   const formatPKR = (v: number) => {
     const abs = Math.abs(v)
     const sign = v < 0 ? "-" : ""
@@ -187,42 +187,44 @@ export default function ManagementDashboard({ role }: { role: string }) {
           border-radius: 16px; padding: 1rem 1.5rem;
           margin-bottom: 1rem; display: flex;
           align-items: center; justify-content: space-between;
-          flex-wrap: wrap; gap: 1rem;
+          flex-wrap: wrap; gap: 0.8rem;
         }
         .mgmt .hero-greeting h2 {
-          font-size: 1.3rem; font-weight: 700; color: #0a2940; margin-bottom: 0.15rem;
+          font-size: 1.3rem; font-weight: 700; color: #0a2940; margin-bottom: 0.15rem; white-space: nowrap;
         }
         .mgmt .hero-greeting p {
-          color: #1a3a5c; font-size: 0.85rem; margin: 0;
+          color: #1a3a5c; font-size: 0.85rem; margin: 0; white-space: nowrap;
         }
         .mgmt .hero-filters {
-          display: flex; align-items: center; gap: 0.8rem;
+          display: flex; align-items: center; gap: 0.5rem;
           flex-wrap: wrap;
         }
         .mgmt .filter-label {
-          font-weight: 600; color: #1a3a5c; font-size: 0.8rem;
+          font-weight: 600; color: #1a3a5c; font-size: 0.75rem; margin-right: 0.1rem;
         }
         .mgmt .filter-pill {
           background: white; border: 1px solid #c2d2e8;
-          padding: 0.3rem 1rem; border-radius: 30px;
-          font-size: 0.8rem; font-weight: 500; color: #0b2b3b;
-          display: flex; align-items: center; gap: 0.3rem;
+          padding: 0.2rem 0.6rem; border-radius: 20px;
+          font-size: 0.78rem; font-weight: 500; color: #0b2b3b;
           cursor: pointer; transition: 0.15s;
+          -webkit-appearance: none; appearance: none;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+          background-repeat: no-repeat;
+          background-position: right 0.5rem center;
+          padding-right: 1.8rem;
         }
-        .mgmt .filter-pill.active {
-          background: #d3e0f2; border-color: #8faac9; font-weight: 600;
-        }
+        .mgmt .filter-pill:focus { outline: none; border-color: #8faac9; }
 
-        /* ── Warning banner (compact, navy accent, red text) ── */
+        /* ── Warning banner ── */
         .mgmt .warning-banner {
           background: #ffffff;
           border: 1px solid #d6e0eb;
-          border-left: 6px solid #1e3a8a;      /* navy left accent */
+          border-left: 6px solid #1e3a8a;
           border-radius: 10px; padding: 8px 16px;
           margin-bottom: 1rem; display: flex;
           align-items: center; justify-content: space-between;
           flex-wrap: wrap; gap: 10px;
-          font-size: 0.9rem; color: #dc2626;    /* red text */
+          font-size: 0.9rem; color: #dc2626;
           font-weight: 500;
         }
         .mgmt .warning-banner span {
@@ -249,7 +251,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .mgmt .kpi-value { font-size: 1.7rem; font-weight: 700; color: #0a2940; line-height: 1.2; }
         .mgmt .kpi-meta { font-size: 0.8rem; color: #3d546b; display: flex; align-items: center; gap: 0.3rem; }
 
-        /* CRM card special layout */
+        /* CRM card */
         .mgmt .crm-card {
           background: #f8fafd; border: 1px solid #d6e0eb;
           border-radius: 18px; padding: 1.2rem 1.3rem;
@@ -306,25 +308,23 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </div>
           <div className="hero-filters">
             <span className="filter-label">Period:</span>
-            <select className="filter-pill active" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
-              {[2024,2025,2026,2027].map(y => <option key={y} value={y}>FY {y} ▾</option>)}
+            <select className="filter-pill" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
+              {[2024,2025,2026,2027].map(y => <option key={y} value={y}>FY {y}</option>)}
             </select>
-            <span style={{ color: "#8b9bb5" }}>|</span>
             <span className="filter-label">Projects:</span>
-            <select className="filter-pill active" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
-              <option value="">All Projects ▾</option>
+            <select className="filter-pill" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
+              <option value="">All Projects</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
-            <span style={{ color: "#8b9bb5" }}>|</span>
             <span className="filter-label">Donors:</span>
-            <select className="filter-pill active" value={selectedDonorId} onChange={e => setSelectedDonorId(e.target.value)}>
-              <option value="">All Donors ▾</option>
+            <select className="filter-pill" value={selectedDonorId} onChange={e => setSelectedDonorId(e.target.value)}>
+              <option value="">All Donors</option>
               {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
         </div>
 
-        {/* ── Warning banner (below hero, compact) ── */}
+        {/* ── Warning banner ── */}
         {filteredOverspentCount > 0 && (
           <div className="warning-banner">
             <span>
@@ -397,7 +397,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </div>
         </div>
 
-        {/* Quick stats + CRM (CRM styled as card) */}
+        {/* Quick stats + CRM */}
         <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginBottom: "1rem" }}>
           <div className="card" style={{ flex: 1, minWidth: 140 }}>
             <div className="kpi-label">📋 Payables</div>
