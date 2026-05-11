@@ -315,7 +315,7 @@ function DashboardLayoutInner({
         .dl-hamburger span { display: block; width: 20px; height: 2px; background: #475569; margin: 4px 0; border-radius: 2px; }
         .dl-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 35; }
         .dl-overlay.open { display: block; }
-        @media (max-width: 900px) {
+        @media (max-width: 768px) {
           .dl-sidebar { width: 60px; min-width: 60px; }
           .dl-sidebar-logo-name, .dl-sidebar-logo-sub, .dl-section-btn span,
           .dl-nav-group-label, .dl-nav-item span:not(.dl-nav-icon),
