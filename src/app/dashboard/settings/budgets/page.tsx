@@ -46,6 +46,8 @@ export default function BudgetsPage() {
 
   // View mode: "gl" or "month"
   const [viewMode, setViewMode] = useState<"gl" | "month">("gl")
+  // Project duration (months) – used when viewMode = "month"
+  const [projectDuration, setProjectDuration] = useState<number>(12)
 
   // Data (annual GL budgets + actuals)
   const [data, setData] = useState<Record<string, Record<string, Record<string, { budget: number; actual: number }>>>>({})
@@ -209,11 +211,13 @@ export default function BudgetsPage() {
     return total
   }
 
+  // Month budget: annual / projectDuration, unless overridden
   const getMonthBudget = (actId: string, locId: string, month: number) => {
     const override = monthBudgetOverrides[actId]?.[locId]?.[month]
     if (override !== null && override !== undefined) return override
     const annual = rowTotalBudget(actId, locId)
-    return Math.round(annual / 12)
+    const duration = projectDuration > 0 ? projectDuration : 12
+    return Math.round(annual / duration)
   }
 
   const setMonthBudget = (actId: string, locId: string, month: number, value: number) => {
@@ -226,9 +230,10 @@ export default function BudgetsPage() {
     })
   }
 
+  // Sum of monthly budgets for the row (over the project duration)
   const monthRowTotal = (actId: string, locId: string) => {
     let sum = 0
-    for (let m = 1; m <= 12; m++) sum += getMonthBudget(actId, locId, m)
+    for (let m = 1; m <= projectDuration; m++) sum += getMonthBudget(actId, locId, m)
     return sum
   }
 
@@ -461,6 +466,18 @@ export default function BudgetsPage() {
             <option value="gl">View by: GL</option>
             <option value="month">View by: Month</option>
           </select>
+          {viewMode === "month" && (
+            <input
+              type="number"
+              min={1}
+              max={12}
+              value={projectDuration}
+              onChange={e => setProjectDuration(Number(e.target.value) || 12)}
+              className="filter-select"
+              style={{ width: 80 }}
+              placeholder="Months"
+            />
+          )}
           <button className="btn-primary" style={{ margin: 0, padding: "6px 12px", background: "#059669" }} onClick={exportExcel}>
             <Download size={14} /> Excel
           </button>
@@ -644,13 +661,13 @@ export default function BudgetsPage() {
               <thead>
                 <tr>
                   <th rowSpan={2} style={{ width: 120 }}>Activity / Location</th>
-                  {MONTHS.map(m => (
+                  {MONTHS.slice(0, projectDuration).map(m => (
                     <th key={m} colSpan={3} style={{ fontSize: 10 }}>{m}</th>
                   ))}
                   <th colSpan={3} style={{ fontSize: 10 }}>TOTAL</th>
                 </tr>
                 <tr className="sub-header">
-                  {MONTHS.map(m => (
+                  {MONTHS.slice(0, projectDuration).map(m => (
                     <Fragment key={m}>
                       <th>Budget</th><th>Actual</th><th>Var</th>
                     </Fragment>
@@ -664,14 +681,14 @@ export default function BudgetsPage() {
                   const locationsInAct = Object.keys(actData)
                   return (
                     <Fragment key={act.id}>
-                      <tr className="act-header"><td colSpan={1 + 12 * 3 + 3}>{act.name}</td></tr>
+                      <tr className="act-header"><td colSpan={1 + projectDuration * 3 + 3}>{act.name}</td></tr>
                       {locationsInAct.map(lid => {
                         const loc = locations.find(l => l.id == lid)
                         return (
                           <tr key={lid}>
                             <td style={{ fontWeight: 600, textAlign: "left", paddingLeft: 16 }}>{loc?.name || lid}</td>
-                            {MONTHS.map((_, monthIdx) => {
-                              const monthNum = monthIdx + 1
+                            {MONTHS.slice(0, projectDuration).map((_, idx) => {
+                              const monthNum = idx + 1
                               const budget = getMonthBudget(act.id, lid, monthNum)
                               const actual = monthlyActuals[act.id]?.[lid]?.[monthNum] || 0
                               const variance = budget - actual
