@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { Shield, UserPlus, Search } from "lucide-react"
+import { Shield, UserPlus, Search, Trash2 } from "lucide-react"
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
 
@@ -32,7 +32,6 @@ export default function AdminUsersPage() {
   const [inviting, setInviting] = useState(false)
   const [search, setSearch] = useState("")
 
-  // Fetch users when role is known
   useEffect(() => {
     if (!role) return
     if (!canView) {
@@ -82,6 +81,27 @@ export default function AdminUsersPage() {
     }
   }
 
+  const handleRemove = async (userId: string) => {
+    if (!window.confirm("Remove this user from the company?")) return
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setUsers(prev => prev.filter(u => u.id !== userId))
+        setMessage(data.message)
+      } else {
+        setMessage(data.error || "Remove failed")
+      }
+    } catch {
+      setMessage("Network error")
+    }
+    setTimeout(() => setMessage(""), 4000)
+  }
+
   const handleInvite = async () => {
     if (!inviteEmail.trim()) return
     setInviting(true)
@@ -106,7 +126,6 @@ export default function AdminUsersPage() {
     setTimeout(() => setMessage(""), 5000)
   }
 
-  // Filter by search
   const filtered = search.trim()
     ? users.filter(u => u.email.toLowerCase().includes(search.toLowerCase()))
     : users
@@ -132,6 +151,7 @@ export default function AdminUsersPage() {
           .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
           .btn-primary { background: #1D4ED8; color: white; }
           .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
+          .btn-danger { background: #EF4444; color: white; }
           table { width: 100%; border-collapse: collapse; }
           th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8; text-align: left; padding: 8px 6px; border-bottom: 1px solid #E2E8F0; }
           td { padding: 10px 6px; border-bottom: 1px solid #F1F5F9; font-size: 13px; }
@@ -140,9 +160,12 @@ export default function AdminUsersPage() {
           .badge-admin { background: #D1FAE5; color: #065F46; }
           .badge-accountant { background: #FEF3C7; color: #92400E; }
           .badge-viewer { background: #FEE2E2; color: #991B1B; }
+          .badge-none { background: #F1F5F9; color: #64748B; }
           .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+          .action-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
           @media (max-width: 700px) {
             th:nth-child(2), td:nth-child(2) { display: none; }
+            .action-row { flex-direction: column; align-items: stretch; }
           }
         `}</style>
 
@@ -181,16 +204,16 @@ export default function AdminUsersPage() {
           </div>
         </div>
 
-        {/* Invite Bar */}
+        {/* Invite + Search in one row */}
         {canEdit && (
-          <div style={{ display: "flex", gap: 10, marginBottom: 16, alignItems: "center" }}>
+          <div className="action-row">
             <input
               type="email"
               placeholder="Email to invite..."
               value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
               className="input"
-              style={{ flex: 1, maxWidth: 320 }}
+              style={{ flex: 1, maxWidth: 300 }}
             />
             <button
               onClick={handleInvite}
@@ -199,16 +222,12 @@ export default function AdminUsersPage() {
             >
               {inviting ? "Inviting..." : "Invite User"}
             </button>
+            <div style={{ flex: 1, maxWidth: 300, marginLeft: 'auto', position: "relative" }}>
+              <Search size={14} style={{ position: "absolute", left: 10, top: 12, color: "#94A3B8" }} />
+              <input className="input" style={{ paddingLeft: 32, width: "100%" }} placeholder="Search by email..." value={search} onChange={e => setSearch(e.target.value)} />
+            </div>
           </div>
         )}
-
-        {/* Search */}
-        <div style={{ maxWidth: 320, marginBottom: 16 }}>
-          <div style={{ position: "relative" }}>
-            <Search size={14} style={{ position: "absolute", left: 10, top: 12, color: "#94A3B8" }} />
-            <input className="input" style={{ paddingLeft: 32, width: "100%" }} placeholder="Search by email..." value={search} onChange={e => setSearch(e.target.value)} />
-          </div>
-        </div>
 
         {/* Users Table */}
         <div className="card" style={{ padding: 0, overflowX: "auto" }}>
@@ -216,7 +235,7 @@ export default function AdminUsersPage() {
             <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading users...</div>
           ) : filtered.length === 0 ? (
             <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>
-              No users found. Users who sign up or are invited will appear here.
+              No users found.
             </div>
           ) : (
             <table>
@@ -238,12 +257,13 @@ export default function AdminUsersPage() {
                     <td>
                       <span className={`badge ${
                         u.role === "admin" ? "badge-admin" :
-                        u.role === "accountant" ? "badge-accountant" : "badge-viewer"
+                        u.role === "accountant" ? "badge-accountant" :
+                        u.role === "viewer" ? "badge-viewer" : "badge-none"
                       }`}>
                         {u.role || "none"}
                       </span>
                     </td>
-                    <td>
+                    <td style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       {canEdit && (
                         <select
                           className="input"
@@ -255,6 +275,16 @@ export default function AdminUsersPage() {
                           <option value="accountant">Accountant</option>
                           <option value="admin">Admin</option>
                         </select>
+                      )}
+                      {canEdit && (
+                        <button
+                          className="btn btn-outline"
+                          style={{ padding: "4px 8px", color: "#EF4444", borderColor: "#FECACA" }}
+                          onClick={() => handleRemove(u.id)}
+                          title="Remove user"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       )}
                     </td>
                   </tr>

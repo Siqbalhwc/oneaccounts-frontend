@@ -44,7 +44,7 @@ async function requireAdmin() {
   return { error: null, status: 200, user, companyId }
 }
 
-// ─── GET ──────────────────────────────────────────────────
+// ── GET ──
 export async function GET() {
   const { error, status, companyId } = await requireAdmin()
   if (error) return NextResponse.json({ error }, { status })
@@ -78,7 +78,7 @@ export async function GET() {
   return NextResponse.json({ users: enriched })
 }
 
-// ─── PUT (update role) ────────────────────────────────────
+// ── PUT (update role) ──
 export async function PUT(request: Request) {
   const { error, status, companyId } = await requireAdmin()
   if (error) return NextResponse.json({ error }, { status })
@@ -104,7 +104,7 @@ export async function PUT(request: Request) {
   return NextResponse.json({ success: true })
 }
 
-// ─── POST (invite user) ───────────────────────────────────
+// ── POST (invite user) ──
 export async function POST(request: Request) {
   const { error, status, companyId } = await requireAdmin()
   if (error) return NextResponse.json({ error }, { status })
@@ -136,4 +136,26 @@ export async function POST(request: Request) {
     success: true,
     message: `Invitation sent to ${email}. They will appear after signing up.`
   })
+}
+
+// ── DELETE (remove user from this company) ──
+export async function DELETE(request: Request) {
+  const { error, status, companyId } = await requireAdmin()
+  if (error) return NextResponse.json({ error }, { status })
+
+  const { userId } = await request.json()
+  if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+
+  const { error: deleteError } = await supabaseAdmin
+    .from('user_roles')
+    .delete()
+    .eq('user_id', userId)
+    .eq('company_id', companyId)
+
+  if (deleteError) {
+    console.error('Admin delete error:', deleteError)
+    return NextResponse.json({ error: deleteError.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true, message: 'User removed from this company' })
 }
