@@ -76,7 +76,7 @@ export async function GET() {
   }))
 
   // Only return users who still have a role in this company
-  const activeUsers = enriched.filter(u => u.role !== 'none')
+  const activeUsers = enriched.filter((u: any) => u.role !== 'none')
 
   return NextResponse.json({ users: activeUsers })
 }
