@@ -28,7 +28,7 @@ export default function BankTransfersPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const { role } = useRole()
+  const { role, loading: roleLoading } = useRole()   // FIX: added loading
   const canView = role === "admin" || role === "accountant"
   const canEdit = role === "admin" || role === "accountant"
 
@@ -95,8 +95,10 @@ export default function BankTransfersPage() {
 
   useEffect(() => { if (companyId) fetchData() }, [companyId])
 
-  // ── Access guards ────────────────────────────────────────────────────────
-  if (!companyId) return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
+  // ── Access guards (FIXED) ──────────────────────────────────────────────
+  if (!companyId || roleLoading || !role) {
+    return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
+  }
   if (!canView) {
     return (
       <div style={{ padding: 24, textAlign: "center" }}>
