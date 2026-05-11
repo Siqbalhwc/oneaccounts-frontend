@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { Shield, UserPlus } from "lucide-react"
+import { Shield, UserPlus, Search } from "lucide-react"
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
 
@@ -20,7 +20,7 @@ export default function AdminUsersPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
   const router = useRouter()
-  const { role } = useRole()
+  const { role, loading: roleLoading } = useRole()
   const canView = role === "admin"
   const canEdit = role === "admin"
 
@@ -30,7 +30,9 @@ export default function AdminUsersPage() {
   const [message, setMessage] = useState("")
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviting, setInviting] = useState(false)
+  const [search, setSearch] = useState("")
 
+  // Fetch users when role is known
   useEffect(() => {
     if (!role) return
     if (!canView) {
@@ -104,10 +106,17 @@ export default function AdminUsersPage() {
     setTimeout(() => setMessage(""), 5000)
   }
 
-  if (!role) return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
+  // Filter by search
+  const filtered = search.trim()
+    ? users.filter(u => u.email.toLowerCase().includes(search.toLowerCase()))
+    : users
+
+  if (roleLoading || !role) {
+    return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
+  }
   if (!canView) {
     return (
-      <div style={{ padding: 24, textAlign: "center" }}>
+      <div style={{ padding: 40, textAlign: "center" }}>
         <h2>Access Denied</h2>
         <p style={{ color: "#94A3B8" }}>Only administrators can access this page.</p>
       </div>
@@ -116,27 +125,32 @@ export default function AdminUsersPage() {
 
   return (
     <RoleGuard allowedRoles={["admin"]}>
-      <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
+      <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         <style>{`
-          .admin-header { margin-bottom: 20px; }
-          .admin-title { font-size: 22px; font-weight: 800; color: #1E293B; }
-          .admin-subtitle { font-size: 13px; color: #94A3B8; }
-          .admin-table { background: white; border-radius: 10px; border: 1px solid #E2E8F0; overflow: hidden; }
-          .admin-row { display: grid; grid-template-columns: 1fr 200px 120px 120px; padding: 10px 16px; border-bottom: 1px solid #F1F5F9; align-items: center; font-size: 13px; }
-          .admin-row-header { background: #F8FAFC; font-size: 9px; font-weight: 700; text-transform: uppercase; color: #94A3B8; }
-          .admin-badge { padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; display: inline-block; }
-          .admin-select { padding: 6px 10px; border: 1px solid #E2E8F0; border-radius: 6px; font-size: 12px; }
-          .admin-btn { padding: 6px 14px; background: #1D4ED8; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; }
-          .admin-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+          .card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+          .input { height: 38px; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0 12px; font-size: 13px; box-sizing: border-box; }
+          .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+          .btn-primary { background: #1D4ED8; color: white; }
+          .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
+          table { width: 100%; border-collapse: collapse; }
+          th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8; text-align: left; padding: 8px 6px; border-bottom: 1px solid #E2E8F0; }
+          td { padding: 10px 6px; border-bottom: 1px solid #F1F5F9; font-size: 13px; }
+          tr:hover td { background: #FAFBFF; }
+          .badge { padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; display: inline-block; }
+          .badge-admin { background: #D1FAE5; color: #065F46; }
+          .badge-accountant { background: #FEF3C7; color: #92400E; }
+          .badge-viewer { background: #FEE2E2; color: #991B1B; }
+          .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
           @media (max-width: 700px) {
-            .admin-row { grid-template-columns: 1fr 100px 100px; }
-            .admin-hide-mobile { display: none; }
+            th:nth-child(2), td:nth-child(2) { display: none; }
           }
         `}</style>
 
-        <div className="admin-header">
-          <div className="admin-title">👑 Admin Panel - User Roles</div>
-          <div className="admin-subtitle">Manage user permissions and invite new users</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", margin: 0 }}>👑 Admin Panel - User Roles</h1>
+            <p style={{ fontSize: 13, color: "#94A3B8", margin: 0 }}>Manage user permissions and invite new users</p>
+          </div>
         </div>
 
         {error && (
@@ -151,7 +165,23 @@ export default function AdminUsersPage() {
           </div>
         )}
 
-        {/* Invite User Bar */}
+        {/* Summary Cards */}
+        <div className="summary-grid">
+          <div className="card">
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Users</div>
+            <div style={{ fontSize: 24, fontWeight: 800 }}>{filtered.length}</div>
+          </div>
+          <div className="card">
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Admins</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: "#065F46" }}>{filtered.filter(u => u.role === "admin").length}</div>
+          </div>
+          <div className="card">
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Accountants</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: "#92400E" }}>{filtered.filter(u => u.role === "accountant").length}</div>
+          </div>
+        </div>
+
+        {/* Invite Bar */}
         {canEdit && (
           <div style={{ display: "flex", gap: 10, marginBottom: 16, alignItems: "center" }}>
             <input
@@ -159,71 +189,80 @@ export default function AdminUsersPage() {
               placeholder="Email to invite..."
               value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
-              style={{
-                padding: "7px 12px",
-                border: "1px solid #E2E8F0",
-                borderRadius: 6,
-                fontSize: 13,
-                flex: 1,
-                maxWidth: 300,
-              }}
+              className="input"
+              style={{ flex: 1, maxWidth: 320 }}
             />
             <button
               onClick={handleInvite}
               disabled={inviting || !inviteEmail.trim()}
-              className="admin-btn"
-              style={{ whiteSpace: "nowrap" }}
+              className="btn btn-primary"
             >
               {inviting ? "Inviting..." : "Invite User"}
             </button>
           </div>
         )}
 
-        {loading ? (
-          <div style={{ textAlign: "center", padding: 40 }}>Loading users...</div>
-        ) : users.length === 0 ? (
-          <div style={{ background: "white", borderRadius: 10, border: "1px solid #E2E8F0", padding: 40, textAlign: "center", color: "#94A3B8" }}>
-            No users found. Users who sign up or are invited will appear here.
+        {/* Search */}
+        <div style={{ maxWidth: 320, marginBottom: 16 }}>
+          <div style={{ position: "relative" }}>
+            <Search size={14} style={{ position: "absolute", left: 10, top: 12, color: "#94A3B8" }} />
+            <input className="input" style={{ paddingLeft: 32, width: "100%" }} placeholder="Search by email..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-        ) : (
-          <div className="admin-table">
-            <div className="admin-row admin-row-header">
-              <span>Email</span>
-              <span className="admin-hide-mobile">Created</span>
-              <span>Role</span>
-              <span>Action</span>
+        </div>
+
+        {/* Users Table */}
+        <div className="card" style={{ padding: 0, overflowX: "auto" }}>
+          {loading ? (
+            <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading users...</div>
+          ) : filtered.length === 0 ? (
+            <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>
+              No users found. Users who sign up or are invited will appear here.
             </div>
-            {users.map(u => (
-              <div key={u.id} className="admin-row">
-                <span>{u.email}</span>
-                <span className="admin-hide-mobile" style={{ color: "#64748B" }}>
-                  {u.created_at ? new Date(u.created_at).toLocaleDateString() : "-"}
-                </span>
-                <span>
-                  <span className="admin-badge" style={{
-                    background: u.role === "admin" ? "#D1FAE5" : u.role === "accountant" ? "#FEF3C7" : "#FEE2E2",
-                    color: u.role === "admin" ? "#065F46" : u.role === "accountant" ? "#92400E" : "#991B1B"
-                  }}>
-                    {u.role || "none"}
-                  </span>
-                </span>
-                <span>
-                  {canEdit && (
-                    <select
-                      className="admin-select"
-                      value={u.role || "viewer"}
-                      onChange={(e) => assignRole(u.id, e.target.value)}
-                    >
-                      <option value="viewer">Viewer</option>
-                      <option value="accountant">Accountant</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                  )}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Email</th>
+                  <th>Created</th>
+                  <th>Role</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(u => (
+                  <tr key={u.id}>
+                    <td style={{ fontWeight: 500 }}>{u.email}</td>
+                    <td style={{ color: "#64748B" }}>
+                      {u.created_at ? new Date(u.created_at).toLocaleDateString() : "-"}
+                    </td>
+                    <td>
+                      <span className={`badge ${
+                        u.role === "admin" ? "badge-admin" :
+                        u.role === "accountant" ? "badge-accountant" : "badge-viewer"
+                      }`}>
+                        {u.role || "none"}
+                      </span>
+                    </td>
+                    <td>
+                      {canEdit && (
+                        <select
+                          className="input"
+                          style={{ width: 120, height: 32, fontSize: 12, padding: "0 8px" }}
+                          value={u.role || "viewer"}
+                          onChange={(e) => assignRole(u.id, e.target.value)}
+                        >
+                          <option value="viewer">Viewer</option>
+                          <option value="accountant">Accountant</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </RoleGuard>
   )
