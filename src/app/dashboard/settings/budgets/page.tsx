@@ -142,7 +142,7 @@ export default function BudgetsPage() {
           newData[activity_id][location_id][account_id] = { budget: budgeted_amount || 0, actual: 0 }
         })
 
-        // Add actuals: net amount = debit - credit (returns reduce spending)
+        // Add actuals: net amount = debit - credit
         actualRows?.forEach((line: any) => {
           const { account_id, activity_id, location_id, debit, credit } = line
           if (!activity_id || !location_id || !account_id) return
@@ -361,13 +361,15 @@ export default function BudgetsPage() {
 
   const displayActivities = filterActivityId ? allActivities.filter(a => a.id == filterActivityId) : allActivities
 
-  // ── Compute overall totals ─────────────────────────────────────────────
+  // ── Compute overall totals (only from relevant accounts) ──────────────
   let grandBudget = 0, grandActual = 0
   for (const actId of Object.keys(data)) {
     for (const locId of Object.keys(data[actId])) {
       for (const accId of Object.keys(data[actId][locId])) {
-        grandBudget += data[actId][locId][accId].budget || 0
-        grandActual += data[actId][locId][accId].actual || 0
+        if (relevantAccounts.some(a => String(a.id) === accId)) {
+          grandBudget += data[actId][locId][accId].budget || 0
+          grandActual += data[actId][locId][accId].actual || 0
+        }
       }
     }
   }
@@ -467,13 +469,19 @@ export default function BudgetsPage() {
                 {displayActivities.map(act => {
                   const actData = data[act.id] || {}
                   const locationsInAct = Object.keys(actData)
+
+                  // Compute subtotals ONLY from relevant accounts
                   let actTotalBudget = 0, actTotalActual = 0
                   locationsInAct.forEach(lid => {
-                    Object.keys(actData[lid]).forEach(accId => {
-                      actTotalBudget += actData[lid][accId]?.budget || 0
-                      actTotalActual += actData[lid][accId]?.actual || 0
+                    relevantAccounts.forEach(acc => {
+                      const cell = actData[lid]?.[String(acc.id)]
+                      if (cell) {
+                        actTotalBudget += cell.budget || 0
+                        actTotalActual += cell.actual || 0
+                      }
                     })
                   })
+
                   return (
                     <Fragment key={act.id}>
                       <tr className="act-header">
@@ -486,7 +494,7 @@ export default function BudgetsPage() {
                           <tr key={lid}>
                             <td style={{ fontWeight: 600, textAlign: "left", paddingLeft: 16 }}>{loc?.name || lid}</td>
                             {relevantAccounts.map(acc => {
-                              const cell = actData[lid]?.[acc.id] || { budget: 0, actual: 0 }
+                              const cell = actData[lid]?.[String(acc.id)] || { budget: 0, actual: 0 }
                               rowBudget += cell.budget
                               rowActual += cell.actual
                               const variance = cell.budget - cell.actual
@@ -499,7 +507,7 @@ export default function BudgetsPage() {
                                       min="0"
                                       step="100"
                                       value={cell.budget || ""}
-                                      onChange={e => updateCell(acc.id, act.id, lid, Number(e.target.value))}
+                                      onChange={e => updateCell(String(acc.id), act.id, lid, Number(e.target.value))}
                                       disabled={!canEdit}
                                       placeholder="0"
                                     />
@@ -539,8 +547,11 @@ export default function BudgetsPage() {
                         {relevantAccounts.map(acc => {
                           let sb = 0, sa = 0
                           locationsInAct.forEach(lid => {
-                            sb += actData[lid][acc.id]?.budget || 0
-                            sa += actData[lid][acc.id]?.actual || 0
+                            const cell = actData[lid]?.[String(acc.id)]
+                            if (cell) {
+                              sb += cell.budget || 0
+                              sa += cell.actual || 0
+                            }
                           })
                           const sv = sb - sa
                           return (
@@ -562,14 +573,14 @@ export default function BudgetsPage() {
                     </Fragment>
                   )
                 })}
-                {/* Grand total */}
+                {/* Grand total – only relevant accounts */}
                 <tr className="total-row" style={{ fontSize: 12 }}>
                   <td>GRAND TOTAL</td>
                   {relevantAccounts.map(acc => {
                     let gb = 0, ga = 0
                     for (const actId of Object.keys(data)) {
                       for (const locId of Object.keys(data[actId])) {
-                        const cell = data[actId][locId][acc.id]
+                        const cell = data[actId][locId]?.[String(acc.id)]
                         if (cell) {
                           gb += cell.budget || 0
                           ga += cell.actual || 0
