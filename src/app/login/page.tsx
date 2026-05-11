@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
+import { createBrowserClient } from "@supabase/ssr"
 import { Eye, EyeOff } from "lucide-react"
 
 const PILLS = [
@@ -29,7 +29,10 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     setError("")
-    const supabase = createClient()
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
     const { error: authError } = isSignUp
       ? await supabase.auth.signUp({ email, password })
       : await supabase.auth.signInWithPassword({ email, password })
@@ -47,6 +50,17 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
+
+    // Log successful login (fire‑and‑forget)
+    fetch("/api/log-login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        userAgent: navigator.userAgent,
+      }),
+    }).catch(() => {})
+
     router.push("/dashboard")
     router.refresh()
   }
