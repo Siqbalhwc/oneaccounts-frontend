@@ -131,7 +131,7 @@ function DashboardLayoutInner({
     { label: 'New Company',       icon: '🏢', href: '/dashboard/companies/new',       feature: null, roles: ["admin","accountant"] },
   ]
 
-  // ── Only add Super Admin link for the owner
+  // Super Admin for owner
   if (email === 'siqbalhwc@gmail.com') {
     allNavItems.push({
       label: 'Super Admin',
@@ -142,7 +142,6 @@ function DashboardLayoutInner({
     })
   }
 
-  // ── Build navigation sections
   const navSections: NavSection[] = [
     {
       section: "MAIN",
@@ -203,11 +202,8 @@ function DashboardLayoutInner({
 
   return (
     <>
-      {/* Inject updated navy‑themed sidebar styles */}
       <style>{`
         .dl-shell { display: flex; min-height: 100vh; background: #f4f8fc; }
-
-        /* Sidebar – navy gradient matching dashboard accent */
         .dl-sidebar {
           width: 220px; min-width: 220px;
           background: linear-gradient(150deg, #0c2e4a 0%, #1e3a8a 100%);
@@ -229,11 +225,7 @@ function DashboardLayoutInner({
         .dl-sidebar-logo-img { width: 32px; height: 32px; border-radius: 8px; object-fit: contain; flex-shrink: 0; }
         .dl-sidebar-logo-name { color: white; font-size: 14px; font-weight: 700; line-height: 1.1; }
         .dl-sidebar-logo-sub { color: rgba(255,255,255,0.5); font-size: 9px; }
-
-        /* Navigation */
         .dl-sidebar-nav { flex: 1; padding: 8px 8px; overflow-y: auto; position: relative; z-index: 1; }
-
-        /* Collapsible section button */
         .dl-section-btn {
           width: 100%; display: flex; align-items: center; gap: 6px;
           padding: 8px 10px; background: transparent; border: none;
@@ -247,8 +239,6 @@ function DashboardLayoutInner({
           background: rgba(255,255,255,0.08);
           color: white;
         }
-
-        /* Nav items */
         .dl-nav-item {
           display: flex; align-items: center; gap: 10px;
           padding: 8px 12px; border-radius: 8px;
@@ -264,21 +254,15 @@ function DashboardLayoutInner({
           color: white; font-weight: 600;
         }
         .dl-nav-icon { width: 18px; text-align: center; flex-shrink: 0; }
-
-        /* Group sub‑label */
         .dl-nav-group-label {
           font-size: 8px; font-weight: 700; text-transform: uppercase;
           color: rgba(255,255,255,0.25); padding: 4px 10px 2px;
           letter-spacing: 0.05em;
         }
-
-        /* Divider */
         .dl-nav-divider {
           height: 1px; background: rgba(255,255,255,0.08);
           margin: 8px 14px;
         }
-
-        /* User area */
         .dl-sidebar-user { 
           padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.1); 
           display: flex; align-items: center; gap: 10px; 
@@ -296,16 +280,12 @@ function DashboardLayoutInner({
           background: none; border: none; font-family: inherit; padding: 0; margin-top: 2px;
         }
         .dl-sidebar-signout:hover { color: #f87171; }
-
-        /* Main content area */
         .dl-main {
           flex: 1; margin-left: 220px;
           display: flex; flex-direction: column;
           min-height: 100vh; min-width: 0;
           overflow-x: hidden;
         }
-
-        /* Top bar (already matches dashboard palette) */
         .dl-topbar {
           background: white; border-bottom: 1px solid #d6e0eb;
           padding: 0 20px; display: flex; align-items: center;
@@ -331,14 +311,10 @@ function DashboardLayoutInner({
         .dl-btn-bill:hover    { background: #fef9c3; }
         .dl-btn-receipt:hover { background: #a7f3d0; }
         .dl-btn-payment:hover { background: #fecaca; }
-
-        /* Hamburger for mobile */
         .dl-hamburger { display: none; background: none; border: none; cursor: pointer; padding: 6px; flex-shrink: 0; }
         .dl-hamburger span { display: block; width: 20px; height: 2px; background: #475569; margin: 4px 0; border-radius: 2px; }
         .dl-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 35; }
         .dl-overlay.open { display: block; }
-
-        /* Responsive */
         @media (max-width: 900px) {
           .dl-sidebar { width: 60px; min-width: 60px; }
           .dl-sidebar-logo-name, .dl-sidebar-logo-sub, .dl-section-btn span,
@@ -398,7 +374,9 @@ function DashboardLayoutInner({
                 visibleFlatItems = sec.items.filter(isVisible)
               }
 
-              const hasContent = visibleGroups.length > 0 || visibleFlatItems.length > 0
+              // Force BANKING and SYSTEM to always appear
+              const alwaysShow = sec.section === "BANKING" || sec.section === "SYSTEM"
+              const hasContent = alwaysShow || visibleGroups.length > 0 || visibleFlatItems.length > 0
               if (!hasContent) return null
 
               const expanded = expandedSections[sec.section] ?? false
