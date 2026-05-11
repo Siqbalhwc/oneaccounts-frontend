@@ -27,7 +27,7 @@ export default function BudgetsPage() {
   const [businessType, setBusinessType] = useState<string>("")
 
   // Master data
-  const [accounts, setAccounts] = useState<any[]>([])
+  const [accounts, setAccounts] = useState<any[]>([])          // both Expense & Asset
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
@@ -49,14 +49,19 @@ export default function BudgetsPage() {
   const [budgetImportFile, setBudgetImportFile] = useState<File | null>(null)
   const [importingBudget, setImportingBudget] = useState(false)
 
-  // ── 1. Load master data ──────────────────────────────────────────────────
+  // ── 1. Load master data (Expense + Asset accounts) ──────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
       supabase.from("companies").select("business_type").eq("id", cid).single()
         .then(r => r.data && setBusinessType(r.data.business_type || ""))
-      supabase.from("accounts").select("id, code, name").eq("company_id", cid).eq("type", "Expense").order("code")
+      // Fetch both Expense and Asset accounts
+      supabase.from("accounts")
+        .select("id, code, name, type")
+        .eq("company_id", cid)
+        .in("type", ["Expense", "Asset"])
+        .order("code")
         .then(r => r.data && setAccounts(r.data))
       supabase.from("projects").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
         .then(r => r.data && setProjects(r.data))
@@ -79,10 +84,9 @@ export default function BudgetsPage() {
       .then(r => r.data && setAllActivities(r.data))
   }, [companyId, selectedProjectId])
 
-  // ── 2b. Auto‑select donor if only one donor is linked to the project ──
+  // ── 2b. Auto‑select donor if only one donor has budgets for the project ──
   useEffect(() => {
     if (!companyId || !selectedProjectId || businessType !== "ngo") return
-    // If donor already set (from URL or user), don't override
     if (initialDonor) return
     supabase.from("budgets")
       .select("donor_id")
@@ -155,7 +159,19 @@ export default function BudgetsPage() {
     })
   }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, filterLocationId, businessType])
 
-  // ── 4. Helpers ───────────────────────────────────────────────────────────
+  // ── Determine which accounts actually appear in the current data ─────────
+  const usedAccountIds = new Set<string>()
+  for (const actId of Object.keys(data)) {
+    for (const locId of Object.keys(data[actId])) {
+      for (const accId of Object.keys(data[actId][locId])) {
+        const cell = data[actId][locId][accId]
+        if (cell.budget > 0 || cell.actual !== 0) usedAccountIds.add(accId)
+      }
+    }
+  }
+  const relevantAccounts = accounts.filter(a => usedAccountIds.has(String(a.id)))
+
+  // ── Helper: update a budget cell ────────────────────────────────────────
   const updateCell = (accountId: string, activityId: string, locationId: string, amount: number) => {
     setData(prev => {
       const updated = { ...prev }
@@ -179,6 +195,7 @@ export default function BudgetsPage() {
     })
   }
 
+  // ── Save budgets ────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!companyId || !canEdit) return
     if (!selectedProjectId) { setFlash("Please select a Project first."); return }
@@ -237,15 +254,16 @@ export default function BudgetsPage() {
     setTimeout(() => setFlash(""), 4000)
   }
 
+  // ── Export functions (only relevant accounts) ──────────────────────────
   const exportExcel = () => {
     const rows: any[] = []
     for (const actId of Object.keys(data)) {
-      const actName = allActivities.find(a => a.id == actId)?.name || actId
       for (const locId of Object.keys(data[actId])) {
+        const actName = allActivities.find(a => a.id == actId)?.name || actId
         const locName = locations.find(l => l.id == locId)?.name || locId
         const row: any = { "Activity / Location": `${actName} - ${locName}` }
         let rowBudget = 0, rowActual = 0
-        accounts.forEach(acc => {
+        relevantAccounts.forEach(acc => {
           const cell = data[actId][locId]?.[acc.id] || { budget: 0, actual: 0 }
           row[`${acc.code} Budget`] = cell.budget
           row[`${acc.code} Actual`] = cell.actual
@@ -266,19 +284,19 @@ export default function BudgetsPage() {
   }
 
   const exportPDF = () => {
-    const doc = new jsPDF()
-    doc.setFontSize(16)
+    const doc = new jsPDF({ orientation: "landscape" })
+    doc.setFontSize(14)
     doc.text("Budget vs Actual Report", 14, 20)
-    const tableData: any[] = []
-    const tableColumns = ["Activity / Location", ...accounts.map(acc => `${acc.code} Budget`), ...accounts.map(acc => `${acc.code} Actual`), ...accounts.map(acc => `${acc.code} Var`), "Total Budget", "Total Actual", "Total Var"]
+    const tableColumns = ["Activity / Location", ...relevantAccounts.map(acc => `${acc.code} Budget`), ...relevantAccounts.map(acc => `${acc.code} Actual`), ...relevantAccounts.map(acc => `${acc.code} Var`), "Total Budget", "Total Actual", "Total Var"]
 
+    const tableData: any[] = []
     for (const actId of Object.keys(data)) {
       for (const locId of Object.keys(data[actId])) {
         const actName = allActivities.find(a => a.id == actId)?.name || actId
         const locName = locations.find(l => l.id == locId)?.name || locId
         const row: any = { "Activity / Location": `${actName} - ${locName}` }
         let rowBudget = 0, rowActual = 0
-        accounts.forEach(acc => {
+        relevantAccounts.forEach(acc => {
           const cell = data[actId][locId]?.[acc.id] || { budget: 0, actual: 0 }
           row[`${acc.code} Budget`] = cell.budget
           row[`${acc.code} Actual`] = cell.actual
@@ -293,7 +311,7 @@ export default function BudgetsPage() {
       }
     }
 
-    autoTable(doc, { head: [tableColumns], body: tableData.map(row => tableColumns.map(col => row[col] || "")), startY: 35 })
+    autoTable(doc, { head: [tableColumns], body: tableData.map(row => tableColumns.map(col => row[col] || "")), startY: 35, styles: { fontSize: 7 } })
     doc.save(`budget_vs_actual_${fiscalYear}.pdf`)
   }
 
@@ -341,6 +359,18 @@ export default function BudgetsPage() {
   }
 
   const displayActivities = filterActivityId ? allActivities.filter(a => a.id == filterActivityId) : allActivities
+
+  // ── Compute overall totals ─────────────────────────────────────────────
+  let grandBudget = 0, grandActual = 0
+  for (const actId of Object.keys(data)) {
+    for (const locId of Object.keys(data[actId])) {
+      for (const accId of Object.keys(data[actId][locId])) {
+        grandBudget += data[actId][locId][accId].budget || 0
+        grandActual += data[actId][locId][accId].actual || 0
+      }
+    }
+  }
+  const grandVariance = grandBudget - grandActual
 
   if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" }}>Loading...</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center" }}><h2>Access Denied</h2></div>
@@ -417,14 +447,14 @@ export default function BudgetsPage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th rowSpan={2} style={{ width: 100 }}>Activity / Location</th>
-                  {accounts.map(acc => (
+                  <th rowSpan={2} style={{ width: 120 }}>Activity / Location</th>
+                  {relevantAccounts.map(acc => (
                     <th key={acc.id} colSpan={3} style={{ fontSize: 10 }}>{acc.code}<br/>{acc.name}</th>
                   ))}
                   <th colSpan={3} style={{ fontSize: 10 }}>TOTAL</th>
                 </tr>
                 <tr className="sub-header">
-                  {accounts.map(acc => (
+                  {relevantAccounts.map(acc => (
                     <Fragment key={acc.id}>
                       <th>Budget</th><th>Actual</th><th>Var</th>
                     </Fragment>
@@ -446,7 +476,7 @@ export default function BudgetsPage() {
                   return (
                     <Fragment key={act.id}>
                       <tr className="act-header">
-                        <td colSpan={1 + accounts.length * 3 + 3}>{act.name}</td>
+                        <td colSpan={1 + relevantAccounts.length * 3 + 3}>{act.name}</td>
                       </tr>
                       {locationsInAct.map(lid => {
                         const loc = locations.find(l => l.id == lid)
@@ -454,7 +484,7 @@ export default function BudgetsPage() {
                         return (
                           <tr key={lid}>
                             <td style={{ fontWeight: 600, textAlign: "left", paddingLeft: 16 }}>{loc?.name || lid}</td>
-                            {accounts.map(acc => {
+                            {relevantAccounts.map(acc => {
                               const cell = actData[lid]?.[acc.id] || { budget: 0, actual: 0 }
                               rowBudget += cell.budget
                               rowActual += cell.actual
@@ -501,11 +531,11 @@ export default function BudgetsPage() {
                             ))}
                           </select>
                         </td>
-                        <td colSpan={accounts.length * 3 + 3}></td>
+                        <td colSpan={relevantAccounts.length * 3 + 3}></td>
                       </tr>
                       <tr className="total-row">
                         <td style={{ textAlign: "left", paddingLeft: 16 }}>Sub Total</td>
-                        {accounts.map(acc => {
+                        {relevantAccounts.map(acc => {
                           let sb = 0, sa = 0
                           locationsInAct.forEach(lid => {
                             sb += actData[lid][acc.id]?.budget || 0
@@ -531,46 +561,37 @@ export default function BudgetsPage() {
                     </Fragment>
                   )
                 })}
-                {displayActivities.length > 0 && (
-                  <tr className="total-row" style={{ fontSize: 12 }}>
-                    <td>GRAND TOTAL</td>
-                    {accounts.map(acc => {
-                      let gb = 0, ga = 0
-                      displayActivities.forEach(act => {
-                        const actData = data[act.id] || {}
-                        Object.keys(actData).forEach(lid => {
-                          gb += actData[lid][acc.id]?.budget || 0
-                          ga += actData[lid][acc.id]?.actual || 0
-                        })
-                      })
-                      const gv = gb - ga
-                      return (
-                        <Fragment key={acc.id}>
-                          <td>{gb.toLocaleString()}</td>
-                          <td>{ga.toLocaleString()}</td>
-                          <td style={{ color: gv < 0 ? "#EF4444" : gv > 0 ? "#10B981" : "#64748B" }}>
-                            {gv === 0 ? "—" : (gv > 0 ? "+" : "") + gv.toLocaleString()}
-                          </td>
-                        </Fragment>
-                      )
-                    })}
-                    <td>
-                      {displayActivities.reduce((sum, act) => {
-                        const ad = data[act.id] || {}
-                        Object.keys(ad).forEach(l => Object.keys(ad[l]).forEach(a => sum += ad[l][a].budget || 0))
-                        return sum
-                      }, 0).toLocaleString()}
-                    </td>
-                    <td>
-                      {displayActivities.reduce((sum, act) => {
-                        const ad = data[act.id] || {}
-                        Object.keys(ad).forEach(l => Object.keys(ad[l]).forEach(a => sum += ad[l][a].actual || 0))
-                        return sum
-                      }, 0).toLocaleString()}
-                    </td>
-                    <td>—</td>
-                  </tr>
-                )}
+                {/* Grand total – now correctly sums */}
+                <tr className="total-row" style={{ fontSize: 12 }}>
+                  <td>GRAND TOTAL</td>
+                  {relevantAccounts.map(acc => {
+                    let gb = 0, ga = 0
+                    for (const actId of Object.keys(data)) {
+                      for (const locId of Object.keys(data[actId])) {
+                        const cell = data[actId][locId][acc.id]
+                        if (cell) {
+                          gb += cell.budget || 0
+                          ga += cell.actual || 0
+                        }
+                      }
+                    }
+                    const gv = gb - ga
+                    return (
+                      <Fragment key={acc.id}>
+                        <td>{gb.toLocaleString()}</td>
+                        <td>{ga.toLocaleString()}</td>
+                        <td style={{ color: gv < 0 ? "#EF4444" : gv > 0 ? "#10B981" : "#64748B" }}>
+                          {gv === 0 ? "—" : (gv > 0 ? "+" : "") + gv.toLocaleString()}
+                        </td>
+                      </Fragment>
+                    )
+                  })}
+                  <td>{grandBudget.toLocaleString()}</td>
+                  <td>{grandActual.toLocaleString()}</td>
+                  <td style={{ color: grandVariance < 0 ? "#EF4444" : grandVariance > 0 ? "#10B981" : "#64748B" }}>
+                    {grandVariance === 0 ? "—" : (grandVariance > 0 ? "+" : "") + grandVariance.toLocaleString()}
+                  </td>
+                </tr>
               </tbody>
             </table>
 
