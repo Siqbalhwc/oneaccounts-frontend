@@ -10,7 +10,6 @@ const styles = `
 
   .dl-shell { display: flex; min-height: 100vh; background: #EFF4FB; }
 
-  /* ── SIDEBAR ── */
   .dl-sidebar {
     width: 220px; min-width: 220px;
     background: linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%);
@@ -27,35 +26,39 @@ const styles = `
   .dl-sidebar-logo-img { width: 32px; height: 32px; border-radius: 8px; object-fit: contain; flex-shrink: 0; }
   .dl-sidebar-logo-name { color: white; font-size: 14px; font-weight: 700; line-height: 1.1; }
   .dl-sidebar-logo-sub { color: rgba(255,255,255,0.45); font-size: 9px; }
-  .dl-sidebar-nav { flex: 1; padding: 12px 10px; overflow-y: auto; position: relative; z-index: 1; }
-  .dl-nav-section { padding: 8px 8px 4px; color: rgba(255,255,255,0.35); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
-  .dl-nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; color: rgba(255,255,255,0.65); font-size: 13px; font-weight: 500; text-decoration: none; transition: all 0.15s; margin-bottom: 2px; }
-  .dl-nav-item:hover { background: rgba(255,255,255,0.06); color: white; }
-  .dl-nav-item.active { background: rgba(255,255,255,0.1); color: white; font-weight: 600; }
+
+  .dl-sidebar-nav { flex: 1; padding: 8px 10px; overflow-y: auto; position: relative; z-index: 1; }
+
+  .dl-nav-section {
+    padding: 10px 8px 4px; color: rgba(255,255,255,0.35);
+    font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em;
+  }
+  .dl-nav-group-label {
+    padding: 6px 10px 2px; color: rgba(255,255,255,0.22);
+    font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .dl-nav-item {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    border-radius: 8px; color: rgba(255,255,255,0.65); font-size: 13px; font-weight: 500;
+    text-decoration: none; transition: all 0.15s; margin-bottom: 2px;
+  }
+  .dl-nav-item:hover { background: rgba(255,255,255,0.07); color: white; }
+  .dl-nav-item.active { background: rgba(255,255,255,0.12); color: white; font-weight: 600; }
   .dl-nav-icon { width: 18px; text-align: center; flex-shrink: 0; }
-  .dl-nav-divider { height: 1px; background: rgba(255,255,255,0.08); margin: 8px 14px; }
+  .dl-nav-divider { height: 1px; background: rgba(255,255,255,0.08); margin: 6px 14px; }
+
   .dl-sidebar-user { padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 10px; position: relative; z-index: 1; }
   .dl-sidebar-avatar { width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.15); color: white; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
   .dl-sidebar-email { color: rgba(255,255,255,0.7); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dl-sidebar-signout { color: rgba(255,255,255,0.4); font-size: 10px; cursor: pointer; background: none; border: none; font-family: inherit; padding: 0; margin-top: 2px; }
   .dl-sidebar-signout:hover { color: #EF4444; }
 
-  /* ── MAIN ── */
-  .dl-main {
-    flex: 1;
-    margin-left: 220px;
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-    min-width: 0;
-    overflow-x: hidden;
-  }
+  .dl-main { flex: 1; margin-left: 220px; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; overflow-x: hidden; }
 
-  /* ── TOP BAR ── */
   .dl-topbar { background: white; border-bottom: 1px solid #E2E8F0; padding: 0 20px; display: flex; align-items: center; min-height: 56px; gap: 16px; position: sticky; top: 0; z-index: 30; }
   .dl-topbar-greeting { flex: 1; min-width: 0; }
   .dl-topbar-title { font-size: clamp(12px, 1.1vw, 14px); font-weight: 700; color: #1E293B; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .dl-topbar-subtitle { font-size: clamp(10px, 0.8vw, 11px); color: #94A3B8; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dl-topbar-subtitle { font-size: clamp(10px, 0.8vw, 11px); color: #94A3B8; line-height: 1.2; }
   .dl-topbar-actions { display: flex; gap: 8px; flex-shrink: 0; }
   .dl-action-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px clamp(10px, 1.2vw, 14px); border-radius: 8px; font-size: clamp(10px, 0.78vw, 11.5px); font-weight: 600; text-decoration: none; cursor: pointer; border: 1.5px solid; font-family: inherit; transition: all 0.15s; white-space: nowrap; height: 34px; }
   .dl-btn-invoice { background: #EEF2FF; border-color: #C7D2FE; color: #4338CA; }
@@ -67,16 +70,14 @@ const styles = `
   .dl-btn-receipt:hover { background: #A7F3D0; }
   .dl-btn-payment:hover { background: #FECACA; }
 
-  /* ── HAMBURGER ── */
   .dl-hamburger { display: none; background: none; border: none; cursor: pointer; padding: 6px; flex-shrink: 0; }
-  .dl-hamburger span { display: block; width: 20px; height: 2px; background: #475569; margin: 4px 0; border-radius: 2px; transition: all 0.2s; }
+  .dl-hamburger span { display: block; width: 20px; height: 2px; background: #475569; margin: 4px 0; border-radius: 2px; }
   .dl-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 35; }
   .dl-overlay.open { display: block; }
 
-  /* ── RESPONSIVE ── */
   @media (max-width: 900px) {
     .dl-sidebar { width: 60px; min-width: 60px; }
-    .dl-sidebar-logo-name, .dl-sidebar-logo-sub, .dl-nav-section,
+    .dl-sidebar-logo-name, .dl-sidebar-logo-sub, .dl-nav-section, .dl-nav-group-label,
     .dl-nav-item span:not(.dl-nav-icon), .dl-sidebar-email, .dl-sidebar-signout { display: none; }
     .dl-sidebar-logo { justify-content: center; padding: 14px 0; }
     .dl-nav-item { justify-content: center; padding: 10px; }
@@ -87,7 +88,8 @@ const styles = `
     .dl-sidebar { transform: translateX(-220px); width: 220px; min-width: 220px; }
     .dl-sidebar.mobile-open { transform: translateX(0); }
     .dl-sidebar.mobile-open .dl-sidebar-logo-name, .dl-sidebar.mobile-open .dl-sidebar-logo-sub,
-    .dl-sidebar.mobile-open .dl-nav-section, .dl-sidebar.mobile-open .dl-nav-item span:not(.dl-nav-icon),
+    .dl-sidebar.mobile-open .dl-nav-section, .dl-sidebar.mobile-open .dl-nav-group-label,
+    .dl-sidebar.mobile-open .dl-nav-item span:not(.dl-nav-icon),
     .dl-sidebar.mobile-open .dl-sidebar-email, .dl-sidebar.mobile-open .dl-sidebar-signout { display: block; }
     .dl-sidebar.mobile-open .dl-sidebar-logo { justify-content: flex-start; padding: 16px 18px; }
     .dl-sidebar.mobile-open .dl-nav-item { justify-content: flex-start; padding: 8px 12px; }
@@ -104,6 +106,78 @@ const styles = `
   }
 `
 
+// ── CORRECTED NAV STRUCTURE ──────────────────────────────────────────────
+const navSections = [
+  {
+    section: 'MAIN',
+    items: [
+      { label: 'Dashboard', icon: '📊', href: '/dashboard' },
+    ],
+  },
+  {
+    section: 'CRM',
+    items: [
+      { label: 'Customers',      icon: '👥', href: '/dashboard/customers' },
+      { label: 'Sales Invoices', icon: '🧾', href: '/dashboard/invoices'  },
+      { label: 'Receipts',       icon: '💰', href: '/dashboard/receipts'  },
+      { label: 'Suppliers',      icon: '🚚', href: '/dashboard/suppliers' },
+      { label: 'Purchase Bills', icon: '📦', href: '/dashboard/bills'     },
+      { label: 'Payments',       icon: '💳', href: '/dashboard/payments'  },
+    ],
+  },
+  {
+    section: 'BANKING',
+    items: [
+      { label: 'Bank Accounts',  icon: '🏦', href: '/dashboard/banking/bank-accounts'  },
+      { label: 'Bank Transfers', icon: '🔄', href: '/dashboard/banking/bank-transfers' },
+    ],
+  },
+  {
+    section: 'INVENTORY',
+    items: [
+      { label: 'Products',       icon: '📦', href: '/dashboard/products'              },
+      { label: 'Inventory Adj.', icon: '⚖️', href: '/dashboard/inventory/adjustments' },
+    ],
+  },
+  {
+    section: 'ACCOUNTING',
+    groups: [
+      {
+        groupLabel: 'General',
+        items: [
+          { label: 'Chart of Accounts', icon: '📋', href: '/dashboard/accounts' },
+          { label: 'Journal Entries',   icon: '📓', href: '/dashboard/journal'  },
+        ],
+      },
+      {
+        groupLabel: 'Reports',
+        items: [
+          { label: 'All Reports', icon: '📈', href: '/dashboard/reports' },
+        ],
+      },
+      {
+        groupLabel: 'Automation',
+        items: [
+          { label: 'Invoice Automation', icon: '⚙️', href: '/dashboard/settings/invoice-automation' },
+          { label: 'Investors',          icon: '💼', href: '/dashboard/investors'                   },
+        ],
+      },
+    ],
+  },
+  {
+    section: 'SYSTEM',
+    items: [
+      { label: 'Admin Panel',     icon: '👑', href: '/dashboard/admin/users'    },
+      { label: 'Feature Manager', icon: '⚙️', href: '/dashboard/admin/features' },
+      { label: 'Audit Logs',      icon: '📋', href: '/dashboard/admin/audit-logs' },
+      { label: 'Settings',        icon: '⚙️', href: '/dashboard/settings'       },
+      { label: 'New Company',     icon: '🏢', href: '/dashboard/companies/new'  },
+      { label: 'Upgrade Plan',    icon: '⭐', href: '/dashboard/upgrade'        },
+      { label: 'Super Admin',     icon: '🛡️', href: '/dashboard/super-admin'    },
+    ],
+  },
+]
+
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -119,32 +193,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
     return 'Good evening'
   }
 
-  const navItems = [
-    { label: 'Dashboard',         icon: '📊', href: '/dashboard',          section: 'MAIN'      },
-    { label: 'Chart of Accounts', icon: '📋', href: '/dashboard/accounts', section: 'MAIN'      },
-    { label: 'Journal Entries',   icon: '📓', href: '/dashboard/journal',  section: 'MAIN'      },
-    { label: 'Sales Invoices',    icon: '🧾', href: '/dashboard/invoices', section: 'MAIN'      },
-    { label: 'Purchase Bills',    icon: '📦', href: '/dashboard/bills',    section: 'MAIN'      },
-    { label: 'Receipts',          icon: '💰', href: '/dashboard/receipts', section: 'MAIN'      },
-    { label: 'Payments',          icon: '💳', href: '/dashboard/payments', section: 'MAIN'      },
-    { label: 'Customers',         icon: '👥', href: '/dashboard/customers',section: 'CRM'       },
-    { label: 'Suppliers',         icon: '🚚', href: '/dashboard/suppliers',section: 'CRM'       },
-    { label: 'Investors',         icon: '💼', href: '/dashboard/investors',section: 'CRM'       },
-    { label: 'Products',          icon: '📦', href: '/dashboard/products', section: 'INVENTORY' },
-    { label: 'All Reports',       icon: '📁', href: '/dashboard/reports',  section: 'REPORTS'   },
-  ]
-
-  const sections = navItems.reduce((acc, item) => {
-    if (!acc[item.section]) acc[item.section] = []
-    acc[item.section].push(item)
-    return acc
-  }, {} as Record<string, typeof navItems>)
-
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       <div className="dl-shell">
         <SidebarClient />
+
         <aside className="dl-sidebar" id="dl-sidebar">
           <div className="dl-sidebar-logo">
             <img src="/logo.png" alt="OneAccounts" className="dl-sidebar-logo-img" />
@@ -153,21 +207,48 @@ export default async function DashboardLayout({ children }: { children: React.Re
               <div className="dl-sidebar-logo-sub">by Siqbal</div>
             </div>
           </div>
+
           <nav className="dl-sidebar-nav">
-            {Object.entries(sections).map(([section, items], secIdx) => (
-              <div key={section}>
-                <div className="dl-nav-section">{section}</div>
-                {items.map((item) => (
-                  <a key={item.href} href={item.href}
-                    className={`dl-nav-item${item.href === '/dashboard' ? ' active' : ''}`}>
-                    <span className="dl-nav-icon">{item.icon}</span>
-                    <span>{item.label}</span>
-                  </a>
-                ))}
-                {secIdx < Object.keys(sections).length - 1 && <div className="dl-nav-divider" />}
+            {navSections.map((sec, secIdx) => (
+              <div key={sec.section}>
+                <div className="dl-nav-section">{sec.section}</div>
+
+                {'groups' in sec && sec.groups ? (
+                  sec.groups.map((group) => (
+                    <div key={group.groupLabel}>
+                      <div className="dl-nav-group-label">{group.groupLabel}</div>
+                      {group.items.map((item) => (
+                        <a
+                          key={item.href}
+                          href={item.href}
+                          className="dl-nav-item"
+                        >
+                          <span className="dl-nav-icon">{item.icon}</span>
+                          <span>{item.label}</span>
+                        </a>
+                      ))}
+                    </div>
+                  ))
+                ) : (
+                  'items' in sec && sec.items?.map((item) => (
+                    <a
+                      key={item.href}
+                      href={item.href}
+                      className="dl-nav-item"
+                    >
+                      <span className="dl-nav-icon">{item.icon}</span>
+                      <span>{item.label}</span>
+                    </a>
+                  ))
+                )}
+
+                {secIdx < navSections.length - 1 && (
+                  <div className="dl-nav-divider" />
+                )}
               </div>
             ))}
           </nav>
+
           <div className="dl-sidebar-user">
             <div className="dl-sidebar-avatar">{initial}</div>
             <div style={{ overflow: 'hidden' }}>
@@ -178,6 +259,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             </div>
           </div>
         </aside>
+
         <div className="dl-main">
           <DashboardTopBar email={email} greeting={getGreeting()} />
           {children}
