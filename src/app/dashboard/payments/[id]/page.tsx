@@ -3,19 +3,29 @@
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Printer, Send } from "lucide-react"
+import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 
 interface Payment {
   id: number
+  payment_no: string
   date: string
   amount: number
-  supplier_id: number
-  bank_id: number
-  notes: string
-  suppliers?: { name: string; code: string }
-  bank_accounts?: { name: string }
-  allocations?: { invoice_no: string; amount: number }[]
-  journal_entries?: { id: number; entry_no: string; date: string }[]
+  payment_method: string
+  reference?: string
+  notes?: string
+  party_id: number
+  supplier?: {
+    name: string
+    code: string
+    phone?: string
+    email?: string
+  }
+  allocations?: {
+    invoice_id: number
+    invoice_no: string
+    amount: number
+  }[]
 }
 
 export default function PaymentDetailPage() {
@@ -41,83 +51,146 @@ export default function PaymentDetailPage() {
 
   useEffect(() => {
     if (!companyId || !paymentId) return
+    setLoading(true)
+
     supabase
       .from("payments")
-      .select("*, suppliers(name, code), bank_accounts(name)")
+      .select("*")
       .eq("id", paymentId)
       .eq("company_id", companyId)
       .single()
       .then(({ data }) => {
-        if (data) {
-          const pmt: Payment = data
-          // Fetch allocations (use payment_allocations with receipt_id could be confusing; here we assume payments have similar allocation table)
-          // For simplicity, we'll show invoice allocations from payment_allocations linked to payment (if you have a relation)
+        if (!data) { setLoading(false); return }
+
+        const pmt: Payment = data
+
+        // Fetch supplier
+        if (pmt.party_id) {
           supabase
-            .from("payment_allocations")
-            .select("amount, invoices(invoice_no)")
-            .eq("payment_id", pmt.id)        // assuming payment_allocations has payment_id
-            .eq("company_id", companyId)
-            .then(({ data: allocs }) => {
-              pmt.allocations = allocs?.map((a: any) => ({
-                invoice_no: a.invoices?.invoice_no,
-                amount: a.amount,
-              })) || []
+            .from("suppliers")
+            .select("name, code, phone, email")
+            .eq("id", pmt.party_id)
+            .single()
+            .then(({ data: supp }) => {
+              pmt.supplier = supp || undefined
+            })
+            .then(() => {
+              // Fetch allocations
               supabase
-                .from("journal_entries")
-                .select("id, entry_no, date")
-                .eq("company_id", companyId)
-                .like("description", `%${pmt.id}%`)
-                .order("date", { ascending: false })
-                .then(({ data: entries }) => {
-                  pmt.journal_entries = entries || []
+                .from("payment_allocations")
+                .select("amount, invoice_id, invoices(invoice_no)")
+                .eq("payment_id", pmt.id)
+                .then(({ data: allocs }) => {
+                  pmt.allocations = (allocs || []).map((a: any) => ({
+                    invoice_id: a.invoice_id,
+                    invoice_no: a.invoices?.invoice_no || "—",
+                    amount: a.amount,
+                  }))
                   setPayment(pmt)
                   setLoading(false)
                 })
             })
         } else {
+          setPayment(pmt)
           setLoading(false)
         }
       })
   }, [companyId, paymentId])
 
+  const getWhatsAppLink = () => {
+    if (!payment || !payment.supplier) return ""
+    const phone = (payment.supplier.phone || "").replace(/\D/g, "")
+    if (!phone) return ""
+    const msg = `Dear ${payment.supplier.name},\n\nYour payment ${payment.payment_no} for PKR ${payment.amount?.toLocaleString()} has been processed.\nDate: ${payment.date}\nMethod: ${payment.payment_method}\n${payment.notes ? "Notes: " + payment.notes : ""}\n\nThank you.\n— OneAccounts`
+    return `https://wa.me/92${phone}?text=${encodeURIComponent(msg)}`
+  }
+
+  const handlePrintPDF = () => {
+    if (!payment) return
+    const pdfData = {
+      companyName: "OneAccounts",
+      invoiceNo: payment.payment_no,   // reuse the same field for PDF
+      date: payment.date,
+      dueDate: "",
+      customerName: payment.supplier?.name || "Supplier",
+      customerPhone: payment.supplier?.phone || "",
+      items: (payment.allocations || []).map(a => ({
+        description: `Bill: ${a.invoice_no}`,
+        qty: 1,
+        unit_price: a.amount,
+        total: a.amount,
+      })),
+      subtotal: payment.amount,
+      total: payment.amount,
+    }
+    const doc = generateInvoicePDF(pdfData)
+    doc.save(`Payment_${payment.payment_no}.pdf`)
+  }
+
   if (loading) return <div style={{ padding: 24, textAlign: "center" }}>Loading…</div>
   if (!payment) return <div style={{ padding: 24, textAlign: "center" }}>Payment not found</div>
 
+  const waLink = getWhatsAppLink()
+
   return (
-    <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
+    <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <style>{`
-        .card { background: white; border-radius: 10px; border: 1px solid #E2E8F0; padding: 20px; margin-bottom: 16px; }
-        .row { display: flex; margin-bottom: 8px; font-size: 13px; }
-        .label { width: 120px; color: #64748B; font-weight: 600; }
-        .value { color: #1E293B; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        th { text-align: left; padding: 8px 12px; border-bottom: 1px solid #E2E8F0; background: #F8FAFC; font-weight: 600; color: #475569; }
-        td { padding: 8px 12px; border-bottom: 1px solid #F1F5F9; }
-        .total-row { font-weight: 700; }
+        .card {
+          background: white; border-radius: 14px; border: 1px solid #d6e0eb;
+          padding: 24px; margin-bottom: 16px;
+          box-shadow: 0 2px 8px rgba(0,25,45,0.04);
+        }
+        .row { display: flex; margin-bottom: 10px; font-size: 14px; }
+        .label { width: 130px; color: #2c5778; font-weight: 600; }
+        .value { color: #0a2940; font-weight: 500; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 10px 12px; background: #f8fafc; font-weight: 700; color: #2c5778; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #d6e0eb; }
+        td { padding: 10px 12px; border-bottom: 1px solid #f0f3f7; font-size: 13px; }
+        .btn { padding: 8px 18px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-family: inherit; }
+        .btn-outline { background: white; border: 1.5px solid #d6e0eb; color: #2c5778; }
+        .btn-primary { background: #1e3a8a; color: white; }
+        .btn-success { background: #25D366; color: white; }
       `}</style>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        <button className="btn btn-outline" onClick={() => router.push("/dashboard/payments")}>
-          <ArrowLeft size={16} />
-        </button>
-        <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>Payment #{payment.id}</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button className="btn btn-outline" onClick={() => router.push("/dashboard/payments")}>
+            <ArrowLeft size={18} />
+          </button>
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 800, color: "#0a2940", margin: 0 }}>Payment #{payment.payment_no}</h1>
+            <p style={{ color: "#2c5778", fontSize: 13, margin: 0 }}>{payment.supplier?.name || "Unknown Supplier"}</p>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {waLink && (
+            <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success">
+              <Send size={16} /> WhatsApp
+            </a>
+          )}
+          <button className="btn btn-primary" onClick={handlePrintPDF}>
+            <Printer size={16} /> Print PDF
+          </button>
+        </div>
       </div>
 
       <div className="card">
+        <div className="row"><span className="label">Payment No.</span><span className="value">{payment.payment_no}</span></div>
         <div className="row"><span className="label">Date</span><span className="value">{payment.date}</span></div>
-        <div className="row"><span className="label">Supplier</span><span className="value">{payment.suppliers?.code} – {payment.suppliers?.name}</span></div>
-        <div className="row"><span className="label">Bank</span><span className="value">{payment.bank_accounts?.name}</span></div>
-        <div className="row"><span className="label">Amount</span><span className="value">PKR {payment.amount?.toLocaleString()}</span></div>
+        <div className="row"><span className="label">Supplier</span><span className="value">{payment.supplier?.code} – {payment.supplier?.name}</span></div>
+        <div className="row"><span className="label">Amount</span><span className="value" style={{ fontSize: 18, fontWeight: 700 }}>PKR {payment.amount?.toLocaleString()}</span></div>
+        <div className="row"><span className="label">Method</span><span className="value">{payment.payment_method}</span></div>
+        <div className="row"><span className="label">Reference</span><span className="value">{payment.reference || "—"}</span></div>
         <div className="row"><span className="label">Notes</span><span className="value">{payment.notes || "—"}</span></div>
       </div>
 
       {payment.allocations && payment.allocations.length > 0 && (
         <div className="card">
-          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700 }}>Applied to Bills</h3>
+          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#0a2940", marginBottom: 12 }}>Applied to Bills</h3>
           <table>
             <thead>
               <tr>
-                <th>Invoice #</th>
+                <th>Bill Number</th>
                 <th style={{ textAlign: "right" }}>Amount</th>
               </tr>
             </thead>
@@ -125,29 +198,7 @@ export default function PaymentDetailPage() {
               {payment.allocations.map((alloc, idx) => (
                 <tr key={idx}>
                   <td>{alloc.invoice_no}</td>
-                  <td style={{ textAlign: "right" }}>{alloc.amount.toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {payment.journal_entries && payment.journal_entries.length > 0 && (
-        <div className="card">
-          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700 }}>Related Journal Entries</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Entry No</th>
-                <th>Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {payment.journal_entries.map(entry => (
-                <tr key={entry.id}>
-                  <td>{entry.entry_no}</td>
-                  <td>{entry.date}</td>
+                  <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {alloc.amount?.toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
