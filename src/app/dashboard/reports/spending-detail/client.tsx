@@ -1,6 +1,5 @@
 "use client"
 
-
 import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
@@ -8,7 +7,7 @@ import * as XLSX from "xlsx"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
-export default function SpendingDetailPage() {
+export default function SpendingDetailClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createBrowserClient(
@@ -30,6 +29,7 @@ export default function SpendingDetailPage() {
   const [selectedDonorId, setSelectedDonorId] = useState(initialDonor)
   const [expenseAccountIds, setExpenseAccountIds] = useState<number[]>([])
 
+  // ── 1. Initialise company and master data ──────────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -38,38 +38,90 @@ export default function SpendingDetailPage() {
         setCompanyId(cid)
         supabase.from("projects").select("id, name").eq("company_id", cid).order("name").then(r => r.data && setProjects(r.data))
         supabase.from("donors").select("id, name").eq("company_id", cid).order("name").then(r => r.data && setDonors(r.data))
-        supabase.from("accounts").select("id").eq("company_id", cid).eq("type", "Expense").then(r => r.data && setExpenseAccountIds(r.data.map((a: any) => a.id)))
+        supabase.from("accounts").select("id").eq("company_id", cid).eq("type", "Expense")
+          .then(r => {
+            if (r.data) setExpenseAccountIds(r.data.map((a: any) => a.id))
+          })
       }
     })
   }, [])
 
+  // ── 2. Fetch rows once everything is ready ─────────────────────────────
   useEffect(() => {
     if (!companyId || expenseAccountIds.length === 0) return
     setLoading(true)
 
-    let query = supabase.from("journal_lines")
+    let query = supabase
+      .from("journal_lines")
       .select(`
-        account_id, project_id, activity_id, location_id, donor_id, debit, credit,
-        accounts(code, name, type), projects(name), donors(name), activities(name), locations(name),
-        journal_entries!inner(date)
+        id,
+        account_id,
+        project_id,
+        donor_id,
+        activity_id,
+        location_id,
+        debit,
+        credit,
+        journal_entries!inner(date, entry_no)
       `)
       .eq("company_id", companyId)
       .gte("journal_entries.date", `${fiscalYear}-01-01`)
       .lte("journal_entries.date", `${fiscalYear}-12-31`)
       .in("account_id", expenseAccountIds)
-      .order("journal_entries.date", { ascending: false })
+      .order("journal_entries(date)", { ascending: false })
+      .limit(500)
 
     if (selectedProjectId) query = query.eq("project_id", selectedProjectId)
     if (selectedDonorId) query = query.eq("donor_id", selectedDonorId)
 
-    query.then(({ data }) => {
-      setRows((data || []).map((r: any) => ({
-        date: r.journal_entries?.date,
-        project: r.projects?.name, donor: r.donors?.name,
-        activity: r.activities?.name, location: r.locations?.name,
-        account_code: r.accounts?.code, account_name: r.accounts?.name,
-        debit: r.debit, credit: r.credit, net: (r.debit || 0) - (r.credit || 0),
-      })))
+    query.then(async ({ data: lines }) => {
+      if (!lines || lines.length === 0) {
+        setRows([])
+        setLoading(false)
+        return
+      }
+
+      // Gather distinct IDs for enrichment
+      const accountIds = [...new Set(lines.map((l: any) => l.account_id))]
+      const projectIds = [...new Set(lines.map((l: any) => l.project_id))]
+      const donorIds = [...new Set(lines.map((l: any) => l.donor_id))]
+      const activityIds = [...new Set(lines.map((l: any) => l.activity_id))]
+      const locationIds = [...new Set(lines.map((l: any) => l.location_id))]
+
+      const [accRes, projRes, donRes, actRes, locRes] = await Promise.all([
+        supabase.from("accounts").select("id,code,name").in("id", accountIds),
+        supabase.from("projects").select("id,name").in("id", projectIds),
+        supabase.from("donors").select("id,name").in("id", donorIds),
+        supabase.from("activities").select("id,name").in("id", activityIds),
+        supabase.from("locations").select("id,name").in("id", locationIds),
+      ])
+
+      const mapFrom = (arr: any[]) => {
+        const m: Record<number, any> = {}
+        ;(arr || []).forEach((x: any) => (m[x.id] = x))
+        return m
+      }
+      const accounts = mapFrom(accRes.data || [])
+      const projs = mapFrom(projRes.data || [])
+      const dons = mapFrom(donRes.data || [])
+      const acts = mapFrom(actRes.data || [])
+      const locs = mapFrom(locRes.data || [])
+
+      const enriched = (lines || []).map((l: any) => ({
+        date: l.journal_entries?.date,
+        entry_no: l.journal_entries?.entry_no,
+        project: projs[l.project_id]?.name || "",
+        donor: dons[l.donor_id]?.name || "",
+        activity: acts[l.activity_id]?.name || "",
+        location: locs[l.location_id]?.name || "",
+        account_code: accounts[l.account_id]?.code || "",
+        account_name: accounts[l.account_id]?.name || "",
+        debit: l.debit,
+        credit: l.credit,
+        net: (l.debit || 0) - (l.credit || 0),
+      }))
+
+      setRows(enriched)
       setLoading(false)
     })
   }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, expenseAccountIds])
@@ -136,7 +188,7 @@ export default function SpendingDetailPage() {
         </div>
       </div>
       <div className="card" style={{ overflowX: "auto" }}>
-        {loading ? <p>Loading...</p> : rows.length === 0 ? <p style={{ color: "#94a3b8", textAlign: "center", padding: 40 }}>No spending data found.</p> : (
+        {loading ? <p>Loading...</p> : rows.length === 0 ? <p style={{ color: "#94a3b8", textAlign: "center", padding: 40 }}>No spending data found for the selected filters.</p> : (
           <table className="table" style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
@@ -154,12 +206,14 @@ export default function SpendingDetailPage() {
                   <td style={{ fontWeight: 600, textAlign: "right" }}>{r.net?.toLocaleString()}</td>
                 </tr>
               ))}
-              <tr style={{ fontWeight: 700, borderTop: "2px solid #e2e8f0" }}>
-                <td colSpan={7} style={{ textAlign: "right" }}>Total</td>
-                <td style={{ textAlign: "right" }}>{rows.reduce((s,r)=>s+(r.debit||0),0).toLocaleString()}</td>
-                <td style={{ textAlign: "right" }}>{rows.reduce((s,r)=>s+(r.credit||0),0).toLocaleString()}</td>
-                <td style={{ textAlign: "right" }}>{rows.reduce((s,r)=>s+(r.net||0),0).toLocaleString()}</td>
-              </tr>
+              {rows.length > 0 && (
+                <tr style={{ fontWeight: 700, borderTop: "2px solid #e2e8f0" }}>
+                  <td colSpan={7} style={{ textAlign: "right" }}>Total</td>
+                  <td style={{ textAlign: "right" }}>{rows.reduce((s,r)=>s+(r.debit||0),0).toLocaleString()}</td>
+                  <td style={{ textAlign: "right" }}>{rows.reduce((s,r)=>s+(r.credit||0),0).toLocaleString()}</td>
+                  <td style={{ textAlign: "right" }}>{rows.reduce((s,r)=>s+(r.net||0),0).toLocaleString()}</td>
+                </tr>
+              )}
             </tbody>
           </table>
         )}

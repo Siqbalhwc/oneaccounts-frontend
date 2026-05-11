@@ -38,12 +38,12 @@ export default function SidebarNav({
 }) {
   const pathname = usePathname()
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    MAIN: true,
-    CRM: true,
-    BANKING: true,
-    INVENTORY: true,
-    ACCOUNTING: true,
-    SYSTEM: true,
+    MAIN: false,
+    CRM: false,
+    BANKING: false,
+    INVENTORY: false,
+    ACCOUNTING: false,
+    SYSTEM: false,
   })
 
   const toggleSection = (section: string) => {
