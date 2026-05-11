@@ -9,6 +9,11 @@ import { Upload, Download } from "lucide-react"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
+const MONTHS = [
+  "Jan","Feb","Mar","Apr","May","Jun",
+  "Jul","Aug","Sep","Oct","Nov","Dec"
+]
+
 export default function BudgetsPage() {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -26,41 +31,43 @@ export default function BudgetsPage() {
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
   const [businessType, setBusinessType] = useState<string>("")
 
-  // Master data – both Expense and Asset accounts
+  // Master data – Expense + Asset accounts
   const [accounts, setAccounts] = useState<any[]>([])
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
   const [allActivities, setAllActivities] = useState<any[]>([])
 
-  // Filters
+  // Filters (donor removed from UI, still used internally)
   const [selectedProjectId, setSelectedProjectId] = useState<string>(initialProject)
   const [selectedDonorId, setSelectedDonorId] = useState<string>(initialDonor)
   const [filterActivityId, setFilterActivityId] = useState<string>("")
   const [filterLocationId, setFilterLocationId] = useState<string>("")
 
-  // Data
+  // View mode: "gl" or "month"
+  const [viewMode, setViewMode] = useState<"gl" | "month">("gl")
+
+  // Data (annual GL budgets + actuals)
   const [data, setData] = useState<Record<string, Record<string, Record<string, { budget: number; actual: number }>>>>({})
   const [loading, setLoading] = useState(true)
+
+  // Month view: monthly actuals keyed by activity→location→month
+  const [monthlyActuals, setMonthlyActuals] = useState<Record<string, Record<string, Record<number, number>>>>({})
+  const [monthBudgetOverrides, setMonthBudgetOverrides] = useState<Record<string, Record<string, Record<number, number | null>>>>({})
   const [saving, setSaving] = useState(false)
   const [flash, setFlash] = useState<string>("")
-
-  // Budget import
   const [budgetImportFile, setBudgetImportFile] = useState<File | null>(null)
   const [importingBudget, setImportingBudget] = useState(false)
 
-  // ── 1. Load master data (Expense + Asset accounts) ──────────────────────
+  // ── 1. Load master data ──────────────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
       supabase.from("companies").select("business_type").eq("id", cid).single()
         .then(r => r.data && setBusinessType(r.data.business_type || ""))
-      supabase.from("accounts")
-        .select("id, code, name, type")
-        .eq("company_id", cid)
-        .in("type", ["Expense", "Asset"])
-        .order("code")
+      supabase.from("accounts").select("id, code, name, type")
+        .eq("company_id", cid).in("type", ["Expense","Asset"]).order("code")
         .then(r => r.data && setAccounts(r.data))
       supabase.from("projects").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
         .then(r => r.data && setProjects(r.data))
@@ -74,35 +81,27 @@ export default function BudgetsPage() {
   // ── 2. Activities of selected project ────────────────────────────────────
   useEffect(() => {
     if (!companyId || !selectedProjectId) { setAllActivities([]); return }
-    supabase.from("activities")
-      .select("id, name")
-      .eq("company_id", companyId)
-      .eq("project_id", selectedProjectId)
-      .is("deleted_at", null)
-      .order("name")
+    supabase.from("activities").select("id, name")
+      .eq("company_id", companyId).eq("project_id", selectedProjectId)
+      .is("deleted_at", null).order("name")
       .then(r => r.data && setAllActivities(r.data))
   }, [companyId, selectedProjectId])
 
-  // ── 2b. Auto‑select donor if only one donor has budgets for the project ──
+  // ── 2b. Auto‑select donor (only when NGO) ───────────────────────────────
   useEffect(() => {
     if (!companyId || !selectedProjectId || businessType !== "ngo") return
     if (initialDonor) return
-    supabase.from("budgets")
-      .select("donor_id")
-      .eq("company_id", companyId)
-      .eq("project_id", selectedProjectId)
-      .is("month", null)
-      .is("deleted_at", null)
+    supabase.from("budgets").select("donor_id")
+      .eq("company_id", companyId).eq("project_id", selectedProjectId)
+      .is("month", null).is("deleted_at", null)
       .then(({ data: budgetRows }) => {
         if (!budgetRows) return
-        const uniqueDonorIds = [...new Set(budgetRows.map((b: any) => b.donor_id).filter(Boolean))]
-        if (uniqueDonorIds.length === 1) {
-          setSelectedDonorId(String(uniqueDonorIds[0]))
-        }
+        const unique = [...new Set(budgetRows.map((b: any) => b.donor_id).filter(Boolean))]
+        if (unique.length === 1) setSelectedDonorId(String(unique[0]))
       })
   }, [companyId, selectedProjectId, businessType, initialDonor])
 
-  // ── 3. Load budgets + actuals (actual = debit - credit) ─────────────────
+  // ── 3. Load budgets + actuals (annual) ───────────────────────────────────
   useEffect(() => {
     if (!companyId || !selectedProjectId) { setData({}); setLoading(false); return }
     if (businessType === "ngo" && !selectedDonorId) { setData({}); setLoading(false); return }
@@ -110,11 +109,8 @@ export default function BudgetsPage() {
 
     let budgetQuery = supabase.from("budgets")
       .select("account_id, activity_id, location_id, donor_id, budgeted_amount")
-      .eq("company_id", companyId)
-      .eq("fiscal_year", fiscalYear)
-      .eq("project_id", selectedProjectId)
-      .is("month", null)
-      .is("deleted_at", null)
+      .eq("company_id", companyId).eq("fiscal_year", fiscalYear)
+      .eq("project_id", selectedProjectId).is("month", null).is("deleted_at", null)
     if (businessType === "ngo") budgetQuery = budgetQuery.eq("donor_id", selectedDonorId)
     if (filterLocationId) budgetQuery = budgetQuery.eq("location_id", filterLocationId)
 
@@ -123,17 +119,13 @@ export default function BudgetsPage() {
       const endDate = `${fiscalYear}-12-31`
       let actualQuery = supabase.from("journal_lines")
         .select("account_id, activity_id, location_id, debit, credit, journal_entries!inner(date)")
-        .eq("company_id", companyId)
-        .eq("project_id", selectedProjectId)
-        .gte("journal_entries.date", startDate)
-        .lte("journal_entries.date", endDate)
+        .eq("company_id", companyId).eq("project_id", selectedProjectId)
+        .gte("journal_entries.date", startDate).lte("journal_entries.date", endDate)
       if (businessType === "ngo") actualQuery = actualQuery.eq("donor_id", selectedDonorId)
       if (filterLocationId) actualQuery = actualQuery.eq("location_id", filterLocationId)
 
       actualQuery.then(({ data: actualRows }) => {
         const newData: Record<string, Record<string, Record<string, { budget: number; actual: number }>>> = {}
-
-        // Initialize from budget rows
         budgetRows?.forEach((b: any) => {
           const { account_id, activity_id, location_id, budgeted_amount } = b
           if (!activity_id || !location_id || !account_id) return
@@ -141,26 +133,49 @@ export default function BudgetsPage() {
           if (!newData[activity_id][location_id]) newData[activity_id][location_id] = {}
           newData[activity_id][location_id][account_id] = { budget: budgeted_amount || 0, actual: 0 }
         })
-
-        // Add actuals: net amount = debit - credit
         actualRows?.forEach((line: any) => {
           const { account_id, activity_id, location_id, debit, credit } = line
           if (!activity_id || !location_id || !account_id) return
           if (!newData[activity_id]) newData[activity_id] = {}
           if (!newData[activity_id][location_id]) newData[activity_id][location_id] = {}
-          if (!newData[activity_id][location_id][account_id]) {
-            newData[activity_id][location_id][account_id] = { budget: 0, actual: 0 }
-          }
+          if (!newData[activity_id][location_id][account_id]) newData[activity_id][location_id][account_id] = { budget: 0, actual: 0 }
           newData[activity_id][location_id][account_id].actual += (debit || 0) - (credit || 0)
         })
-
         setData(newData)
         setLoading(false)
       })
     })
   }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, filterLocationId, businessType])
 
-  // ── Determine which accounts actually appear (budget > 0 or actual != 0) ─
+  // ── 4. Monthly actuals (only needed in month view) ──────────────────────
+  useEffect(() => {
+    if (viewMode !== "month" || !companyId || !selectedProjectId) return
+    if (businessType === "ngo" && !selectedDonorId) return
+
+    const startDate = `${fiscalYear}-01-01`
+    const endDate = `${fiscalYear}-12-31`
+    let query = supabase.from("journal_lines")
+      .select("activity_id, location_id, debit, credit, journal_entries!inner(date)")
+      .eq("company_id", companyId).eq("project_id", selectedProjectId)
+      .gte("journal_entries.date", startDate).lte("journal_entries.date", endDate)
+    if (businessType === "ngo") query = query.eq("donor_id", selectedDonorId)
+    if (filterLocationId) query = query.eq("location_id", filterLocationId)
+
+    query.then(({ data: lines }) => {
+      const agg: Record<string, Record<string, Record<number, number>>> = {}
+      ;(lines || []).forEach((l: any) => {
+        const act = String(l.activity_id)
+        const loc = String(l.location_id)
+        const month = new Date(l.journal_entries.date).getMonth() + 1  // 1‑12
+        if (!agg[act]) agg[act] = {}
+        if (!agg[act][loc]) agg[act][loc] = {}
+        agg[act][loc][month] = (agg[act][loc][month] || 0) + (l.debit || 0) - (l.credit || 0)
+      })
+      setMonthlyActuals(agg)
+    })
+  }, [viewMode, companyId, selectedProjectId, selectedDonorId, filterLocationId, fiscalYear, businessType])
+
+  // ── Determine which accounts to display ────────────────────────────────
   const usedAccountIds = new Set<string>()
   for (const actId of Object.keys(data)) {
     for (const locId of Object.keys(data[actId])) {
@@ -170,9 +185,53 @@ export default function BudgetsPage() {
       }
     }
   }
-  const relevantAccounts = accounts.filter(a => usedAccountIds.has(String(a.id)))
+  // If no accounts have been used yet (first visit, no budgets), show all
+  const relevantAccounts = usedAccountIds.size > 0
+    ? accounts.filter(a => usedAccountIds.has(String(a.id)))
+    : accounts
 
-  // ── Helper: update a budget cell ────────────────────────────────────────
+  // ── Helpers ─────────────────────────────────────────────────────────────
+  const rowTotalBudget = (actId: string, locId: string) => {
+    let total = 0
+    relevantAccounts.forEach(acc => {
+      const cell = data[actId]?.[locId]?.[String(acc.id)]
+      if (cell) total += cell.budget || 0
+    })
+    return total
+  }
+
+  const rowTotalActual = (actId: string, locId: string) => {
+    let total = 0
+    relevantAccounts.forEach(acc => {
+      const cell = data[actId]?.[locId]?.[String(acc.id)]
+      if (cell) total += cell.actual || 0
+    })
+    return total
+  }
+
+  const getMonthBudget = (actId: string, locId: string, month: number) => {
+    const override = monthBudgetOverrides[actId]?.[locId]?.[month]
+    if (override !== null && override !== undefined) return override
+    const annual = rowTotalBudget(actId, locId)
+    return Math.round(annual / 12)
+  }
+
+  const setMonthBudget = (actId: string, locId: string, month: number, value: number) => {
+    setMonthBudgetOverrides(prev => {
+      const a = { ...prev }
+      if (!a[actId]) a[actId] = {}
+      if (!a[actId][locId]) a[actId][locId] = {}
+      a[actId][locId] = { ...a[actId][locId], [month]: value }
+      return a
+    })
+  }
+
+  const monthRowTotal = (actId: string, locId: string) => {
+    let sum = 0
+    for (let m = 1; m <= 12; m++) sum += getMonthBudget(actId, locId, m)
+    return sum
+  }
+
   const updateCell = (accountId: string, activityId: string, locationId: string, amount: number) => {
     setData(prev => {
       const updated = { ...prev }
@@ -214,48 +273,31 @@ export default function BudgetsPage() {
           if (uniqueKeys.has(key)) continue
           uniqueKeys.add(key)
           rowsToInsert.push({
-            company_id: companyId,
-            account_id: parseInt(accountId),
-            project_id: selectedProjectId,
-            activity_id: activityId,
+            company_id: companyId, account_id: parseInt(accountId),
+            project_id: selectedProjectId, activity_id: activityId,
             donor_id: (businessType === "ngo") ? selectedDonorId : null,
-            location_id: locationId,
-            fiscal_year: fiscalYear,
-            month: null,
+            location_id: locationId, fiscal_year: fiscalYear, month: null,
             budgeted_amount: budget,
           })
         }
       }
     }
-
-    let deleteQuery = supabase
-      .from("budgets")
-      .delete()
-      .eq("company_id", companyId)
-      .eq("project_id", selectedProjectId)
-      .eq("fiscal_year", fiscalYear)
-      .is("month", null)
-
-    if (businessType === "ngo") {
-      deleteQuery = deleteQuery.eq("donor_id", selectedDonorId)
-    }
+    let deleteQuery = supabase.from("budgets").delete()
+      .eq("company_id", companyId).eq("project_id", selectedProjectId)
+      .eq("fiscal_year", fiscalYear).is("month", null)
+    if (businessType === "ngo") deleteQuery = deleteQuery.eq("donor_id", selectedDonorId)
     await deleteQuery
 
     if (rowsToInsert.length > 0) {
       const { error } = await supabase.from("budgets").insert(rowsToInsert)
-      if (error) {
-        setFlash("Error: " + error.message)
-        setSaving(false)
-        return
-      }
+      if (error) { setFlash("Error: " + error.message); setSaving(false); return }
     }
-
     setFlash("Budget saved!")
     setSaving(false)
     setTimeout(() => setFlash(""), 4000)
   }
 
-  // ── Export functions (only relevant accounts) ──────────────────────────
+  // ── Export functions ────────────────────────────────────────────────────
   const exportExcel = () => {
     const rows: any[] = []
     for (const actId of Object.keys(data)) {
@@ -361,15 +403,13 @@ export default function BudgetsPage() {
 
   const displayActivities = filterActivityId ? allActivities.filter(a => a.id == filterActivityId) : allActivities
 
-  // ── Compute overall totals (only from relevant accounts) ──────────────
+  // ── Grand totals (GL view) ─────────────────────────────────────────────
   let grandBudget = 0, grandActual = 0
-  for (const actId of Object.keys(data)) {
-    for (const locId of Object.keys(data[actId])) {
-      for (const accId of Object.keys(data[actId][locId])) {
-        if (relevantAccounts.some(a => String(a.id) === accId)) {
-          grandBudget += data[actId][locId][accId].budget || 0
-          grandActual += data[actId][locId][accId].actual || 0
-        }
+  for (const actId of Object.keys(data)) for (const locId of Object.keys(data[actId])) {
+    for (const accId of Object.keys(data[actId][locId])) {
+      if (relevantAccounts.some(a => String(a.id) === accId)) {
+        grandBudget += data[actId][locId][accId].budget || 0
+        grandActual += data[actId][locId][accId].actual || 0
       }
     }
   }
@@ -409,12 +449,6 @@ export default function BudgetsPage() {
             <option value="">-- Select Project --</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          {businessType === "ngo" && (
-            <select className="filter-select" value={selectedDonorId} onChange={e => setSelectedDonorId(e.target.value)}>
-              <option value="">-- Select Donor --</option>
-              {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          )}
           <select className="filter-select" value={filterActivityId} onChange={e => setFilterActivityId(e.target.value)}>
             <option value="">All Activities</option>
             {allActivities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -422,6 +456,10 @@ export default function BudgetsPage() {
           <select className="filter-select" value={filterLocationId} onChange={e => setFilterLocationId(e.target.value)}>
             <option value="">All Locations</option>
             {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+          <select className="filter-select" value={viewMode} onChange={e => setViewMode(e.target.value as "gl" | "month")}>
+            <option value="gl">View by: GL</option>
+            <option value="month">View by: Month</option>
           </select>
           <button className="btn-primary" style={{ margin: 0, padding: "6px 12px", background: "#059669" }} onClick={exportExcel}>
             <Download size={14} /> Excel
@@ -445,7 +483,8 @@ export default function BudgetsPage() {
           <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>
             No Activities found for this project. Create them in Settings.
           </div>
-        ) : (
+        ) : viewMode === "gl" ? (
+          /* ───────────────── GL‑wise view ───────────────── */
           <>
             <table className="table">
               <thead>
@@ -470,15 +509,11 @@ export default function BudgetsPage() {
                   const actData = data[act.id] || {}
                   const locationsInAct = Object.keys(actData)
 
-                  // Compute subtotals ONLY from relevant accounts
                   let actTotalBudget = 0, actTotalActual = 0
                   locationsInAct.forEach(lid => {
                     relevantAccounts.forEach(acc => {
                       const cell = actData[lid]?.[String(acc.id)]
-                      if (cell) {
-                        actTotalBudget += cell.budget || 0
-                        actTotalActual += cell.actual || 0
-                      }
+                      if (cell) { actTotalBudget += cell.budget || 0; actTotalActual += cell.actual || 0 }
                     })
                   })
 
@@ -503,9 +538,7 @@ export default function BudgetsPage() {
                                   <td>
                                     <input
                                       className="input-budget"
-                                      type="number"
-                                      min="0"
-                                      step="100"
+                                      type="number" min="0" step="100"
                                       value={cell.budget || ""}
                                       onChange={e => updateCell(String(acc.id), act.id, lid, Number(e.target.value))}
                                       disabled={!canEdit}
@@ -548,10 +581,7 @@ export default function BudgetsPage() {
                           let sb = 0, sa = 0
                           locationsInAct.forEach(lid => {
                             const cell = actData[lid]?.[String(acc.id)]
-                            if (cell) {
-                              sb += cell.budget || 0
-                              sa += cell.actual || 0
-                            }
+                            if (cell) { sb += cell.budget || 0; sa += cell.actual || 0 }
                           })
                           const sv = sb - sa
                           return (
@@ -573,53 +603,117 @@ export default function BudgetsPage() {
                     </Fragment>
                   )
                 })}
-                {/* Grand total – only relevant accounts */}
                 <tr className="total-row" style={{ fontSize: 12 }}>
                   <td>GRAND TOTAL</td>
                   {relevantAccounts.map(acc => {
                     let gb = 0, ga = 0
-                    for (const actId of Object.keys(data)) {
-                      for (const locId of Object.keys(data[actId])) {
-                        const cell = data[actId][locId]?.[String(acc.id)]
-                        if (cell) {
-                          gb += cell.budget || 0
-                          ga += cell.actual || 0
-                        }
-                      }
+                    for (const actId of Object.keys(data)) for (const locId of Object.keys(data[actId])) {
+                      const cell = data[actId][locId]?.[String(acc.id)]
+                      if (cell) { gb += cell.budget || 0; ga += cell.actual || 0 }
                     }
                     const gv = gb - ga
                     return (
                       <Fragment key={acc.id}>
                         <td>{gb.toLocaleString()}</td>
                         <td>{ga.toLocaleString()}</td>
-                        <td style={{ color: gv < 0 ? "#EF4444" : gv > 0 ? "#10B981" : "#64748B" }}>
-                          {gv === 0 ? "—" : (gv > 0 ? "+" : "") + gv.toLocaleString()}
-                        </td>
+                        <td style={{ color: gv < 0 ? "#EF4444" : gv > 0 ? "#10B981" : "#64748B" }}>{gv === 0 ? "—" : (gv > 0 ? "+" : "") + gv.toLocaleString()}</td>
                       </Fragment>
                     )
                   })}
                   <td>{grandBudget.toLocaleString()}</td>
                   <td>{grandActual.toLocaleString()}</td>
-                  <td style={{ color: grandVariance < 0 ? "#EF4444" : grandVariance > 0 ? "#10B981" : "#64748B" }}>
-                    {grandVariance === 0 ? "—" : (grandVariance > 0 ? "+" : "") + grandVariance.toLocaleString()}
-                  </td>
+                  <td style={{ color: grandVariance < 0 ? "#EF4444" : grandVariance > 0 ? "#10B981" : "#64748B" }}>{grandVariance === 0 ? "—" : (grandVariance > 0 ? "+" : "") + grandVariance.toLocaleString()}</td>
                 </tr>
               </tbody>
             </table>
-
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
               {canEdit && (
                 <>
-                  <button className="btn-primary" onClick={handleSave} disabled={saving}>
-                    {saving ? "Saving..." : "Save Budget"}
-                  </button>
-                  <button className="btn-primary" style={{ background: '#059669' }} onClick={() => document.getElementById('budget-file-input')?.click()}>
-                    <Upload size={14} /> Import Budget
-                  </button>
+                  <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save Budget"}</button>
+                  <button className="btn-primary" style={{ background: '#059669' }} onClick={() => document.getElementById('budget-file-input')?.click()}><Upload size={14} /> Import Budget</button>
                   <input id="budget-file-input" type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={e => setBudgetImportFile(e.target.files?.[0] || null)} />
-                  {budgetImportFile && (
-                    <button className="btn-primary" style={{ background: '#059669' }} onClick={handleBudgetImport} disabled={importingBudget}>Start Import</button>
-                  )}
+                  {budgetImportFile && <button className="btn-primary" style={{ background: '#059669' }} onClick={handleBudgetImport} disabled={importingBudget}>Start Import</button>}
+                </>
+              )}
+            </div>
+          </>
+        ) : (
+          /* ───────────────── Month‑wise view ───────────────── */
+          <>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th rowSpan={2} style={{ width: 120 }}>Activity / Location</th>
+                  {MONTHS.map(m => (
+                    <th key={m} colSpan={3} style={{ fontSize: 10 }}>{m}</th>
+                  ))}
+                  <th colSpan={3} style={{ fontSize: 10 }}>TOTAL</th>
+                </tr>
+                <tr className="sub-header">
+                  {MONTHS.map(m => (
+                    <Fragment key={m}>
+                      <th>Budget</th><th>Actual</th><th>Var</th>
+                    </Fragment>
+                  ))}
+                  <th>Budget</th><th>Actual</th><th>Var</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayActivities.map(act => {
+                  const actData = data[act.id] || {}
+                  const locationsInAct = Object.keys(actData)
+                  return (
+                    <Fragment key={act.id}>
+                      <tr className="act-header"><td colSpan={1 + 12 * 3 + 3}>{act.name}</td></tr>
+                      {locationsInAct.map(lid => {
+                        const loc = locations.find(l => l.id == lid)
+                        return (
+                          <tr key={lid}>
+                            <td style={{ fontWeight: 600, textAlign: "left", paddingLeft: 16 }}>{loc?.name || lid}</td>
+                            {MONTHS.map((_, monthIdx) => {
+                              const monthNum = monthIdx + 1
+                              const budget = getMonthBudget(act.id, lid, monthNum)
+                              const actual = monthlyActuals[act.id]?.[lid]?.[monthNum] || 0
+                              const variance = budget - actual
+                              return (
+                                <Fragment key={monthNum}>
+                                  <td>
+                                    <input
+                                      className="input-budget"
+                                      type="number" min="0" step="100"
+                                      value={budget || ""}
+                                      onChange={e => setMonthBudget(act.id, lid, monthNum, Number(e.target.value))}
+                                      disabled={!canEdit}
+                                      placeholder="0"
+                                    />
+                                  </td>
+                                  <td style={{ fontSize: 10 }}>{actual.toLocaleString()}</td>
+                                  <td style={{ fontSize: 10, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "#64748B" }}>
+                                    {variance === 0 ? "—" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
+                                  </td>
+                                </Fragment>
+                              )
+                            })}
+                            <td style={{ fontWeight: 600 }}>{monthRowTotal(act.id, lid).toLocaleString()}</td>
+                            <td style={{ fontWeight: 600 }}>{rowTotalActual(act.id, lid).toLocaleString()}</td>
+                            <td style={{ fontWeight: 600, color: (monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid)) < 0 ? "#EF4444" : (monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid)) > 0 ? "#10B981" : "#64748B" }}>
+                              {(monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid)) === 0 ? "—" : (monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid) > 0 ? "+" : "") + (monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid)).toLocaleString()}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              {canEdit && (
+                <>
+                  <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save Budget"}</button>
+                  <button className="btn-primary" style={{ background: '#059669' }} onClick={() => document.getElementById('budget-file-input')?.click()}><Upload size={14} /> Import Budget</button>
+                  <input id="budget-file-input" type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={e => setBudgetImportFile(e.target.files?.[0] || null)} />
+                  {budgetImportFile && <button className="btn-primary" style={{ background: '#059669' }} onClick={handleBudgetImport} disabled={importingBudget}>Start Import</button>}
                 </>
               )}
             </div>
