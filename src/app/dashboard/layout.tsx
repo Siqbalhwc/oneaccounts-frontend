@@ -10,6 +10,7 @@ const styles = `
 
   .dl-shell { display: flex; min-height: 100vh; background: #EFF4FB; }
 
+  /* ── Sidebar ── */
   .dl-sidebar {
     width: 220px; min-width: 220px;
     background: linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%);
@@ -53,6 +54,7 @@ const styles = `
   .dl-sidebar-signout { color: rgba(255,255,255,0.4); font-size: 10px; cursor: pointer; background: none; border: none; font-family: inherit; padding: 0; margin-top: 2px; }
   .dl-sidebar-signout:hover { color: #EF4444; }
 
+  /* ── Main area ── */
   .dl-main { flex: 1; margin-left: 220px; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; overflow-x: hidden; }
 
   .dl-topbar { background: white; border-bottom: 1px solid #E2E8F0; padding: 0 20px; display: flex; align-items: center; min-height: 56px; gap: 16px; position: sticky; top: 0; z-index: 30; }
@@ -106,7 +108,7 @@ const styles = `
   }
 `
 
-// ── CORRECTED NAV STRUCTURE ──────────────────────────────────────────────
+// ── Navigation structure ──
 const navSections = [
   {
     section: 'MAIN',
@@ -186,6 +188,30 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const email   = user.email || ''
   const initial = email.charAt(0).toUpperCase()
 
+  // ── Fetch company settings ──
+    let companyName = 'OneAccounts'
+  let companyTagline = 'by Siqbal'
+  let logoUrl = '/logo.png'
+
+  try {
+    const cid = (user?.app_metadata as any)?.company_id
+    if (cid) {
+      const { data: settings } = await supabase
+        .from('company_settings')
+        .select('business_name, logo_url, tagline')
+        .eq('company_id', cid)
+        .maybeSingle()
+
+      if (settings) {
+        if (settings.business_name) companyName = settings.business_name
+        if (settings.logo_url) logoUrl = settings.logo_url
+        if (settings.tagline) companyTagline = settings.tagline
+      }
+    }
+  } catch {
+    // keep hardcoded fallbacks
+  }
+
   const getGreeting = () => {
     const h = new Date().getHours()
     if (h < 12) return 'Good morning'
@@ -200,14 +226,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <SidebarClient />
 
         <aside className="dl-sidebar" id="dl-sidebar">
+          {/* Logo */}
           <div className="dl-sidebar-logo">
-            <img src="/logo.png" alt="OneAccounts" className="dl-sidebar-logo-img" />
+            <img src={logoUrl} alt={companyName} className="dl-sidebar-logo-img" />
             <div>
-              <div className="dl-sidebar-logo-name">OneAccounts</div>
-              <div className="dl-sidebar-logo-sub">by Siqbal</div>
+              <div className="dl-sidebar-logo-name">{companyName}</div>
+              <div className="dl-sidebar-logo-sub">{companyTagline}</div>
             </div>
           </div>
 
+          {/* Nav */}
           <nav className="dl-sidebar-nav">
             {navSections.map((sec, secIdx) => (
               <div key={sec.section}>
@@ -249,6 +277,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             ))}
           </nav>
 
+          {/* User footer */}
           <div className="dl-sidebar-user">
             <div className="dl-sidebar-avatar">{initial}</div>
             <div style={{ overflow: 'hidden' }}>
