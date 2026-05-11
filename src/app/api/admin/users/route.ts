@@ -44,7 +44,7 @@ async function requireAdmin() {
   return { error: null, status: 200, user, companyId }
 }
 
-// ── GET ──
+// ── GET (list users who have a role in this company) ──
 export async function GET() {
   const { error, status, companyId } = await requireAdmin()
   if (error) return NextResponse.json({ error }, { status })
@@ -75,7 +75,10 @@ export async function GET() {
     role: roleMap[u.id] || 'none',
   }))
 
-  return NextResponse.json({ users: enriched })
+  // Only return users who still have a role in this company
+  const activeUsers = enriched.filter(u => u.role !== 'none')
+
+  return NextResponse.json({ users: activeUsers })
 }
 
 // ── PUT (update role) ──

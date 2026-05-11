@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { usePathname } from "next/navigation"
 import { ChevronDown, ChevronRight } from "lucide-react"
 
@@ -37,13 +37,48 @@ export default function SidebarNav({
   companyTagline: string
 }) {
   const pathname = usePathname()
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    MAIN: false,
-    CRM: false,
-    BANKING: false,
-    INVENTORY: false,
-    ACCOUNTING: false,
-    SYSTEM: false,
+
+  // Determine which section is currently active based on the URL
+  const activeSection = useMemo(() => {
+    for (const sec of navSections) {
+      if (sec.items) {
+        for (const item of sec.items) {
+          if (item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href)) {
+            return sec.section
+          }
+        }
+      }
+      if (sec.groups) {
+        for (const group of sec.groups) {
+          for (const item of group.items) {
+            if (item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href)) {
+              return sec.section
+            }
+          }
+        }
+      }
+    }
+    return null
+  }, [pathname, navSections])
+
+  // Initialize: only the active section is expanded; others are collapsed
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {}
+    for (const sec of navSections) {
+      initial[sec.section] = sec.section === activeSection
+    }
+    return initial
+  })
+
+  // When the user navigates to a different page, keep that section open
+  useState(() => {
+    if (activeSection) {
+      setExpandedSections(prev => {
+        // Only update if the active section isn't already expanded
+        if (prev[activeSection]) return prev
+        return { ...prev, [activeSection]: true }
+      })
+    }
   })
 
   const toggleSection = (section: string) => {
@@ -67,7 +102,7 @@ export default function SidebarNav({
       {/* Nav */}
       <nav className="dl-sidebar-nav">
         {navSections.map((sec) => {
-          const expanded = expandedSections[sec.section] ?? true
+          const expanded = expandedSections[sec.section] ?? false
 
           return (
             <div key={sec.section} style={{ marginBottom: 2 }}>
