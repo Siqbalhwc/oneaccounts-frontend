@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRole } from "@/contexts/RoleContext"
 import { Plus, Search, Edit, Trash2, X } from "lucide-react"
+import RecordHistory from "@/components/RecordHistory"
 
 interface Supplier {
   id: number
@@ -334,7 +335,7 @@ export default function SuppliersPage() {
         </div>
       )}
 
-      {/* Add/Edit Modal */}
+      {/* Add/Edit Modal with history */}
       {showModal && canEdit && (
         <div className="pr-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="pr-modal" onClick={e => e.stopPropagation()}>
@@ -344,21 +345,21 @@ export default function SuppliersPage() {
             </div>
             <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
               {formError && <div className="form-error">{formError}</div>}
-              <div><label className="inv-label">Name *</label><input className="input" value={form.name} onChange={e => setForm({...form, name: e.target.value})} /></div>
-              <div><label className="inv-label">Phone</label><input className="input" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></div>
-              <div><label className="inv-label">Email</label><input className="input" type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></div>
-              <div><label className="inv-label">Address</label><input className="input" value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></div>
-              <div><label className="inv-label">Opening Balance</label><input className="input" type="number" value={form.opening_balance} onChange={e => setForm({...form, opening_balance: parseFloat(e.target.value) || 0})} /></div>
+              <div><label>Name *</label><input className="input" value={form.name} onChange={e => setForm({...form, name: e.target.value})} /></div>
+              <div><label>Phone</label><input className="input" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></div>
+              <div><label>Email</label><input className="input" type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></div>
+              <div><label>Address</label><input className="input" value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></div>
+              <div><label>Opening Balance</label><input className="input" type="number" value={form.opening_balance} onChange={e => setForm({...form, opening_balance: parseFloat(e.target.value) || 0})} /></div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <div>
-                  <label className="inv-label">Default Project</label>
+                  <label>Default Project</label>
                   <select className="input" value={form.default_project_id ?? ""} onChange={e => setForm({...form, default_project_id: e.target.value ? Number(e.target.value) : null})}>
                     <option value="">— None —</option>
                     {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="inv-label">Default Location</label>
+                  <label>Default Location</label>
                   <select className="input" value={form.default_location_id ?? ""} onChange={e => setForm({...form, default_location_id: e.target.value ? Number(e.target.value) : null})}>
                     <option value="">— None —</option>
                     {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -366,12 +367,20 @@ export default function SuppliersPage() {
                 </div>
               </div>
               <div>
-                <label className="inv-label">Default Activity</label>
+                <label>Default Activity</label>
                 <select className="input" value={form.default_activity_id ?? ""} onChange={e => setForm({...form, default_activity_id: e.target.value ? Number(e.target.value) : null})}>
                   <option value="">— None —</option>
                   {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
               </div>
+
+              {/* ── ODOO‑STYLE HISTORY ── */}
+              {editingSupplier && (
+                <div style={{ borderTop: "1px solid #E2E8F0", paddingTop: 14, marginTop: 4 }}>
+                  <h4 style={{ fontSize: 14, fontWeight: 700, color: "#0a2940", marginBottom: 8 }}>📝 Change History</h4>
+                  <RecordHistory tableName="suppliers" recordId={String(editingSupplier.id)} />
+                </div>
+              )}
             </div>
             <div style={{ padding: "16px 24px", borderTop: "1px solid #E2E8F0", display: "flex", justifyContent: "flex-end", gap: 8 }}>
               <button className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
