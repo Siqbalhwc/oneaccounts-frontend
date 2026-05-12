@@ -23,7 +23,7 @@ export default function RecordHistory({
       .eq("table_name", tableName)
       .eq("record_id", recordId)
       .order("changed_at", { ascending: false })
-      .then(({ data }) => {
+      .then(({ data }: { data: any[] | null }) => {
         setLogs(data || [])
         setLoading(false)
       })
