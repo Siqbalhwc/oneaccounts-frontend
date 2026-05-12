@@ -1,11 +1,11 @@
 "use client"
 
-import RecordHistory from "@/components/RecordHistory"
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Printer, Send } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
+import RecordHistory from "@/components/RecordHistory"
 
 interface BillItem {
   id: number
@@ -108,7 +108,6 @@ export default function BillDetailPage() {
                 })
             })
         } else {
-          // No party_id
           supabase
             .from("invoice_items")
             .select("*")
@@ -262,14 +261,16 @@ export default function BillDetailPage() {
           </table>
         </div>
       )}
+
+      {/* ── ODOO‑STYLE HISTORY ── */}
+      {bill && (
+        <div className="card">
+          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#0a2940", marginBottom: 12 }}>
+            📝 Change History
+          </h3>
+          <RecordHistory tableName="invoices" recordId={String(bill.id)} />
+        </div>
+      )}
     </div>
   )
 }
-{bill && (
-  <div className="card">
-    <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#0a2940", marginBottom: 12 }}>
-      📝 Change History
-    </h3>
-    <RecordHistory tableName="invoices" recordId={String(bill.id)} />
-  </div>
-)}
