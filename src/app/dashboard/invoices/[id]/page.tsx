@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Printer, Send } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
+import RecordHistory from "@/components/RecordHistory"
 
 interface InvoiceItem {
   id: number
@@ -12,7 +13,6 @@ interface InvoiceItem {
   qty: number
   unit_price: number
   total: number
-  image_path?: string | null
 }
 
 interface Invoice {
@@ -77,50 +77,48 @@ export default function InvoiceDetailPage() {
       .eq("company_id", companyId)
       .single()
       .then(({ data }) => {
-        if (!data) {
-          setLoading(false)
-          return
-        }
+        if (!data) { setLoading(false); return }
 
         const inv: Invoice = data
 
-        // Fetch customer and items in a safe chain (no .finally)
-        const fetchCustomer = inv.party_id
-          ? supabase
-              .from("customers")
-              .select("name, code, phone, country_code, address, email")
-              .eq("id", inv.party_id)
-              .single()
-              .then(({ data: cust }) => {
-                inv.customer = cust || undefined
-              })
-              .then(() => {
-                // After customer (or if skipped), fetch items
-                return supabase
-                  .from("invoice_items")
-                  .select("*")
-                  .eq("invoice_id", inv.id)
-                  .eq("company_id", companyId)
-                  .then(({ data: items }) => {
-                    inv.items = items || []
-                    setInvoice(inv)
-                    setLoading(false)
-                  })
-              })
-          : supabase
-              .from("invoice_items")
-              .select("*")
-              .eq("invoice_id", inv.id)
-              .eq("company_id", companyId)
-              .then(({ data: items }) => {
-                inv.items = items || []
-                setInvoice(inv)
-                setLoading(false)
-              })
-
-        return fetchCustomer
+        // Fetch customer
+        if (inv.party_id) {
+          supabase
+            .from("customers")
+            .select("name, code, phone, country_code, address, email")
+            .eq("id", inv.party_id)
+            .single()
+            .then(({ data: cust }) => {
+              inv.customer = cust || undefined
+            })
+            .then(() => {
+              // Fetch items
+              supabase
+                .from("invoice_items")
+                .select("*")
+                .eq("invoice_id", inv.id)
+                .eq("company_id", companyId)
+                .then(({ data: items }) => {
+                  inv.items = items || []
+                  setInvoice(inv)
+                  setLoading(false)
+                })
+            })
+        } else {
+          supabase
+            .from("invoice_items")
+            .select("*")
+            .eq("invoice_id", inv.id)
+            .eq("company_id", companyId)
+            .then(({ data: items }) => {
+              inv.items = items || []
+              setInvoice(inv)
+              setLoading(false)
+            })
+        }
       })
 
+    // Fetch company settings for PDF
     supabase
       .from("company_settings")
       .select("company_name, address, phone, email, logo_url")
@@ -182,7 +180,6 @@ export default function InvoiceDetailPage() {
         qty: item.qty,
         unit_price: item.unit_price,
         total: item.total,
-        image_path: item.image_path || null,
       })),
       subtotal: subTotal,
       total: invoice.total,
@@ -221,13 +218,6 @@ export default function InvoiceDetailPage() {
         .btn-primary { background: #1e3a8a; color: white; }
         .btn-success { background: #25D366; color: white; }
         .btn-warning { background: #F59E0B; color: white; }
-        .badge {
-          display: inline-block; padding: 3px 12px; border-radius: 20px;
-          font-size: 11px; font-weight: 600; text-transform: uppercase;
-        }
-        .badge-paid { background: #dcfce7; color: #166534; }
-        .badge-unpaid { background: #fef3c7; color: #92400e; }
-        .badge-overdue { background: #fee2e2; color: #991b1b; }
       `}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
@@ -241,6 +231,9 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-outline" onClick={() => router.push(`/dashboard/invoices/new?id=${invoice.id}`)}>
+            ✏️ Edit
+          </button>
           {remindLink && (
             <a href={remindLink} target="_blank" rel="noopener noreferrer" className="btn btn-warning">
               <Send size={16} /> Remind
@@ -296,6 +289,16 @@ export default function InvoiceDetailPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ── ODOO‑STYLE HISTORY ── */}
+      {invoice && (
+        <div className="card">
+          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#0a2940", marginBottom: 12 }}>
+            📝 Change History
+          </h3>
+          <RecordHistory tableName="invoices" recordId={String(invoice.id)} />
         </div>
       )}
     </div>
