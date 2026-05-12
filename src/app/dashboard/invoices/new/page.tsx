@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import {
   ArrowLeft, Plus, Trash2, Send, Search, X, Download, CheckCircle,
-  Image as ImageIcon,
+  Image as ImageIcon, RefreshCw,
 } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
@@ -13,7 +13,7 @@ import RecordHistory from "@/components/RecordHistory"
 export default function NewInvoicePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const editId = searchParams.get("id")        // present when editing
+  const editId = searchParams.get("id")
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -47,16 +47,29 @@ export default function NewInvoicePage() {
   const [showHistory, setShowHistory] = useState(false)
   const [lastSelectedProduct, setLastSelectedProduct] = useState<any>(null)
 
+  // ── Customer refresh indicator ────────────────────────────────────────
+  const [refreshingCustomers, setRefreshingCustomers] = useState(false)
+
   // ── Load company & initial data ────────────────────────────────────────
+  const loadCustomers = () => {
+    if (!companyId) return
+    setRefreshingCustomers(true)
+    supabase.from("customers")
+      .select("id,code,name,phone,balance,country_code")
+      .eq("company_id", companyId)
+      .order("name")
+      .then(r => {
+        if (r.data) setCustomers(r.data)
+        setRefreshingCustomers(false)
+      })
+  }
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
 
-      supabase.from("customers")
-        .select("id,code,name,phone,balance,country_code")
-        .eq("company_id", cid).order("name")
-        .then(r => { if (r.data) setCustomers(r.data); else setCustomers([]) })
+      loadCustomers()
 
       supabase.from("products")
         .select("id,code,name,sale_price,cost_price,qty_on_hand,image_path")
@@ -73,14 +86,13 @@ export default function NewInvoicePage() {
           .then(({ data: bill }) => {
             if (!bill) return
             setCustomerId(bill.party_id)
-            const supp = customers.find((s: any) => s.id === bill.party_id)
-            if (supp) { setSelectedCustomer(supp); setCustomerSearch(supp.name) }
+            const cust = customers.find((s: any) => s.id === bill.party_id)
+            if (cust) { setSelectedCustomer(cust); setCustomerSearch(cust.name) }
             setInvoiceDate(bill.date)
             setDueDate(bill.due_date)
             setReference(bill.reference || "")
             setNotes(bill.notes || "")
 
-            // Load items
             supabase.from("invoice_items")
               .select("*")
               .eq("invoice_id", bill.id)
@@ -90,7 +102,7 @@ export default function NewInvoicePage() {
                   const loaded = itemsData.map((item: any) => ({
                     product_id: item.product_id,
                     description: item.description,
-                    product_name: "",  // we could try to match product, but keep simple
+                    product_name: "",
                     product_image: null,
                     qty: item.qty,
                     unit_price: item.unit_price,
@@ -105,7 +117,7 @@ export default function NewInvoicePage() {
 
       setLoading(false)
     })
-  }, [editId])   // re-run when editId changes
+  }, [editId])
 
   // ── Customer helpers ───────────────────────────────────────────────────
   const filteredCustomers = customers.filter(c =>
@@ -134,29 +146,54 @@ export default function NewInvoicePage() {
     p.code.toLowerCase().includes(productSearch.toLowerCase())
   )
 
-  // Fetch price history for a given product & customer
+  // Safe price history fetch
   const fetchPriceHistory = async (productId: number, custId: number) => {
-    const { data } = await supabase
+    // Fetch last 5 invoice_items for this customer + product
+    const { data: items } = await supabase
       .from("invoice_items")
-      .select("unit_price, invoices!inner(invoice_no, date, party_id)")
-      .eq("invoices.party_id", custId)
+      .select("id, invoice_id, unit_price")
       .eq("product_id", productId)
-      .order("invoices.date", { ascending: false })
-      .limit(5)
+      .order("id", { ascending: false })
+      .limit(20)  // fetch a few more than needed then filter by customer
 
-    if (data) {
-      setPriceHistory(
-        data.map((d: any) => ({
-          unit_price: d.unit_price,
-          invoice_no: d.invoices.invoice_no,
-          date: d.invoices.date,
-        }))
-      )
-      setShowHistory(true)
-    } else {
+    if (!items || items.length === 0) {
       setPriceHistory([])
       setShowHistory(true)
+      return
     }
+
+    // Get the invoice IDs from those items
+    const invoiceIds = [...new Set(items.map((i: any) => i.invoice_id))]
+
+    // Fetch the invoices that belong to this customer
+    const { data: invoices } = await supabase
+      .from("invoices")
+      .select("id, invoice_no, date")
+      .in("id", invoiceIds)
+      .eq("party_id", custId)
+
+    if (!invoices || invoices.length === 0) {
+      setPriceHistory([])
+      setShowHistory(true)
+      return
+    }
+
+    // Build a map: invoice_id -> { invoice_no, date }
+    const invMap: Record<number, any> = {}
+    invoices.forEach((inv: any) => { invMap[inv.id] = inv })
+
+    // Enrich and filter to last 5
+    const history = items
+      .filter((item: any) => invMap[item.invoice_id])
+      .map((item: any) => ({
+        unit_price: item.unit_price,
+        invoice_no: invMap[item.invoice_id].invoice_no,
+        date: invMap[item.invoice_id].date,
+      }))
+      .slice(0, 5)
+
+    setPriceHistory(history)
+    setShowHistory(true)
   }
 
   const addProductItem = (prod: any) => {
@@ -173,7 +210,6 @@ export default function NewInvoicePage() {
     setProductSearch("")
     setShowProductList(false)
 
-    // Show price history if customer is selected
     setLastSelectedProduct(prod)
     if (customerId) {
       fetchPriceHistory(prod.id, customerId)
@@ -361,7 +397,6 @@ export default function NewInvoicePage() {
         .inv-btn-outline { background: white; border: 1.5px solid #E5EAF2; color: #475569; }
         .inv-btn-success { background: #25D366; color: white; }
 
-        /* ── Item row ── */
         .inv-item-row {
           display: grid;
           grid-template-columns: 30px 150px 3fr 70px 90px 90px auto 30px;
@@ -375,7 +410,6 @@ export default function NewInvoicePage() {
           text-transform: uppercase; color: #94A3B8; padding-bottom: 6px;
         }
 
-        /* ── Customer & Product dropdowns ── */
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
         .cust-dropdown {
@@ -404,7 +438,6 @@ export default function NewInvoicePage() {
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
         @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
 
-        /* Price history panel */
         .price-history {
           background: #F8FAFC; border-radius: 8px; padding: 10px 14px;
           margin-top: 12px; font-size: 12px;
@@ -439,10 +472,24 @@ export default function NewInvoicePage() {
               <label className="inv-label">Customer *</label>
               <div className="cust-wrap" ref={customerRef}>
                 {selectedCustomer ? (
-                  <div className="cust-selected-badge" onClick={clearCustomer}>
+                  <div className="cust-selected-badge" onClick={clearCustomer} style={{ position: "relative", paddingRight: 40 }}>
                     <span>👤</span><span style={{ flex: 1 }}>{selectedCustomer.code} — {selectedCustomer.name}</span>
                     <span style={{ fontSize: 11, color: "#64748B" }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
-                    <button className="cust-clear" onClick={(e) => { e.stopPropagation(); clearCustomer(); }}><X size={14} /></button>
+                    <button
+                      className="cust-clear"
+                      style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)" }}
+                      onClick={(e) => { e.stopPropagation(); clearCustomer(); }}
+                    >
+                      <X size={14} />
+                    </button>
+                    <button
+                      className="cust-clear"
+                      style={{ position: "absolute", right: 22, top: "50%", transform: "translateY(-50%)", color: "#1e3a8a" }}
+                      onClick={(e) => { e.stopPropagation(); loadCustomers(); }}
+                      title="Refresh customer list"
+                    >
+                      <RefreshCw size={13} className={refreshingCustomers ? "fa-spin" : ""} />
+                    </button>
                   </div>
                 ) : (
                   <>
@@ -553,7 +600,7 @@ export default function NewInvoicePage() {
               )}
             </div>
 
-            {/* ── If editing, show change history ── */}
+            {/* Change History when editing */}
             {editId && (
               <div className="inv-card">
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0a2940", marginBottom: 12 }}>📝 Change History</h3>
