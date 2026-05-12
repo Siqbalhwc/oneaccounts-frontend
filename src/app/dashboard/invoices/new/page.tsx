@@ -204,13 +204,23 @@ export default function NewInvoicePage() {
 
   const handleBeforeSavePdf = () => {
     if (!selectedCustomer) return
-    const tempInv = {
-      invoice_no: "PREVIEW",
+    const pdfData = {
+      companyName: "OneAccounts",
+      invoiceNo: "PREVIEW",
       date: invoiceDate,
-      due_date: dueDate,
-      customers: selectedCustomer || {},
+      dueDate: dueDate,
+      customerName: selectedCustomer.name || "Customer",
+      customerPhone: selectedCustomer.phone || "",
+      items: items.map(i => ({
+        description: i.description || "",
+        qty: i.qty || 0,
+        unit_price: i.unit_price || 0,
+        total: i.total || 0,
+      })),
+      subtotal: totalAmount,
+      total: totalAmount,
     }
-    const doc = generateInvoicePDF(tempInv, items)
+    const doc = generateInvoicePDF(pdfData)
     doc.save(`invoice-preview.pdf`)
   }
 
