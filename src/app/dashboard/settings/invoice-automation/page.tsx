@@ -45,7 +45,7 @@ export default function InvoiceAutomationPage() {
   const [expenseEnabled, setExpenseEnabled] = useState(false)
   const [profitEnabled, setProfitEnabled] = useState(false)
 
-  // Configurable rules
+  // Dynamic rules
   const [expenseRules, setExpenseRules] = useState<ExpenseRule[]>(DEFAULT_EXPENSE_RULES)
   const [partners, setPartners] = useState<Partner[]>(DEFAULT_PARTNERS)
 
@@ -54,10 +54,10 @@ export default function InvoiceAutomationPage() {
   const [equityLiabilityAccounts, setEquityLiabilityAccounts] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
 
-  // Feature UUIDs
+  // Feature UUIDs (for toggling in company_features)
   const [featureIdMap, setFeatureIdMap] = useState<Record<string, string>>({})
 
-  // Preview amount
+  // Preview
   const [previewAmount, setPreviewAmount] = useState(100000)
 
   // ── Initialise ──
@@ -74,17 +74,15 @@ export default function InvoiceAutomationPage() {
     if (!cid) { setLoading(false); return }
     setCompanyId(cid)
 
-    // Fetch feature UUIDs (needed later for toggling)
+    // Feature UUIDs
     const { data: featureRows } = await supabase.from("features")
       .select("id, code")
       .in("code", ["invoice_automation", "profit_allocation"])
     const idMap: Record<string, string> = {}
-    if (featureRows) {
-      featureRows.forEach((f: any) => { idMap[f.code] = f.id })
-    }
+    if (featureRows) featureRows.forEach((f: any) => { idMap[f.code] = f.id })
     setFeatureIdMap(idMap)
 
-    // Fetch accounts
+    // Accounts
     const [{ data: expAccs }, { data: eqAccs }] = await Promise.all([
       supabase.from("accounts").select("id, code, name").in("type", ["Expense","Asset"]).eq("company_id", cid).order("code"),
       supabase.from("accounts").select("id, code, name").in("type", ["Equity","Liability"]).eq("company_id", cid).order("code"),
@@ -92,7 +90,7 @@ export default function InvoiceAutomationPage() {
     if (expAccs) setExpenseAccounts(expAccs)
     if (eqAccs) setEquityLiabilityAccounts(eqAccs)
 
-    // Load stored config (toggle state + rules) from company_settings
+    // Load saved config
     const { data: settings } = await supabase.from("company_settings")
       .select("invoice_automation_config")
       .eq("company_id", cid)
@@ -105,28 +103,25 @@ export default function InvoiceAutomationPage() {
       if (config.expenseRules) setExpenseRules(config.expenseRules)
       if (config.partners) setPartners(config.partners)
     }
-    // If no config exists, we keep the default values and default toggle state (off)
 
     setLoading(false)
   }
 
-  // ── Toggle feature on/off using proper UUID column (feature_id) ────────
+  // ── Toggle feature on/off ──────────────────────────────────────────────
   const toggleFeature = async (code: string, enabled: boolean) => {
     const featureId = featureIdMap[code]
     if (!featureId || !companyId || !canEdit) return
-    // Optimistic UI update
     if (code === "invoice_automation") setExpenseEnabled(enabled)
     if (code === "profit_allocation") setProfitEnabled(enabled)
 
     const { error } = await supabase.from("company_features").upsert({
       company_id: companyId,
-      feature_id: featureId,   // ← CORRECT COLUMN NAME
+      feature_id: featureId,
       enabled,
     }, { onConflict: "company_id, feature_id" })
 
     if (error) {
       setMessage("Error: " + error.message)
-      // Revert optimistic state
       if (code === "invoice_automation") setExpenseEnabled(!enabled)
       if (code === "profit_allocation") setProfitEnabled(!enabled)
     } else {
@@ -135,13 +130,17 @@ export default function InvoiceAutomationPage() {
     }
   }
 
-  // ── Rule/Partner helpers ────────────────────────────────────────────────
+  // ── Expense rule helpers (dynamic) ────────────────────────────────────
   const updateExpenseRule = (idx: number, field: string, value: any) => {
     const updated = [...expenseRules]
     updated[idx] = { ...updated[idx], [field]: value }
     setExpenseRules(updated)
   }
 
+  const addExpenseRule = () => setExpenseRules([...expenseRules, { name: "", rate: 0, account_id: null }])
+  const removeExpenseRule = (idx: number) => setExpenseRules(expenseRules.filter((_, i) => i !== idx))
+
+  // ── Partner helpers ────────────────────────────────────────────────────
   const updatePartner = (idx: number, field: string, value: any) => {
     const updated = [...partners]
     updated[idx] = { ...updated[idx], [field]: value }
@@ -153,7 +152,7 @@ export default function InvoiceAutomationPage() {
 
   const totalPartnerPercentage = partners.reduce((sum, p) => sum + (p.percentage || 0), 0)
 
-  // ── Save settings ────────────────────────────────────────────────────────
+  // ── Save settings ──────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!companyId || !canEdit) return
     if (profitEnabled && totalPartnerPercentage !== 100) {
@@ -176,7 +175,7 @@ export default function InvoiceAutomationPage() {
     setTimeout(() => setMessage(""), 3000)
   }
 
-  // ── Preview calculation ─────────────────────────────────────────────────
+  // ── Preview ─────────────────────────────────────────────────────────────
   const expenseTotal = expenseEnabled
     ? expenseRules.reduce((sum, r) => sum + (previewAmount * r.rate) / 100, 0)
     : 0
@@ -219,30 +218,30 @@ export default function InvoiceAutomationPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Expense Automation</h2>
-                  <p style={{ color: "#64748B", fontSize: 12, marginTop: 2 }}>Auto‑calculate salary, ads, and fuel expenses on invoices</p>
+                  <p style={{ color: "#64748B", fontSize: 12, marginTop: 2 }}>Auto‑calculate custom expenses on invoices</p>
                 </div>
                 <button className="toggle-btn" onClick={() => toggleFeature("invoice_automation", !expenseEnabled)}>
                   {expenseEnabled ? <ToggleRight size={24} color="#10B981" /> : <ToggleLeft size={24} color="#CBD5E1" />}
                 </button>
               </div>
+
               {expenseEnabled && (
                 <div style={{ marginTop: 16 }}>
                   {expenseRules.map((rule, idx) => (
-                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 1fr', gap: 12, alignItems: 'center', marginBottom: 10 }}>
-                      <span style={{ fontWeight: 600 }}>{rule.name}</span>
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 1fr 40px', gap: 10, alignItems: 'center', marginBottom: 10 }}>
+                      <input className="input" value={rule.name} placeholder="Expense name" onChange={e => updateExpenseRule(idx, "name", e.target.value)} />
                       <div>
                         <label className="label">Rate (%)</label>
                         <input className="input" type="number" step="0.1" value={rule.rate} onChange={e => updateExpenseRule(idx, "rate", Number(e.target.value))} />
                       </div>
-                      <div>
-                        <label className="label">Expense Account</label>
-                        <select className="select" value={rule.account_id ?? ""} onChange={e => updateExpenseRule(idx, "account_id", e.target.value ? Number(e.target.value) : null)}>
-                          <option value="">— Select —</option>
-                          {expenseAccounts.map(a => <option key={a.id} value={a.id}>{a.code} - {a.name}</option>)}
-                        </select>
-                      </div>
+                      <select className="select" value={rule.account_id ?? ""} onChange={e => updateExpenseRule(idx, "account_id", e.target.value ? Number(e.target.value) : null)}>
+                        <option value="">— Select Account —</option>
+                        {expenseAccounts.map(a => <option key={a.id} value={a.id}>{a.code} - {a.name}</option>)}
+                      </select>
+                      <button className="btn btn-outline" style={{ padding: 6 }} onClick={() => removeExpenseRule(idx)}><Trash2 size={14} /></button>
                     </div>
                   ))}
+                  <button className="btn btn-outline" onClick={addExpenseRule}><Plus size={14} /> Add Expense Rule</button>
                 </div>
               )}
             </div>
@@ -258,15 +257,19 @@ export default function InvoiceAutomationPage() {
                   {profitEnabled ? <ToggleRight size={24} color="#10B981" /> : <ToggleLeft size={24} color="#CBD5E1" />}
                 </button>
               </div>
+
               {profitEnabled && (
                 <div style={{ marginTop: 16 }}>
                   {partners.map((p, idx) => (
-                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 40px', gap: 12, alignItems: 'center', marginBottom: 8 }}>
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 40px', gap: 10, alignItems: 'center', marginBottom: 8 }}>
                       <select className="select" value={p.account_id ?? ""} onChange={e => updatePartner(idx, "account_id", e.target.value ? Number(e.target.value) : null)}>
                         <option value="">— Select Account —</option>
                         {equityLiabilityAccounts.map(a => <option key={a.id} value={a.id}>{a.code} - {a.name}</option>)}
                       </select>
-                      <input className="input" type="number" min="0" max="100" value={p.percentage} onChange={e => updatePartner(idx, "percentage", Number(e.target.value))} placeholder="%" />
+                      <div>
+                        <label className="label">% Share</label>
+                        <input className="input" type="number" min="0" max="100" value={p.percentage} onChange={e => updatePartner(idx, "percentage", Number(e.target.value))} />
+                      </div>
                       <button className="btn btn-outline" style={{ padding: 6 }} onClick={() => removePartner(idx)}><Trash2 size={14} /></button>
                     </div>
                   ))}
@@ -289,9 +292,9 @@ export default function InvoiceAutomationPage() {
                 {expenseEnabled && (
                   <>
                     <p style={{ fontWeight: 600, marginBottom: 8 }}>Expense Charges:</p>
-                    {expenseRules.map(r => (
-                      <div key={r.name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                        <span>{r.name} ({r.rate}%)</span>
+                    {expenseRules.map((r, idx) => (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                        <span>{r.name || '(unnamed)'} ({r.rate}%)</span>
                         <span>PKR {((previewAmount * r.rate) / 100).toLocaleString()}</span>
                       </div>
                     ))}
