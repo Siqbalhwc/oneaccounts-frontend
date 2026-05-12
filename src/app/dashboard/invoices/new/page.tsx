@@ -50,8 +50,74 @@ export default function NewInvoicePage() {
   // ── Customer refresh indicator ────────────────────────────────────────
   const [refreshingCustomers, setRefreshingCustomers] = useState(false)
 
-  // ── Load company & initial data ────────────────────────────────────────
-  const loadCustomers = () => {
+  // ── 1. Load company ID, customers, and products ONCE ─────────────────
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
+      setCompanyId(cid)
+
+      // Always load customers
+      supabase.from("customers")
+        .select("id,code,name,phone,balance,country_code")
+        .eq("company_id", cid)
+        .order("name")
+        .then(r => {
+          if (r.data) setCustomers(r.data)
+          else setCustomers([])
+        })
+
+      // Always load products
+      supabase.from("products")
+        .select("id,code,name,sale_price,cost_price,qty_on_hand,image_path")
+        .order("name")
+        .then(r => r.data && setProducts(r.data))
+
+      setLoading(false)
+    })
+  }, [])
+
+  // ── 2. If editing, load the existing invoice data AFTER customers/products are ready ──
+  useEffect(() => {
+    if (!editId || !companyId) return
+    supabase.from("invoices")
+      .select("*")
+      .eq("id", editId)
+      .eq("company_id", companyId)
+      .single()
+      .then(({ data: bill }) => {
+        if (!bill) return
+        setCustomerId(bill.party_id)
+        const cust = customers.find((s: any) => s.id === bill.party_id)
+        if (cust) { setSelectedCustomer(cust); setCustomerSearch(cust.name) }
+        setInvoiceDate(bill.date)
+        setDueDate(bill.due_date)
+        setReference(bill.reference || "")
+        setNotes(bill.notes || "")
+
+        supabase.from("invoice_items")
+          .select("*")
+          .eq("invoice_id", bill.id)
+          .order("id")
+          .then(({ data: itemsData }) => {
+            if (itemsData) {
+              const loaded = itemsData.map((item: any) => ({
+                product_id: item.product_id,
+                description: item.description,
+                product_name: "",
+                product_image: null,
+                qty: item.qty,
+                unit_price: item.unit_price,
+                cost_price: item.cost_price || 0,
+                total: item.total,
+              }))
+              setItems(loaded)
+            }
+          })
+      })
+  }, [editId, companyId, customers])
+
+  // ── Reload customers (preserves search) ─────────────────────────────
+  const refreshCustomers = () => {
     if (!companyId) return
     setRefreshingCustomers(true)
     supabase.from("customers")
@@ -61,63 +127,13 @@ export default function NewInvoicePage() {
       .then(r => {
         if (r.data) setCustomers(r.data)
         setRefreshingCustomers(false)
+        // Update selected customer balance if present
+        if (selectedCustomer) {
+          const updated = r.data?.find((c: any) => c.id === selectedCustomer.id)
+          if (updated) setSelectedCustomer(updated)
+        }
       })
   }
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
-      setCompanyId(cid)
-
-      loadCustomers()
-
-      supabase.from("products")
-        .select("id,code,name,sale_price,cost_price,qty_on_hand,image_path")
-        .order("name")
-        .then(r => r.data && setProducts(r.data))
-
-      // If editing, load existing invoice data
-      if (editId) {
-        supabase.from("invoices")
-          .select("*")
-          .eq("id", editId)
-          .eq("company_id", cid)
-          .single()
-          .then(({ data: bill }) => {
-            if (!bill) return
-            setCustomerId(bill.party_id)
-            const cust = customers.find((s: any) => s.id === bill.party_id)
-            if (cust) { setSelectedCustomer(cust); setCustomerSearch(cust.name) }
-            setInvoiceDate(bill.date)
-            setDueDate(bill.due_date)
-            setReference(bill.reference || "")
-            setNotes(bill.notes || "")
-
-            supabase.from("invoice_items")
-              .select("*")
-              .eq("invoice_id", bill.id)
-              .order("id")
-              .then(({ data: itemsData }) => {
-                if (itemsData) {
-                  const loaded = itemsData.map((item: any) => ({
-                    product_id: item.product_id,
-                    description: item.description,
-                    product_name: "",
-                    product_image: null,
-                    qty: item.qty,
-                    unit_price: item.unit_price,
-                    cost_price: item.cost_price || 0,
-                    total: item.total,
-                  }))
-                  setItems(loaded)
-                }
-              })
-          })
-      }
-
-      setLoading(false)
-    })
-  }, [editId])
 
   // ── Customer helpers ───────────────────────────────────────────────────
   const filteredCustomers = customers.filter(c =>
@@ -146,15 +162,15 @@ export default function NewInvoicePage() {
     p.code.toLowerCase().includes(productSearch.toLowerCase())
   )
 
-  // Safe price history fetch
+  // Safe price history fetch (two‑step)
   const fetchPriceHistory = async (productId: number, custId: number) => {
-    // Fetch last 5 invoice_items for this customer + product
+    // Step 1: get invoice_items for this product (limited)
     const { data: items } = await supabase
       .from("invoice_items")
       .select("id, invoice_id, unit_price")
       .eq("product_id", productId)
       .order("id", { ascending: false })
-      .limit(20)  // fetch a few more than needed then filter by customer
+      .limit(20)
 
     if (!items || items.length === 0) {
       setPriceHistory([])
@@ -162,10 +178,9 @@ export default function NewInvoicePage() {
       return
     }
 
-    // Get the invoice IDs from those items
     const invoiceIds = [...new Set(items.map((i: any) => i.invoice_id))]
 
-    // Fetch the invoices that belong to this customer
+    // Step 2: fetch only invoices belonging to this customer
     const { data: invoices } = await supabase
       .from("invoices")
       .select("id, invoice_no, date")
@@ -178,11 +193,9 @@ export default function NewInvoicePage() {
       return
     }
 
-    // Build a map: invoice_id -> { invoice_no, date }
     const invMap: Record<number, any> = {}
     invoices.forEach((inv: any) => { invMap[inv.id] = inv })
 
-    // Enrich and filter to last 5
     const history = items
       .filter((item: any) => invMap[item.invoice_id])
       .map((item: any) => ({
@@ -485,10 +498,10 @@ export default function NewInvoicePage() {
                     <button
                       className="cust-clear"
                       style={{ position: "absolute", right: 22, top: "50%", transform: "translateY(-50%)", color: "#1e3a8a" }}
-                      onClick={(e) => { e.stopPropagation(); loadCustomers(); }}
+                      onClick={(e) => { e.stopPropagation(); refreshCustomers(); }}
                       title="Refresh customer list"
                     >
-                      <RefreshCw size={13} className={refreshingCustomers ? "fa-spin" : ""} />
+                      <RefreshCw size={13} />
                     </button>
                   </div>
                 ) : (
