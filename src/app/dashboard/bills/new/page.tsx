@@ -181,11 +181,9 @@ export default function NewBillPage() {
       }
     }
 
+    // NGO donor enforcement – only check, don't send
     const firstActivityId = Number(items[0]?.activity_id)
-    const donorId = donorCache[firstActivityId]?.id ?? null
-    const projectId = projectCache[firstActivityId]?.id ?? null
-
-    if (businessType === "ngo" && !donorId) {
+    if (businessType === "ngo" && !donorCache[firstActivityId]?.id) {
       setError("Donor is required for NGO bills. Please select an activity that has a donor.")
       return
     }
@@ -194,13 +192,11 @@ export default function NewBillPage() {
     const suppCode = selectedSupplier?.code || "BILL"
     const billNo = await getNextBillNo(suppCode)
 
-    // Build items – only send columns that definitely exist
+    // Only send columns that exist in invoices/invoice_items
     const safeItems = items.map(i => ({
       description: i.description,
       qty: i.qty,
       unit_price: i.unit_price,
-      // account_id may not exist on some versions; the API will ignore it
-      account_id: i.account_id || null,
     }))
 
     try {
@@ -214,10 +210,6 @@ export default function NewBillPage() {
           due_date: dueDate,
           items: safeItems,
           reference, notes,
-          location_id: items[0]?.location_id,
-          activity_id: items[0]?.activity_id,
-          project_id: projectId,
-          donor_id: donorId,
         }),
       })
       const result = await res.json()
@@ -247,7 +239,6 @@ export default function NewBillPage() {
         date: billDate,
         dueDate: dueDate,
         customerName: selectedSupplier.name,
-        customerPhone: selectedSupplier.phone || "",
         items: items.map(i => ({
           description: i.description || "",
           qty: i.qty || 0,
@@ -279,11 +270,12 @@ export default function NewBillPage() {
   return (
     <div style={{ padding: "16px", background: "#F4F6FB", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <style>{`
-        .inv-shell { max-width: 1100px; margin: 0 auto; }
+        .inv-shell { max-width: 1200px; margin: 0 auto; }
         .inv-title { font-size: 18px; font-weight: 700; color: #1E293B; }
         .inv-card {
           background: white; border-radius: 12px; border: 1px solid #E5EAF2;
           padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+          margin-bottom: 12px;
         }
         .inv-label {
           font-size: 10px; font-weight: 600; color: #6B7280;
@@ -305,7 +297,7 @@ export default function NewBillPage() {
         .inv-btn-primary { background: linear-gradient(135deg, #1740C8, #071352); color: white; }
         .inv-btn-outline { background: white; border: 1.5px solid #E5EAF2; color: #475569; }
 
-        /* Item row – description is wide, GL is narrow */
+        /* Item row – description is wide, total fits */
         .inv-item-row {
           display: grid;
           grid-template-columns: 3fr 70px 90px 110px 110px 80px 70px 30px;
@@ -318,19 +310,15 @@ export default function NewBillPage() {
           gap: 6px; font-size: 9px; font-weight: 700;
           text-transform: uppercase; color: #94A3B8; padding-bottom: 6px;
         }
-
-        /* Responsive adjustments */
         @media (max-width: 1000px) {
           .inv-item-row, .inv-item-header {
-            grid-template-columns: 2fr 60px 80px 90px 90px 70px 60px 25px;
+            grid-template-columns: 2fr 55px 75px 90px 90px 65px 60px 22px;
           }
         }
         @media (max-width: 800px) {
           .inv-item-row, .inv-item-header {
-            grid-template-columns: 2fr 55px 70px 80px 80px 60px 55px 22px;
-            font-size: 0.7rem;
+            grid-template-columns: 2fr 50px 70px 80px 80px 60px 55px 20px;
           }
-          .inv-shell { padding: 8px; }
         }
 
         /* Supplier dropdown */
@@ -359,8 +347,9 @@ export default function NewBillPage() {
           font-weight: 600; color: #1E3A8A; width: 100%; cursor: pointer;
         }
 
-        .inv-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
-        @media (max-width: 900px) { .inv-grid { grid-template-columns: 1fr; } }
+        /* Two‑column layout for header and summary */
+        .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
+        @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
       `}</style>
 
       <div className="inv-shell">
@@ -386,9 +375,9 @@ export default function NewBillPage() {
           </div>
         )}
 
-        <div className="inv-grid">
+        <div className="header-grid">
+          {/* LEFT: Supplier + Dates + Reference + Notes */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {/* Supplier + Bill dates */}
             <div className="inv-card">
               <label className="inv-label">Supplier *</label>
               <div className="cust-wrap" ref={supplierRef}>
@@ -444,104 +433,15 @@ export default function NewBillPage() {
                 <div><label className="inv-label">Notes</label><input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" /></div>
               </div>
             </div>
-
-            {/* Items */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 14, fontWeight: 600, color: "#1E293B" }}>Items</span>
-              <button className="inv-btn inv-btn-outline" onClick={addItem}><Plus size={14} /> Add Item</button>
-            </div>
-
-            {items.length > 0 && (
-              <div className="inv-card" style={{ overflowX: "auto" }}>
-                <div className="inv-item-header">
-                  <span>Description</span>
-                  <span>Qty</span>
-                  <span>Price</span>
-                  <span>Location</span>
-                  <span>Activity</span>
-                  <span>GL Acc</span>
-                  <span style={{ textAlign: "right" }}>Total</span>
-                  <span></span>
-                </div>
-                {items.map((item, idx) => (
-                  <div key={idx}>
-                    <div className="inv-item-row">
-                      <input
-                        className="inv-input"
-                        style={{ height: 34, fontSize: 12 }}
-                        value={item.description}
-                        onChange={e => updateItem(idx, "description", e.target.value)}
-                        placeholder="Description"
-                      />
-                      <input
-                        className="inv-input"
-                        style={{ height: 34, fontSize: 12, textAlign: "center" }}
-                        type="number"
-                        value={item.qty}
-                        onChange={e => updateItem(idx, "qty", Number(e.target.value))}
-                      />
-                      <input
-                        className="inv-input"
-                        style={{ height: 34, fontSize: 12, textAlign: "right" }}
-                        type="number"
-                        value={item.unit_price}
-                        onChange={e => updateItem(idx, "unit_price", Number(e.target.value))}
-                      />
-                      <select
-                        className="inv-select"
-                        style={{ height: 34, fontSize: 11 }}
-                        value={item.location_id}
-                        onChange={e => updateItem(idx, "location_id", e.target.value)}
-                      >
-                        <option value="">—</option>
-                        {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                      </select>
-                      <select
-                        className="inv-select"
-                        style={{ height: 34, fontSize: 11 }}
-                        value={item.activity_id}
-                        onChange={e => updateItem(idx, "activity_id", e.target.value)}
-                      >
-                        <option value="">—</option>
-                        {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                      </select>
-                      <select
-                        className="inv-select"
-                        style={{ height: 34, fontSize: 11 }}
-                        value={item.account_id ?? ""}
-                        onChange={e => updateItem(idx, "account_id", e.target.value ? Number(e.target.value) : null)}
-                      >
-                        <option value="">—</option>
-                        {allAccounts.map(a => <option key={a.id} value={a.id}>{a.code}</option>)}
-                      </select>
-                      <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13 }}>
-                        PKR {item.total.toLocaleString()}
-                      </span>
-                      <button
-                        style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }}
-                        onClick={() => removeItem(idx)}
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                    {item.activity_id && (
-                      <div style={{ fontSize: 10, color: "#64748B", marginLeft: 8, display: "flex", gap: 12 }}>
-                        <span>Project: <strong>{projectCache[item.activity_id]?.name || "Fetching…"}</strong></span>
-                        <span>Donor: <strong>{donorCache[item.activity_id]?.name || "Fetching…"}</strong></span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
-          {/* Right summary */}
+          {/* RIGHT: Summary & Posting */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 16 }}>
             <div className="inv-card">
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: "#1E293B", marginBottom: 10 }}>Summary</h3>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
-                <span>Total</span><span>PKR {totalAmount.toLocaleString()}</span>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: "#1E293B", margin: "0 0 10px 0" }}>Summary</h3>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, fontWeight: 600 }}>
+                <span>Total</span>
+                <span>PKR {totalAmount.toLocaleString()}</span>
               </div>
             </div>
             <div className="inv-card">
@@ -562,6 +462,63 @@ export default function NewBillPage() {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Items table – full width */}
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: "#1E293B" }}>Items</span>
+            <button className="inv-btn inv-btn-outline" onClick={addItem}><Plus size={14} /> Add Item</button>
+          </div>
+          {items.length > 0 && (
+            <div className="inv-card" style={{ overflowX: "auto", padding: "16px 12px" }}>
+              <div className="inv-item-header">
+                <span>Description</span>
+                <span>Qty</span>
+                <span>Price</span>
+                <span>Location</span>
+                <span>Activity</span>
+                <span>GL Acc</span>
+                <span style={{ textAlign: "right" }}>Total</span>
+                <span></span>
+              </div>
+              {items.map((item, idx) => (
+                <div key={idx}>
+                  <div className="inv-item-row">
+                    <input
+                      className="inv-input"
+                      style={{ height: 34, fontSize: 12 }}
+                      value={item.description}
+                      onChange={e => updateItem(idx, "description", e.target.value)}
+                      placeholder="Description"
+                    />
+                    <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                    <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                    <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.location_id} onChange={e => updateItem(idx, "location_id", e.target.value)}>
+                      <option value="">—</option>
+                      {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    </select>
+                    <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.activity_id} onChange={e => updateItem(idx, "activity_id", e.target.value)}>
+                      <option value="">—</option>
+                      {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                    <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.account_id ?? ""} onChange={e => updateItem(idx, "account_id", e.target.value ? Number(e.target.value) : null)}>
+                      <option value="">—</option>
+                      {allAccounts.map(a => <option key={a.id} value={a.id}>{a.code}</option>)}
+                    </select>
+                    <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>PKR {item.total.toLocaleString()}</span>
+                    <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
+                  </div>
+                  {item.activity_id && (
+                    <div style={{ fontSize: 10, color: "#64748B", marginLeft: 8, display: "flex", gap: 12 }}>
+                      <span>Project: <strong>{projectCache[item.activity_id]?.name || "Fetching…"}</strong></span>
+                      <span>Donor: <strong>{donorCache[item.activity_id]?.name || "Fetching…"}</strong></span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
