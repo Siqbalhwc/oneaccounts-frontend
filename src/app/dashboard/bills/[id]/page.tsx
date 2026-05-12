@@ -215,16 +215,23 @@ export default function BillDetailPage() {
           <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>Bill #{bill.invoice_no}</h1>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          {waLink && (
-            <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success">
-              <Send size={16} /> WhatsApp
-            </a>
-          )}
-          <button className="btn btn-primary" onClick={handlePrintPDF}>
-            <Printer size={16} /> Print PDF
-          </button>
-        </div>
-      </div>
+  {/* ── NEW EDIT BUTTON ── */}
+  <button
+    className="btn btn-outline"
+    onClick={() => router.push(`/dashboard/bills/new?id=${bill.id}`)}
+  >
+    ✏️ Edit
+  </button>
+
+  {waLink && (
+    <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success">
+      <Send size={16} /> WhatsApp
+    </a>
+  )}
+  <button className="btn btn-primary" onClick={handlePrintPDF}>
+    <Printer size={16} /> Print PDF
+  </button>
+</div>      </div>
 
       <div className="card">
         <div className="row"><span className="label">Date</span><span className="value">{bill.date}</span></div>

@@ -1,13 +1,16 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Plus, Trash2, Search, X, Download, CheckCircle } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 
 export default function NewBillPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const editId = searchParams.get("id")        // ← if editing an existing bill
+
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -77,6 +80,53 @@ export default function NewBillPage() {
       setLoading(false)
     })
   }, [])
+
+  // ── If editing, load existing bill ─────────────────────────────────────
+  useEffect(() => {
+    if (!editId || !companyId) return
+    supabase
+      .from("invoices")
+      .select("*")
+      .eq("id", editId)
+      .eq("company_id", companyId)
+      .single()
+      .then(({ data: bill }) => {
+        if (!bill) return
+        // Fill header
+        setSupplierId(bill.party_id)
+        // Select the supplier from the list (manual match)
+        const supp = suppliers.find((s: any) => s.id === bill.party_id)
+        if (supp) {
+          setSelectedSupplier(supp)
+          setSupplierSearch(supp.name)
+        }
+        setBillDate(bill.date)
+        setDueDate(bill.due_date)
+        setReference(bill.reference || "")
+        setNotes(bill.notes || "")
+
+        // Load items
+        supabase
+          .from("invoice_items")
+          .select("*")
+          .eq("invoice_id", bill.id)
+          .order("id")
+          .then(({ data: itemsData }) => {
+            if (itemsData) {
+              const loaded = itemsData.map((item: any) => ({
+                description: item.description,
+                qty: item.qty,
+                unit_price: item.unit_price,
+                total: item.total,
+                location_id: "",        // not stored per item; user will re‑select
+                activity_id: "",
+                account_id: null,
+              }))
+              setItems(loaded)
+            }
+          })
+      })
+  }, [editId, companyId, suppliers])
 
   // ── Supplier helpers ──
   const filteredSuppliers = suppliers.filter(s =>
@@ -181,7 +231,7 @@ export default function NewBillPage() {
       }
     }
 
-    // NGO donor enforcement – only check, don't send
+    // NGO donor enforcement
     const firstActivityId = Number(items[0]?.activity_id)
     if (businessType === "ngo" && !donorCache[firstActivityId]?.id) {
       setError("Donor is required for NGO bills. Please select an activity that has a donor.")
@@ -190,20 +240,23 @@ export default function NewBillPage() {
 
     setSaving(true); setError("")
     const suppCode = selectedSupplier?.code || "BILL"
-    const billNo = await getNextBillNo(suppCode)
+    const billNo = editId ? selectedSupplier?.code + "-EDIT" : await getNextBillNo(suppCode)
 
-    // Only send columns that exist in invoices/invoice_items
     const safeItems = items.map(i => ({
       description: i.description,
       qty: i.qty,
       unit_price: i.unit_price,
     }))
 
+    const url = editId ? `/api/bills?id=${editId}` : "/api/bills"
+    const method = editId ? "PUT" : "POST"
+
     try {
-      const res = await fetch("/api/bills", {
-        method: "POST",
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          id: editId || undefined,
           invoice_no: billNo,
           party_id: supplierId,
           invoice_date: billDate,
@@ -214,14 +267,18 @@ export default function NewBillPage() {
       })
       const result = await res.json()
       if (!result.success) {
-        setError(result.error || "Failed to create bill")
+        setError(result.error || "Failed to save bill")
         setSaving(false)
         return
       }
 
-      setFlash(`✅ Bill ${billNo} saved successfully!`)
-      setItems([])
-      clearSupplier()
+      setFlash(`✅ Bill ${editId ? "updated" : "saved"} successfully!`)
+      if (editId) {
+        router.push(`/dashboard/bills/${editId}`)
+      } else {
+        setItems([])
+        clearSupplier()
+      }
       setSaving(false)
       setTimeout(() => setFlash(null), 4000)
     } catch {
@@ -232,25 +289,24 @@ export default function NewBillPage() {
 
   const handleBeforeSavePdf = () => {
     if (!selectedSupplier) return
-    getNextBillNo(selectedSupplier.code || "BILL").then(billNo => {
-      const pdfData = {
-        companyName: "OneAccounts",
-        invoiceNo: billNo,
-        date: billDate,
-        dueDate: dueDate,
-        customerName: selectedSupplier.name,
-        items: items.map(i => ({
-          description: i.description || "",
-          qty: i.qty || 0,
-          unit_price: i.unit_price || 0,
-          total: i.total || 0,
-        })),
-        subtotal: totalAmount,
-        total: totalAmount,
-      }
-      const doc = generateInvoicePDF(pdfData)
-      doc.save(`bill-preview-${billNo}.pdf`)
-    })
+    const billNo = editId ? selectedSupplier.code + "-EDIT" : "PREVIEW"
+    const pdfData = {
+      companyName: "OneAccounts",
+      invoiceNo: billNo,
+      date: billDate,
+      dueDate: dueDate,
+      customerName: selectedSupplier.name,
+      items: items.map(i => ({
+        description: i.description || "",
+        qty: i.qty || 0,
+        unit_price: i.unit_price || 0,
+        total: i.total || 0,
+      })),
+      subtotal: totalAmount,
+      total: totalAmount,
+    }
+    const doc = generateInvoicePDF(pdfData)
+    doc.save(`bill-preview-${billNo}.pdf`)
   }
 
   useEffect(() => {
@@ -297,27 +353,27 @@ export default function NewBillPage() {
         .inv-btn-primary { background: linear-gradient(135deg, #1740C8, #071352); color: white; }
         .inv-btn-outline { background: white; border: 1.5px solid #E5EAF2; color: #475569; }
 
-        /* Item row – description is wide, total fits */
+        /* ── FIXED: total column auto width ── */
         .inv-item-row {
           display: grid;
-          grid-template-columns: 3fr 70px 90px 110px 110px 80px 70px 30px;
+          grid-template-columns: 3fr 70px 90px 110px 110px 80px auto 30px;
           gap: 6px; align-items: center; padding: 6px 0;
           border-bottom: 1px solid #F1F5F9;
         }
         .inv-item-header {
           display: grid;
-          grid-template-columns: 3fr 70px 90px 110px 110px 80px 70px 30px;
+          grid-template-columns: 3fr 70px 90px 110px 110px 80px auto 30px;
           gap: 6px; font-size: 9px; font-weight: 700;
           text-transform: uppercase; color: #94A3B8; padding-bottom: 6px;
         }
         @media (max-width: 1000px) {
           .inv-item-row, .inv-item-header {
-            grid-template-columns: 2fr 55px 75px 90px 90px 65px 60px 22px;
+            grid-template-columns: 2fr 55px 75px 90px 90px 65px auto 22px;
           }
         }
         @media (max-width: 800px) {
           .inv-item-row, .inv-item-header {
-            grid-template-columns: 2fr 50px 70px 80px 80px 60px 55px 20px;
+            grid-template-columns: 2fr 50px 70px 80px 80px 60px auto 20px;
           }
         }
 
@@ -347,7 +403,6 @@ export default function NewBillPage() {
           font-weight: 600; color: #1E3A8A; width: 100%; cursor: pointer;
         }
 
-        /* Two‑column layout for header and summary */
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
         @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
       `}</style>
@@ -356,9 +411,9 @@ export default function NewBillPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
           <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/bills")}><ArrowLeft size={16} /></button>
           <div style={{ flex: 1 }}>
-            <div className="inv-title">📦 New Purchase Bill</div>
+            <div className="inv-title">{editId ? "✏️ Edit Purchase Bill" : "📦 New Purchase Bill"}</div>
             <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 1 }}>
-              Select supplier → add items with individual location, activity & GL
+              {editId ? "Modify bill details and items" : "Select supplier → add items with individual location, activity & GL"}
             </div>
           </div>
           <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/bills")}>View List</button>
@@ -451,7 +506,7 @@ export default function NewBillPage() {
                 onClick={handleSubmit}
                 disabled={saving}
               >
-                {saving ? "Posting..." : "💾 POST Bill"}
+                {saving ? "Posting..." : editId ? "💾 UPDATE Bill" : "💾 POST Bill"}
               </button>
               <button
                 className="inv-btn inv-btn-outline"
