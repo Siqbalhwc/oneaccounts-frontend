@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { Save, Plus, Trash2, Eye } from "lucide-react"
+import { Save, Plus, Trash2, ToggleLeft, ToggleRight } from "lucide-react"
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
 
@@ -54,6 +54,9 @@ export default function InvoiceAutomationPage() {
   const [equityLiabilityAccounts, setEquityLiabilityAccounts] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
 
+  // Feature UUIDs
+  const [featureIdMap, setFeatureIdMap] = useState<Record<string, string>>({})
+
   // Preview amount
   const [previewAmount, setPreviewAmount] = useState(100000)
 
@@ -71,7 +74,17 @@ export default function InvoiceAutomationPage() {
     if (!cid) { setLoading(false); return }
     setCompanyId(cid)
 
-    // Fetch accounts (Expense + Asset for expense rules, Equity + Liability for partners)
+    // Fetch feature UUIDs
+    const { data: featureRows } = await supabase.from("features")
+      .select("id, code")
+      .in("code", ["invoice_automation", "profit_allocation"])
+    const idMap: Record<string, string> = {}
+    if (featureRows) {
+      featureRows.forEach((f: any) => { idMap[f.code] = f.id })
+    }
+    setFeatureIdMap(idMap)
+
+    // Fetch accounts
     const [{ data: expAccs }, { data: eqAccs }] = await Promise.all([
       supabase.from("accounts").select("id, code, name").in("type", ["Expense","Asset"]).eq("company_id", cid).order("code"),
       supabase.from("accounts").select("id, code, name").in("type", ["Equity","Liability"]).eq("company_id", cid).order("code"),
@@ -91,12 +104,54 @@ export default function InvoiceAutomationPage() {
       if (config.profitEnabled !== undefined) setProfitEnabled(config.profitEnabled)
       if (config.expenseRules) setExpenseRules(config.expenseRules)
       if (config.partners) setPartners(config.partners)
+    } else {
+      // Check existing company_features for current toggle state
+      if (idMap["invoice_automation"]) {
+        const { data: override } = await supabase.from("company_features")
+          .select("enabled")
+          .eq("company_id", cid)
+          .eq("features", idMap["invoice_automation"])
+          .maybeSingle()
+        if (override) setExpenseEnabled(override.enabled)
+      }
+      if (idMap["profit_allocation"]) {
+        const { data: override } = await supabase.from("company_features")
+          .select("enabled")
+          .eq("company_id", cid)
+          .eq("features", idMap["profit_allocation"])
+          .maybeSingle()
+        if (override) setProfitEnabled(override.enabled)
+      }
     }
 
     setLoading(false)
   }
 
-  // ── Helpers ──
+  // ── Toggle feature on/off using proper UUID ─────────────────────────────
+  const toggleFeature = async (code: string, enabled: boolean) => {
+    const featureId = featureIdMap[code]
+    if (!featureId || !companyId || !canEdit) return
+    // Optimistic
+    if (code === "invoice_automation") setExpenseEnabled(enabled)
+    if (code === "profit_allocation") setProfitEnabled(enabled)
+
+    const { error } = await supabase.from("company_features").upsert({
+      company_id: companyId,
+      features: featureId,   // UUID
+      enabled,
+    }, { onConflict: "company_id,features" })
+
+    if (error) {
+      setMessage("Error: " + error.message)
+      if (code === "invoice_automation") setExpenseEnabled(!enabled)
+      if (code === "profit_allocation") setProfitEnabled(!enabled)
+    } else {
+      setMessage("Feature toggled!")
+      setTimeout(() => setMessage(""), 3000)
+    }
+  }
+
+  // ── Rule/Partner helpers ────────────────────────────────────────────────
   const updateExpenseRule = (idx: number, field: string, value: any) => {
     const updated = [...expenseRules]
     updated[idx] = { ...updated[idx], [field]: value }
@@ -114,7 +169,7 @@ export default function InvoiceAutomationPage() {
 
   const totalPartnerPercentage = partners.reduce((sum, p) => sum + (p.percentage || 0), 0)
 
-  // ── Save ──
+  // ── Save settings ────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!companyId || !canEdit) return
     if (profitEnabled && totalPartnerPercentage !== 100) {
@@ -122,12 +177,7 @@ export default function InvoiceAutomationPage() {
       return
     }
     setSaving(true)
-    const config = {
-      expenseEnabled,
-      profitEnabled,
-      expenseRules,
-      partners,
-    }
+    const config = { expenseEnabled, profitEnabled, expenseRules, partners }
     const { error } = await supabase.from("company_settings").upsert({
       company_id: companyId,
       invoice_automation_config: config,
@@ -142,7 +192,7 @@ export default function InvoiceAutomationPage() {
     setTimeout(() => setMessage(""), 3000)
   }
 
-  // ── Preview calculation ──
+  // ── Preview calculation ─────────────────────────────────────────────────
   const expenseTotal = expenseEnabled
     ? expenseRules.reduce((sum, r) => sum + (previewAmount * r.rate) / 100, 0)
     : 0
@@ -163,7 +213,6 @@ export default function InvoiceAutomationPage() {
           .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
           .btn-primary { background: #1D4ED8; color: white; }
           .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
-          .btn-danger { background: #EF4444; color: white; }
           .toggle-btn { background: none; border: none; cursor: pointer; padding: 4px; border-radius: 6px; }
           .toggle-btn:hover { background: #F1F5F9; }
         `}</style>
@@ -188,7 +237,7 @@ export default function InvoiceAutomationPage() {
                   <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Expense Automation</h2>
                   <p style={{ color: "#64748B", fontSize: 12, marginTop: 2 }}>Auto‑calculate salary, ads, and fuel expenses on invoices</p>
                 </div>
-                <button className="toggle-btn" onClick={() => setExpenseEnabled(!expenseEnabled)}>
+                <button className="toggle-btn" onClick={() => toggleFeature("invoice_automation", !expenseEnabled)}>
                   {expenseEnabled ? <ToggleRight size={24} color="#10B981" /> : <ToggleLeft size={24} color="#CBD5E1" />}
                 </button>
               </div>
@@ -221,7 +270,7 @@ export default function InvoiceAutomationPage() {
                   <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Profit Allocation</h2>
                   <p style={{ color: "#64748B", fontSize: 12, marginTop: 2 }}>Distribute net profit to partner accounts</p>
                 </div>
-                <button className="toggle-btn" onClick={() => setProfitEnabled(!profitEnabled)}>
+                <button className="toggle-btn" onClick={() => toggleFeature("profit_allocation", !profitEnabled)}>
                   {profitEnabled ? <ToggleRight size={24} color="#10B981" /> : <ToggleLeft size={24} color="#CBD5E1" />}
                 </button>
               </div>
