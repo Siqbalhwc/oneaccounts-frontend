@@ -1,5 +1,6 @@
 "use client"
 
+import RecordHistory from "@/components/RecordHistory"
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
@@ -264,3 +265,11 @@ export default function BillDetailPage() {
     </div>
   )
 }
+{bill && (
+  <div className="card">
+    <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#0a2940", marginBottom: 12 }}>
+      📝 Change History
+    </h3>
+    <RecordHistory tableName="invoices" recordId={String(bill.id)} />
+  </div>
+)}
