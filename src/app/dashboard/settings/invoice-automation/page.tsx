@@ -56,6 +56,8 @@ export default function InvoiceAutomationPage() {
 
   // Feature UUIDs (for toggling in company_features)
   const [featureIdMap, setFeatureIdMap] = useState<Record<string, string>>({})
+  // Store the existing settings row id for upsert
+  const [settingsId, setSettingsId] = useState<number | null>(null)
 
   // Preview
   const [previewAmount, setPreviewAmount] = useState(100000)
@@ -92,36 +94,62 @@ export default function InvoiceAutomationPage() {
 
     // Load saved config
     const { data: settings } = await supabase.from("company_settings")
-      .select("invoice_automation_config")
+      .select("id, invoice_automation_config")
       .eq("company_id", cid)
       .maybeSingle()
 
-    if (settings?.invoice_automation_config) {
-      const config = settings.invoice_automation_config as any
-      if (config.expenseEnabled !== undefined) setExpenseEnabled(config.expenseEnabled)
-      if (config.profitEnabled !== undefined) setProfitEnabled(config.profitEnabled)
-      if (config.expenseRules) setExpenseRules(config.expenseRules)
-      if (config.partners) setPartners(config.partners)
+    if (settings) {
+      setSettingsId(settings.id)   // remember the row id
+      if (settings.invoice_automation_config) {
+        const config = settings.invoice_automation_config as any
+        if (config.expenseEnabled !== undefined) setExpenseEnabled(config.expenseEnabled)
+        if (config.profitEnabled !== undefined) setProfitEnabled(config.profitEnabled)
+        if (config.expenseRules) setExpenseRules(config.expenseRules)
+        if (config.partners) setPartners(config.partners)
+      }
+    } else {
+      // No settings row yet – we'll create one when saving
+      setSettingsId(null)
     }
 
     setLoading(false)
   }
 
-  // ── Toggle feature on/off ──────────────────────────────────────────────
+  // ── Toggle feature on/off (safe, no ON CONFLICT) ──────────────────────
   const toggleFeature = async (code: string, enabled: boolean) => {
     const featureId = featureIdMap[code]
     if (!featureId || !companyId || !canEdit) return
+    // Optimistic UI update
     if (code === "invoice_automation") setExpenseEnabled(enabled)
     if (code === "profit_allocation") setProfitEnabled(enabled)
 
-    const { error } = await supabase.from("company_features").upsert({
-      company_id: companyId,
-      feature_id: featureId,
-      enabled,
-    }, { onConflict: "company_id, feature_id" })
+    // Check if a row already exists
+    const { data: existing } = await supabase
+      .from("company_features")
+      .select("id")
+      .eq("company_id", companyId)
+      .eq("feature_id", featureId)
+      .maybeSingle()
+
+    let error = null
+    if (existing) {
+      // update
+      const { error: updateErr } = await supabase
+        .from("company_features")
+        .update({ enabled })
+        .eq("id", existing.id)
+      error = updateErr
+    } else {
+      // insert
+      const { error: insertErr } = await supabase
+        .from("company_features")
+        .insert({ company_id: companyId, feature_id: featureId, enabled })
+      error = insertErr
+    }
 
     if (error) {
       setMessage("Error: " + error.message)
+      // revert
       if (code === "invoice_automation") setExpenseEnabled(!enabled)
       if (code === "profit_allocation") setProfitEnabled(!enabled)
     } else {
@@ -130,13 +158,12 @@ export default function InvoiceAutomationPage() {
     }
   }
 
-  // ── Expense rule helpers (dynamic) ────────────────────────────────────
+  // ── Expense rule helpers ──────────────────────────────────────────────
   const updateExpenseRule = (idx: number, field: string, value: any) => {
     const updated = [...expenseRules]
     updated[idx] = { ...updated[idx], [field]: value }
     setExpenseRules(updated)
   }
-
   const addExpenseRule = () => setExpenseRules([...expenseRules, { name: "", rate: 0, account_id: null }])
   const removeExpenseRule = (idx: number) => setExpenseRules(expenseRules.filter((_, i) => i !== idx))
 
@@ -146,13 +173,12 @@ export default function InvoiceAutomationPage() {
     updated[idx] = { ...updated[idx], [field]: value }
     setPartners(updated)
   }
-
   const addPartner = () => setPartners([...partners, { account_id: null, percentage: 0 }])
   const removePartner = (idx: number) => setPartners(partners.filter((_, i) => i !== idx))
 
   const totalPartnerPercentage = partners.reduce((sum, p) => sum + (p.percentage || 0), 0)
 
-  // ── Save settings ──────────────────────────────────────────────────────
+  // ── Save settings (safe, no ON CONFLICT) ────────────────────────────
   const handleSave = async () => {
     if (!companyId || !canEdit) return
     if (profitEnabled && totalPartnerPercentage !== 100) {
@@ -161,10 +187,25 @@ export default function InvoiceAutomationPage() {
     }
     setSaving(true)
     const config = { expenseEnabled, profitEnabled, expenseRules, partners }
-    const { error } = await supabase.from("company_settings").upsert({
-      company_id: companyId,
-      invoice_automation_config: config,
-    }, { onConflict: "company_id" })
+
+    let error = null
+    if (settingsId) {
+      // update existing row
+      const { error: updateErr } = await supabase
+        .from("company_settings")
+        .update({ invoice_automation_config: config })
+        .eq("id", settingsId)
+      error = updateErr
+    } else {
+      // insert new row
+      const { data: inserted, error: insertErr } = await supabase
+        .from("company_settings")
+        .insert({ company_id: companyId, invoice_automation_config: config })
+        .select("id")
+        .single()
+      if (inserted) setSettingsId(inserted.id)
+      error = insertErr
+    }
 
     if (error) {
       setMessage("Error: " + error.message)
@@ -175,7 +216,7 @@ export default function InvoiceAutomationPage() {
     setTimeout(() => setMessage(""), 3000)
   }
 
-  // ── Preview ─────────────────────────────────────────────────────────────
+  // ── Preview ─────────────────────────────────────────────────────────
   const expenseTotal = expenseEnabled
     ? expenseRules.reduce((sum, r) => sum + (previewAmount * r.rate) / 100, 0)
     : 0
