@@ -1,16 +1,20 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import {
   ArrowLeft, Plus, Trash2, Send, Search, X, Download, CheckCircle,
-  Image as ImageIcon, ChevronDown, ChevronUp,
+  Image as ImageIcon,
 } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
+import RecordHistory from "@/components/RecordHistory"
 
 export default function NewInvoicePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const editId = searchParams.get("id")        // present when editing
+
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -38,10 +42,6 @@ export default function NewInvoicePage() {
   const [productSearch, setProductSearch] = useState("")
   const [showProductList, setShowProductList] = useState(false)
 
-  // Automation toggles – initialised from saved Invoice Automation config
-  const [enableAutomation, setEnableAutomation] = useState(false)
-  const [enableProfitAllocation, setEnableProfitAllocation] = useState(false)
-
   // ── Price History state ──────────────────────────────────────────────
   const [priceHistory, setPriceHistory] = useState<any[]>([])
   const [showHistory, setShowHistory] = useState(false)
@@ -63,22 +63,49 @@ export default function NewInvoicePage() {
         .order("name")
         .then(r => r.data && setProducts(r.data))
 
-      // Load Invoice Automation config (toggle states)
-      supabase.from("company_settings")
-        .select("invoice_automation_config")
-        .eq("company_id", cid)
-        .maybeSingle()
-        .then(({ data: settings }) => {
-          if (settings?.invoice_automation_config) {
-            const config = settings.invoice_automation_config as any
-            if (config.expenseEnabled !== undefined) setEnableAutomation(config.expenseEnabled)
-            if (config.profitEnabled !== undefined) setEnableProfitAllocation(config.profitEnabled)
-          }
-        })
+      // If editing, load existing invoice data
+      if (editId) {
+        supabase.from("invoices")
+          .select("*")
+          .eq("id", editId)
+          .eq("company_id", cid)
+          .single()
+          .then(({ data: bill }) => {
+            if (!bill) return
+            setCustomerId(bill.party_id)
+            const supp = customers.find((s: any) => s.id === bill.party_id)
+            if (supp) { setSelectedCustomer(supp); setCustomerSearch(supp.name) }
+            setInvoiceDate(bill.date)
+            setDueDate(bill.due_date)
+            setReference(bill.reference || "")
+            setNotes(bill.notes || "")
+
+            // Load items
+            supabase.from("invoice_items")
+              .select("*")
+              .eq("invoice_id", bill.id)
+              .order("id")
+              .then(({ data: itemsData }) => {
+                if (itemsData) {
+                  const loaded = itemsData.map((item: any) => ({
+                    product_id: item.product_id,
+                    description: item.description,
+                    product_name: "",  // we could try to match product, but keep simple
+                    product_image: null,
+                    qty: item.qty,
+                    unit_price: item.unit_price,
+                    cost_price: item.cost_price || 0,
+                    total: item.total,
+                  }))
+                  setItems(loaded)
+                }
+              })
+          })
+      }
 
       setLoading(false)
     })
-  }, [])
+  }, [editId])   // re-run when editId changes
 
   // ── Customer helpers ───────────────────────────────────────────────────
   const filteredCustomers = customers.filter(c =>
@@ -215,13 +242,17 @@ export default function NewInvoicePage() {
 
     setSaving(true); setError("")
     const custCode = selectedCustomer?.code || "CUST"
-    const invoiceNo = await getNextInvoiceNo(custCode)
+    const invoiceNo = editId ? selectedCustomer?.code + "-EDIT" : await getNextInvoiceNo(custCode)
+
+    const url = editId ? `/api/invoices?id=${editId}` : "/api/invoices"
+    const method = editId ? "PUT" : "POST"
 
     try {
-      const res = await fetch("/api/invoices", {
-        method: "POST",
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          id: editId || undefined,
           invoice_no: invoiceNo,
           party_id: customerId,
           invoice_date: invoiceDate,
@@ -234,27 +265,28 @@ export default function NewInvoicePage() {
             cost_price: i.cost_price,
           })),
           reference, notes,
-          enable_automation: enableAutomation,
-          enable_profit_allocation: enableProfitAllocation,
         }),
       })
       const result = await res.json()
       if (!result.success) {
-        setError(result.error || "Failed to create invoice")
+        setError(result.error || "Failed to save invoice")
         setSaving(false)
         return
       }
 
-      setFlash(`✅ Invoice ${invoiceNo} saved successfully!`)
-      setSaving(false)
-      // Reset after 2 seconds
-      setTimeout(() => {
-        setFlash(null)
-        setItems([])
-        clearCustomer()
-        setReference("")
-        setNotes("")
-      }, 2000)
+      setFlash(`✅ Invoice ${editId ? "updated" : "saved"} successfully!`)
+      if (editId) {
+        router.push(`/dashboard/invoices/${editId}`)
+      } else {
+        setSaving(false)
+        setTimeout(() => {
+          setFlash(null)
+          setItems([])
+          clearCustomer()
+          setReference("")
+          setNotes("")
+        }, 2000)
+      }
     } catch {
       setError("Network error")
       setSaving(false)
@@ -387,8 +419,8 @@ export default function NewInvoicePage() {
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
           <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/invoices")}><ArrowLeft size={16} /></button>
           <div style={{ flex: 1 }}>
-            <div className="inv-title">🧾 New Sales Invoice</div>
-            <div style={{ fontSize: 12, color: "#94A3B8" }}>Create invoice with full accounting automation</div>
+            <div className="inv-title">{editId ? "✏️ Edit Sales Invoice" : "🧾 New Sales Invoice"}</div>
+            <div style={{ fontSize: 12, color: "#94A3B8" }}>{editId ? "Modify invoice details and items" : "Create invoice with full accounting automation"}</div>
           </div>
           <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/invoices")}>View List</button>
         </div>
@@ -519,19 +551,15 @@ export default function NewInvoicePage() {
                   )}
                 </div>
               )}
-
-              {/* Automation toggles */}
-              <div style={{ marginTop: 12, display: "flex", gap: 16 }}>
-                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
-                  <input type="checkbox" checked={enableAutomation} onChange={e => setEnableAutomation(e.target.checked)} />
-                  Invoice Automation
-                </label>
-                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
-                  <input type="checkbox" checked={enableProfitAllocation} onChange={e => setEnableProfitAllocation(e.target.checked)} />
-                  Profit Allocation
-                </label>
-              </div>
             </div>
+
+            {/* ── If editing, show change history ── */}
+            {editId && (
+              <div className="inv-card">
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0a2940", marginBottom: 12 }}>📝 Change History</h3>
+                <RecordHistory tableName="invoices" recordId={editId} />
+              </div>
+            )}
           </div>
 
           {/* RIGHT: Summary & Actions */}
@@ -544,7 +572,7 @@ export default function NewInvoicePage() {
             </div>
             <div className="inv-card">
               <button className="inv-btn inv-btn-primary" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={saving}>
-                {saving ? "Posting..." : "💾 POST Invoice"}
+                {saving ? "Posting..." : editId ? "💾 UPDATE Invoice" : "💾 POST Invoice"}
               </button>
               <button className="inv-btn inv-btn-outline" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleBeforeSavePdf}>
                 <Download size={14} /> PDF Preview
