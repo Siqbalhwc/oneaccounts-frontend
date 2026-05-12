@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import {
   ArrowLeft, Plus, Trash2, Send, Search, X, Download, CheckCircle,
-  Image as ImageIcon,
+  Image as ImageIcon, ChevronDown, ChevronUp,
 } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 
@@ -41,6 +41,11 @@ export default function NewInvoicePage() {
   // Automation toggles – initialised from saved Invoice Automation config
   const [enableAutomation, setEnableAutomation] = useState(false)
   const [enableProfitAllocation, setEnableProfitAllocation] = useState(false)
+
+  // ── Price History state ──────────────────────────────────────────────
+  const [priceHistory, setPriceHistory] = useState<any[]>([])
+  const [showHistory, setShowHistory] = useState(false)
+  const [lastSelectedProduct, setLastSelectedProduct] = useState<any>(null)
 
   // ── Load company & initial data ────────────────────────────────────────
   useEffect(() => {
@@ -102,6 +107,31 @@ export default function NewInvoicePage() {
     p.code.toLowerCase().includes(productSearch.toLowerCase())
   )
 
+  // Fetch price history for a given product & customer
+  const fetchPriceHistory = async (productId: number, custId: number) => {
+    const { data } = await supabase
+      .from("invoice_items")
+      .select("unit_price, invoices!inner(invoice_no, date, party_id)")
+      .eq("invoices.party_id", custId)
+      .eq("product_id", productId)
+      .order("invoices.date", { ascending: false })
+      .limit(5)
+
+    if (data) {
+      setPriceHistory(
+        data.map((d: any) => ({
+          unit_price: d.unit_price,
+          invoice_no: d.invoices.invoice_no,
+          date: d.invoices.date,
+        }))
+      )
+      setShowHistory(true)
+    } else {
+      setPriceHistory([])
+      setShowHistory(true)
+    }
+  }
+
   const addProductItem = (prod: any) => {
     setItems([...items, {
       product_id: prod.id,
@@ -115,6 +145,14 @@ export default function NewInvoicePage() {
     }])
     setProductSearch("")
     setShowProductList(false)
+
+    // Show price history if customer is selected
+    setLastSelectedProduct(prod)
+    if (customerId) {
+      fetchPriceHistory(prod.id, customerId)
+    } else {
+      setShowHistory(false)
+    }
   }
 
   const addManualItem = () => {
@@ -287,11 +325,11 @@ export default function NewInvoicePage() {
           font-weight: 600; cursor: pointer; border: none;
           font-family: inherit; transition: all 0.15s; white-space: nowrap;
         }
-        .inv-btn-primary { background: #1e3a8a; color: white; }   /* navy blue */
+        .inv-btn-primary { background: #1e3a8a; color: white; }
         .inv-btn-outline { background: white; border: 1.5px solid #E5EAF2; color: #475569; }
         .inv-btn-success { background: #25D366; color: white; }
 
-        /* ── Item row: Image, Product Name, Description (wide), Qty, Price, Cost, Total (auto), Delete ── */
+        /* ── Item row ── */
         .inv-item-row {
           display: grid;
           grid-template-columns: 30px 150px 3fr 70px 90px 90px auto 30px;
@@ -304,7 +342,6 @@ export default function NewInvoicePage() {
           gap: 6px; font-size: 9px; font-weight: 700;
           text-transform: uppercase; color: #94A3B8; padding-bottom: 6px;
         }
-        .inv-item-header span, .inv-item-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
         /* ── Customer & Product dropdowns ── */
         .cust-wrap { position: relative; }
@@ -334,6 +371,16 @@ export default function NewInvoicePage() {
 
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
         @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
+
+        /* Price history panel */
+        .price-history {
+          background: #F8FAFC; border-radius: 8px; padding: 10px 14px;
+          margin-top: 12px; font-size: 12px;
+        }
+        .price-history-item {
+          display: flex; justify-content: space-between; padding: 4px 0;
+          border-bottom: 1px solid #E2E8F0;
+        }
       `}</style>
 
       <div className="inv-shell">
@@ -451,7 +498,29 @@ export default function NewInvoicePage() {
                 </div>
               </div>
 
-              {/* Automation toggles (read from saved config, but user can override for this invoice) */}
+              {/* Price History Panel */}
+              {showHistory && lastSelectedProduct && (
+                <div className="price-history">
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <span style={{ fontWeight: 600, fontSize: 12 }}>📋 Price history for {lastSelectedProduct.name}</span>
+                    <button style={{ background: "none", border: "none", cursor: "pointer", color: "#94A3B8" }} onClick={() => setShowHistory(false)}>
+                      <X size={14} />
+                    </button>
+                  </div>
+                  {priceHistory.length > 0 ? (
+                    priceHistory.map((h: any, i: number) => (
+                      <div key={i} className="price-history-item">
+                        <span>{h.invoice_no} - {h.date}</span>
+                        <span style={{ fontWeight: 600 }}>PKR {h.unit_price.toLocaleString()}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ color: "#94A3B8", fontSize: 12 }}>No previous sales to this customer</div>
+                  )}
+                </div>
+              )}
+
+              {/* Automation toggles */}
               <div style={{ marginTop: 12, display: "flex", gap: 16 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
                   <input type="checkbox" checked={enableAutomation} onChange={e => setEnableAutomation(e.target.checked)} />
