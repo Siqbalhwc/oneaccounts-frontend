@@ -3,79 +3,109 @@
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Plus, Trash2, Send, Search, X, Download, FileText } from "lucide-react"
+import {
+  ArrowLeft, Plus, Trash2, Send, Search, X, Download, CheckCircle,
+  Image as ImageIcon,
+} from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
-
-const SALARY_RATE = 0.04
-const ADS_RATE = 0.005
-const FUEL_RATE = 0.005
-const PARTNERS: Record<string, [string, number]> = {
-  "3101": ["Profit A", 0.05],
-  "3102": ["Profit BA", 0.05],
-  "3103": ["Profit AM", 0.05],
-  "3104": ["Profit MA", 0.05],
-  "3106": ["Profit Owner", 0.80],
-}
 
 export default function NewInvoicePage() {
   const router = useRouter()
-  const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+
+  const [companyId, setCompanyId] = useState("")
+  const [loading, setLoading] = useState(true)
 
   const [customers, setCustomers] = useState<any[]>([])
   const [products, setProducts] = useState<any[]>([])
   const [customerId, setCustomerId] = useState<number | null>(null)
+  const [customerSearch, setCustomerSearch] = useState("")
+  const [showCustomerList, setShowCustomerList] = useState(false)
+  const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
+  const customerRef = useRef<HTMLDivElement>(null)
+
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0])
   const [dueDate, setDueDate] = useState(new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0])
   const [reference, setReference] = useState("")
   const [notes, setNotes] = useState("")
   const [items, setItems] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
-  const [successInvoice, setSuccessInvoice] = useState<any>(null)
+  const [flash, setFlash] = useState<string | null>(null)
   const [productSearch, setProductSearch] = useState("")
   const [showProductList, setShowProductList] = useState(false)
-  const [priceHistory, setPriceHistory] = useState<any[]>([])
-  const [showHistory, setShowHistory] = useState(false)
-  const [lastSelectedProduct, setLastSelectedProduct] = useState<any>(null)
 
+  // Automation toggles (default from saved config, but here we have simple state)
+  const [enableAutomation, setEnableAutomation] = useState(true)
+  const [enableProfitAllocation, setEnableProfitAllocation] = useState(true)
+
+  // ── Load data ──────────────────────────────────────────────────────────
   useEffect(() => {
-    supabase.from("customers").select("id,code,name,phone,balance").order("name").then(r => r.data && setCustomers(r.data))
-    supabase.from("products").select("id,code,name,sale_price,cost_price,qty_on_hand").order("name").then(r => r.data && setProducts(r.data))
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
+      setCompanyId(cid)
+
+      supabase.from("customers")
+        .select("id,code,name,phone,balance,country_code")
+        .eq("company_id", cid).order("name")
+        .then(r => { if (r.data) setCustomers(r.data); else setCustomers([]) })
+
+      supabase.from("products")
+        .select("id,code,name,sale_price,cost_price,qty_on_hand,image_path")
+        .order("name")
+        .then(r => r.data && setProducts(r.data))
+
+      setLoading(false)
+    })
   }, [])
 
-  const filteredProducts = products.filter((p: any) => p.name.toLowerCase().includes(productSearch.toLowerCase()))
+  // ── Customer helpers ───────────────────────────────────────────────
+  const filteredCustomers = customers.filter(c =>
+    c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    c.code.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    (c.phone || "").includes(customerSearch)
+  )
 
-  const fetchPriceHistory = async (productId: number, custId: number) => {
-    const { data } = await supabase.from("invoice_items")
-      .select("unit_price, invoices!inner(invoice_no, date, party_id)")
-      .eq("invoices.party_id", custId)
-      .eq("product_id", productId)
-      .order("invoices.date", { ascending: false })
-      .limit(5)
-    if (data) {
-      setPriceHistory(data.map((d: any) => ({
-        unit_price: d.unit_price,
-        invoice_no: d.invoices.invoice_no,
-        date: d.invoices.date,
-      })))
-      setShowHistory(true)
-    } else {
-      setPriceHistory([])
-      setShowHistory(true)
-    }
+  const selectCustomer = (c: any) => {
+    setCustomerId(c.id)
+    setSelectedCustomer(c)
+    setCustomerSearch(c.name)
+    setShowCustomerList(false)
   }
 
-  const addItem = (prod: any) => {
-    setItems([...items, { product_id: prod.id, description: `${prod.code} - ${prod.name}`, qty: 1, unit_price: prod.sale_price, cost_price: prod.cost_price, total: prod.sale_price }])
+  const clearCustomer = () => {
+    setCustomerId(null)
+    setSelectedCustomer(null)
+    setCustomerSearch("")
+    setShowCustomerList(true)
+  }
+
+  // ── Product / Item management ───────────────────────────────────────
+  const filteredProducts = products.filter((p: any) =>
+    p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+    p.code.toLowerCase().includes(productSearch.toLowerCase())
+  )
+
+  const addProductItem = (prod: any) => {
+    setItems([...items, {
+      product_id: prod.id,
+      description: `${prod.code} - ${prod.name}`,
+      product_name: prod.name,
+      product_image: prod.image_path || null,
+      qty: 1,
+      unit_price: prod.sale_price,
+      cost_price: prod.cost_price,
+      total: prod.sale_price,
+    }])
     setProductSearch("")
     setShowProductList(false)
-    setLastSelectedProduct(prod)
-    if (customerId) fetchPriceHistory(prod.id, customerId)
   }
 
   const addManualItem = () => {
-    setItems([...items, { product_id: null, description: "Manual Item", qty: 1, unit_price: 0, cost_price: 0, total: 0 }])
+    setItems([...items, { product_id: null, description: "", product_name: "", product_image: null, qty: 1, unit_price: 0, cost_price: 0, total: 0 }])
   }
 
   const updateItem = (idx: number, field: string, value: any) => {
@@ -89,203 +119,278 @@ export default function NewInvoicePage() {
 
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
 
-  const generateInvoiceNo = () => {
-    const cust = customers.find((c: any) => c.id === customerId)
-    return cust ? `${cust.code}-01` : `INV-${Date.now().toString(36).toUpperCase()}`
+  // ── Invoice number generation ───────────────────────────────────────
+  const getNextInvoiceNo = async (custCode: string): Promise<string> => {
+    const { data } = await supabase
+      .from("invoices")
+      .select("invoice_no")
+      .like("invoice_no", `${custCode}-%`)
+      .eq("type", "sale")
+      .order("invoice_no", { ascending: false }).limit(1)
+    let nextNum = 1
+    if (data && data.length > 0) {
+      const last = data[0].invoice_no
+      const match = last.match(/(\d+)$/)
+      if (match) nextNum = parseInt(match[1]) + 1
+    }
+    return `${custCode}-${String(nextNum).padStart(2, "0")}`
   }
 
-  const totalAmount = items.reduce((s: number, i: any) => s + i.total, 0)
-  const totalCost = items.reduce((s: number, i: any) => s + (i.qty * i.cost_price), 0)
-  const totalSalary = totalAmount * SALARY_RATE
-  const totalAds = totalAmount * ADS_RATE
-  const totalFuel = totalAmount * FUEL_RATE
-  const totalExpenses = totalSalary + totalAds + totalFuel
-  const netProfit = totalAmount - totalCost - totalExpenses
+  const totalAmount = items.reduce((s, i) => s + i.total, 0)
+  const totalCost = items.reduce((s, i) => s + (i.qty * i.cost_price), 0)
 
+  // ── WhatsApp link ───────────────────────────────────────────────────
+  const waLink = () => {
+    if (!selectedCustomer) return ""
+    const code = (selectedCustomer.country_code || "+92").replace(/\D/g, "")
+    const phone = (selectedCustomer.phone || "").replace(/\D/g, "")
+    if (!phone) return ""
+    const msg = `Dear ${selectedCustomer.name},\n\nYour invoice of PKR ${totalAmount.toLocaleString()} is ready.\nDate: ${invoiceDate}\nDue: ${dueDate}\n\nThank you.\n— OneAccounts`
+    return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
+  }
+
+  // ── Submit ──────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (!customerId) { setError("Please select a customer"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
-    setLoading(true)
-    setError("")
 
-    const res = await fetch("/api/invoices", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        invoice_no: generateInvoiceNo(),
-        party_id: customerId,
-        invoice_date: invoiceDate,
-        due_date: dueDate,
-        items: items.map((i: any) => ({ product_id: i.product_id, description: i.description, qty: i.qty, unit_price: i.unit_price, cost_price: i.cost_price })),
-        reference,
-        notes
+    setSaving(true); setError("")
+    const custCode = selectedCustomer?.code || "CUST"
+    const invoiceNo = await getNextInvoiceNo(custCode)
+
+    try {
+      const res = await fetch("/api/invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          invoice_no: invoiceNo,
+          party_id: customerId,
+          invoice_date: invoiceDate,
+          due_date: dueDate,
+          items: items.map(i => ({
+            product_id: i.product_id,
+            description: i.description,
+            qty: i.qty,
+            unit_price: i.unit_price,
+            cost_price: i.cost_price,
+          })),
+          reference, notes,
+          enable_automation: enableAutomation,
+          enable_profit_allocation: enableProfitAllocation,
+        }),
       })
-    })
-    const result = await res.json()
-    if (result.error) { setError(result.error); setLoading(false) }
-    else {
-      const { data: createdInvoice } = await supabase.from("invoices").select("*, customers(name,phone)").eq("id", result.invoice_id).single()
-      setSuccessInvoice(createdInvoice)
-      setLoading(false)
+      const result = await res.json()
+      if (!result.success) {
+        setError(result.error || "Failed to create invoice")
+        setSaving(false)
+        return
+      }
+
+      setFlash(`✅ Invoice ${invoiceNo} saved successfully!`)
+      setSaving(false)
+      // Reset after 2 seconds
+      setTimeout(() => {
+        setFlash(null)
+        setItems([])
+        clearCustomer()
+        setReference("")
+        setNotes("")
+      }, 2000)
+    } catch {
+      setError("Network error")
+      setSaving(false)
     }
   }
 
-  const handleDownloadPDF = async () => {
-    if (!successInvoice) return
-    const { data: itemsData } = await supabase.from("invoice_items").select("*").eq("invoice_id", successInvoice.id)
-    const doc = generateInvoicePDF({
-      companyName: "OneAccounts",
-      invoiceNo: successInvoice.invoice_no,
-      date: successInvoice.date,
-      dueDate: successInvoice.due_date,
-      customerName: successInvoice.customers?.name || "Customer",
-      customerPhone: successInvoice.customers?.phone || "",
-      items: (itemsData || []).map((i: any) => ({
-        description: i.description || "",
-        qty: i.qty || 0,
-        unit_price: i.unit_price || 0,
-        total: (i.qty || 0) * (i.unit_price || 0),
-      })),
-      subtotal: successInvoice.total || 0,
-      total: successInvoice.total || 0,
-    })
-    doc.save(`invoice-${successInvoice.invoice_no}.pdf`)
-  }
-
-  const waLink = () => {
-    if (successInvoice) {
-      const cust = successInvoice.customers
-      if (!cust?.phone) return ""
-      const msg = `Assalam-u-Alaikum ${cust.name},\nInvoice ${successInvoice.invoice_no} of PKR ${totalAmount.toLocaleString()} is ready.\nDue date: ${dueDate}.\nKindly arrange payment. JazakAllah Khair.\n— OneAccounts by Siqbal`
-      return `https://wa.me/92${cust.phone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`
-    }
-    const cust = customers.find((c: any) => c.id === customerId)
-    if (!cust?.phone) return ""
-    const msg = `Assalam-u-Alaikum ${cust.name},\nInvoice of PKR ${totalAmount.toLocaleString()} is ready.\nDue date: ${dueDate}.\nKindly arrange payment. JazakAllah Khair.\n— OneAccounts by Siqbal`
-    return `https://wa.me/92${cust.phone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`
-  }
-
-  // FIXED: proper InvoicePDFData structure
   const handleBeforeSavePdf = () => {
-    const cust = customers.find((c: any) => c.id === customerId) || {}
-    const pdfData = {
-      companyName: "OneAccounts",
-      invoiceNo: generateInvoiceNo(),
+    if (!selectedCustomer) return
+    const tempInv = {
+      invoice_no: "PREVIEW",
       date: invoiceDate,
-      dueDate: dueDate,
-      customerName: cust.name || "Customer",
-      customerPhone: cust.phone || "",
-      items: items.map((i: any) => ({
-        description: i.description || "",
-        qty: i.qty || 0,
-        unit_price: i.unit_price || 0,
-        total: i.total || 0,
-      })),
-      subtotal: totalAmount,
-      total: totalAmount,
+      due_date: dueDate,
+      customers: selectedCustomer || {},
     }
-    const doc = generateInvoicePDF(pdfData)
-    doc.save(`invoice-preview-${pdfData.invoiceNo}.pdf`)
+    const doc = generateInvoicePDF(tempInv, items)
+    doc.save(`invoice-preview.pdf`)
+  }
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (customerRef.current && !customerRef.current.contains(e.target as Node)) {
+        setShowCustomerList(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
+
+  if (loading) {
+    return <div style={{ padding: 24, textAlign: "center" }}>Loading invoice form…</div>
   }
 
   return (
-    <div style={{ padding: "clamp(16px,2.5vw,24px)", background: "#f4f8fc", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div style={{ padding: "16px", background: "#F4F6FB", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <style>{`
-        .inv-shell { max-width: 1300px; margin: 0 auto; }
+        .inv-shell { max-width: 1200px; margin: 0 auto; }
+        .inv-title { font-size: 18px; font-weight: 700; color: #1E293B; }
         .inv-card {
-          background: #ffffff; border: 1px solid #d6e0eb; border-radius: 14px;
-          padding: 20px 24px; margin-bottom: 14px;
-          box-shadow: 0 2px 8px rgba(0,25,45,0.04);
+          background: white; border-radius: 12px; border: 1px solid #E5EAF2;
+          padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+          margin-bottom: 12px;
         }
-        .inv-title { font-size: 20px; font-weight: 800; color: #0a2940; }
-        .inv-label { font-size: 10px; font-weight: 600; color: #2c5778; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; display: block; }
-        .inv-input, .inv-select { width: 100%; height: 40px; border: 1.5px solid #d6e0eb; border-radius: 8px; padding: 0 14px; font-size: 13px; font-family: inherit; background: #f8fafd; outline: none; }
-        .inv-input:focus, .inv-select:focus { border-color: #1e3a8a; background: white; }
-        .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-        .inv-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all 0.15s; white-space: nowrap; }
-        .inv-btn-primary { background: #1e3a8a; color: white; }
-        .inv-btn-primary:disabled { background: #94a3b8; cursor: not-allowed; }
-        .inv-btn-outline { background: white; border: 1.5px solid #d6e0eb; color: #2c5778; }
-        .inv-btn-danger { background: #ef4444; color: white; }
+        .inv-label {
+          font-size: 10px; font-weight: 600; color: #6B7280;
+          text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block;
+        }
+        .inv-input, .inv-select {
+          width: 100%; height: 38px; border: 1.5px solid #E5EAF2;
+          border-radius: 8px; padding: 0 12px; font-size: 13px;
+          font-family: inherit; background: #FAFBFF; outline: none; box-sizing: border-box;
+        }
+        .inv-input:focus, .inv-select:focus { border-color: #1740C8; background: white; }
+        .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .inv-btn {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 8px 14px; border-radius: 8px; font-size: 13px;
+          font-weight: 600; cursor: pointer; border: none;
+          font-family: inherit; transition: all 0.15s; white-space: nowrap;
+        }
+        .inv-btn-primary { background: #1e3a8a; color: white; }   /* navy blue */
+        .inv-btn-outline { background: white; border: 1.5px solid #E5EAF2; color: #475569; }
         .inv-btn-success { background: #25D366; color: white; }
-        .inv-btn-sm { padding: 6px 10px; font-size: 11px; }
-        .inv-item-row { display: grid; grid-template-columns: 1fr 70px 90px 70px 40px; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid #f0f3f7; }
-        .inv-item-header { display: grid; grid-template-columns: 1fr 70px 90px 70px 40px; gap: 8px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: #64748b; padding-bottom: 6px; }
-        .inv-total-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; color: #1a2636; }
-        .inv-total-row.bold { font-weight: 700; font-size: 15px; border-top: 2px solid #d6e0eb; padding-top: 10px; }
-        .inv-profit { color: #10B981; }
-        .inv-loss { color: #EF4444; }
-        .inv-price-history { background: #f8fafc; border-radius: 8px; padding: 10px 14px; margin-top: 8px; font-size: 12px; }
-        .inv-price-history-item { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #e2e8f0; }
-        .inv-grid { display: grid; grid-template-columns: 1fr 350px; gap: 16px; align-items: start; }
-        @media (max-width: 1000px) { .inv-grid { grid-template-columns: 1fr; } }
-        @media (max-width: 600px) {
-          .inv-row { grid-template-columns: 1fr; }
-          .inv-item-row, .inv-item-header { grid-template-columns: 1fr 60px 70px 40px; }
+
+        /* Item row – description is wide, total fits */
+        .inv-item-row {
+          display: grid;
+          grid-template-columns: 30px 150px 3fr 70px 90px 90px auto 30px;
+          gap: 6px; align-items: center; padding: 6px 0;
+          border-bottom: 1px solid #F1F5F9;
         }
+        .inv-item-header {
+          display: grid;
+          grid-template-columns: 30px 150px 3fr 70px 90px 90px auto 30px;
+          gap: 6px; font-size: 9px; font-weight: 700;
+          text-transform: uppercase; color: #94A3B8; padding-bottom: 6px;
+        }
+
+        /* Customer & Product dropdowns */
+        .cust-wrap { position: relative; }
+        .cust-input-row { position: relative; display: flex; align-items: center; }
+        .cust-dropdown {
+          position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+          background: white; border: 1.5px solid #C7D2FE; border-radius: 10px;
+          max-height: 220px; overflow-y: auto; z-index: 100;
+          box-shadow: 0 8px 24px rgba(30,58,138,0.12);
+        }
+        .cust-option {
+          padding: 8px 12px; cursor: pointer;
+          border-bottom: 1px solid #F1F5F9;
+          display: flex; justify-content: space-between; align-items: center;
+        }
+        .cust-option:last-child { border-bottom: none; }
+        .cust-option:hover { background: #EEF2FF; }
+        .cust-option-name { font-size: 13px; font-weight: 600; color: #1E293B; }
+        .cust-option-meta { font-size: 11px; color: #94A3B8; margin-top: 2px; }
+        .cust-option-bal { font-size: 12px; font-weight: 600; color: #1E3A8A; white-space: nowrap; }
+        .cust-selected-badge {
+          display: inline-flex; align-items: center; gap: 6px;
+          background: #EEF2FF; border: 1.5px solid #C7D2FE;
+          border-radius: 8px; padding: 6px 12px; font-size: 13px;
+          font-weight: 600; color: #1E3A8A; width: 100%; cursor: pointer;
+        }
+
+        .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
+        @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
       `}</style>
 
       <div className="inv-shell">
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
           <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/invoices")}><ArrowLeft size={16} /></button>
-          <div>
+          <div style={{ flex: 1 }}>
             <div className="inv-title">🧾 New Sales Invoice</div>
-            <div style={{ fontSize: 13, color: "#64748b" }}>Create invoice with full accounting automation</div>
+            <div style={{ fontSize: 12, color: "#94A3B8" }}>Create invoice with full accounting automation</div>
           </div>
+          <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/invoices")}>View List</button>
         </div>
 
-        {error && <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#B91C1C", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{error}</div>}
-
-        {successInvoice ? (
-          <div className="inv-card" style={{ background: "#F0FDF4", border: "1px solid #BBF7D0" }}>
-            <h3 style={{ color: "#15803D", marginBottom: 8 }}>✅ Invoice {successInvoice.invoice_no} posted!</h3>
-            <p style={{ marginBottom: 12 }}>Total: PKR {successInvoice.total?.toLocaleString()}</p>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button onClick={handleDownloadPDF} className="inv-btn inv-btn-primary"><Download size={14} /> Download PDF</button>
-              {waLink() && <a href={waLink()} target="_blank" className="inv-btn inv-btn-success" style={{ textDecoration: "none" }}><Send size={14} /> WhatsApp</a>}
-              <button onClick={() => router.push("/dashboard/invoices")} className="inv-btn inv-btn-outline">View Invoices List</button>
-              <button onClick={() => { setSuccessInvoice(null); setItems([]); setCustomerId(null); setReference(""); setNotes(""); }} className="inv-btn inv-btn-outline">Create Another</button>
-            </div>
+        {error && <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#B91C1C", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
+        {flash && (
+          <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#15803D", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+            <CheckCircle size={16} /> {flash}
           </div>
-        ) : (
-          <div className="inv-grid">
-            {/* LEFT COLUMN – customer, products, items */}
-            <div>
-              <div className="inv-card">
-                <div className="inv-row">
-                  <div>
-                    <label className="inv-label">Customer *</label>
-                    <select className="inv-select" value={customerId || ""} onChange={e => setCustomerId(Number(e.target.value) || null)}>
-                      <option value="">Select customer...</option>
-                      {customers.map((c: any) => <option key={c.id} value={c.id}>{c.code} - {c.name} (Bal: PKR {(c.balance || 0).toLocaleString()})</option>)}
-                    </select>
+        )}
+
+        <div className="header-grid">
+          {/* LEFT: Customer + Dates + Reference + Notes */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div className="inv-card">
+              <label className="inv-label">Customer *</label>
+              <div className="cust-wrap" ref={customerRef}>
+                {selectedCustomer ? (
+                  <div className="cust-selected-badge" onClick={clearCustomer}>
+                    <span>👤</span><span style={{ flex: 1 }}>{selectedCustomer.code} — {selectedCustomer.name}</span>
+                    <span style={{ fontSize: 11, color: "#64748B" }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
+                    <button className="cust-clear" onClick={(e) => { e.stopPropagation(); clearCustomer(); }}><X size={14} /></button>
                   </div>
-                  <div>
-                    <label className="inv-label">Invoice Date *</label>
-                    <input className="inv-input" type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="inv-label">Due Date</label>
-                    <input className="inv-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="inv-label">Reference</label>
-                    <input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="PO #" />
-                  </div>
-                </div>
-                <div style={{ marginTop: 14 }}>
-                  <label className="inv-label">Notes</label>
-                  <input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" />
-                </div>
+                ) : (
+                  <>
+                    <div className="cust-input-row">
+                      <Search size={14} style={{ position: "absolute", left: 10, color: "#94A3B8" }} />
+                      <input
+                        className="inv-input"
+                        style={{ paddingLeft: 32, paddingRight: 32 }}
+                        placeholder="Search by name, code or phone..."
+                        value={customerSearch}
+                        onChange={e => { setCustomerSearch(e.target.value); setShowCustomerList(true) }}
+                        onFocus={() => setShowCustomerList(true)}
+                        onClick={() => setShowCustomerList(true)}
+                        autoComplete="off"
+                      />
+                      {customerSearch && <button className="cust-clear" onClick={() => setCustomerSearch("")}><X size={13} /></button>}
+                    </div>
+                    {showCustomerList && (
+                      <div className="cust-dropdown">
+                        {filteredCustomers.length === 0 ? (
+                          <div style={{ padding: "10px 14px", color: "#94A3B8", fontSize: 13 }}>No customers found</div>
+                        ) : (
+                          filteredCustomers.map(c => (
+                            <div key={c.id} className="cust-option" onMouseDown={() => selectCustomer(c)}>
+                              <div>
+                                <div className="cust-option-name">{c.name}</div>
+                                <div className="cust-option-meta">{c.code}{c.phone ? ` · ${c.phone}` : ""}</div>
+                              </div>
+                              <div className="cust-option-bal">PKR {(c.balance || 0).toLocaleString()}</div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
 
-              <div className="inv-card">
+              <div className="inv-row" style={{ marginTop: 14 }}>
+                <div><label className="inv-label">Invoice Date *</label><input className="inv-input" type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} /></div>
+                <div><label className="inv-label">Due Date</label><input className="inv-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} /></div>
+              </div>
+              <div className="inv-row" style={{ marginTop: 10 }}>
+                <div><label className="inv-label">Reference</label><input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="Customer PO #" /></div>
+                <div><label className="inv-label">Notes</label><input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" /></div>
+              </div>
+
+              {/* Product search + manual */}
+              <div style={{ marginTop: 14 }}>
                 <label className="inv-label">Add Product</label>
                 <div style={{ position: "relative" }}>
                   <div style={{ display: "flex", gap: 8 }}>
                     <div style={{ position: "relative", flex: 1 }}>
-                      <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "#94a3b8" }} />
-                      <input className="inv-input" style={{ paddingLeft: 36 }} placeholder="Search product..." value={productSearch}
+                      <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "#94A3B8" }} />
+                      <input
+                        className="inv-input"
+                        style={{ paddingLeft: 36 }}
+                        placeholder="Search product..."
+                        value={productSearch}
                         onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
                         onFocus={() => setShowProductList(true)}
                         onBlur={() => setTimeout(() => setShowProductList(false), 200)}
@@ -294,112 +399,102 @@ export default function NewInvoicePage() {
                     <button className="inv-btn inv-btn-outline" onClick={addManualItem}><Plus size={14} /> Manual</button>
                   </div>
                   {showProductList && (
-                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid #d6e0eb", borderRadius: 8, maxHeight: 200, overflowY: "auto", zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.08)", marginTop: 4 }}>
-                      {(productSearch ? filteredProducts : products).map((p: any) => (
-                        <div key={p.id} style={{ padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #f0f3f7", fontSize: 13 }}
-                          onClick={() => { addItem(p); if (customerId) fetchPriceHistory(p.id, customerId) }}>
-                          <span><strong>{p.code}</strong> - {p.name}</span>
-                          <span style={{ color: "#64748b" }}>PKR {p.sale_price} | Stock: {p.qty_on_hand}</span>
+                    <div className="cust-dropdown" style={{ marginTop: 4 }}>
+                      {filteredProducts.map((p: any) => (
+                        <div key={p.id} className="cust-option" onMouseDown={() => addProductItem(p)}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            {p.image_path && <img src={p.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />}
+                            <div>
+                              <div className="cust-option-name">{p.code} - {p.name}</div>
+                              <div className="cust-option-meta">PKR {p.sale_price} | Stock: {p.qty_on_hand}</div>
+                            </div>
+                          </div>
                         </div>
                       ))}
-                      {(productSearch ? filteredProducts : products).length === 0 && <div style={{ padding: 12, color: "#94a3b8", fontSize: 12 }}>No products found</div>}
+                      {filteredProducts.length === 0 && (
+                        <div style={{ padding: 12, color: "#94A3B8", fontSize: 12 }}>No products found</div>
+                      )}
                     </div>
                   )}
                 </div>
-
-                {showHistory && (
-                  <div className="inv-price-history" style={{ marginTop: 12 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                      <span style={{ fontWeight: 600, fontSize: 12 }}>📋 Price history for {lastSelectedProduct?.name}</span>
-                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8" }} onClick={() => setShowHistory(false)}><X size={14} /></button>
-                    </div>
-                    {priceHistory.length > 0 ? priceHistory.map((h: any, i: number) => (
-                      <div key={i} className="inv-price-history-item">
-                        <span>{h.invoice_no} - {h.date}</span>
-                        <span style={{ fontWeight: 600 }}>PKR {h.unit_price.toLocaleString()}</span>
-                      </div>
-                    )) : <div style={{ color: "#94a3b8", fontSize: 12 }}>No previous sales</div>}
-                  </div>
-                )}
               </div>
 
-              {items.length > 0 && (
-                <div className="inv-card">
-                  <div className="inv-item-header">
-                    <span>Description</span><span>Qty</span><span>Price</span><span>Total</span><span></span>
-                  </div>
-                  {items.map((item: any, idx: number) => (
-                    <div key={idx} className="inv-item-row">
-                      <input className="inv-input" style={{ height: 36, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} />
-                      <input className="inv-input" style={{ height: 36, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                      <input className="inv-input" style={{ height: 36, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                      <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13 }}>PKR {item.total.toLocaleString()}</span>
-                      <button className="inv-btn inv-btn-danger inv-btn-sm" onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* RIGHT COLUMN – always visible */}
-            <div style={{ position: "sticky", top: 16 }}>
-              <div className="inv-card">
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0a2940", margin: "0 0 14px 0" }}>Summary</h3>
-                <div className="inv-total-row"><span>Subtotal</span><span>PKR {totalAmount.toLocaleString()}</span></div>
-                <div className="inv-total-row"><span>COGS</span><span>PKR {totalCost.toLocaleString()}</span></div>
-                <div className="inv-total-row"><span>Salary (4%)</span><span>PKR {totalSalary.toLocaleString()}</span></div>
-                <div className="inv-total-row"><span>Advertisement (0.5%)</span><span>PKR {totalAds.toLocaleString()}</span></div>
-                <div className="inv-total-row"><span>Fuel (0.5%)</span><span>PKR {totalFuel.toLocaleString()}</span></div>
-                <div className="inv-total-row bold">
-                  <span>Net Profit</span>
-                  <span className={netProfit >= 0 ? "inv-profit" : "inv-loss"}>PKR {netProfit.toLocaleString()}</span>
-                </div>
-                {netProfit > 0 && (
-                  <div style={{ marginTop: 12, padding: "12px 14px", background: "#f0fdf4", borderRadius: 8, fontSize: 12 }}>
-                    <div style={{ fontWeight: 600, marginBottom: 6, color: "#065f46" }}>Profit Allocation:</div>
-                    {Object.entries(PARTNERS).map(([code, value]) => {
-                      const [name, share] = value as [string, number];
-                      return (
-                        <div key={code} className="inv-total-row" style={{ fontSize: 12 }}>
-                          <span>{name} ({(share * 100).toFixed(0)}%)</span>
-                          <span>PKR {(netProfit * share).toLocaleString()}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <button
-                  className="inv-btn inv-btn-primary"
-                  style={{ width: "100%", justifyContent: "center" }}
-                  onClick={handleSubmit}
-                  disabled={loading || items.length === 0 || !customerId}
-                >
-                  {loading ? "Posting..." : "💾 POST Invoice"}
-                </button>
-                <button
-                  className="inv-btn inv-btn-outline"
-                  style={{ width: "100%", justifyContent: "center" }}
-                  onClick={handleBeforeSavePdf}
-                >
-                  <Download size={14} /> PDF Preview
-                </button>
-                {waLink() && (
-                  <a
-                    href={waLink()}
-                    target="_blank"
-                    className="inv-btn inv-btn-success"
-                    style={{ width: "100%", justifyContent: "center", textDecoration: "none" }}
-                  >
-                    <Send size={14} /> WhatsApp
-                  </a>
-                )}
+              {/* Automation toggles */}
+              <div style={{ marginTop: 12, display: "flex", gap: 16 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
+                  <input type="checkbox" checked={enableAutomation} onChange={e => setEnableAutomation(e.target.checked)} />
+                  Invoice Automation
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
+                  <input type="checkbox" checked={enableProfitAllocation} onChange={e => setEnableProfitAllocation(e.target.checked)} />
+                  Profit Allocation
+                </label>
               </div>
             </div>
           </div>
-        )}
+
+          {/* RIGHT: Summary & Actions */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 16 }}>
+            <div className="inv-card">
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: "#1E293B", margin: "0 0 10px" }}>Summary</h3>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
+                <span>Total</span><span>PKR {totalAmount.toLocaleString()}</span>
+              </div>
+            </div>
+            <div className="inv-card">
+              <button className="inv-btn inv-btn-primary" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={saving}>
+                {saving ? "Posting..." : "💾 POST Invoice"}
+              </button>
+              <button className="inv-btn inv-btn-outline" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleBeforeSavePdf}>
+                <Download size={14} /> PDF Preview
+              </button>
+              {selectedCustomer && waLink() && (
+                <a href={waLink()} target="_blank" rel="noopener noreferrer" className="inv-btn inv-btn-success" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%", textDecoration: "none" }}>
+                  <Send size={14} /> WhatsApp
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Items table – full width */}
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: "#1E293B" }}>Items</span>
+          </div>
+          {items.length > 0 && (
+            <div className="inv-card" style={{ overflowX: "auto", padding: "16px 12px" }}>
+              <div className="inv-item-header">
+                <span></span>
+                <span>Product</span>
+                <span>Description</span>
+                <span>Qty</span>
+                <span>Price</span>
+                <span>Cost</span>
+                <span style={{ textAlign: "right" }}>Total</span>
+                <span></span>
+              </div>
+              {items.map((item, idx) => (
+                <div key={idx} className="inv-item-row">
+                  <div>
+                    {item.product_image ? (
+                      <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
+                    ) : (
+                      <ImageIcon size={14} />
+                    )}
+                  </div>
+                  <span style={{ fontSize: 12 }}>{item.product_name || "—"}</span>
+                  <input className="inv-input" style={{ height: 34, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Description / product name" />
+                  <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                  <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                  <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.cost_price} onChange={e => updateItem(idx, "cost_price", Number(e.target.value))} />
+                  <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>PKR {item.total.toLocaleString()}</span>
+                  <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
