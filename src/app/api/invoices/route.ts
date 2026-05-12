@@ -87,18 +87,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: updateError?.message || 'Failed to update total' }, { status: 500 })
   }
 
-  // 3. Update customer balance (add invoice total to balance)
-  await supabase.rpc('increment_balance', {
-    table_name: 'customers',
-    record_id: party_id,
-    amount: total
-  }).catch(async () => {
-    // fallback manual update if RPC doesn't exist
-    const { data: cust } = await supabase.from('customers').select('balance').eq('id', party_id).single()
-    if (cust) {
-      await supabase.from('customers').update({ balance: cust.balance + total }).eq('id', party_id)
-    }
-  })
+  // 3. Update customer balance manually (safe)
+  const { data: cust } = await supabase.from('customers').select('balance').eq('id', party_id).single()
+  if (cust) {
+    await supabase.from('customers').update({ balance: cust.balance + total }).eq('id', party_id)
+  }
 
   // 4. Audit log
   await logDataChange('invoices', String(updatedInv.id), 'INSERT', undefined, updatedInv)
