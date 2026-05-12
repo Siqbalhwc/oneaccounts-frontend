@@ -33,7 +33,7 @@ const DEFAULT_PARTNERS: Partner[] = [
 
 export default function InvoiceAutomationPage() {
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
-  const { role } = useRole()
+  const { role, loading: roleLoading } = useRole()
   const canView = role === "admin" || role === "accountant"
   const canEdit = role === "admin" || role === "accountant"
 
