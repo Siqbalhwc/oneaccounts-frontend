@@ -38,11 +38,11 @@ export default function NewInvoicePage() {
   const [productSearch, setProductSearch] = useState("")
   const [showProductList, setShowProductList] = useState(false)
 
-  // Automation toggles (default from saved config, but here we have simple state)
-  const [enableAutomation, setEnableAutomation] = useState(true)
-  const [enableProfitAllocation, setEnableProfitAllocation] = useState(true)
+  // Automation toggles – initialised from saved Invoice Automation config
+  const [enableAutomation, setEnableAutomation] = useState(false)
+  const [enableProfitAllocation, setEnableProfitAllocation] = useState(false)
 
-  // ── Load data ──────────────────────────────────────────────────────────
+  // ── Load company & initial data ────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -58,11 +58,24 @@ export default function NewInvoicePage() {
         .order("name")
         .then(r => r.data && setProducts(r.data))
 
+      // Load Invoice Automation config (toggle states)
+      supabase.from("company_settings")
+        .select("invoice_automation_config")
+        .eq("company_id", cid)
+        .maybeSingle()
+        .then(({ data: settings }) => {
+          if (settings?.invoice_automation_config) {
+            const config = settings.invoice_automation_config as any
+            if (config.expenseEnabled !== undefined) setEnableAutomation(config.expenseEnabled)
+            if (config.profitEnabled !== undefined) setEnableProfitAllocation(config.profitEnabled)
+          }
+        })
+
       setLoading(false)
     })
   }, [])
 
-  // ── Customer helpers ───────────────────────────────────────────────
+  // ── Customer helpers ───────────────────────────────────────────────────
   const filteredCustomers = customers.filter(c =>
     c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
     c.code.toLowerCase().includes(customerSearch.toLowerCase()) ||
@@ -83,7 +96,7 @@ export default function NewInvoicePage() {
     setShowCustomerList(true)
   }
 
-  // ── Product / Item management ───────────────────────────────────────
+  // ── Product / Item management ─────────────────────────────────────────
   const filteredProducts = products.filter((p: any) =>
     p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
     p.code.toLowerCase().includes(productSearch.toLowerCase())
@@ -105,7 +118,16 @@ export default function NewInvoicePage() {
   }
 
   const addManualItem = () => {
-    setItems([...items, { product_id: null, description: "", product_name: "", product_image: null, qty: 1, unit_price: 0, cost_price: 0, total: 0 }])
+    setItems([...items, {
+      product_id: null,
+      description: "",
+      product_name: "",
+      product_image: null,
+      qty: 1,
+      unit_price: 0,
+      cost_price: 0,
+      total: 0,
+    }])
   }
 
   const updateItem = (idx: number, field: string, value: any) => {
@@ -119,7 +141,7 @@ export default function NewInvoicePage() {
 
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
 
-  // ── Invoice number generation ───────────────────────────────────────
+  // ── Invoice number generation ─────────────────────────────────────────
   const getNextInvoiceNo = async (custCode: string): Promise<string> => {
     const { data } = await supabase
       .from("invoices")
@@ -137,9 +159,8 @@ export default function NewInvoicePage() {
   }
 
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
-  const totalCost = items.reduce((s, i) => s + (i.qty * i.cost_price), 0)
 
-  // ── WhatsApp link ───────────────────────────────────────────────────
+  // ── WhatsApp link ─────────────────────────────────────────────────────
   const waLink = () => {
     if (!selectedCustomer) return ""
     const code = (selectedCustomer.country_code || "+92").replace(/\D/g, "")
@@ -149,7 +170,7 @@ export default function NewInvoicePage() {
     return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
   }
 
-  // ── Submit ──────────────────────────────────────────────────────────
+  // ── Submit ────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (!customerId) { setError("Please select a customer"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
@@ -224,7 +245,7 @@ export default function NewInvoicePage() {
     doc.save(`invoice-preview.pdf`)
   }
 
-  // Close dropdowns on outside click
+  // Close customer dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (customerRef.current && !customerRef.current.contains(e.target as Node)) {
@@ -270,7 +291,7 @@ export default function NewInvoicePage() {
         .inv-btn-outline { background: white; border: 1.5px solid #E5EAF2; color: #475569; }
         .inv-btn-success { background: #25D366; color: white; }
 
-        /* Item row – description is wide, total fits */
+        /* ── Item row: Image, Product Name, Description (wide), Qty, Price, Cost, Total (auto), Delete ── */
         .inv-item-row {
           display: grid;
           grid-template-columns: 30px 150px 3fr 70px 90px 90px auto 30px;
@@ -283,8 +304,9 @@ export default function NewInvoicePage() {
           gap: 6px; font-size: 9px; font-weight: 700;
           text-transform: uppercase; color: #94A3B8; padding-bottom: 6px;
         }
+        .inv-item-header span, .inv-item-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-        /* Customer & Product dropdowns */
+        /* ── Customer & Product dropdowns ── */
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
         .cust-dropdown {
@@ -429,7 +451,7 @@ export default function NewInvoicePage() {
                 </div>
               </div>
 
-              {/* Automation toggles */}
+              {/* Automation toggles (read from saved config, but user can override for this invoice) */}
               <div style={{ marginTop: 12, display: "flex", gap: 16 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
                   <input type="checkbox" checked={enableAutomation} onChange={e => setEnableAutomation(e.target.checked)} />
@@ -486,20 +508,32 @@ export default function NewInvoicePage() {
               </div>
               {items.map((item, idx) => (
                 <div key={idx} className="inv-item-row">
-                  <div>
+                  <div style={{ display: "flex", justifyContent: "center" }}>
                     {item.product_image ? (
                       <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
                     ) : (
                       <ImageIcon size={14} />
                     )}
                   </div>
-                  <span style={{ fontSize: 12 }}>{item.product_name || "—"}</span>
-                  <input className="inv-input" style={{ height: 34, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Description / product name" />
+                  <span style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {item.product_name || "—"}
+                  </span>
+                  <input
+                    className="inv-input"
+                    style={{ height: 34, fontSize: 12 }}
+                    value={item.description}
+                    onChange={e => updateItem(idx, "description", e.target.value)}
+                    placeholder="Description / product name"
+                  />
                   <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
                   <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
                   <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.cost_price} onChange={e => updateItem(idx, "cost_price", Number(e.target.value))} />
-                  <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>PKR {item.total.toLocaleString()}</span>
-                  <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
+                  <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>
+                    PKR {item.total.toLocaleString()}
+                  </span>
+                  <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}>
+                    <Trash2 size={12} />
+                  </button>
                 </div>
               ))}
             </div>
