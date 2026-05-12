@@ -74,7 +74,7 @@ export default function InvoiceAutomationPage() {
     if (!cid) { setLoading(false); return }
     setCompanyId(cid)
 
-    // Fetch feature UUIDs
+    // Fetch feature UUIDs (needed later for toggling)
     const { data: featureRows } = await supabase.from("features")
       .select("id, code")
       .in("code", ["invoice_automation", "profit_allocation"])
@@ -92,7 +92,7 @@ export default function InvoiceAutomationPage() {
     if (expAccs) setExpenseAccounts(expAccs)
     if (eqAccs) setEquityLiabilityAccounts(eqAccs)
 
-    // Load stored config from company_settings
+    // Load stored config (toggle state + rules) from company_settings
     const { data: settings } = await supabase.from("company_settings")
       .select("invoice_automation_config")
       .eq("company_id", cid)
@@ -104,45 +104,29 @@ export default function InvoiceAutomationPage() {
       if (config.profitEnabled !== undefined) setProfitEnabled(config.profitEnabled)
       if (config.expenseRules) setExpenseRules(config.expenseRules)
       if (config.partners) setPartners(config.partners)
-    } else {
-      // Check existing company_features for current toggle state
-      if (idMap["invoice_automation"]) {
-        const { data: override } = await supabase.from("company_features")
-          .select("enabled")
-          .eq("company_id", cid)
-          .eq("features", idMap["invoice_automation"])
-          .maybeSingle()
-        if (override) setExpenseEnabled(override.enabled)
-      }
-      if (idMap["profit_allocation"]) {
-        const { data: override } = await supabase.from("company_features")
-          .select("enabled")
-          .eq("company_id", cid)
-          .eq("features", idMap["profit_allocation"])
-          .maybeSingle()
-        if (override) setProfitEnabled(override.enabled)
-      }
     }
+    // If no config exists, we keep the default values and default toggle state (off)
 
     setLoading(false)
   }
 
-  // ── Toggle feature on/off using proper UUID ─────────────────────────────
+  // ── Toggle feature on/off using proper UUID column (feature_id) ────────
   const toggleFeature = async (code: string, enabled: boolean) => {
     const featureId = featureIdMap[code]
     if (!featureId || !companyId || !canEdit) return
-    // Optimistic
+    // Optimistic UI update
     if (code === "invoice_automation") setExpenseEnabled(enabled)
     if (code === "profit_allocation") setProfitEnabled(enabled)
 
     const { error } = await supabase.from("company_features").upsert({
       company_id: companyId,
-      features: featureId,   // UUID
+      feature_id: featureId,   // ← CORRECT COLUMN NAME
       enabled,
-    }, { onConflict: "company_id,features" })
+    }, { onConflict: "company_id, feature_id" })
 
     if (error) {
       setMessage("Error: " + error.message)
+      // Revert optimistic state
       if (code === "invoice_automation") setExpenseEnabled(!enabled)
       if (code === "profit_allocation") setProfitEnabled(!enabled)
     } else {
