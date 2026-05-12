@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
+import { logDataChange } from '@/lib/audit'
 
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies()
@@ -31,7 +32,6 @@ export async function POST(request: NextRequest) {
 
   let productCode = code?.trim() || ""
   if (!productCode) {
-    // Auto‑generate code: PROD‑XXX (next available number)
     const { data: existing } = await supabase
       .from('products')
       .select('code')
@@ -68,6 +68,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: insertErr?.message || 'Failed to create product' }, { status: 500 })
   }
 
+  // Audit log the new product
+  await logDataChange('products', String(product.id), 'INSERT', undefined, {
+    code: productCode, name, sale_price: salePrice,
+    cost_price: costPrice, qty_on_hand: openingQty,
+  })
+
   // Opening inventory GL entry
   if (openingQty > 0 && costPrice > 0) {
     const totalValue = openingQty * costPrice
@@ -100,10 +106,10 @@ export async function PUT(request: NextRequest) {
   const { id, code, name, sale_price, cost_price, opening_qty, image_url } = await request.json()
   if (!id || !code || !name) return NextResponse.json({ error: 'ID, code and name required' }, { status: 400 })
 
-  // Fetch old product for GL reversal
+  // Fetch old product for GL reversal and audit logging
   const { data: oldProduct } = await supabase
     .from('products')
-    .select('cost_price, qty_on_hand')
+    .select('*')
     .eq('id', id)
     .single()
 
@@ -127,17 +133,23 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: updateErr.message }, { status: 500 })
   }
 
+  // Audit log the update (old vs new)
+  if (oldProduct) {
+    await logDataChange('products', String(id), 'UPDATE', oldProduct, {
+      code, name, sale_price: newSalePrice,
+      cost_price: newCostPrice, qty_on_hand: newOpeningQty,
+    })
+  }
+
   // Handle GL adjustments for opening inventory
   const oldValue = (oldProduct?.cost_price || 0) * (oldProduct?.qty_on_hand || 0)
   const newValue = newOpeningQty * newCostPrice
 
   if (oldValue !== newValue) {
     if (oldValue > 0) {
-      // Reverse old entry
       await postOpeningInventoryEntry(supabase, id, code, name, oldValue, 'reverse')
     }
     if (newValue > 0) {
-      // Post new entry
       await postOpeningInventoryEntry(supabase, id, code, name, newValue, 'new')
     }
   }
