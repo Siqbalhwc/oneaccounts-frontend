@@ -4,7 +4,6 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Plus, Trash2, CheckCircle } from "lucide-react"
-import { logDataChange } from "@/lib/audit"
 
 export default function NewJournalPage() {
   const router = useRouter()
@@ -294,30 +293,33 @@ export default function NewJournalPage() {
       return
     }
 
-    // 5. Audit log
+    // 5. Audit log – insert directly into data_change_logs using the browser client
     const auditPayload = {
-      id: entryId,
-      company_id: companyId,
-      entry_no: entryNo,
-      date: entryDate,
-      description,
-      lines: validLines.map((l) => ({
-        account_id: l.account_id,
-        debit: l.debit,
-        credit: l.credit,
-        description: l.line_description,
-        location_id: l.location_id,
-        activity_id: l.activity_id,
-        project_id: l.project_id,
-      })),
+      table_name: "journal_entries",
+      record_id: String(entryId),
+      action: "INSERT",
+      old_data: null,
+      new_data: {
+        id: entryId,
+        company_id: companyId,
+        entry_no: entryNo,
+        date: entryDate,
+        description,
+        lines: validLines.map((l) => ({
+          account_id: l.account_id,
+          debit: l.debit,
+          credit: l.credit,
+          description: l.line_description,
+          location_id: l.location_id,
+          activity_id: l.activity_id,
+          project_id: l.project_id,
+        })),
+      },
+      changed_by: (await supabase.auth.getUser()).data.user?.id || null,
+      changed_at: new Date().toISOString(),
     }
-    await logDataChange(
-      "journal_entries",
-      String(entryId),
-      "INSERT",
-      undefined,
-      auditPayload
-    )
+
+    await supabase.from("data_change_logs").insert(auditPayload)
 
     // 6. Success
     setFlash(`✅ Journal Entry ${entryNo} posted!`)
