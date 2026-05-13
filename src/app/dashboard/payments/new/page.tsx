@@ -47,7 +47,8 @@ export default function NewPaymentPage() {
   const loadSuppliers = () => {
     if (!companyId) return
     setRefreshingSuppliers(true)
-    supabase.from("suppliers").select("id, code, name, phone, balance, country_code")
+    // ✅ Removed "country_code" – column does not exist in the suppliers table
+    supabase.from("suppliers").select("id, code, name, phone, balance")
       .eq("company_id", companyId).order("name")
       .then(r => { if (r.data) setSuppliers(r.data); setRefreshingSuppliers(false) })
   }
