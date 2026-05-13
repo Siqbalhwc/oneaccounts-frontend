@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Search } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
+import JournalEntryDrawer from "@/components/JournalEntryDrawer"
 
 export default function LedgerPage() {
   const router = useRouter()
@@ -15,6 +16,9 @@ export default function LedgerPage() {
   const [loading, setLoading] = useState(false)
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
+
+  // Drill‑down
+  const [drawerEntryId, setDrawerEntryId] = useState<number | null>(null)
 
   // Pre‑select account from URL parameter
   useEffect(() => {
@@ -45,7 +49,7 @@ export default function LedgerPage() {
     setLoading(true)
     let query = supabase
       .from("journal_lines")
-      .select("*, journal_entries!inner(date, entry_no, description)")
+      .select("*, journal_entries!inner(date, entry_no, description, id)")
       .eq("account_id", accountId)
       .order("journal_entries(date)")
 
@@ -65,6 +69,7 @@ export default function LedgerPage() {
           date: l.journal_entries?.date,
           entry_no: l.journal_entries?.entry_no,
           description: l.journal_entries?.description,
+          entry_id: l.journal_entries?.id, // for drill‑down
         }
       })
       setLines(enriched)
@@ -87,6 +92,8 @@ export default function LedgerPage() {
         .btn-primary { background: #1D4ED8; color: white; }
         .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
         .input { height: 38px; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0 12px; font-size: 13px; box-sizing: border-box; }
+        .clickable-entry { color: #1E3A8A; font-weight: 600; text-decoration: underline; cursor: pointer; }
+        .clickable-entry:hover { color: #1D4ED8; }
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
@@ -136,7 +143,13 @@ export default function LedgerPage() {
           {lines.map((l, i) => (
             <div key={i} style={{ display: "grid", gridTemplateColumns: "100px 100px 1fr 100px 100px 100px", padding: "8px 14px", borderBottom: "1px solid #F1F5F9", fontSize: 12, alignItems: "center" }}>
               <span>{l.date || "—"}</span>
-              <span style={{ color: "#1E3A8A", fontWeight: 600 }}>{l.entry_no}</span>
+              <span
+                className="clickable-entry"
+                onClick={() => setDrawerEntryId(l.entry_id)}
+                title="View journal entry"
+              >
+                {l.entry_no}
+              </span>
               <span style={{ color: "#64748B" }}>{l.description}</span>
               <span style={{ textAlign: "right", color: "#EF4444" }}>{l.debit > 0 ? `PKR ${l.debit.toLocaleString()}` : "-"}</span>
               <span style={{ textAlign: "right", color: "#10B981" }}>{l.credit > 0 ? `PKR ${l.credit.toLocaleString()}` : "-"}</span>
@@ -148,6 +161,14 @@ export default function LedgerPage() {
         <div className="card" style={{ textAlign: "center", color: "#94A3B8", padding: 24 }}>
           No transactions found {accountId ? "for the selected period" : ""}. Select an account and date range.
         </div>
+      )}
+
+      {/* Drill-down drawer */}
+      {drawerEntryId && (
+        <JournalEntryDrawer
+          entryId={drawerEntryId}
+          onClose={() => setDrawerEntryId(null)}
+        />
       )}
     </div>
   )
