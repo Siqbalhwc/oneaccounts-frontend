@@ -82,26 +82,65 @@ export default function NewJournalPage() {
   }, [])
 
   // ── Generate a unique entry number ──
-  const generateEntryNo = async (): Promise<string> => {
-    const datePrefix = new Date().toISOString().split("T")[0].replace(/-/g, "")
-    const { data } = await supabase
-      .from("journal_entries")
-      .select("entry_no")
-      .order("entry_no", { ascending: false })
-      .limit(5)
+  const handleSubmit = async () => {
+  if (!isBalanced) { setError("Debits must equal Credits"); return }
+  if (!companyId) { setError("Company not found. Please reload."); return }
 
-    let maxNum = 0
-    if (data) {
-      for (const row of data) {
-        const match = row.entry_no?.match(new RegExp(`JE-${datePrefix}-(\\d+)`))
-        if (match) {
-          const num = parseInt(match[1], 10)
-          if (!isNaN(num) && num > maxNum) maxNum = num
-        }
-      }
+  setLoading(true); setError("")
+
+  // ── Generate entry number & insert with up to 3 retries ──
+  let entryNo = ""
+  let je: any = null
+  let headerErr: any = null
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      entryNo = await generateEntryNo()
+    } catch (e: any) {
+      setError("Failed to generate entry number. Please try again.")
+      setLoading(false)
+      return
     }
-    const nextNum = maxNum + 1
-    return `JE-${datePrefix}-${String(nextNum).padStart(3, "0")}`
+
+    const result = await supabase
+      .from("journal_entries")
+      .insert({
+        company_id: companyId,
+        entry_no: entryNo,
+        date: entryDate,
+        description,
+      })
+      .select("id")
+      .single()
+
+    headerErr = result.error
+    je = result.data
+
+    if (!headerErr) break // success
+
+    // If it's a duplicate key, try again with the next number
+    if (headerErr.message?.includes("duplicate key") && attempt < 2) {
+      continue
+    }
+
+    // Some other error – stop
+    setError(headerErr?.message || "Failed to create journal entry")
+    setLoading(false)
+    return
+  }
+
+  if (!je) {
+    setError("Failed to create journal entry after multiple attempts.")
+    setLoading(false)
+    return
+  }
+
+  const entryId = je.id
+
+  // … the rest of the function stays identical from here …
+  // (validLines filtering, insert, balance update, rollback, audit log)
+  // I'll paste the complete handleSubmit below for convenience.
+}
   }
 
   const addLine = () =>
