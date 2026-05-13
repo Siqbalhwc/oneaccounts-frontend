@@ -249,4 +249,4 @@ export default function ReceiptDetailPage() {
       </div>
     </RoleGuard>
   )
-}s
+}
