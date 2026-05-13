@@ -187,7 +187,6 @@ export default function BudgetsPage() {
       }
     }
   }
-  // If no accounts have been used yet (first visit, no budgets), show all
   const relevantAccounts = usedAccountIds.size > 0
     ? accounts.filter(a => usedAccountIds.has(String(a.id)))
     : accounts
@@ -278,15 +277,21 @@ export default function BudgetsPage() {
           if (uniqueKeys.has(key)) continue
           uniqueKeys.add(key)
           rowsToInsert.push({
-            company_id: companyId, account_id: parseInt(accountId),
-            project_id: selectedProjectId, activity_id: activityId,
+            company_id: companyId,
+            account_id: parseInt(accountId),
+            project_id: selectedProjectId,
+            activity_id: activityId,
             donor_id: (businessType === "ngo") ? selectedDonorId : null,
-            location_id: locationId, fiscal_year: fiscalYear, month: null,
+            location_id: locationId,
+            fiscal_year: fiscalYear,
+            month: null,
             budgeted_amount: budget,
           })
         }
       }
     }
+
+    // Delete old budgets
     let deleteQuery = supabase.from("budgets").delete()
       .eq("company_id", companyId).eq("project_id", selectedProjectId)
       .eq("fiscal_year", fiscalYear).is("month", null)
@@ -297,6 +302,23 @@ export default function BudgetsPage() {
       const { error } = await supabase.from("budgets").insert(rowsToInsert)
       if (error) { setFlash("Error: " + error.message); setSaving(false); return }
     }
+
+    // ── Audit log: record budget update ───────────────────────────────────
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      await supabase.from("data_change_logs").insert({
+        table_name: "budgets",
+        record_id: `${selectedProjectId}_${fiscalYear}`,
+        action: "UPDATE",
+        old_data: null,
+        new_data: rowsToInsert,
+        changed_by: user?.email || user?.id || null,
+        changed_at: new Date().toISOString(),
+      })
+    } catch {
+      // ignore audit failures
+    }
+
     setFlash("Budget saved!")
     setSaving(false)
     setTimeout(() => setFlash(""), 4000)
