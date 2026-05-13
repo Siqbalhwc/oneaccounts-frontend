@@ -23,6 +23,24 @@ const PREDEFINED_CATEGORIES = [
 
 const CUSTOM_OPTION = "➕ Custom…"
 
+// Helper: get the default code range for a given account type (used when custom range is left empty)
+function getDefaultRangeForType(type: string): { start: number; end: number } | null {
+  switch (type) {
+    case "Asset":
+      return { start: 1000, end: 1999 }
+    case "Liability":
+      return { start: 2000, end: 2999 }
+    case "Equity":
+      return { start: 3000, end: 3999 }
+    case "Revenue":
+      return { start: 4000, end: 4999 }
+    case "Expense":
+      return { start: 5000, end: 5999 }
+    default:
+      return null
+  }
+}
+
 export default function NewAccountPage() {
   const router = useRouter()
   const supabase = createBrowserClient(
@@ -32,7 +50,7 @@ export default function NewAccountPage() {
 
   const [companyId, setCompanyId] = useState("")
   const [accountType, setAccountType] = useState("")
-  const [selectedCategory, setSelectedCategory] = useState("")   // can be predefined label or CUSTOM_OPTION
+  const [selectedCategory, setSelectedCategory] = useState("")
   const [customCategoryName, setCustomCategoryName] = useState("")
   const [customCodeStart, setCustomCodeStart] = useState("")
   const [customCodeEnd, setCustomCodeEnd] = useState("")
@@ -43,22 +61,32 @@ export default function NewAccountPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  // Available predefined categories for the selected type
-  const availablePredefined = PREDEFINED_CATEGORIES.filter(c => c.type === accountType)
+  const availablePredefined = PREDEFINED_CATEGORIES.filter((c) => c.type === accountType)
   const isCustom = selectedCategory === CUSTOM_OPTION
-
-  // The final category text that will be saved
   const finalCategory = isCustom ? customCategoryName.trim() : selectedCategory
 
-  // Determine the code range to use for suggestions
-  const effectiveCodeStart = isCustom
-    ? (customCodeStart ? parseInt(customCodeStart, 10) : (accountType === "Asset" ? 1000 : accountType === "Liability" ? 2000 : accountType === "Equity" ? 3000 : accountType === "Revenue" ? 4000 : accountType === "Expense" ? 5000 : null))
-  const effectiveCodeEnd = isCustom
-    ? (customCodeEnd ? parseInt(customCodeEnd, 10) : (accountType === "Asset" ? 1999 : accountType === "Liability" ? 2999 : accountType === "Equity" ? 3999 : accountType === "Revenue" ? 4999 : accountType === "Expense" ? 5999 : null))
-    : (() => {
-        const cat = PREDEFINED_CATEGORIES.find(c => c.label === selectedCategory)
-        return cat ? { start: cat.codeStart, end: cat.codeEnd } : null
-      })()
+  // Determine the effective code range (start/end as numbers)
+  const effectiveCodeStart = (() => {
+    if (!selectedCategory) return null
+    if (isCustom) {
+      if (customCodeStart) return parseInt(customCodeStart, 10)
+      const def = getDefaultRangeForType(accountType)
+      return def ? def.start : null
+    }
+    const cat = PREDEFINED_CATEGORIES.find((c) => c.label === selectedCategory)
+    return cat ? cat.codeStart : null
+  })()
+
+  const effectiveCodeEnd = (() => {
+    if (!selectedCategory) return null
+    if (isCustom) {
+      if (customCodeEnd) return parseInt(customCodeEnd, 10)
+      const def = getDefaultRangeForType(accountType)
+      return def ? def.end : null
+    }
+    const cat = PREDEFINED_CATEGORIES.find((c) => c.label === selectedCategory)
+    return cat ? cat.codeEnd : null
+  })()
 
   // Get company ID
   useEffect(() => {
@@ -68,14 +96,13 @@ export default function NewAccountPage() {
     })
   }, [])
 
-  // When category changes, suggest the next available code
+  // When category/range changes, suggest next available code
   useEffect(() => {
     if (!companyId || !selectedCategory) {
       setSuggestedCode(null)
       setCustomCode("")
       return
     }
-    // If custom but no range yet, use whole type range
     const start = effectiveCodeStart
     const end = effectiveCodeEnd
     if (!start || !end) {
@@ -93,8 +120,8 @@ export default function NewAccountPage() {
       .order("code", { ascending: true })
       .then(({ data }) => {
         const usedNumbers = (data || [])
-          .map(a => parseInt(a.code, 10))
-          .filter(n => !isNaN(n) && n >= start && n <= end)
+          .map((a) => parseInt(a.code, 10))
+          .filter((n) => !isNaN(n) && n >= start && n <= end)
           .sort((a, b) => a - b)
 
         let next = start
@@ -106,7 +133,7 @@ export default function NewAccountPage() {
         setSuggestedCode(next)
         setCustomCode(next.toString())
       })
-  }, [companyId, selectedCategory, customCodeStart, customCodeEnd, accountType])
+  }, [companyId, selectedCategory, effectiveCodeStart, effectiveCodeEnd, accountType])
 
   const codeToSubmit = customCode || (suggestedCode?.toString() ?? "")
 
@@ -131,7 +158,7 @@ export default function NewAccountPage() {
           code: currentCode.toString(),
           name: accountName.trim(),
           type: accountType,
-          category: finalCategory,   // ✅ save the category
+          category: finalCategory,
           balance: 0,
           company_id: companyId,
         })
@@ -199,9 +226,9 @@ export default function NewAccountPage() {
       <div className="form-card">
         <div style={{ marginBottom: 16 }}>
           <label className="label">Account Type *</label>
-          <select className="select" value={accountType} onChange={(e) => { setAccountType(e.target.value); setSelectedCategory(""); setCustomCategoryName(""); setCustomCodeStart(""); setCustomCodeEnd(""); setSuggestedCode(null); setCustomCode(""); }}>
+          <select className="select" value={accountType} onChange={(e) => { setAccountType(e.target.value); setSelectedCategory(""); setCustomCategoryName(""); setCustomCodeStart(""); setCustomCodeEnd(""); }}>
             <option value="">— Select Type —</option>
-            {["Asset", "Liability", "Equity", "Revenue", "Expense"].map(t => <option key={t} value={t}>{t}</option>)}
+            {["Asset", "Liability", "Equity", "Revenue", "Expense"].map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
 
@@ -210,13 +237,12 @@ export default function NewAccountPage() {
             <label className="label">Category *</label>
             <select className="select" value={selectedCategory} onChange={(e) => { setSelectedCategory(e.target.value); setCustomCategoryName(""); setCustomCodeStart(""); setCustomCodeEnd(""); }}>
               <option value="">— Select Category —</option>
-              {availablePredefined.map(c => <option key={c.label} value={c.label}>{c.label} ({c.codeStart}-{c.codeEnd})</option>)}
+              {availablePredefined.map((c) => <option key={c.label} value={c.label}>{c.label} ({c.codeStart}-{c.codeEnd})</option>)}
               <option value={CUSTOM_OPTION}>{CUSTOM_OPTION}</option>
             </select>
           </div>
         )}
 
-        {/* Custom category fields */}
         {isCustom && (
           <>
             <div style={{ marginBottom: 16 }}>
@@ -236,7 +262,7 @@ export default function NewAccountPage() {
           </>
         )}
 
-        {suggestedCode !== null && (
+        {effectiveCodeStart !== null && effectiveCodeEnd !== null && suggestedCode !== null && (
           <div style={{ marginBottom: 16 }}>
             <label className="label">Account Code</label>
             <input className="input" type="number" value={customCode} onChange={(e) => setCustomCode(e.target.value)} placeholder={`Suggested: ${suggestedCode}`} />
