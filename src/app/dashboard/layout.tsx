@@ -12,53 +12,27 @@ const styles = `
 
   .dl-shell { display: flex; min-height: 100vh; background: #0B1120; }
 
-  /* ── Sidebar – slim 60px, expands on hover ── */
+  /* ── Sidebar – 208 px, fixed, no hover changes ── */
   .dl-sidebar {
-    width: 60px; min-width: 60px;
+    width: 208px; min-width: 208px;
     background: #0F172A;
     display: flex; flex-direction: column;
     position: fixed; top: 0; left: 0; bottom: 0; z-index: 40;
-    transition: width 0.25s ease; overflow: hidden;
+    transition: none; overflow: hidden;
     border-right: 1px solid #1E293B;
   }
+  /* Absolutely no expansion on hover – keep it always 208px */
   .dl-sidebar:hover {
-    width: 260px;
+    width: 208px;
   }
 
-  /* Hide text elements when collapsed */
-  .dl-sidebar:not(:hover) .dl-sidebar-logo-name,
-  .dl-sidebar:not(:hover) .dl-sidebar-logo-sub,
-  .dl-sidebar:not(:hover) .dl-section-btn span,
-  .dl-sidebar:not(:hover) .dl-nav-group-label,
-  .dl-sidebar:not(:hover) .dl-nav-item span:not(.dl-nav-icon),
-  .dl-sidebar:not(:hover) .dl-sidebar-email,
-  .dl-sidebar:not(:hover) .dl-sidebar-signout {
-    display: none;
-  }
-
-  /* Center icons when collapsed */
-  .dl-sidebar:not(:hover) .dl-section-btn {
-    justify-content: center;
-    padding: 10px 0;
-  }
-  .dl-sidebar:not(:hover) .dl-sidebar-logo {
-    justify-content: center;
-    padding: 14px 0;
-  }
-  .dl-sidebar:not(:hover) .dl-nav-item {
-    justify-content: center;
-    padding: 10px 0;
-  }
-  .dl-sidebar:not(:hover) .dl-sidebar-user {
-    justify-content: center;
-  }
-
-  /* Logo styling (expanded) */
+  /* Logo */
   .dl-sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 20px 18px; border-bottom: 1px solid #1E293B; min-height: 68px; }
   .dl-sidebar-logo-img { width: 40px; height: 40px; border-radius: 12px; object-fit: contain; flex-shrink: 0; }
   .dl-sidebar-logo-name { color: white; font-size: 15px; font-weight: 700; line-height: 1.2; }
   .dl-sidebar-logo-sub { color: #64748B; font-size: 10px; }
 
+  /* Section toggle button */
   .dl-section-btn {
     display: flex; align-items: center; gap: 8px; padding: 10px 16px;
     background: none; border: none; color: #94A3B8; font-size: 12px;
@@ -94,9 +68,9 @@ const styles = `
   .dl-sidebar-signout { color: #64748B; font-size: 10px; cursor: pointer; background: none; border: none; font-family: inherit; padding: 0; margin-top: 2px; }
   .dl-sidebar-signout:hover { color: #EF4444; }
 
-  /* ── Main area ── */
-  .dl-main { flex: 1; margin-left: 60px; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; overflow-x: hidden; background: #0B1120; }
-  .dl-main-content { flex: 1; }
+  /* ── Main area – margin matches the 208 px sidebar ── */
+  .dl-main { flex: 1; margin-left: 208px; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; overflow-x: hidden; background: #0B1120; }
+  .dl-main-content { flex: 1; }   /* fixes large‑screen blank space */
 
   .dl-topbar { background: #0F172A; border-bottom: 1px solid #1E293B; padding: 0 24px; display: flex; align-items: center; min-height: 64px; gap: 16px; position: sticky; top: 0; z-index: 30; }
   .dl-topbar-greeting { flex: 1; min-width: 0; }
@@ -125,7 +99,7 @@ const styles = `
   }
 
   @media (max-width: 640px) {
-    .dl-sidebar { transform: translateX(-60px); width: 260px; min-width: 260px; }
+    .dl-sidebar { transform: translateX(-208px); width: 260px; min-width: 260px; }
     .dl-sidebar.mobile-open { transform: translateX(0); }
     .dl-sidebar.mobile-open .dl-sidebar-logo-name, .dl-sidebar.mobile-open .dl-sidebar-logo-sub,
     .dl-sidebar.mobile-open .dl-nav-section, .dl-sidebar.mobile-open .dl-nav-group-label,
