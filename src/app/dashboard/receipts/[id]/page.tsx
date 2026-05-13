@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Printer, MessageCircle, ExternalLink } from "lucide-react"
+import { ArrowLeft, Printer, MessageCircle } from "lucide-react"
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
 
@@ -130,30 +130,93 @@ export default function ReceiptDetailPage() {
             font-size: 11px; color: #94A3B8; display: flex; align-items: center; gap: 6px;
             margin-top: 10px; border-top: 1px solid #F1F5F9; padding-top: 8px;
           }
+
+          /* Responsive */
+          @media (max-width: 640px) {
+            .grid-2col { grid-template-columns: 1fr; }
+            .action-row { flex-wrap: wrap; }
+          }
         `}</style>
 
-        {/* Back & Actions */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <button onClick={() => router.push("/dashboard/receipts")} style={{ background: "white", border: "1px solid #E2E8F0", borderRadius: 8, padding: "8px 12px", cursor: "pointer" }}>
+        {/* ── Professional Header ── */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <button
+              onClick={() => router.push("/dashboard/receipts")}
+              style={{
+                background: "white",
+                border: "1px solid #E2E8F0",
+                borderRadius: 8,
+                padding: "8px 14px",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#475569",
+              }}
+            >
               <ArrowLeft size={16} />
+              Back
             </button>
-            <div>
-              <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", margin: 0 }}>Receipt {receipt.receipt_no}</h1>
-              <p style={{ color: "#94A3B8", fontSize: 13 }}>Received</p>
+
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <h1 style={{ fontSize: 20, fontWeight: 800, color: "#1E293B", margin: 0 }}>
+                  {receipt.receipt_no}
+                </h1>
+                <span style={{
+                  background: receipt.status === "Completed" ? "#D1FAE5" : "#FEF3C7",
+                  color: receipt.status === "Completed" ? "#065F46" : "#92400E",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  padding: "2px 10px",
+                  borderRadius: 100,
+                  letterSpacing: 0.04,
+                }}>
+                  {receipt.status || "Active"}
+                </span>
+              </div>
+              <p style={{ color: "#94A3B8", fontSize: 13, margin: "4px 0 0" }}>
+                Received{receipt.date ? ` · ${new Date(receipt.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}` : ""}
+              </p>
             </div>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, background: "#EEF2FF", color: "#4338CA", border: "1px solid #C7D2FE", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-              <Printer size={14} /> Print PDF
-            </button>
-            <button style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, background: "#ECFDF5", color: "#065F46", border: "1px solid #A7F3D0", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-              <MessageCircle size={14} /> WhatsApp
-            </button>
+
+            {/* Action buttons */}
+            <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+              <button style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                padding: "8px 14px", borderRadius: 8,
+                background: "#EEF2FF", color: "#4338CA",
+                border: "1px solid #C7D2FE", fontWeight: 600, fontSize: 13, cursor: "pointer"
+              }}>
+                <Printer size={14} /> Print
+              </button>
+              <button style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                padding: "8px 14px", borderRadius: 8,
+                background: "#ECFDF5", color: "#065F46",
+                border: "1px solid #A7F3D0", fontWeight: 600, fontSize: 13, cursor: "pointer"
+              }}>
+                <MessageCircle size={14} /> WhatsApp
+              </button>
+              {role === "admin" && (
+                <button style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  padding: "8px 14px", borderRadius: 8,
+                  background: "#F1F5F9", color: "#475569",
+                  border: "1px solid #E2E8F0", fontWeight: 600, fontSize: 13, cursor: "pointer"
+                }}>
+                  ✏️ Edit
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Receipt Details Card */}
+        {/* ── Receipt Details Card ── */}
         <div className="card">
           <h2 style={{ fontSize: 16, fontWeight: 700, color: "#1E293B", marginBottom: 16 }}>Receipt details</h2>
           <div className="grid-2col">
@@ -196,7 +259,7 @@ export default function ReceiptDetailPage() {
           </div>
         </div>
 
-        {/* Change History – New Professional Timeline */}
+        {/* ── Change History – Professional Timeline ── */}
         <div className="card">
           <h2 style={{ fontSize: 16, fontWeight: 700, color: "#1E293B", marginBottom: 16 }}>Change history</h2>
           {auditLogs.length === 0 ? (
@@ -208,13 +271,13 @@ export default function ReceiptDetailPage() {
                 const badgeClass = action.toLowerCase() === "insert" ? "insert" : action.toLowerCase() === "update" ? "update" : "delete"
                 const dotClass = action.toLowerCase() === "insert" ? "insert" : action.toLowerCase() === "update" ? "update" : "delete"
 
-                // Extract new/old values as an object
+                // Parse new_values
                 let values: Record<string, any> = {}
                 if (log.new_values) {
                   try { values = JSON.parse(log.new_values) } catch { values = log.new_values }
                 }
 
-                // Build pills from new_values (ignore empty and technical fields)
+                // Build pills (exclude technical fields)
                 const pills = Object.entries(values)
                   .filter(([k]) => !["id", "company_id", "created_at", "updated_at", "deleted_at", "changed_at", "changed_by"].includes(k))
                   .map(([key, val]) => ({ key, value: val }))

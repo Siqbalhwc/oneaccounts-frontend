@@ -243,7 +243,17 @@ export async function POST(request: NextRequest) {
   }
 
   // Audit log
-  await logDataChange('receipts', String(receipt.id), 'INSERT', undefined, receipt)
+  // Audit log with user email
+const { data: { user: auditUser } } = await supabase.auth.getUser()
+await supabaseAdmin.from("data_change_logs").insert({
+  table_name: "receipts",
+  record_id: String(receipt.id),
+  action: "INSERT",
+  old_data: null,
+  new_data: receipt,
+  changed_by: auditUser?.email || auditUser?.id || null,
+  changed_at: new Date().toISOString(),
+})
 
   return NextResponse.json({ success: true, receipt_no: recNo, receipt })
 }
