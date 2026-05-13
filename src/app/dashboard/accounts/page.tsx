@@ -1,17 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { Plus, Pencil, Search } from "lucide-react"
+import { Plus, ArrowUpDown, ArrowUp, ArrowDown, Search } from "lucide-react"
+import RoleGuard from "@/components/RoleGuard"
+import { useRole } from "@/contexts/RoleContext"
 
-const CODE_RANGES: Record<string, { min: number; max: number }> = {
-  Asset:    { min: 1000, max: 1999 },
-  Liability:{ min: 2000, max: 2999 },
-  Equity:   { min: 3000, max: 3999 },
-  Revenue:  { min: 4000, max: 4999 },
-  Expense:  { min: 5000, max: 5999 },
-}
+type SortField = "code" | "name" | "type"
+type SortDir = "asc" | "desc"
 
 export default function AccountsPage() {
   const router = useRouter()
@@ -19,399 +16,194 @@ export default function AccountsPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
+  const { role } = useRole()
+  const canView = role === "admin" || role === "accountant"
+  const canEdit = role === "admin"
 
   const [accounts, setAccounts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState("All")
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [companyId, setCompanyId] = useState<string>("")
   const [search, setSearch] = useState("")
+  const [sortField, setSortField] = useState<SortField>("code")
+  const [sortDir, setSortDir] = useState<SortDir>("asc")
 
-  // Bank mapping
-  const [bankMap, setBankMap] = useState<Record<number, any>>({})
-
-  // Lookup lists
-  const [projects, setProjects] = useState<any[]>([])
-  const [locations, setLocations] = useState<any[]>([])
-  const [activities, setActivities] = useState<any[]>([])
-
-  // Modal state
-  const [showModal, setShowModal] = useState(false)
-  const [editId, setEditId] = useState<string | null>(null)
-  const [formCode, setFormCode] = useState("")
-  const [formName, setFormName] = useState("")
-  const [formType, setFormType] = useState("Asset")
-  const [defaultProjectId, setDefaultProjectId] = useState<number | null>(null)
-  const [defaultLocationId, setDefaultLocationId] = useState<number | null>(null)
-  const [defaultActivityId, setDefaultActivityId] = useState<number | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [modalError, setModalError] = useState("")
-
+  // Fetch accounts
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      const cid = (user?.app_metadata as any)?.company_id
-        || '00000000-0000-0000-0000-000000000001'
-      setCompanyId(cid)
+    if (!role) return
+    if (!canView) { setLoading(false); return }
+    supabase
+      .from("accounts")
+      .select("*")
+      .order("code", { ascending: true })
+      .then(({ data }) => {
+        setAccounts(data || [])
+        setLoading(false)
+      })
+  }, [role, canView])
 
-      // Fetch accounts
-      supabase
-        .from("accounts")
-        .select("*")
-        .eq("company_id", cid)
-        .order("code")
-        .then(r => {
-          if (r.data) setAccounts(r.data)
-          setLoading(false)
-        })
+  // Filtered and sorted accounts
+  const filteredAccounts = useMemo(() => {
+    let list = accounts
 
-      // Admin check
-      supabase.from("user_roles")
-        .select("role")
-        .eq("user_id", user!.id)
-        .eq("company_id", cid)
-        .maybeSingle()
-        .then(({ data }) => {
-          if (data?.role === "admin") setIsAdmin(true)
-        })
+    // Filter by search
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      list = list.filter(
+        (a) =>
+          a.code?.toLowerCase().includes(q) ||
+          a.name?.toLowerCase().includes(q) ||
+          a.type?.toLowerCase().includes(q)
+      )
+    }
 
-      // Linked bank accounts
-      supabase
-        .from("bank_accounts")
-        .select("account_id, bank_name, id")
-        .eq("company_id", cid)
-        .then(r => {
-          if (r.data) {
-            const map: Record<number, any> = {}
-            r.data.forEach((b: any) => {
-              map[b.account_id] = { bankName: b.bank_name, bankId: b.id }
-            })
-            setBankMap(map)
-          }
-        })
-
-      // Lookup lists
-      supabase.from("projects").select("id, name").eq("company_id", cid).order("name").then(r => r.data && setProjects(r.data))
-      supabase.from("locations").select("id, name").eq("company_id", cid).order("name").then(r => r.data && setLocations(r.data))
-      supabase.from("activities").select("id, name").eq("company_id", cid).order("name").then(r => r.data && setActivities(r.data))
+    // Sort
+    list = [...list].sort((a, b) => {
+      let valA = (a[sortField] || "").toString().toLowerCase()
+      let valB = (b[sortField] || "").toString().toLowerCase()
+      // Numeric sort for code if both are numbers
+      if (sortField === "code") {
+        const numA = parseFloat(a.code)
+        const numB = parseFloat(b.code)
+        if (!isNaN(numA) && !isNaN(numB)) {
+          valA = numA.toString().padStart(10, "0")
+          valB = numB.toString().padStart(10, "0")
+        }
+      }
+      if (valA < valB) return sortDir === "asc" ? -1 : 1
+      if (valA > valB) return sortDir === "asc" ? 1 : -1
+      return 0
     })
-  }, [])
 
-  const types = ["All", "Asset", "Liability", "Equity", "Revenue", "Expense"]
+    return list
+  }, [accounts, search, sortField, sortDir])
 
-  // Filtered list (by type + search)
-  let filtered = filter === "All" ? accounts : accounts.filter(a => a.type === filter)
-  if (search.trim()) {
-    const s = search.toLowerCase()
-    filtered = filtered.filter(a => a.code.includes(s) || a.name.toLowerCase().includes(s))
-  }
-
-  // Compute summary from all accounts (not filtered)
-  const totalAssets = accounts.filter(a => a.type === "Asset").reduce((sum, a) => sum + (a.balance || 0), 0)
-  const totalLiabilities = accounts.filter(a => a.type === "Liability").reduce((sum, a) => sum + (a.balance || 0), 0)
-  const totalRevenue = accounts.filter(a => a.type === "Revenue").reduce((sum, a) => sum + (a.balance || 0), 0)
-  const totalExpense = accounts.filter(a => a.type === "Expense").reduce((sum, a) => sum + (a.balance || 0), 0)
-  const netProfit = totalRevenue - totalExpense
-
-  // ── Next available code suggestion ──
-  const getNextCodeForType = (type: string): string => {
-    const range = CODE_RANGES[type]
-    if (!range) return ""
-    // find max numeric code for this type among existing accounts
-    const codesOfType = accounts.filter(a => a.type === type).map(a => parseInt(a.code, 10)).filter(n => !isNaN(n))
-    const maxCode = codesOfType.length > 0 ? Math.max(...codesOfType) : range.min - 1
-    const next = Math.max(range.min, maxCode + 1)
-    if (next > range.max) return "" // range exhausted
-    return String(next)
-  }
-
-  const handleTypeChange = (newType: string) => {
-    setFormType(newType)
-    if (!editId) {
-      // only suggest when adding a new account
-      const suggested = getNextCodeForType(newType)
-      setFormCode(suggested || "")
-    }
-  }
-
-  const typeColors: Record<string, string> = {
-    Asset: "#1E3A8A",
-    Liability: "#EF4444",
-    Equity: "#8B5CF6",
-    Revenue: "#10B981",
-    Expense: "#F59E0B",
-  }
-
-  const openAdd = () => {
-    setEditId(null)
-    setFormCode("")
-    setFormName("")
-    setFormType("Asset")
-    setDefaultProjectId(null)
-    setDefaultLocationId(null)
-    setDefaultActivityId(null)
-    setModalError("")
-    // Auto‑suggest code for default type "Asset"
-    setFormCode(getNextCodeForType("Asset") || "")
-    setShowModal(true)
-  }
-
-  const openEdit = (acct: any) => {
-    setEditId(acct.id)
-    setFormCode(String(acct.code))
-    setFormName(acct.name)
-    setFormType(acct.type)
-    setDefaultProjectId(acct.default_project_id || null)
-    setDefaultLocationId(acct.default_location_id || null)
-    setDefaultActivityId(acct.default_activity_id || null)
-    setModalError("")
-    setShowModal(true)
-  }
-
-  const handleSave = async () => {
-    if (!formCode.trim() || !formName.trim()) return
-    setSaving(true)
-    setModalError("")
-
-    const payload = {
-      code: formCode.trim(),
-      name: formName.trim(),
-      type: formType,
-      default_project_id: defaultProjectId,
-      default_location_id: defaultLocationId,
-      default_activity_id: defaultActivityId,
-    }
-
-    if (editId) {
-      const { error } = await supabase
-        .from("accounts")
-        .update(payload)
-        .eq("id", editId)
-        .eq("company_id", companyId)
-      if (error) {
-        setModalError(error.message)
-        setSaving(false)
-        return
-      }
-      setAccounts(prev => prev.map(a => a.id === editId ? { ...a, ...payload } : a))
+  // Toggle sort
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"))
     } else {
-      if (!companyId) {
-        setModalError("Company ID not available.")
-        setSaving(false)
-        return
-      }
-      const { data: inserted, error } = await supabase
-        .from("accounts")
-        .insert({ ...payload, company_id: companyId })
-        .select()
-        .single()
-      if (error) {
-        setModalError(error.message)
-        setSaving(false)
-        return
-      }
-      setAccounts(prev => [...prev, inserted].sort((a, b) => a.code.localeCompare(b.code)))
+      setSortField(field)
+      setSortDir("asc")
     }
-
-    setSaving(false)
-    setShowModal(false)
   }
 
-  const range = CODE_RANGES[formType]
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown size={12} />
+    return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+  }
+
+  if (!role) return <div style={{ padding: 24, textAlign: "center" }}>Loading…</div>
+  if (!canView) {
+    return (
+      <div style={{ padding: 24, textAlign: "center" }}>
+        <h2>Access Denied</h2>
+        <p style={{ color: "#94A3B8" }}>You do not have permission to view this page.</p>
+      </div>
+    )
+  }
 
   return (
-    <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-      <style>{`
-        .card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-        .input { height: 38px; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0 12px; font-size: 13px; box-sizing: border-box; }
-        .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-        .btn-primary { background: #1D4ED8; color: white; }
-        .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); display: flex; justify-content: center; align-items: center; z-index: 1000; }
-        .modal-box { background: white; border-radius: 12px; padding: 24px; max-width: 480px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
-        .field-label { font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; display: block; }
-        .pill { padding: 6px 14px; border-radius: 20px; border: 1px solid #E2E8F0; background: white; color: #64748B; font-size: 12px; font-weight: 600; cursor: pointer; }
-        .pill.active { background: #1E3A8A; color: white; border-color: #1E3A8A; }
-        .row { display: grid; grid-template-columns: 80px 1fr 100px 120px 120px 50px; padding: 10px 16px; border-bottom: 1px solid #F1F5F9; font-size: 13px; align-items: center; cursor: pointer; transition: background 0.1s; }
-        .row:hover { background: #FAFBFF; }
-        .row-header { display: grid; grid-template-columns: 80px 1fr 100px 120px 120px 50px; padding: 10px 16px; background: #F8FAFC; font-size: 9px; font-weight: 700; text-transform: uppercase; color: #94A3B8; }
-        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
-        @media (max-width: 600px) {
-          .row, .row-header { grid-template-columns: 80px 1fr 80px 80px; }
-          .hide-mobile { display: none; }
-        }
-      `}</style>
+    <RoleGuard allowedRoles={["admin", "accountant"]}>
+      <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        <style>{`
+          .ac-card {
+            background: white; border-radius: 12px; border: 1px solid #E2E8F0;
+            padding: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.04); overflow: hidden;
+          }
+          .ac-header {
+            display: grid; grid-template-columns: 80px 1fr 100px 100px;
+            padding: 12px 20px; background: #F8FAFC;
+            font-size: 10px; font-weight: 700; text-transform: uppercase;
+            color: #94A3B8; cursor: default; border-bottom: 1px solid #E2E8F0;
+          }
+          .ac-row {
+            display: grid; grid-template-columns: 80px 1fr 100px 100px;
+            padding: 10px 20px; border-bottom: 1px solid #F1F5F9;
+            font-size: 13px; align-items: center; transition: background 0.15s;
+          }
+          .ac-row:hover { background: #FAFBFF; }
+          .ac-row:last-child { border-bottom: none; }
+          .ac-sort-btn {
+            background: none; border: none; cursor: pointer;
+            font: inherit; color: inherit; display: inline-flex; align-items: center; gap: 4px;
+            padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px;
+          }
+          .ac-sort-btn:hover { color: #1E3A8A; }
+          .ac-search {
+            height: 38px; border: 1.5px solid #E2E8F0; border-radius: 8px;
+            padding: 0 12px 0 36px; font-size: 13px; width: 260px;
+            box-sizing: border-box; outline: none; font-family: inherit;
+          }
+          .ac-search:focus { border-color: #1D4ED8; }
+          .btn {
+            padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600;
+            font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+          }
+          .btn-primary { background: #1D4ED8; color: white; }
+          .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
+          @media (max-width: 640px) {
+            .ac-header, .ac-row { grid-template-columns: 60px 1fr 80px 80px; padding: 8px 12px; }
+            .ac-search { width: 100%; }
+          }
+        `}</style>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", margin: 0 }}>📊 Chart of Accounts</h1>
-          <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>Manage your chart of accounts</p>
-        </div>
-        {isAdmin && (
-          <button className="btn btn-primary" onClick={openAdd}>
-            <Plus size={15} /> Add Account
-          </button>
-        )}
-      </div>
-
-      {/* Summary Cards */}
-      <div className="summary-grid">
-        <div className="card">
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Accounts</div>
-          <div style={{ fontSize: 24, fontWeight: 800 }}>{accounts.length}</div>
-        </div>
-        <div className="card">
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Net Profit</div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: netProfit >= 0 ? "#059669" : "#dc2626" }}>
-            PKR {netProfit.toLocaleString()}
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", margin: 0 }}>📋 Chart of Accounts</h1>
+            <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>Manage your general ledger accounts</p>
           </div>
-        </div>
-        <div className="card">
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Assets</div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: "#1E3A8A" }}>
-            PKR {totalAssets.toLocaleString()}
-          </div>
-        </div>
-        <div className="card">
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Liabilities</div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: "#B91C1C" }}>
-            PKR {totalLiabilities.toLocaleString()}
-          </div>
-        </div>
-      </div>
-
-      {/* Type filter pills */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-        {types.map(t => (
-          <button key={t} className={`pill ${filter === t ? "active" : ""}`} onClick={() => setFilter(t)}>
-            {t}
-          </button>
-        ))}
-      </div>
-
-      {/* Search */}
-      <div style={{ maxWidth: 300, marginBottom: 16 }}>
-        <div style={{ position: "relative" }}>
-          <Search size={14} style={{ position: "absolute", left: 10, top: 12, color: "#94A3B8" }} />
-          <input className="input" style={{ paddingLeft: 32, width: "100%" }} placeholder="Search code or name..." value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-      </div>
-
-      {loading ? (
-        <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading...</div>
-      ) : (
-        <div className="card" style={{ padding: 0, overflowX: "auto" }}>
-          <div className="row-header" style={{ borderBottom: "2px solid #E2E8F0" }}>
-            <span>Code</span>
-            <span>Name</span>
-            <span>Type</span>
-            <span style={{ textAlign: "right" }}>Current Balance</span>
-            <span className="hide-mobile">Bank</span>
-            {isAdmin && <span></span>}
-          </div>
-          {filtered.map((a, i) => (
-            <div key={a.id} className="row" onClick={() => router.push(`/dashboard/reports/ledger?accountId=${a.id}`)}>
-              <span style={{ fontWeight: 700, color: "#1E3A8A" }}>{a.code}</span>
-              <span>{a.name}</span>
-              <span>
-                <span style={{
-                  padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 600,
-                  background: (typeColors[a.type] || "#64748B") + "18",
-                  color: typeColors[a.type] || "#64748B",
-                }}>{a.type}</span>
-              </span>
-              <span style={{ textAlign: "right", fontWeight: 600 }}>
-                PKR {(a.balance || 0).toLocaleString()}
-              </span>
-              <span className="hide-mobile" style={{ fontSize: 12, color: "#1E3A8A" }}>
-                {bankMap[a.id]?.bankName || "—"}
-                {bankMap[a.id]?.bankId && (
-                  <span style={{ marginLeft: 6, cursor: "pointer", color: "#1D4ED8" }} onClick={(e) => { e.stopPropagation(); router.push("/dashboard/banking/bank-accounts") }}>🔗</span>
-                )}
-              </span>
-              {isAdmin && (
-                <span style={{ textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); openEdit(a); }}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "#64748B", padding: 0 }}
-                    title="Edit account"
-                  >
-                    <Pencil size={14} />
-                  </button>
-                </span>
-              )}
-            </div>
-          ))}
-          {filtered.length === 0 && (
-            <div style={{ padding: 20, textAlign: "center", color: "#94A3B8" }}>No accounts found.</div>
+          {canEdit && (
+            <button className="btn btn-primary" onClick={() => router.push("/dashboard/accounts/new")}>
+              <Plus size={16} /> Add Account
+            </button>
           )}
         </div>
-      )}
 
-      {/* Add / Edit Modal */}
-      {showModal && (
-        <div className="modal-overlay">
-          <div className="modal-box">
-            <h3 style={{ marginTop: 0, marginBottom: 4 }}>{editId ? "Edit Account" : "Add New Account"}</h3>
-            <p style={{ fontSize: 12, color: "#94A3B8", marginBottom: 16 }}>
-              {editId ? "Update the account name, code, or type." : "Create a new account. The code is auto‑suggested for the type."}
-            </p>
-
-            <label className="field-label">Account Type</label>
-            <select className="input" style={{ width: "100%", marginBottom: 10 }} value={formType} onChange={e => handleTypeChange(e.target.value)}>
-              {Object.keys(CODE_RANGES).map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-            {range && (
-              <p style={{ fontSize: 11, color: "#64748B", marginTop: -8, marginBottom: 10 }}>
-                Recommended range: {range.min} – {range.max} {!editId && formCode && `(Next available: ${formCode})`}
-              </p>
-            )}
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-              <div>
-                <label className="field-label">Account Code *</label>
-                <input className="input" style={{ width: "100%" }} type="text" placeholder={range ? `${range.min + 1}` : "Enter code"} value={formCode} onChange={e => setFormCode(e.target.value)} />
-              </div>
-              <div>
-                <label className="field-label">Account Name *</label>
-                <input className="input" style={{ width: "100%" }} type="text" placeholder="e.g., Office Supplies" value={formName} onChange={e => setFormName(e.target.value)} />
-              </div>
-            </div>
-
-            <div className="field-label" style={{ marginBottom: 8 }}>Default Budget Tags</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-              <div>
-                <label className="field-label">Project</label>
-                <select className="input" style={{ width: "100%" }} value={defaultProjectId ?? ""} onChange={e => setDefaultProjectId(e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">— None —</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="field-label">Location</label>
-                <select className="input" style={{ width: "100%" }} value={defaultLocationId ?? ""} onChange={e => setDefaultLocationId(e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">— None —</option>
-                  {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                </select>
-              </div>
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <label className="field-label">Activity</label>
-              <select className="input" style={{ width: "100%" }} value={defaultActivityId ?? ""} onChange={e => setDefaultActivityId(e.target.value ? Number(e.target.value) : null)}>
-                <option value="">— None —</option>
-                {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
-            </div>
-
-            {modalError && <div style={{ color: "#B91C1C", fontSize: 12, marginBottom: 10 }}>{modalError}</div>}
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-              <button className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleSave} disabled={saving || !formCode.trim() || !formName.trim()}>
-                {saving ? "Saving..." : editId ? "Update" : "Create"}
-              </button>
-            </div>
-          </div>
+        {/* Search */}
+        <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
+          <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#94A3B8" }} />
+          <input
+            className="ac-search"
+            placeholder="Filter by code, name or type..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
-      )}
-    </div>
+
+        {/* Table */}
+        {loading ? (
+          <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading accounts…</div>
+        ) : filteredAccounts.length === 0 ? (
+          <div className="ac-card" style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>
+            No accounts found. {canEdit && "Add a new account to get started."}
+          </div>
+        ) : (
+          <div className="ac-card">
+            <div className="ac-header">
+              <button className="ac-sort-btn" onClick={() => handleSort("code")}>
+                Code {getSortIcon("code")}
+              </button>
+              <button className="ac-sort-btn" onClick={() => handleSort("name")}>
+                Name {getSortIcon("name")}
+              </button>
+              <button className="ac-sort-btn" onClick={() => handleSort("type")}>
+                Type {getSortIcon("type")}
+              </button>
+              <span style={{ textAlign: "right" }}>Balance</span>
+            </div>
+            {filteredAccounts.map((a) => (
+              <div key={a.id} className="ac-row">
+                <span style={{ fontWeight: 600, color: "#1E3A8A" }}>{a.code}</span>
+                <span style={{ color: "#334155" }}>{a.name}</span>
+                <span style={{ fontSize: 11, color: "#64748B" }}>{a.type}</span>
+                <span style={{ textAlign: "right", fontWeight: 600, color: a.balance >= 0 ? "#10B981" : "#EF4444" }}>
+                  PKR {(a.balance || 0).toLocaleString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </RoleGuard>
   )
 }
