@@ -22,7 +22,7 @@ const styles = `
     border-right: 1px solid #1E293B;
   }
   .dl-sidebar:hover {
-    width: 208px;  /* prevent accidental expansion */
+    width: 208px;
   }
 
   .dl-sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 20px 18px; border-bottom: 1px solid #1E293B; min-height: 68px; }
@@ -67,7 +67,7 @@ const styles = `
 
   /* ── Main area ── */
   .dl-main { flex: 1; margin-left: 208px; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; overflow-x: hidden; background: #0B1120; }
-  .dl-main-content { flex: 1; }   /* fixes large‑screen blank space */
+  .dl-main-content { flex: 1; background: #0B1120; }
 
   .dl-topbar { background: #0F172A; border-bottom: 1px solid #1E293B; padding: 0 24px; display: flex; align-items: center; min-height: 64px; gap: 16px; position: sticky; top: 0; z-index: 30; }
   .dl-topbar-greeting { flex: 1; min-width: 0; }
@@ -116,42 +116,49 @@ const styles = `
     .dl-action-btn { padding: 6px 4px; font-size: 9px; }
   }
 
-  /* ── Global dark theme for all internal pages (except the Dashboard) ── */
-  /* These overrides will turn every card, table, input, and form dark. */
+  /* ══════════════════ GLOBAL DARK THEME ══════════════════ */
+  /* Override ALL white/light backgrounds and text */
+  body, .dl-shell, .dl-main, .dl-main-content {
+    background: #0B1120 !important;
+  }
 
-  /* Cards */
-  .card, .tb-card, .inv-card, .pay-card, .ac-card, .form-card {
+  /* Force dark background on any div directly under main content (Dashboard wrapper) */
+  .dl-main-content > div {
+    background: #0B1120 !important;
+  }
+
+  /* Cards – used almost everywhere */
+  .card, .tb-card, .inv-card, .pay-card, .ac-card, .form-card,
+  .log-table, .tb-summary-item {
     background: #111827 !important;
     border: 1px solid #1E293B !important;
     color: #E2E8F0 !important;
     box-shadow: 0 1px 3px rgba(0,0,0,0.2) !important;
   }
-  /* Inputs & selects */
-  .input, .filter-select, select.input, input.input, .pay-input, .inv-input, .ac-search,
+
+  /* Inputs & selects – forms, filters, search bars */
+  .input, .filter-select, select.input, input.input,
+  .pay-input, .inv-input, .ac-search,
   .inv-select, .pay-select, .filter-select, .input-budget {
     background: #1E293B !important;
     border-color: #334155 !important;
     color: #F1F5F9 !important;
   }
-  .input:focus, .filter-select:focus, .pay-input:focus, .inv-input:focus, .ac-search:focus,
-  .inv-select:focus, .pay-select:focus {
+  .input:focus, .filter-select:focus, .pay-input:focus, .inv-input:focus,
+  .ac-search:focus, .inv-select:focus, .pay-select:focus {
     border-color: #2563EB !important;
     outline: none !important;
   }
+
   /* Buttons */
-  .btn-primary {
-    background: #2563EB !important;
-    color: white !important;
-  }
-  .btn-outline {
-    background: transparent !important;
-    border: 1.5px solid #334155 !important;
-    color: #CBD5E1 !important;
-  }
+  .btn-primary { background: #2563EB !important; color: white !important; }
+  .btn-outline { background: transparent !important; border: 1.5px solid #334155 !important; color: #CBD5E1 !important; }
+
   /* Labels */
   .label, .pay-label, .inv-label, .ac-label, .tb-label {
     color: #64748B !important;
   }
+
   /* Tables */
   table, .table {
     background: #111827 !important;
@@ -165,7 +172,8 @@ const styles = `
   table td, .table td {
     border-color: #1E293B !important;
   }
-  .row-header, .tb-table-header, .ac-header, .journal-header {
+  .row-header, .tb-table-header, .ac-header, .journal-header,
+  .log-row-header {
     background: #1E293B !important;
   }
   .row, .tb-row, .ac-row, .journal-row {
@@ -175,25 +183,13 @@ const styles = `
   .row:hover, .tb-row:hover, .ac-row:hover, .journal-row:hover {
     background: #1E293B !important;
   }
-  /* Summary items */
-  .tb-summary-item, .log-table {
-    background: #111827 !important;
-    border-color: #1E293B !important;
-  }
-  /* Ensure text inside these elements is visible */
-  .tb-summary-item *, .tb-card *, .inv-card *, .pay-card *, .ac-card *, .form-card *,
-  .card * {
+
+  /* Ensure text inside cards is always light */
+  .card *, .tb-card *, .inv-card *, .pay-card *, .ac-card *, .form-card *,
+  .tb-summary-item *, .log-table * {
     color: inherit !important;
   }
-  /* Specific overrides for some old inline styles (if any) */
-  .tb-summary-item div {
-    color: inherit !important;
-  }
-  /* Fix the budget input */
-  .input-budget {
-    background: #1E293B !important;
-    color: white !important;
-  }
+
   /* Log tabs */
   .log-tab {
     background: #1E293B !important;
@@ -205,14 +201,8 @@ const styles = `
     color: white !important;
     border-color: #2563EB !important;
   }
-  /* Profit & Loss / Balance sheet text */
-  .clickable, .clickable-cat, .clickable-row {
-    color: #E2E8F0 !important;
-  }
-  .clickable:hover, .clickable-cat:hover, .clickable-row:hover {
-    color: #2563EB !important;
-  }
-  /* Override any remaining white backgrounds in rows */
+
+  /* Budget table special overrides */
   .act-header td {
     background: #1E293B !important;
     color: #E2E8F0 !important;
@@ -221,6 +211,35 @@ const styles = `
     background: #1E293B !important;
     color: #94A3B8 !important;
   }
+
+  /* Clickable drill-down elements */
+  .clickable, .clickable-cat, .clickable-row {
+    color: #E2E8F0 !important;
+  }
+  .clickable:hover, .clickable-cat:hover, .clickable-row:hover {
+    color: #2563EB !important;
+  }
+
+  /* Dashboard specific cards (ManagementDashboard uses inline styles, override with !important) */
+  /* If any card still shows white, force its background here */
+  [class*="card"] {
+    background: #111827 !important;
+    border-color: #1E293B !important;
+  }
+
+  /* Override any remaining inline white backgrounds on containers */
+  div[style*="background: white"], div[style*="background: #fff"],
+  div[style*="background: #ffffff"] {
+    background: #111827 !important;
+  }
+
+  /* Ensure all font colors are legible */
+  h1, h2, h3, h4, h5, h6, p, span, a, li, td, th, label, input, select, textarea {
+    color: inherit;
+  }
+
+  /* Specific fix for Dashboard greeting text (it uses inline style, so we leave it) */
+  /* The greeting is already white (#F1F5F9) from topbar styles – no change needed */
 `
 
 // ── Navigation structure (unchanged) ──
