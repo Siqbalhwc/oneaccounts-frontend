@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Printer, Send } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
+import RecordHistory from "@/components/RecordHistory"
 
 interface Receipt {
   id: number
@@ -14,19 +15,9 @@ interface Receipt {
   party_id: number
   bank_id: number
   notes: string
-  customer?: {
-    name: string
-    code: string
-    phone?: string
-    country_code?: string
-  }
-  bank_accounts?: {
-    bank_name: string
-  }
-  allocations?: {
-    invoice_no: string
-    amount: number
-  }[]
+  customer?: { name: string; code: string; phone?: string; country_code?: string }
+  bank_accounts?: { bank_name: string }
+  allocations?: { invoice_no: string; amount: number }[]
 }
 
 export default function ReceiptDetailPage() {
@@ -43,11 +34,7 @@ export default function ReceiptDetailPage() {
   const [companyId, setCompanyId] = useState<string>("")
 
   const [companySettings, setCompanySettings] = useState<{
-    name?: string
-    address?: string
-    phone?: string
-    email?: string
-    logo_url?: string
+    name?: string; address?: string; phone?: string; email?: string; logo_url?: string
   }>({})
 
   useEffect(() => {
@@ -62,9 +49,7 @@ export default function ReceiptDetailPage() {
     if (!companyId || !receiptId) return
     setLoading(true)
 
-    // Fetch receipt (no join to keep it safe)
-    supabase
-      .from("receipts")
+    supabase.from("receipts")
       .select("*")
       .eq("id", receiptId)
       .eq("company_id", companyId)
@@ -74,50 +59,38 @@ export default function ReceiptDetailPage() {
 
         const rec: Receipt = data
 
-        // Fetch customer & bank in parallel
-        const fetchCustomer = rec.party_id
-          ? supabase
-              .from("customers")
-              .select("name, code, phone, country_code")
-              .eq("id", rec.party_id)
-              .single()
-              .then(({ data: cust }) => {
-                rec.customer = cust || undefined
-              })
-          : Promise.resolve()
-
-        const fetchBank = rec.bank_id
-          ? supabase
-              .from("bank_accounts")
-              .select("bank_name")
-              .eq("id", rec.bank_id)
-              .single()
-              .then(({ data: bank }) => {
-                rec.bank_accounts = bank || undefined
-              })
-          : Promise.resolve()
-
-        Promise.all([fetchCustomer, fetchBank]).then(() => {
-          // Fetch allocations
-          supabase
-            .from("payment_allocations")
-            .select("amount, invoices(invoice_no)")
-            .eq("receipt_id", rec.id)
-            .eq("company_id", companyId)
-            .then(({ data: allocs }) => {
-              rec.allocations = (allocs || []).map((a: any) => ({
-                invoice_no: a.invoices?.invoice_no || "—",
-                amount: a.amount,
-              }))
-              setReceipt(rec)
-              setLoading(false)
-            })
-        })
+        // Fetch customer
+        if (rec.party_id) {
+          supabase.from("customers")
+            .select("name, code, phone, country_code")
+            .eq("id", rec.party_id)
+            .single()
+            .then(({ data: cust }) => { rec.customer = cust || undefined })
+        }
+        // Fetch bank
+        if (rec.bank_id) {
+          supabase.from("bank_accounts")
+            .select("bank_name")
+            .eq("id", rec.bank_id)
+            .single()
+            .then(({ data: bank }) => { rec.bank_accounts = bank || undefined })
+        }
+        // Fetch allocations
+        supabase.from("payment_allocations")
+          .select("amount, invoices(invoice_no)")
+          .eq("receipt_id", rec.id)
+          .eq("company_id", companyId)
+          .then(({ data: allocs }) => {
+            rec.allocations = (allocs || []).map((a: any) => ({
+              invoice_no: a.invoices?.invoice_no || "—",
+              amount: a.amount,
+            }))
+            setReceipt(rec)
+            setLoading(false)
+          })
       })
 
-    // Fetch company settings for PDF
-    supabase
-      .from("company_settings")
+    supabase.from("company_settings")
       .select("company_name, address, phone, email, logo_url")
       .limit(1)
       .maybeSingle()
@@ -139,7 +112,7 @@ export default function ReceiptDetailPage() {
     const code = (receipt.customer.country_code || "+92").replace(/\D/g, "")
     const phone = (receipt.customer.phone || "").replace(/\D/g, "")
     if (!phone) return ""
-    const msg = `Dear ${receipt.customer.name},\n\nWe've received your payment of PKR ${receipt.amount?.toLocaleString()} against receipt ${receipt.receipt_no}.\nDate: ${receipt.date}\n\nThank you for your business.\n— OneAccounts`
+    const msg = `Dear ${receipt.customer.name},\n\nWe've received your payment of PKR ${receipt.amount?.toLocaleString()} for receipt ${receipt.receipt_no}.\nDate: ${receipt.date}\n\nThank you.\n— OneAccounts`
     return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
   }
 
@@ -201,7 +174,7 @@ export default function ReceiptDetailPage() {
           </button>
           <div>
             <h1 style={{ fontSize: 24, fontWeight: 800, color: "#0a2940", margin: 0 }}>Receipt #{receipt.receipt_no}</h1>
-            <p style={{ color: "#2c5778", fontSize: 13, margin: 0 }}>{receipt.customer?.name || "Unknown Customer"}</p>
+            <p style={{ color: "#2c5778", fontSize: 13, margin: 0 }}>{receipt.customer?.name || "Receipt"}</p>
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -219,7 +192,7 @@ export default function ReceiptDetailPage() {
       <div className="card">
         <div className="row"><span className="label">Receipt No.</span><span className="value">{receipt.receipt_no}</span></div>
         <div className="row"><span className="label">Date</span><span className="value">{receipt.date}</span></div>
-        <div className="row"><span className="label">Customer</span><span className="value">{receipt.customer?.code} – {receipt.customer?.name}</span></div>
+        <div className="row"><span className="label">Customer</span><span className="value">{receipt.customer?.code} – {receipt.customer?.name || "—"}</span></div>
         <div className="row"><span className="label">Bank</span><span className="value">{receipt.bank_accounts?.bank_name || "—"}</span></div>
         <div className="row"><span className="label">Amount</span><span className="value" style={{ fontSize: 18, fontWeight: 700 }}>PKR {receipt.amount?.toLocaleString()}</span></div>
         <div className="row"><span className="label">Notes</span><span className="value">{receipt.notes || "—"}</span></div>
@@ -244,6 +217,16 @@ export default function ReceiptDetailPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ── ODOO‑STYLE HISTORY ── */}
+      {receipt && (
+        <div className="card">
+          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#0a2940", marginBottom: 12 }}>
+            📝 Change History
+          </h3>
+          <RecordHistory tableName="receipts" recordId={String(receipt.id)} />
         </div>
       )}
     </div>

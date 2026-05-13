@@ -2,6 +2,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
+import { logDataChange } from '@/lib/audit'
 
 const supabaseAdmin = createSupabaseClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -70,13 +71,13 @@ export async function POST(request: NextRequest) {
     bank_account_id: bank_account_id || null,
     reference,
     notes,
-  }).select('id').single()
+  }).select('*').single()
 
   if (insertErr || !payment) {
     return NextResponse.json({ error: insertErr?.message || 'Insert failed' }, { status: 500 })
   }
 
-  // Allocations
+  // Allocations to purchase bills
   if (allocations && Array.isArray(allocations) && allocations.length > 0) {
     for (const alloc of allocations) {
       const billId = alloc.bill_id
@@ -118,7 +119,7 @@ export async function POST(request: NextRequest) {
       .eq('id', party_id).eq('company_id', companyId)
   }
 
-  // GL entries: DR AP / CR Cash (or bank if chosen)
+  // ── Journal Entry: Dr AP (2000), Cr Cash (1000) ───────────────────────
   const apAcc = await supabaseAdmin.from('accounts')
     .select('id,balance').eq('code', '2000').eq('company_id', companyId).single()
   const cashAcc = await supabaseAdmin.from('accounts')
@@ -131,15 +132,21 @@ export async function POST(request: NextRequest) {
       date: date || new Date().toISOString().split('T')[0],
       description: `Payment - ${payNo}`,
     }).select('id').single()
+
     if (entry) {
       await supabaseAdmin.from('journal_lines').insert([
         { company_id: companyId, entry_id: entry.id, account_id: apAcc.data.id, debit: amount, credit: 0 },
         { company_id: companyId, entry_id: entry.id, account_id: cashAcc.data.id, debit: 0, credit: amount },
       ])
-      await supabaseAdmin.from('accounts').update({ balance: apAcc.data.balance - amount }).eq('id', apAcc.data.id)
-      await supabaseAdmin.from('accounts').update({ balance: cashAcc.data.balance - amount }).eq('id', cashAcc.data.id)
+      const newAp = (apAcc.data.balance || 0) - amount
+      const newCash = (cashAcc.data.balance || 0) - amount
+      await supabaseAdmin.from('accounts').update({ balance: newAp }).eq('id', apAcc.data.id)
+      await supabaseAdmin.from('accounts').update({ balance: newCash }).eq('id', cashAcc.data.id)
     }
   }
 
-  return NextResponse.json({ success: true, payment_no: payNo })
+  // Audit log
+  await logDataChange('payments', String(payment.id), 'INSERT', undefined, payment)
+
+  return NextResponse.json({ success: true, payment_no: payNo, payment })
 }
