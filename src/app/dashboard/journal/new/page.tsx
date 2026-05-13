@@ -243,7 +243,7 @@ export default function NewJournalPage() {
       return
     }
 
-    // 3. Insert lines (using "narration" column, and including donor_id)
+    // 3. Insert lines (now includes source_type and source_id)
     const { error: linesErr } = await supabase.from("journal_lines").insert(
       validLines.map((l) => ({
         company_id: companyId,
@@ -251,11 +251,13 @@ export default function NewJournalPage() {
         account_id: l.account_id,
         debit: l.debit,
         credit: l.credit,
-        narration: l.narration || null,          // ✅ correct column
+        narration: l.narration || null,
         location_id: l.location_id || null,
         activity_id: l.activity_id || null,
         project_id: l.project_id || null,
-        donor_id: l.donor_id || null,           // ✅ new
+        donor_id: l.donor_id || null,
+        source_type: 'manual_journal',   // ✅ new
+        source_id: entryId,              // ✅ new
       }))
     )
     if (linesErr) {
@@ -316,6 +318,8 @@ export default function NewJournalPage() {
           activity_id: l.activity_id,
           project_id: l.project_id,
           donor_id: l.donor_id,
+          source_type: 'manual_journal',   // ✅ new
+          source_id: entryId,              // ✅ new
         })),
       },
       changed_by: user?.id || null,
