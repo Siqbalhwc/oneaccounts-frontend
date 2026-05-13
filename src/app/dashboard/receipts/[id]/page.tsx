@@ -1,234 +1,269 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useRouter, useParams } from "next/navigation"
+import { useEffect, useState } from "react"
+import { useParams, useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Printer, Send } from "lucide-react"
-import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
-import RecordHistory from "@/components/RecordHistory"
-
-interface Receipt {
-  id: number
-  receipt_no: string
-  date: string
-  amount: number
-  party_id: number
-  bank_id: number
-  notes: string
-  customer?: { name: string; code: string; phone?: string; country_code?: string }
-  bank_accounts?: { bank_name: string }
-  allocations?: { invoice_no: string; amount: number }[]
-}
+import { ArrowLeft, Printer, MessageCircle, ExternalLink } from "lucide-react"
+import RoleGuard from "@/components/RoleGuard"
+import { useRole } from "@/contexts/RoleContext"
 
 export default function ReceiptDetailPage() {
+  const { id } = useParams()
   const router = useRouter()
-  const params = useParams()
-  const receiptId = params?.id as string
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
+  const { role } = useRole()
 
-  const [receipt, setReceipt] = useState<Receipt | null>(null)
+  const [receipt, setReceipt] = useState<any>(null)
+  const [customer, setCustomer] = useState<any>(null)
+  const [bank, setBank] = useState<any>(null)
+  const [auditLogs, setAuditLogs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [companyId, setCompanyId] = useState<string>("")
-
-  const [companySettings, setCompanySettings] = useState<{
-    name?: string; address?: string; phone?: string; email?: string; logo_url?: string
-  }>({})
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
-      const cid = (user?.app_metadata as any)?.company_id
-      if (cid) setCompanyId(cid)
-    })
-  }, [])
+    if (!role || !id) return
+    const fetchData = async () => {
+      // Receipt
+      const { data: rec } = await supabase
+        .from("receipts")
+        .select("*")
+        .eq("id", id)
+        .single()
+      if (!rec) { setLoading(false); return }
+      setReceipt(rec)
 
-  useEffect(() => {
-    if (!companyId || !receiptId) return
-    setLoading(true)
+      // Customer
+      if (rec.party_id) {
+        const { data: cust } = await supabase
+          .from("customers")
+          .select("id, code, name, phone, balance")
+          .eq("id", rec.party_id)
+          .single()
+        setCustomer(cust)
+      }
 
-    supabase.from("receipts")
-      .select("*")
-      .eq("id", receiptId)
-      .eq("company_id", companyId)
-      .single()
-      .then(({ data }) => {
-        if (!data) { setLoading(false); return }
+      // Bank
+      if (rec.bank_account_id) {
+        const { data: bk } = await supabase
+          .from("bank_accounts")
+          .select("id, bank_name, account_number, accounts(code)")
+          .eq("id", rec.bank_account_id)
+          .single()
+        setBank(bk)
+      }
 
-        const rec: Receipt = data
+      // Audit logs
+      const { data: logs } = await supabase
+        .from("data_change_logs")
+        .select("*")
+        .eq("table_name", "receipts")
+        .eq("record_id", String(id))
+        .order("changed_at", { ascending: true })
+      setAuditLogs(logs || [])
 
-        // Fetch customer
-        if (rec.party_id) {
-          supabase.from("customers")
-            .select("name, code, phone, country_code")
-            .eq("id", rec.party_id)
-            .single()
-            .then(({ data: cust }) => { rec.customer = cust || undefined })
-        }
-        // Fetch bank
-        if (rec.bank_id) {
-          supabase.from("bank_accounts")
-            .select("bank_name")
-            .eq("id", rec.bank_id)
-            .single()
-            .then(({ data: bank }) => { rec.bank_accounts = bank || undefined })
-        }
-        // Fetch allocations
-        supabase.from("payment_allocations")
-          .select("amount, invoices(invoice_no)")
-          .eq("receipt_id", rec.id)
-          .eq("company_id", companyId)
-          .then(({ data: allocs }) => {
-            rec.allocations = (allocs || []).map((a: any) => ({
-              invoice_no: a.invoices?.invoice_no || "—",
-              amount: a.amount,
-            }))
-            setReceipt(rec)
-            setLoading(false)
-          })
-      })
-
-    supabase.from("company_settings")
-      .select("company_name, address, phone, email, logo_url")
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) {
-          setCompanySettings({
-            name: data.company_name || "OneAccounts",
-            address: data.address || "",
-            phone: data.phone || "",
-            email: data.email || "",
-            logo_url: data.logo_url || null,
-          })
-        }
-      })
-  }, [companyId, receiptId])
-
-  const getWhatsAppLink = () => {
-    if (!receipt || !receipt.customer) return ""
-    const code = (receipt.customer.country_code || "+92").replace(/\D/g, "")
-    const phone = (receipt.customer.phone || "").replace(/\D/g, "")
-    if (!phone) return ""
-    const msg = `Dear ${receipt.customer.name},\n\nWe've received your payment of PKR ${receipt.amount?.toLocaleString()} for receipt ${receipt.receipt_no}.\nDate: ${receipt.date}\n\nThank you.\n— OneAccounts`
-    return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
-  }
-
-  const handlePrintPDF = () => {
-    if (!receipt) return
-    const pdfData = {
-      companyName: companySettings.name || "OneAccounts",
-      companyAddress: companySettings.address,
-      companyPhone: companySettings.phone,
-      companyEmail: companySettings.email,
-      logoUrl: companySettings.logo_url,
-      invoiceNo: receipt.receipt_no,
-      date: receipt.date,
-      dueDate: "",
-      customerName: receipt.customer?.name || "Customer",
-      customerPhone: receipt.customer?.phone || "",
-      items: (receipt.allocations || []).map(a => ({
-        description: `Invoice: ${a.invoice_no}`,
-        qty: 1,
-        unit_price: a.amount,
-        total: a.amount,
-      })),
-      subtotal: receipt.amount,
-      total: receipt.amount,
+      setLoading(false)
     }
-    const doc = generateInvoicePDF(pdfData)
-    doc.save(`Receipt_${receipt.receipt_no}.pdf`)
+    fetchData()
+  }, [role, id])
+
+  if (loading || !role) {
+    return <div style={{ padding: 24, textAlign: "center" }}>Loading…</div>
   }
-
-  if (loading) return <div style={{ padding: 24, textAlign: "center" }}>Loading…</div>
-  if (!receipt) return <div style={{ padding: 24, textAlign: "center" }}>Receipt not found</div>
-
-  const waLink = getWhatsAppLink()
+  if (!receipt) {
+    return <div style={{ padding: 24, textAlign: "center" }}>Receipt not found.</div>
+  }
 
   return (
-    <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-      <style>{`
-        .card {
-          background: white; border-radius: 14px; border: 1px solid #d6e0eb;
-          padding: 24px; margin-bottom: 16px;
-          box-shadow: 0 2px 8px rgba(0,25,45,0.04);
-        }
-        .row { display: flex; margin-bottom: 10px; font-size: 14px; }
-        .label { width: 130px; color: #2c5778; font-weight: 600; }
-        .value { color: #0a2940; font-weight: 500; }
-        table { width: 100%; border-collapse: collapse; }
-        th { text-align: left; padding: 10px 12px; background: #f8fafc; font-weight: 700; color: #2c5778; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #d6e0eb; }
-        td { padding: 10px 12px; border-bottom: 1px solid #f0f3f7; font-size: 13px; }
-        .btn { padding: 8px 18px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-family: inherit; }
-        .btn-outline { background: white; border: 1.5px solid #d6e0eb; color: #2c5778; }
-        .btn-primary { background: #1e3a8a; color: white; }
-        .btn-success { background: #25D366; color: white; }
-      `}</style>
+    <RoleGuard allowedRoles={["admin", "accountant"]}>
+      <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        <style>{`
+          .card {
+            background: white; border-radius: 12px; border: 1px solid #E2E8F0;
+            padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+          }
+          .grid-2col {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+          }
+          .label { font-size: 11px; font-weight: 600; color: #94A3B8; text-transform: uppercase; margin-bottom: 4px; }
+          .value { font-size: 14px; font-weight: 600; color: #1E293B; }
+          .amount { font-size: 20px; font-weight: 800; color: #1D4ED8; }
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button className="btn btn-outline" onClick={() => router.push("/dashboard/receipts")}>
-            <ArrowLeft size={18} />
-          </button>
-          <div>
-            <h1 style={{ fontSize: 24, fontWeight: 800, color: "#0a2940", margin: 0 }}>Receipt #{receipt.receipt_no}</h1>
-            <p style={{ color: "#2c5778", fontSize: 13, margin: 0 }}>{receipt.customer?.name || "Receipt"}</p>
+          /* Timeline */
+          .timeline { position: relative; padding-left: 28px; margin: 0; }
+          .timeline::before {
+            content: ''; position: absolute; left: 10px; top: 8px; bottom: 0;
+            width: 2px; background: #E2E8F0;
+          }
+          .timeline-event { position: relative; margin-bottom: 20px; }
+          .timeline-event:last-child { margin-bottom: 0; }
+          .timeline-dot {
+            position: absolute; left: -20px; top: 4px;
+            width: 10px; height: 10px; border-radius: 50%;
+            background: #1D4ED8; border: 2px solid white;
+            box-shadow: 0 0 0 2px #1D4ED8;
+          }
+          .timeline-dot.insert { background: #10B981; box-shadow: 0 0 0 2px #10B981; }
+          .timeline-dot.update { background: #F59E0B; box-shadow: 0 0 0 2px #F59E0B; }
+          .timeline-dot.delete { background: #EF4444; box-shadow: 0 0 0 2px #EF4444; }
+
+          .timeline-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+          .action-badge {
+            font-size: 10px; font-weight: 700; text-transform: uppercase;
+            padding: 2px 8px; border-radius: 100px; letter-spacing: 0.04em;
+          }
+          .action-badge.insert { background: #D1FAE5; color: #065F46; }
+          .action-badge.update { background: #FEF3C7; color: #92400E; }
+          .action-badge.delete { background: #FEE2E2; color: #991B1B; }
+
+          .field-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+          .pill {
+            background: #F1F5F9; border-radius: 6px; padding: 2px 10px;
+            font-size: 11px; color: #475569; display: inline-flex; align-items: center; gap: 4px;
+          }
+          .pill-key { font-weight: 600; }
+          .pill-value { color: #1E293B; }
+          .pill-null { color: #94A3B8; font-style: italic; }
+
+          .user-strip {
+            font-size: 11px; color: #94A3B8; display: flex; align-items: center; gap: 6px;
+            margin-top: 10px; border-top: 1px solid #F1F5F9; padding-top: 8px;
+          }
+        `}</style>
+
+        {/* Back & Actions */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button onClick={() => router.push("/dashboard/receipts")} style={{ background: "white", border: "1px solid #E2E8F0", borderRadius: 8, padding: "8px 12px", cursor: "pointer" }}>
+              <ArrowLeft size={16} />
+            </button>
+            <div>
+              <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", margin: 0 }}>Receipt {receipt.receipt_no}</h1>
+              <p style={{ color: "#94A3B8", fontSize: 13 }}>Received</p>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, background: "#EEF2FF", color: "#4338CA", border: "1px solid #C7D2FE", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+              <Printer size={14} /> Print PDF
+            </button>
+            <button style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, background: "#ECFDF5", color: "#065F46", border: "1px solid #A7F3D0", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+              <MessageCircle size={14} /> WhatsApp
+            </button>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          {waLink && (
-            <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success">
-              <Send size={16} /> WhatsApp
-            </a>
+
+        {/* Receipt Details Card */}
+        <div className="card">
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: "#1E293B", marginBottom: 16 }}>Receipt details</h2>
+          <div className="grid-2col">
+            <div>
+              <div className="label">Receipt no.</div>
+              <div className="value">{receipt.receipt_no}</div>
+            </div>
+            <div>
+              <div className="label">Date</div>
+              <div className="value">{new Date(receipt.date || receipt.payment_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</div>
+            </div>
+            <div>
+              <div className="label">Customer</div>
+              <div className="value" style={{ color: "#1D4ED8" }}>
+                {customer ? `${customer.code} – ${customer.name}` : "—"}
+              </div>
+            </div>
+            <div>
+              <div className="label">Payment method</div>
+              <div className="value">{receipt.payment_method || "—"}</div>
+            </div>
+            <div>
+              <div className="label">Amount</div>
+              <div className="amount">PKR {receipt.amount?.toLocaleString()}</div>
+            </div>
+            <div>
+              <div className="label">Bank account</div>
+              <div className="value">
+                {bank ? `${bank.bank_name} ${bank.account_number ? "· " + bank.account_number : ""}` : "—"}
+              </div>
+            </div>
+            <div>
+              <div className="label">Notes</div>
+              <div className="value" style={{ fontWeight: 400 }}>{receipt.notes || "—"}</div>
+            </div>
+            <div>
+              <div className="label">Reference</div>
+              <div className="value" style={{ fontWeight: 400 }}>{receipt.reference || "—"}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Change History – New Professional Timeline */}
+        <div className="card">
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: "#1E293B", marginBottom: 16 }}>Change history</h2>
+          {auditLogs.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 20, color: "#94A3B8" }}>No events recorded.</div>
+          ) : (
+            <div className="timeline">
+              {auditLogs.map((log, idx) => {
+                const action = log.action || "UNKNOWN"
+                const badgeClass = action.toLowerCase() === "insert" ? "insert" : action.toLowerCase() === "update" ? "update" : "delete"
+                const dotClass = action.toLowerCase() === "insert" ? "insert" : action.toLowerCase() === "update" ? "update" : "delete"
+
+                // Extract new/old values as an object
+                let values: Record<string, any> = {}
+                if (log.new_values) {
+                  try { values = JSON.parse(log.new_values) } catch { values = log.new_values }
+                }
+
+                // Build pills from new_values (ignore empty and technical fields)
+                const pills = Object.entries(values)
+                  .filter(([k]) => !["id", "company_id", "created_at", "updated_at", "deleted_at", "changed_at", "changed_by"].includes(k))
+                  .map(([key, val]) => ({ key, value: val }))
+
+                return (
+                  <div key={log.id} className="timeline-event">
+                    <div className={`timeline-dot ${dotClass}`} />
+                    <div className="timeline-header">
+                      <span className={`action-badge ${badgeClass}`}>{action}</span>
+                      <span style={{ fontSize: 12, color: "#64748B" }}>
+                        {new Date(log.changed_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+                      </span>
+                      <span style={{ fontSize: 12, color: "#94A3B8" }}>
+                        {new Date(log.changed_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                      </span>
+                    </div>
+                    <div className="field-pills">
+                      {pills.slice(0, 8).map((p, i) => (
+                        <div key={i} className="pill">
+                          <span className="pill-key">{p.key}</span>
+                          <span className={`pill-value ${p.value === null || p.value === "" ? "pill-null" : ""}`}>
+                            {p.value === null ? "null" : String(p.value)}
+                          </span>
+                        </div>
+                      ))}
+                      {pills.length > 8 && <div className="pill">+{pills.length - 8} more</div>}
+                    </div>
+                    <div className="user-strip">
+                      <span>👤 {log.changed_by || "System"}</span>
+                      <span>·</span>
+                      <span>{new Date(log.changed_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           )}
-          <button className="btn btn-primary" onClick={handlePrintPDF}>
-            <Printer size={16} /> Print PDF
-          </button>
+          {/* Summary strip */}
+          {auditLogs.length > 0 && (
+            <div style={{ marginTop: 16, borderTop: "1px solid #E2E8F0", paddingTop: 12 }}>
+              <div style={{ fontSize: 13, color: "#64748B" }}>
+                Created {new Date(receipt.created_at || receipt.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                {" · "}
+                <span style={{ fontWeight: 600, color: "#1E293B" }}>{receipt.receipt_no}</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-
-      <div className="card">
-        <div className="row"><span className="label">Receipt No.</span><span className="value">{receipt.receipt_no}</span></div>
-        <div className="row"><span className="label">Date</span><span className="value">{receipt.date}</span></div>
-        <div className="row"><span className="label">Customer</span><span className="value">{receipt.customer?.code} – {receipt.customer?.name || "—"}</span></div>
-        <div className="row"><span className="label">Bank</span><span className="value">{receipt.bank_accounts?.bank_name || "—"}</span></div>
-        <div className="row"><span className="label">Amount</span><span className="value" style={{ fontSize: 18, fontWeight: 700 }}>PKR {receipt.amount?.toLocaleString()}</span></div>
-        <div className="row"><span className="label">Notes</span><span className="value">{receipt.notes || "—"}</span></div>
-      </div>
-
-      {receipt.allocations && receipt.allocations.length > 0 && (
-        <div className="card">
-          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#0a2940", marginBottom: 12 }}>Applied to Invoices</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Invoice #</th>
-                <th style={{ textAlign: "right" }}>Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {receipt.allocations.map((alloc, idx) => (
-                <tr key={idx}>
-                  <td>{alloc.invoice_no}</td>
-                  <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {alloc.amount?.toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* ── ODOO‑STYLE HISTORY ── */}
-      {receipt && (
-        <div className="card">
-          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#0a2940", marginBottom: 12 }}>
-            📝 Change History
-          </h3>
-          <RecordHistory tableName="receipts" recordId={String(receipt.id)} />
-        </div>
-      )}
-    </div>
+    </RoleGuard>
   )
 }
