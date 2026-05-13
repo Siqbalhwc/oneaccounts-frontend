@@ -16,6 +16,29 @@ async function getAccount(supabase: any, code: string, companyId: string) {
   return data
 }
 
+// ── Robust receipt number generation ────────────────────────────────────
+async function generateReceiptNo(companyId: string): Promise<string> {
+  // Fetch all receipt numbers for this company that start with RCPT-
+  const { data } = await supabaseAdmin
+    .from('receipts')
+    .select('receipt_no')
+    .eq('company_id', companyId)
+    .ilike('receipt_no', 'RCPT-%')
+
+  let maxNum = 0
+  if (data) {
+    for (const row of data) {
+      const match = row.receipt_no?.match(/^RCPT-(\d+)$/)
+      if (match) {
+        const num = parseInt(match[1], 10)
+        if (!isNaN(num) && num > maxNum) maxNum = num
+      }
+    }
+  }
+  const nextNum = maxNum + 1
+  return `RCPT-${String(nextNum).padStart(4, '0')}`
+}
+
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -52,38 +75,42 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Amount is required' }, { status: 400 })
   }
 
-  // Generate receipt number
-  const { data: existing } = await supabaseAdmin
-    .from('receipts')
-    .select('receipt_no')
-    .eq('company_id', companyId)
-    .order('receipt_no', { ascending: false })
-    .limit(1)
-  let nextNum = 1
-  if (existing && existing.length > 0) {
-    const last = existing[0].receipt_no
-    const parts = last.split('-')
-    const num = parseInt(parts[parts.length - 1])
-    if (!isNaN(num)) nextNum = num + 1
-  }
-  const recNo = `RCPT-${String(nextNum).padStart(4, "0")}`
+  // ── Generate unique receipt number with retry ──────────────────────────
+  let recNo = ''
+  let receipt: any = null
+  let insertErr: any = null
 
-  // Insert receipt
-  const { data: receipt, error: insertErr } = await supabaseAdmin.from("receipts").insert({
-    company_id: companyId,
-    receipt_no: recNo,
-    party_id: party_id || null,
-    date: date || new Date().toISOString().split('T')[0],
-    amount,
-    payment_method,
-    bank_account_id: bank_account_id || null,
-    income_account_id: income_account_id || null,
-    reference,
-    notes,
-  }).select('*').single()
+  for (let attempt = 0; attempt < 3; attempt++) {
+    recNo = await generateReceiptNo(companyId)
 
-  if (insertErr || !receipt) {
+    const result = await supabaseAdmin.from("receipts").insert({
+      company_id: companyId,
+      receipt_no: recNo,
+      party_id: party_id || null,
+      date: date || new Date().toISOString().split('T')[0],
+      amount,
+      payment_method,
+      bank_account_id: bank_account_id || null,
+      income_account_id: income_account_id || null,
+      reference,
+      notes,
+    }).select('*').single()
+
+    insertErr = result.error
+    receipt = result.data
+
+    if (!insertErr) break // success
+
+    // If duplicate key, try next number
+    if (insertErr.message?.includes('duplicate key') && attempt < 2) {
+      continue
+    }
+
     return NextResponse.json({ error: insertErr?.message || 'Insert failed' }, { status: 500 })
+  }
+
+  if (!receipt) {
+    return NextResponse.json({ error: 'Failed to create receipt after multiple attempts.' }, { status: 500 })
   }
 
   // Allocated portion
@@ -192,8 +219,8 @@ export async function POST(request: NextRequest) {
     ...l,
     entry_id: entry.id,
     company_id: companyId,
-    source_type: 'receipt',   // ✅ new
-    source_id: receipt.id,    // ✅ new
+    source_type: 'receipt',
+    source_id: receipt.id,
   }))
   await supabaseAdmin.from('journal_lines').insert(lineRows)
 
@@ -207,7 +234,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Audit log (already present)
+  // Audit log
   await logDataChange('receipts', String(receipt.id), 'INSERT', undefined, receipt)
 
   return NextResponse.json({ success: true, receipt_no: recNo, receipt })
