@@ -10,6 +10,12 @@ const supabaseAdmin = createSupabaseClient(
   { auth: { persistSession: false, autoRefreshToken: false } }
 )
 
+async function getAccount(supabase: any, code: string, companyId: string) {
+  const { data } = await supabase.from('accounts')
+    .select('id,balance').eq('code', code).eq('company_id', companyId).maybeSingle()
+  return data
+}
+
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -38,7 +44,10 @@ export async function POST(request: NextRequest) {
   if (!roleData?.company_id) return NextResponse.json({ error: 'No company found' }, { status: 400 })
   const companyId = roleData.company_id
 
-  const { party_id, amount, payment_method, bank_account_id, income_account_id, date, reference, notes, allocations } = await request.json()
+  const {
+    party_id, amount, payment_method, bank_account_id,
+    income_account_id, unallocated_amount, date, reference, notes, allocations
+  } = await request.json()
   if (!amount || amount <= 0) {
     return NextResponse.json({ error: 'Amount is required' }, { status: 400 })
   }
@@ -77,7 +86,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: insertErr?.message || 'Insert failed' }, { status: 500 })
   }
 
-  // Allocations to invoices
+  // Allocated portion
+  let totalAllocated = 0
   if (allocations && Array.isArray(allocations) && allocations.length > 0) {
     for (const alloc of allocations) {
       const invoiceId = alloc.invoice_id
@@ -107,10 +117,15 @@ export async function POST(request: NextRequest) {
         amount: allocAmount,
         company_id: companyId,
       })
+      totalAllocated += allocAmount
     }
   }
 
-  // Update customer balance (if party_id provided)
+  // Unallocated = total received - allocated
+  const unallocated = unallocated_amount ?? (amount - totalAllocated)
+  const advanceAmount = unallocated > 0 ? unallocated : 0
+
+  // Update customer balance (reduce by total amount)
   if (party_id) {
     const { data: cust } = await supabaseAdmin.from('customers')
       .select('balance').eq('id', party_id).eq('company_id', companyId).single()
@@ -122,44 +137,73 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Journal Entry ──────────────────────────────────────────────────────
-  const cashAcc = await supabaseAdmin.from('accounts')
-    .select('id,balance').eq('code', '1000').eq('company_id', companyId).single()
-
-  // Credit account: either AR (1100) or a user-selected income account (donation)
-  let creditAccountId: number | null = null
-  let jeDescription = `Receipt - ${recNo}`
-
-  if (income_account_id) {
-    // Donation mode: Cr the selected income account
-    creditAccountId = income_account_id
-    jeDescription = `Donation Receipt - ${recNo}`
-  } else {
-    // Normal receipt: Cr AR (1100)
-    const arAcc = await supabaseAdmin.from('accounts')
-      .select('id,balance').eq('code', '1100').eq('company_id', companyId).single()
-    creditAccountId = arAcc.data?.id || null
+  const cashAcc = await getAccount(supabaseAdmin, '1000', companyId)
+  if (!cashAcc) {
+    return NextResponse.json({ error: 'Cash account (1000) not found' }, { status: 500 })
   }
 
-  if (cashAcc.data && creditAccountId) {
-    const { data: entry } = await supabaseAdmin.from('journal_entries').insert({
-      company_id: companyId,
-      entry_no: `JE-RCPT-${recNo}`,
-      date: date || new Date().toISOString().split('T')[0],
-      description: jeDescription,
-    }).select('id').single()
+  const jeLines: any[] = [
+    { account_id: cashAcc.id, debit: amount, credit: 0 }   // Debit bank
+  ]
 
-    if (entry) {
-      await supabaseAdmin.from('journal_lines').insert([
-        { company_id: companyId, entry_id: entry.id, account_id: cashAcc.data.id, debit: amount, credit: 0 },
-        { company_id: companyId, entry_id: entry.id, account_id: creditAccountId, debit: 0, credit: amount },
-      ])
-      await supabaseAdmin.from('accounts').update({ balance: cashAcc.data.balance + amount }).eq('id', cashAcc.data.id)
-      await supabaseAdmin.from('accounts').update({ balance: (await supabaseAdmin.from('accounts').select('balance').eq('id', creditAccountId).single()).data?.balance ?? 0 - amount }).eq('id', creditAccountId)
-      // Fix: properly fetch balance first
-      const { data: crAcc } = await supabaseAdmin.from('accounts').select('balance').eq('id', creditAccountId).single()
-      if (crAcc) {
-        await supabaseAdmin.from('accounts').update({ balance: crAcc.balance + amount }).eq('id', creditAccountId)
+  let description = `Receipt - ${recNo}`
+
+  if (income_account_id) {
+    // Donation mode: entire amount credits the selected income account
+    jeLines.push({ account_id: income_account_id, debit: 0, credit: amount })
+    description = `Donation Receipt - ${recNo}`
+  } else {
+    // Normal receipt: allocate to AR and optionally to advance
+    const arAcc = await getAccount(supabaseAdmin, '1100', companyId)
+    if (!arAcc) {
+      return NextResponse.json({ error: 'AR account (1100) not found' }, { status: 500 })
+    }
+
+    // Credit AR for the allocated amount
+    if (totalAllocated > 0) {
+      jeLines.push({ account_id: arAcc.id, debit: 0, credit: totalAllocated })
+    }
+
+    // Credit a separate advance account for the excess
+    if (advanceAmount > 0) {
+      // Look for a liability account code 2010 or create one
+      let advanceAcc = await getAccount(supabaseAdmin, '2010', companyId)
+      if (!advanceAcc) {
+        // Create the account
+        const { data: newAcc } = await supabaseAdmin.from('accounts').insert({
+          code: '2010', name: 'Customer Advances', type: 'Liability', company_id: companyId
+        }).select('id,balance').single()
+        advanceAcc = newAcc
       }
+      if (advanceAcc) {
+        jeLines.push({ account_id: advanceAcc.id, debit: 0, credit: advanceAmount })
+      }
+    }
+  }
+
+  // Insert journal entry and lines
+  const { data: entry, error: entryErr } = await supabaseAdmin.from('journal_entries').insert({
+    company_id: companyId,
+    entry_no: `JE-RCPT-${recNo}`,
+    date: date || new Date().toISOString().split('T')[0],
+    description,
+  }).select('id').single()
+
+  if (entryErr || !entry) {
+    // Rollback receipt? Not critical, but log error
+    return NextResponse.json({ error: entryErr?.message || 'JE insert failed' }, { status: 500 })
+  }
+
+  const lineRows = jeLines.map(l => ({ ...l, entry_id: entry.id, company_id: companyId }))
+  await supabaseAdmin.from('journal_lines').insert(lineRows)
+
+  // Update account balances
+  for (const l of jeLines) {
+    const { data: acc } = await supabaseAdmin.from('accounts')
+      .select('balance').eq('id', l.account_id).eq('company_id', companyId).single()
+    if (acc) {
+      const newBal = acc.balance + (l.debit || 0) - (l.credit || 0)
+      await supabaseAdmin.from('accounts').update({ balance: newBal }).eq('id', l.account_id).eq('company_id', companyId)
     }
   }
 

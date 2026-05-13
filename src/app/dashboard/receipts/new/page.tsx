@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Search, X, CheckCircle } from "lucide-react"
+import { ArrowLeft, Search, X, CheckCircle, RefreshCw } from "lucide-react"
 
 export default function NewReceiptPage() {
   const router = useRouter()
@@ -19,11 +19,12 @@ export default function NewReceiptPage() {
   const [showCustomerList, setShowCustomerList] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
   const customerRef = useRef<HTMLDivElement>(null)
+  const [refreshingCustomers, setRefreshingCustomers] = useState(false)
 
   const [banks, setBanks] = useState<any[]>([])
   const [selectedBankId, setSelectedBankId] = useState<number | null>(null)
 
-  // Donation mode: GL income account selector
+  // Donation mode
   const [incomeAccounts, setIncomeAccounts] = useState<any[]>([])
   const [selectedIncomeAccountId, setSelectedIncomeAccountId] = useState<number | null>(null)
   const [isDonation, setIsDonation] = useState(false)
@@ -47,15 +48,20 @@ export default function NewReceiptPage() {
     })
   }, [])
 
+  const loadCustomers = () => {
+    if (!companyId) return
+    setRefreshingCustomers(true)
+    supabase.from("customers").select("id, code, name, phone, balance, country_code")
+      .eq("company_id", companyId).order("name")
+      .then(r => { if (r.data) setCustomers(r.data); setRefreshingCustomers(false) })
+  }
+
   useEffect(() => {
     if (!companyId) return
     supabase.from("bank_accounts").select("id, bank_name, accounts(code)")
       .eq("company_id", companyId).order("bank_name")
       .then(r => r.data && setBanks(r.data.map((b: any) => ({ id: b.id, name: b.bank_name, glCode: b.accounts?.code }))))
-    supabase.from("customers").select("id, code, name, phone, balance")
-      .eq("company_id", companyId).order("name")
-      .then(r => r.data && setCustomers(r.data))
-    // Income accounts for donation mode
+    loadCustomers()
     supabase.from("accounts").select("id, code, name")
       .in("type", ["Revenue","Income"]).eq("company_id", companyId).order("code")
       .then(r => r.data && setIncomeAccounts(r.data))
@@ -122,12 +128,13 @@ export default function NewReceiptPage() {
   }
 
   const totalAllocated = Object.values(allocations).reduce((s, v) => s + v, 0)
+  const totalAmount = Number(receiptAmount || 0)
+  const unallocated = totalAmount - totalAllocated
 
   const handleSubmit = async () => {
-    const amt = Number(receiptAmount)
     if (!companyId) { setError("Company not loaded"); return }
     if (!selectedBankId) { setError("Please select a bank account"); return }
-    if (amt <= 0) { setError("Enter a valid receipt amount"); return }
+    if (totalAmount <= 0) { setError("Enter a valid receipt amount"); return }
     if (!customerId && !isDonation) { setError("Please select a customer or enable donation mode"); return }
 
     setLoading(true); setError("")
@@ -138,7 +145,8 @@ export default function NewReceiptPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           party_id: customerId,
-          amount: amt,
+          amount: totalAmount,
+          unallocated_amount: unallocated > 0 ? unallocated : 0,
           payment_method: "Bank Transfer",
           bank_account_id: selectedBankId,
           income_account_id: isDonation ? selectedIncomeAccountId : null,
@@ -221,7 +229,6 @@ export default function NewReceiptPage() {
         <div className="header-grid">
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="inv-card">
-              {/* Donation mode toggle */}
               <div style={{ marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
                   <input type="checkbox" checked={isDonation} onChange={e => { setIsDonation(e.target.checked); clearCustomer(); }} />
@@ -229,16 +236,16 @@ export default function NewReceiptPage() {
                 </label>
               </div>
 
-              {/* Customer or Income GL */}
               {!isDonation ? (
                 <>
                   <label className="inv-label">Customer *</label>
                   <div className="cust-wrap" ref={customerRef}>
                     {selectedCustomer ? (
-                      <div className="cust-selected-badge" onClick={clearCustomer}>
+                      <div className="cust-selected-badge" onClick={clearCustomer} style={{ position: "relative", paddingRight: 40 }}>
                         <span>👤</span><span style={{ flex: 1 }}>{selectedCustomer.code} — {selectedCustomer.name}</span>
                         <span style={{ fontSize: 11, color: "#64748B" }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
-                        <button className="cust-clear" onClick={(e) => { e.stopPropagation(); clearCustomer(); }}><X size={14} /></button>
+                        <button className="cust-clear" style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)" }} onClick={(e) => { e.stopPropagation(); clearCustomer(); }}><X size={14} /></button>
+                        <button className="cust-clear" style={{ position: "absolute", right: 22, top: "50%", transform: "translateY(-50%)", color: "#1e3a8a" }} onClick={(e) => { e.stopPropagation(); loadCustomers(); }} title="Refresh"><RefreshCw size={13} /></button>
                       </div>
                     ) : (
                       <>
@@ -278,7 +285,6 @@ export default function NewReceiptPage() {
                 </div>
               )}
 
-              {/* Bank & Amount */}
               <div style={{ marginTop: 10 }}>
                 <label className="inv-label">Bank Account *</label>
                 <select className="inv-select" value={selectedBankId ?? ""} onChange={e => setSelectedBankId(e.target.value ? Number(e.target.value) : null)}>
@@ -297,7 +303,6 @@ export default function NewReceiptPage() {
               </div>
             </div>
 
-            {/* Allocations to invoices (only for customer receipts) */}
             {customerId && !isDonation && invoices.length > 0 && (
               <div className="inv-card">
                 <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 12px 0" }}>Allocate to Invoices</h3>
@@ -334,8 +339,20 @@ export default function NewReceiptPage() {
                       <td colSpan={5} style={{ textAlign: "right" }}>Allocated</td>
                       <td style={{ textAlign: "right" }}>PKR {totalAllocated.toLocaleString()}</td>
                     </tr>
+                    {unallocated > 0 && (
+                      <tr style={{ fontSize: 12, color: "#64748B" }}>
+                        <td colSpan={6} style={{ textAlign: "right", paddingTop: 4 }}>
+                          Unallocated (advance): PKR {unallocated.toLocaleString()}
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
+              </div>
+            )}
+            {customerId && !isDonation && invoices.length === 0 && (
+              <div className="inv-card" style={{ textAlign: "center", color: "#94A3B8" }}>
+                No unpaid invoices for this customer. Any amount entered will be recorded as an advance.
               </div>
             )}
           </div>
@@ -344,8 +361,18 @@ export default function NewReceiptPage() {
             <div className="inv-card">
               <h3 style={{ fontSize: 15, fontWeight: 700, color: "#1E293B", margin: "0 0 10px" }}>Summary</h3>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
-                <span>Amount</span><span>PKR {Number(receiptAmount || 0).toLocaleString()}</span>
+                <span>Amount</span><span>PKR {totalAmount.toLocaleString()}</span>
               </div>
+              {!isDonation && (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginTop: 4 }}>
+                    <span>Allocated</span><span>PKR {totalAllocated.toLocaleString()}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: unallocated > 0 ? "#dc2626" : "#64748B" }}>
+                    <span>Advance</span><span>PKR {unallocated.toLocaleString()}</span>
+                  </div>
+                </>
+              )}
             </div>
             <div className="inv-card">
               <button className="inv-btn inv-btn-primary" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading}>
