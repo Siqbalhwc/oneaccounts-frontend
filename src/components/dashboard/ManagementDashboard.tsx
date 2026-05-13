@@ -293,39 +293,21 @@ export default function ManagementDashboard({ role }: { role: string }) {
           .mgmt .hero { flex-direction: column; align-items: flex-start; }
           .mgmt .hero-filters { width: 100%; }
         }
-        @media (max-width: 600px) {
+        @media (max-width: 640px) {
+          /* Force 2 columns for KPI cards on mobile */
+          .mgmt .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+          
+          .mgmt .hero { padding: 1rem; }
+          .mgmt .hero-greeting h2 { font-size: 1.1rem; white-space: normal; }
+          .mgmt .hero-greeting p { font-size: 0.8rem; white-space: normal; }
+          .mgmt .hero-filters { width: 100%; justify-content: space-between; gap: 0.4rem; }
+          .mgmt .filter-label { font-size: 0.7rem; }
+          .mgmt .filter-pill { font-size: 0.7rem; padding: 0.2rem 0.5rem; padding-right: 1.5rem; background-position: right 0.3rem center; }
+          .mgmt .card { padding: 1rem; }
+          .mgmt .kpi-value { font-size: 1.4rem; }
+        }
+        @media (max-width: 380px) {
           .mgmt .kpi-grid { grid-template-columns: 1fr; }
-          .mgmt .hero {
-            padding: 1rem;
-          }
-          .mgmt .hero-greeting h2 {
-            font-size: 1.1rem;
-            white-space: normal;   /* allow wrapping */
-          }
-          .mgmt .hero-greeting p {
-            font-size: 0.8rem;
-            white-space: normal;   /* allow wrapping */
-          }
-          .mgmt .hero-filters {
-            width: 100%;
-            justify-content: space-between;
-            gap: 0.4rem;
-          }
-          .mgmt .filter-label {
-            font-size: 0.7rem;
-          }
-          .mgmt .filter-pill {
-            font-size: 0.7rem;
-            padding: 0.2rem 0.5rem;
-            padding-right: 1.5rem;
-            background-position: right 0.3rem center;
-          }
-          .mgmt .card {
-            padding: 1rem;
-          }
-          .mgmt .kpi-value {
-            font-size: 1.4rem;
-          }
         }
       `}</style>
 

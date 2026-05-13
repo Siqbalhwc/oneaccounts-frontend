@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import SidebarClient from './sidebar-client'
 import DashboardTopBar from "@/components/DashboardTopBar"
-import SidebarNav from "@/components/SidebarNav"
+import BottomNav from "@/components/BottomNav"
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
@@ -11,7 +11,7 @@ const styles = `
 
   .dl-shell { display: flex; min-height: 100vh; background: #EFF4FB; }
 
-  /* ── Sidebar (base styles) ── */
+  /* ── Sidebar ── */
   .dl-sidebar {
     width: 220px; min-width: 220px;
     background: linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%);
@@ -31,45 +31,28 @@ const styles = `
 
   .dl-sidebar-nav { flex: 1; padding: 8px 10px; overflow-y: auto; position: relative; z-index: 1; }
 
-  /* Collapsible section button */
-  .dl-section-btn {
-    width: 100%; display: flex; align-items: center; gap: 6px;
-    padding: 10px 10px; background: transparent; border: none;
-    color: rgba(255,255,255,0.95); font-size: 12px; font-weight: 700;
-    text-transform: uppercase; letter-spacing: 0.08em;
-    cursor: pointer; font-family: inherit;
-    border-radius: 6px;
-    transition: background 0.15s, color 0.15s;
-  }
-  .dl-section-btn:hover {
-    background: rgba(255,255,255,0.1);
-    color: white;
-  }
-  .dl-section-content {
-    margin-left: 6px;
-    border-left: 1px solid rgba(255,255,255,0.1);
-    padding-left: 6px;
+  .dl-nav-section {
+    padding: 10px 8px 4px; color: rgba(255,255,255,0.35);
+    font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em;
   }
   .dl-nav-group-label {
-    font-size: 8px; font-weight: 700; text-transform: uppercase;
-    color: rgba(255,255,255,0.45); padding: 4px 10px 2px;
-    letter-spacing: 0.06em;
+    padding: 6px 10px 2px; color: rgba(255,255,255,0.22);
+    font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
   }
   .dl-nav-item {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px 12px;
-    border-radius: 8px; color: rgba(255,255,255,0.9); font-size: 14px; font-weight: 500;
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    border-radius: 8px; color: rgba(255,255,255,0.65); font-size: 13px; font-weight: 500;
     text-decoration: none; transition: all 0.15s; margin-bottom: 2px;
   }
-  .dl-nav-item:hover { background: rgba(255,255,255,0.12); color: white; }
-  .dl-nav-item.active { background: rgba(255,255,255,0.18); color: white; font-weight: 600; }
+  .dl-nav-item:hover { background: rgba(255,255,255,0.07); color: white; }
+  .dl-nav-item.active { background: rgba(255,255,255,0.12); color: white; font-weight: 600; }
   .dl-nav-icon { width: 18px; text-align: center; flex-shrink: 0; }
+  .dl-nav-divider { height: 1px; background: rgba(255,255,255,0.08); margin: 6px 14px; }
 
-  /* User area */
   .dl-sidebar-user { padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 10px; position: relative; z-index: 1; }
   .dl-sidebar-avatar { width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.15); color: white; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
-  .dl-sidebar-email { color: rgba(255,255,255,0.9); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dl-sidebar-signout { color: rgba(255,255,255,0.6); font-size: 10px; cursor: pointer; background: none; border: none; font-family: inherit; padding: 0; margin-top: 2px; }
+  .dl-sidebar-email { color: rgba(255,255,255,0.7); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dl-sidebar-signout { color: rgba(255,255,255,0.4); font-size: 10px; cursor: pointer; background: none; border: none; font-family: inherit; padding: 0; margin-top: 2px; }
   .dl-sidebar-signout:hover { color: #EF4444; }
 
   /* ── Main area ── */
@@ -95,11 +78,17 @@ const styles = `
   .dl-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 35; }
   .dl-overlay.open { display: block; }
 
+  /* ── Bottom nav – hidden on desktop, shown on mobile ── */
+  .mobile-bottom-nav { display: none; }
+  @media (max-width: 768px) {
+    .mobile-bottom-nav { display: block; }
+    .dl-main { padding-bottom: 56px; }   /* space for bottom nav */
+  }
+
   @media (max-width: 900px) {
     .dl-sidebar { width: 60px; min-width: 60px; }
-    .dl-sidebar-logo-name, .dl-sidebar-logo-sub, .dl-section-btn span,
-    .dl-nav-group-label, .dl-nav-item span:not(.dl-nav-icon),
-    .dl-sidebar-email, .dl-sidebar-signout { display: none; }
+    .dl-sidebar-logo-name, .dl-sidebar-logo-sub, .dl-nav-section, .dl-nav-group-label,
+    .dl-nav-item span:not(.dl-nav-icon), .dl-sidebar-email, .dl-sidebar-signout { display: none; }
     .dl-sidebar-logo { justify-content: center; padding: 14px 0; }
     .dl-nav-item { justify-content: center; padding: 10px; }
     .dl-sidebar-user { justify-content: center; }
@@ -109,8 +98,7 @@ const styles = `
     .dl-sidebar { transform: translateX(-220px); width: 220px; min-width: 220px; }
     .dl-sidebar.mobile-open { transform: translateX(0); }
     .dl-sidebar.mobile-open .dl-sidebar-logo-name, .dl-sidebar.mobile-open .dl-sidebar-logo-sub,
-    .dl-sidebar.mobile-open .dl-section-btn span,
-    .dl-sidebar.mobile-open .dl-nav-group-label,
+    .dl-sidebar.mobile-open .dl-nav-section, .dl-sidebar.mobile-open .dl-nav-group-label,
     .dl-sidebar.mobile-open .dl-nav-item span:not(.dl-nav-icon),
     .dl-sidebar.mobile-open .dl-sidebar-email, .dl-sidebar.mobile-open .dl-sidebar-signout { display: block; }
     .dl-sidebar.mobile-open .dl-sidebar-logo { justify-content: flex-start; padding: 16px 18px; }
@@ -128,7 +116,7 @@ const styles = `
   }
 `
 
-// ── Navigation structure (unchanged) ──
+// ── Navigation structure ──
 const navSections = [
   {
     section: 'MAIN',
@@ -245,19 +233,73 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <div className="dl-shell">
         <SidebarClient />
 
-        {/* Collapsible sidebar with dynamic branding */}
-        <SidebarNav
-          navSections={navSections}
-          email={email}
-          initial={initial}
-          logoUrl={logoUrl}
-          companyName={companyName}
-          companyTagline={companyTagline}
-        />
+        <aside className="dl-sidebar" id="dl-sidebar">
+          <div className="dl-sidebar-logo">
+            <img src={logoUrl} alt={companyName} className="dl-sidebar-logo-img" />
+            <div>
+              <div className="dl-sidebar-logo-name">{companyName}</div>
+              <div className="dl-sidebar-logo-sub">{companyTagline}</div>
+            </div>
+          </div>
+
+          <nav className="dl-sidebar-nav">
+            {navSections.map((sec, secIdx) => (
+              <div key={sec.section}>
+                <div className="dl-nav-section">{sec.section}</div>
+
+                {'groups' in sec && sec.groups ? (
+                  sec.groups.map((group) => (
+                    <div key={group.groupLabel}>
+                      <div className="dl-nav-group-label">{group.groupLabel}</div>
+                      {group.items.map((item) => (
+                        <a
+                          key={item.href}
+                          href={item.href}
+                          className="dl-nav-item"
+                        >
+                          <span className="dl-nav-icon">{item.icon}</span>
+                          <span>{item.label}</span>
+                        </a>
+                      ))}
+                    </div>
+                  ))
+                ) : (
+                  'items' in sec && sec.items?.map((item) => (
+                    <a
+                      key={item.href}
+                      href={item.href}
+                      className="dl-nav-item"
+                    >
+                      <span className="dl-nav-icon">{item.icon}</span>
+                      <span>{item.label}</span>
+                    </a>
+                  ))
+                )}
+
+                {secIdx < navSections.length - 1 && (
+                  <div className="dl-nav-divider" />
+                )}
+              </div>
+            ))}
+          </nav>
+
+          <div className="dl-sidebar-user">
+            <div className="dl-sidebar-avatar">{initial}</div>
+            <div style={{ overflow: 'hidden' }}>
+              <div className="dl-sidebar-email">{email}</div>
+              <form action="/auth/signout" method="post">
+                <button type="submit" className="dl-sidebar-signout">Sign Out</button>
+              </form>
+            </div>
+          </div>
+        </aside>
 
         <div className="dl-main">
           <DashboardTopBar email={email} greeting={getGreeting()} />
           {children}
+          <div className="mobile-bottom-nav">
+            <BottomNav />
+          </div>
         </div>
       </div>
     </>
