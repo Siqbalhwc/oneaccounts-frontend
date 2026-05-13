@@ -12,15 +12,48 @@ const styles = `
 
   .dl-shell { display: flex; min-height: 100vh; background: #0B1120; }
 
-  /* ── Sidebar ── */
+  /* ── Sidebar – slim 60px, expands on hover ── */
   .dl-sidebar {
-    width: 260px; min-width: 260px;
+    width: 60px; min-width: 60px;
     background: #0F172A;
     display: flex; flex-direction: column;
     position: fixed; top: 0; left: 0; bottom: 0; z-index: 40;
-    transition: transform 0.25s ease; overflow: hidden;
+    transition: width 0.25s ease; overflow: hidden;
     border-right: 1px solid #1E293B;
   }
+  .dl-sidebar:hover {
+    width: 260px;
+  }
+
+  /* Hide text elements when collapsed */
+  .dl-sidebar:not(:hover) .dl-sidebar-logo-name,
+  .dl-sidebar:not(:hover) .dl-sidebar-logo-sub,
+  .dl-sidebar:not(:hover) .dl-section-btn span,
+  .dl-sidebar:not(:hover) .dl-nav-group-label,
+  .dl-sidebar:not(:hover) .dl-nav-item span:not(.dl-nav-icon),
+  .dl-sidebar:not(:hover) .dl-sidebar-email,
+  .dl-sidebar:not(:hover) .dl-sidebar-signout {
+    display: none;
+  }
+
+  /* Center icons when collapsed */
+  .dl-sidebar:not(:hover) .dl-section-btn {
+    justify-content: center;
+    padding: 10px 0;
+  }
+  .dl-sidebar:not(:hover) .dl-sidebar-logo {
+    justify-content: center;
+    padding: 14px 0;
+  }
+  .dl-sidebar:not(:hover) .dl-nav-item {
+    justify-content: center;
+    padding: 10px 0;
+  }
+  .dl-sidebar:not(:hover) .dl-sidebar-user {
+    justify-content: center;
+  }
+
+  /* Logo styling (expanded) */
   .dl-sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 20px 18px; border-bottom: 1px solid #1E293B; min-height: 68px; }
   .dl-sidebar-logo-img { width: 40px; height: 40px; border-radius: 12px; object-fit: contain; flex-shrink: 0; }
   .dl-sidebar-logo-name { color: white; font-size: 15px; font-weight: 700; line-height: 1.2; }
@@ -62,7 +95,7 @@ const styles = `
   .dl-sidebar-signout:hover { color: #EF4444; }
 
   /* ── Main area ── */
-  .dl-main { flex: 1; margin-left: 260px; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; overflow-x: hidden; background: #0B1120; }
+  .dl-main { flex: 1; margin-left: 60px; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; overflow-x: hidden; background: #0B1120; }
   .dl-main-content { flex: 1; }
 
   .dl-topbar { background: #0F172A; border-bottom: 1px solid #1E293B; padding: 0 24px; display: flex; align-items: center; min-height: 64px; gap: 16px; position: sticky; top: 0; z-index: 30; }
@@ -91,17 +124,8 @@ const styles = `
     .dl-main { padding-bottom: 60px; }
   }
 
-  @media (max-width: 900px) {
-    .dl-sidebar { width: 60px; min-width: 60px; }
-    .dl-sidebar-logo-name, .dl-sidebar-logo-sub, .dl-nav-section, .dl-nav-group-label,
-    .dl-nav-item span:not(.dl-nav-icon), .dl-sidebar-email, .dl-sidebar-signout { display: none; }
-    .dl-sidebar-logo { justify-content: center; padding: 14px 0; }
-    .dl-nav-item { justify-content: center; padding: 10px; }
-    .dl-sidebar-user { justify-content: center; }
-    .dl-main { margin-left: 60px; }
-  }
   @media (max-width: 640px) {
-    .dl-sidebar { transform: translateX(-260px); width: 260px; min-width: 260px; }
+    .dl-sidebar { transform: translateX(-60px); width: 260px; min-width: 260px; }
     .dl-sidebar.mobile-open { transform: translateX(0); }
     .dl-sidebar.mobile-open .dl-sidebar-logo-name, .dl-sidebar.mobile-open .dl-sidebar-logo-sub,
     .dl-sidebar.mobile-open .dl-nav-section, .dl-sidebar.mobile-open .dl-nav-group-label,
@@ -122,7 +146,7 @@ const styles = `
   }
 `
 
-// ── Navigation structure ──
+// ── Navigation structure (unchanged) ──
 const navSections = [
   {
     section: 'MAIN',
@@ -250,7 +274,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
         <div className="dl-main">
           <DashboardTopBar email={email} greeting={getGreeting()} />
-          <div className="dl-main-content">   {/* ✅ flex:1 wrapper – fixes large‑screen blank space */}
+          <div className="dl-main-content">
             {children}
           </div>
           <div className="mobile-bottom-nav">
