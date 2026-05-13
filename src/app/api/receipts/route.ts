@@ -16,9 +16,8 @@ async function getAccount(supabase: any, code: string, companyId: string) {
   return data
 }
 
-// ── Robust receipt number generation ────────────────────────────────────
+// ── Robust receipt number generation (fix duplicate) ───────────────────
 async function generateReceiptNo(companyId: string): Promise<string> {
-  // Fetch all receipt numbers for this company that start with RCPT-
   const { data } = await supabaseAdmin
     .from('receipts')
     .select('receipt_no')
@@ -35,8 +34,7 @@ async function generateReceiptNo(companyId: string): Promise<string> {
       }
     }
   }
-  const nextNum = maxNum + 1
-  return `RCPT-${String(nextNum).padStart(4, '0')}`
+  return `RCPT-${String(maxNum + 1).padStart(4, '0')}`
 }
 
 export async function POST(request: NextRequest) {
@@ -99,13 +97,11 @@ export async function POST(request: NextRequest) {
     insertErr = result.error
     receipt = result.data
 
-    if (!insertErr) break // success
+    if (!insertErr) break
 
-    // If duplicate key, try next number
     if (insertErr.message?.includes('duplicate key') && attempt < 2) {
       continue
     }
-
     return NextResponse.json({ error: insertErr?.message || 'Insert failed' }, { status: 500 })
   }
 
@@ -148,11 +144,10 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Unallocated = total received - allocated
   const unallocated = unallocated_amount ?? (amount - totalAllocated)
   const advanceAmount = unallocated > 0 ? unallocated : 0
 
-  // Update customer balance (reduce by total amount)
+  // Update customer balance
   if (party_id) {
     const { data: cust } = await supabaseAdmin.from('customers')
       .select('balance').eq('id', party_id).eq('company_id', companyId).single()
@@ -163,14 +158,28 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // ── Journal Entry ──────────────────────────────────────────────────────
-  const cashAcc = await getAccount(supabaseAdmin, '1000', companyId)
-  if (!cashAcc) {
-    return NextResponse.json({ error: 'Cash account (1000) not found' }, { status: 500 })
+  // ── Determine the bank's GL account (replace hardcoded 1000) ──────────
+  let bankGlAccountId: number | null = null
+  if (bank_account_id) {
+    const { data: bank } = await supabaseAdmin.from('bank_accounts')
+      .select('account_id')
+      .eq('id', bank_account_id)
+      .eq('company_id', companyId)
+      .single()
+    if (bank) bankGlAccountId = bank.account_id
+  }
+  // Fallback to generic cash
+  if (!bankGlAccountId) {
+    const cashFallback = await getAccount(supabaseAdmin, '1000', companyId)
+    if (cashFallback) bankGlAccountId = cashFallback.id
+  }
+  if (!bankGlAccountId) {
+    return NextResponse.json({ error: 'No bank GL account found. Please select a bank.' }, { status: 500 })
   }
 
+  // ── Journal Entry ──────────────────────────────────────────────────────
   const jeLines: any[] = [
-    { account_id: cashAcc.id, debit: amount, credit: 0 }   // Debit bank
+    { account_id: bankGlAccountId, debit: amount, credit: 0 }   // Debit the selected bank account
   ]
 
   let description = `Receipt - ${recNo}`
@@ -214,7 +223,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: entryErr?.message || 'JE insert failed' }, { status: 500 })
   }
 
-  // Build lines with source tracking
   const lineRows = jeLines.map(l => ({
     ...l,
     entry_id: entry.id,

@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Supplier and amount are required' }, { status: 400 })
   }
 
-  // Generate payment number
+  // Generate payment number (unchanged)
   const { data: existing } = await supabaseAdmin
     .from('payments')
     .select('payment_no')
@@ -119,13 +119,28 @@ export async function POST(request: NextRequest) {
       .eq('id', party_id).eq('company_id', companyId)
   }
 
-  // ── Journal Entry: Dr AP (2000), Cr Cash (1000) ───────────────────────
+  // ── Journal Entry: Dr AP (2000), Cr Bank (selected bank or fallback 1000) ──
   const apAcc = await supabaseAdmin.from('accounts')
     .select('id,balance').eq('code', '2000').eq('company_id', companyId).single()
-  const cashAcc = await supabaseAdmin.from('accounts')
-    .select('id,balance').eq('code', '1000').eq('company_id', companyId).single()
 
-  if (apAcc.data && cashAcc.data) {
+  // Determine the correct bank GL account
+  let bankGlAccountId: number | null = null
+  if (bank_account_id) {
+    const { data: bank } = await supabaseAdmin.from('bank_accounts')
+      .select('account_id')
+      .eq('id', bank_account_id)
+      .eq('company_id', companyId)
+      .single()
+    if (bank) bankGlAccountId = bank.account_id
+  }
+  // Fallback to generic cash if no bank selected or bank not found
+  if (!bankGlAccountId) {
+    const { data: cashFallback } = await supabaseAdmin.from('accounts')
+      .select('id').eq('code', '1000').eq('company_id', companyId).single()
+    if (cashFallback) bankGlAccountId = cashFallback.id
+  }
+
+  if (apAcc.data && bankGlAccountId) {
     const { data: entry } = await supabaseAdmin.from('journal_entries').insert({
       company_id: companyId,
       entry_no: `JE-PAY-${payNo}`,
@@ -141,27 +156,34 @@ export async function POST(request: NextRequest) {
           account_id: apAcc.data.id,
           debit: amount,
           credit: 0,
-          source_type: 'payment',      // ✅ new
-          source_id: payment.id,       // ✅ new
+          source_type: 'payment',
+          source_id: payment.id,
         },
         {
           company_id: companyId,
           entry_id: entry.id,
-          account_id: cashAcc.data.id,
+          account_id: bankGlAccountId,           // ✅ now uses the selected bank's GL account
           debit: 0,
           credit: amount,
-          source_type: 'payment',      // ✅ new
-          source_id: payment.id,       // ✅ new
+          source_type: 'payment',
+          source_id: payment.id,
         },
       ])
+
+      // Update account balances
       const newAp = (apAcc.data.balance || 0) - amount
-      const newCash = (cashAcc.data.balance || 0) - amount
       await supabaseAdmin.from('accounts').update({ balance: newAp }).eq('id', apAcc.data.id)
-      await supabaseAdmin.from('accounts').update({ balance: newCash }).eq('id', cashAcc.data.id)
+
+      const { data: bankAcc } = await supabaseAdmin.from('accounts')
+        .select('balance').eq('id', bankGlAccountId).single()
+      if (bankAcc) {
+        const newBankBal = (bankAcc.balance || 0) - amount
+        await supabaseAdmin.from('accounts').update({ balance: newBankBal }).eq('id', bankGlAccountId)
+      }
     }
   }
 
-  // Audit log (already present)
+  // Audit log
   await logDataChange('payments', String(payment.id), 'INSERT', undefined, payment)
 
   return NextResponse.json({ success: true, payment_no: payNo, payment })
