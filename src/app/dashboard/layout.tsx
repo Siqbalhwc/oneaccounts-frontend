@@ -25,7 +25,7 @@ const styles = `
     width: 260px;
   }
 
-  /* Hide text when collapsed */
+  /* Hide text elements when collapsed */
   .dl-sidebar:not(:hover) .dl-sidebar-logo-name,
   .dl-sidebar:not(:hover) .dl-sidebar-logo-sub,
   .dl-sidebar:not(:hover) .dl-section-btn span,
@@ -53,7 +53,7 @@ const styles = `
     justify-content: center;
   }
 
-  /* Logo (expanded) */
+  /* Logo styling (expanded) */
   .dl-sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 20px 18px; border-bottom: 1px solid #1E293B; min-height: 68px; }
   .dl-sidebar-logo-img { width: 40px; height: 40px; border-radius: 12px; object-fit: contain; flex-shrink: 0; }
   .dl-sidebar-logo-name { color: white; font-size: 15px; font-weight: 700; line-height: 1.2; }
@@ -144,72 +144,144 @@ const styles = `
     .dl-topbar-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
     .dl-action-btn { padding: 6px 4px; font-size: 9px; }
   }
-
-  /* ── Global dark theme for all internal pages ── */
-  /* These classes are used by your reports, forms, and lists. */
-  .card {
-    background: #111827 !important;
-    border: 1px solid #1E293B !important;
-    color: #E2E8F0 !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2) !important;
-  }
-  .input, .filter-select, select.input, input.input, .pay-input, .inv-input, .ac-search {
-    background: #1E293B !important;
-    border-color: #334155 !important;
-    color: #F1F5F9 !important;
-  }
-  .input:focus, .filter-select:focus, .pay-input:focus, .inv-input:focus, .ac-search:focus {
-    border-color: #2563EB !important;
-    outline: none !important;
-  }
-  .btn-primary {
-    background: #2563EB !important;
-    color: white !important;
-  }
-  .btn-outline {
-    background: transparent !important;
-    border: 1.5px solid #334155 !important;
-    color: #CBD5E1 !important;
-  }
-  .label, .pay-label, .inv-label, .ac-label {
-    color: #64748B !important;
-  }
-  table, .table {
-    background: #111827 !important;
-    color: #E2E8F0 !important;
-  }
-  table th, .table th {
-    background: #1E293B !important;
-    color: #94A3B8 !important;
-    border-color: #1E293B !important;
-  }
-  table td, .table td {
-    border-color: #1E293B !important;
-  }
-  .row-header, .tb-table-header, .ac-header {
-    background: #1E293B !important;
-  }
-  .row, .tb-row, .ac-row {
-    background: #111827 !important;
-    border-bottom: 1px solid #1E293B !important;
-  }
-  .row:hover, .tb-row:hover, .ac-row:hover {
-    background: #1E293B !important;
-  }
-  /* Fix white backgrounds on summary cards */
-  .tb-summary-item, .tb-card, .inv-card, .pay-card, .ac-card, .form-card {
-    background: #111827 !important;
-    border-color: #1E293B !important;
-  }
-  /* Ensure text inside these cards is visible */
-  .tb-summary-item *, .tb-card *, .inv-card *, .pay-card *, .ac-card *, .form-card * {
-    color: inherit !important;
-  }
 `
 
 // ── Navigation structure (unchanged) ──
-const navSections = [ /* ... keep exactly as before ... */ ]
+const navSections = [
+  {
+    section: 'MAIN',
+    items: [
+      { label: 'Dashboard', icon: '📊', href: '/dashboard' },
+    ],
+  },
+  {
+    section: 'CRM',
+    items: [
+      { label: 'Customers',      icon: '👥', href: '/dashboard/customers' },
+      { label: 'Sales Invoices', icon: '🧾', href: '/dashboard/invoices'  },
+      { label: 'Receipts',       icon: '💰', href: '/dashboard/receipts'  },
+      { label: 'Suppliers',      icon: '🚚', href: '/dashboard/suppliers' },
+      { label: 'Purchase Bills', icon: '📦', href: '/dashboard/bills'     },
+      { label: 'Payments',       icon: '💳', href: '/dashboard/payments'  },
+    ],
+  },
+  {
+    section: 'BANKING',
+    items: [
+      { label: 'Bank Accounts',  icon: '🏦', href: '/dashboard/banking/bank-accounts'  },
+      { label: 'Bank Transfers', icon: '🔄', href: '/dashboard/banking/bank-transfers' },
+    ],
+  },
+  {
+    section: 'INVENTORY',
+    items: [
+      { label: 'Products',       icon: '📦', href: '/dashboard/products'              },
+      { label: 'Inventory Adj.', icon: '⚖️', href: '/dashboard/inventory/adjustments' },
+    ],
+  },
+  {
+    section: 'ACCOUNTING',
+    groups: [
+      {
+        groupLabel: 'General',
+        items: [
+          { label: 'Chart of Accounts', icon: '📋', href: '/dashboard/accounts' },
+          { label: 'Journal Entries',   icon: '📓', href: '/dashboard/journal'  },
+        ],
+      },
+      {
+        groupLabel: 'Reports',
+        items: [
+          { label: 'All Reports', icon: '📈', href: '/dashboard/reports' },
+        ],
+      },
+      {
+        groupLabel: 'Automation',
+        items: [
+          { label: 'Invoice Automation', icon: '⚙️', href: '/dashboard/settings/invoice-automation' },
+          { label: 'Investors',          icon: '💼', href: '/dashboard/investors'                   },
+        ],
+      },
+    ],
+  },
+  {
+    section: 'SYSTEM',
+    items: [
+      { label: 'Admin Panel',     icon: '👑', href: '/dashboard/admin/users'    },
+      { label: 'Feature Manager', icon: '⚙️', href: '/dashboard/admin/features' },
+      { label: 'Audit Logs',      icon: '📋', href: '/dashboard/admin/audit-logs' },
+      { label: 'Settings',        icon: '⚙️', href: '/dashboard/settings'       },
+      { label: 'New Company',     icon: '🏢', href: '/dashboard/companies/new'  },
+      { label: 'Upgrade Plan',    icon: '⭐', href: '/dashboard/upgrade'        },
+      { label: 'Super Admin',     icon: '🛡️', href: '/dashboard/super-admin'    },
+    ],
+  },
+]
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  /* ... keep exactly as before ... */
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const email   = user.email || ''
+  const initial = email.charAt(0).toUpperCase()
+
+  // ── Fetch company settings ──
+  let companyName = 'OneAccounts'
+  let companyTagline = 'by Siqbal'
+  let logoUrl = '/logo.png'
+
+  try {
+    const cid = (user?.app_metadata as any)?.company_id
+    if (cid) {
+      const { data: settings } = await supabase
+        .from('company_settings')
+        .select('business_name, logo_url, tagline')
+        .eq('company_id', cid)
+        .maybeSingle()
+
+      if (settings) {
+        if (settings.business_name) companyName = settings.business_name
+        if (settings.logo_url) logoUrl = settings.logo_url
+        if (settings.tagline) companyTagline = settings.tagline
+      }
+    }
+  } catch {
+    // keep hardcoded fallbacks
+  }
+
+  const getGreeting = () => {
+    const h = new Date().getHours()
+    if (h < 12) return 'Good morning'
+    if (h < 17) return 'Good afternoon'
+    return 'Good evening'
+  }
+
+  return (
+    <>
+      <style dangerouslySetInnerHTML={{ __html: styles }} />
+      <div className="dl-shell">
+        <SidebarClient />
+
+        <SidebarNav
+          navSections={navSections}
+          email={email}
+          initial={initial}
+          logoUrl={logoUrl}
+          companyName={companyName}
+          companyTagline={companyTagline}
+        />
+
+        <div className="dl-main">
+          <DashboardTopBar email={email} greeting={getGreeting()} />
+          <div className="dl-main-content">
+            {children}
+          </div>
+          <div className="mobile-bottom-nav">
+            <BottomNav />
+          </div>
+        </div>
+      </div>
+    </>
+  )
 }
