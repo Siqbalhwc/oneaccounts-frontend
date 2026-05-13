@@ -3,97 +3,92 @@ import { redirect } from 'next/navigation'
 import SidebarClient from './sidebar-client'
 import DashboardTopBar from "@/components/DashboardTopBar"
 import BottomNav from "@/components/BottomNav"
-import SidebarNav from "@/components/SidebarNav"   // ✅ new import
+import SidebarNav from "@/components/SidebarNav"
 
 const styles = `
-  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Plus Jakarta Sans', sans-serif; background: #EFF4FB; }
+  body { font-family: 'Inter', sans-serif; background: #0B1120; color: #E2E8F0; }
 
-  .dl-shell { display: flex; min-height: 100vh; background: #EFF4FB; }
+  .dl-shell { display: flex; min-height: 100vh; background: #0B1120; }
 
   /* ── Sidebar ── */
   .dl-sidebar {
-    width: 220px; min-width: 220px;
-    background: linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%);
+    width: 260px; min-width: 260px;
+    background: #0F172A;
     display: flex; flex-direction: column;
     position: fixed; top: 0; left: 0; bottom: 0; z-index: 40;
     transition: transform 0.25s ease; overflow: hidden;
+    border-right: 1px solid #1E293B;
   }
-  .dl-sidebar::before {
-    content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-    background-image: radial-gradient(rgba(255,255,255,0.055) 1.2px, transparent 1.2px);
-    background-size: 28px 28px; pointer-events: none; z-index: 0;
-  }
-  .dl-sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 16px 18px; border-bottom: 1px solid rgba(255,255,255,0.08); min-height: 58px; position: relative; z-index: 1; }
-  .dl-sidebar-logo-img { width: 32px; height: 32px; border-radius: 8px; object-fit: contain; flex-shrink: 0; }
-  .dl-sidebar-logo-name { color: white; font-size: 14px; font-weight: 700; line-height: 1.1; }
-  .dl-sidebar-logo-sub { color: rgba(255,255,255,0.45); font-size: 9px; }
+  .dl-sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 20px 18px; border-bottom: 1px solid #1E293B; min-height: 68px; }
+  .dl-sidebar-logo-img { width: 40px; height: 40px; border-radius: 12px; object-fit: contain; flex-shrink: 0; }
+  .dl-sidebar-logo-name { color: white; font-size: 15px; font-weight: 700; line-height: 1.2; }
+  .dl-sidebar-logo-sub { color: #64748B; font-size: 10px; }
 
-  /* ── New sidebar classes (used by SidebarNav) ── */
   .dl-section-btn {
-    display: flex; align-items: center; gap: 6px; padding: 8px 12px;
-    background: none; border: none; color: rgba(255,255,255,0.7); font-size: 12px;
+    display: flex; align-items: center; gap: 8px; padding: 10px 16px;
+    background: none; border: none; color: #94A3B8; font-size: 12px;
     font-weight: 600; cursor: pointer; width: 100%; text-align: left;
-    font-family: inherit; border-radius: 8px; transition: background 0.15s;
+    font-family: inherit; border-radius: 10px; transition: all 0.2s;
   }
-  .dl-section-btn:hover { background: rgba(255,255,255,0.08); }
-  .dl-section-content { padding-left: 6px; margin-top: 2px; margin-bottom: 8px; }
+  .dl-section-btn:hover { background: rgba(255,255,255,0.04); color: white; }
+  .dl-section-content { padding-left: 12px; margin-top: 4px; margin-bottom: 8px; }
 
-  .dl-sidebar-nav { flex: 1; padding: 8px 10px; overflow-y: auto; position: relative; z-index: 1; }
+  .dl-sidebar-nav { flex: 1; padding: 12px 10px; overflow-y: auto; }
 
   .dl-nav-section {
-    padding: 10px 8px 4px; color: rgba(255,255,255,0.35);
+    padding: 12px 16px 6px; color: #64748B;
     font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em;
   }
   .dl-nav-group-label {
-    padding: 6px 10px 2px; color: rgba(255,255,255,0.22);
+    padding: 6px 16px 2px; color: #475569;
     font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
   }
   .dl-nav-item {
-    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
-    border-radius: 8px; color: rgba(255,255,255,0.65); font-size: 13px; font-weight: 500;
+    display: flex; align-items: center; gap: 10px; padding: 9px 16px;
+    border-radius: 10px; color: #94A3B8; font-size: 13px; font-weight: 500;
     text-decoration: none; transition: all 0.15s; margin-bottom: 2px;
   }
-  .dl-nav-item:hover { background: rgba(255,255,255,0.07); color: white; }
-  .dl-nav-item.active { background: rgba(255,255,255,0.12); color: white; font-weight: 600; }
-  .dl-nav-icon { width: 18px; text-align: center; flex-shrink: 0; }
-  .dl-nav-divider { height: 1px; background: rgba(255,255,255,0.08); margin: 6px 14px; }
+  .dl-nav-item:hover { background: rgba(255,255,255,0.04); color: white; }
+  .dl-nav-item.active { background: rgba(37,99,235,0.15); color: white; font-weight: 600; border-left: 3px solid #2563EB; }
+  .dl-nav-icon { width: 20px; text-align: center; flex-shrink: 0; }
+  .dl-nav-divider { height: 1px; background: rgba(255,255,255,0.06); margin: 8px 16px; }
 
-  .dl-sidebar-user { padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 10px; position: relative; z-index: 1; }
-  .dl-sidebar-avatar { width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.15); color: white; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
-  .dl-sidebar-email { color: rgba(255,255,255,0.7); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dl-sidebar-signout { color: rgba(255,255,255,0.4); font-size: 10px; cursor: pointer; background: none; border: none; font-family: inherit; padding: 0; margin-top: 2px; }
+  .dl-sidebar-user { padding: 16px; border-top: 1px solid #1E293B; display: flex; align-items: center; gap: 10px; }
+  .dl-sidebar-avatar { width: 36px; height: 36px; border-radius: 50%; background: #1E293B; color: white; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex-shrink: 0; }
+  .dl-sidebar-email { color: #94A3B8; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dl-sidebar-signout { color: #64748B; font-size: 10px; cursor: pointer; background: none; border: none; font-family: inherit; padding: 0; margin-top: 2px; }
   .dl-sidebar-signout:hover { color: #EF4444; }
 
   /* ── Main area ── */
-  .dl-main { flex: 1; margin-left: 220px; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; overflow-x: hidden; }
+  .dl-main { flex: 1; margin-left: 260px; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; overflow-x: hidden; background: #0B1120; }
+  .dl-main-content { flex: 1; }
 
-  .dl-topbar { background: white; border-bottom: 1px solid #E2E8F0; padding: 0 20px; display: flex; align-items: center; min-height: 56px; gap: 16px; position: sticky; top: 0; z-index: 30; }
+  .dl-topbar { background: #0F172A; border-bottom: 1px solid #1E293B; padding: 0 24px; display: flex; align-items: center; min-height: 64px; gap: 16px; position: sticky; top: 0; z-index: 30; }
   .dl-topbar-greeting { flex: 1; min-width: 0; }
-  .dl-topbar-title { font-size: clamp(12px, 1.1vw, 14px); font-weight: 700; color: #1E293B; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .dl-topbar-subtitle { font-size: clamp(10px, 0.8vw, 11px); color: #94A3B8; line-height: 1.2; }
+  .dl-topbar-title { font-size: 14px; font-weight: 700; color: #F1F5F9; line-height: 1.2; }
+  .dl-topbar-subtitle { font-size: 11px; color: #64748B; line-height: 1.2; }
   .dl-topbar-actions { display: flex; gap: 8px; flex-shrink: 0; }
-  .dl-action-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px clamp(10px, 1.2vw, 14px); border-radius: 8px; font-size: clamp(10px, 0.78vw, 11.5px); font-weight: 600; text-decoration: none; cursor: pointer; border: 1.5px solid; font-family: inherit; transition: all 0.15s; white-space: nowrap; height: 34px; }
-  .dl-btn-invoice { background: #EEF2FF; border-color: #C7D2FE; color: #4338CA; }
-  .dl-btn-bill    { background: #FEF3C7; border-color: #FCD34D; color: #92400E; }
-  .dl-btn-receipt { background: #D1FAE5; border-color: #A7F3D0; color: #065F46; }
-  .dl-btn-payment { background: #FEE2E2; border-color: #FECACA; color: #991B1B; }
-  .dl-btn-invoice:hover { background: #E0E7FF; }
-  .dl-btn-bill:hover    { background: #FEF9C3; }
-  .dl-btn-receipt:hover { background: #A7F3D0; }
-  .dl-btn-payment:hover { background: #FECACA; }
+  .dl-action-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 10px; font-size: 11.5px; font-weight: 600; text-decoration: none; cursor: pointer; border: 1px solid; font-family: inherit; transition: all 0.15s; white-space: nowrap; height: 36px; }
+  .dl-btn-invoice { background: #1E293B; border-color: #334155; color: #93C5FD; }
+  .dl-btn-bill    { background: #1E293B; border-color: #334155; color: #FCD34D; }
+  .dl-btn-receipt { background: #1E293B; border-color: #334155; color: #6EE7B7; }
+  .dl-btn-payment { background: #1E293B; border-color: #334155; color: #FCA5A5; }
+  .dl-btn-invoice:hover { background: #1E3A8A; border-color: #2563EB; color: white; }
+  .dl-btn-bill:hover    { background: #1E3A8A; border-color: #2563EB; color: white; }
+  .dl-btn-receipt:hover { background: #065F46; border-color: #10B981; color: white; }
+  .dl-btn-payment:hover { background: #991B1B; border-color: #EF4444; color: white; }
 
-  .dl-hamburger { display: none; background: none; border: none; cursor: pointer; padding: 6px; flex-shrink: 0; }
-  .dl-hamburger span { display: block; width: 20px; height: 2px; background: #475569; margin: 4px 0; border-radius: 2px; }
-  .dl-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 35; }
+  .dl-hamburger { display: none; background: none; border: none; cursor: pointer; padding: 6px; flex-shrink: 0; position: relative; z-index: 100; }
+  .dl-hamburger span { display: block; width: 20px; height: 2px; background: #94A3B8; margin: 4px 0; border-radius: 2px; }
+  .dl-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 35; }
   .dl-overlay.open { display: block; }
 
-  /* ── Bottom nav – hidden on desktop, shown on mobile ── */
-  .mobile-bottom-nav { display: none; }
+  .mobile-bottom-nav { display: none; z-index: 10; }
   @media (max-width: 768px) {
     .mobile-bottom-nav { display: block; }
-    .dl-main { padding-bottom: 56px; }
+    .dl-main { padding-bottom: 60px; }
   }
 
   @media (max-width: 900px) {
@@ -106,17 +101,17 @@ const styles = `
     .dl-main { margin-left: 60px; }
   }
   @media (max-width: 640px) {
-    .dl-sidebar { transform: translateX(-220px); width: 220px; min-width: 220px; }
+    .dl-sidebar { transform: translateX(-260px); width: 260px; min-width: 260px; }
     .dl-sidebar.mobile-open { transform: translateX(0); }
     .dl-sidebar.mobile-open .dl-sidebar-logo-name, .dl-sidebar.mobile-open .dl-sidebar-logo-sub,
     .dl-sidebar.mobile-open .dl-nav-section, .dl-sidebar.mobile-open .dl-nav-group-label,
     .dl-sidebar.mobile-open .dl-nav-item span:not(.dl-nav-icon),
     .dl-sidebar.mobile-open .dl-sidebar-email, .dl-sidebar.mobile-open .dl-sidebar-signout { display: block; }
-    .dl-sidebar.mobile-open .dl-sidebar-logo { justify-content: flex-start; padding: 16px 18px; }
-    .dl-sidebar.mobile-open .dl-nav-item { justify-content: flex-start; padding: 8px 12px; }
+    .dl-sidebar.mobile-open .dl-sidebar-logo { justify-content: flex-start; padding: 20px 18px; }
+    .dl-sidebar.mobile-open .dl-nav-item { justify-content: flex-start; padding: 9px 16px; }
     .dl-main { margin-left: 0; }
     .dl-hamburger { display: block; }
-    .dl-topbar { flex-wrap: wrap; min-height: auto; padding: 10px 14px; gap: 10px; }
+    .dl-topbar { flex-wrap: wrap; min-height: auto; padding: 12px 16px; gap: 10px; }
     .dl-topbar-greeting { flex: 1 1 60%; }
     .dl-topbar-actions { flex: 1 1 100%; gap: 6px; }
     .dl-action-btn { flex: 1; justify-content: center; padding: 7px 8px; font-size: 10px; }
@@ -127,7 +122,7 @@ const styles = `
   }
 `
 
-// ── Navigation structure (unchanged) ──
+// ── Navigation structure ──
 const navSections = [
   {
     section: 'MAIN',
@@ -242,10 +237,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       <div className="dl-shell">
-        {/* Mobile overlay (required for hamburger menu) */}
         <SidebarClient />
 
-        {/* ✅ Now using the collapsible SidebarNav component */}
         <SidebarNav
           navSections={navSections}
           email={email}
@@ -257,7 +250,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
         <div className="dl-main">
           <DashboardTopBar email={email} greeting={getGreeting()} />
-          {children}
+          <div className="dl-main-content">   {/* ✅ flex:1 wrapper – fixes large‑screen blank space */}
+            {children}
+          </div>
           <div className="mobile-bottom-nav">
             <BottomNav />
           </div>

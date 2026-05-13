@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo } from "react"
 import { usePathname } from "next/navigation"
 import { ChevronDown, ChevronRight } from "lucide-react"
 
-// ── Type definitions ────────────────────────────────────────────────────
 interface NavItem {
   label: string
   icon: string
@@ -22,7 +21,6 @@ interface NavSection {
   groups?: NavGroup[]
 }
 
-// ── Component ───────────────────────────────────────────────────────────
 export default function SidebarNav({
   navSections,
   email,
@@ -43,7 +41,6 @@ export default function SidebarNav({
   // Which section contains the current page?
   const activeSection = useMemo(() => {
     for (const sec of navSections) {
-      // flat items
       if (sec.items) {
         for (const item of sec.items) {
           if (item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href)) {
@@ -51,7 +48,6 @@ export default function SidebarNav({
           }
         }
       }
-      // grouped items
       if (sec.groups) {
         for (const group of sec.groups) {
           for (const item of group.items) {
@@ -92,12 +88,10 @@ export default function SidebarNav({
     setExpandedSections(prev => {
       const isOpen = prev[section]
       if (isOpen) {
-        // close it (all closed)
         const allClosed: Record<string, boolean> = {}
         for (const sec of navSections) allClosed[sec.section] = false
         return allClosed
       }
-      // open this, close others
       const next: Record<string, boolean> = {}
       for (const sec of navSections) next[sec.section] = false
       next[section] = true
@@ -108,7 +102,6 @@ export default function SidebarNav({
   const isActive = (href: string) =>
     href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href)
 
-  // ── JSX ───────────────────────────────────────────────────────────────
   return (
     <aside className="dl-sidebar" id="dl-sidebar">
       {/* Logo */}
@@ -126,7 +119,6 @@ export default function SidebarNav({
           const expanded = expandedSections[sec.section] ?? false
           return (
             <div key={sec.section} style={{ marginBottom: 2 }}>
-              {/* Section toggle */}
               <button className="dl-section-btn" onClick={() => toggleSection(sec.section)}>
                 {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                 <span>{sec.section}</span>
@@ -134,7 +126,6 @@ export default function SidebarNav({
 
               {expanded && (
                 <div className="dl-section-content">
-                  {/* Grouped items (e.g., ACCOUNTING) */}
                   {sec.groups &&
                     sec.groups.map(group => (
                       <div key={group.groupLabel}>
@@ -152,7 +143,6 @@ export default function SidebarNav({
                       </div>
                     ))}
 
-                  {/* Flat items */}
                   {sec.items &&
                     sec.items.map(item => (
                       <a
