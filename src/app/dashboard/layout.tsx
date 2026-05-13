@@ -12,7 +12,7 @@ const styles = `
 
   .dl-shell { display: flex; min-height: 100vh; background: #0B1120; }
 
-  /* ── Sidebar – 208 px, fixed, no hover changes ── */
+  /* ── Sidebar – 208 px, fixed, no hover expansion ── */
   .dl-sidebar {
     width: 208px; min-width: 208px;
     background: #0F172A;
@@ -21,18 +21,15 @@ const styles = `
     transition: none; overflow: hidden;
     border-right: 1px solid #1E293B;
   }
-  /* Absolutely no expansion on hover – keep it always 208px */
   .dl-sidebar:hover {
-    width: 208px;
+    width: 208px;  /* prevent accidental expansion */
   }
 
-  /* Logo */
   .dl-sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 20px 18px; border-bottom: 1px solid #1E293B; min-height: 68px; }
   .dl-sidebar-logo-img { width: 40px; height: 40px; border-radius: 12px; object-fit: contain; flex-shrink: 0; }
   .dl-sidebar-logo-name { color: white; font-size: 15px; font-weight: 700; line-height: 1.2; }
   .dl-sidebar-logo-sub { color: #64748B; font-size: 10px; }
 
-  /* Section toggle button */
   .dl-section-btn {
     display: flex; align-items: center; gap: 8px; padding: 10px 16px;
     background: none; border: none; color: #94A3B8; font-size: 12px;
@@ -68,7 +65,7 @@ const styles = `
   .dl-sidebar-signout { color: #64748B; font-size: 10px; cursor: pointer; background: none; border: none; font-family: inherit; padding: 0; margin-top: 2px; }
   .dl-sidebar-signout:hover { color: #EF4444; }
 
-  /* ── Main area – margin matches the 208 px sidebar ── */
+  /* ── Main area ── */
   .dl-main { flex: 1; margin-left: 208px; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; overflow-x: hidden; background: #0B1120; }
   .dl-main-content { flex: 1; }   /* fixes large‑screen blank space */
 
@@ -117,6 +114,112 @@ const styles = `
   @media (max-width: 380px) {
     .dl-topbar-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
     .dl-action-btn { padding: 6px 4px; font-size: 9px; }
+  }
+
+  /* ── Global dark theme for all internal pages (except the Dashboard) ── */
+  /* These overrides will turn every card, table, input, and form dark. */
+
+  /* Cards */
+  .card, .tb-card, .inv-card, .pay-card, .ac-card, .form-card {
+    background: #111827 !important;
+    border: 1px solid #1E293B !important;
+    color: #E2E8F0 !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2) !important;
+  }
+  /* Inputs & selects */
+  .input, .filter-select, select.input, input.input, .pay-input, .inv-input, .ac-search,
+  .inv-select, .pay-select, .filter-select, .input-budget {
+    background: #1E293B !important;
+    border-color: #334155 !important;
+    color: #F1F5F9 !important;
+  }
+  .input:focus, .filter-select:focus, .pay-input:focus, .inv-input:focus, .ac-search:focus,
+  .inv-select:focus, .pay-select:focus {
+    border-color: #2563EB !important;
+    outline: none !important;
+  }
+  /* Buttons */
+  .btn-primary {
+    background: #2563EB !important;
+    color: white !important;
+  }
+  .btn-outline {
+    background: transparent !important;
+    border: 1.5px solid #334155 !important;
+    color: #CBD5E1 !important;
+  }
+  /* Labels */
+  .label, .pay-label, .inv-label, .ac-label, .tb-label {
+    color: #64748B !important;
+  }
+  /* Tables */
+  table, .table {
+    background: #111827 !important;
+    color: #E2E8F0 !important;
+  }
+  table th, .table th {
+    background: #1E293B !important;
+    color: #94A3B8 !important;
+    border-color: #1E293B !important;
+  }
+  table td, .table td {
+    border-color: #1E293B !important;
+  }
+  .row-header, .tb-table-header, .ac-header, .journal-header {
+    background: #1E293B !important;
+  }
+  .row, .tb-row, .ac-row, .journal-row {
+    background: #111827 !important;
+    border-bottom: 1px solid #1E293B !important;
+  }
+  .row:hover, .tb-row:hover, .ac-row:hover, .journal-row:hover {
+    background: #1E293B !important;
+  }
+  /* Summary items */
+  .tb-summary-item, .log-table {
+    background: #111827 !important;
+    border-color: #1E293B !important;
+  }
+  /* Ensure text inside these elements is visible */
+  .tb-summary-item *, .tb-card *, .inv-card *, .pay-card *, .ac-card *, .form-card *,
+  .card * {
+    color: inherit !important;
+  }
+  /* Specific overrides for some old inline styles (if any) */
+  .tb-summary-item div {
+    color: inherit !important;
+  }
+  /* Fix the budget input */
+  .input-budget {
+    background: #1E293B !important;
+    color: white !important;
+  }
+  /* Log tabs */
+  .log-tab {
+    background: #1E293B !important;
+    color: #94A3B8 !important;
+    border-color: #334155 !important;
+  }
+  .log-tab.active {
+    background: #2563EB !important;
+    color: white !important;
+    border-color: #2563EB !important;
+  }
+  /* Profit & Loss / Balance sheet text */
+  .clickable, .clickable-cat, .clickable-row {
+    color: #E2E8F0 !important;
+  }
+  .clickable:hover, .clickable-cat:hover, .clickable-row:hover {
+    color: #2563EB !important;
+  }
+  /* Override any remaining white backgrounds in rows */
+  .act-header td {
+    background: #1E293B !important;
+    color: #E2E8F0 !important;
+  }
+  .sub-header th {
+    background: #1E293B !important;
+    color: #94A3B8 !important;
   }
 `
 
