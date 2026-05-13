@@ -135,8 +135,24 @@ export async function POST(request: NextRequest) {
 
     if (entry) {
       await supabaseAdmin.from('journal_lines').insert([
-        { company_id: companyId, entry_id: entry.id, account_id: apAcc.data.id, debit: amount, credit: 0 },
-        { company_id: companyId, entry_id: entry.id, account_id: cashAcc.data.id, debit: 0, credit: amount },
+        {
+          company_id: companyId,
+          entry_id: entry.id,
+          account_id: apAcc.data.id,
+          debit: amount,
+          credit: 0,
+          source_type: 'payment',      // ✅ new
+          source_id: payment.id,       // ✅ new
+        },
+        {
+          company_id: companyId,
+          entry_id: entry.id,
+          account_id: cashAcc.data.id,
+          debit: 0,
+          credit: amount,
+          source_type: 'payment',      // ✅ new
+          source_id: payment.id,       // ✅ new
+        },
       ])
       const newAp = (apAcc.data.balance || 0) - amount
       const newCash = (cashAcc.data.balance || 0) - amount
@@ -145,7 +161,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Audit log
+  // Audit log (already present)
   await logDataChange('payments', String(payment.id), 'INSERT', undefined, payment)
 
   return NextResponse.json({ success: true, payment_no: payNo, payment })

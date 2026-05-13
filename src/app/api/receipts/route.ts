@@ -149,27 +149,21 @@ export async function POST(request: NextRequest) {
   let description = `Receipt - ${recNo}`
 
   if (income_account_id) {
-    // Donation mode: entire amount credits the selected income account
     jeLines.push({ account_id: income_account_id, debit: 0, credit: amount })
     description = `Donation Receipt - ${recNo}`
   } else {
-    // Normal receipt: allocate to AR and optionally to advance
     const arAcc = await getAccount(supabaseAdmin, '1100', companyId)
     if (!arAcc) {
       return NextResponse.json({ error: 'AR account (1100) not found' }, { status: 500 })
     }
 
-    // Credit AR for the allocated amount
     if (totalAllocated > 0) {
       jeLines.push({ account_id: arAcc.id, debit: 0, credit: totalAllocated })
     }
 
-    // Credit a separate advance account for the excess
     if (advanceAmount > 0) {
-      // Look for a liability account code 2010 or create one
       let advanceAcc = await getAccount(supabaseAdmin, '2010', companyId)
       if (!advanceAcc) {
-        // Create the account
         const { data: newAcc } = await supabaseAdmin.from('accounts').insert({
           code: '2010', name: 'Customer Advances', type: 'Liability', company_id: companyId
         }).select('id,balance').single()
@@ -190,11 +184,17 @@ export async function POST(request: NextRequest) {
   }).select('id').single()
 
   if (entryErr || !entry) {
-    // Rollback receipt? Not critical, but log error
     return NextResponse.json({ error: entryErr?.message || 'JE insert failed' }, { status: 500 })
   }
 
-  const lineRows = jeLines.map(l => ({ ...l, entry_id: entry.id, company_id: companyId }))
+  // Build lines with source tracking
+  const lineRows = jeLines.map(l => ({
+    ...l,
+    entry_id: entry.id,
+    company_id: companyId,
+    source_type: 'receipt',   // ✅ new
+    source_id: receipt.id,    // ✅ new
+  }))
   await supabaseAdmin.from('journal_lines').insert(lineRows)
 
   // Update account balances
@@ -207,7 +207,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Audit log
+  // Audit log (already present)
   await logDataChange('receipts', String(receipt.id), 'INSERT', undefined, receipt)
 
   return NextResponse.json({ success: true, receipt_no: recNo, receipt })
