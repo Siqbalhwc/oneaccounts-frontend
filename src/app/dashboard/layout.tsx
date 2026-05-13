@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import SidebarClient from './sidebar-client'
 import DashboardTopBar from "@/components/DashboardTopBar"
 import BottomNav from "@/components/BottomNav"
+import SidebarNav from "@/components/SidebarNav"   // ✅ new import
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
@@ -28,6 +29,16 @@ const styles = `
   .dl-sidebar-logo-img { width: 32px; height: 32px; border-radius: 8px; object-fit: contain; flex-shrink: 0; }
   .dl-sidebar-logo-name { color: white; font-size: 14px; font-weight: 700; line-height: 1.1; }
   .dl-sidebar-logo-sub { color: rgba(255,255,255,0.45); font-size: 9px; }
+
+  /* ── New sidebar classes (used by SidebarNav) ── */
+  .dl-section-btn {
+    display: flex; align-items: center; gap: 6px; padding: 8px 12px;
+    background: none; border: none; color: rgba(255,255,255,0.7); font-size: 12px;
+    font-weight: 600; cursor: pointer; width: 100%; text-align: left;
+    font-family: inherit; border-radius: 8px; transition: background 0.15s;
+  }
+  .dl-section-btn:hover { background: rgba(255,255,255,0.08); }
+  .dl-section-content { padding-left: 6px; margin-top: 2px; margin-bottom: 8px; }
 
   .dl-sidebar-nav { flex: 1; padding: 8px 10px; overflow-y: auto; position: relative; z-index: 1; }
 
@@ -82,7 +93,7 @@ const styles = `
   .mobile-bottom-nav { display: none; }
   @media (max-width: 768px) {
     .mobile-bottom-nav { display: block; }
-    .dl-main { padding-bottom: 56px; }   /* space for bottom nav */
+    .dl-main { padding-bottom: 56px; }
   }
 
   @media (max-width: 900px) {
@@ -116,7 +127,7 @@ const styles = `
   }
 `
 
-// ── Navigation structure ──
+// ── Navigation structure (unchanged) ──
 const navSections = [
   {
     section: 'MAIN',
@@ -231,68 +242,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       <div className="dl-shell">
+        {/* Mobile overlay (required for hamburger menu) */}
         <SidebarClient />
 
-        <aside className="dl-sidebar" id="dl-sidebar">
-          <div className="dl-sidebar-logo">
-            <img src={logoUrl} alt={companyName} className="dl-sidebar-logo-img" />
-            <div>
-              <div className="dl-sidebar-logo-name">{companyName}</div>
-              <div className="dl-sidebar-logo-sub">{companyTagline}</div>
-            </div>
-          </div>
-
-          <nav className="dl-sidebar-nav">
-            {navSections.map((sec, secIdx) => (
-              <div key={sec.section}>
-                <div className="dl-nav-section">{sec.section}</div>
-
-                {'groups' in sec && sec.groups ? (
-                  sec.groups.map((group) => (
-                    <div key={group.groupLabel}>
-                      <div className="dl-nav-group-label">{group.groupLabel}</div>
-                      {group.items.map((item) => (
-                        <a
-                          key={item.href}
-                          href={item.href}
-                          className="dl-nav-item"
-                        >
-                          <span className="dl-nav-icon">{item.icon}</span>
-                          <span>{item.label}</span>
-                        </a>
-                      ))}
-                    </div>
-                  ))
-                ) : (
-                  'items' in sec && sec.items?.map((item) => (
-                    <a
-                      key={item.href}
-                      href={item.href}
-                      className="dl-nav-item"
-                    >
-                      <span className="dl-nav-icon">{item.icon}</span>
-                      <span>{item.label}</span>
-                    </a>
-                  ))
-                )}
-
-                {secIdx < navSections.length - 1 && (
-                  <div className="dl-nav-divider" />
-                )}
-              </div>
-            ))}
-          </nav>
-
-          <div className="dl-sidebar-user">
-            <div className="dl-sidebar-avatar">{initial}</div>
-            <div style={{ overflow: 'hidden' }}>
-              <div className="dl-sidebar-email">{email}</div>
-              <form action="/auth/signout" method="post">
-                <button type="submit" className="dl-sidebar-signout">Sign Out</button>
-              </form>
-            </div>
-          </div>
-        </aside>
+        {/* ✅ Now using the collapsible SidebarNav component */}
+        <SidebarNav
+          navSections={navSections}
+          email={email}
+          initial={initial}
+          logoUrl={logoUrl}
+          companyName={companyName}
+          companyTagline={companyTagline}
+        />
 
         <div className="dl-main">
           <DashboardTopBar email={email} greeting={getGreeting()} />
