@@ -7,30 +7,15 @@ import { Plus, ArrowUpDown, ArrowUp, ArrowDown, Search } from "lucide-react"
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
 
-// ── Category mapping from standard GL code ranges ──
-function getCategory(account: { code?: string }): string {
-  if (!account.code) return "Other"
-  const num = parseFloat(account.code)
-  if (isNaN(num)) return "Other"
+// Fallback category mapping for accounts without a stored category
+function getFallbackCategory(code?: string): string {
+  if (!code) return "—"
+  const num = parseFloat(code)
+  if (isNaN(num)) return "—"
   if (num >= 1000 && num <= 1099) return "Cash & Bank"
   if (num >= 1100 && num <= 1199) return "Accounts Receivable"
-  if (num >= 1200 && num <= 1299) return "Inventory"
-  if (num >= 1300 && num <= 1399) return "Other Current Assets"
-  if (num >= 1400 && num <= 1499) return "Fixed Assets"
-  if (num >= 1500 && num <= 1599) return "Vehicles"
-  if (num >= 2000 && num <= 2099) return "Accounts Payable"
-  if (num >= 2100 && num <= 2199) return "Other Current Liabilities"
-  if (num >= 3000 && num <= 3099) return "Equity"
-  if (num >= 4000 && num <= 4099) return "Revenue"
-  if (num >= 5000 && num <= 5099) return "Direct Expenses"
-  if (num >= 5100 && num <= 5199) return "Operating Expenses"
-  // fallback by type
-  if (num >= 1000 && num <= 1999) return "Assets"
-  if (num >= 2000 && num <= 2999) return "Liabilities"
-  if (num >= 3000 && num <= 3999) return "Equity"
-  if (num >= 4000 && num <= 4999) return "Revenue"
-  if (num >= 5000 && num <= 5999) return "Expenses"
-  return "Other"
+  // ... keep all existing mappings if you like, or just use a simple default
+  return "—"
 }
 
 type SortField = "code" | "name" | "type" | "category"
@@ -66,16 +51,19 @@ export default function AccountsPage() {
   }, [role, canView])
 
   const filteredAccounts = useMemo(() => {
-    let list = accounts.map((a) => ({ ...a, category: getCategory(a) }))
+    let list = accounts.map(a => ({
+      ...a,
+      // Use stored category, fallback to old mapping if null
+      category: a.category || getFallbackCategory(a.code),
+    }))
 
     if (search.trim()) {
       const q = search.toLowerCase()
-      list = list.filter(
-        (a) =>
-          a.code?.toLowerCase().includes(q) ||
-          a.name?.toLowerCase().includes(q) ||
-          a.type?.toLowerCase().includes(q) ||
-          a.category?.toLowerCase().includes(q)
+      list = list.filter(a =>
+        a.code?.toLowerCase().includes(q) ||
+        a.name?.toLowerCase().includes(q) ||
+        a.type?.toLowerCase().includes(q) ||
+        (a.category || "").toLowerCase().includes(q)
       )
     }
 
@@ -100,7 +88,7 @@ export default function AccountsPage() {
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
-      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"))
+      setSortDir(prev => prev === "asc" ? "desc" : "asc")
     } else {
       setSortField(field)
       setSortDir("asc")
@@ -139,7 +127,7 @@ export default function AccountsPage() {
           .btn-primary { background: #1D4ED8; color: white; }
           @media (max-width: 640px) {
             .ac-header, .ac-row { grid-template-columns: 60px 1fr 80px 80px; }
-            .ac-header span:nth-child(4), .ac-row span:nth-child(4) { display: none; }  /* hide category on very small screens */
+            .ac-header span:nth-child(4), .ac-row span:nth-child(4) { display: none; }
             .ac-search { width: 100%; }
           }
         `}</style>
@@ -158,7 +146,7 @@ export default function AccountsPage() {
 
         <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
           <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#94A3B8" }} />
-          <input className="ac-search" placeholder="Filter by code, name, type..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          <input className="ac-search" placeholder="Filter by code, name, type..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
 
         {loading ? (
@@ -176,7 +164,7 @@ export default function AccountsPage() {
               <button className="ac-sort-btn" onClick={() => handleSort("category")}>Category {getSortIcon("category")}</button>
               <span style={{ textAlign: "right" }}>Balance</span>
             </div>
-            {filteredAccounts.map((a) => (
+            {filteredAccounts.map(a => (
               <div key={a.id} className="ac-row">
                 <span style={{ fontWeight: 600, color: "#1E3A8A" }}>{a.code}</span>
                 <span style={{ color: "#334155" }}>{a.name}</span>

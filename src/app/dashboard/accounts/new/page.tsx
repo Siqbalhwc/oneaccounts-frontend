@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Plus, CheckCircle } from "lucide-react"
 
-// ── Full category list with their GL code ranges ──
-const CATEGORIES = [
+// Predefined categories with code ranges
+const PREDEFINED_CATEGORIES = [
   { label: "Cash & Bank", codeStart: 1000, codeEnd: 1099, type: "Asset" },
   { label: "Accounts Receivable", codeStart: 1100, codeEnd: 1199, type: "Asset" },
   { label: "Inventory", codeStart: 1200, codeEnd: 1299, type: "Asset" },
@@ -21,6 +21,8 @@ const CATEGORIES = [
   { label: "Operating Expenses", codeStart: 5100, codeEnd: 5199, type: "Expense" },
 ]
 
+const CUSTOM_OPTION = "➕ Custom…"
+
 export default function NewAccountPage() {
   const router = useRouter()
   const supabase = createBrowserClient(
@@ -30,7 +32,10 @@ export default function NewAccountPage() {
 
   const [companyId, setCompanyId] = useState("")
   const [accountType, setAccountType] = useState("")
-  const [categoryLabel, setCategoryLabel] = useState("")
+  const [selectedCategory, setSelectedCategory] = useState("")   // can be predefined label or CUSTOM_OPTION
+  const [customCategoryName, setCustomCategoryName] = useState("")
+  const [customCodeStart, setCustomCodeStart] = useState("")
+  const [customCodeEnd, setCustomCodeEnd] = useState("")
   const [accountName, setAccountName] = useState("")
   const [suggestedCode, setSuggestedCode] = useState<number | null>(null)
   const [customCode, setCustomCode] = useState("")
@@ -38,8 +43,22 @@ export default function NewAccountPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  // Available categories filtered by the selected type
-  const availableCategories = CATEGORIES.filter((c) => c.type === accountType)
+  // Available predefined categories for the selected type
+  const availablePredefined = PREDEFINED_CATEGORIES.filter(c => c.type === accountType)
+  const isCustom = selectedCategory === CUSTOM_OPTION
+
+  // The final category text that will be saved
+  const finalCategory = isCustom ? customCategoryName.trim() : selectedCategory
+
+  // Determine the code range to use for suggestions
+  const effectiveCodeStart = isCustom
+    ? (customCodeStart ? parseInt(customCodeStart, 10) : (accountType === "Asset" ? 1000 : accountType === "Liability" ? 2000 : accountType === "Equity" ? 3000 : accountType === "Revenue" ? 4000 : accountType === "Expense" ? 5000 : null))
+  const effectiveCodeEnd = isCustom
+    ? (customCodeEnd ? parseInt(customCodeEnd, 10) : (accountType === "Asset" ? 1999 : accountType === "Liability" ? 2999 : accountType === "Equity" ? 3999 : accountType === "Revenue" ? 4999 : accountType === "Expense" ? 5999 : null))
+    : (() => {
+        const cat = PREDEFINED_CATEGORIES.find(c => c.label === selectedCategory)
+        return cat ? { start: cat.codeStart, end: cat.codeEnd } : null
+      })()
 
   // Get company ID
   useEffect(() => {
@@ -51,50 +70,50 @@ export default function NewAccountPage() {
 
   // When category changes, suggest the next available code
   useEffect(() => {
-    if (!companyId || !categoryLabel || !accountType) {
+    if (!companyId || !selectedCategory) {
       setSuggestedCode(null)
       setCustomCode("")
       return
     }
-    const cat = CATEGORIES.find((c) => c.label === categoryLabel)
-    if (!cat) return
+    // If custom but no range yet, use whole type range
+    const start = effectiveCodeStart
+    const end = effectiveCodeEnd
+    if (!start || !end) {
+      setSuggestedCode(null)
+      setCustomCode("")
+      return
+    }
 
-    // Find existing codes in this range, then suggest the smallest free number
     supabase
       .from("accounts")
       .select("code")
       .eq("company_id", companyId)
-      .gte("code", cat.codeStart.toString())
-      .lte("code", cat.codeEnd.toString())
+      .gte("code", start.toString())
+      .lte("code", end.toString())
       .order("code", { ascending: true })
       .then(({ data }) => {
         const usedNumbers = (data || [])
-          .map((a) => parseInt(a.code, 10))
-          .filter((n) => !isNaN(n) && n >= cat.codeStart && n <= cat.codeEnd)
+          .map(a => parseInt(a.code, 10))
+          .filter(n => !isNaN(n) && n >= start && n <= end)
           .sort((a, b) => a - b)
 
-        let next = cat.codeStart
-        // Find first gap, or max+1
+        let next = start
         for (const n of usedNumbers) {
-          if (n === next) {
-            next++
-          } else if (n > next) {
-            break
-          }
+          if (n === next) next++
+          else if (n > next) break
         }
-        // Make sure we don't exceed the range
-        if (next > cat.codeEnd) next = cat.codeEnd
+        if (next > end) next = end
         setSuggestedCode(next)
         setCustomCode(next.toString())
       })
-  }, [companyId, categoryLabel, accountType])
+  }, [companyId, selectedCategory, customCodeStart, customCodeEnd, accountType])
 
-  // If the user edits the code manually, we use that
   const codeToSubmit = customCode || (suggestedCode?.toString() ?? "")
 
   const handleSubmit = async () => {
     if (!companyId) { setError("Company not loaded"); return }
-    if (!accountType || !categoryLabel) { setError("Please select type and category"); return }
+    if (!accountType || !selectedCategory) { setError("Please select type and category"); return }
+    if (isCustom && !customCategoryName.trim()) { setError("Please enter a custom category name"); return }
     if (!accountName.trim()) { setError("Account name is required"); return }
     const code = parseInt(codeToSubmit, 10)
     if (isNaN(code) || code < 0) { setError("Invalid account code"); return }
@@ -102,7 +121,6 @@ export default function NewAccountPage() {
     setLoading(true)
     setError("")
 
-    // Try inserting with retry on duplicate
     let attempts = 0
     let currentCode = code
     let insertResult: any = null
@@ -113,17 +131,17 @@ export default function NewAccountPage() {
           code: currentCode.toString(),
           name: accountName.trim(),
           type: accountType,
+          category: finalCategory,   // ✅ save the category
           balance: 0,
           company_id: companyId,
         })
-        .select("id, code")
+        .select("id, code, category")
         .single()
 
       insertResult = { data, error: insertErr }
       if (!insertErr) break
 
       if (insertErr.message?.includes("duplicate key") && attempts < 2) {
-        // Try next code
         currentCode++
         attempts++
         continue
@@ -143,7 +161,10 @@ export default function NewAccountPage() {
     setFlash(`✅ Account ${insertResult.data.code} – ${accountName} created!`)
     setAccountName("")
     setAccountType("")
-    setCategoryLabel("")
+    setSelectedCategory("")
+    setCustomCategoryName("")
+    setCustomCodeStart("")
+    setCustomCodeEnd("")
     setLoading(false)
     setTimeout(() => router.push("/dashboard/accounts"), 1500)
   }
@@ -160,6 +181,8 @@ export default function NewAccountPage() {
         .btn { padding: 10px 20px; border-radius: 8px; border: none; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
         .btn-primary { background: #1D4ED8; color: white; }
         .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
+        .inline-group { display: flex; gap: 8px; }
+        .inline-group > * { flex: 1; }
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
@@ -176,7 +199,7 @@ export default function NewAccountPage() {
       <div className="form-card">
         <div style={{ marginBottom: 16 }}>
           <label className="label">Account Type *</label>
-          <select className="select" value={accountType} onChange={(e) => { setAccountType(e.target.value); setCategoryLabel(""); setSuggestedCode(null); setCustomCode(""); }}>
+          <select className="select" value={accountType} onChange={(e) => { setAccountType(e.target.value); setSelectedCategory(""); setCustomCategoryName(""); setCustomCodeStart(""); setCustomCodeEnd(""); setSuggestedCode(null); setCustomCode(""); }}>
             <option value="">— Select Type —</option>
             {["Asset", "Liability", "Equity", "Revenue", "Expense"].map(t => <option key={t} value={t}>{t}</option>)}
           </select>
@@ -185,18 +208,39 @@ export default function NewAccountPage() {
         {accountType && (
           <div style={{ marginBottom: 16 }}>
             <label className="label">Category *</label>
-            <select className="select" value={categoryLabel} onChange={(e) => setCategoryLabel(e.target.value)}>
+            <select className="select" value={selectedCategory} onChange={(e) => { setSelectedCategory(e.target.value); setCustomCategoryName(""); setCustomCodeStart(""); setCustomCodeEnd(""); }}>
               <option value="">— Select Category —</option>
-              {availableCategories.map(c => <option key={c.label} value={c.label}>{c.label} ({c.codeStart}-{c.codeEnd})</option>)}
+              {availablePredefined.map(c => <option key={c.label} value={c.label}>{c.label} ({c.codeStart}-{c.codeEnd})</option>)}
+              <option value={CUSTOM_OPTION}>{CUSTOM_OPTION}</option>
             </select>
           </div>
+        )}
+
+        {/* Custom category fields */}
+        {isCustom && (
+          <>
+            <div style={{ marginBottom: 16 }}>
+              <label className="label">Custom Category Name *</label>
+              <input className="input" value={customCategoryName} onChange={(e) => setCustomCategoryName(e.target.value)} placeholder="e.g. Land & Building" />
+            </div>
+            <div className="inline-group" style={{ marginBottom: 16 }}>
+              <div>
+                <label className="label">Code Start (optional)</label>
+                <input className="input" type="number" value={customCodeStart} onChange={(e) => setCustomCodeStart(e.target.value)} placeholder="1000" />
+              </div>
+              <div>
+                <label className="label">Code End (optional)</label>
+                <input className="input" type="number" value={customCodeEnd} onChange={(e) => setCustomCodeEnd(e.target.value)} placeholder="1999" />
+              </div>
+            </div>
+          </>
         )}
 
         {suggestedCode !== null && (
           <div style={{ marginBottom: 16 }}>
             <label className="label">Account Code</label>
             <input className="input" type="number" value={customCode} onChange={(e) => setCustomCode(e.target.value)} placeholder={`Suggested: ${suggestedCode}`} />
-            <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 4 }}>Suggested next available code in this category</div>
+            <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 4 }}>Suggested next free code in the selected range</div>
           </div>
         )}
 
