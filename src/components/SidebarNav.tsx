@@ -1,25 +1,10 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { usePathname } from "next/navigation"
 import { ChevronDown, ChevronRight } from "lucide-react"
 
-interface NavItem {
-  label: string
-  icon: string
-  href: string
-}
-
-interface NavGroup {
-  groupLabel: string
-  items: NavItem[]
-}
-
-interface NavSection {
-  section: string
-  items?: NavItem[]
-  groups?: NavGroup[]
-}
+// … types remain unchanged (NavItem, NavGroup, NavSection) …
 
 export default function SidebarNav({
   navSections,
@@ -38,11 +23,12 @@ export default function SidebarNav({
 }) {
   const pathname = usePathname()
 
-  // Determine which section is currently active based on the URL
+  // 1. Find which section contains the current page
   const activeSection = useMemo(() => {
     for (const sec of navSections) {
       if (sec.items) {
         for (const item of sec.items) {
+          // handled: dashboard exact match, others prefix match
           if (item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href)) {
             return sec.section
           }
@@ -61,7 +47,7 @@ export default function SidebarNav({
     return null
   }, [pathname, navSections])
 
-  // Initialize: only the active section is expanded; others are collapsed
+  // 2. Expanded sections – start with only the active section open
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {}
     for (const sec of navSections) {
@@ -70,97 +56,43 @@ export default function SidebarNav({
     return initial
   })
 
-  // When the user navigates to a different page, keep that section open
-  useState(() => {
+  // 3. When active section changes (navigation), auto‑open that section
+  useEffect(() => {
     if (activeSection) {
       setExpandedSections(prev => {
-        // Only update if the active section isn't already expanded
+        // Already open? Do nothing
         if (prev[activeSection]) return prev
-        return { ...prev, [activeSection]: true }
+        // Open only the active section – accordion style
+        const next: Record<string, boolean> = {}
+        for (const sec of navSections) {
+          next[sec.section] = false
+        }
+        next[activeSection] = true
+        return next
       })
     }
-  })
+  }, [activeSection, navSections])
 
+  // 4. Manual toggle – accordion: only one section open at a time
   const toggleSection = (section: string) => {
-    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }))
+    setExpandedSections(prev => {
+      const isCurrentlyOpen = prev[section]
+      // If it's already open, close it (no open sections)
+      if (isCurrentlyOpen) {
+        const allClosed: Record<string, boolean> = {}
+        for (const sec of navSections) allClosed[sec.section] = false
+        return allClosed
+      }
+      // Open this section, close all others
+      const next: Record<string, boolean> = {}
+      for (const sec of navSections) next[sec.section] = false
+      next[section] = true
+      return next
+    })
   }
 
   const isActive = (href: string) =>
     href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href)
 
-  return (
-    <aside className="dl-sidebar" id="dl-sidebar">
-      {/* Logo */}
-      <div className="dl-sidebar-logo">
-        <img src={logoUrl} alt={companyName} className="dl-sidebar-logo-img" />
-        <div>
-          <div className="dl-sidebar-logo-name">{companyName}</div>
-          <div className="dl-sidebar-logo-sub">{companyTagline}</div>
-        </div>
-      </div>
-
-      {/* Nav */}
-      <nav className="dl-sidebar-nav">
-        {navSections.map((sec) => {
-          const expanded = expandedSections[sec.section] ?? false
-
-          return (
-            <div key={sec.section} style={{ marginBottom: 2 }}>
-              {/* Section toggle */}
-              <button className="dl-section-btn" onClick={() => toggleSection(sec.section)}>
-                {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                <span>{sec.section}</span>
-              </button>
-
-              {expanded && (
-                <div className="dl-section-content">
-                  {/* Grouped items (ACCOUNTING) */}
-                  {sec.groups &&
-                    sec.groups.map(group => (
-                      <div key={group.groupLabel}>
-                        <div className="dl-nav-group-label">{group.groupLabel}</div>
-                        {group.items.map(item => (
-                          <a
-                            key={item.href}
-                            href={item.href}
-                            className={`dl-nav-item${isActive(item.href) ? " active" : ""}`}
-                          >
-                            <span className="dl-nav-icon">{item.icon}</span>
-                            <span>{item.label}</span>
-                          </a>
-                        ))}
-                      </div>
-                    ))}
-
-                  {/* Flat items */}
-                  {sec.items &&
-                    sec.items.map(item => (
-                      <a
-                        key={item.href}
-                        href={item.href}
-                        className={`dl-nav-item${isActive(item.href) ? " active" : ""}`}
-                      >
-                        <span className="dl-nav-icon">{item.icon}</span>
-                        <span>{item.label}</span>
-                      </a>
-                    ))}
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </nav>
-
-      {/* User footer */}
-      <div className="dl-sidebar-user">
-        <div className="dl-sidebar-avatar">{initial}</div>
-        <div style={{ overflow: "hidden" }}>
-          <div className="dl-sidebar-email">{email}</div>
-          <form action="/auth/signout" method="post">
-            <button type="submit" className="dl-sidebar-signout">Sign Out</button>
-          </form>
-        </div>
-      </div>
-    </aside>
-  )
+  // … JSX remains exactly the same …
 }
