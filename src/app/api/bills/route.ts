@@ -101,7 +101,7 @@ async function createBillJournalEntry(
 
   if (entryErr || !entry) throw new Error(entryErr?.message || 'JE insert failed')
 
-  // Insert journal lines
+  // Insert journal lines – NOW with source tracking
   const lineRows = debitLines.map(l => ({
     company_id: companyId,
     entry_id: entry.id,
@@ -112,6 +112,8 @@ async function createBillJournalEntry(
     location_id: l.location_id || null,
     project_id: l.project_id || null,
     donor_id: l.donor_id || null,
+    source_type: 'purchase_bill',   // ✅ new
+    source_id: bill.id,             // ✅ new
   }))
 
   await supabase.from('journal_lines').insert(lineRows)
