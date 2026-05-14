@@ -28,7 +28,7 @@ export default function BillsPage() {
       .from("invoices")
       .select("*")
       .eq("type", "purchase")
-      .is("deleted_at", null)            // ← hide soft‑deleted
+      .is("deleted_at", null)            // ← HIDE SOFT‑DELETED
       .order("date", { ascending: false })
       .then(({ data }) => {
         setBills(data || [])
@@ -53,7 +53,7 @@ export default function BillsPage() {
           .card { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
           .input { height: 38px; border: 1px solid #334155; border-radius: 8px; padding: 0 12px; font-size: 13px; box-sizing: border-box; background: #1E293B; color: #F1F5F9; }
           .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-          .btn-primary { background: #2563EB; color: white; }
+          .btn-primary { background: #1E3A8A; color: white; }
           .btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
           table { width: 100%; border-collapse: collapse; }
           th { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94A3B8; text-align: left; padding: 8px 6px; border-bottom: 1px solid #1E293B; }
