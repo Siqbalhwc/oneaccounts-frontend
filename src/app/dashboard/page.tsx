@@ -33,7 +33,7 @@ export default function DashboardPage() {
 
   // Default: Management roles see the management dashboard
   if (role === "admin" || role === "manager" || role === "director") {
-    return <ManagementDashboard />
+    return <ManagementDashboard role={role} />
   }
 
   // Everyone else sees the accountant dashboard
