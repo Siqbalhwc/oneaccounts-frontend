@@ -16,6 +16,7 @@ export async function POST(request: Request) {
   const { entity } = await request.json()
   if (!entity) return NextResponse.json({ error: 'entity is required' }, { status: 400 })
 
+  // 1. Find the user's active admin company
   const { data: activeRole } = await supabaseAdmin
     .from('user_roles')
     .select('company_id, role')
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
   if (activeRole?.role === 'admin') {
     targetCompanyId = activeRole.company_id
   } else {
+    // fallback: any company where the user is admin
     const { data: anyAdmin } = await supabaseAdmin
       .from('user_roles')
       .select('company_id')
@@ -41,9 +43,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No admin company found' }, { status: 403 })
   }
 
-  if (targetCompanyId === '00000000-0000-0000-0000-000000000001') {
-    return NextResponse.json({ error: 'Cannot modify template company' }, { status: 400 })
-  }
+  // ✅ No more template company block – admins can clean their own test data
 
   try {
     const { error } = await supabaseAdmin.rpc('delete_company_entity', {
