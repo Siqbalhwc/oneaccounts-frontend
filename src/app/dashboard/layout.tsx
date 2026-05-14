@@ -12,17 +12,15 @@ const styles = `
 
   .dl-shell { display: flex; min-height: 100vh; background: #0B1120; }
 
-  /* ── Sidebar – 260 px, original dark style ── */
+  /* ── Sidebar ── */
   .dl-sidebar {
     width: 260px; min-width: 260px;
     background: #0F172A;
     display: flex; flex-direction: column;
     position: fixed; top: 0; left: 0; bottom: 0; z-index: 40;
-    transition: none; overflow: hidden;
+    transition: transform 0.25s ease; overflow: hidden;
     border-right: 1px solid #1E293B;
   }
-  .dl-sidebar:hover { width: 260px; }
-
   .dl-sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 20px 18px; border-bottom: 1px solid #1E293B; min-height: 68px; }
   .dl-sidebar-logo-img { width: 40px; height: 40px; border-radius: 12px; object-fit: contain; flex-shrink: 0; }
   .dl-sidebar-logo-name { color: white; font-size: 15px; font-weight: 700; line-height: 1.2; }
@@ -65,12 +63,12 @@ const styles = `
 
   /* ── Main area ── */
   .dl-main { flex: 1; margin-left: 260px; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; overflow-x: hidden; background: #0B1120; }
-  .dl-main-content { flex: 1; background: #0B1120; }
+  .dl-main-content { flex: 1; }
 
   .dl-topbar { background: #0F172A; border-bottom: 1px solid #1E293B; padding: 0 24px; display: flex; align-items: center; min-height: 64px; gap: 16px; position: sticky; top: 0; z-index: 30; }
   .dl-topbar-greeting { flex: 1; min-width: 0; }
   .dl-topbar-title { font-size: 14px; font-weight: 700; color: #F1F5F9; line-height: 1.2; }
-  .dl-topbar-subtitle { font-size: 11px; color: #94A3B8; line-height: 1.2; }
+  .dl-topbar-subtitle { font-size: 11px; color: #64748B; line-height: 1.2; }
   .dl-topbar-actions { display: flex; gap: 8px; flex-shrink: 0; }
   .dl-action-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 10px; font-size: 11.5px; font-weight: 600; text-decoration: none; cursor: pointer; border: 1px solid; font-family: inherit; transition: all 0.15s; white-space: nowrap; height: 36px; }
   .dl-btn-invoice { background: #1E293B; border-color: #334155; color: #93C5FD; }
@@ -93,6 +91,15 @@ const styles = `
     .dl-main { padding-bottom: 60px; }
   }
 
+  @media (max-width: 900px) {
+    .dl-sidebar { width: 60px; min-width: 60px; }
+    .dl-sidebar-logo-name, .dl-sidebar-logo-sub, .dl-nav-section, .dl-nav-group-label,
+    .dl-nav-item span:not(.dl-nav-icon), .dl-sidebar-email, .dl-sidebar-signout { display: none; }
+    .dl-sidebar-logo { justify-content: center; padding: 14px 0; }
+    .dl-nav-item { justify-content: center; padding: 10px; }
+    .dl-sidebar-user { justify-content: center; }
+    .dl-main { margin-left: 60px; }
+  }
   @media (max-width: 640px) {
     .dl-sidebar { transform: translateX(-260px); width: 260px; min-width: 260px; }
     .dl-sidebar.mobile-open { transform: translateX(0); }
@@ -113,138 +120,9 @@ const styles = `
     .dl-topbar-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
     .dl-action-btn { padding: 6px 4px; font-size: 9px; }
   }
-
-  /* ══════════════════ GLOBAL DARK THEME ══════════════════ */
-  body, .dl-shell, .dl-main, .dl-main-content {
-    background: #0B1120 !important;
-  }
-  .dl-main-content > div {
-    background: #0B1120 !important;
-  }
-
-  .card, .tb-card, .inv-card, .pay-card, .ac-card, .form-card,
-  .log-table, .tb-summary-item {
-    background: #111827 !important;
-    border: 1px solid #1E293B !important;
-    color: #E2E8F0 !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2) !important;
-  }
-
-  .input, .filter-select, select.input, input.input,
-  .pay-input, .inv-input, .ac-search,
-  .inv-select, .pay-select, .filter-select, .input-budget {
-    background: #1E293B !important;
-    border-color: #334155 !important;
-    color: #F1F5F9 !important;
-  }
-  .input:focus, .filter-select:focus, .pay-input:focus, .inv-input:focus,
-  .ac-search:focus, .inv-select:focus, .pay-select:focus {
-    border-color: #2563EB !important;
-    outline: none !important;
-  }
-
-  .btn-primary { background: #2563EB !important; color: white !important; }
-  .btn-outline { background: transparent !important; border: 1.5px solid #334155 !important; color: #CBD5E1 !important; }
-
-  .label, .pay-label, .inv-label, .ac-label, .tb-label {
-    color: #64748B !important;
-  }
-
-  table, .table {
-    background: #111827 !important;
-    color: #E2E8F0 !important;
-  }
-  table th, .table th {
-    background: #1E293B !important;
-    color: #94A3B8 !important;
-    border-color: #1E293B !important;
-  }
-  table td, .table td {
-    border-color: #1E293B !important;
-  }
-  .row-header, .tb-table-header, .ac-header, .journal-header,
-  .log-row-header {
-    background: #1E293B !important;
-  }
-  .row, .tb-row, .ac-row, .journal-row {
-    background: #111827 !important;
-    border-bottom: 1px solid #1E293B !important;
-  }
-  .row:hover, .tb-row:hover, .ac-row:hover, .journal-row:hover {
-    background: #1E293B !important;
-  }
-
-  .card *, .tb-card *, .inv-card *, .pay-card *, .ac-card *, .form-card *,
-  .tb-summary-item *, .log-table * {
-    color: inherit !important;
-  }
-
-  .log-tab {
-    background: #1E293B !important;
-    color: #94A3B8 !important;
-    border-color: #334155 !important;
-  }
-  .log-tab.active {
-    background: #2563EB !important;
-    color: white !important;
-    border-color: #2563EB !important;
-  }
-
-  .act-header td {
-    background: #1E293B !important;
-    color: #E2E8F0 !important;
-  }
-  .sub-header th {
-    background: #1E293B !important;
-    color: #94A3B8 !important;
-  }
-
-  .clickable, .clickable-cat, .clickable-row {
-    color: #E2E8F0 !important;
-  }
-  .clickable:hover, .clickable-cat:hover, .clickable-row:hover {
-    color: #2563EB !important;
-  }
-
-  [class*="card"] {
-    background: #111827 !important;
-    border-color: #1E293B !important;
-  }
-
-  div[style*="background: white"], div[style*="background: #fff"],
-  div[style*="background: #ffffff"] {
-    background: #111827 !important;
-  }
-
-  h1, h2, h3, h4, h5, h6, p, span, a, li, td, th, label, input, select, textarea {
-    color: inherit;
-  }
-
-  /* ── Fix: full‑height content, no gap ── */
-  .dl-main-content {
-    display: flex;
-    flex-direction: column;
-  }
-  .dl-main-content > div {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    background: #0B1120 !important;
-  }
-
-  /* ── Fix: any white page shell Next.js injects ── */
-  #__next, main, [data-nextjs-scroll-focus-boundary] {
-    background: #0B1120 !important;
-    color: #E2E8F0 !important;
-  }
-
-  /* ── Fix: dashboard page top gap (hamburger‑only topbar) ── */
-  .dl-main > .dl-main-content:first-child {
-    padding-top: 0;
-  }
 `
 
-// ── Navigation structure (unchanged) ──
+// ── Navigation structure ──
 const navSections = [
   {
     section: 'MAIN',
@@ -372,7 +250,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
         <div className="dl-main">
           <DashboardTopBar email={email} greeting={getGreeting()} />
-          <div className="dl-main-content">
+          <div className="dl-main-content">   {/* ✅ flex:1 wrapper – fixes large‑screen blank space */}
             {children}
           </div>
           <div className="mobile-bottom-nav">
