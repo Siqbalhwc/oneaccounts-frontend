@@ -12,98 +12,63 @@ const styles = `
 
   .dl-shell { display: flex; min-height: 100vh; background: #0B1120; }
 
-  /* ── Sidebar – 208 px, fixed, no hover expansion ── */
+  /* ── Sidebar ── */
   .dl-sidebar {
-    width: 208px; min-width: 208px;
+    width: 260px; min-width: 260px;
     background: #0F172A;
     display: flex; flex-direction: column;
     position: fixed; top: 0; left: 0; bottom: 0; z-index: 40;
-    transition: none; overflow: hidden;
+    transition: transform 0.25s ease; overflow: hidden;
     border-right: 1px solid #1E293B;
   }
-  .dl-sidebar:hover { width: 208px; }
-
-  .dl-sidebar-logo {
-    display: flex; align-items: center; gap: 8px;
-    padding: 18px 14px;
-    border-bottom: 1px solid #1E293B;
-    min-height: 60px;
-  }
-  .dl-sidebar-logo-img {
-    width: 36px; height: 36px;
-    border-radius: 10px;
-    object-fit: contain;
-    flex-shrink: 0;
-  }
-  .dl-sidebar-logo-name {
-    color: white;
-    font-size: 14px;
-    font-weight: 700;
-    line-height: 1.2;
-    white-space: nowrap;
-  }
-  .dl-sidebar-logo-sub {
-    color: #64748B;
-    font-size: 9px;
-  }
+  .dl-sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 20px 18px; border-bottom: 1px solid #1E293B; min-height: 68px; }
+  .dl-sidebar-logo-img { width: 40px; height: 40px; border-radius: 12px; object-fit: contain; flex-shrink: 0; }
+  .dl-sidebar-logo-name { color: white; font-size: 15px; font-weight: 700; line-height: 1.2; }
+  .dl-sidebar-logo-sub { color: #64748B; font-size: 10px; }
 
   .dl-section-btn {
-    display: flex; align-items: center; gap: 6px;
-    padding: 8px 14px;
-    background: none; border: none;
-    color: #94A3B8; font-size: 12px; font-weight: 600;
-    cursor: pointer; width: 100%; text-align: left;
-    font-family: inherit; border-radius: 8px;
-    transition: all 0.2s;
+    display: flex; align-items: center; gap: 8px; padding: 10px 16px;
+    background: none; border: none; color: #94A3B8; font-size: 12px;
+    font-weight: 600; cursor: pointer; width: 100%; text-align: left;
+    font-family: inherit; border-radius: 10px; transition: all 0.2s;
   }
   .dl-section-btn:hover { background: rgba(255,255,255,0.04); color: white; }
-  .dl-section-content { padding-left: 10px; margin-top: 4px; margin-bottom: 6px; }
+  .dl-section-content { padding-left: 12px; margin-top: 4px; margin-bottom: 8px; }
 
-  .dl-sidebar-nav { flex: 1; padding: 10px 8px; overflow-y: auto; }
+  .dl-sidebar-nav { flex: 1; padding: 12px 10px; overflow-y: auto; }
 
   .dl-nav-section {
-    padding: 10px 14px 4px; color: #64748B;
-    font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+    padding: 12px 16px 6px; color: #64748B;
+    font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em;
   }
   .dl-nav-group-label {
-    padding: 4px 14px 2px; color: #475569;
+    padding: 6px 16px 2px; color: #475569;
     font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
   }
   .dl-nav-item {
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 14px;
-    border-radius: 8px; color: #94A3B8;
-    font-size: 13px; font-weight: 500;
+    display: flex; align-items: center; gap: 10px; padding: 9px 16px;
+    border-radius: 10px; color: #94A3B8; font-size: 13px; font-weight: 500;
     text-decoration: none; transition: all 0.15s; margin-bottom: 2px;
   }
   .dl-nav-item:hover { background: rgba(255,255,255,0.04); color: white; }
-  .dl-nav-item.active {
-    background: rgba(255,255,255,0.04);
-    color: white; font-weight: 600;
-    border-left: 3px solid #334155;
-  }
+  .dl-nav-item.active { background: rgba(37,99,235,0.15); color: white; font-weight: 600; border-left: 3px solid #2563EB; }
   .dl-nav-icon { width: 20px; text-align: center; flex-shrink: 0; }
-  .dl-nav-divider { height: 1px; background: rgba(255,255,255,0.06); margin: 6px 14px; }
+  .dl-nav-divider { height: 1px; background: rgba(255,255,255,0.06); margin: 8px 16px; }
 
-  .dl-sidebar-user { padding: 14px; border-top: 1px solid #1E293B; display: flex; align-items: center; gap: 10px; }
-  .dl-sidebar-avatar {
-    width: 34px; height: 34px; border-radius: 50%;
-    background: #1E293B; color: white;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 14px; font-weight: 700; flex-shrink: 0;
-  }
+  .dl-sidebar-user { padding: 16px; border-top: 1px solid #1E293B; display: flex; align-items: center; gap: 10px; }
+  .dl-sidebar-avatar { width: 36px; height: 36px; border-radius: 50%; background: #1E293B; color: white; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex-shrink: 0; }
   .dl-sidebar-email { color: #94A3B8; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dl-sidebar-signout { color: #64748B; font-size: 10px; cursor: pointer; background: none; border: none; font-family: inherit; padding: 0; margin-top: 2px; }
   .dl-sidebar-signout:hover { color: #EF4444; }
 
   /* ── Main area ── */
-  .dl-main { flex: 1; margin-left: 208px; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; overflow-x: hidden; background: #0B1120; }
-  .dl-main-content { flex: 1; background: #0B1120; }
+  .dl-main { flex: 1; margin-left: 260px; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; overflow-x: hidden; background: #0B1120; }
+  .dl-main-content { flex: 1; }
 
   .dl-topbar { background: #0F172A; border-bottom: 1px solid #1E293B; padding: 0 24px; display: flex; align-items: center; min-height: 64px; gap: 16px; position: sticky; top: 0; z-index: 30; }
   .dl-topbar-greeting { flex: 1; min-width: 0; }
   .dl-topbar-title { font-size: 14px; font-weight: 700; color: #F1F5F9; line-height: 1.2; }
-  .dl-topbar-subtitle { font-size: 11px; color: #94A3B8; line-height: 1.2; }
+  .dl-topbar-subtitle { font-size: 11px; color: #64748B; line-height: 1.2; }
   .dl-topbar-actions { display: flex; gap: 8px; flex-shrink: 0; }
   .dl-action-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 10px; font-size: 11.5px; font-weight: 600; text-decoration: none; cursor: pointer; border: 1px solid; font-family: inherit; transition: all 0.15s; white-space: nowrap; height: 36px; }
   .dl-btn-invoice { background: #1E293B; border-color: #334155; color: #93C5FD; }
@@ -126,15 +91,24 @@ const styles = `
     .dl-main { padding-bottom: 60px; }
   }
 
+  @media (max-width: 900px) {
+    .dl-sidebar { width: 60px; min-width: 60px; }
+    .dl-sidebar-logo-name, .dl-sidebar-logo-sub, .dl-nav-section, .dl-nav-group-label,
+    .dl-nav-item span:not(.dl-nav-icon), .dl-sidebar-email, .dl-sidebar-signout { display: none; }
+    .dl-sidebar-logo { justify-content: center; padding: 14px 0; }
+    .dl-nav-item { justify-content: center; padding: 10px; }
+    .dl-sidebar-user { justify-content: center; }
+    .dl-main { margin-left: 60px; }
+  }
   @media (max-width: 640px) {
-    .dl-sidebar { transform: translateX(-208px); width: 260px; min-width: 260px; }
+    .dl-sidebar { transform: translateX(-260px); width: 260px; min-width: 260px; }
     .dl-sidebar.mobile-open { transform: translateX(0); }
     .dl-sidebar.mobile-open .dl-sidebar-logo-name, .dl-sidebar.mobile-open .dl-sidebar-logo-sub,
     .dl-sidebar.mobile-open .dl-nav-section, .dl-sidebar.mobile-open .dl-nav-group-label,
     .dl-sidebar.mobile-open .dl-nav-item span:not(.dl-nav-icon),
     .dl-sidebar.mobile-open .dl-sidebar-email, .dl-sidebar.mobile-open .dl-sidebar-signout { display: block; }
-    .dl-sidebar.mobile-open .dl-sidebar-logo { justify-content: flex-start; padding: 18px 14px; }
-    .dl-sidebar.mobile-open .dl-nav-item { justify-content: flex-start; padding: 8px 14px; }
+    .dl-sidebar.mobile-open .dl-sidebar-logo { justify-content: flex-start; padding: 20px 18px; }
+    .dl-sidebar.mobile-open .dl-nav-item { justify-content: flex-start; padding: 9px 16px; }
     .dl-main { margin-left: 0; }
     .dl-hamburger { display: block; }
     .dl-topbar { flex-wrap: wrap; min-height: auto; padding: 12px 16px; gap: 10px; }
@@ -146,115 +120,9 @@ const styles = `
     .dl-topbar-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
     .dl-action-btn { padding: 6px 4px; font-size: 9px; }
   }
-
-  /* ══════════════════ GLOBAL DARK THEME ══════════════════ */
-  body, .dl-shell, .dl-main, .dl-main-content {
-    background: #0B1120 !important;
-  }
-  .dl-main-content > div {
-    background: #0B1120 !important;
-  }
-
-  .card, .tb-card, .inv-card, .pay-card, .ac-card, .form-card,
-  .log-table, .tb-summary-item {
-    background: #111827 !important;
-    border: 1px solid #1E293B !important;
-    color: #E2E8F0 !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2) !important;
-  }
-
-  .input, .filter-select, select.input, input.input,
-  .pay-input, .inv-input, .ac-search,
-  .inv-select, .pay-select, .filter-select, .input-budget {
-    background: #1E293B !important;
-    border-color: #334155 !important;
-    color: #F1F5F9 !important;
-  }
-  .input:focus, .filter-select:focus, .pay-input:focus, .inv-input:focus,
-  .ac-search:focus, .inv-select:focus, .pay-select:focus {
-    border-color: #2563EB !important;
-    outline: none !important;
-  }
-
-  .btn-primary { background: #2563EB !important; color: white !important; }
-  .btn-outline { background: transparent !important; border: 1.5px solid #334155 !important; color: #CBD5E1 !important; }
-
-  .label, .pay-label, .inv-label, .ac-label, .tb-label {
-    color: #64748B !important;
-  }
-
-  table, .table {
-    background: #111827 !important;
-    color: #E2E8F0 !important;
-  }
-  table th, .table th {
-    background: #1E293B !important;
-    color: #94A3B8 !important;
-    border-color: #1E293B !important;
-  }
-  table td, .table td {
-    border-color: #1E293B !important;
-  }
-  .row-header, .tb-table-header, .ac-header, .journal-header,
-  .log-row-header {
-    background: #1E293B !important;
-  }
-  .row, .tb-row, .ac-row, .journal-row {
-    background: #111827 !important;
-    border-bottom: 1px solid #1E293B !important;
-  }
-  .row:hover, .tb-row:hover, .ac-row:hover, .journal-row:hover {
-    background: #1E293B !important;
-  }
-
-  .card *, .tb-card *, .inv-card *, .pay-card *, .ac-card *, .form-card *,
-  .tb-summary-item *, .log-table * {
-    color: inherit !important;
-  }
-
-  .log-tab {
-    background: #1E293B !important;
-    color: #94A3B8 !important;
-    border-color: #334155 !important;
-  }
-  .log-tab.active {
-    background: #2563EB !important;
-    color: white !important;
-    border-color: #2563EB !important;
-  }
-
-  .act-header td {
-    background: #1E293B !important;
-    color: #E2E8F0 !important;
-  }
-  .sub-header th {
-    background: #1E293B !important;
-    color: #94A3B8 !important;
-  }
-
-  .clickable, .clickable-cat, .clickable-row {
-    color: #E2E8F0 !important;
-  }
-  .clickable:hover, .clickable-cat:hover, .clickable-row:hover {
-    color: #2563EB !important;
-  }
-
-  [class*="card"] {
-    background: #111827 !important;
-    border-color: #1E293B !important;
-  }
-
-  div[style*="background: white"], div[style*="background: #fff"],
-  div[style*="background: #ffffff"] {
-    background: #111827 !important;
-  }
-
-  h1, h2, h3, h4, h5, h6, p, span, a, li, td, th, label, input, select, textarea {
-    color: inherit;
-  }
 `
 
-// ── Navigation structure (unchanged) ──
+// ── Navigation structure ──
 const navSections = [
   {
     section: 'MAIN',
@@ -334,6 +202,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const email   = user.email || ''
   const initial = email.charAt(0).toUpperCase()
 
+  // ── Fetch company settings ──
   let companyName = 'OneAccounts'
   let companyTagline = 'by Siqbal'
   let logoUrl = '/logo.png'
@@ -353,7 +222,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
         if (settings.tagline) companyTagline = settings.tagline
       }
     }
-  } catch { }
+  } catch {
+    // keep hardcoded fallbacks
+  }
 
   const getGreeting = () => {
     const h = new Date().getHours()
@@ -367,6 +238,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       <div className="dl-shell">
         <SidebarClient />
+
         <SidebarNav
           navSections={navSections}
           email={email}
@@ -375,9 +247,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
           companyName={companyName}
           companyTagline={companyTagline}
         />
+
         <div className="dl-main">
           <DashboardTopBar email={email} greeting={getGreeting()} />
-          <div className="dl-main-content">
+          <div className="dl-main-content">   {/* ✅ flex:1 wrapper – fixes large‑screen blank space */}
             {children}
           </div>
           <div className="mobile-bottom-nav">
