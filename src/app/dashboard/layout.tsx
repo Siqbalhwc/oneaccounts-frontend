@@ -12,7 +12,7 @@ const styles = `
 
   .dl-shell { display: flex; min-height: 100vh; background: #0B1120; }
 
-  /* ── Sidebar – 208 px (80% of original), same dark background as dashboard ── */
+  /* ── Sidebar – 208 px ── */
   .dl-sidebar {
     width: 208px; min-width: 208px;
     background: #0B1120;
@@ -21,39 +21,16 @@ const styles = `
     transition: transform 0.25s ease; overflow: hidden;
     border-right: 1px solid #1E293B;
   }
-
-  .dl-sidebar-logo {
-    display: flex; align-items: center; gap: 8px;
-    padding: 18px 14px;
-    border-bottom: 1px solid #1E293B;
-    min-height: 62px;
-  }
-  .dl-sidebar-logo-img {
-    width: 36px; height: 36px;
-    border-radius: 10px;
-    object-fit: contain;
-    flex-shrink: 0;
-  }
-  .dl-sidebar-logo-name {
-    color: white;
-    font-size: 13px;
-    font-weight: 700;
-    line-height: 1.2;
-    white-space: nowrap;
-  }
-  .dl-sidebar-logo-sub {
-    color: #64748B;
-    font-size: 9px;
-  }
+  .dl-sidebar-logo { display: flex; align-items: center; gap: 8px; padding: 18px 14px; border-bottom: 1px solid #1E293B; min-height: 62px; }
+  .dl-sidebar-logo-img { width: 36px; height: 36px; border-radius: 10px; object-fit: contain; flex-shrink: 0; }
+  .dl-sidebar-logo-name { color: white; font-size: 13px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+  .dl-sidebar-logo-sub { color: #64748B; font-size: 9px; }
 
   .dl-section-btn {
-    display: flex; align-items: center; gap: 6px;
-    padding: 8px 14px;
-    background: none; border: none;
-    color: #94A3B8; font-size: 12px; font-weight: 600;
+    display: flex; align-items: center; gap: 6px; padding: 8px 14px;
+    background: none; border: none; color: #94A3B8; font-size: 12px; font-weight: 600;
     cursor: pointer; width: 100%; text-align: left;
-    font-family: inherit; border-radius: 8px;
-    transition: all 0.2s;
+    font-family: inherit; border-radius: 8px; transition: all 0.2s;
   }
   .dl-section-btn:hover { background: rgba(255,255,255,0.04); color: white; }
   .dl-section-content { padding-left: 10px; margin-top: 4px; margin-bottom: 6px; }
@@ -69,14 +46,11 @@ const styles = `
     font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
   }
   .dl-nav-item {
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 14px;
-    border-radius: 8px; color: #94A3B8;
-    font-size: 13px; font-weight: 500;
+    display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+    border-radius: 8px; color: #94A3B8; font-size: 13px; font-weight: 500;
     text-decoration: none; transition: all 0.15s; margin-bottom: 2px;
   }
   .dl-nav-item:hover { background: rgba(255,255,255,0.04); color: white; }
-
   .dl-nav-item.active {
     background: rgba(255,255,255,0.05);
     color: white; font-weight: 600;
@@ -86,30 +60,15 @@ const styles = `
   .dl-nav-divider { height: 1px; background: rgba(255,255,255,0.06); margin: 6px 14px; }
 
   .dl-sidebar-user { padding: 14px; border-top: 1px solid #1E293B; display: flex; align-items: center; gap: 10px; }
-  .dl-sidebar-avatar {
-    width: 34px; height: 34px; border-radius: 50%;
-    background: #1E293B; color: white;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 14px; font-weight: 700; flex-shrink: 0;
-  }
+  .dl-sidebar-avatar { width: 34px; height: 34px; border-radius: 50%; background: #1E293B; color: white; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex-shrink: 0; }
   .dl-sidebar-email { color: #94A3B8; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dl-sidebar-signout { color: #64748B; font-size: 10px; cursor: pointer; background: none; border: none; font-family: inherit; padding: 0; margin-top: 2px; }
   .dl-sidebar-signout:hover { color: #EF4444; }
 
   /* ── Main area ── */
   .dl-main { flex: 1; margin-left: 208px; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; overflow-x: hidden; background: #0B1120; }
-
-  .dl-main-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-  }
-  .dl-main-content > div {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    background: #0B1120 !important;
-  }
+  .dl-main-content { flex: 1; display: flex; flex-direction: column; }
+  .dl-main-content > div { flex: 1; display: flex; flex-direction: column; background: #0B1120 !important; }
 
   .dl-topbar { background: #0F172A; border-bottom: 1px solid #1E293B; padding: 0 24px; display: flex; align-items: center; min-height: 64px; gap: 16px; position: sticky; top: 0; z-index: 30; }
   .dl-topbar-greeting { flex: 1; min-width: 0; }
@@ -121,8 +80,8 @@ const styles = `
   .dl-btn-bill    { background: #1E293B; border-color: #334155; color: #FCD34D; }
   .dl-btn-receipt { background: #1E293B; border-color: #334155; color: #6EE7B7; }
   .dl-btn-payment { background: #1E293B; border-color: #334155; color: #FCA5A5; }
-  .dl-btn-invoice:hover { background: #1E3A8A; border-color: #2563EB; color: white; }
-  .dl-btn-bill:hover    { background: #1E3A8A; border-color: #2563EB; color: white; }
+  .dl-btn-invoice:hover { background: #1E3A8A; border-color: #1E3A8A; color: white; }
+  .dl-btn-bill:hover    { background: #1E3A8A; border-color: #1E3A8A; color: white; }
   .dl-btn-receipt:hover { background: #065F46; border-color: #10B981; color: white; }
   .dl-btn-payment:hover { background: #991B1B; border-color: #EF4444; color: white; }
 
@@ -167,117 +126,121 @@ const styles = `
     .dl-action-btn { padding: 6px 4px; font-size: 9px; }
   }
 
-  /* ── Final force: no white backgrounds, all text light (applies to all pages) ── */
-  .dl-main-content h1, .dl-main-content h2, .dl-main-content h3,
-  .dl-main-content h4, .dl-main-content h5, .dl-main-content h6,
-  h1, h2, h3, h4, h5, h6 {
-    color: #F1F5F9 !important;
-  }
+  /* ══════════════════ GLOBAL DARK THEME ══════════════════ */
+  body, .dl-shell, .dl-main, .dl-main-content { background: #0B1120 !important; }
+  .dl-main-content > div { background: #0B1120 !important; }
 
-  [style*="background: white"],
-  [style*="background: #fff"],
-  [style*="background: #ffffff"],
-  [style*="background: #f8f9fa"],
-  [style*="background: #f1f5f9"],
-  [style*="background: #EFF4FB"],
-  [style*="background: #F4F6FB"],
-  [style*="background: #FAFBFF"] {
-    background: #111827 !important;
-  }
+  /* Headings */
+  h1, h2, h3, h4, h5, h6 { color: #F1F5F9 !important; }
 
-  .card, .tb-card, .inv-card, .pay-card, .ac-card, .form-card {
+  /* Cards */
+  .card, .tb-card, .inv-card, .pay-card, .ac-card, .form-card,
+  .log-table, .tb-summary-item, .kpi-card, [class*="kpi-card"],
+  .crm-card, .crm-section, .crm-item {
     background: #111827 !important;
-    border-color: #1E293B !important;
+    border: 1px solid #1E293B !important;
+    color: #E2E8F0 !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2) !important;
   }
-
-  table, .table, .log-table {
-    background: #111827 !important;
-  }
-  table th, .table th, .log-row-header {
+  .card:hover, .tb-card:hover, .inv-card:hover, .pay-card:hover,
+  .ac-card:hover, .form-card:hover, .kpi-card:hover, .crm-card:hover {
     background: #1E293B !important;
-    color: #94A3B8 !important;
-  }
-  table td, .table td {
-    background: #111827 !important;
-    border-color: #1E293B !important;
   }
 
+  /* Inputs, selects, textareas */
   input, select, textarea,
   .input, .pay-input, .inv-input, .ac-search,
-  .filter-select, .inv-select, .pay-select {
+  .filter-select, .inv-select, .pay-select, .filter-select, .input-budget {
     background: #1E293B !important;
     border-color: #334155 !important;
     color: #F1F5F9 !important;
   }
-
-  .btn-primary, a.btn-primary, button.btn-primary {
-    background: #2563EB !important;
-    color: white !important;
-    border-color: #2563EB !important;
+  input:focus, select:focus, textarea:focus,
+  .input:focus, .pay-input:focus, .inv-input:focus,
+  .ac-search:focus, .inv-select:focus, .pay-select:focus {
+    border-color: #1E3A8A !important;
+    outline: none !important;
   }
+  ::placeholder { color: #64748B !important; }
+
+  /* Buttons – navy primary, dark outline */
+  .btn-primary, a.btn-primary, button.btn-primary {
+    background: #1E3A8A !important;
+    color: white !important;
+    border: 1px solid #1E3A8A !important;
+  }
+  .btn-primary:hover, a.btn-primary:hover, button.btn-primary:hover {
+    background: #1E40AF !important;
+  }
+  .btn-outline {
+    background: transparent !important;
+    border: 1.5px solid #334155 !important;
+    color: #CBD5E1 !important;
+  }
+  .btn-outline:hover { background: #1E293B !important; }
+
+  /* Labels */
+  .label, .pay-label, .inv-label, .ac-label, .tb-label { color: #94A3B8 !important; }
+
+  /* Tables */
+  table, .table { background: #111827 !important; color: #E2E8F0 !important; }
+  table th, .table th { background: #1E293B !important; color: #94A3B8 !important; border-color: #1E293B !important; }
+  table td, .table td { border-color: #1E293B !important; background: #111827 !important; color: #E2E8F0 !important; }
+  .row-header, .tb-table-header, .ac-header, .journal-header { background: #1E293B !important; }
+  .row, .tb-row, .ac-row, .journal-row {
+    background: #111827 !important;
+    border-bottom: 1px solid #1E293B !important;
+  }
+  .row:hover, .tb-row:hover, .ac-row:hover, .journal-row:hover {
+    background: #1E293B !important;
+    color: #F1F5F9 !important;
+  }
+
+  /* Log tabs */
+  .log-tab { background: #1E293B !important; color: #94A3B8 !important; border-color: #334155 !important; }
+  .log-tab.active { background: #1E3A8A !important; color: white !important; border-color: #1E3A8A !important; }
+
+  /* Clickable drill-down */
+  .clickable, .clickable-cat, .clickable-row { color: #E2E8F0 !important; }
+  .clickable:hover, .clickable-cat:hover, .clickable-row:hover { color: #1E3A8A !important; }
+
+  /* Remove any residual blue accent from the sidebar */
+  .dl-nav-item.active { border-left-color: #334155 !important; }
 `
 
 // ── Navigation structure (unchanged) ──
 const navSections = [
-  {
-    section: 'MAIN',
-    items: [
-      { label: 'Dashboard', icon: '📊', href: '/dashboard' },
-    ],
-  },
-  {
-    section: 'CRM',
-    items: [
+  { section: 'MAIN', items: [ { label: 'Dashboard', icon: '📊', href: '/dashboard' } ] },
+  { section: 'CRM', items: [
       { label: 'Customers',      icon: '👥', href: '/dashboard/customers' },
       { label: 'Sales Invoices', icon: '🧾', href: '/dashboard/invoices'  },
       { label: 'Receipts',       icon: '💰', href: '/dashboard/receipts'  },
       { label: 'Suppliers',      icon: '🚚', href: '/dashboard/suppliers' },
       { label: 'Purchase Bills', icon: '📦', href: '/dashboard/bills'     },
       { label: 'Payments',       icon: '💳', href: '/dashboard/payments'  },
-    ],
-  },
-  {
-    section: 'BANKING',
-    items: [
+  ]},
+  { section: 'BANKING', items: [
       { label: 'Bank Accounts',  icon: '🏦', href: '/dashboard/banking/bank-accounts'  },
       { label: 'Bank Transfers', icon: '🔄', href: '/dashboard/banking/bank-transfers' },
-    ],
-  },
-  {
-    section: 'INVENTORY',
-    items: [
+  ]},
+  { section: 'INVENTORY', items: [
       { label: 'Products',       icon: '📦', href: '/dashboard/products'              },
       { label: 'Inventory Adj.', icon: '⚖️', href: '/dashboard/inventory/adjustments' },
-    ],
-  },
-  {
-    section: 'ACCOUNTING',
-    groups: [
-      {
-        groupLabel: 'General',
-        items: [
+  ]},
+  { section: 'ACCOUNTING', groups: [
+      { groupLabel: 'General', items: [
           { label: 'Chart of Accounts', icon: '📋', href: '/dashboard/accounts' },
           { label: 'Journal Entries',   icon: '📓', href: '/dashboard/journal'  },
-        ],
-      },
-      {
-        groupLabel: 'Reports',
-        items: [
+      ]},
+      { groupLabel: 'Reports', items: [
           { label: 'All Reports', icon: '📈', href: '/dashboard/reports' },
-        ],
-      },
-      {
-        groupLabel: 'Automation',
-        items: [
+      ]},
+      { groupLabel: 'Automation', items: [
           { label: 'Invoice Automation', icon: '⚙️', href: '/dashboard/settings/invoice-automation' },
           { label: 'Investors',          icon: '💼', href: '/dashboard/investors'                   },
-        ],
-      },
-    ],
-  },
-  {
-    section: 'SYSTEM',
-    items: [
+      ]},
+  ]},
+  { section: 'SYSTEM', items: [
       { label: 'Admin Panel',     icon: '👑', href: '/dashboard/admin/users'    },
       { label: 'Feature Manager', icon: '⚙️', href: '/dashboard/admin/features' },
       { label: 'Audit Logs',      icon: '📋', href: '/dashboard/admin/audit-logs' },
@@ -285,8 +248,7 @@ const navSections = [
       { label: 'New Company',     icon: '🏢', href: '/dashboard/companies/new'  },
       { label: 'Upgrade Plan',    icon: '⭐', href: '/dashboard/upgrade'        },
       { label: 'Super Admin',     icon: '🛡️', href: '/dashboard/super-admin'    },
-    ],
-  },
+  ]},
 ]
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -296,8 +258,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const email   = user.email || ''
   const initial = email.charAt(0).toUpperCase()
-
-  // ── Fetch company settings ──
   let companyName = 'OneAccounts'
   let companyTagline = 'by Siqbal'
   let logoUrl = '/logo.png'
@@ -310,16 +270,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
         .select('business_name, logo_url, tagline')
         .eq('company_id', cid)
         .maybeSingle()
-
       if (settings) {
         if (settings.business_name) companyName = settings.business_name
         if (settings.logo_url) logoUrl = settings.logo_url
         if (settings.tagline) companyTagline = settings.tagline
       }
     }
-  } catch {
-    // keep hardcoded fallbacks
-  }
+  } catch {}
 
   const getGreeting = () => {
     const h = new Date().getHours()
@@ -333,24 +290,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       <div className="dl-shell">
         <SidebarClient />
-
-        <SidebarNav
-          navSections={navSections}
-          email={email}
-          initial={initial}
-          logoUrl={logoUrl}
-          companyName={companyName}
-          companyTagline={companyTagline}
-        />
-
+        <SidebarNav navSections={navSections} email={email} initial={initial} logoUrl={logoUrl} companyName={companyName} companyTagline={companyTagline} />
         <div className="dl-main">
           <DashboardTopBar email={email} greeting={getGreeting()} />
-          <div className="dl-main-content">
-            {children}
-          </div>
-          <div className="mobile-bottom-nav">
-            <BottomNav />
-          </div>
+          <div className="dl-main-content">{children}</div>
+          <div className="mobile-bottom-nav"><BottomNav /></div>
         </div>
       </div>
     </>
