@@ -67,10 +67,34 @@ const styles = `
   .dl-main { flex: 1; margin-left: 208px; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; overflow-x: hidden; background: #0B1120; }
   .dl-main-content { flex: 1; background: #0B1120; }
 
-  .dl-topbar { background: #0F172A; border-bottom: 1px solid #1E293B; padding: 0 24px; display: flex; align-items: center; min-height: 64px; gap: 16px; position: sticky; top: 0; z-index: 30; }
-  .dl-topbar-greeting { flex: 1; min-width: 0; }
-  .dl-topbar-title { font-size: 14px; font-weight: 700; color: #F1F5F9; line-height: 1.2; }
-  .dl-topbar-subtitle { font-size: 11px; color: #64748B; line-height: 1.2; }
+  /* Top bar — force dark background and correct text colors */
+  .dl-topbar {
+    background: #0F172A !important;
+    border-bottom: 1px solid #1E293B !important;
+    padding: 0 24px; display: flex; align-items: center; min-height: 64px; gap: 16px;
+    position: sticky; top: 0; z-index: 30;
+  }
+  .dl-topbar * {
+    color: #E2E8F0 !important;
+  }
+  /* Keep the greeting title and subtitle exactly as we want */
+  .dl-topbar .dl-topbar-title {
+    color: #F1F5F9 !important;
+  }
+  .dl-topbar .dl-topbar-subtitle {
+    color: #94A3B8 !important;
+  }
+  /* Fix filter headings (like "Filter") inside top bar */
+  .dl-topbar .filter-heading,
+  .dl-topbar .filter-label,
+  .dl-topbar label {
+    color: #64748B !important;
+  }
+  .dl-topbar input, .dl-topbar select {
+    background: #1E293B !important;
+    border-color: #334155 !important;
+    color: #F1F5F9 !important;
+  }
   .dl-topbar-actions { display: flex; gap: 8px; flex-shrink: 0; }
   .dl-action-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 10px; font-size: 11.5px; font-weight: 600; text-decoration: none; cursor: pointer; border: 1px solid; font-family: inherit; transition: all 0.15s; white-space: nowrap; height: 36px; }
   .dl-btn-invoice { background: #1E293B; border-color: #334155; color: #93C5FD; }
@@ -114,15 +138,15 @@ const styles = `
     .dl-action-btn { padding: 6px 4px; font-size: 9px; }
   }
 
-  /* ══════════════════ GLOBAL DARK THEME – EVERY ELEMENT ══════════════════ */
+  /* ══════════════════ GLOBAL DARK THEME – FINAL OVERRIDES ══════════════════ */
 
-  /* 1. Base backgrounds – nothing white remains */
+  /* 1. Absolute base */
   body, .dl-shell, .dl-main, .dl-main-content,
   .dl-main-content > div {
     background: #0B1120 !important;
   }
 
-  /* 2. Override ANY inline white/light background */
+  /* 2. Remove ALL white/light backgrounds */
   [style*="background: white"],
   [style*="background: #fff"],
   [style*="background: #ffffff"],
@@ -140,14 +164,15 @@ const styles = `
   /* 3. Cards & containers */
   .card, .tb-card, .inv-card, .pay-card, .ac-card, .form-card,
   .log-table, .tb-summary-item,
-  .kpi-card, [class*="kpi-card"] {
+  .kpi-card, [class*="kpi-card"],
+  .crm-card, .crm-section, .crm-item {
     background: #111827 !important;
     border: 1px solid #1E293B !important;
     color: #E2E8F0 !important;
     box-shadow: 0 1px 3px rgba(0,0,0,0.2) !important;
   }
 
-  /* 4. Inputs, selects, filters */
+  /* 4. All inputs, selects, textareas */
   input, select, textarea,
   .input, .filter-select, .pay-input, .inv-input, .ac-search,
   .inv-select, .pay-select, .filter-select, .input-budget {
@@ -161,14 +186,13 @@ const styles = `
     border-color: #2563EB !important;
     outline: none !important;
   }
-  /* Placeholder color */
   ::placeholder { color: #64748B !important; }
 
   /* 5. Buttons */
   button, .btn {
     font-family: inherit;
   }
-  .btn-primary {
+  .btn-primary, a.btn-primary, button.btn-primary {
     background: #2563EB !important;
     color: white !important;
     border: 1px solid #2563EB !important;
@@ -178,8 +202,9 @@ const styles = `
     border: 1.5px solid #334155 !important;
     color: #CBD5E1 !important;
   }
-  .btn-primary:hover { background: #1D4ED8 !important; }
-  .btn-outline:hover { background: #1E293B !important; }
+  .btn-primary:hover, a.btn-primary:hover, button.btn-primary:hover {
+    background: #1D4ED8 !important;
+  }
 
   /* 6. Labels */
   .label, .pay-label, .inv-label, .ac-label, .tb-label {
@@ -202,7 +227,7 @@ const styles = `
     color: #E2E8F0 !important;
   }
   .row-header, .tb-table-header, .ac-header, .journal-header,
-  .log-row-header, .row-header {
+  .log-row-header {
     background: #1E293B !important;
   }
   .row, .tb-row, .ac-row, .journal-row {
@@ -220,119 +245,112 @@ const styles = `
     color: #F1F5F9 !important;
   }
 
-  /* 9. Dashboard Top Bar (filter area specific) */
-  .dl-topbar input,
-  .dl-topbar select,
-  .dl-topbar .filter-select {
-    background: #1E293B !important;
-    border-color: #334155 !important;
-    color: #F1F5F9 !important;
-  }
-
-  /* 10. Alert / Overspent Banner */
+  /* 9. Alert / Overspent Banner – ensure dark background + themed button */
   .overspent-banner, .alert-banner, [class*="alert-banner"] {
     background: #1E293B !important;
     border-left: 4px solid #2563EB !important;
     color: #FCA5A5 !important; /* red text for overspent */
   }
   .overspent-banner a, .overspent-banner button,
-  .alert-banner a, .alert-banner button {
-    background: #2563EB !important;
-    color: white !important;
-    border-radius: 8px;
-  }
-
-  /* 11. KPI cards text – keep it light */
-  .kpi-card .kpi-title, .kpi-card .kpi-label,
-  .kpi-card h4, .kpi-card span,
-  .kpi-value, .kpi-amount {
-    color: #E2E8F0 !important;
-  }
-  /* Allow red/green for overspent/health – they are inline styles, will remain */
-  .kpi-card .kpi-value[style*="color: #EF4444"] {
-    color: #EF4444 !important;  /* reinforce red */
-  }
-  .kpi-card .kpi-value[style*="color: #10B981"] {
-    color: #10B981 !important;
-  }
-
-  /* 12. Project Utilization & Donor Balance rows */
-  .project-row, .donor-row, .utilization-row,
-  .project-table tr, .donor-table tr {
-    background: #111827 !important;
-    color: #E2E8F0 !important;
-  }
-  .project-row td, .donor-row td,
-  .project-table td, .donor-table td {
-    background: #111827 !important;
-    border-bottom: 1px solid #1E293B !important;
-  }
-
-  /* 13. CRM Card – heading and inner items */
-  .crm-card, .crm-card h3, .crm-card .crm-heading {
-    background: #111827 !important;
-    color: #F1F5F9 !important;
-    border-color: #1E293B !important;
-  }
-  .crm-card .crm-item, .crm-card .customer-row, .crm-card .supplier-row,
-  .crm-card .investor-row {
-    background: #111827 !important;
-    color: #E2E8F0 !important;
-  }
-
-  /* 14. Bottom navigation bar */
-  .mobile-bottom-nav {
-    background: #0F172A !important;
-    border-top: 1px solid #1E293B !important;
-    color: #E2E8F0 !important;
-  }
-  .mobile-bottom-nav a, .mobile-bottom-nav span {
-    color: #E2E8F0 !important;
-  }
-
-  /* 15. List view status columns – keep badge colors but fix background */
-  .status-badge, .badge {
-    /* preserve existing colors, just ensure background is dark enough */
-    background: #1E293B !important;
-    color: #F1F5F9 !important;
-  }
-  /* If there are colored badges like 'Paid', 'Unpaid', etc., their inline styles should override this,
-     but we set a fallback */
-  .row-header span, .row span {
-    color: #E2E8F0 !important;
-  }
-
-  /* 16. Specific page actions (new invoice, etc.) – already btn-primary, but also target <a> links */
-  a.btn-primary, a[class*="btn-primary"] {
-    background: #2563EB !important;
-    color: white !important;
-  }
-
-  /* 17. CRM heading (the main "CRM" label) */
-  .crm-heading, .section-heading, .report-heading {
-    color: #F1F5F9 !important;
-  }
-
-  /* 18. Override any residual dark text that is hard to read */
-  span, p, a, li, td, th, label {
-    color: inherit;
-  }
-
-  /* 19. Ensure all icons and generic text inside cards is light */
-  .card *, .card *::before, .card *::after {
-    color: inherit !important;
-  }
-
-  /* 20. Fix the "view overspent budget" button to match theme */
+  .alert-banner a, .alert-banner button,
   .view-overspent-btn, a.view-overspent {
     background: #2563EB !important;
     color: white !important;
     border-radius: 8px;
     padding: 8px 16px;
+    border: none !important;
+    font-weight: 600;
+    text-decoration: none;
   }
 
-  /* 21. Remove any old blue borders that conflict */
-  .border-blue-500, .border-blue-400 { border-color: #2563EB !important; }
+  /* 10. KPI cards – fix sub‑texts */
+  .kpi-card .kpi-title, .kpi-card .kpi-label,
+  .kpi-card h4, .kpi-card span,
+  .kpi-value, .kpi-amount {
+    color: #E2E8F0 !important;
+  }
+  .kpi-card .kpi-subtext,
+  .kpi-card .kpi-hint,
+  .kpi-card .minor-text,
+  .kpi-card .small-text {
+    color: #94A3B8 !important;
+  }
+  /* Ensure red/green colors for percentages */
+  .kpi-card .kpi-value[style*="color: #EF4444"] {
+    color: #EF4444 !important;
+  }
+  .kpi-card .kpi-value[style*="color: #10B981"] {
+    color: #10B981 !important;
+  }
+
+  /* 11. Project Utilization & Donor Balance inner rows */
+  .project-row, .donor-row, .utilization-row,
+  .project-table tr, .donor-table tr,
+  .utilization-table tr {
+    background: #111827 !important;
+    color: #E2E8F0 !important;
+  }
+  .project-row td, .donor-row td,
+  .project-table td, .donor-table td,
+  .utilization-table td {
+    background: #111827 !important;
+    border-bottom: 1px solid #1E293B !important;
+  }
+
+  /* 12. CRM heading & inner cards */
+  .crm-heading, .crm-section-heading,
+  .crm-card .crm-heading {
+    color: #F1F5F9 !important;
+    background: #111827 !important;
+    border-bottom: 1px solid #1E293B;
+  }
+  .crm-card .crm-item, .crm-card .customer-row,
+  .crm-card .supplier-row, .crm-card .investor-row {
+    background: #111827 !important;
+    color: #E2E8F0 !important;
+    border: 1px solid #1E293B !important;
+  }
+
+  /* 13. Bottom bar (portfolio health / summary) */
+  .mobile-bottom-nav,
+  .dashboard-summary,
+  .portfolio-summary,
+  .bottom-summary {
+    background: #0F172A !important;
+    border-top: 1px solid #1E293B !important;
+    color: #E2E8F0 !important;
+  }
+  .mobile-bottom-nav a, .mobile-bottom-nav span,
+  .dashboard-summary a, .dashboard-summary span,
+  .portfolio-summary a, .portfolio-summary span,
+  .bottom-summary a, .bottom-summary span {
+    color: #E2E8F0 !important;
+  }
+  /* Specific text like “⚠️ Portfolio Health: Needs Attention” */
+  .portfolio-status-text,
+  .health-status-text,
+  .summary-text {
+    color: #FCA5A5 !important; /* red for warning */
+  }
+
+  /* 14. List view status columns – dark background, preserve badge colors */
+  .status-badge, .badge {
+    background: #1E293B !important;
+    color: #F1F5F9 !important;
+  }
+
+  /* 15. All action links (new invoice, etc.) already covered by btn-primary */
+
+  /* 16. Remove any remaining old dark text that is unreadable */
+  span, p, a, li, td, th, label {
+    color: inherit;
+  }
+
+  /* 17. Ensure all icons and generic text inside cards is light */
+  .card *, .card *::before, .card *::after,
+  .kpi-card *, .crm-card * {
+    color: inherit !important;
+  }
 `
 
 // ── Navigation structure (unchanged) ──
