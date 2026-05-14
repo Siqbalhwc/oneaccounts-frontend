@@ -168,7 +168,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
   }
 
   return (
-    <div style={{ background: "#f4f8fc", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif", color: "#1a2636" }}>
+    <div style={{ background: "#f4f8fc", minHeight: "100%", flex: 1, fontFamily: "'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif", color: "#1a2636" }}>
       <style>{`
         .mgmt * { box-sizing: border-box; margin: 0; padding: 0; }
 

@@ -63,7 +63,19 @@ const styles = `
 
   /* ── Main area ── */
   .dl-main { flex: 1; margin-left: 260px; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; overflow-x: hidden; background: #0B1120; }
-  .dl-main-content { flex: 1; }
+
+  /* ── The fix: make dl-main-content a flex column that forces its child to stretch ── */
+  .dl-main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .dl-main-content > div {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #0B1120 !important;
+  }
 
   .dl-topbar { background: #0F172A; border-bottom: 1px solid #1E293B; padding: 0 24px; display: flex; align-items: center; min-height: 64px; gap: 16px; position: sticky; top: 0; z-index: 30; }
   .dl-topbar-greeting { flex: 1; min-width: 0; }
@@ -250,7 +262,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
         <div className="dl-main">
           <DashboardTopBar email={email} greeting={getGreeting()} />
-          <div className="dl-main-content">   {/* ✅ flex:1 wrapper – fixes large‑screen blank space */}
+          <div className="dl-main-content">
             {children}
           </div>
           <div className="mobile-bottom-nav">
