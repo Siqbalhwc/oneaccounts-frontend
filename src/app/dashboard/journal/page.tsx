@@ -34,7 +34,7 @@ export default function JournalPage() {
   const [expandedLines, setExpandedLines] = useState<any[]>([])
   const [loadingLines, setLoadingLines] = useState(false)
 
-  // Fetch journal entries with aggregated Dr/Cr
+  // Fetch journal entries – now excludes soft‑deleted rows
   useEffect(() => {
     if (!role) return
     if (!canView) {
@@ -44,6 +44,7 @@ export default function JournalPage() {
     supabase
       .from("journal_entries")
       .select("id, entry_no, date, description")
+      .is("deleted_at", null)                   // ← filter soft‑deletes
       .order("date", { ascending: false })
       .then(({ data }) => {
         if (data) {
@@ -110,42 +111,43 @@ export default function JournalPage() {
       <div
         style={{
           padding: 24,
-          background: "#EFF4FB",
+          background: "#0B1120",
           minHeight: "100vh",
-          fontFamily: "'Plus Jakarta Sans', sans-serif",
+          fontFamily: "'Inter', sans-serif",
+          color: "#E2E8F0",
         }}
       >
         <style>{`
-          .card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-          .input { height: 38px; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0 12px; font-size: 13px; box-sizing: border-box; }
+          .card { background: #111827; border-radius: 12px; border: 1px solid #1E293B; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+          .input { height: 38px; border: 1px solid #334155; border-radius: 8px; padding: 0 12px; font-size: 13px; box-sizing: border-box; background: #1E293B; color: #F1F5F9; }
           .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-          .btn-primary { background: #1D4ED8; color: white; }
-          .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
+          .btn-primary { background: #2563EB; color: white; }
+          .btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
 
           .journal-row {
             display: grid;
             grid-template-columns: 32px 1fr 1.5fr 100px 100px 40px;
             padding: 12px 16px;
-            border-bottom: 1px solid #F1F5F9;
+            border-bottom: 1px solid #1E293B;
             font-size: 13px;
             align-items: center;
             transition: background 0.15s;
+            cursor: pointer;
           }
-          .journal-row:hover { background: #FAFBFF; }
+          .journal-row:hover { background: #1E293B; }
 
           .journal-header {
             display: grid;
             grid-template-columns: 32px 1fr 1.5fr 100px 100px 40px;
             padding: 10px 16px;
-            background: #F8FAFC;
-            font-size: 9px;
+            background: #111827;
+            font-size: 10px;
             font-weight: 700;
             text-transform: uppercase;
             color: #94A3B8;
-            border-bottom: 1px solid #E2E8F0;
+            border-bottom: 1px solid #1E293B;
           }
 
-          /* Description truncation */
           .desc-cell {
             white-space: nowrap;
             overflow: hidden;
@@ -155,10 +157,9 @@ export default function JournalPage() {
             cursor: default;
           }
 
-          /* Expanded lines sub‑table */
           .lines-container {
-            background: #F8FAFC;
-            border-left: 3px solid #1D4ED8;
+            background: #0B1120;
+            border-left: 3px solid #2563EB;
             margin: 0 16px 8px;
             border-radius: 0 8px 8px 0;
             overflow: hidden;
@@ -171,14 +172,14 @@ export default function JournalPage() {
             font-weight: 700;
             text-transform: uppercase;
             color: #64748B;
-            background: #F1F5F9;
+            background: #1E293B;
           }
           .line-item {
             display: grid;
             grid-template-columns: 1fr 80px 80px;
             padding: 6px 16px;
             font-size: 12px;
-            border-bottom: 1px solid #F1F5F9;
+            border-bottom: 1px solid #1E293B;
           }
           .line-item:last-child { border-bottom: none; }
 
@@ -208,7 +209,7 @@ export default function JournalPage() {
           }}
         >
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", margin: 0 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>
               📓 Journal Entries
             </h1>
             <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>
@@ -246,7 +247,7 @@ export default function JournalPage() {
             >
               Total Entries
             </div>
-            <div style={{ fontSize: 24, fontWeight: 800 }}>{entries.length}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: "#F1F5F9" }}>{entries.length}</div>
           </div>
           <div className="card">
             <div
@@ -337,13 +338,13 @@ export default function JournalPage() {
                       <ChevronRight size={14} />
                     )}
                   </span>
-                  <span style={{ fontWeight: 600, color: "#1E3A8A" }}>
+                  <span style={{ fontWeight: 600, color: "#93C5FD" }}>
                     {je.entry_no}
                   </span>
                   <span
                     className="desc-cell"
                     title={je.description || ""}
-                    style={{ color: "#334155" }}
+                    style={{ color: "#E2E8F0" }}
                   >
                     {je.description || "—"}
                   </span>
@@ -401,7 +402,7 @@ export default function JournalPage() {
                     ) : (
                       expandedLines.map((l, idx) => (
                         <div key={idx} className="line-item">
-                          <span style={{ color: "#334155" }}>
+                          <span style={{ color: "#E2E8F0" }}>
                             {l.accounts?.code} – {l.accounts?.name}
                           </span>
                           <span
