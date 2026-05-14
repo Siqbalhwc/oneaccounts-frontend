@@ -206,6 +206,40 @@ const styles = `
 
   /* Remove any residual blue accent from the sidebar */
   .dl-nav-item.active { border-left-color: #334155 !important; }
+
+  /* ── EXTRA OVERRIDES – kill any remaining white/light inside reports ── */
+  /* Force all elements inside the main content to dark, unless they already have a specific dark background */
+  .dl-main-content div:not([class*="dl-"]):not(.mgmt *) {
+    background-color: #111827 !important;
+    color: #E2E8F0 !important;
+  }
+  .dl-main-content span, .dl-main-content p, .dl-main-content a, .dl-main-content li {
+    color: inherit !important;
+  }
+  /* Fix specifically for report inner cards */
+  .dl-main-content .card, .dl-main-content [class*="card"] {
+    background: #111827 !important;
+    border-color: #1E293B !important;
+  }
+  .dl-main-content .card * {
+    color: #E2E8F0 !important;
+  }
+  /* Override any inline white/light colors */
+  .dl-main-content [style*="background: white"],
+  .dl-main-content [style*="background: #fff"],
+  .dl-main-content [style*="background: #ffffff"],
+  .dl-main-content [style*="background: #f8f9fa"],
+  .dl-main-content [style*="background: #f1f5f9"],
+  .dl-main-content [style*="background: #EFF4FB"],
+  .dl-main-content [style*="background: #F4F6FB"],
+  .dl-main-content [style*="background: #FAFBFF"] {
+    background: #111827 !important;
+  }
+  .dl-main-content [style*="color: #1E293B"],
+  .dl-main-content [style*="color: #0a2940"],
+  .dl-main-content [style*="color: #1a2636"] {
+    color: #E2E8F0 !important;
+  }
 `
 
 // ── Navigation structure (unchanged) ──
