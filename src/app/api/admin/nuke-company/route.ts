@@ -42,9 +42,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No admin company found' }, { status: 403 })
   }
 
-  if (targetCompanyId === '00000000-0000-0000-0000-000000000001') {
-    return NextResponse.json({ error: 'Cannot nuke the template company' }, { status: 400 })
-  }
+  // ✅ Removed the template‑company block – now allows nuking any company you admin
 
   try {
     const { error } = await supabaseAdmin.rpc('nuke_company_data', {
