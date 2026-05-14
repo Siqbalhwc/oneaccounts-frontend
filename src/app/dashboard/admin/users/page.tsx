@@ -50,8 +50,6 @@ export default function AdminUsersPage() {
   )
   const router = useRouter()
   const { role, loading: roleLoading } = useRole()
-// TODO: get plan limits from company_settings / plans table
-const maxUsers = 0   // 0 = unlimited for now
   const canView = role === "admin"
   const canEdit = role === "admin"
 
@@ -70,8 +68,8 @@ const maxUsers = 0   // 0 = unlimited for now
   const [editingRoleId, setEditingRoleId] = useState<number | null>(null)
   const [permDraft, setPermDraft] = useState<Record<string, boolean>>({})
 
-  // Plan limits
-  const maxUsers = plan?.max_users ?? 0   // from your plan system (we'll add this later, for now default 0 = unlimited)
+  // Plan limits – 0 = unlimited for now (will be fetched from plan settings later)
+  const maxUsers = 0
 
   useEffect(() => {
     if (!role) return
@@ -186,7 +184,6 @@ const maxUsers = 0   // 0 = unlimited for now
     }
 
     if (editingRoleId) {
-      // update
       const { error } = await supabase.from("company_roles").update(payload).eq("id", editingRoleId)
       if (!error) {
         setMessage("Role updated!")
@@ -198,7 +195,6 @@ const maxUsers = 0   // 0 = unlimited for now
         setMessage(error.message)
       }
     } else {
-      // insert
       const { error } = await supabase.from("company_roles").insert(payload)
       if (!error) {
         setMessage("Role created!")
@@ -315,7 +311,6 @@ const maxUsers = 0   // 0 = unlimited for now
             <h3 style={{ color: "#F1F5F9", marginBottom: 12 }}>
               {editingRoleId ? "Edit Role" : "Custom Roles"}
             </h3>
-            {/* Existing roles list */}
             {!editingRoleId && (
               <div style={{ marginBottom: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {roles.map(role => (
@@ -328,7 +323,6 @@ const maxUsers = 0   // 0 = unlimited for now
               </div>
             )}
 
-            {/* Add / Edit form */}
             <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
               <input
                 className="input"
@@ -351,7 +345,6 @@ const maxUsers = 0   // 0 = unlimited for now
               )}
             </div>
 
-            {/* Permissions checklist */}
             {(editingRoleId || newRoleName) && (
               <>
                 <p style={{ color: "#94A3B8", fontSize: 12, margin: "0 0 8px" }}>Select permissions for this role:</p>
