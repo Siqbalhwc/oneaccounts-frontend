@@ -213,9 +213,7 @@ const styles = `
     background-color: #111827 !important;
     color: #E2E8F0 !important;
   }
-  .dl-main-content span, .dl-main-content p, .dl-main-content a, .dl-main-content li {
-    color: inherit !important;
-  }
+  
   /* Fix specifically for report inner cards */
   .dl-main-content .card, .dl-main-content [class*="card"] {
     background: #111827 !important;
