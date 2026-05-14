@@ -7,6 +7,7 @@ import { Shield, UserPlus, Search, Trash2, Plus, X, Save, CheckCircle } from "lu
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
 
+// All possible modules
 const ALL_MODULES = [
   "Dashboard",
   "Customers",
@@ -60,14 +61,14 @@ export default function AdminUsersPage() {
   const [inviting, setInviting] = useState(false)
   const [search, setSearch] = useState("")
 
-  // Custom roles
+  // Custom roles (fetched from DB)
   const [roles, setRoles] = useState<Role[]>([])
   const [showRoleManager, setShowRoleManager] = useState(false)
   const [newRoleName, setNewRoleName] = useState("")
   const [editingRoleId, setEditingRoleId] = useState<number | null>(null)
   const [permDraft, setPermDraft] = useState<Record<string, boolean>>({})
 
-  // Company ID (needed for role operations)
+  // Company ID
   const [companyId, setCompanyId] = useState("")
 
   const maxUsers = 0   // unlimited for now
@@ -79,7 +80,6 @@ export default function AdminUsersPage() {
       return
     }
 
-    // Get company ID from the logged‑in user
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
         const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -117,6 +117,23 @@ export default function AdminUsersPage() {
     if (data) {
       setRoles(data)
     }
+  }
+
+  // ── Helper: get effective permissions for a user ──
+  const getUserPermissions = (userRole: string): string[] => {
+    // Hard‑coded built‑in roles
+    if (userRole === "admin") return ALL_MODULES
+    if (userRole === "accountant") return ALL_MODULES.filter(m => m !== "Admin Panel" && m !== "Settings")
+    if (userRole === "viewer") return ["Dashboard", "Customers", "Sales Invoices", "Receipts", "Suppliers", "Purchase Bills", "Payments", "Reports"]
+
+    // Custom roles
+    const customRole = roles.find(r => r.role_name === userRole)
+    if (customRole?.permissions) {
+      return Object.entries(customRole.permissions)
+        .filter(([_, enabled]) => enabled)
+        .map(([mod]) => mod)
+    }
+    return []
   }
 
   const assignRole = async (userId: string, newRole: string) => {
@@ -186,21 +203,15 @@ export default function AdminUsersPage() {
     setTimeout(() => setMessage(""), 5000)
   }
 
-  // ── Role management (now includes company_id) ──
+  // ── Role management (unchanged) ──
   const addOrUpdateRole = async () => {
     const name = newRoleName.trim()
-    if (!name) return
-    if (!companyId) {
-      setMessage("Company ID not loaded yet")
-      return
-    }
-
+    if (!name || !companyId) return
     const payload: any = {
       role_name: name,
       permissions: permDraft,
-      company_id: companyId,       // ✅ required by RLS
+      company_id: companyId,
     }
-
     if (editingRoleId) {
       const { error } = await supabase
         .from("company_roles")
@@ -209,36 +220,23 @@ export default function AdminUsersPage() {
         .eq("company_id", companyId)
       if (!error) {
         setMessage("Role updated!")
-        setNewRoleName("")
-        setEditingRoleId(null)
-        setPermDraft({})
+        setNewRoleName(""); setEditingRoleId(null); setPermDraft({})
         fetchRoles()
-      } else {
-        setMessage(error.message)
-      }
+      } else setMessage(error.message)
     } else {
-      const { error } = await supabase
-        .from("company_roles")
-        .insert(payload)
+      const { error } = await supabase.from("company_roles").insert(payload)
       if (!error) {
         setMessage("Role created!")
-        setNewRoleName("")
-        setPermDraft({})
+        setNewRoleName(""); setPermDraft({})
         fetchRoles()
-      } else {
-        setMessage(error.message)
-      }
+      } else setMessage(error.message)
     }
     setTimeout(() => setMessage(""), 3000)
   }
 
   const deleteRole = async (id: number) => {
     if (!companyId) return
-    await supabase
-      .from("company_roles")
-      .delete()
-      .eq("id", id)
-      .eq("company_id", companyId)
+    await supabase.from("company_roles").delete().eq("id", id).eq("company_id", companyId)
     fetchRoles()
     setMessage("Role deleted")
     setTimeout(() => setMessage(""), 3000)
@@ -251,16 +249,11 @@ export default function AdminUsersPage() {
   }
 
   const cancelEdit = () => {
-    setEditingRoleId(null)
-    setNewRoleName("")
-    setPermDraft({})
+    setEditingRoleId(null); setNewRoleName(""); setPermDraft({})
   }
 
   const togglePerm = (module: string) => {
-    setPermDraft(prev => ({
-      ...prev,
-      [module]: !prev[module],
-    }))
+    setPermDraft(prev => ({ ...prev, [module]: !prev[module] }))
   }
 
   const filtered = search.trim()
@@ -300,6 +293,7 @@ export default function AdminUsersPage() {
           .badge-accountant { background: #FEF3C7; color: #92400E; }
           .badge-viewer { background: #FEE2E2; color: #991B1B; }
           .badge-custom { background: #1E293B; color: #CBD5E1; }
+          .perm-badge { background: #1E293B; border: 1px solid #334155; border-radius: 4px; padding: 1px 6px; font-size: 10px; color: #CBD5E1; white-space: nowrap; }
           .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
           .action-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
           .perm-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
@@ -350,7 +344,6 @@ export default function AdminUsersPage() {
                 ))}
               </div>
             )}
-
             <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
               <input
                 className="input"
@@ -361,18 +354,13 @@ export default function AdminUsersPage() {
               />
               {editingRoleId ? (
                 <>
-                  <button className="btn btn-primary" onClick={addOrUpdateRole}>
-                    <Save size={14} /> Update
-                  </button>
+                  <button className="btn btn-primary" onClick={addOrUpdateRole}><Save size={14} /> Update</button>
                   <button className="btn btn-outline" onClick={cancelEdit}>Cancel</button>
                 </>
               ) : (
-                <button className="btn btn-primary" onClick={addOrUpdateRole}>
-                  <Plus size={14} /> Add
-                </button>
+                <button className="btn btn-primary" onClick={addOrUpdateRole}><Plus size={14} /> Add</button>
               )}
             </div>
-
             {(editingRoleId || newRoleName) && (
               <>
                 <p style={{ color: "#94A3B8", fontSize: 12, margin: "0 0 8px" }}>Select permissions for this role:</p>
@@ -437,7 +425,7 @@ export default function AdminUsersPage() {
           </div>
         )}
 
-        {/* Users Table */}
+        {/* Users Table – now with Permissions column */}
         <div className="card" style={{ padding: 0, overflowX: "auto" }}>
           {loading ? (
             <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading users...</div>
@@ -452,50 +440,64 @@ export default function AdminUsersPage() {
                   <th>Email</th>
                   <th>Created</th>
                   <th>Role</th>
+                  <th>Permissions</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(u => (
-                  <tr key={u.id}>
-                    <td style={{ fontWeight: 500 }}>{u.email}</td>
-                    <td style={{ color: "#64748B" }}>
-                      {u.created_at ? new Date(u.created_at).toLocaleDateString() : "-"}
-                    </td>
-                    <td>
-                      <span className={`badge ${
-                        u.role === "admin" ? "badge-admin" :
-                        u.role === "accountant" ? "badge-accountant" :
-                        u.role === "viewer" ? "badge-viewer" :
-                        "badge-custom"
-                      }`}>
-                        {u.role || "none"}
-                      </span>
-                    </td>
-                    <td style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      {canEdit && (
-                        <select
-                          className="input"
-                          style={{ width: 140, height: 32, fontSize: 12, padding: "0 8px" }}
-                          value={u.role || "viewer"}
-                          onChange={(e) => assignRole(u.id, e.target.value)}
-                        >
-                          {allRoles.map(r => <option key={r} value={r}>{r}</option>)}
-                        </select>
-                      )}
-                      {canEdit && (
-                        <button
-                          className="btn btn-outline"
-                          style={{ padding: "4px 8px", color: "#EF4444", borderColor: "#FECACA" }}
-                          onClick={() => handleRemove(u.id)}
-                          title="Remove user"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map(u => {
+                  const permissions = getUserPermissions(u.role)
+                  return (
+                    <tr key={u.id}>
+                      <td style={{ fontWeight: 500 }}>{u.email}</td>
+                      <td style={{ color: "#64748B" }}>
+                        {u.created_at ? new Date(u.created_at).toLocaleDateString() : "-"}
+                      </td>
+                      <td>
+                        <span className={`badge ${
+                          u.role === "admin" ? "badge-admin" :
+                          u.role === "accountant" ? "badge-accountant" :
+                          u.role === "viewer" ? "badge-viewer" :
+                          "badge-custom"
+                        }`}>
+                          {u.role || "none"}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                          {permissions.slice(0, 4).map(perm => (
+                            <span key={perm} className="perm-badge">{perm}</span>
+                          ))}
+                          {permissions.length > 4 && (
+                            <span className="perm-badge" title={permissions.join(", ")}>+{permissions.length - 4} more</span>
+                          )}
+                        </div>
+                      </td>
+                      <td style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        {canEdit && (
+                          <select
+                            className="input"
+                            style={{ width: 140, height: 32, fontSize: 12, padding: "0 8px" }}
+                            value={u.role || "viewer"}
+                            onChange={(e) => assignRole(u.id, e.target.value)}
+                          >
+                            {allRoles.map(r => <option key={r} value={r}>{r}</option>)}
+                          </select>
+                        )}
+                        {canEdit && (
+                          <button
+                            className="btn btn-outline"
+                            style={{ padding: "4px 8px", color: "#EF4444", borderColor: "#FECACA" }}
+                            onClick={() => handleRemove(u.id)}
+                            title="Remove user"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           )}
