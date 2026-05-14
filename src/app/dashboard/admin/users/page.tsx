@@ -7,7 +7,6 @@ import { Shield, UserPlus, Search, Trash2, Plus, X, Save, CheckCircle } from "lu
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
 
-// Define the list of modules (permissions) that can be assigned
 const ALL_MODULES = [
   "Dashboard",
   "Customers",
@@ -68,8 +67,10 @@ export default function AdminUsersPage() {
   const [editingRoleId, setEditingRoleId] = useState<number | null>(null)
   const [permDraft, setPermDraft] = useState<Record<string, boolean>>({})
 
-  // Plan limits – 0 = unlimited for now (will be fetched from plan settings later)
-  const maxUsers = 0
+  // Company ID (needed for role operations)
+  const [companyId, setCompanyId] = useState("")
+
+  const maxUsers = 0   // unlimited for now
 
   useEffect(() => {
     if (!role) return
@@ -77,6 +78,15 @@ export default function AdminUsersPage() {
       setLoading(false)
       return
     }
+
+    // Get company ID from the logged‑in user
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
+        setCompanyId(cid)
+      }
+    })
+
     fetchUsers()
     fetchRoles()
   }, [role, canView])
@@ -100,7 +110,10 @@ export default function AdminUsersPage() {
   }
 
   const fetchRoles = async () => {
-    const { data } = await supabase.from("company_roles").select("*").order("role_name")
+    const { data } = await supabase
+      .from("company_roles")
+      .select("*")
+      .order("role_name")
     if (data) {
       setRoles(data)
     }
@@ -173,18 +186,27 @@ export default function AdminUsersPage() {
     setTimeout(() => setMessage(""), 5000)
   }
 
-  // ── Role management ──
+  // ── Role management (now includes company_id) ──
   const addOrUpdateRole = async () => {
     const name = newRoleName.trim()
     if (!name) return
+    if (!companyId) {
+      setMessage("Company ID not loaded yet")
+      return
+    }
 
     const payload: any = {
       role_name: name,
       permissions: permDraft,
+      company_id: companyId,       // ✅ required by RLS
     }
 
     if (editingRoleId) {
-      const { error } = await supabase.from("company_roles").update(payload).eq("id", editingRoleId)
+      const { error } = await supabase
+        .from("company_roles")
+        .update(payload)
+        .eq("id", editingRoleId)
+        .eq("company_id", companyId)
       if (!error) {
         setMessage("Role updated!")
         setNewRoleName("")
@@ -195,7 +217,9 @@ export default function AdminUsersPage() {
         setMessage(error.message)
       }
     } else {
-      const { error } = await supabase.from("company_roles").insert(payload)
+      const { error } = await supabase
+        .from("company_roles")
+        .insert(payload)
       if (!error) {
         setMessage("Role created!")
         setNewRoleName("")
@@ -209,7 +233,12 @@ export default function AdminUsersPage() {
   }
 
   const deleteRole = async (id: number) => {
-    await supabase.from("company_roles").delete().eq("id", id)
+    if (!companyId) return
+    await supabase
+      .from("company_roles")
+      .delete()
+      .eq("id", id)
+      .eq("company_id", companyId)
     fetchRoles()
     setMessage("Role deleted")
     setTimeout(() => setMessage(""), 3000)
@@ -238,7 +267,6 @@ export default function AdminUsersPage() {
     ? users.filter(u => u.email.toLowerCase().includes(search.toLowerCase()))
     : users
 
-  // All roles (for dropdown) = built-in + custom
   const allRoles = ["admin", "accountant", "viewer", ...roles.map(r => r.role_name).filter(r => !["admin","accountant","viewer"].includes(r))]
 
   if (roleLoading || !role) {
