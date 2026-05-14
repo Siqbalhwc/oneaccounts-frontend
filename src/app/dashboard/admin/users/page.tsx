@@ -3,11 +3,10 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { Shield, UserPlus, Search, Trash2, Plus, X, Save, CheckCircle } from "lucide-react"
+import { Shield, UserPlus, Search, Trash2, Plus, X, Save, CheckCircle, Edit3 } from "lucide-react"
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
 
-// All possible modules
 const ALL_MODULES = [
   "Dashboard",
   "Customers",
@@ -35,6 +34,8 @@ interface User {
   email: string
   created_at: string
   role: string
+  // custom permissions if present
+  customPermissions?: Record<string, boolean> | null
 }
 
 interface Role {
@@ -68,6 +69,11 @@ export default function AdminUsersPage() {
   const [editingRoleId, setEditingRoleId] = useState<number | null>(null)
   const [permDraft, setPermDraft] = useState<Record<string, boolean>>({})
 
+  // Per‑user permissions modal
+  const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [userPerms, setUserPerms] = useState<Record<string, boolean>>({})
+  const [savingUserPerms, setSavingUserPerms] = useState(false)
+
   // Company ID
   const [companyId, setCompanyId] = useState("")
 
@@ -97,7 +103,19 @@ export default function AdminUsersPage() {
       const res = await fetch("/api/admin/users")
       const data = await res.json()
       if (data.users && Array.isArray(data.users)) {
-        setUsers(data.users)
+        // Fetch custom permissions for each user (from user_roles table)
+        const enriched = await Promise.all(data.users.map(async (u: any) => {
+          const { data: userRole } = await supabase
+            .from("user_roles")
+            .select("permissions")
+            .eq("user_id", u.id)
+            .maybeSingle()
+          return {
+            ...u,
+            customPermissions: userRole?.permissions || null,
+          }
+        }))
+        setUsers(enriched)
       } else if (data.error) {
         setError(data.error)
       } else {
@@ -120,20 +138,33 @@ export default function AdminUsersPage() {
   }
 
   // ── Helper: get effective permissions for a user ──
-  const getUserPermissions = (userRole: string): string[] => {
-    // Hard‑coded built‑in roles
-    if (userRole === "admin") return ALL_MODULES
-    if (userRole === "accountant") return ALL_MODULES.filter(m => m !== "Admin Panel" && m !== "Settings")
-    if (userRole === "viewer") return ["Dashboard", "Customers", "Sales Invoices", "Receipts", "Suppliers", "Purchase Bills", "Payments", "Reports"]
-
-    // Custom roles
-    const customRole = roles.find(r => r.role_name === userRole)
-    if (customRole?.permissions) {
-      return Object.entries(customRole.permissions)
-        .filter(([_, enabled]) => enabled)
-        .map(([mod]) => mod)
+  const getEffectivePermissions = (user: User): Record<string, boolean> => {
+    // If user has custom overrides, use them
+    if (user.customPermissions && Object.keys(user.customPermissions).length > 0) {
+      return { ...user.customPermissions }
     }
-    return []
+
+    // Otherwise, derive from role
+    const rolePermissions: Record<string, boolean> = {}
+    if (user.role === "admin") {
+      ALL_MODULES.forEach(m => rolePermissions[m] = true)
+    } else if (user.role === "accountant") {
+      ALL_MODULES.forEach(m => rolePermissions[m] = m !== "Admin Panel" && m !== "Settings")
+    } else if (user.role === "viewer") {
+      const viewerModules = ["Dashboard", "Customers", "Sales Invoices", "Receipts", "Suppliers", "Purchase Bills", "Payments", "Reports"]
+      ALL_MODULES.forEach(m => rolePermissions[m] = viewerModules.includes(m))
+    } else {
+      // Custom role
+      const customRole = roles.find(r => r.role_name === user.role)
+      if (customRole?.permissions) {
+        Object.entries(customRole.permissions).forEach(([mod, enabled]) => {
+          rolePermissions[mod] = enabled
+        })
+      }
+      // fill missing with false
+      ALL_MODULES.forEach(m => { if (!(m in rolePermissions)) rolePermissions[m] = false })
+    }
+    return rolePermissions
   }
 
   const assignRole = async (userId: string, newRole: string) => {
@@ -201,6 +232,33 @@ export default function AdminUsersPage() {
     }
     setInviting(false)
     setTimeout(() => setMessage(""), 5000)
+  }
+
+  // ── Open user permissions modal ──
+  const openUserPerms = (user: User) => {
+    setSelectedUser(user)
+    setUserPerms(getEffectivePermissions(user))
+  }
+
+  // ── Save user permissions (overrides) ──
+  const saveUserPerms = async () => {
+    if (!selectedUser || !companyId) return
+    setSavingUserPerms(true)
+    const { error } = await supabase
+      .from("user_roles")
+      .update({ permissions: userPerms })
+      .eq("user_id", selectedUser.id)
+      .eq("company_id", companyId)
+
+    if (!error) {
+      setUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, customPermissions: { ...userPerms } } : u))
+      setMessage("Permissions updated!")
+      setSelectedUser(null)
+    } else {
+      setMessage(error.message)
+    }
+    setSavingUserPerms(false)
+    setTimeout(() => setMessage(""), 3000)
   }
 
   // ── Role management (unchanged) ──
@@ -299,11 +357,46 @@ export default function AdminUsersPage() {
           .perm-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
           .perm-chip { background: #1E293B; border: 1px solid #334155; border-radius: 6px; padding: 2px 8px; font-size: 11px; cursor: pointer; }
           .perm-chip.active { background: #2563EB; border-color: #2563EB; color: white; }
+          .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: flex; align-items: center; justify-content: center; }
+          .modal { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 24px; width: 90%; max-width: 500px; max-height: 80vh; overflow-y: auto; }
           @media (max-width: 700px) {
             th:nth-child(2), td:nth-child(2) { display: none; }
             .action-row { flex-direction: column; align-items: stretch; }
           }
         `}</style>
+
+        {/* ── User Permissions Modal ── */}
+        {selectedUser && (
+          <div className="modal-overlay" onClick={() => setSelectedUser(null)}>
+            <div className="modal" onClick={e => e.stopPropagation()}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <h3 style={{ color: "#F1F5F9", fontSize: 16 }}>
+                  Permissions for {selectedUser.email}
+                </h3>
+                <button onClick={() => setSelectedUser(null)} style={{ background: "none", border: "none", color: "#94A3B8", cursor: "pointer" }}>
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="perm-list" style={{ marginBottom: 20 }}>
+                {ALL_MODULES.map(mod => (
+                  <div
+                    key={mod}
+                    className={`perm-chip ${userPerms[mod] ? "active" : ""}`}
+                    onClick={() => setUserPerms(prev => ({ ...prev, [mod]: !prev[mod] }))}
+                  >
+                    {mod}
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                <button className="btn btn-outline" onClick={() => setSelectedUser(null)}>Cancel</button>
+                <button className="btn btn-primary" onClick={saveUserPerms} disabled={savingUserPerms}>
+                  {savingUserPerms ? "Saving..." : "Save Permissions"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div>
@@ -425,7 +518,7 @@ export default function AdminUsersPage() {
           </div>
         )}
 
-        {/* Users Table – now with Permissions column */}
+        {/* Users Table */}
         <div className="card" style={{ padding: 0, overflowX: "auto" }}>
           {loading ? (
             <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading users...</div>
@@ -446,7 +539,8 @@ export default function AdminUsersPage() {
               </thead>
               <tbody>
                 {filtered.map(u => {
-                  const permissions = getUserPermissions(u.role)
+                  const perms = getEffectivePermissions(u)
+                  const permList = Object.keys(perms).filter(k => perms[k])
                   return (
                     <tr key={u.id}>
                       <td style={{ fontWeight: 500 }}>{u.email}</td>
@@ -464,13 +558,20 @@ export default function AdminUsersPage() {
                         </span>
                       </td>
                       <td>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                          {permissions.slice(0, 4).map(perm => (
-                            <span key={perm} className="perm-badge">{perm}</span>
-                          ))}
-                          {permissions.length > 4 && (
-                            <span className="perm-badge" title={permissions.join(", ")}>+{permissions.length - 4} more</span>
-                          )}
+                        <div
+                          style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+                          onClick={() => openUserPerms(u)}
+                          title="Click to edit permissions"
+                        >
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, flex: 1 }}>
+                            {permList.slice(0, 3).map(perm => (
+                              <span key={perm} className="perm-badge">{perm}</span>
+                            ))}
+                            {permList.length > 3 && (
+                              <span className="perm-badge">+{permList.length - 3} more</span>
+                            )}
+                          </div>
+                          <Edit3 size={14} style={{ color: "#94A3B8", flexShrink: 0 }} />
                         </div>
                       </td>
                       <td style={{ display: "flex", gap: 8, alignItems: "center" }}>
