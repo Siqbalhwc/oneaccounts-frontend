@@ -15,7 +15,7 @@ const styles = `
   /* ── Sidebar – 208 px (80% of original), same dark background as dashboard ── */
   .dl-sidebar {
     width: 208px; min-width: 208px;
-    background: #0B1120;               /* ← matches dashboard */
+    background: #0B1120;
     display: flex; flex-direction: column;
     position: fixed; top: 0; left: 0; bottom: 0; z-index: 40;
     transition: transform 0.25s ease; overflow: hidden;
@@ -24,7 +24,7 @@ const styles = `
 
   .dl-sidebar-logo {
     display: flex; align-items: center; gap: 8px;
-    padding: 18px 14px;               /* slightly tighter for 208 px width */
+    padding: 18px 14px;
     border-bottom: 1px solid #1E293B;
     min-height: 62px;
   }
@@ -36,7 +36,7 @@ const styles = `
   }
   .dl-sidebar-logo-name {
     color: white;
-    font-size: 13px;                   /* smaller to fit on one line */
+    font-size: 13px;
     font-weight: 700;
     line-height: 1.2;
     white-space: nowrap;
@@ -77,11 +77,10 @@ const styles = `
   }
   .dl-nav-item:hover { background: rgba(255,255,255,0.04); color: white; }
 
-  /* Active item – NO blue, subtle white accent */
   .dl-nav-item.active {
     background: rgba(255,255,255,0.05);
     color: white; font-weight: 600;
-    border-left: 3px solid #334155;    /* dark slate, no blue */
+    border-left: 3px solid #334155;
   }
   .dl-nav-icon { width: 20px; text-align: center; flex-shrink: 0; }
   .dl-nav-divider { height: 1px; background: rgba(255,255,255,0.06); margin: 6px 14px; }
@@ -100,7 +99,6 @@ const styles = `
   /* ── Main area ── */
   .dl-main { flex: 1; margin-left: 208px; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; overflow-x: hidden; background: #0B1120; }
 
-  /* Large‑screen fix: stretch content */
   .dl-main-content {
     flex: 1;
     display: flex;
@@ -167,6 +165,55 @@ const styles = `
   @media (max-width: 380px) {
     .dl-topbar-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
     .dl-action-btn { padding: 6px 4px; font-size: 9px; }
+  }
+
+  /* ── Final force: no white backgrounds, all text light (applies to all pages) ── */
+  .dl-main-content h1, .dl-main-content h2, .dl-main-content h3,
+  .dl-main-content h4, .dl-main-content h5, .dl-main-content h6,
+  h1, h2, h3, h4, h5, h6 {
+    color: #F1F5F9 !important;
+  }
+
+  [style*="background: white"],
+  [style*="background: #fff"],
+  [style*="background: #ffffff"],
+  [style*="background: #f8f9fa"],
+  [style*="background: #f1f5f9"],
+  [style*="background: #EFF4FB"],
+  [style*="background: #F4F6FB"],
+  [style*="background: #FAFBFF"] {
+    background: #111827 !important;
+  }
+
+  .card, .tb-card, .inv-card, .pay-card, .ac-card, .form-card {
+    background: #111827 !important;
+    border-color: #1E293B !important;
+  }
+
+  table, .table, .log-table {
+    background: #111827 !important;
+  }
+  table th, .table th, .log-row-header {
+    background: #1E293B !important;
+    color: #94A3B8 !important;
+  }
+  table td, .table td {
+    background: #111827 !important;
+    border-color: #1E293B !important;
+  }
+
+  input, select, textarea,
+  .input, .pay-input, .inv-input, .ac-search,
+  .filter-select, .inv-select, .pay-select {
+    background: #1E293B !important;
+    border-color: #334155 !important;
+    color: #F1F5F9 !important;
+  }
+
+  .btn-primary, a.btn-primary, button.btn-primary {
+    background: #2563EB !important;
+    color: white !important;
+    border-color: #2563EB !important;
   }
 `
 
