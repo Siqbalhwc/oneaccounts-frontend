@@ -87,20 +87,33 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
   }
 
-  const { error: upsertError } = await supabaseAdmin
+  // 1. Try to update an existing row
+  const { data: existing, error: updateError } = await supabaseAdmin
     .from('user_roles')
-    .upsert(
-      {
+    .update({ role })
+    .eq('user_id', userId)
+    .eq('company_id', companyId)
+    .select('id')
+    .maybeSingle()
+
+  if (updateError) {
+    console.error('Admin update error:', updateError)
+    return NextResponse.json({ error: updateError.message }, { status: 500 })
+  }
+
+  // 2. If no row existed, insert a new one
+  if (!existing) {
+    const { error: insertError } = await supabaseAdmin
+      .from('user_roles')
+      .insert({
         user_id: userId,
         company_id: companyId,
         role,
-      },
-      { onConflict: 'user_id, company_id' }   // ← THE FIX
-    )
-
-  if (upsertError) {
-    console.error('Admin upsert error:', upsertError)
-    return NextResponse.json({ error: upsertError.message }, { status: 500 })
+      })
+    if (insertError) {
+      console.error('Admin insert error:', insertError)
+      return NextResponse.json({ error: insertError.message }, { status: 500 })
+    }
   }
 
   return NextResponse.json({ success: true })
