@@ -197,10 +197,10 @@ export default function DataManagementPage() {
   }
 
   // ----- Access guards -----
-  if (companyId === null) return <div style={{ padding: 24, textAlign: "center" }}>Loading company context…</div>
-  if (!role) return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
+  if (companyId === null) return <div style={{ padding: 24, textAlign: "center", color: "#94A3B8" }}>Loading company context…</div>
+  if (!role) return <div style={{ padding: 24, textAlign: "center", color: "#94A3B8" }}>Loading...</div>
   if (!canView) return (
-    <div style={{ padding: 24, textAlign: "center" }}>
+    <div style={{ padding: 24, textAlign: "center", color: "#E2E8F0" }}>
       <h2>Access Denied</h2>
       <p style={{ color: "#94A3B8" }}>You do not have permission to view this page.</p>
     </div>
@@ -208,32 +208,43 @@ export default function DataManagementPage() {
 
   return (
     <RoleGuard allowedRoles={["admin", "accountant"]}>
-      <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
+      <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
         <style>{`
           .dm-header { margin-bottom: 20px; }
-          .dm-title { font-size: 22px; font-weight: 800; color: #1E293B; }
+          .dm-title { font-size: 22px; font-weight: 800; color: #F1F5F9; }
           .dm-subtitle { font-size: 13px; color: #94A3B8; }
           .dm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 20px; }
           .dm-card {
-            background: white; border: 1px solid #E2E8F0; border-radius: 10px;
+            background: #111827; border: 1px solid #1E293B; border-radius: 10px;
             padding: 18px; display: flex; flex-direction: column; gap: 10px;
           }
-          .dm-card-title { font-size: 14px; font-weight: 700; color: #1E293B; display: flex; align-items: center; gap: 6px; }
-          .dm-card-desc { font-size: 12px; color: #64748B; flex: 1; }
+          .dm-card-title { font-size: 14px; font-weight: 700; color: #F1F5F9; display: flex; align-items: center; gap: 6px; }
+          .dm-card-desc { font-size: 12px; color: #94A3B8; flex: 1; }
           .dm-btn {
             display: inline-flex; align-items: center; gap: 6px;
             padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600;
             border: none; cursor: pointer; font-family: inherit;
           }
-          .dm-btn-primary { background: #1D4ED8; color: white; }
+          .dm-btn-primary { background: #2563EB; color: white; }
           .dm-btn-danger { background: #EF4444; color: white; }
-          .dm-btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
+          .dm-btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
           .confirmation-box {
-            background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; padding: 12px;
-            margin-top: 8px; font-size: 12px; color: #B91C1C;
+            background: #1E293B; border: 1px solid #EF4444; border-radius: 8px; padding: 12px;
+            margin-top: 8px; font-size: 12px; color: #FCA5A5;
           }
           .confirmation-buttons { display: flex; gap: 8px; margin-top: 8px; }
-          .import-section { background: white; border: 1px solid #E2E8F0; border-radius: 10px; padding: 20px; margin-top: 20px; }
+          .import-section {
+            background: #111827; border: 1px solid #1E293B; border-radius: 10px;
+            padding: 20px; margin-top: 20px;
+          }
+          select, input[type="file"] {
+            background: #1E293B; border: 1px solid #334155; border-radius: 6px;
+            padding: 6px 10px; color: #F1F5F9; font-size: 12px;
+          }
+          table { width: 100%; border-collapse: collapse; color: #E2E8F0; }
+          th { background: #1E293B; color: #94A3B8; font-size: 10px; padding: 6px; text-align: left; }
+          td { border-bottom: 1px solid #1E293B; padding: 4px 6px; }
+          label { color: #CBD5E1; }
         `}</style>
 
         <div className="dm-header">
@@ -243,16 +254,16 @@ export default function DataManagementPage() {
 
         {flash && (
           <div style={{
-            background: flash.includes("✅") ? "#F0FDF4" : "#FEF2F2",
-            border: "1px solid " + (flash.includes("✅") ? "#BBF7D0" : "#FECACA"),
-            color: flash.includes("✅") ? "#15803D" : "#B91C1C",
+            background: flash.includes("✅") ? "#064E3B" : "#1E293B",
+            border: "1px solid " + (flash.includes("✅") ? "#065F46" : "#EF4444"),
+            color: flash.includes("✅") ? "#6EE7B7" : "#FCA5A5",
             padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13
           }}>
             {flash}
           </div>
         )}
 
-        {/* ── Delete / Reset cards (now using server‑side API) ── */}
+        {/* ── Delete / Reset cards ── */}
         <div className="dm-grid">
           {[
             { key: "journal",          title: "Delete Journal Entries",    desc: "Remove all journal entries and reset balances.", entity: "journal",          successMsg: "Journal entries deleted." },
@@ -290,8 +301,7 @@ export default function DataManagementPage() {
                         } else if (item.key === 'reset_balances') {
                           resetBalances()
                         }
-                        // The UI will hide confirmation via the success handler; but we also reset confirmSection immediately
-                        // to avoid flicker (handled inside callDeleteEntity/resetBalances).
+                        // confirmation will be hidden inside success handlers
                       }}
                     >
                       ✅ Yes
@@ -312,10 +322,10 @@ export default function DataManagementPage() {
           ))}
         </div>
 
-        {/* ── Bulk Import Section (unchanged) ─────────────── */}
+        {/* ── Bulk Import Section ─────────────── */}
         <div className="import-section">
-          <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10 }}>📥 Import from CSV</h3>
-          <p style={{ fontSize: 12, color: "#64748B", marginBottom: 12 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: "#F1F5F9" }}>📥 Import from CSV</h3>
+          <p style={{ fontSize: 12, color: "#94A3B8", marginBottom: 12 }}>
             Upload a CSV file to bulk import Customers, Suppliers, or Products.
           </p>
 
@@ -330,9 +340,9 @@ export default function DataManagementPage() {
 
           {importPreview.length > 0 && (
             <>
-              <h4>Preview ({importPreview.length} rows)</h4>
+              <h4 style={{ color: "#F1F5F9" }}>Preview ({importPreview.length} rows)</h4>
               <div style={{ maxHeight: 200, overflow: "auto", marginBottom: 12 }}>
-                <table style={{ width: "100%", fontSize: 11 }}>
+                <table>
                   <thead>
                     <tr>{Object.keys(importPreview[0]).map(k => <th key={k}>{k}</th>)}</tr>
                   </thead>
@@ -344,7 +354,7 @@ export default function DataManagementPage() {
                 </table>
               </div>
 
-              <h4>Column Mapping</h4>
+              <h4 style={{ color: "#F1F5F9" }}>Column Mapping</h4>
               {fieldOptions[importEntity].map(field => (
                 <div key={field} style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center" }}>
                   <span style={{ width: 100, fontWeight: 600 }}>{field}:</span>
