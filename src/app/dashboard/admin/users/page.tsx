@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { Shield, UserPlus, Search, Trash2 } from "lucide-react"
+import { Shield, UserPlus, Search, Trash2, Plus, X } from "lucide-react"
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
 
@@ -32,6 +32,11 @@ export default function AdminUsersPage() {
   const [inviting, setInviting] = useState(false)
   const [search, setSearch] = useState("")
 
+  // Custom roles
+  const [customRoles, setCustomRoles] = useState<string[]>([])
+  const [showRoleManager, setShowRoleManager] = useState(false)
+  const [newRoleName, setNewRoleName] = useState("")
+
   useEffect(() => {
     if (!role) return
     if (!canView) {
@@ -39,6 +44,7 @@ export default function AdminUsersPage() {
       return
     }
     fetchUsers()
+    fetchCustomRoles()
   }, [role, canView])
 
   const fetchUsers = async () => {
@@ -57,6 +63,14 @@ export default function AdminUsersPage() {
       setError("Network error")
     }
     setLoading(false)
+  }
+
+  const fetchCustomRoles = async () => {
+    const { data } = await supabase
+      .from("company_roles")
+      .select("role_name")
+      .order("role_name")
+    if (data) setCustomRoles(data.map(r => r.role_name))
   }
 
   const assignRole = async (userId: string, newRole: string) => {
@@ -126,41 +140,62 @@ export default function AdminUsersPage() {
     setTimeout(() => setMessage(""), 5000)
   }
 
+  const addCustomRole = async () => {
+    const name = newRoleName.trim()
+    if (!name) return
+    const { error } = await supabase.from("company_roles").insert({ role_name: name })
+    if (!error) {
+      setCustomRoles(prev => [...prev, name].sort())
+      setNewRoleName("")
+    } else {
+      setMessage(error.message)
+      setTimeout(() => setMessage(""), 4000)
+    }
+  }
+
+  const deleteCustomRole = async (roleName: string) => {
+    await supabase.from("company_roles").delete().eq("role_name", roleName)
+    setCustomRoles(prev => prev.filter(r => r !== roleName))
+  }
+
   const filtered = search.trim()
     ? users.filter(u => u.email.toLowerCase().includes(search.toLowerCase()))
     : users
 
   if (roleLoading || !role) {
-    return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
+    return <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>Loading…</div>
   }
   if (!canView) {
     return (
-      <div style={{ padding: 40, textAlign: "center" }}>
+      <div style={{ padding: 40, textAlign: "center", color: "#E2E8F0" }}>
         <h2>Access Denied</h2>
         <p style={{ color: "#94A3B8" }}>Only administrators can access this page.</p>
       </div>
     )
   }
 
+  // All possible roles: hardcoded + custom
+  const allRoles = ["admin", "accountant", "viewer", ...customRoles.filter(r => !["admin","accountant","viewer"].includes(r))]
+
   return (
     <RoleGuard allowedRoles={["admin"]}>
-      <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
         <style>{`
-          .card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-          .input { height: 38px; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0 12px; font-size: 13px; box-sizing: border-box; }
+          .card { background: #111827; border-radius: 12px; border: 1px solid #1E293B; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+          .input { height: 38px; border: 1px solid #334155; border-radius: 8px; padding: 0 12px; font-size: 13px; box-sizing: border-box; background: #1E293B; color: #F1F5F9; }
           .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-          .btn-primary { background: #1D4ED8; color: white; }
-          .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
+          .btn-primary { background: #2563EB; color: white; }
+          .btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
           .btn-danger { background: #EF4444; color: white; }
           table { width: 100%; border-collapse: collapse; }
-          th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8; text-align: left; padding: 8px 6px; border-bottom: 1px solid #E2E8F0; }
-          td { padding: 10px 6px; border-bottom: 1px solid #F1F5F9; font-size: 13px; }
-          tr:hover td { background: #FAFBFF; }
+          th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8; text-align: left; padding: 8px 6px; border-bottom: 1px solid #1E293B; }
+          td { padding: 10px 6px; border-bottom: 1px solid #1E293B; font-size: 13px; color: #E2E8F0; }
+          tr:hover td { background: #1E293B; }
           .badge { padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; display: inline-block; }
           .badge-admin { background: #D1FAE5; color: #065F46; }
           .badge-accountant { background: #FEF3C7; color: #92400E; }
           .badge-viewer { background: #FEE2E2; color: #991B1B; }
-          .badge-none { background: #F1F5F9; color: #64748B; }
+          .badge-custom { background: #1E293B; color: #CBD5E1; }
           .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
           .action-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
           @media (max-width: 700px) {
@@ -171,20 +206,52 @@ export default function AdminUsersPage() {
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", margin: 0 }}>👑 Admin Panel - User Roles</h1>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>👑 Admin Panel - User Roles</h1>
             <p style={{ fontSize: 13, color: "#94A3B8", margin: 0 }}>Manage user permissions and invite new users</p>
           </div>
+          <button className="btn btn-outline" onClick={() => setShowRoleManager(!showRoleManager)}>
+            <Shield size={14} /> Manage Roles
+          </button>
         </div>
 
         {error && (
-          <div style={{ background: "#FEF2F2", color: "#B91C1C", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+          <div style={{ background: "#1E293B", color: "#FCA5A5", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
             {error}
           </div>
         )}
 
         {message && (
-          <div style={{ background: "#F0FDF4", color: "#15803D", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+          <div style={{ background: "#064E3B", color: "#6EE7B7", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
             {message}
+          </div>
+        )}
+
+        {/* Custom Role Manager */}
+        {showRoleManager && (
+          <div className="card" style={{ marginBottom: 16 }}>
+            <h3 style={{ color: "#F1F5F9", marginBottom: 12 }}>Custom Roles</h3>
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <input
+                className="input"
+                placeholder="New role name (e.g. Purchaser)"
+                value={newRoleName}
+                onChange={e => setNewRoleName(e.target.value)}
+                style={{ flex: 1 }}
+              />
+              <button className="btn btn-primary" onClick={addCustomRole}>
+                <Plus size={14} /> Add
+              </button>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {customRoles.map(role => (
+                <div key={role} className="badge badge-custom" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {role}
+                  <button onClick={() => deleteCustomRole(role)} style={{ background: "none", border: "none", color: "#94A3B8", cursor: "pointer", padding: 0 }}>
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -192,19 +259,19 @@ export default function AdminUsersPage() {
         <div className="summary-grid">
           <div className="card">
             <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Users</div>
-            <div style={{ fontSize: 24, fontWeight: 800 }}>{filtered.length}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: "#F1F5F9" }}>{filtered.length}</div>
           </div>
           <div className="card">
             <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Admins</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: "#065F46" }}>{filtered.filter(u => u.role === "admin").length}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: "#6EE7B7" }}>{filtered.filter(u => u.role === "admin").length}</div>
           </div>
           <div className="card">
             <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Accountants</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: "#92400E" }}>{filtered.filter(u => u.role === "accountant").length}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: "#FCD34D" }}>{filtered.filter(u => u.role === "accountant").length}</div>
           </div>
         </div>
 
-        {/* Invite + Search in one row */}
+        {/* Invite + Search */}
         {canEdit && (
           <div className="action-row">
             <input
@@ -258,7 +325,8 @@ export default function AdminUsersPage() {
                       <span className={`badge ${
                         u.role === "admin" ? "badge-admin" :
                         u.role === "accountant" ? "badge-accountant" :
-                        u.role === "viewer" ? "badge-viewer" : "badge-none"
+                        u.role === "viewer" ? "badge-viewer" :
+                        "badge-custom"
                       }`}>
                         {u.role || "none"}
                       </span>
@@ -267,13 +335,11 @@ export default function AdminUsersPage() {
                       {canEdit && (
                         <select
                           className="input"
-                          style={{ width: 120, height: 32, fontSize: 12, padding: "0 8px" }}
+                          style={{ width: 140, height: 32, fontSize: 12, padding: "0 8px" }}
                           value={u.role || "viewer"}
                           onChange={(e) => assignRole(u.id, e.target.value)}
                         >
-                          <option value="viewer">Viewer</option>
-                          <option value="accountant">Accountant</option>
-                          <option value="admin">Admin</option>
+                          {allRoles.map(r => <option key={r} value={r}>{r}</option>)}
                         </select>
                       )}
                       {canEdit && (

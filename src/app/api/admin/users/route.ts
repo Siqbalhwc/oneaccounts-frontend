@@ -93,11 +93,34 @@ export async function PUT(request: Request) {
 
   const { error: upsertError } = await supabaseAdmin
     .from('user_roles')
-    .upsert({
-      user_id: userId,
-      company_id: companyId,
-      role,
-    })
+    // ── PUT (update role) ──
+export async function PUT(request: Request) {
+  const { error, status, companyId } = await requireAdmin()
+  if (error) return NextResponse.json({ error }, { status })
+
+  const { userId, role } = await request.json()
+  if (!userId || !role) {
+    return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+  }
+
+  const { error: upsertError } = await supabaseAdmin
+    .from('user_roles')
+    .upsert(
+      {
+        user_id: userId,
+        company_id: companyId,
+        role,
+      },
+      { onConflict: 'user_id, company_id' }   // ← THIS is the fix
+    )
+
+  if (upsertError) {
+    console.error('Admin upsert error:', upsertError)
+    return NextResponse.json({ error: upsertError.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true })
+}
 
   if (upsertError) {
     console.error('Admin upsert error:', upsertError)
