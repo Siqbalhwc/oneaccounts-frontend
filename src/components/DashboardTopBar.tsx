@@ -22,10 +22,26 @@ export default function DashboardTopBar({ email, greeting }: { email: string; gr
     )
   }
 
-  // Other pages: normal top bar
+  // Other pages: normal top bar – now dark themed
   return (
-    <header className="dl-topbar">
-      <button className="dl-hamburger" id="dl-hamburger" aria-label="Open menu" style={{ marginRight: 8 }}>
+    <header
+      className="dl-topbar"
+      style={{
+        background: "#0F172A",   // dark sidebar colour
+        borderBottom: "1px solid #1E293B",
+        padding: "0 24px",
+        display: "flex",
+        alignItems: "center",
+        minHeight: "64px",
+        gap: "16px",
+      }}
+    >
+      <button
+        className="dl-hamburger"
+        id="dl-hamburger"
+        aria-label="Open menu"
+        style={{ marginRight: 8 }}
+      >
         <span /><span /><span />
       </button>
 
@@ -34,25 +50,29 @@ export default function DashboardTopBar({ email, greeting }: { email: string; gr
         alt="Logo"
         style={{ width: 28, height: 28, borderRadius: 8, objectFit: "contain", marginRight: 8 }}
       />
-      <div className="dl-topbar-greeting">
-        <div className="dl-topbar-title">
+      <div className="dl-topbar-greeting" style={{ flex: 1, minWidth: 0 }}>
+        <div className="dl-topbar-title" style={{ fontSize: 14, fontWeight: 700, color: "#F1F5F9", lineHeight: 1.2 }}>
           👋 {greeting}, {email.split("@")[0]}!
         </div>
-        <div className="dl-topbar-subtitle">
+        <div className="dl-topbar-subtitle" style={{ fontSize: 11, color: "#94A3B8", lineHeight: 1.2 }}>
           Here's what's happening with your business today
         </div>
       </div>
-      <div className="dl-topbar-actions">
-        <a href="/dashboard/invoices/new" className="dl-action-btn dl-btn-invoice">
+      <div className="dl-topbar-actions" style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+        <a href="/dashboard/invoices/new" className="dl-action-btn dl-btn-invoice"
+          style={{ background: "#1E293B", borderColor: "#334155", color: "#93C5FD" }}>
           <span>🧾</span> New Invoice
         </a>
-        <a href="/dashboard/bills/new" className="dl-action-btn dl-btn-bill">
+        <a href="/dashboard/bills/new" className="dl-action-btn dl-btn-bill"
+          style={{ background: "#1E293B", borderColor: "#334155", color: "#FCD34D" }}>
           <span>📦</span> New Bill
         </a>
-        <a href="/dashboard/receipts/new" className="dl-action-btn dl-btn-receipt">
+        <a href="/dashboard/receipts/new" className="dl-action-btn dl-btn-receipt"
+          style={{ background: "#1E293B", borderColor: "#334155", color: "#6EE7B7" }}>
           <span>💰</span> Receipt
         </a>
-        <a href="/dashboard/payments/new" className="dl-action-btn dl-btn-payment">
+        <a href="/dashboard/payments/new" className="dl-action-btn dl-btn-payment"
+          style={{ background: "#1E293B", borderColor: "#334155", color: "#FCA5A5" }}>
           <span>💳</span> Payment
         </a>
       </div>
