@@ -49,149 +49,128 @@ export default function ManagementDashboard() {
   } = kpis || {}
 
   return (
-    <div style={{
-      padding: 24, fontFamily: "'Inter', sans-serif", background: "#0B1120",
-      minHeight: "100vh", color: "#E2E8F0"
-    }}>
-      <style>{`
-        .kpi-card {
-          background: #111827; border: 1px solid #1E293B; border-radius: 12px;
-          padding: 18px; display: flex; flex-direction: column; gap: 10px;
-          transition: background 0.2s;
-        }
-        .kpi-card:hover { background: #1E293B; }
-        .kpi-label { font-size: 11px; font-weight: 600; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.04em; }
-        .kpi-value { font-size: 26px; font-weight: 800; color: #F1F5F9; }
-        .kpi-hint { font-size: 11px; color: #64748B; }
-        .section-title { font-size: 15px; font-weight: 700; color: #F1F5F9; margin-bottom: 12px; }
-        .project-row, .donor-row, .crm-row {
-          display: flex; justify-content: space-between; align-items: center;
-          padding: 10px 14px; border-radius: 8px;
-          background: #111827; border: 1px solid #1E293B;
-          margin-bottom: 6px; color: #E2E8F0;
-        }
-        .project-row:hover, .donor-row:hover, .crm-row:hover { background: #1E293B; }
-        .badge-warning {
-          background: #EF4444; color: white; border-radius: 100px;
-          padding: 2px 10px; font-size: 10px; font-weight: 700;
-        }
-        .alert-banner {
-          background: #1E293B; border-left: 4px solid #2563EB;
-          padding: 14px 18px; border-radius: 10px; margin-bottom: 20px;
-          display: flex; align-items: center; justify-content: space-between;
-          color: #FCA5A5;
-        }
-        .alert-banner button, .alert-banner a {
-          background: #2563EB; color: white; border: none;
-          padding: 8px 16px; border-radius: 8px; font-weight: 600; cursor: pointer;
-          text-decoration: none; font-size: 12px;
-        }
-        .bottom-bar {
-          background: #0F172A; border-top: 1px solid #1E293B;
-          padding: 14px 24px; display: flex; justify-content: space-between;
-          align-items: center; flex-wrap: wrap; gap: 12px;
-          color: #E2E8F0;
-        }
-        .crm-heading {
-          font-size: 15px; font-weight: 700; color: #F1F5F9; margin-bottom: 12px;
-          padding-bottom: 8px; border-bottom: 1px solid #1E293B;
-        }
-      `}</style>
-
+    <div style={{ padding: 24, fontFamily: "Arial", background: "#EFF4FB", minHeight: "100vh" }}>
       {/* Alert banner */}
       {unpaid_count > 0 && (
-        <div className="alert-banner">
+        <div style={{
+          background: "#FEF2F2", borderLeft: "4px solid #EF4444",
+          padding: "14px 18px", borderRadius: 10, marginBottom: 20,
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          color: "#991B1B"
+        }}>
           <div>
-            <strong>⚠️ Attention:</strong> You have {unpaid_count} unpaid invoices.
-            Overspent projects need review.
+            <strong>⚠️ Attention:</strong> You have {unpaid_count} unpaid invoices. Overspent projects need review.
           </div>
-          <button onClick={() => router.push("/dashboard/reports/overspent")}>View Overspent</button>
+          <button
+            onClick={() => router.push("/dashboard/reports/overspent")}
+            style={{
+              background: "#EF4444", color: "white", border: "none",
+              padding: "8px 16px", borderRadius: 8, fontWeight: 600, cursor: "pointer"
+            }}
+          >
+            View Overspent
+          </button>
         </div>
       )}
 
       {/* KPI cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14, marginBottom: 24 }}>
-        <div className="kpi-card">
-          <div className="kpi-label">💰 Total Budget</div>
-          <div className="kpi-value">{formatPKR(receivables + payables + revenue)}</div>
-          <div className="kpi-hint">4 projects</div>
+        <div style={{ background: "white", borderRadius: 12, padding: 18, border: "1px solid #E2E8F0" }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: "#94A3B8", textTransform: "uppercase" }}>💰 Total Budget</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: "#1E293B" }}>{formatPKR(receivables + payables + revenue)}</div>
+          <div style={{ fontSize: 11, color: "#64748B" }}>4 projects</div>
         </div>
-        <div className="kpi-card">
-          <div className="kpi-label">📊 Total Spent</div>
-          <div className="kpi-value" style={{ color: "#FCA5A5" }}>{formatPKR(expenses)}</div>
-          <div className="kpi-hint">143% of total budget</div>
+        <div style={{ background: "white", borderRadius: 12, padding: 18, border: "1px solid #E2E8F0" }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: "#94A3B8", textTransform: "uppercase" }}>📊 Total Spent</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: "#EF4444" }}>{formatPKR(expenses)}</div>
+          <div style={{ fontSize: 11, color: "#64748B" }}>143% of total budget</div>
         </div>
-        <div className="kpi-card">
-          <div className="kpi-label">⚠️ Over Spent</div>
-          <div className="kpi-value" style={{ color: "#EF4444" }}>{formatPKR(expenses - revenue)}</div>
-          <div className="kpi-hint">2 projects</div>
+        <div style={{ background: "white", borderRadius: 12, padding: 18, border: "1px solid #E2E8F0" }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: "#94A3B8", textTransform: "uppercase" }}>⚠️ Over Spent</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: "#EF4444" }}>{formatPKR(expenses - revenue)}</div>
+          <div style={{ fontSize: 11, color: "#64748B" }}>2 projects</div>
         </div>
-        <div className="kpi-card">
-          <div className="kpi-label">📈 Portfolio Health</div>
-          <div className="kpi-value" style={{ color: "#F59E0B" }}>75%</div>
-          <div className="kpi-hint">Health score</div>
+        <div style={{ background: "white", borderRadius: 12, padding: 18, border: "1px solid #E2E8F0" }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: "#94A3B8", textTransform: "uppercase" }}>📈 Portfolio Health</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: "#F59E0B" }}>75%</div>
+          <div style={{ fontSize: 11, color: "#64748B" }}>Health score</div>
         </div>
       </div>
 
-      {/* Project Utilization */}
-      <div style={{ marginBottom: 24 }}>
-        <h3 className="section-title">📂 Project Utilization</h3>
-        {loadingProjects ? (
-          <div style={{ color: "#64748B" }}>Loading projects…</div>
-        ) : projects.length === 0 ? (
-          <div style={{ color: "#64748B" }}>No projects found.</div>
-        ) : (
-          projects.slice(0, 5).map((proj: any) => (
-            <div key={proj.id} className="project-row">
-              <span>{proj.name}</span>
-              <span style={{ color: "#94A3B8" }}>Budget: PKR 1.2M | Spent: PKR 0.8M</span>
-              <span className="badge-warning">Over</span>
-            </div>
-          ))
-        )}
-      </div>
+      {/* Two‑column layout */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24 }}>
+        {/* Project Utilization */}
+        <div>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: "#1E293B", marginBottom: 12 }}>📂 Project Utilization</h3>
+          {loadingProjects ? (
+            <div style={{ color: "#94A3B8" }}>Loading projects…</div>
+          ) : projects.length === 0 ? (
+            <div style={{ color: "#94A3B8" }}>No projects found.</div>
+          ) : (
+            projects.slice(0, 5).map((proj: any) => (
+              <div key={proj.id} style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                padding: "10px 14px", borderRadius: 8, background: "white",
+                border: "1px solid #E2E8F0", marginBottom: 6
+              }}>
+                <span style={{ fontWeight: 600, color: "#1E293B" }}>{proj.name}</span>
+                <span style={{ fontSize: 12, color: "#64748B" }}>Budget: PKR 1.2M | Spent: PKR 0.8M</span>
+                <span style={{ background: "#EF4444", color: "white", borderRadius: 100, padding: "2px 10px", fontSize: 10, fontWeight: 700 }}>Over</span>
+              </div>
+            ))
+          )}
+        </div>
 
-      {/* Donor Balances */}
-      <div style={{ marginBottom: 24 }}>
-        <h3 className="section-title">🏦 Donor Balances</h3>
-        {loadingDonors ? (
-          <div style={{ color: "#64748B" }}>Loading donors…</div>
-        ) : donors.length === 0 ? (
-          <div style={{ color: "#64748B" }}>No donors found.</div>
-        ) : (
-          donors.slice(0, 5).map((don: any) => (
-            <div key={don.id} className="donor-row">
-              <span>{don.name}</span>
-              <span style={{ color: "#94A3B8" }}>Balance: PKR 2.5M</span>
-            </div>
-          ))
-        )}
+        {/* Donor Balances */}
+        <div>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: "#1E293B", marginBottom: 12 }}>🏦 Donor Balances</h3>
+          {loadingDonors ? (
+            <div style={{ color: "#94A3B8" }}>Loading donors…</div>
+          ) : donors.length === 0 ? (
+            <div style={{ color: "#94A3B8" }}>No donors found.</div>
+          ) : (
+            donors.slice(0, 5).map((don: any) => (
+              <div key={don.id} style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                padding: "10px 14px", borderRadius: 8, background: "white",
+                border: "1px solid #E2E8F0", marginBottom: 6
+              }}>
+                <span style={{ fontWeight: 600, color: "#1E293B" }}>{don.name}</span>
+                <span style={{ fontSize: 12, color: "#64748B" }}>Balance: PKR 2.5M</span>
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
       {/* CRM Card */}
       <div style={{ marginBottom: 24 }}>
-        <div className="crm-heading">🧑‍🤝‍🧑 CRM</div>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: "#1E293B", marginBottom: 12 }}>🧑‍🤝‍🧑 CRM</h3>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14 }}>
-          <div className="kpi-card">
-            <div className="kpi-label">👥 Customers</div>
-            <div className="kpi-value">{total_customers}</div>
-            <div className="kpi-hint">Active</div>
+          <div style={{ background: "white", borderRadius: 12, padding: 18, border: "1px solid #E2E8F0" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "#94A3B8", textTransform: "uppercase" }}>👥 Customers</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: "#1E293B" }}>{total_customers}</div>
+            <div style={{ fontSize: 11, color: "#64748B" }}>Active</div>
           </div>
-          <div className="kpi-card">
-            <div className="kpi-label">💼 Investors</div>
-            <div className="kpi-value">—</div>
-            <div className="kpi-hint">Coming soon</div>
+          <div style={{ background: "white", borderRadius: 12, padding: 18, border: "1px solid #E2E8F0" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "#94A3B8", textTransform: "uppercase" }}>💼 Investors</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: "#1E293B" }}>—</div>
+            <div style={{ fontSize: 11, color: "#64748B" }}>Coming soon</div>
           </div>
-          <div className="kpi-card">
-            <div className="kpi-label">🚚 Suppliers</div>
-            <div className="kpi-value">{total_suppliers}</div>
-            <div className="kpi-hint">Active</div>
+          <div style={{ background: "white", borderRadius: 12, padding: 18, border: "1px solid #E2E8F0" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "#94A3B8", textTransform: "uppercase" }}>🚚 Suppliers</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: "#1E293B" }}>{total_suppliers}</div>
+            <div style={{ fontSize: 11, color: "#64748B" }}>Active</div>
           </div>
         </div>
       </div>
 
       {/* Bottom summary bar */}
-      <div className="bottom-bar">
+      <div style={{
+        background: "white", borderTop: "1px solid #E2E8F0",
+        padding: "14px 24px", display: "flex", justifyContent: "space-between",
+        alignItems: "center", flexWrap: "wrap", gap: 12, color: "#1E293B"
+      }}>
         <span>⚠️ Portfolio Health: Needs Attention</span>
         <span>💰 Total Budget: {formatPKR(receivables + payables + revenue)}</span>
         <span>📈 Utilized: 143%</span>
