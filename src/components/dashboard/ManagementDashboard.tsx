@@ -164,73 +164,74 @@ export default function ManagementDashboard({ role }: { role: string }) {
   }
 
   if (loading) {
-    return <div style={{ padding: 40, textAlign: "center", background: "#f4f8fc", minHeight: "100vh" }}>Loading…</div>
+    return <div style={{ padding: 40, textAlign: "center", background: "#0B1120", minHeight: "100vh", color: "#94A3B8" }}>Loading…</div>
   }
 
   return (
-    <div style={{ background: "#f4f8fc", minHeight: "100%", flex: 1, fontFamily: "'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif", color: "#1a2636" }}>
+    <div style={{ background: "#0B1120", minHeight: "100%", flex: 1, fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: "#E2E8F0" }}>
       <style>{`
         .mgmt * { box-sizing: border-box; margin: 0; padding: 0; }
 
         .mgmt .card {
-          background: #f8fafd; border: 1px solid #d6e0eb;
+          background: #111827; border: 1px solid #1E293B;
           border-radius: 18px; padding: 1.2rem 1.3rem;
-          box-shadow: 0 4px 12px rgba(0,25,45,0.04);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
           transition: all 0.2s;
         }
-        .mgmt .card:hover { background: #f0f4fb; border-color: #b3c5da; }
+        .mgmt .card:hover { background: #1E293B; border-color: #334155; }
 
         /* ── Hero / Greeting bar ── */
         .mgmt .hero {
-          background: linear-gradient(115deg, #e6eef8 0%, #dae5f2 40%, #cddcee 100%);
+          background: #111827;
+          border: 1px solid #1E293B;
           border-radius: 16px; padding: 1rem 1.5rem;
           margin-bottom: 1rem; display: flex;
           align-items: center; justify-content: space-between;
           flex-wrap: wrap; gap: 0.8rem;
         }
         .mgmt .hero-greeting h2 {
-          font-size: 1.3rem; font-weight: 700; color: #0a2940; margin-bottom: 0.15rem; white-space: nowrap;
+          font-size: 1.3rem; font-weight: 700; color: #F1F5F9; margin-bottom: 0.15rem; white-space: nowrap;
         }
         .mgmt .hero-greeting p {
-          color: #1a3a5c; font-size: 0.85rem; margin: 0; white-space: nowrap;
+          color: #94A3B8; font-size: 0.85rem; margin: 0; white-space: nowrap;
         }
         .mgmt .hero-filters {
           display: flex; align-items: center; gap: 0.5rem;
           flex-wrap: wrap;
         }
         .mgmt .filter-label {
-          font-weight: 600; color: #1a3a5c; font-size: 0.75rem; margin-right: 0.1rem;
+          font-weight: 600; color: #94A3B8; font-size: 0.75rem; margin-right: 0.1rem;
         }
         .mgmt .filter-pill {
-          background: white; border: 1px solid #c2d2e8;
+          background: #1E293B; border: 1px solid #334155;
           padding: 0.2rem 0.6rem; border-radius: 20px;
-          font-size: 0.78rem; font-weight: 500; color: #0b2b3b;
+          font-size: 0.78rem; font-weight: 500; color: #F1F5F9;
           cursor: pointer; transition: 0.15s;
           -webkit-appearance: none; appearance: none;
-          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
           background-repeat: no-repeat;
           background-position: right 0.5rem center;
           padding-right: 1.8rem;
         }
-        .mgmt .filter-pill:focus { outline: none; border-color: #8faac9; }
+        .mgmt .filter-pill:focus { outline: none; border-color: #2563EB; }
 
         /* ── Warning banner ── */
         .mgmt .warning-banner {
-          background: #ffffff;
-          border: 1px solid #d6e0eb;
-          border-left: 6px solid #1e3a8a;
+          background: #1E293B;
+          border: 1px solid #1E293B;
+          border-left: 6px solid #2563EB;
           border-radius: 10px; padding: 8px 16px;
           margin-bottom: 1rem; display: flex;
           align-items: center; justify-content: space-between;
           flex-wrap: wrap; gap: 10px;
-          font-size: 0.9rem; color: #dc2626;
+          font-size: 0.9rem; color: #FCA5A5;
           font-weight: 500;
         }
         .mgmt .warning-banner span {
           display: flex; align-items: center; gap: 0.5rem;
         }
         .mgmt .warning-btn {
-          background: #1e3a8a; color: white; border: none;
+          background: #2563EB; color: white; border: none;
           border-radius: 6px; padding: 6px 14px;
           font-weight: 600; cursor: pointer; font-size: 0.8rem;
           white-space: nowrap;
@@ -238,43 +239,43 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
         /* ── KPI cards ── */
         .mgmt .kpi-card {
-          background: #f8fafd; border: 1px solid #d6e0eb;
+          background: #111827; border: 1px solid #1E293B;
           border-radius: 18px; padding: 1.2rem 1.3rem;
-          box-shadow: 0 4px 12px rgba(0,25,45,0.04);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
           display: flex; flex-direction: column; gap: 0.4rem;
           cursor: pointer; transition: all 0.2s;
           position: relative;
         }
-        .mgmt .kpi-card:hover { background: #f0f4fb; }
-        .mgmt .kpi-label { text-transform: uppercase; font-size: 0.7rem; font-weight: 700; color: #2c5778; letter-spacing: 0.04em; }
-        .mgmt .kpi-value { font-size: 1.7rem; font-weight: 700; color: #0a2940; line-height: 1.2; }
-        .mgmt .kpi-meta { font-size: 0.8rem; color: #3d546b; display: flex; align-items: center; gap: 0.3rem; }
+        .mgmt .kpi-card:hover { background: #1E293B; }
+        .mgmt .kpi-label { text-transform: uppercase; font-size: 0.7rem; font-weight: 700; color: #94A3B8; letter-spacing: 0.04em; }
+        .mgmt .kpi-value { font-size: 1.7rem; font-weight: 700; color: #F1F5F9; line-height: 1.2; }
+        .mgmt .kpi-meta { font-size: 0.8rem; color: #64748B; display: flex; align-items: center; gap: 0.3rem; }
 
         /* CRM card */
         .mgmt .crm-card {
-          background: #f8fafd; border: 1px solid #d6e0eb;
+          background: #111827; border: 1px solid #1E293B;
           border-radius: 18px; padding: 1.2rem 1.3rem;
-          box-shadow: 0 4px 12px rgba(0,25,45,0.04);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
           display: flex; flex-direction: column; gap: 0.6rem;
         }
         .mgmt .crm-labels {
           display: flex; flex-wrap: wrap; gap: 0.5rem;
         }
         .mgmt .crm-pill {
-          background: #e0eaf7; border-radius: 20px;
+          background: #1E293B; border-radius: 20px;
           padding: 0.3rem 0.9rem; font-size: 0.75rem;
-          font-weight: 600; color: #0a2940;
+          font-weight: 600; color: #E2E8F0;
         }
 
         /* Donor / Project rows */
-        .mgmt .section-title { font-weight: 700; font-size: 0.95rem; color: #0c2e4a; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.3rem; }
+        .mgmt .section-title { font-weight: 700; font-size: 0.95rem; color: #F1F5F9; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.3rem; }
         .mgmt .donor-row, .mgmt .project-row {
           display: flex; align-items: center; gap: 0.8rem;
-          background: white; border-radius: 12px; padding: 0.5rem 1rem;
-          border: 1px solid #d6e0eb; cursor: pointer; margin-bottom: 0.5rem;
+          background: #111827; border-radius: 12px; padding: 0.5rem 1rem;
+          border: 1px solid #1E293B; cursor: pointer; margin-bottom: 0.5rem;
           flex-wrap: wrap;
         }
-        .mgmt .progress-bg { height: 5px; background: #e0e8f2; border-radius: 10px; width: 70px; overflow: hidden; }
+        .mgmt .progress-bg { height: 5px; background: #334155; border-radius: 10px; width: 70px; overflow: hidden; }
         .mgmt .progress-fill { height: 100%; border-radius: 10px; }
         .mgmt .badge {
           padding: 0.1rem 0.6rem; border-radius: 12px;
@@ -294,9 +295,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           .mgmt .hero-filters { width: 100%; }
         }
         @media (max-width: 640px) {
-          /* Force 2 columns for KPI cards on mobile */
           .mgmt .kpi-grid { grid-template-columns: repeat(2, 1fr); }
-          
           .mgmt .hero { padding: 1rem; }
           .mgmt .hero-greeting h2 { font-size: 1.1rem; white-space: normal; }
           .mgmt .hero-greeting p { font-size: 0.8rem; white-space: normal; }
@@ -379,7 +378,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </div>
           <div className="kpi-card" onClick={() => router.push("/dashboard/reports/overspent" + detailQuery())}>
             <div className="kpi-label">Portfolio Health</div>
-            <div className="kpi-value" style={{ color: filteredOverspentCount > 0 ? "#b45309" : "#0a2940" }}>
+            <div className="kpi-value" style={{ color: filteredOverspentCount > 0 ? "#F59E0B" : "#F1F5F9" }}>
               {filteredOverspentCount > 0 ? "⚠️ Needs Attention" : "Healthy"}
             </div>
             <div className="kpi-meta">{Math.round((1 - filteredOverspentCount / Math.max(filteredProjectRows.length, 1)) * 100)}% health score</div>
@@ -393,9 +392,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
             {filteredProjectRows.map((p, idx) => (
               <div key={idx} className="project-row" onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}`)}>
                 <div style={{ width: 8, height: 8, borderRadius: "50%", background: p.pct > 100 ? "#dc2626" : p.pct > 80 ? "#f59e0b" : "#16a34a", flexShrink: 0 }}></div>
-                <span style={{ flex: 1, fontWeight: 600, fontSize: "0.85rem" }}>{p.name}</span>
+                <span style={{ flex: 1, fontWeight: 600, fontSize: "0.85rem", color: "#E2E8F0" }}>{p.name}</span>
                 <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
-                  <span style={{ fontWeight: 600, minWidth: 60, fontSize: "0.8rem" }}>{formatPKR(p.actual)}</span>
+                  <span style={{ fontWeight: 600, minWidth: 60, fontSize: "0.8rem", color: "#E2E8F0" }}>{formatPKR(p.actual)}</span>
                   <span style={{ minWidth: 50, color: p.pct > 100 ? "#dc2626" : p.pct > 80 ? "#d97706" : "#16a34a", fontSize: "0.8rem" }}>{p.pct}%</span>
                   <span className={`badge ${p.pct > 100 ? "badge-danger" : p.pct > 80 ? "badge-warning" : "badge-success"}`}>
                     {p.pct > 100 ? "Overspent" : p.pct > 80 ? "Review" : "On Track"}
@@ -410,9 +409,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
             {filteredDonorBalances.map((d, idx) => (
               <div key={idx} className="donor-row" onClick={() => router.push(`/dashboard/settings/budgets?donor=${d.donor_id}`)}>
                 <div style={{ width: 8, height: 8, borderRadius: "50%", background: d.overspent ? "#dc2626" : "#1e3a8a", flexShrink: 0 }}></div>
-                <span style={{ flex: 1, fontWeight: 600, fontSize: "0.85rem" }}>{d.name}</span>
-                <span style={{ fontWeight: 700, fontSize: "0.85rem" }}>{formatPKR(d.remaining)}</span>
-                <span style={{ fontSize: "0.75rem", color: "#2c5778", minWidth: 30, textAlign: "right" }}>{d.pct}%</span>
+                <span style={{ flex: 1, fontWeight: 600, fontSize: "0.85rem", color: "#E2E8F0" }}>{d.name}</span>
+                <span style={{ fontWeight: 700, fontSize: "0.85rem", color: "#E2E8F0" }}>{formatPKR(d.remaining)}</span>
+                <span style={{ fontSize: "0.75rem", color: "#94A3B8", minWidth: 30, textAlign: "right" }}>{d.pct}%</span>
               </div>
             ))}
           </div>
@@ -443,7 +442,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         </div>
 
         {/* Footer summary */}
-        <div style={{ background: "white", borderRadius: 12, padding: "0.6rem 1.2rem", border: "1px solid #d6e0eb", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "0.8rem", fontSize: "0.8rem", color: "#2c5778", fontWeight: 500 }}>
+        <div style={{ background: "#0F172A", borderRadius: 12, padding: "0.6rem 1.2rem", border: "1px solid #1E293B", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "0.8rem", fontSize: "0.8rem", color: "#94A3B8", fontWeight: 500 }}>
           <span>⚠️ Portfolio Health: {filteredOverspentCount > 0 ? "Needs Attention" : "Healthy"}</span>
           <span>💰 Total Budget: {formatPKR(filteredTotalBudget)}</span>
           <span>📈 Utilized: {spentPct}%</span>
