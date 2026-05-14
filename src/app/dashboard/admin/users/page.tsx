@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation"
 import { Shield, UserPlus, Search, Trash2, Plus, X, Save, CheckCircle } from "lucide-react"
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
-import { usePlan } from "@/contexts/PlanContext"
 
 // Define the list of modules (permissions) that can be assigned
 const ALL_MODULES = [
@@ -51,7 +50,8 @@ export default function AdminUsersPage() {
   )
   const router = useRouter()
   const { role, loading: roleLoading } = useRole()
-  const { plan } = usePlan()
+// TODO: get plan limits from company_settings / plans table
+const maxUsers = 0   // 0 = unlimited for now
   const canView = role === "admin"
   const canEdit = role === "admin"
 
