@@ -13,10 +13,8 @@ async function requireAdmin() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized', status: 401, user: null, companyId: null }
 
-  // 1. Try to get the active company from JWT
   let companyId = (user.app_metadata as any)?.company_id
 
-  // 2. Fallback – if no claim, use the user's first company from user_roles
   if (!companyId) {
     const { data: anyRole } = await supabaseAdmin
       .from('user_roles')
@@ -29,7 +27,6 @@ async function requireAdmin() {
 
   if (!companyId) return { error: 'No active company', status: 400, user: null, companyId: null }
 
-  // 3. Check if the user is admin in that company
   const { data: roleData } = await supabase
     .from('user_roles')
     .select('role')
@@ -75,7 +72,6 @@ export async function GET() {
     role: roleMap[u.id] || 'none',
   }))
 
-  // Only return users who still have a role in this company
   const activeUsers = enriched.filter((u: any) => u.role !== 'none')
 
   return NextResponse.json({ users: activeUsers })
@@ -93,34 +89,14 @@ export async function PUT(request: Request) {
 
   const { error: upsertError } = await supabaseAdmin
     .from('user_roles')
-    // ── PUT (update role) ──
-export async function PUT(request: Request) {
-  const { error, status, companyId } = await requireAdmin()
-  if (error) return NextResponse.json({ error }, { status })
-
-  const { userId, role } = await request.json()
-  if (!userId || !role) {
-    return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
-  }
-
-  const { error: upsertError } = await supabaseAdmin
-    .from('user_roles')
     .upsert(
       {
         user_id: userId,
         company_id: companyId,
         role,
       },
-      { onConflict: 'user_id, company_id' }   // ← THIS is the fix
+      { onConflict: 'user_id, company_id' }   // ← THE FIX
     )
-
-  if (upsertError) {
-    console.error('Admin upsert error:', upsertError)
-    return NextResponse.json({ error: upsertError.message }, { status: 500 })
-  }
-
-  return NextResponse.json({ success: true })
-}
 
   if (upsertError) {
     console.error('Admin upsert error:', upsertError)
