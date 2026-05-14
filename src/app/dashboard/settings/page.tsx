@@ -12,7 +12,7 @@ export default function SettingsHubPage() {
       desc: "Business name, logo, contact details",
       icon: <Settings size={22} />,
       href: "/dashboard/settings/company",
-      color: "#1E3A8A",
+      color: "#3B82F6",
     },
     {
       title: "Data Management",
@@ -35,13 +35,13 @@ export default function SettingsHubPage() {
       href: "/dashboard/settings/projects",
       color: "#8B5CF6",
     },
-{
-  title: "Budget Entry",
-  desc: "Set annual expense budgets per account",
-  icon: <Wallet size={22} />,
-  href: "/dashboard/settings/budgets",
-  color: "#F59E0B",
-},
+    {
+      title: "Budget Entry",
+      desc: "Set annual expense budgets per account",
+      icon: <Wallet size={22} />,
+      href: "/dashboard/settings/budgets",
+      color: "#F59E0B",
+    },
     {
       title: "Payment Settings",
       desc: "JazzCash merchant credentials and gateway config",
@@ -66,8 +66,8 @@ export default function SettingsHubPage() {
   ]
 
   return (
-    <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", marginBottom: 4 }}>⚙️ Settings</h1>
+    <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
+      <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", marginBottom: 4 }}>⚙️ Settings</h1>
       <p style={{ fontSize: 13, color: "#94A3B8", marginBottom: 24 }}>Manage your business configuration</p>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
@@ -76,23 +76,29 @@ export default function SettingsHubPage() {
             key={c.title}
             onClick={() => router.push(c.href)}
             style={{
-              background: "white",
+              background: "#111827",
               borderRadius: 12,
-              border: "1px solid #E2E8F0",
+              border: "1px solid #1E293B",
               borderTop: `3px solid ${c.color}`,
               padding: "20px 18px",
               cursor: "pointer",
-              transition: "box-shadow 0.15s",
+              transition: "box-shadow 0.15s, background 0.15s",
               display: "flex",
               flexDirection: "column",
               justifyContent: "space-between",
             }}
-            onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 18px rgba(0,0,0,0.08)"}
-            onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.boxShadow = "none"}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 18px rgba(0,0,0,0.5)"
+              ;(e.currentTarget as HTMLDivElement).style.background = "#1E293B"
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLDivElement).style.boxShadow = "none"
+              ;(e.currentTarget as HTMLDivElement).style.background = "#111827"
+            }}
           >
             <div>
               <div style={{ color: c.color, marginBottom: 12 }}>{c.icon}</div>
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: "#1E293B", margin: "0 0 4px" }}>{c.title}</h3>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: "#F1F5F9", margin: "0 0 4px" }}>{c.title}</h3>
               <p style={{ fontSize: 12, color: "#94A3B8", margin: 0 }}>{c.desc}</p>
             </div>
             <div style={{ textAlign: "right", marginTop: 12, color: c.color }}>
