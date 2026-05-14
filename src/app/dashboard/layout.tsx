@@ -12,59 +12,95 @@ const styles = `
 
   .dl-shell { display: flex; min-height: 100vh; background: #0B1120; }
 
-  /* ── Sidebar ── */
+  /* ── Sidebar – 208 px (80% of original), same dark background as dashboard ── */
   .dl-sidebar {
-    width: 260px; min-width: 260px;
-    background: #0F172A;
+    width: 208px; min-width: 208px;
+    background: #0B1120;               /* ← matches dashboard */
     display: flex; flex-direction: column;
     position: fixed; top: 0; left: 0; bottom: 0; z-index: 40;
     transition: transform 0.25s ease; overflow: hidden;
     border-right: 1px solid #1E293B;
   }
-  .dl-sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 20px 18px; border-bottom: 1px solid #1E293B; min-height: 68px; }
-  .dl-sidebar-logo-img { width: 40px; height: 40px; border-radius: 12px; object-fit: contain; flex-shrink: 0; }
-  .dl-sidebar-logo-name { color: white; font-size: 15px; font-weight: 700; line-height: 1.2; }
-  .dl-sidebar-logo-sub { color: #64748B; font-size: 10px; }
+
+  .dl-sidebar-logo {
+    display: flex; align-items: center; gap: 8px;
+    padding: 18px 14px;               /* slightly tighter for 208 px width */
+    border-bottom: 1px solid #1E293B;
+    min-height: 62px;
+  }
+  .dl-sidebar-logo-img {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+  .dl-sidebar-logo-name {
+    color: white;
+    font-size: 13px;                   /* smaller to fit on one line */
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+  .dl-sidebar-logo-sub {
+    color: #64748B;
+    font-size: 9px;
+  }
 
   .dl-section-btn {
-    display: flex; align-items: center; gap: 8px; padding: 10px 16px;
-    background: none; border: none; color: #94A3B8; font-size: 12px;
-    font-weight: 600; cursor: pointer; width: 100%; text-align: left;
-    font-family: inherit; border-radius: 10px; transition: all 0.2s;
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 14px;
+    background: none; border: none;
+    color: #94A3B8; font-size: 12px; font-weight: 600;
+    cursor: pointer; width: 100%; text-align: left;
+    font-family: inherit; border-radius: 8px;
+    transition: all 0.2s;
   }
   .dl-section-btn:hover { background: rgba(255,255,255,0.04); color: white; }
-  .dl-section-content { padding-left: 12px; margin-top: 4px; margin-bottom: 8px; }
+  .dl-section-content { padding-left: 10px; margin-top: 4px; margin-bottom: 6px; }
 
-  .dl-sidebar-nav { flex: 1; padding: 12px 10px; overflow-y: auto; }
+  .dl-sidebar-nav { flex: 1; padding: 10px 8px; overflow-y: auto; }
 
   .dl-nav-section {
-    padding: 12px 16px 6px; color: #64748B;
-    font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em;
+    padding: 10px 14px 4px; color: #64748B;
+    font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
   }
   .dl-nav-group-label {
-    padding: 6px 16px 2px; color: #475569;
+    padding: 4px 14px 2px; color: #475569;
     font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
   }
   .dl-nav-item {
-    display: flex; align-items: center; gap: 10px; padding: 9px 16px;
-    border-radius: 10px; color: #94A3B8; font-size: 13px; font-weight: 500;
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 14px;
+    border-radius: 8px; color: #94A3B8;
+    font-size: 13px; font-weight: 500;
     text-decoration: none; transition: all 0.15s; margin-bottom: 2px;
   }
   .dl-nav-item:hover { background: rgba(255,255,255,0.04); color: white; }
-  .dl-nav-item.active { background: rgba(37,99,235,0.15); color: white; font-weight: 600; border-left: 3px solid #2563EB; }
-  .dl-nav-icon { width: 20px; text-align: center; flex-shrink: 0; }
-  .dl-nav-divider { height: 1px; background: rgba(255,255,255,0.06); margin: 8px 16px; }
 
-  .dl-sidebar-user { padding: 16px; border-top: 1px solid #1E293B; display: flex; align-items: center; gap: 10px; }
-  .dl-sidebar-avatar { width: 36px; height: 36px; border-radius: 50%; background: #1E293B; color: white; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex-shrink: 0; }
+  /* Active item – NO blue, subtle white accent */
+  .dl-nav-item.active {
+    background: rgba(255,255,255,0.05);
+    color: white; font-weight: 600;
+    border-left: 3px solid #334155;    /* dark slate, no blue */
+  }
+  .dl-nav-icon { width: 20px; text-align: center; flex-shrink: 0; }
+  .dl-nav-divider { height: 1px; background: rgba(255,255,255,0.06); margin: 6px 14px; }
+
+  .dl-sidebar-user { padding: 14px; border-top: 1px solid #1E293B; display: flex; align-items: center; gap: 10px; }
+  .dl-sidebar-avatar {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: #1E293B; color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 700; flex-shrink: 0;
+  }
   .dl-sidebar-email { color: #94A3B8; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dl-sidebar-signout { color: #64748B; font-size: 10px; cursor: pointer; background: none; border: none; font-family: inherit; padding: 0; margin-top: 2px; }
   .dl-sidebar-signout:hover { color: #EF4444; }
 
   /* ── Main area ── */
-  .dl-main { flex: 1; margin-left: 260px; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; overflow-x: hidden; background: #0B1120; }
+  .dl-main { flex: 1; margin-left: 208px; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; overflow-x: hidden; background: #0B1120; }
 
-  /* ── The fix: make dl-main-content a flex column that forces its child to stretch ── */
+  /* Large‑screen fix: stretch content */
   .dl-main-content {
     flex: 1;
     display: flex;
@@ -80,7 +116,7 @@ const styles = `
   .dl-topbar { background: #0F172A; border-bottom: 1px solid #1E293B; padding: 0 24px; display: flex; align-items: center; min-height: 64px; gap: 16px; position: sticky; top: 0; z-index: 30; }
   .dl-topbar-greeting { flex: 1; min-width: 0; }
   .dl-topbar-title { font-size: 14px; font-weight: 700; color: #F1F5F9; line-height: 1.2; }
-  .dl-topbar-subtitle { font-size: 11px; color: #64748B; line-height: 1.2; }
+  .dl-topbar-subtitle { font-size: 11px; color: #94A3B8; line-height: 1.2; }
   .dl-topbar-actions { display: flex; gap: 8px; flex-shrink: 0; }
   .dl-action-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 10px; font-size: 11.5px; font-weight: 600; text-decoration: none; cursor: pointer; border: 1px solid; font-family: inherit; transition: all 0.15s; white-space: nowrap; height: 36px; }
   .dl-btn-invoice { background: #1E293B; border-color: #334155; color: #93C5FD; }
@@ -113,14 +149,14 @@ const styles = `
     .dl-main { margin-left: 60px; }
   }
   @media (max-width: 640px) {
-    .dl-sidebar { transform: translateX(-260px); width: 260px; min-width: 260px; }
+    .dl-sidebar { transform: translateX(-208px); width: 260px; min-width: 260px; }
     .dl-sidebar.mobile-open { transform: translateX(0); }
     .dl-sidebar.mobile-open .dl-sidebar-logo-name, .dl-sidebar.mobile-open .dl-sidebar-logo-sub,
     .dl-sidebar.mobile-open .dl-nav-section, .dl-sidebar.mobile-open .dl-nav-group-label,
     .dl-sidebar.mobile-open .dl-nav-item span:not(.dl-nav-icon),
     .dl-sidebar.mobile-open .dl-sidebar-email, .dl-sidebar.mobile-open .dl-sidebar-signout { display: block; }
-    .dl-sidebar.mobile-open .dl-sidebar-logo { justify-content: flex-start; padding: 20px 18px; }
-    .dl-sidebar.mobile-open .dl-nav-item { justify-content: flex-start; padding: 9px 16px; }
+    .dl-sidebar.mobile-open .dl-sidebar-logo { justify-content: flex-start; padding: 18px 14px; }
+    .dl-sidebar.mobile-open .dl-nav-item { justify-content: flex-start; padding: 8px 14px; }
     .dl-main { margin-left: 0; }
     .dl-hamburger { display: block; }
     .dl-topbar { flex-wrap: wrap; min-height: auto; padding: 12px 16px; gap: 10px; }
@@ -134,7 +170,7 @@ const styles = `
   }
 `
 
-// ── Navigation structure ──
+// ── Navigation structure (unchanged) ──
 const navSections = [
   {
     section: 'MAIN',
