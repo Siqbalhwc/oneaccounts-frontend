@@ -3,15 +3,45 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { Shield, UserPlus, Search, Trash2, Plus, X } from "lucide-react"
+import { Shield, UserPlus, Search, Trash2, Plus, X, Save, CheckCircle } from "lucide-react"
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
+import { usePlan } from "@/contexts/PlanContext"
+
+// Define the list of modules (permissions) that can be assigned
+const ALL_MODULES = [
+  "Dashboard",
+  "Customers",
+  "Sales Invoices",
+  "Receipts",
+  "Suppliers",
+  "Purchase Bills",
+  "Payments",
+  "Bank Accounts",
+  "Bank Transfers",
+  "Products",
+  "Inventory Adjustments",
+  "Chart of Accounts",
+  "Journal Entries",
+  "Reports",
+  "Budget vs Actuals",
+  "Invoice Automation",
+  "Investors",
+  "Settings",
+  "Admin Panel",
+]
 
 interface User {
   id: string
   email: string
   created_at: string
   role: string
+}
+
+interface Role {
+  id: number
+  role_name: string
+  permissions: Record<string, boolean> | null
 }
 
 export default function AdminUsersPage() {
@@ -21,6 +51,7 @@ export default function AdminUsersPage() {
   )
   const router = useRouter()
   const { role, loading: roleLoading } = useRole()
+  const { plan } = usePlan()
   const canView = role === "admin"
   const canEdit = role === "admin"
 
@@ -33,9 +64,14 @@ export default function AdminUsersPage() {
   const [search, setSearch] = useState("")
 
   // Custom roles
-  const [customRoles, setCustomRoles] = useState<string[]>([])
+  const [roles, setRoles] = useState<Role[]>([])
   const [showRoleManager, setShowRoleManager] = useState(false)
   const [newRoleName, setNewRoleName] = useState("")
+  const [editingRoleId, setEditingRoleId] = useState<number | null>(null)
+  const [permDraft, setPermDraft] = useState<Record<string, boolean>>({})
+
+  // Plan limits
+  const maxUsers = plan?.max_users ?? 0   // from your plan system (we'll add this later, for now default 0 = unlimited)
 
   useEffect(() => {
     if (!role) return
@@ -44,7 +80,7 @@ export default function AdminUsersPage() {
       return
     }
     fetchUsers()
-    fetchCustomRoles()
+    fetchRoles()
   }, [role, canView])
 
   const fetchUsers = async () => {
@@ -65,12 +101,11 @@ export default function AdminUsersPage() {
     setLoading(false)
   }
 
-  const fetchCustomRoles = async () => {
-    const { data } = await supabase
-      .from("company_roles")
-      .select("role_name")
-      .order("role_name")
-    if (data) setCustomRoles(data.map(r => r.role_name))
+  const fetchRoles = async () => {
+    const { data } = await supabase.from("company_roles").select("*").order("role_name")
+    if (data) {
+      setRoles(data)
+    }
   }
 
   const assignRole = async (userId: string, newRole: string) => {
@@ -140,27 +175,75 @@ export default function AdminUsersPage() {
     setTimeout(() => setMessage(""), 5000)
   }
 
-  const addCustomRole = async () => {
+  // ── Role management ──
+  const addOrUpdateRole = async () => {
     const name = newRoleName.trim()
     if (!name) return
-    const { error } = await supabase.from("company_roles").insert({ role_name: name })
-    if (!error) {
-      setCustomRoles(prev => [...prev, name].sort())
-      setNewRoleName("")
-    } else {
-      setMessage(error.message)
-      setTimeout(() => setMessage(""), 4000)
+
+    const payload: any = {
+      role_name: name,
+      permissions: permDraft,
     }
+
+    if (editingRoleId) {
+      // update
+      const { error } = await supabase.from("company_roles").update(payload).eq("id", editingRoleId)
+      if (!error) {
+        setMessage("Role updated!")
+        setNewRoleName("")
+        setEditingRoleId(null)
+        setPermDraft({})
+        fetchRoles()
+      } else {
+        setMessage(error.message)
+      }
+    } else {
+      // insert
+      const { error } = await supabase.from("company_roles").insert(payload)
+      if (!error) {
+        setMessage("Role created!")
+        setNewRoleName("")
+        setPermDraft({})
+        fetchRoles()
+      } else {
+        setMessage(error.message)
+      }
+    }
+    setTimeout(() => setMessage(""), 3000)
   }
 
-  const deleteCustomRole = async (roleName: string) => {
-    await supabase.from("company_roles").delete().eq("role_name", roleName)
-    setCustomRoles(prev => prev.filter(r => r !== roleName))
+  const deleteRole = async (id: number) => {
+    await supabase.from("company_roles").delete().eq("id", id)
+    fetchRoles()
+    setMessage("Role deleted")
+    setTimeout(() => setMessage(""), 3000)
+  }
+
+  const startEditRole = (role: Role) => {
+    setEditingRoleId(role.id)
+    setNewRoleName(role.role_name)
+    setPermDraft(role.permissions || {})
+  }
+
+  const cancelEdit = () => {
+    setEditingRoleId(null)
+    setNewRoleName("")
+    setPermDraft({})
+  }
+
+  const togglePerm = (module: string) => {
+    setPermDraft(prev => ({
+      ...prev,
+      [module]: !prev[module],
+    }))
   }
 
   const filtered = search.trim()
     ? users.filter(u => u.email.toLowerCase().includes(search.toLowerCase()))
     : users
+
+  // All roles (for dropdown) = built-in + custom
+  const allRoles = ["admin", "accountant", "viewer", ...roles.map(r => r.role_name).filter(r => !["admin","accountant","viewer"].includes(r))]
 
   if (roleLoading || !role) {
     return <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>Loading…</div>
@@ -173,9 +256,6 @@ export default function AdminUsersPage() {
       </div>
     )
   }
-
-  // All possible roles: hardcoded + custom
-  const allRoles = ["admin", "accountant", "viewer", ...customRoles.filter(r => !["admin","accountant","viewer"].includes(r))]
 
   return (
     <RoleGuard allowedRoles={["admin"]}>
@@ -198,6 +278,9 @@ export default function AdminUsersPage() {
           .badge-custom { background: #1E293B; color: #CBD5E1; }
           .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
           .action-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+          .perm-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+          .perm-chip { background: #1E293B; border: 1px solid #334155; border-radius: 6px; padding: 2px 8px; font-size: 11px; cursor: pointer; }
+          .perm-chip.active { background: #2563EB; border-color: #2563EB; color: white; }
           @media (max-width: 700px) {
             th:nth-child(2), td:nth-child(2) { display: none; }
             .action-row { flex-direction: column; align-items: stretch; }
@@ -207,7 +290,7 @@ export default function AdminUsersPage() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>👑 Admin Panel - User Roles</h1>
-            <p style={{ fontSize: 13, color: "#94A3B8", margin: 0 }}>Manage user permissions and invite new users</p>
+            <p style={{ fontSize: 13, color: "#94A3B8", margin: 0 }}>Manage user permissions, invite users, and customize roles</p>
           </div>
           <button className="btn btn-outline" onClick={() => setShowRoleManager(!showRoleManager)}>
             <Shield size={14} /> Manage Roles
@@ -229,29 +312,62 @@ export default function AdminUsersPage() {
         {/* Custom Role Manager */}
         {showRoleManager && (
           <div className="card" style={{ marginBottom: 16 }}>
-            <h3 style={{ color: "#F1F5F9", marginBottom: 12 }}>Custom Roles</h3>
+            <h3 style={{ color: "#F1F5F9", marginBottom: 12 }}>
+              {editingRoleId ? "Edit Role" : "Custom Roles"}
+            </h3>
+            {/* Existing roles list */}
+            {!editingRoleId && (
+              <div style={{ marginBottom: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {roles.map(role => (
+                  <div key={role.id} className="badge badge-custom" style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 12px" }}>
+                    <span>{role.role_name}</span>
+                    <button onClick={() => startEditRole(role)} style={{ background: "none", border: "none", color: "#94A3B8", cursor: "pointer", padding: 0 }}>✏️</button>
+                    <button onClick={() => deleteRole(role.id)} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", padding: 0 }}><X size={12} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add / Edit form */}
             <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
               <input
                 className="input"
-                placeholder="New role name (e.g. Purchaser)"
+                placeholder="Role name (e.g. Purchaser)"
                 value={newRoleName}
                 onChange={e => setNewRoleName(e.target.value)}
                 style={{ flex: 1 }}
               />
-              <button className="btn btn-primary" onClick={addCustomRole}>
-                <Plus size={14} /> Add
-              </button>
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {customRoles.map(role => (
-                <div key={role} className="badge badge-custom" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  {role}
-                  <button onClick={() => deleteCustomRole(role)} style={{ background: "none", border: "none", color: "#94A3B8", cursor: "pointer", padding: 0 }}>
-                    <X size={12} />
+              {editingRoleId ? (
+                <>
+                  <button className="btn btn-primary" onClick={addOrUpdateRole}>
+                    <Save size={14} /> Update
                   </button>
-                </div>
-              ))}
+                  <button className="btn btn-outline" onClick={cancelEdit}>Cancel</button>
+                </>
+              ) : (
+                <button className="btn btn-primary" onClick={addOrUpdateRole}>
+                  <Plus size={14} /> Add
+                </button>
+              )}
             </div>
+
+            {/* Permissions checklist */}
+            {(editingRoleId || newRoleName) && (
+              <>
+                <p style={{ color: "#94A3B8", fontSize: 12, margin: "0 0 8px" }}>Select permissions for this role:</p>
+                <div className="perm-list">
+                  {ALL_MODULES.map(mod => (
+                    <div
+                      key={mod}
+                      className={`perm-chip ${permDraft[mod] ? "active" : ""}`}
+                      onClick={() => togglePerm(mod)}
+                    >
+                      {mod}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -260,6 +376,7 @@ export default function AdminUsersPage() {
           <div className="card">
             <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Users</div>
             <div style={{ fontSize: 24, fontWeight: 800, color: "#F1F5F9" }}>{filtered.length}</div>
+            {maxUsers > 0 && <div style={{ fontSize: 11, color: "#64748B", marginTop: 4 }}>Plan limit: {maxUsers}</div>}
           </div>
           <div className="card">
             <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Admins</div>
@@ -284,11 +401,14 @@ export default function AdminUsersPage() {
             />
             <button
               onClick={handleInvite}
-              disabled={inviting || !inviteEmail.trim()}
+              disabled={inviting || !inviteEmail.trim() || (maxUsers > 0 && filtered.length >= maxUsers)}
               className="btn btn-primary"
             >
               {inviting ? "Inviting..." : "Invite User"}
             </button>
+            {maxUsers > 0 && filtered.length >= maxUsers && (
+              <span style={{ color: "#FCA5A5", fontSize: 12 }}>Plan limit reached</span>
+            )}
             <div style={{ flex: 1, maxWidth: 300, marginLeft: 'auto', position: "relative" }}>
               <Search size={14} style={{ position: "absolute", left: 10, top: 12, color: "#94A3B8" }} />
               <input className="input" style={{ paddingLeft: 32, width: "100%" }} placeholder="Search by email..." value={search} onChange={e => setSearch(e.target.value)} />
