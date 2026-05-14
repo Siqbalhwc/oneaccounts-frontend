@@ -99,7 +99,7 @@ export default function InvoiceAutomationPage() {
       .maybeSingle()
 
     if (settings) {
-      setSettingsId(settings.id)   // remember the row id
+      setSettingsId(settings.id)
       if (settings.invoice_automation_config) {
         const config = settings.invoice_automation_config as any
         if (config.expenseEnabled !== undefined) setExpenseEnabled(config.expenseEnabled)
@@ -108,48 +108,35 @@ export default function InvoiceAutomationPage() {
         if (config.partners) setPartners(config.partners)
       }
     } else {
-      // No settings row yet – we'll create one when saving
       setSettingsId(null)
     }
 
     setLoading(false)
   }
 
-  // ── Toggle feature on/off (safe, no ON CONFLICT) ──────────────────────
+  // ── Toggle feature on/off (NOW WITH SAFE UPSERT) ──────────────────────
   const toggleFeature = async (code: string, enabled: boolean) => {
     const featureId = featureIdMap[code]
     if (!featureId || !companyId || !canEdit) return
+
     // Optimistic UI update
     if (code === "invoice_automation") setExpenseEnabled(enabled)
     if (code === "profit_allocation") setProfitEnabled(enabled)
 
-    // Check if a row already exists
-    const { data: existing } = await supabase
+    const { error } = await supabase
       .from("company_features")
-      .select("id")
-      .eq("company_id", companyId)
-      .eq("feature_id", featureId)
-      .maybeSingle()
-
-    let error = null
-    if (existing) {
-      // update
-      const { error: updateErr } = await supabase
-        .from("company_features")
-        .update({ enabled })
-        .eq("id", existing.id)
-      error = updateErr
-    } else {
-      // insert
-      const { error: insertErr } = await supabase
-        .from("company_features")
-        .insert({ company_id: companyId, feature_id: featureId, enabled })
-      error = insertErr
-    }
+      .upsert(
+        {
+          company_id: companyId,
+          feature_id: featureId,
+          enabled,
+        },
+        { onConflict: "company_id, feature_id" }   // ← THE FIX
+      )
 
     if (error) {
       setMessage("Error: " + error.message)
-      // revert
+      // revert optimistic update
       if (code === "invoice_automation") setExpenseEnabled(!enabled)
       if (code === "profit_allocation") setProfitEnabled(!enabled)
     } else {
@@ -229,23 +216,23 @@ export default function InvoiceAutomationPage() {
 
   return (
     <RoleGuard allowedRoles={["admin", "accountant"]}>
-      <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+      <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter',sans-serif", color: "#E2E8F0" }}>
         <style>{`
-          .card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-          .label { font-size: 10px; font-weight: 600; color: #6B7280; text-transform: uppercase; margin-bottom: 4px; }
-          .input, .select { width: 100%; height: 38px; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0 12px; font-size: 13px; }
+          .card { background: #111827; border-radius: 12px; border: 1px solid #1E293B; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+          .label { font-size: 10px; font-weight: 600; color: #94A3B8; text-transform: uppercase; margin-bottom: 4px; }
+          .input, .select { width: 100%; height: 38px; border: 1px solid #334155; border-radius: 8px; padding: 0 12px; font-size: 13px; background: #1E293B; color: #F1F5F9; }
           .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-          .btn-primary { background: #1D4ED8; color: white; }
-          .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
+          .btn-primary { background: #1E3A8A; color: white; }
+          .btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
           .toggle-btn { background: none; border: none; cursor: pointer; padding: 4px; border-radius: 6px; }
-          .toggle-btn:hover { background: #F1F5F9; }
+          .toggle-btn:hover { background: #1E293B; }
         `}</style>
 
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", marginBottom: 4 }}>⚙️ Invoice Automation</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", marginBottom: 4 }}>⚙️ Invoice Automation</h1>
         <p style={{ fontSize: 13, color: "#94A3B8", marginBottom: 20 }}>Configure automated expenses and profit allocation</p>
 
         {message && (
-          <div style={{ background: "#F0FDF4", color: "#15803D", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+          <div style={{ background: "#064E3B", color: "#6EE7B7", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
             {message}
           </div>
         )}
@@ -258,8 +245,8 @@ export default function InvoiceAutomationPage() {
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Expense Automation</h2>
-                  <p style={{ color: "#64748B", fontSize: 12, marginTop: 2 }}>Auto‑calculate custom expenses on invoices</p>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: "#F1F5F9", margin: 0 }}>Expense Automation</h2>
+                  <p style={{ color: "#94A3B8", fontSize: 12, marginTop: 2 }}>Auto‑calculate custom expenses on invoices</p>
                 </div>
                 <button className="toggle-btn" onClick={() => toggleFeature("invoice_automation", !expenseEnabled)}>
                   {expenseEnabled ? <ToggleRight size={24} color="#10B981" /> : <ToggleLeft size={24} color="#CBD5E1" />}
@@ -291,8 +278,8 @@ export default function InvoiceAutomationPage() {
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Profit Allocation</h2>
-                  <p style={{ color: "#64748B", fontSize: 12, marginTop: 2 }}>Distribute net profit to partner accounts</p>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: "#F1F5F9", margin: 0 }}>Profit Allocation</h2>
+                  <p style={{ color: "#94A3B8", fontSize: 12, marginTop: 2 }}>Distribute net profit to partner accounts</p>
                 </div>
                 <button className="toggle-btn" onClick={() => toggleFeature("profit_allocation", !profitEnabled)}>
                   {profitEnabled ? <ToggleRight size={24} color="#10B981" /> : <ToggleLeft size={24} color="#CBD5E1" />}
@@ -324,12 +311,12 @@ export default function InvoiceAutomationPage() {
 
             {/* ── Preview ── */}
             <div className="card">
-              <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 10px' }}>📊 Preview</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: "#F1F5F9", margin: '0 0 10px' }}>📊 Preview</h2>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
                 <span style={{ fontWeight: 600 }}>Sample Invoice Amount:</span>
                 <input className="input" style={{ width: 150 }} type="number" value={previewAmount} onChange={e => setPreviewAmount(Number(e.target.value))} />
               </div>
-              <div style={{ background: '#F8FAFC', padding: 16, borderRadius: 8 }}>
+              <div style={{ background: '#1E293B', padding: 16, borderRadius: 8 }}>
                 {expenseEnabled && (
                   <>
                     <p style={{ fontWeight: 600, marginBottom: 8 }}>Expense Charges:</p>
@@ -339,7 +326,7 @@ export default function InvoiceAutomationPage() {
                         <span>PKR {((previewAmount * r.rate) / 100).toLocaleString()}</span>
                       </div>
                     ))}
-                    <div style={{ borderTop: '1px solid #E2E8F0', marginTop: 6, paddingTop: 6, fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
+                    <div style={{ borderTop: '1px solid #334155', marginTop: 6, paddingTop: 6, fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
                       <span>Total Expenses</span>
                       <span>PKR {expenseTotal.toLocaleString()}</span>
                     </div>
