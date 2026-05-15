@@ -193,83 +193,110 @@ export default function NewAccountPage() {
   return (
     <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
       <style>{`
-        .form-card { background: #111827; border-radius: 12px; border: 1px solid #1E293B; padding: 24px; margin-bottom: 16px; max-width: 560px; }
+        .form-card {
+          background: #111827; border: 1px solid #1E293B; border-radius: 12px;
+          padding: 24px; margin-bottom: 16px; max-width: 560px;
+          margin-left: auto; margin-right: auto;   /* center the card */
+        }
         .label { font-size: 11px; font-weight: 600; color: #94A3B8; text-transform: uppercase; margin-bottom: 4px; display: block; }
-        .input, .select { width: 100%; height: 40px; border: 1.5px solid #334155; border-radius: 8px; padding: 0 12px; font-size: 13px; box-sizing: border-box; font-family: inherit; background: #1E293B; color: #F1F5F9; }
-        .input:focus, .select:focus { border-color: #1E3A8A; outline: none; }
-        .btn { padding: 10px 20px; border-radius: 8px; border: none; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-        .btn-primary { background: #1E3A8A; color: white; }
-        .btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
+        .input, .select {
+          width: 100%; height: 40px; border: 1.5px solid #334155; border-radius: 8px;
+          padding: 0 12px; font-size: 13px; box-sizing: border-box;
+          font-family: inherit; background: #1E293B; color: #F1F5F9;
+        }
+        /* Focus border – now a soft gray, matching the theme */
+        .input:focus, .select:focus { border-color: #64748B; outline: none; }
+
+        .btn {
+          padding: 10px 20px; border-radius: 8px; border: none; font-weight: 600;
+          font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+        }
+        .btn-primary {
+          background: #1E3A8A;   /* navy, same as logo */
+          color: white;
+          box-shadow: 0 4px 12px rgba(30,58,138,0.4);  /* subtle glow */
+          transition: all 0.2s;
+        }
+        .btn-primary:hover {
+          background: #1E40AF;   /* slightly lighter navy on hover */
+          box-shadow: 0 6px 16px rgba(30,64,175,0.5);
+        }
+        .btn-outline {
+          background: transparent; border: 1.5px solid #334155; color: #CBD5E1;
+        }
         .inline-group { display: flex; gap: 8px; }
         .inline-group > * { flex: 1; }
       `}</style>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        <button className="btn btn-outline" onClick={() => router.push("/dashboard/accounts")}><ArrowLeft size={16} /></button>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>➕ New Account</h1>
-          <p style={{ color: "#94A3B8", fontSize: 13 }}>Add a new GL account</p>
-        </div>
-      </div>
-
-      {error && <div style={{ background: "#1E293B", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
-      {flash && <div style={{ background: "#064E3B", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
-
-      <div className="form-card">
-        <div style={{ marginBottom: 16 }}>
-          <label className="label">Account Type *</label>
-          <select className="select" value={accountType} onChange={(e) => { setAccountType(e.target.value); setSelectedCategory(""); setCustomCategoryName(""); setCustomCodeStart(""); setCustomCodeEnd(""); }}>
-            <option value="">— Select Type —</option>
-            {["Asset", "Liability", "Equity", "Revenue", "Expense"].map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
+      <div style={{ maxWidth: 600, margin: "0 auto" }}>
+        {/* Back button and title */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+          <button className="btn btn-outline" onClick={() => router.push("/dashboard/accounts")}><ArrowLeft size={16} /></button>
+          <div>
+            <h1 style={{ fontSize: 20, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>➕ New Account</h1>
+            <p style={{ color: "#94A3B8", fontSize: 13 }}>Add a new GL account</p>
+          </div>
         </div>
 
-        {accountType && (
+        {error && <div style={{ background: "#1E293B", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
+        {flash && <div style={{ background: "#064E3B", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
+
+        <div className="form-card">
           <div style={{ marginBottom: 16 }}>
-            <label className="label">Category *</label>
-            <select className="select" value={selectedCategory} onChange={(e) => { setSelectedCategory(e.target.value); setCustomCategoryName(""); setCustomCodeStart(""); setCustomCodeEnd(""); }}>
-              <option value="">— Select Category —</option>
-              {availablePredefined.map((c) => <option key={c.label} value={c.label}>{c.label} ({c.codeStart}-{c.codeEnd})</option>)}
-              <option value={CUSTOM_OPTION}>{CUSTOM_OPTION}</option>
+            <label className="label">Account Type *</label>
+            <select className="select" value={accountType} onChange={(e) => { setAccountType(e.target.value); setSelectedCategory(""); setCustomCategoryName(""); setCustomCodeStart(""); setCustomCodeEnd(""); }}>
+              <option value="">— Select Type —</option>
+              {["Asset", "Liability", "Equity", "Revenue", "Expense"].map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
-        )}
 
-        {isCustom && (
-          <>
+          {accountType && (
             <div style={{ marginBottom: 16 }}>
-              <label className="label">Custom Category Name *</label>
-              <input className="input" value={customCategoryName} onChange={(e) => setCustomCategoryName(e.target.value)} placeholder="e.g. Land & Building" />
+              <label className="label">Category *</label>
+              <select className="select" value={selectedCategory} onChange={(e) => { setSelectedCategory(e.target.value); setCustomCategoryName(""); setCustomCodeStart(""); setCustomCodeEnd(""); }}>
+                <option value="">— Select Category —</option>
+                {availablePredefined.map((c) => <option key={c.label} value={c.label}>{c.label} ({c.codeStart}-{c.codeEnd})</option>)}
+                <option value={CUSTOM_OPTION}>{CUSTOM_OPTION}</option>
+              </select>
             </div>
-            <div className="inline-group" style={{ marginBottom: 16 }}>
-              <div>
-                <label className="label">Code Start (optional)</label>
-                <input className="input" type="number" value={customCodeStart} onChange={(e) => setCustomCodeStart(e.target.value)} placeholder="1000" />
-              </div>
-              <div>
-                <label className="label">Code End (optional)</label>
-                <input className="input" type="number" value={customCodeEnd} onChange={(e) => setCustomCodeEnd(e.target.value)} placeholder="1999" />
-              </div>
-            </div>
-          </>
-        )}
+          )}
 
-        {effectiveCodeStart !== null && effectiveCodeEnd !== null && suggestedCode !== null && (
+          {isCustom && (
+            <>
+              <div style={{ marginBottom: 16 }}>
+                <label className="label">Custom Category Name *</label>
+                <input className="input" value={customCategoryName} onChange={(e) => setCustomCategoryName(e.target.value)} placeholder="e.g. Land & Building" />
+              </div>
+              <div className="inline-group" style={{ marginBottom: 16 }}>
+                <div>
+                  <label className="label">Code Start (optional)</label>
+                  <input className="input" type="number" value={customCodeStart} onChange={(e) => setCustomCodeStart(e.target.value)} placeholder="1000" />
+                </div>
+                <div>
+                  <label className="label">Code End (optional)</label>
+                  <input className="input" type="number" value={customCodeEnd} onChange={(e) => setCustomCodeEnd(e.target.value)} placeholder="1999" />
+                </div>
+              </div>
+            </>
+          )}
+
+          {effectiveCodeStart !== null && effectiveCodeEnd !== null && suggestedCode !== null && (
+            <div style={{ marginBottom: 16 }}>
+              <label className="label">Account Code</label>
+              <input className="input" type="number" value={customCode} onChange={(e) => setCustomCode(e.target.value)} placeholder={`Suggested: ${suggestedCode}`} />
+              <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 4 }}>Suggested next free code in the selected range</div>
+            </div>
+          )}
+
           <div style={{ marginBottom: 16 }}>
-            <label className="label">Account Code</label>
-            <input className="input" type="number" value={customCode} onChange={(e) => setCustomCode(e.target.value)} placeholder={`Suggested: ${suggestedCode}`} />
-            <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 4 }}>Suggested next free code in the selected range</div>
+            <label className="label">Account Name *</label>
+            <input className="input" value={accountName} onChange={(e) => setAccountName(e.target.value)} placeholder="e.g. Main Bank Account" />
           </div>
-        )}
 
-        <div style={{ marginBottom: 16 }}>
-          <label className="label">Account Name *</label>
-          <input className="input" value={accountName} onChange={(e) => setAccountName(e.target.value)} placeholder="e.g. Main Bank Account" />
+          <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={handleSubmit} disabled={loading}>
+            {loading ? "Creating..." : <> <Plus size={16} /> Create Account </>}
+          </button>
         </div>
-
-        <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={handleSubmit} disabled={loading}>
-          {loading ? "Creating..." : <> <Plus size={16} /> Create Account </>}
-        </button>
       </div>
     </div>
   )
