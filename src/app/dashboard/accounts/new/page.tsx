@@ -23,21 +23,14 @@ const PREDEFINED_CATEGORIES = [
 
 const CUSTOM_OPTION = "➕ Custom…"
 
-// Helper: get the default code range for a given account type (used when custom range is left empty)
 function getDefaultRangeForType(type: string): { start: number; end: number } | null {
   switch (type) {
-    case "Asset":
-      return { start: 1000, end: 1999 }
-    case "Liability":
-      return { start: 2000, end: 2999 }
-    case "Equity":
-      return { start: 3000, end: 3999 }
-    case "Revenue":
-      return { start: 4000, end: 4999 }
-    case "Expense":
-      return { start: 5000, end: 5999 }
-    default:
-      return null
+    case "Asset": return { start: 1000, end: 1999 }
+    case "Liability": return { start: 2000, end: 2999 }
+    case "Equity": return { start: 3000, end: 3999 }
+    case "Revenue": return { start: 4000, end: 4999 }
+    case "Expense": return { start: 5000, end: 5999 }
+    default: return null
   }
 }
 
@@ -65,7 +58,6 @@ export default function NewAccountPage() {
   const isCustom = selectedCategory === CUSTOM_OPTION
   const finalCategory = isCustom ? customCategoryName.trim() : selectedCategory
 
-  // Determine the effective code range (start/end as numbers)
   const effectiveCodeStart = (() => {
     if (!selectedCategory) return null
     if (isCustom) {
@@ -96,7 +88,7 @@ export default function NewAccountPage() {
     })
   }, [])
 
-  // When category/range changes, suggest next available code
+  // Suggest next free code
   useEffect(() => {
     if (!companyId || !selectedCategory) {
       setSuggestedCode(null)
@@ -196,18 +188,18 @@ export default function NewAccountPage() {
     setTimeout(() => router.push("/dashboard/accounts"), 1500)
   }
 
-  if (!companyId) return <div style={{ padding: 40, textAlign: "center" }}>Loading company data…</div>
+  if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>Loading company data…</div>
 
   return (
-    <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
       <style>{`
-        .form-card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 24px; margin-bottom: 16px; max-width: 500px; }
-        .label { font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase; margin-bottom: 4px; display: block; }
-        .input, .select { width: 100%; height: 40px; border: 1.5px solid #E2E8F0; border-radius: 8px; padding: 0 12px; font-size: 13px; box-sizing: border-box; font-family: inherit; background: #FAFBFF; }
-        .input:focus, .select:focus { border-color: #1D4ED8; outline: none; }
+        .form-card { background: #111827; border-radius: 12px; border: 1px solid #1E293B; padding: 24px; margin-bottom: 16px; max-width: 560px; }
+        .label { font-size: 11px; font-weight: 600; color: #94A3B8; text-transform: uppercase; margin-bottom: 4px; display: block; }
+        .input, .select { width: 100%; height: 40px; border: 1.5px solid #334155; border-radius: 8px; padding: 0 12px; font-size: 13px; box-sizing: border-box; font-family: inherit; background: #1E293B; color: #F1F5F9; }
+        .input:focus, .select:focus { border-color: #1E3A8A; outline: none; }
         .btn { padding: 10px 20px; border-radius: 8px; border: none; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-        .btn-primary { background: #1D4ED8; color: white; }
-        .btn-outline { background: white; border: 1.5px solid #E2E8F0; color: #475569; }
+        .btn-primary { background: #1E3A8A; color: white; }
+        .btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
         .inline-group { display: flex; gap: 8px; }
         .inline-group > * { flex: 1; }
       `}</style>
@@ -215,13 +207,13 @@ export default function NewAccountPage() {
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
         <button className="btn btn-outline" onClick={() => router.push("/dashboard/accounts")}><ArrowLeft size={16} /></button>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: "#1E293B", margin: 0 }}>➕ New Account</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>➕ New Account</h1>
           <p style={{ color: "#94A3B8", fontSize: 13 }}>Add a new GL account</p>
         </div>
       </div>
 
-      {error && <div style={{ background: "#FEF2F2", color: "#B91C1C", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
-      {flash && <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#15803D", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
+      {error && <div style={{ background: "#1E293B", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
+      {flash && <div style={{ background: "#064E3B", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
 
       <div className="form-card">
         <div style={{ marginBottom: 16 }}>
