@@ -38,7 +38,7 @@ export default function BudgetsPage() {
   const [locations, setLocations] = useState<any[]>([])
   const [allActivities, setAllActivities] = useState<any[]>([])
 
-  // Filters (donor removed from UI, still used internally)
+  // Filters
   const [selectedProjectId, setSelectedProjectId] = useState<string>(initialProject)
   const [selectedDonorId, setSelectedDonorId] = useState<string>(initialDonor)
   const [filterActivityId, setFilterActivityId] = useState<string>("")
@@ -46,7 +46,6 @@ export default function BudgetsPage() {
 
   // View mode: "gl" or "month"
   const [viewMode, setViewMode] = useState<"gl" | "month">("gl")
-  // Project duration (months) – used when viewMode = "month"
   const [projectDuration, setProjectDuration] = useState<number>(12)
 
   // Data (annual GL budgets + actuals)
@@ -71,7 +70,7 @@ export default function BudgetsPage() {
       supabase.from("accounts").select("id, code, name, type")
         .eq("company_id", cid).in("type", ["Expense","Asset"]).order("code")
         .then(r => r.data && setAccounts(r.data))
-      supabase.from("projects").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
+      supabase.from("projects").select("id, name, donor_id").eq("company_id", cid).is("deleted_at", null).order("name")
         .then(r => r.data && setProjects(r.data))
       supabase.from("donors").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
         .then(r => r.data && setDonors(r.data))
@@ -89,19 +88,27 @@ export default function BudgetsPage() {
       .then(r => r.data && setAllActivities(r.data))
   }, [companyId, selectedProjectId])
 
-  // ── 2b. Auto‑select donor (only when NGO) ───────────────────────────────
+  // ── 2b. Auto‑select donor from project (when project is selected) ───────
   useEffect(() => {
-    if (!companyId || !selectedProjectId || businessType !== "ngo") return
-    if (initialDonor) return
-    supabase.from("budgets").select("donor_id")
-      .eq("company_id", companyId).eq("project_id", selectedProjectId)
-      .is("month", null).is("deleted_at", null)
-      .then(({ data: budgetRows }) => {
-        if (!budgetRows) return
-        const unique = [...new Set(budgetRows.map((b: any) => b.donor_id).filter(Boolean))]
-        if (unique.length === 1) setSelectedDonorId(String(unique[0]))
-      })
-  }, [companyId, selectedProjectId, businessType, initialDonor])
+    if (!selectedProjectId || businessType !== "ngo") return
+    if (initialDonor) return   // respect an explicit donor from URL
+
+    // Find the donor attached to this project (if any)
+    const project = projects.find(p => p.id == selectedProjectId)
+    if (project?.donor_id) {
+      setSelectedDonorId(String(project.donor_id))
+    } else {
+      // If no donor linked, try to guess from existing budgets (unchanged logic)
+      supabase.from("budgets").select("donor_id")
+        .eq("company_id", companyId).eq("project_id", selectedProjectId)
+        .is("month", null).is("deleted_at", null)
+        .then(({ data: budgetRows }) => {
+          if (!budgetRows) return
+          const unique = [...new Set(budgetRows.map((b: any) => b.donor_id).filter(Boolean))]
+          if (unique.length === 1) setSelectedDonorId(String(unique[0]))
+        })
+    }
+  }, [selectedProjectId, projects, businessType, initialDonor, companyId])
 
   // ── 3. Load budgets + actuals (annual) ───────────────────────────────────
   useEffect(() => {
@@ -168,7 +175,7 @@ export default function BudgetsPage() {
       ;(lines || []).forEach((l: any) => {
         const act = String(l.activity_id)
         const loc = String(l.location_id)
-        const month = new Date(l.journal_entries.date).getMonth() + 1  // 1‑12
+        const month = new Date(l.journal_entries.date).getMonth() + 1
         if (!agg[act]) agg[act] = {}
         if (!agg[act][loc]) agg[act][loc] = {}
         agg[act][loc][month] = (agg[act][loc][month] || 0) + (l.debit || 0) - (l.credit || 0)
@@ -210,7 +217,6 @@ export default function BudgetsPage() {
     return total
   }
 
-  // Month budget: annual / projectDuration, unless overridden
   const getMonthBudget = (actId: string, locId: string, month: number) => {
     const override = monthBudgetOverrides[actId]?.[locId]?.[month]
     if (override !== null && override !== undefined) return override
@@ -229,7 +235,6 @@ export default function BudgetsPage() {
     })
   }
 
-  // Sum of monthly budgets for the row (over the project duration)
   const monthRowTotal = (actId: string, locId: string) => {
     let sum = 0
     for (let m = 1; m <= projectDuration; m++) sum += getMonthBudget(actId, locId, m)
@@ -303,7 +308,7 @@ export default function BudgetsPage() {
       if (error) { setFlash("Error: " + error.message); setSaving(false); return }
     }
 
-    // ── Audit log: record budget update ───────────────────────────────────
+    // Audit log
     try {
       const { data: { user } } = await supabase.auth.getUser()
       await supabase.from("data_change_logs").insert({
@@ -315,9 +320,7 @@ export default function BudgetsPage() {
         changed_by: user?.email || user?.id || null,
         changed_at: new Date().toISOString(),
       })
-    } catch {
-      // ignore audit failures
-    }
+    } catch {}
 
     setFlash("Budget saved!")
     setSaving(false)
@@ -358,7 +361,6 @@ export default function BudgetsPage() {
     doc.setFontSize(14)
     doc.text("Budget vs Actual Report", 14, 20)
     const tableColumns = ["Activity / Location", ...relevantAccounts.map(acc => `${acc.code} Budget`), ...relevantAccounts.map(acc => `${acc.code} Actual`), ...relevantAccounts.map(acc => `${acc.code} Var`), "Total Budget", "Total Actual", "Total Var"]
-
     const tableData: any[] = []
     for (const actId of Object.keys(data)) {
       for (const locId of Object.keys(data[actId])) {
@@ -380,7 +382,6 @@ export default function BudgetsPage() {
         tableData.push(row)
       }
     }
-
     autoTable(doc, { head: [tableColumns], body: tableData.map(row => tableColumns.map(col => row[col] || "")), startY: 35, styles: { fontSize: 7 } })
     doc.save(`budget_vs_actual_${fiscalYear}.pdf`)
   }
@@ -442,26 +443,32 @@ export default function BudgetsPage() {
   }
   const grandVariance = grandBudget - grandActual
 
-  if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" }}>Loading...</div>
-  if (!canView) return <div style={{ padding: 24, textAlign: "center" }}><h2>Access Denied</h2></div>
+  if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>Loading...</div>
+  if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "#E2E8F0" }}><h2>Access Denied</h2></div>
 
   return (
-    <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
+    <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
       <style>{`
         .budget-shell { max-width: 100%; overflow-x: auto; }
         .filter-bar { display: flex; gap: 10px; margin: 16px 0; flex-wrap: wrap; align-items: center; }
-        .filter-select { padding: 8px 12px; border: 1px solid #E2E8F0; border-radius: 8px; font-size: 13px; background: white; }
-        .table { border-collapse: collapse; width: 100%; font-size: 11px; background: white; }
-        .table th, .table td { border: 1px solid #E2E8F0; padding: 4px 6px; text-align: center; }
-        .act-header td { background: #E2E8F0; font-weight: 700; text-align: left; padding: 6px; }
-        .sub-header th { background: #F1F5F9; font-weight: 600; font-size: 9px; }
-        .input-budget { width: 70px; text-align: right; border: 1px solid #E2E8F0; border-radius: 4px; padding: 2px 4px; font-size: 10px; }
-        .total-row td { font-weight: 700; background: #F8FAFC; }
-        .btn-primary { padding: 10px 20px; background: #1D4ED8; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; margin-top: 16px; }
+        .filter-select { padding: 8px 12px; border: 1px solid #334155; border-radius: 8px; font-size: 13px; background: #1E293B; color: #F1F5F9; }
+        .table { border-collapse: collapse; width: 100%; font-size: 11px; background: #111827; }
+        .table th, .table td { border: 1px solid #1E293B; padding: 4px 6px; text-align: center; }
+        .table th { background: #1E293B; color: #94A3B8; }
+        .act-header td { background: #1E293B; font-weight: 700; text-align: left; padding: 6px; color: #F1F5F9; }
+        .sub-header th { background: #1E293B; font-weight: 600; font-size: 9px; color: #94A3B8; }
+        .input-budget { width: 70px; text-align: right; border: 1px solid #334155; border-radius: 4px; padding: 2px 4px; font-size: 10px; background: #1E293B; color: #F1F5F9; }
+        .total-row td { font-weight: 700; background: #1E293B; color: #F1F5F9; }
+        .btn-primary { padding: 10px 20px; background: #1E3A8A; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; margin-top: 16px; }
+        .btn-primary:hover { background: #1E40AF; }
+        .btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
+        .btn-outline:hover { background: #1E293B; }
+        h2 { color: #F1F5F9; }
+        p { color: #94A3B8; }
       `}</style>
 
       <div className="budget-shell">
-        <h2 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B" }}>Budget vs Actuals</h2>
+        <h2 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9" }}>Budget vs Actuals</h2>
         <p style={{ fontSize: 13, color: "#94A3B8", marginTop: 2 }}>
           {businessType === "ngo"
             ? "Enter budgets per Project, Donor, Activity, and Location"
@@ -500,15 +507,19 @@ export default function BudgetsPage() {
               placeholder="Months"
             />
           )}
-          <button className="btn-primary" style={{ margin: 0, padding: "6px 12px", background: "#059669" }} onClick={exportExcel}>
+          <button className="btn-primary" style={{ margin: 0, padding: "6px 12px", background: "#1E3A8A" }} onClick={exportExcel}>
             <Download size={14} /> Excel
           </button>
-          <button className="btn-primary" style={{ margin: 0, padding: "6px 12px", background: "#dc2626" }} onClick={exportPDF}>
+          <button className="btn-primary" style={{ margin: 0, padding: "6px 12px", background: "#1E3A8A" }} onClick={exportPDF}>
             <Download size={14} /> PDF
           </button>
         </div>
 
-        {flash && <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#15803D", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{flash}</div>}
+        {flash && (
+          <div style={{ background: flash.startsWith("Error") ? "#1E293B" : "#064E3B", border: flash.startsWith("Error") ? "1px solid #EF4444" : "1px solid #065F46", color: flash.startsWith("Error") ? "#FCA5A5" : "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
+            {flash}
+          </div>
+        )}
 
         {!selectedProjectId || (businessType === "ngo" && !selectedDonorId) ? (
           <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>
@@ -517,7 +528,7 @@ export default function BudgetsPage() {
               : "Please select a Project to display the budget matrix."}
           </div>
         ) : loading ? (
-          <div style={{ textAlign: "center", padding: 40 }}>Loading budgets & actuals...</div>
+          <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading budgets & actuals...</div>
         ) : displayActivities.length === 0 ? (
           <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>
             No Activities found for this project. Create them in Settings.
@@ -547,7 +558,6 @@ export default function BudgetsPage() {
                 {displayActivities.map(act => {
                   const actData = data[act.id] || {}
                   const locationsInAct = Object.keys(actData)
-
                   let actTotalBudget = 0, actTotalActual = 0
                   locationsInAct.forEach(lid => {
                     relevantAccounts.forEach(acc => {
@@ -555,7 +565,6 @@ export default function BudgetsPage() {
                       if (cell) { actTotalBudget += cell.budget || 0; actTotalActual += cell.actual || 0 }
                     })
                   })
-
                   return (
                     <Fragment key={act.id}>
                       <tr className="act-header">
@@ -566,7 +575,7 @@ export default function BudgetsPage() {
                         let rowBudget = 0, rowActual = 0
                         return (
                           <tr key={lid}>
-                            <td style={{ fontWeight: 600, textAlign: "left", paddingLeft: 16 }}>{loc?.name || lid}</td>
+                            <td style={{ fontWeight: 600, textAlign: "left", paddingLeft: 16, color: "#E2E8F0" }}>{loc?.name || lid}</td>
                             {relevantAccounts.map(acc => {
                               const cell = actData[lid]?.[String(acc.id)] || { budget: 0, actual: 0 }
                               rowBudget += cell.budget
@@ -584,16 +593,16 @@ export default function BudgetsPage() {
                                       placeholder="0"
                                     />
                                   </td>
-                                  <td style={{ fontSize: 10 }}>{cell.actual.toLocaleString()}</td>
-                                  <td style={{ fontSize: 10, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "#64748B" }}>
+                                  <td style={{ fontSize: 10, color: "#E2E8F0" }}>{cell.actual.toLocaleString()}</td>
+                                  <td style={{ fontSize: 10, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "#94A3B8" }}>
                                     {variance === 0 ? "—" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
                                   </td>
                                 </Fragment>
                               )
                             })}
-                            <td style={{ fontWeight: 600 }}>{rowBudget.toLocaleString()}</td>
-                            <td style={{ fontWeight: 600 }}>{rowActual.toLocaleString()}</td>
-                            <td style={{ fontWeight: 600, color: (rowBudget - rowActual) < 0 ? "#EF4444" : (rowBudget - rowActual) > 0 ? "#10B981" : "#64748B" }}>
+                            <td style={{ fontWeight: 600, color: "#E2E8F0" }}>{rowBudget.toLocaleString()}</td>
+                            <td style={{ fontWeight: 600, color: "#E2E8F0" }}>{rowActual.toLocaleString()}</td>
+                            <td style={{ fontWeight: 600, color: (rowBudget - rowActual) < 0 ? "#EF4444" : (rowBudget - rowActual) > 0 ? "#10B981" : "#94A3B8" }}>
                               {(rowBudget - rowActual) === 0 ? "—" : (rowBudget - rowActual > 0 ? "+" : "") + (rowBudget - rowActual).toLocaleString()}
                             </td>
                           </tr>
@@ -602,7 +611,7 @@ export default function BudgetsPage() {
                       <tr>
                         <td>
                           <select
-                            style={{ width: "100%", padding: "2px 4px", fontSize: 10 }}
+                            style={{ width: "100%", padding: "2px 4px", fontSize: 10, background: "#1E293B", color: "#F1F5F9", borderColor: "#334155" }}
                             value=""
                             onChange={e => { if (e.target.value) addLocationRow(act.id, e.target.value) }}
                           >
@@ -627,7 +636,7 @@ export default function BudgetsPage() {
                             <Fragment key={acc.id}>
                               <td>{sb.toLocaleString()}</td>
                               <td>{sa.toLocaleString()}</td>
-                              <td style={{ color: sv < 0 ? "#EF4444" : sv > 0 ? "#10B981" : "#64748B" }}>
+                              <td style={{ color: sv < 0 ? "#EF4444" : sv > 0 ? "#10B981" : "#94A3B8" }}>
                                 {sv === 0 ? "—" : (sv > 0 ? "+" : "") + sv.toLocaleString()}
                               </td>
                             </Fragment>
@@ -635,7 +644,7 @@ export default function BudgetsPage() {
                         })}
                         <td>{actTotalBudget.toLocaleString()}</td>
                         <td>{actTotalActual.toLocaleString()}</td>
-                        <td style={{ color: (actTotalBudget - actTotalActual) < 0 ? "#EF4444" : (actTotalBudget - actTotalActual) > 0 ? "#10B981" : "#64748B" }}>
+                        <td style={{ color: (actTotalBudget - actTotalActual) < 0 ? "#EF4444" : (actTotalBudget - actTotalActual) > 0 ? "#10B981" : "#94A3B8" }}>
                           {(actTotalBudget - actTotalActual) === 0 ? "—" : (actTotalBudget - actTotalActual > 0 ? "+" : "") + (actTotalBudget - actTotalActual).toLocaleString()}
                         </td>
                       </tr>
@@ -655,13 +664,13 @@ export default function BudgetsPage() {
                       <Fragment key={acc.id}>
                         <td>{gb.toLocaleString()}</td>
                         <td>{ga.toLocaleString()}</td>
-                        <td style={{ color: gv < 0 ? "#EF4444" : gv > 0 ? "#10B981" : "#64748B" }}>{gv === 0 ? "—" : (gv > 0 ? "+" : "") + gv.toLocaleString()}</td>
+                        <td style={{ color: gv < 0 ? "#EF4444" : gv > 0 ? "#10B981" : "#94A3B8" }}>{gv === 0 ? "—" : (gv > 0 ? "+" : "") + gv.toLocaleString()}</td>
                       </Fragment>
                     )
                   })}
                   <td>{grandBudget.toLocaleString()}</td>
                   <td>{grandActual.toLocaleString()}</td>
-                  <td style={{ color: grandVariance < 0 ? "#EF4444" : grandVariance > 0 ? "#10B981" : "#64748B" }}>{grandVariance === 0 ? "—" : (grandVariance > 0 ? "+" : "") + grandVariance.toLocaleString()}</td>
+                  <td style={{ color: grandVariance < 0 ? "#EF4444" : grandVariance > 0 ? "#10B981" : "#94A3B8" }}>{grandVariance === 0 ? "—" : (grandVariance > 0 ? "+" : "") + grandVariance.toLocaleString()}</td>
                 </tr>
               </tbody>
             </table>
@@ -669,9 +678,9 @@ export default function BudgetsPage() {
               {canEdit && (
                 <>
                   <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save Budget"}</button>
-                  <button className="btn-primary" style={{ background: '#059669' }} onClick={() => document.getElementById('budget-file-input')?.click()}><Upload size={14} /> Import Budget</button>
+                  <button className="btn-primary" style={{ background: '#1E3A8A' }} onClick={() => document.getElementById('budget-file-input')?.click()}><Upload size={14} /> Import Budget</button>
                   <input id="budget-file-input" type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={e => setBudgetImportFile(e.target.files?.[0] || null)} />
-                  {budgetImportFile && <button className="btn-primary" style={{ background: '#059669' }} onClick={handleBudgetImport} disabled={importingBudget}>Start Import</button>}
+                  {budgetImportFile && <button className="btn-primary" style={{ background: '#1E3A8A' }} onClick={handleBudgetImport} disabled={importingBudget}>Start Import</button>}
                 </>
               )}
             </div>
@@ -708,7 +717,7 @@ export default function BudgetsPage() {
                         const loc = locations.find(l => l.id == lid)
                         return (
                           <tr key={lid}>
-                            <td style={{ fontWeight: 600, textAlign: "left", paddingLeft: 16 }}>{loc?.name || lid}</td>
+                            <td style={{ fontWeight: 600, textAlign: "left", paddingLeft: 16, color: "#E2E8F0" }}>{loc?.name || lid}</td>
                             {MONTHS.slice(0, projectDuration).map((_, idx) => {
                               const monthNum = idx + 1
                               const budget = getMonthBudget(act.id, lid, monthNum)
@@ -726,16 +735,16 @@ export default function BudgetsPage() {
                                       placeholder="0"
                                     />
                                   </td>
-                                  <td style={{ fontSize: 10 }}>{actual.toLocaleString()}</td>
-                                  <td style={{ fontSize: 10, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "#64748B" }}>
+                                  <td style={{ fontSize: 10, color: "#E2E8F0" }}>{actual.toLocaleString()}</td>
+                                  <td style={{ fontSize: 10, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "#94A3B8" }}>
                                     {variance === 0 ? "—" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
                                   </td>
                                 </Fragment>
                               )
                             })}
-                            <td style={{ fontWeight: 600 }}>{monthRowTotal(act.id, lid).toLocaleString()}</td>
-                            <td style={{ fontWeight: 600 }}>{rowTotalActual(act.id, lid).toLocaleString()}</td>
-                            <td style={{ fontWeight: 600, color: (monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid)) < 0 ? "#EF4444" : (monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid)) > 0 ? "#10B981" : "#64748B" }}>
+                            <td style={{ fontWeight: 600, color: "#E2E8F0" }}>{monthRowTotal(act.id, lid).toLocaleString()}</td>
+                            <td style={{ fontWeight: 600, color: "#E2E8F0" }}>{rowTotalActual(act.id, lid).toLocaleString()}</td>
+                            <td style={{ fontWeight: 600, color: (monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid)) < 0 ? "#EF4444" : (monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid)) > 0 ? "#10B981" : "#94A3B8" }}>
                               {(monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid)) === 0 ? "—" : (monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid) > 0 ? "+" : "") + (monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid)).toLocaleString()}
                             </td>
                           </tr>
@@ -750,9 +759,9 @@ export default function BudgetsPage() {
               {canEdit && (
                 <>
                   <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save Budget"}</button>
-                  <button className="btn-primary" style={{ background: '#059669' }} onClick={() => document.getElementById('budget-file-input')?.click()}><Upload size={14} /> Import Budget</button>
+                  <button className="btn-primary" style={{ background: '#1E3A8A' }} onClick={() => document.getElementById('budget-file-input')?.click()}><Upload size={14} /> Import Budget</button>
                   <input id="budget-file-input" type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={e => setBudgetImportFile(e.target.files?.[0] || null)} />
-                  {budgetImportFile && <button className="btn-primary" style={{ background: '#059669' }} onClick={handleBudgetImport} disabled={importingBudget}>Start Import</button>}
+                  {budgetImportFile && <button className="btn-primary" style={{ background: '#1E3A8A' }} onClick={handleBudgetImport} disabled={importingBudget}>Start Import</button>}
                 </>
               )}
             </div>
