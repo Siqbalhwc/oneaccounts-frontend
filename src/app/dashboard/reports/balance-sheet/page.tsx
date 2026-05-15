@@ -48,9 +48,17 @@ function BalanceSheetContent() {
   const liabilityCategories = ["Accounts Payable", "Other Current Liabilities"]
   const equityCategories = ["Equity"]
 
-  const assetsTotal = accounts.filter(a => a.type === "Asset").reduce((s, a) => s + (a.balance || 0), 0)
-  const liabilitiesTotal = accounts.filter(a => a.type === "Liability").reduce((s, a) => s + (a.balance || 0), 0)
-  const equityTotal = accounts.filter(a => a.type === "Equity").reduce((s, a) => s + (a.balance || 0), 0)
+  const totalAssets = accounts.filter(a => a.type === "Asset").reduce((s, a) => s + (a.balance || 0), 0)
+  const totalLiabilities = accounts.filter(a => a.type === "Liability").reduce((s, a) => s + (a.balance || 0), 0)
+  const totalEquityAccounts = accounts.filter(a => a.type === "Equity").reduce((s, a) => s + (a.balance || 0), 0)
+
+  // Compute net profit (same as P&L) to show as retained earnings
+  const revenue = accounts.filter(a => a.type === "Revenue").reduce((s, a) => s + (a.balance || 0), 0)
+  const expenses = accounts.filter(a => a.type === "Expense").reduce((s, a) => s + (a.balance || 0), 0)
+  const netProfit = revenue - expenses
+
+  // Total equity = existing equity accounts + net profit (retained earnings)
+  const totalEquity = totalEquityAccounts + netProfit
 
   const navigateToTrialBalance = (type: string, category?: string) => {
     const params = new URLSearchParams()
@@ -68,7 +76,7 @@ function BalanceSheetContent() {
 
   const CategoryBlock = ({ title, categories, type, color }: any) => (
     <div style={{ marginBottom: 20 }}>
-      <h3 style={{ fontSize: 16, fontWeight: 700, color: color || "#1E293B", marginBottom: 12, cursor: "pointer" }}
+      <h3 style={{ fontSize: 16, fontWeight: 700, color: color || "#F1F5F9", marginBottom: 12, cursor: "pointer" }}
           onClick={() => navigateToTrialBalance(type)}>
         {title}
       </h3>
@@ -77,13 +85,13 @@ function BalanceSheetContent() {
         const catTotal = items.reduce((s, a) => s + (a.balance || 0), 0)
         return items.length > 0 ? (
           <div key={cat} style={{ marginBottom: 8 }}>
-            <div className="clickable-cat" style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontWeight: 600, fontSize: 13, color: "#334155", cursor: "pointer" }}
+            <div className="clickable-cat" style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontWeight: 600, fontSize: 13, color: "#E2E8F0", cursor: "pointer" }}
                  onClick={() => navigateToTrialBalance(type, cat)}>
               <span>{cat}</span>
               <span>PKR {catTotal.toLocaleString()}</span>
             </div>
             {items.map((a: any) => (
-              <div key={a.id} className="clickable-row" style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", paddingLeft: 16, fontSize: 12, color: "#475569", borderBottom: "1px solid #F1F5F9", cursor: "pointer" }}
+              <div key={a.id} className="clickable-row" style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", paddingLeft: 16, fontSize: 12, color: "#94A3B8", borderBottom: "1px solid #1E293B", cursor: "pointer" }}
                    onClick={() => openLedger(a.id)} title={`Ledger for ${a.code}`}>
                 <span>{a.code} – {a.name}</span>
                 <span style={{ fontWeight: 500 }}>PKR {(a.balance || 0).toLocaleString()}</span>
@@ -96,11 +104,11 @@ function BalanceSheetContent() {
   )
 
   return (
-    <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>
       <style>{`
-        .card { background: white; border-radius: 14px; border: 1px solid #E5EAF2; padding: 24px; box-shadow: 0 2px 6px rgba(0,0,0,0.02); }
-        .clickable-cat:hover { color: #1D4ED8; }
-        .clickable-row:hover { background: #FAFBFF; }
+        .card { background: #111827; border: 1px solid #1E293B; border-radius: 14px; padding: 24px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+        .clickable-cat:hover { color: #93C5FD; }
+        .clickable-row:hover { background: #1E293B; }
         .total-band {
           border-radius: 8px; padding: 14px 20px; color: white; font-weight: 700; font-size: 16px;
           margin-top: 20px; text-align: center;
@@ -108,11 +116,11 @@ function BalanceSheetContent() {
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        <button onClick={() => router.push("/dashboard/reports")} style={{ background: "white", border: "1px solid #E2E8F0", borderRadius: 8, padding: "8px 12px", cursor: "pointer" }}>
+        <button onClick={() => router.push("/dashboard/reports")} style={{ background: "transparent", border: "1.5px solid #334155", borderRadius: 8, padding: "8px 12px", cursor: "pointer", color: "#CBD5E1", display: "inline-flex", alignItems: "center", gap: 6 }}>
           <ArrowLeft size={16} />
         </button>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", margin: 0 }}>📊 Balance Sheet</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>📊 Balance Sheet</h1>
           <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>Assets = Liabilities + Equity · Click any item to drill down</p>
         </div>
       </div>
@@ -122,11 +130,11 @@ function BalanceSheetContent() {
         <div className="card">
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
             <Wallet size={20} color="#1E3A8A" />
-            <span style={{ fontWeight: 700, fontSize: 18, color: "#1E3A8A" }}>Assets</span>
+            <span style={{ fontWeight: 700, fontSize: 18, color: "#F1F5F9" }}>Assets</span>
           </div>
           <CategoryBlock title="" categories={assetCategories} type="Asset" color="#1E3A8A" />
           <div className="total-band" style={{ background: "#1E3A8A" }}>
-            TOTAL ASSETS: PKR {assetsTotal.toLocaleString()}
+            TOTAL ASSETS: PKR {totalAssets.toLocaleString()}
           </div>
         </div>
 
@@ -134,12 +142,35 @@ function BalanceSheetContent() {
         <div className="card">
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
             <Landmark size={20} color="#8B5CF6" />
-            <span style={{ fontWeight: 700, fontSize: 18, color: "#8B5CF6" }}>Liabilities & Equity</span>
+            <span style={{ fontWeight: 700, fontSize: 18, color: "#F1F5F9" }}>Liabilities & Equity</span>
           </div>
           <CategoryBlock title="Liabilities" categories={liabilityCategories} type="Liability" color="#EF4444" />
-          <CategoryBlock title="Equity" categories={equityCategories} type="Equity" color="#8B5CF6" />
+          
+          {/* Equity section with retained earnings */}
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: "#8B5CF6", marginBottom: 12, cursor: "pointer" }}
+              onClick={() => navigateToTrialBalance("Equity")}>
+            Equity
+          </h3>
+          {grouped["Equity"]?.map((a: any) => (
+            <div key={a.id} className="clickable-row" style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", paddingLeft: 16, fontSize: 12, color: "#94A3B8", borderBottom: "1px solid #1E293B", cursor: "pointer" }}
+                 onClick={() => openLedger(a.id)}>
+              <span>{a.code} – {a.name}</span>
+              <span style={{ fontWeight: 500 }}>PKR {(a.balance || 0).toLocaleString()}</span>
+            </div>
+          ))}
+          {/* Retained Earnings (Net Profit) */}
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", fontWeight: 600, fontSize: 13, color: "#E2E8F0", cursor: "pointer" }}
+               onClick={() => navigateToTrialBalance("Revenue")}>
+            <span>Retained Earnings</span>
+            <span style={{ color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
+              PKR {netProfit.toLocaleString()}
+            </span>
+          </div>
           <div className="total-band" style={{ background: "#8B5CF6" }}>
-            TOTAL LIABILITIES + EQUITY: PKR {(liabilitiesTotal + equityTotal).toLocaleString()}
+            TOTAL EQUITY: PKR {totalEquity.toLocaleString()}
+          </div>
+          <div className="total-band" style={{ background: "#8B5CF6", marginTop: 0 }}>
+            TOTAL LIABILITIES + EQUITY: PKR {(totalLiabilities + totalEquity).toLocaleString()}
           </div>
         </div>
       </div>

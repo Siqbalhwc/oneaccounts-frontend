@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, TrendingUp, TrendingDown, DollarSign } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import { useRouter } from "next/navigation"
 
-// Fallback category mapper
+// Category mapping for expense accounts
 function getCategory(account: any): string {
   if (account.category) return account.category
   const code = account.code
@@ -36,67 +36,83 @@ export default function ProfitLossPage() {
   const revenueAccounts = accounts.filter(a => a.type === "Revenue")
   const expenseAccounts = accounts.filter(a => a.type === "Expense")
 
-  // Group expenses into categories
-  const expenseByCategory = expenseAccounts.reduce((acc: Record<string, any[]>, a) => {
-    const cat = getCategory(a)
-    if (!acc[cat]) acc[cat] = []
-    acc[cat].push(a)
-    return acc
-  }, {})
+  // Group expenses by category
+  const directExpenses = expenseAccounts.filter(a => getCategory(a) === "Direct Expenses")
+  const operatingExpenses = expenseAccounts.filter(a => getCategory(a) === "Operating Expenses")
+  const otherExpenses = expenseAccounts.filter(a => !["Direct Expenses", "Operating Expenses"].includes(getCategory(a)))
 
   const totalRevenue = revenueAccounts.reduce((s, a) => s + (a.balance || 0), 0)
-  const totalExpenses = expenseAccounts.reduce((s, a) => s + (a.balance || 0), 0)
-  const netProfit = totalRevenue - totalExpenses
+  const totalDirectExpenses = directExpenses.reduce((s, a) => s + (a.balance || 0), 0)
+  const totalOperatingExpenses = operatingExpenses.reduce((s, a) => s + (a.balance || 0), 0)
+  const totalOtherExpenses = otherExpenses.reduce((s, a) => s + (a.balance || 0), 0)
+  const totalExpenses = totalDirectExpenses + totalOperatingExpenses + totalOtherExpenses
 
-  // Navigate to Trial Balance filtered by type/category
-  const navigateToTrialBalance = (type: string, category?: string) => {
+  const grossProfit = totalRevenue - totalDirectExpenses
+  const netProfit = grossProfit - totalOperatingExpenses - totalOtherExpenses
+
+  // Drill‑down to Trial Balance
+  const openTrialBalance = (type: string, category?: string) => {
     const params = new URLSearchParams()
     params.set("type", type)
     if (category) params.set("category", category)
     router.push(`/dashboard/reports/trial-balance?${params.toString()}`)
   }
 
-  // Navigate to Ledger for a single account
+  // Drill‑down to Ledger for a single account
   const openLedger = (accountId: number) => {
     const now = new Date()
-    const start = `${now.getFullYear()}-01-01`
-    const end = now.toISOString().split("T")[0]
-    router.push(`/dashboard/reports/ledger?accountId=${accountId}&startDate=${start}&endDate=${end}`)
+    router.push(`/dashboard/reports/ledger?accountId=${accountId}&startDate=${now.getFullYear()}-01-01&endDate=${now.toISOString().split("T")[0]}`)
   }
+
+  // Line component for statement rows
+  const Line = ({
+    label, amount, bold, indent, color, clickable, onClick,
+  }: {
+    label: string; amount: number; bold?: boolean; indent?: boolean;
+    color?: string; clickable?: boolean; onClick?: () => void;
+  }) => (
+    <div
+      style={{
+        display: "flex", justifyContent: "space-between", padding: "8px 0",
+        borderBottom: "1px solid #1E293B", fontSize: 13, fontWeight: bold ? 700 : 400,
+        cursor: onClick ? "pointer" : "default",
+        paddingLeft: indent ? 24 : 0,
+        color: color || "#E2E8F0",
+      }}
+      onClick={onClick}
+      title={onClick ? "View ledger" : undefined}
+    >
+      <span>{label}</span>
+      <span style={{ fontWeight: bold ? 700 : 400 }}>
+        PKR {amount.toLocaleString()}
+      </span>
+    </div>
+  )
+
+  if (loading) return <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>Loading…</div>
 
   return (
     <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
       <style>{`
-        .card {
-          background: #111827; border-radius: 12px; border: 1px solid #1E293B;
-          padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); margin-bottom: 16px;
+        .statement-card {
+          background: #111827; border: 1px solid #1E293B; border-radius: 12px;
+          padding: 24px; max-width: 700px; margin: 0 auto;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.2);
         }
-        .section-header {
-          display: flex; align-items: center; gap: 10px;
-          padding: 8px 0; margin-bottom: 12px;
-          cursor: pointer; transition: color 0.15s;
-          color: #F1F5F9;
+        .section-title {
+          font-size: 15px; font-weight: 700; color: #F1F5F9; margin: 16px 0 8px;
+          cursor: pointer; display: inline-block;
         }
-        .section-header:hover { color: #93C5FD; }
-        .clickable-row {
-          display: flex; justify-content: space-between; padding: 8px 0;
-          border-bottom: 1px solid #1E293B; font-size: 13px;
-          cursor: pointer; transition: background 0.15s;
+        .section-title:hover { color: #93C5FD; }
+        .total-line {
+          display: flex; justify-content: space-between; padding: 10px 0;
+          font-weight: 700; font-size: 14px; border-top: 2px solid #1E293B;
         }
-        .clickable-row:hover { background: #1E293B; }
-        .clickable-row:last-child { border-bottom: none; }
-        .total-row {
-          display: flex; justify-content: space-between; padding: 12px 0;
-          font-weight: 700; font-size: 15px; border-top: 2px solid #1E293B;
+        .net-line {
+          background: #1E293B; border-radius: 8px; padding: 14px 16px;
+          margin-top: 20px; display: flex; justify-content: space-between;
+          font-weight: 700; font-size: 16px;
         }
-        .net-profit-card {
-          border-radius: 14px; padding: 24px; text-align: center;
-          border: 2px solid; margin-top: 8px;
-        }
-        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
-        .summary-item { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 16px; }
-        .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94A3B8; margin-bottom: 4px; }
-        .summary-value { font-size: 22px; font-weight: 800; color: #F1F5F9; }
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
@@ -105,100 +121,74 @@ export default function ProfitLossPage() {
         </button>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>📈 Profit & Loss Statement</h1>
-          <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>Revenue – Expenses = Net Profit · Click any row to drill down</p>
+          <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>For the period</p>
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="summary-grid">
-        <div className="summary-item">
-          <div className="summary-label">Total Revenue</div>
-          <div className="summary-value" style={{ color: "#10B981" }}>PKR {totalRevenue.toLocaleString()}</div>
-        </div>
-        <div className="summary-item">
-          <div className="summary-label">Total Expenses</div>
-          <div className="summary-value" style={{ color: "#EF4444" }}>PKR {totalExpenses.toLocaleString()}</div>
-        </div>
-        <div className="summary-item">
-          <div className="summary-label">Net Profit</div>
-          <div className="summary-value" style={{ color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
-            PKR {netProfit.toLocaleString()}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ maxWidth: 720, margin: "0 auto" }}>
-        {/* Revenue Section */}
-        <div className="card">
-          <div className="section-header" onClick={() => navigateToTrialBalance("Revenue")}>
-            <TrendingUp size={18} color="#10B981" />
-            <h3 style={{ fontWeight: 700, fontSize: 16, margin: 0, flex: 1 }}>Revenue</h3>
-            <span style={{ fontSize: 14, fontWeight: 700 }}>PKR {totalRevenue.toLocaleString()}</span>
-          </div>
-          {revenueAccounts.length === 0 ? (
-            <div style={{ textAlign: "center", color: "#94A3B8", padding: 12 }}>No revenue accounts</div>
-          ) : (
-            revenueAccounts.map(a => (
-              <div key={a.id} className="clickable-row" onClick={() => openLedger(a.id)} title={`View ledger for ${a.code}`}>
-                <span>{a.code} – {a.name}</span>
-                <span style={{ fontWeight: 600 }}>PKR {(a.balance || 0).toLocaleString()}</span>
-              </div>
-            ))
-          )}
-          <div className="total-row">
-            <span>Total Revenue</span>
-            <span>PKR {totalRevenue.toLocaleString()}</span>
-          </div>
+      <div className="statement-card">
+        {/* Revenue */}
+        <div className="section-title" onClick={() => openTrialBalance("Revenue")}>Revenue</div>
+        {revenueAccounts.map(a => (
+          <Line key={a.id} label={`${a.code} – ${a.name}`} amount={a.balance || 0} onClick={() => openLedger(a.id)} />
+        ))}
+        <div className="total-line" style={{ color: "#10B981" }}>
+          <span>Total Revenue</span>
+          <span>PKR {totalRevenue.toLocaleString()}</span>
         </div>
 
-        {/* Expenses Section */}
-        <div className="card">
-          <div className="section-header" onClick={() => navigateToTrialBalance("Expense")}>
-            <TrendingDown size={18} color="#EF4444" />
-            <h3 style={{ fontWeight: 700, fontSize: 16, margin: 0, flex: 1 }}>Expenses</h3>
-            <span style={{ fontSize: 14, fontWeight: 700 }}>PKR {totalExpenses.toLocaleString()}</span>
-          </div>
-          {Object.entries(expenseByCategory).map(([cat, items]) => {
-            const catTotal = items.reduce((s, a) => s + (a.balance || 0), 0)
-            return (
-              <div key={cat} style={{ marginBottom: 8 }}>
-                <div className="section-header" style={{ padding: "4px 0", marginBottom: 4, fontSize: 13 }}
-                     onClick={() => navigateToTrialBalance("Expense", cat)}>
-                  <span style={{ fontWeight: 600 }}>{cat}</span>
-                  <span style={{ fontWeight: 700 }}>PKR {catTotal.toLocaleString()}</span>
-                </div>
-                {items.map(a => (
-                  <div key={a.id} className="clickable-row" style={{ paddingLeft: 16 }} onClick={() => openLedger(a.id)} title={`View ledger for ${a.code}`}>
-                    <span style={{ color: "#94A3B8" }}>{a.code} – {a.name}</span>
-                    <span style={{ fontWeight: 500 }}>PKR {(a.balance || 0).toLocaleString()}</span>
-                  </div>
-                ))}
-              </div>
-            )
-          })}
-          <div className="total-row">
-            <span>Total Expenses</span>
-            <span>PKR {totalExpenses.toLocaleString()}</span>
-          </div>
+        {/* Direct Expenses (COGS) */}
+        {directExpenses.length > 0 && (
+          <>
+            <div className="section-title" style={{ marginTop: 20 }} onClick={() => openTrialBalance("Expense", "Direct Expenses")}>Direct Expenses</div>
+            {directExpenses.map(a => (
+              <Line key={a.id} label={`${a.code} – ${a.name}`} amount={a.balance || 0} onClick={() => openLedger(a.id)} />
+            ))}
+            <div className="total-line" style={{ color: "#EF4444" }}>
+              <span>Total Direct Expenses</span>
+              <span>PKR {totalDirectExpenses.toLocaleString()}</span>
+            </div>
+          </>
+        )}
+
+        {/* Gross Profit */}
+        <div className="total-line" style={{ color: grossProfit >= 0 ? "#10B981" : "#EF4444", borderTop: "1px solid #1E293B" }}>
+          <span>Gross Profit</span>
+          <span>PKR {grossProfit.toLocaleString()}</span>
         </div>
 
-        {/* Net Profit Card */}
-        <div className="net-profit-card" style={{
-          background: netProfit >= 0 ? "#064E3B" : "#1E293B",
-          borderColor: netProfit >= 0 ? "#10B981" : "#EF4444",
-        }}>
-          <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", letterSpacing: 0.06 }}>
-            Net Profit (Loss)
-          </div>
-          <div style={{ fontSize: 32, fontWeight: 800, color: netProfit >= 0 ? "#10B981" : "#EF4444", marginTop: 4 }}>
-            PKR {netProfit.toLocaleString()}
-          </div>
-          <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 4 }}>
-            {netProfit >= 0 ? "Your business is profitable" : "Loss for the period"}
-          </div>
-        </div>
+        {/* Operating Expenses */}
+        {operatingExpenses.length > 0 && (
+          <>
+            <div className="section-title" style={{ marginTop: 20 }} onClick={() => openTrialBalance("Expense", "Operating Expenses")}>Operating Expenses</div>
+            {operatingExpenses.map(a => (
+              <Line key={a.id} label={`${a.code} – ${a.name}`} amount={a.balance || 0} onClick={() => openLedger(a.id)} />
+            ))}
+            <div className="total-line" style={{ color: "#EF4444" }}>
+              <span>Total Operating Expenses</span>
+              <span>PKR {totalOperatingExpenses.toLocaleString()}</span>
+            </div>
+          </>
+        )}
 
-        {loading && <div style={{ textAlign: "center", padding: 20, color: "#94A3B8" }}>Loading…</div>}
+        {/* Other Expenses (if any) */}
+        {otherExpenses.length > 0 && (
+          <>
+            <div className="section-title" style={{ marginTop: 20 }} onClick={() => openTrialBalance("Expense")}>Other Expenses</div>
+            {otherExpenses.map(a => (
+              <Line key={a.id} label={`${a.code} – ${a.name}`} amount={a.balance || 0} onClick={() => openLedger(a.id)} />
+            ))}
+            <div className="total-line" style={{ color: "#EF4444" }}>
+              <span>Total Other Expenses</span>
+              <span>PKR {totalOtherExpenses.toLocaleString()}</span>
+            </div>
+          </>
+        )}
+
+        {/* Net Profit / Loss */}
+        <div className="net-line" style={{ color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
+          <span>{netProfit >= 0 ? "Net Profit" : "Net Loss"}</span>
+          <span>PKR {Math.abs(netProfit).toLocaleString()}</span>
+        </div>
       </div>
     </div>
   )
