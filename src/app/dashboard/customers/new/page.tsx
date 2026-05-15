@@ -5,6 +5,22 @@ import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Plus, CheckCircle } from "lucide-react"
 
+// Country codes for WhatsApp
+const COUNTRY_CODES = [
+  { code: "+92", label: "🇵🇰 +92 (Pakistan)" },
+  { code: "+1",  label: "🇺🇸 +1 (USA)" },
+  { code: "+44", label: "🇬🇧 +44 (UK)" },
+  { code: "+971",label: "🇦🇪 +971 (UAE)" },
+  { code: "+966",label: "🇸🇦 +966 (KSA)" },
+  { code: "+91", label: "🇮🇳 +91 (India)" },
+  { code: "+86", label: "🇨🇳 +86 (China)" },
+  { code: "+81", label: "🇯🇵 +81 (Japan)" },
+  { code: "+49", label: "🇩🇪 +49 (Germany)" },
+  { code: "+33", label: "🇫🇷 +33 (France)" },
+  { code: "+61", label: "🇦🇺 +61 (Australia)" },
+  { code: "+27", label: "🇿🇦 +27 (South Africa)" },
+]
+
 const PAYMENT_TERMS = [
   "Due on Receipt",
   "Net 7",
@@ -22,9 +38,9 @@ export default function NewCustomerPage() {
 
   const [companyId, setCompanyId] = useState("")
   const [customerName, setCustomerName] = useState("")
-  const [customerCode, setCustomerCode] = useState("")
-  const [autoCode, setAutoCode] = useState("")
-  const [phone, setPhone] = useState("")
+  const [customerCode, setCustomerCode] = useState("")      // system generated, display only
+  const [countryCode, setCountryCode] = useState("+92")
+  const [phoneNumber, setPhoneNumber] = useState("")
   const [email, setEmail] = useState("")
   const [address, setAddress] = useState("")
   const [openingBalance, setOpeningBalance] = useState("0")
@@ -33,13 +49,12 @@ export default function NewCustomerPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  // Get company ID and generate next customer code
+  // Generate next customer code per company
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
       if (cid) {
         setCompanyId(cid)
-        // Find next CUST-xxx
         supabase
           .from("customers")
           .select("code")
@@ -56,7 +71,6 @@ export default function NewCustomerPage() {
               }
             }
             const code = `CUST-${String(nextNum).padStart(3, "0")}`
-            setAutoCode(code)
             setCustomerCode(code)
           })
       }
@@ -66,20 +80,21 @@ export default function NewCustomerPage() {
   const handleSubmit = async () => {
     if (!companyId) { setError("Company not loaded"); return }
     if (!customerName.trim()) { setError("Customer name is required"); return }
-    if (!customerCode.trim()) { setError("Code is required"); return }
 
     setLoading(true)
     setError("")
 
     const balance = parseFloat(openingBalance || "0")
+    // Combine country code and phone number for WhatsApp compatibility
+    const fullPhone = countryCode + (phoneNumber.trim().replace(/\D/g, "")) // e.g. "+923001234567"
 
     const { data, error: insertErr } = await supabase
       .from("customers")
       .insert({
         company_id: companyId,
-        code: customerCode.trim(),
+        code: customerCode,           // system generated, never duplicated per company
         name: customerName.trim(),
-        phone: phone.trim() || null,
+        phone: fullPhone || null,
         email: email.trim() || null,
         address: address.trim() || null,
         balance: isNaN(balance) ? 0 : balance,
@@ -90,7 +105,7 @@ export default function NewCustomerPage() {
 
     if (insertErr) {
       if (insertErr.message?.includes("duplicate key")) {
-        setError("This code already exists. Refresh to get a new code.")
+        setError("This code already exists. Please refresh to regenerate.")
       } else {
         setError(insertErr.message)
       }
@@ -100,8 +115,7 @@ export default function NewCustomerPage() {
 
     setFlash(`✅ Customer ${data.code} – ${data.name} created!`)
     setCustomerName("")
-    setCustomerCode("")
-    setPhone("")
+    setPhoneNumber("")
     setEmail("")
     setAddress("")
     setOpeningBalance("0")
@@ -127,22 +141,21 @@ export default function NewCustomerPage() {
           font-family: inherit; background: #1E293B; color: #F1F5F9;
         }
         .input:focus, .select:focus { border-color: #64748B; outline: none; }
+        .input:disabled { opacity: 0.7; cursor: not-allowed; }
         .btn {
-          padding: 10px 20px; border-radius: 8px; border: none; font-weight: 600;
+          padding: 10px 20px; border-radius: 8px; border: 1.5px solid #334155; font-weight: 600;
           font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
         }
-        .btn-primary {
-          background: #1E3A8A; color: white;
-          box-shadow: 0 4px 12px rgba(30,58,138,0.4); transition: all 0.2s;
-        }
-        .btn-primary:hover { background: #1E40AF; box-shadow: 0 6px 16px rgba(30,64,175,0.5); }
-        .btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
+        .btn-outline { background: transparent; color: white; border-color: #334155; }
+        .btn-outline:hover { background: #1E293B; }
+        .btn-back { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
+        .phone-row { display: grid; grid-template-columns: 130px 1fr; gap: 8px; }
         .inline-group { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
       `}</style>
 
       <div style={{ maxWidth: 600, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-          <button className="btn btn-outline" onClick={() => router.push("/dashboard/customers")}><ArrowLeft size={16} /></button>
+          <button className="btn btn-back" onClick={() => router.push("/dashboard/customers")}><ArrowLeft size={16} /></button>
           <div>
             <h1 style={{ fontSize: 20, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>➕ New Customer</h1>
             <p style={{ color: "#94A3B8", fontSize: 13 }}>Add a customer to your system</p>
@@ -153,10 +166,11 @@ export default function NewCustomerPage() {
         {flash && <div style={{ background: "#064E3B", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
 
         <div className="form-card">
+          {/* Customer Code – system generated, read‑only */}
           <div style={{ marginBottom: 16 }}>
             <label className="label">Customer Code</label>
-            <input className="input" value={customerCode} onChange={e => setCustomerCode(e.target.value)} placeholder={autoCode} />
-            <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 4 }}>Auto‑generated code. You can edit it.</div>
+            <input className="input" value={customerCode} disabled />
+            <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 4 }}>System‑generated, unique per company</div>
           </div>
 
           <div style={{ marginBottom: 16 }}>
@@ -164,15 +178,21 @@ export default function NewCustomerPage() {
             <input className="input" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="e.g. ABC Corporation" />
           </div>
 
-          <div className="inline-group" style={{ marginBottom: 16 }}>
-            <div>
-              <label className="label">Phone</label>
-              <input className="input" value={phone} onChange={e => setPhone(e.target.value)} placeholder="0300-1234567" />
+          {/* Phone with country code */}
+          <div style={{ marginBottom: 16 }}>
+            <label className="label">Phone</label>
+            <div className="phone-row">
+              <select className="select" value={countryCode} onChange={e => setCountryCode(e.target.value)}>
+                {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+              </select>
+              <input className="input" type="tel" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} placeholder="300 1234567" />
             </div>
-            <div>
-              <label className="label">Email</label>
-              <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="abc@example.com" />
-            </div>
+            <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 4 }}>Combined for WhatsApp messaging</div>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label className="label">Email</label>
+            <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="abc@example.com" />
           </div>
 
           <div style={{ marginBottom: 16 }}>
@@ -194,7 +214,8 @@ export default function NewCustomerPage() {
             </div>
           </div>
 
-          <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={handleSubmit} disabled={loading}>
+          {/* Create button – outline style, aligned with theme */}
+          <button className="btn btn-outline" style={{ width: "100%", justifyContent: "center" }} onClick={handleSubmit} disabled={loading}>
             {loading ? "Saving..." : <> <Plus size={16} /> Create Customer </>}
           </button>
         </div>
