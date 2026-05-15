@@ -47,32 +47,39 @@ export default function TrialBalancePage() {
   const filterType = searchParams.get("type") || ""
   const filterCategory = searchParams.get("category") || ""
 
-  // Fetch all accounts (needed for category and type info)
-  const [accountsMap, setAccountsMap] = useState<Record<number, any>>({})
-
   useEffect(() => {
     const fetchData = async () => {
-      // 1. Fetch all accounts for type/category info
+      // 1. Get current user's company_id (explicit filter, extra safety)
+      const { data: { user } } = await supabase.auth.getUser()
+      const cid = (user?.app_metadata as any)?.company_id
+      if (!cid) {
+        setLoading(false)
+        return
+      }
+
+      // 2. Fetch all accounts for type/category info (scoped to company)
       const { data: accounts } = await supabase
         .from("accounts")
         .select("id, code, name, type, category")
+        .eq("company_id", cid)
         .order("code")
       const map: Record<number, any> = {}
       accounts?.forEach(a => { map[a.id] = a })
-      setAccountsMap(map)
 
-      // 2. Fetch journal lines (exclude soft‑deleted entries)
+      // 3. Fetch journal lines (exclude soft‑deleted entries, scoped to company)
       const { data: lines, error } = await supabase
         .from("journal_lines")
-        .select("account_id, debit, credit, journal_entries!inner(deleted_at)")
+        .select("account_id, debit, credit, journal_entries!inner(deleted_at, company_id)")
+        .eq("company_id", cid)
         .is("journal_entries.deleted_at", null)
+        .eq("journal_entries.company_id", cid)
       if (error) {
         console.error(error)
         setLoading(false)
         return
       }
 
-      // 3. Aggregate per account
+      // 4. Aggregate per account
       const agg: Record<number, { totalDr: number; totalCr: number }> = {}
       lines?.forEach((l: any) => {
         const aid = l.account_id
@@ -81,20 +88,24 @@ export default function TrialBalancePage() {
         agg[aid].totalCr += l.credit || 0
       })
 
-      // 4. Build rows with account info
+      // 5. Build rows with correct debit/credit classification (case‑insensitive)
       const rows = Object.entries(agg).map(([accId, totals]) => {
         const acc = map[Number(accId)] || { code: "?", name: "Unknown", type: "Asset", category: "Other" }
         const category = acc.category || getFallbackCategory(acc.code)
         const net = totals.totalDr - totals.totalCr
-        // Determine debit/credit presentation based on account type
+
+        // Use lowercase for safe comparison
+        const typeLower = (acc.type || "").toLowerCase()
         let debit = 0, credit = 0
-        if (["Asset", "Expense"].includes(acc.type)) {
+        if (typeLower === "asset" || typeLower === "expense") {
           debit = net > 0 ? net : 0
           credit = net < 0 ? -net : 0
         } else {
+          // liability, equity, revenue, or anything else
           credit = net > 0 ? net : 0
           debit = net < 0 ? -net : 0
         }
+
         return {
           id: Number(accId),
           code: acc.code,
@@ -109,7 +120,7 @@ export default function TrialBalancePage() {
       // Apply filters
       let filtered = rows
       if (filterType) {
-        filtered = filtered.filter(r => r.type === filterType)
+        filtered = filtered.filter(r => r.type.toLowerCase() === filterType.toLowerCase())
       }
       if (filterCategory) {
         filtered = filtered.filter(r => r.category === filterCategory)
