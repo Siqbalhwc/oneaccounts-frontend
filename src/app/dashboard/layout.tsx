@@ -126,117 +126,105 @@ const styles = `
     .dl-action-btn { padding: 6px 4px; font-size: 9px; }
   }
 
-  /* ══════════════════ GLOBAL DARK THEME ══════════════════ */
+  /* ══════════════════ GLOBAL DARK THEME (excludes dashboard) ══════════════════ */
   body, .dl-shell, .dl-main, .dl-main-content { background: #0B1120 !important; }
   .dl-main-content > div { background: #0B1120 !important; }
 
-  /* Headings */
-  h1, h2, h3, h4, h5, h6 { color: #F1F5F9 !important; }
+  /* ── Target everything inside the main content EXCEPT the dashboard wrapper ── */
+  .dl-main-content > div:not(.mgmt) {
+    background: #0B1120 !important;
+    color: #E2E8F0 !important;
+  }
 
-  /* Cards */
-  .card, .tb-card, .inv-card, .pay-card, .ac-card, .form-card,
-  .log-table, .tb-summary-item, .kpi-card, [class*="kpi-card"],
-  .crm-card, .crm-section, .crm-item {
+  /* Headings (inside non‑dashboard pages) */
+  .dl-main-content > div:not(.mgmt) h1,
+  .dl-main-content > div:not(.mgmt) h2,
+  .dl-main-content > div:not(.mgmt) h3,
+  .dl-main-content > div:not(.mgmt) h4,
+  .dl-main-content > div:not(.mgmt) h5,
+  .dl-main-content > div:not(.mgmt) h6 {
+    color: #F1F5F9 !important;
+  }
+
+  /* Cards (outside dashboard) */
+  .dl-main-content > div:not(.mgmt) .card,
+  .dl-main-content > div:not(.mgmt) [class*="card"] {
     background: #111827 !important;
     border: 1px solid #1E293B !important;
     color: #E2E8F0 !important;
     box-shadow: 0 1px 3px rgba(0,0,0,0.2) !important;
   }
-  .card:hover, .tb-card:hover, .inv-card:hover, .pay-card:hover,
-  .ac-card:hover, .form-card:hover, .kpi-card:hover, .crm-card:hover {
-    background: #1E293B !important;
-  }
 
-  /* Inputs, selects, textareas */
-  input, select, textarea,
-  .input, .pay-input, .inv-input, .ac-search,
-  .filter-select, .inv-select, .pay-select, .filter-select, .input-budget {
+  /* Inputs, selects, textareas (outside dashboard) */
+  .dl-main-content > div:not(.mgmt) input,
+  .dl-main-content > div:not(.mgmt) select,
+  .dl-main-content > div:not(.mgmt) textarea {
     background: #1E293B !important;
     border-color: #334155 !important;
     color: #F1F5F9 !important;
   }
-  input:focus, select:focus, textarea:focus,
-  .input:focus, .pay-input:focus, .inv-input:focus,
-  .ac-search:focus, .inv-select:focus, .pay-select:focus {
-    border-color: #1E3A8A !important;
+  .dl-main-content > div:not(.mgmt) input:focus,
+  .dl-main-content > div:not(.mgmt) select:focus,
+  .dl-main-content > div:not(.mgmt) textarea:focus {
+    border-color: #64748B !important;
     outline: none !important;
   }
-  ::placeholder { color: #64748B !important; }
 
-  /* Buttons – navy primary, dark outline */
-  .btn-primary, a.btn-primary, button.btn-primary {
+  /* Buttons (outside dashboard) */
+  .dl-main-content > div:not(.mgmt) .btn-primary,
+  .dl-main-content > div:not(.mgmt) a.btn-primary,
+  .dl-main-content > div:not(.mgmt) button.btn-primary {
     background: #1E3A8A !important;
     color: white !important;
     border: 1px solid #1E3A8A !important;
   }
-  .btn-primary:hover, a.btn-primary:hover, button.btn-primary:hover {
-    background: #1E40AF !important;
-  }
-  .btn-outline {
+  .dl-main-content > div:not(.mgmt) .btn-outline {
     background: transparent !important;
     border: 1.5px solid #334155 !important;
     color: #CBD5E1 !important;
   }
-  .btn-outline:hover { background: #1E293B !important; }
 
-  /* Labels */
-  .label, .pay-label, .inv-label, .ac-label, .tb-label { color: #94A3B8 !important; }
-
-  /* Tables */
-  table, .table { background: #111827 !important; color: #E2E8F0 !important; }
-  table th, .table th { background: #1E293B !important; color: #94A3B8 !important; border-color: #1E293B !important; }
-  table td, .table td { border-color: #1E293B !important; background: #111827 !important; color: #E2E8F0 !important; }
-  .row-header, .tb-table-header, .ac-header, .journal-header { background: #1E293B !important; }
-  .row, .tb-row, .ac-row, .journal-row {
+  /* Tables (outside dashboard) */
+  .dl-main-content > div:not(.mgmt) table,
+  .dl-main-content > div:not(.mgmt) .table {
     background: #111827 !important;
-    border-bottom: 1px solid #1E293B !important;
-  }
-  .row:hover, .tb-row:hover, .ac-row:hover, .journal-row:hover {
-    background: #1E293B !important;
-    color: #F1F5F9 !important;
-  }
-
-  /* Log tabs */
-  .log-tab { background: #1E293B !important; color: #94A3B8 !important; border-color: #334155 !important; }
-  .log-tab.active { background: #1E3A8A !important; color: white !important; border-color: #1E3A8A !important; }
-
-  /* Clickable drill-down */
-  .clickable, .clickable-cat, .clickable-row { color: #E2E8F0 !important; }
-  .clickable:hover, .clickable-cat:hover, .clickable-row:hover { color: #1E3A8A !important; }
-
-  /* Remove any residual blue accent from the sidebar */
-  .dl-nav-item.active { border-left-color: #334155 !important; }
-
-  /* ── EXTRA OVERRIDES – kill any remaining white/light inside reports ── */
-  /* Force all elements inside the main content to dark, unless they already have a specific dark background */
-  .dl-main-content div:not([class*="dl-"]):not(.mgmt *) {
-    background-color: #111827 !important;
     color: #E2E8F0 !important;
   }
-  
-  /* Fix specifically for report inner cards */
-  .dl-main-content .card, .dl-main-content [class*="card"] {
-    background: #111827 !important;
+  .dl-main-content > div:not(.mgmt) table th,
+  .dl-main-content > div:not(.mgmt) .table th {
+    background: #1E293B !important;
+    color: #94A3B8 !important;
     border-color: #1E293B !important;
   }
-  .dl-main-content .card * {
-    color: #E2E8F0 !important;
-  }
-  /* Override any inline white/light colors */
-  .dl-main-content [style*="background: white"],
-  .dl-main-content [style*="background: #fff"],
-  .dl-main-content [style*="background: #ffffff"],
-  .dl-main-content [style*="background: #f8f9fa"],
-  .dl-main-content [style*="background: #f1f5f9"],
-  .dl-main-content [style*="background: #EFF4FB"],
-  .dl-main-content [style*="background: #F4F6FB"],
-  .dl-main-content [style*="background: #FAFBFF"] {
+  .dl-main-content > div:not(.mgmt) table td,
+  .dl-main-content > div:not(.mgmt) .table td {
+    border-color: #1E293B !important;
     background: #111827 !important;
-  }
-  .dl-main-content [style*="color: #1E293B"],
-  .dl-main-content [style*="color: #0a2940"],
-  .dl-main-content [style*="color: #1a2636"] {
     color: #E2E8F0 !important;
+  }
+  .dl-main-content > div:not(.mgmt) tr:hover td {
+    background: #1E293B !important;
+  }
+
+  /* Labels (outside dashboard) */
+  .dl-main-content > div:not(.mgmt) .label,
+  .dl-main-content > div:not(.mgmt) .pay-label,
+  .dl-main-content > div:not(.mgmt) .inv-label,
+  .dl-main-content > div:not(.mgmt) .ac-label,
+  .dl-main-content > div:not(.mgmt) .tb-label {
+    color: #94A3B8 !important;
+  }
+
+  /* Remove any remaining white/light inline backgrounds (outside dashboard) */
+  .dl-main-content > div:not(.mgmt) [style*="background: white"],
+  .dl-main-content > div:not(.mgmt) [style*="background: #fff"],
+  .dl-main-content > div:not(.mgmt) [style*="background: #ffffff"],
+  .dl-main-content > div:not(.mgmt) [style*="background: #f8f9fa"],
+  .dl-main-content > div:not(.mgmt) [style*="background: #f1f5f9"],
+  .dl-main-content > div:not(.mgmt) [style*="background: #EFF4FB"],
+  .dl-main-content > div:not(.mgmt) [style*="background: #F4F6FB"],
+  .dl-main-content > div:not(.mgmt) [style*="background: #FAFBFF"] {
+    background: #111827 !important;
   }
 `
 
