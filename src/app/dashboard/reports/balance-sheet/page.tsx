@@ -52,12 +52,12 @@ function BalanceSheetContent() {
   const totalLiabilities = accounts.filter(a => a.type === "Liability").reduce((s, a) => s + (a.balance || 0), 0)
   const totalEquityAccounts = accounts.filter(a => a.type === "Equity").reduce((s, a) => s + (a.balance || 0), 0)
 
-  // Compute net profit (same as P&L) to show as retained earnings
+  // Net profit (same as P&L) – will be shown as Retained Earnings
   const revenue = accounts.filter(a => a.type === "Revenue").reduce((s, a) => s + (a.balance || 0), 0)
   const expenses = accounts.filter(a => a.type === "Expense").reduce((s, a) => s + (a.balance || 0), 0)
   const netProfit = revenue - expenses
 
-  // Total equity = existing equity accounts + net profit (retained earnings)
+  // Total equity = existing equity + net profit (retained earnings)
   const totalEquity = totalEquityAccounts + netProfit
 
   const navigateToTrialBalance = (type: string, category?: string) => {
@@ -113,6 +113,10 @@ function BalanceSheetContent() {
           border-radius: 8px; padding: 14px 20px; color: white; font-weight: 700; font-size: 16px;
           margin-top: 20px; text-align: center;
         }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .summary-item { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 16px; }
+        .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94A3B8; margin-bottom: 4px; }
+        .summary-value { font-size: 22px; font-weight: 800; color: #F1F5F9; }
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
@@ -122,6 +126,22 @@ function BalanceSheetContent() {
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>📊 Balance Sheet</h1>
           <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>Assets = Liabilities + Equity · Click any item to drill down</p>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="summary-grid">
+        <div className="summary-item">
+          <div className="summary-label">Total Assets</div>
+          <div className="summary-value" style={{ color: "#10B981" }}>PKR {totalAssets.toLocaleString()}</div>
+        </div>
+        <div className="summary-item">
+          <div className="summary-label">Total Liabilities</div>
+          <div className="summary-value" style={{ color: "#EF4444" }}>PKR {totalLiabilities.toLocaleString()}</div>
+        </div>
+        <div className="summary-item">
+          <div className="summary-label">Total Equity</div>
+          <div className="summary-value" style={{ color: "#8B5CF6" }}>PKR {totalEquity.toLocaleString()}</div>
         </div>
       </div>
 
@@ -145,8 +165,8 @@ function BalanceSheetContent() {
             <span style={{ fontWeight: 700, fontSize: 18, color: "#F1F5F9" }}>Liabilities & Equity</span>
           </div>
           <CategoryBlock title="Liabilities" categories={liabilityCategories} type="Liability" color="#EF4444" />
-          
-          {/* Equity section with retained earnings */}
+
+          {/* Equity section with Retained Earnings */}
           <h3 style={{ fontSize: 16, fontWeight: 700, color: "#8B5CF6", marginBottom: 12, cursor: "pointer" }}
               onClick={() => navigateToTrialBalance("Equity")}>
             Equity
@@ -158,7 +178,7 @@ function BalanceSheetContent() {
               <span style={{ fontWeight: 500 }}>PKR {(a.balance || 0).toLocaleString()}</span>
             </div>
           ))}
-          {/* Retained Earnings (Net Profit) */}
+          {/* Retained Earnings */}
           <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", fontWeight: 600, fontSize: 13, color: "#E2E8F0", cursor: "pointer" }}
                onClick={() => navigateToTrialBalance("Revenue")}>
             <span>Retained Earnings</span>
