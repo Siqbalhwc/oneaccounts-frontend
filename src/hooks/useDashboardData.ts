@@ -111,7 +111,11 @@ async function fetchLiveKPIs(): Promise<DashboardKPIs> {
 
   const unpaid_count = await safeQuery(
     async () => {
-      const { count } = await supabase.from("invoices").select("*", { count: "exact", head: true }).eq("type", "sale").eq("status", "Unpaid")
+      const { count } = await supabase.from("invoices")
+        .select("*", { count: "exact", head: true })
+        .eq("type", "sale")
+        .eq("status", "Unpaid")
+        .is("deleted_at", null)          // ← add this
       return count || 0
     },
     0
