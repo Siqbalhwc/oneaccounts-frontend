@@ -7,18 +7,18 @@ import { ArrowLeft, Plus, CheckCircle } from "lucide-react"
 
 // Country codes for WhatsApp
 const COUNTRY_CODES = [
-  { code: "+92", label: "🇵🇰 +92 (Pakistan)" },
-  { code: "+1",  label: "🇺🇸 +1 (USA)" },
-  { code: "+44", label: "🇬🇧 +44 (UK)" },
-  { code: "+971",label: "🇦🇪 +971 (UAE)" },
-  { code: "+966",label: "🇸🇦 +966 (KSA)" },
-  { code: "+91", label: "🇮🇳 +91 (India)" },
-  { code: "+86", label: "🇨🇳 +86 (China)" },
-  { code: "+81", label: "🇯🇵 +81 (Japan)" },
-  { code: "+49", label: "🇩🇪 +49 (Germany)" },
-  { code: "+33", label: "🇫🇷 +33 (France)" },
-  { code: "+61", label: "🇦🇺 +61 (Australia)" },
-  { code: "+27", label: "🇿🇦 +27 (South Africa)" },
+  { code: "+92", label: "🇵🇰 +92" },
+  { code: "+1",  label: "🇺🇸 +1" },
+  { code: "+44", label: "🇬🇧 +44" },
+  { code: "+971",label: "🇦🇪 +971" },
+  { code: "+966",label: "🇸🇦 +966" },
+  { code: "+91", label: "🇮🇳 +91" },
+  { code: "+86", label: "🇨🇳 +86" },
+  { code: "+81", label: "🇯🇵 +81" },
+  { code: "+49", label: "🇩🇪 +49" },
+  { code: "+33", label: "🇫🇷 +33" },
+  { code: "+61", label: "🇦🇺 +61" },
+  { code: "+27", label: "🇿🇦 +27" },
 ]
 
 const PAYMENT_TERMS = [
