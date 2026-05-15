@@ -65,43 +65,65 @@ export default function ProfitLossPage() {
   }
 
   return (
-    <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
       <style>{`
         .card {
-          background: white; border-radius: 14px; border: 1px solid #E5EAF2;
-          padding: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.02); margin-bottom: 16px;
+          background: #111827; border-radius: 12px; border: 1px solid #1E293B;
+          padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); margin-bottom: 16px;
         }
         .section-header {
           display: flex; align-items: center; gap: 10px;
           padding: 8px 0; margin-bottom: 12px;
           cursor: pointer; transition: color 0.15s;
+          color: #F1F5F9;
         }
-        .section-header:hover { color: #1D4ED8; }
+        .section-header:hover { color: #93C5FD; }
         .clickable-row {
           display: flex; justify-content: space-between; padding: 8px 0;
-          border-bottom: 1px solid #F1F5F9; font-size: 13px;
+          border-bottom: 1px solid #1E293B; font-size: 13px;
           cursor: pointer; transition: background 0.15s;
         }
-        .clickable-row:hover { background: #FAFBFF; }
+        .clickable-row:hover { background: #1E293B; }
         .clickable-row:last-child { border-bottom: none; }
         .total-row {
           display: flex; justify-content: space-between; padding: 12px 0;
-          font-weight: 700; font-size: 15px; border-top: 2px solid #E2E8F0;
+          font-weight: 700; font-size: 15px; border-top: 2px solid #1E293B;
         }
         .net-profit-card {
           border-radius: 14px; padding: 24px; text-align: center;
           border: 2px solid; margin-top: 8px;
         }
-        .hint { font-size: 10px; color: #94A3B8; margin-top: 2px; }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .summary-item { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 16px; }
+        .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94A3B8; margin-bottom: 4px; }
+        .summary-value { font-size: 22px; font-weight: 800; color: #F1F5F9; }
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        <button onClick={() => router.push("/dashboard/reports")} style={{ background: "white", border: "1px solid #E2E8F0", borderRadius: 8, padding: "8px 12px", cursor: "pointer" }}>
+        <button onClick={() => router.push("/dashboard/reports")} style={{ background: "transparent", border: "1.5px solid #334155", borderRadius: 8, padding: "8px 12px", cursor: "pointer", color: "#CBD5E1", display: "inline-flex", alignItems: "center", gap: 6 }}>
           <ArrowLeft size={16} />
         </button>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", margin: 0 }}>📈 Profit & Loss Statement</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>📈 Profit & Loss Statement</h1>
           <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>Revenue – Expenses = Net Profit · Click any row to drill down</p>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="summary-grid">
+        <div className="summary-item">
+          <div className="summary-label">Total Revenue</div>
+          <div className="summary-value" style={{ color: "#10B981" }}>PKR {totalRevenue.toLocaleString()}</div>
+        </div>
+        <div className="summary-item">
+          <div className="summary-label">Total Expenses</div>
+          <div className="summary-value" style={{ color: "#EF4444" }}>PKR {totalExpenses.toLocaleString()}</div>
+        </div>
+        <div className="summary-item">
+          <div className="summary-label">Net Profit</div>
+          <div className="summary-value" style={{ color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
+            PKR {netProfit.toLocaleString()}
+          </div>
         </div>
       </div>
 
@@ -147,7 +169,7 @@ export default function ProfitLossPage() {
                 </div>
                 {items.map(a => (
                   <div key={a.id} className="clickable-row" style={{ paddingLeft: 16 }} onClick={() => openLedger(a.id)} title={`View ledger for ${a.code}`}>
-                    <span style={{ color: "#475569" }}>{a.code} – {a.name}</span>
+                    <span style={{ color: "#94A3B8" }}>{a.code} – {a.name}</span>
                     <span style={{ fontWeight: 500 }}>PKR {(a.balance || 0).toLocaleString()}</span>
                   </div>
                 ))}
@@ -162,16 +184,16 @@ export default function ProfitLossPage() {
 
         {/* Net Profit Card */}
         <div className="net-profit-card" style={{
-          background: netProfit >= 0 ? "#F0FDF4" : "#FEF2F2",
+          background: netProfit >= 0 ? "#064E3B" : "#1E293B",
           borderColor: netProfit >= 0 ? "#10B981" : "#EF4444",
         }}>
-          <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "#64748B", letterSpacing: 0.06 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", letterSpacing: 0.06 }}>
             Net Profit (Loss)
           </div>
           <div style={{ fontSize: 32, fontWeight: 800, color: netProfit >= 0 ? "#10B981" : "#EF4444", marginTop: 4 }}>
             PKR {netProfit.toLocaleString()}
           </div>
-          <div style={{ fontSize: 12, color: "#64748B", marginTop: 4 }}>
+          <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 4 }}>
             {netProfit >= 0 ? "Your business is profitable" : "Loss for the period"}
           </div>
         </div>
