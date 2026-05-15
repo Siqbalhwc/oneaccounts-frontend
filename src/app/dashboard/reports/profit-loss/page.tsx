@@ -5,7 +5,6 @@ import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft } from "lucide-react"
 import { useRouter } from "next/navigation"
 
-// Category mapping for expense accounts
 function getCategory(account: any): string {
   if (account.category) return account.category
   const code = account.code
@@ -61,7 +60,6 @@ export default function ProfitLossPage() {
     router.push(`/dashboard/reports/ledger?accountId=${accountId}&startDate=${now.getFullYear()}-01-01&endDate=${now.toISOString().split("T")[0]}`)
   }
 
-  // Row component
   const Row = ({ label, amount, bold, indent, color, onClick }: any) => (
     <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #1E293B", fontSize: 13, fontWeight: bold ? 700 : 400, cursor: onClick ? "pointer" : "default", paddingLeft: indent ? 24 : 0, color: color || "#E2E8F0" }}
          onClick={onClick} title={onClick ? "Drill down" : undefined}>

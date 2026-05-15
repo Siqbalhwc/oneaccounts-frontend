@@ -6,7 +6,6 @@ import { ArrowLeft, Wallet, Landmark } from "lucide-react"
 import { useRouter } from "next/navigation"
 import PremiumGuard from "@/components/PremiumGuard"
 
-// Fallback category mapper
 function getCategory(account: any): string {
   if (account.category) return account.category
   const code = account.code
@@ -36,7 +35,6 @@ function BalanceSheetContent() {
     supabase.from("accounts").select("*").order("code").then(r => r.data && setAccounts(r.data))
   }, [])
 
-  // Group accounts by category
   const grouped = accounts.reduce((acc: Record<string, any[]>, a) => {
     const cat = getCategory(a)
     if (!acc[cat]) acc[cat] = []
@@ -52,12 +50,10 @@ function BalanceSheetContent() {
   const totalLiabilities = accounts.filter(a => a.type === "Liability").reduce((s, a) => s + (a.balance || 0), 0)
   const totalEquityAccounts = accounts.filter(a => a.type === "Equity").reduce((s, a) => s + (a.balance || 0), 0)
 
-  // Net profit (same as P&L) – will be shown as Retained Earnings
   const revenue = accounts.filter(a => a.type === "Revenue").reduce((s, a) => s + (a.balance || 0), 0)
   const expenses = accounts.filter(a => a.type === "Expense").reduce((s, a) => s + (a.balance || 0), 0)
   const netProfit = revenue - expenses
 
-  // Total equity = existing equity + net profit (retained earnings)
   const totalEquity = totalEquityAccounts + netProfit
 
   const navigateToTrialBalance = (type: string, category?: string) => {
@@ -129,7 +125,6 @@ function BalanceSheetContent() {
         </div>
       </div>
 
-      {/* Summary Cards */}
       <div className="summary-grid">
         <div className="summary-item">
           <div className="summary-label">Total Assets</div>
@@ -146,7 +141,6 @@ function BalanceSheetContent() {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, maxWidth: 1000, margin: "0 auto" }}>
-        {/* Assets */}
         <div className="card">
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
             <Wallet size={20} color="#1E3A8A" />
@@ -158,7 +152,6 @@ function BalanceSheetContent() {
           </div>
         </div>
 
-        {/* Liabilities + Equity */}
         <div className="card">
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
             <Landmark size={20} color="#8B5CF6" />
@@ -166,7 +159,6 @@ function BalanceSheetContent() {
           </div>
           <CategoryBlock title="Liabilities" categories={liabilityCategories} type="Liability" color="#EF4444" />
 
-          {/* Equity section with Retained Earnings */}
           <h3 style={{ fontSize: 16, fontWeight: 700, color: "#8B5CF6", marginBottom: 12, cursor: "pointer" }}
               onClick={() => navigateToTrialBalance("Equity")}>
             Equity
@@ -178,7 +170,6 @@ function BalanceSheetContent() {
               <span style={{ fontWeight: 500 }}>PKR {(a.balance || 0).toLocaleString()}</span>
             </div>
           ))}
-          {/* Retained Earnings */}
           <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", fontWeight: 600, fontSize: 13, color: "#E2E8F0", cursor: "pointer" }}
                onClick={() => navigateToTrialBalance("Revenue")}>
             <span>Retained Earnings</span>
