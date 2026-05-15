@@ -31,7 +31,7 @@ export default function BudgetsPage() {
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
   const [businessType, setBusinessType] = useState<string>("")
 
-  // Master data – Expense + Asset accounts
+  // Master data – ONLY Fixed Assets
   const [accounts, setAccounts] = useState<any[]>([])
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
@@ -67,8 +67,14 @@ export default function BudgetsPage() {
       setCompanyId(cid)
       supabase.from("companies").select("business_type").eq("id", cid).single()
         .then(r => r.data && setBusinessType(r.data.business_type || ""))
-      supabase.from("accounts").select("id, code, name, type")
-        .eq("company_id", cid).in("type", ["Expense","Asset"]).order("code")
+      // Only Fixed Assets (category = 'Fixed Assets' OR code 1400-1499)
+      supabase.from("accounts")
+        .select("id, code, name, type")
+        .eq("company_id", cid)
+        .eq("type", "Asset")
+        .gte("code", "1400")
+        .lte("code", "1499")
+        .order("code")
         .then(r => r.data && setAccounts(r.data))
       supabase.from("projects").select("id, name, donor_id").eq("company_id", cid).is("deleted_at", null).order("name")
         .then(r => r.data && setProjects(r.data))
@@ -459,9 +465,9 @@ export default function BudgetsPage() {
         .sub-header th { background: #1E293B; font-weight: 600; font-size: 9px; color: #94A3B8; }
         .input-budget { width: 70px; text-align: right; border: 1px solid #334155; border-radius: 4px; padding: 2px 4px; font-size: 10px; background: #1E293B; color: #F1F5F9; }
         .total-row td { font-weight: 700; background: #1E293B; color: #F1F5F9; }
-        .btn-primary { padding: 10px 20px; background: #1E3A8A; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; margin-top: 16px; }
+        .btn-primary { padding: 10px 20px; background: #1E3A8A; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; margin-top: 16px; display: inline-flex; align-items: center; gap: 6px; }
         .btn-primary:hover { background: #1E40AF; }
-        .btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
+        .btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; display: inline-flex; align-items: center; gap: 6px; }
         .btn-outline:hover { background: #1E293B; }
         h2 { color: #F1F5F9; }
         p { color: #94A3B8; }
