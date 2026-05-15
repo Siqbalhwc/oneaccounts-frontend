@@ -49,7 +49,7 @@ export default function TrialBalancePage() {
 
   useEffect(() => {
     const fetchData = async () => {
-      // 1. Get current user's company_id (explicit filter, extra safety)
+      // Get company ID
       const { data: { user } } = await supabase.auth.getUser()
       const cid = (user?.app_metadata as any)?.company_id
       if (!cid) {
@@ -57,57 +57,38 @@ export default function TrialBalancePage() {
         return
       }
 
-      // 2. Fetch all accounts for type/category info (scoped to company)
+      // Fetch all accounts for this company
       const { data: accounts } = await supabase
         .from("accounts")
-        .select("id, code, name, type, category")
+        .select("*")
         .eq("company_id", cid)
         .order("code")
-      const map: Record<number, any> = {}
-      accounts?.forEach(a => { map[a.id] = a })
 
-      // 3. Fetch journal lines (exclude soft‑deleted entries, scoped to company)
-      const { data: lines, error } = await supabase
-        .from("journal_lines")
-        .select("account_id, debit, credit, journal_entries!inner(deleted_at, company_id)")
-        .eq("company_id", cid)
-        .is("journal_entries.deleted_at", null)
-        .eq("journal_entries.company_id", cid)
-      if (error) {
-        console.error(error)
+      if (!accounts) {
         setLoading(false)
         return
       }
 
-      // 4. Aggregate per account
-      const agg: Record<number, { totalDr: number; totalCr: number }> = {}
-      lines?.forEach((l: any) => {
-        const aid = l.account_id
-        if (!agg[aid]) agg[aid] = { totalDr: 0, totalCr: 0 }
-        agg[aid].totalDr += l.debit || 0
-        agg[aid].totalCr += l.credit || 0
-      })
-
-      // 5. Build rows with correct debit/credit classification (case‑insensitive)
-      const rows = Object.entries(agg).map(([accId, totals]) => {
-        const acc = map[Number(accId)] || { code: "?", name: "Unknown", type: "Asset", category: "Other" }
-        const category = acc.category || getFallbackCategory(acc.code)
-        const net = totals.totalDr - totals.totalCr
-
-        // Use lowercase for safe comparison
+      // Build trial balance rows
+      const rows = accounts.map(acc => {
+        const balance = acc.balance || 0
         const typeLower = (acc.type || "").toLowerCase()
         let debit = 0, credit = 0
+
         if (typeLower === "asset" || typeLower === "expense") {
-          debit = net > 0 ? net : 0
-          credit = net < 0 ? -net : 0
+          // Normal debit balance
+          debit = balance > 0 ? balance : 0
+          credit = balance < 0 ? -balance : 0
         } else {
-          // liability, equity, revenue, or anything else
-          credit = net > 0 ? net : 0
-          debit = net < 0 ? -net : 0
+          // Liability, Equity, Revenue – normal credit balance
+          credit = balance > 0 ? balance : 0
+          debit = balance < 0 ? -balance : 0
         }
 
+        const category = acc.category || getFallbackCategory(acc.code)
+
         return {
-          id: Number(accId),
+          id: acc.id,
           code: acc.code,
           name: acc.name,
           type: acc.type,
