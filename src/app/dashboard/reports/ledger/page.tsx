@@ -107,9 +107,12 @@ export default function LedgerPage() {
       <style>{`
         .card { background: #111827; border-radius: 12px; border: 1px solid #1E293B; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
         .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-        .btn-primary { background: #2563EB; color: white; }
+        .btn-primary { background: #1E3A8A; color: white; }
+        .btn-primary:hover { background: #1E40AF; }
         .btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
+        .btn-outline:hover { background: #1E293B; }
         .input { height: 38px; border: 1px solid #334155; border-radius: 8px; padding: 0 12px; font-size: 13px; box-sizing: border-box; background: #1E293B; color: #F1F5F9; }
+        .input:focus { border-color: #64748B; outline: none; }
         .clickable-entry { color: #93C5FD; font-weight: 600; text-decoration: underline; cursor: pointer; }
         .clickable-entry:hover { color: #2563EB; }
         table { width: 100%; border-collapse: collapse; color: #E2E8F0; }
