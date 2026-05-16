@@ -71,20 +71,8 @@ export default function NewBillPage() {
       supabase.from("companies").select("business_type").eq("id", cid).single()
         .then(r => r.data && setBusinessType(r.data.business_type || ""))
 
-      supabase.from("suppliers")
-        .select("id,code,name,phone,balance,default_project_id,default_location_id,default_activity_id")
-        .eq("company_id", cid)
-        .order("name")
-        .then(r => {
-          if (r.data) setSuppliers(r.data)
-        })
-
-      supabase.from("products")
-        .select("id,code,name,cost_price,qty_on_hand,image_path")
-        .eq("company_id", cid)
-        .is("deleted_at", null)
-        .order("name")
-        .then(r => r.data && setProducts(r.data))
+      loadSuppliers()
+      loadProducts()
 
       supabase.from("accounts")
         .select("id,code,name,type")
@@ -104,6 +92,29 @@ export default function NewBillPage() {
       setLoading(false)
     })
   }, [])
+
+  // ── Load suppliers ──
+  const loadSuppliers = () => {
+    if (!companyId) return
+    supabase.from("suppliers")
+      .select("id,code,name,phone,balance,default_project_id,default_location_id,default_activity_id")
+      .eq("company_id", companyId)
+      .order("name")
+      .then(r => {
+        if (r.data) setSuppliers(r.data)
+      })
+  }
+
+  // ── Load products ──
+  const loadProducts = () => {
+    if (!companyId) return
+    supabase.from("products")
+      .select("id,code,name,cost_price,qty_on_hand,image_path")
+      .eq("company_id", companyId)
+      .is("deleted_at", null)
+      .order("name")
+      .then(r => r.data && setProducts(r.data))
+  }
 
   // ── If editing, load existing bill ──
   useEffect(() => {
@@ -214,7 +225,6 @@ export default function NewBillPage() {
     const key = `${activityId}_${accountId}`
     if (budgetInfo[key]) return
 
-    // Get budget amount
     const { data: budgetRows } = await supabase.from("budgets")
       .select("budgeted_amount")
       .eq("company_id", companyId)
@@ -224,7 +234,6 @@ export default function NewBillPage() {
       .is("month", null)
       .maybeSingle()
 
-    // Get actual spent on this activity+account (from journal_lines)
     const { data: spentRows } = await supabase.from("journal_lines")
       .select("debit, credit")
       .eq("company_id", companyId)
@@ -281,19 +290,15 @@ export default function NewBillPage() {
     if (field === "activity_id" && value) {
       fetchProjectAndDonor(Number(value))
     }
-    // Check budget when activity or account changes
     if ((field === "activity_id" || field === "account_id") && updated[idx].activity_id && updated[idx].account_id) {
       fetchBudget(Number(updated[idx].activity_id), Number(updated[idx].account_id))
     }
     setItems(updated)
-
-    // Budget warning
     checkBudgetOverrun(updated)
   }
 
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
 
-  // ── Budget overrun check ──
   const checkBudgetOverrun = (currentItems: any[]) => {
     let overBudget = false
     for (const item of currentItems) {
@@ -311,13 +316,16 @@ export default function NewBillPage() {
 
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
 
-  // ── Bill number ──
+  // ── Bill number (exclude soft‑deleted bills) ──
   const getNextBillNo = async (suppCode: string): Promise<string> => {
     const { data } = await supabase
-      .from("invoices").select("invoice_no")
+      .from("invoices")
+      .select("invoice_no")
       .like("invoice_no", `${suppCode}-%`)
       .eq("type", "purchase")
-      .order("invoice_no", { ascending: false }).limit(1)
+      .is("deleted_at", null)               // ← FIX: ignore soft‑deleted bills
+      .order("invoice_no", { ascending: false })
+      .limit(1)
     let nextNum = 1
     if (data && data.length > 0) {
       const last = data[0].invoice_no
@@ -331,7 +339,6 @@ export default function NewBillPage() {
     if (!supplierId)          { setError("Please select a supplier"); return }
     if (items.length === 0)   { setError("Add at least one item"); return }
 
-    // Validate manual items
     for (const item of items) {
       if (!item.product_id) {
         if (!item.location_id || !item.activity_id || !item.account_id) {
@@ -341,7 +348,6 @@ export default function NewBillPage() {
       }
     }
 
-    // NGO donor enforcement
     if (businessType === "ngo" && items.some(i => !i.product_id && i.activity_id)) {
       const firstActivityId = Number(items.find(i => !i.product_id && i.activity_id)?.activity_id)
       if (firstActivityId) {
@@ -359,7 +365,6 @@ export default function NewBillPage() {
       }
     }
 
-    // Budget overrun block
     if (budgetError) {
       setError("Cannot save: some lines exceed the available budget. Adjust amounts or select a different activity.")
       return
@@ -404,6 +409,8 @@ export default function NewBillPage() {
       }
 
       setFlash(`✅ Bill ${editId ? "updated" : "saved"} successfully!`)
+      // Refresh supplier list to show updated balances
+      loadSuppliers()
       if (editId) {
         router.push(`/dashboard/bills/${editId}`)
       } else {
@@ -458,7 +465,7 @@ export default function NewBillPage() {
     <div style={{ padding: "16px", background: "#0B1120", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
       <style>{`
         .inv-shell { max-width: 1200px; margin: 0 auto; }
-        .inv-title { font-size: 18px; font-weight: 700; color: "#F1F5F9"; }
+        .inv-title { font-size: 18px; font-weight: 700; color: #F1F5F9; }
         .inv-card {
           background: #111827; border-radius: 12px; border: 1px solid #1E293B;
           padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
@@ -514,14 +521,14 @@ export default function NewBillPage() {
         }
         .cust-option:last-child { border-bottom: none; }
         .cust-option:hover { background: #1E293B; }
-        .cust-option-name { font-size: 13px; font-weight: 600; color: "#F1F5F9"; }
+        .cust-option-name { font-size: 13px; font-weight: 600; color: #F1F5F9; }
         .cust-option-meta { font-size: 11px; color: #94A3B8; }
         .cust-option-bal { font-size: 12px; font-weight: 600; color: #93C5FD; white-space: nowrap; }
         .cust-selected-badge {
           display: inline-flex; align-items: center; gap: 6px;
           background: #1E293B; border: 1.5px solid #334155;
           border-radius: 8px; padding: 6px 12px; font-size: 13px;
-          font-weight: 600; color: "#F1F5F9"; width: 100%; cursor: pointer;
+          font-weight: 600; color: #F1F5F9; width: 100%; cursor: pointer;
         }
 
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
