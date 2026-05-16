@@ -35,6 +35,13 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [totalReceivables, setTotalReceivables] = useState(0)
   const [totalPayables, setTotalPayables] = useState(0)
 
+  // New – Monthly Spending
+  const [monthlySpending, setMonthlySpending] = useState(0)
+  // New – Top 3 underspent activities
+  const [underspentActivities, setUnderspentActivities] = useState<any[]>([])
+  // New – Unpaid invoices details (list with amount)
+  const [unpaidDetails, setUnpaidDetails] = useState<any[]>([])
+
   // ── Fetch company ID and master data ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -106,6 +113,74 @@ export default function ManagementDashboard({ role }: { role: string }) {
       const { data: suppBals } = await supabase.from("suppliers").select("balance").eq("company_id", companyId)
       setTotalPayables(suppBals?.reduce((s, s2) => s + (s2.balance || 0), 0) || 0)
 
+      // ── Monthly Spending (current month) ──
+      const now = new Date()
+      const startOfMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`
+      const endOfMonth = now.toISOString().split("T")[0]
+      const { data: monthLines } = await supabase
+        .from("journal_lines")
+        .select("debit, credit")
+        .eq("company_id", companyId)
+        .gte("journal_entries(date)", startOfMonth)
+        .lte("journal_entries(date)", endOfMonth)
+      const monthTotal = (monthLines || []).reduce((sum, l) => sum + (l.debit || 0) - (l.credit || 0), 0)
+      setMonthlySpending(monthTotal)
+
+      // ── Top 3 underspent activities (budgeted_amount - actual for current month) ──
+      // Fetch activities with budgets for this fiscal year
+      const { data: actBudgets } = await supabase
+        .from("budgets")
+        .select("activity_id, activities(name), budgeted_amount")
+        .eq("company_id", companyId)
+        .eq("fiscal_year", fiscalYear)
+        .is("month", null)
+      const activityMap: Record<number, { name: string; budget: number; actual: number }> = {}
+      actBudgets?.forEach((b: any) => {
+        if (!b.activity_id) return
+        if (!activityMap[b.activity_id]) {
+          activityMap[b.activity_id] = {
+            name: b.activities?.name || `Activity ${b.activity_id}`,
+            budget: 0,
+            actual: 0,
+          }
+        }
+        activityMap[b.activity_id].budget += b.budgeted_amount || 0
+      })
+      // Get actuals for current month for those activities
+      const { data: actLines } = await supabase
+        .from("journal_lines")
+        .select("activity_id, debit, credit")
+        .eq("company_id", companyId)
+        .gte("journal_entries(date)", startOfMonth)
+        .lte("journal_entries(date)", endOfMonth)
+      actLines?.forEach((l: any) => {
+        if (!l.activity_id || !activityMap[l.activity_id]) return
+        activityMap[l.activity_id].actual += (l.debit || 0) - (l.credit || 0)
+      })
+      // Calculate remaining and sort
+      const underspent = Object.values(activityMap)
+        .filter((a: any) => a.budget > 0)
+        .map((a: any) => ({
+          name: a.name,
+          budget: a.budget,
+          actual: a.actual,
+          remaining: a.budget - a.actual,
+          pct: a.budget > 0 ? Math.round(((a.budget - a.actual) / a.budget) * 100) : 0,
+        }))
+        .sort((a: any, b: any) => b.remaining - a.remaining)
+        .slice(0, 3)
+      setUnderspentActivities(underspent)
+
+      // ── Unpaid invoice details (top 5 by amount) ──
+      const { data: unpaidInvs } = await supabase
+        .from("invoices")
+        .select("id, invoice_no, total, party_id, customers(name)")
+        .eq("company_id", companyId)
+        .eq("status", "Unpaid")
+        .order("total", { ascending: false })
+        .limit(5)
+      setUnpaidDetails(unpaidInvs || [])
+
       setLoading(false)
     }
 
@@ -146,12 +221,17 @@ export default function ManagementDashboard({ role }: { role: string }) {
     return "Good evening"
   }
 
-  // ── Formatting (always in millions for dashboard consistency) ──
+  // ── Formatting ──
   const formatPKR = (v: number) => {
     const sign = v < 0 ? "-" : ""
     const abs = Math.abs(v)
     if (abs >= 1_000_000) return `${sign}PKR ${(abs / 1_000_000).toFixed(1)}M`
     return `${sign}PKR ${(abs / 1_000_000).toFixed(1)}M`
+  }
+
+  const formatDetail = (v: number) => {
+    const sign = v < 0 ? "-" : ""
+    return `${sign}PKR ${Math.abs(v).toLocaleString()}`
   }
 
   // ── Build query string for detail pages ──
@@ -219,7 +299,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .mgmt .warning-banner {
           background: #1E293B;
           border: 1px solid #1E293B;
-          border-left: 6px solid #2563EB;
+          border-left: 6px solid #1E3A8A;
           border-radius: 10px; padding: 8px 16px;
           margin-bottom: 1rem; display: flex;
           align-items: center; justify-content: space-between;
@@ -231,7 +311,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           display: flex; align-items: center; gap: 0.5rem;
         }
         .mgmt .warning-btn {
-          background: #2563EB; color: white; border: none;
+          background: #1E3A8A; color: white; border: none;
           border-radius: 6px; padding: 6px 14px;
           font-weight: 600; cursor: pointer; font-size: 0.8rem;
           white-space: nowrap;
@@ -251,42 +331,15 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .mgmt .kpi-value { font-size: 1.7rem; font-weight: 700; color: #F1F5F9; line-height: 1.2; }
         .mgmt .kpi-meta { font-size: 0.8rem; color: #64748B; display: flex; align-items: center; gap: 0.3rem; }
 
-        /* CRM card */
-        .mgmt .crm-card {
-          background: #111827; border: 1px solid #1E293B;
-          border-radius: 18px; padding: 1.2rem 1.3rem;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-          display: flex; flex-direction: column; gap: 0.6rem;
-        }
-        .mgmt .crm-labels {
-          display: flex; flex-wrap: wrap; gap: 0.5rem;
-        }
-        .mgmt .crm-pill {
-          background: #1E293B; border-radius: 20px;
-          padding: 0.3rem 0.9rem; font-size: 0.75rem;
-          font-weight: 600; color: #E2E8F0;
-        }
-
-        /* Donor / Project rows */
-        .mgmt .section-title { font-weight: 700; font-size: 0.95rem; color: #F1F5F9; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.3rem; }
-        .mgmt .donor-row, .mgmt .project-row {
-          display: flex; align-items: center; gap: 0.8rem;
-          background: #111827; border-radius: 12px; padding: 0.5rem 1rem;
-          border: 1px solid #1E293B; cursor: pointer; margin-bottom: 0.5rem;
-          flex-wrap: wrap;
-        }
-        .mgmt .progress-bg { height: 5px; background: #334155; border-radius: 10px; width: 70px; overflow: hidden; }
-        .mgmt .progress-fill { height: 100%; border-radius: 10px; }
-        .mgmt .badge {
-          padding: 0.1rem 0.6rem; border-radius: 12px;
-          font-size: 0.7rem; font-weight: 700;
-        }
-        .mgmt .badge-danger { background: #fee2e2; color: #991b1b; }
-        .mgmt .badge-warning { background: #fef3c7; color: #92400e; }
-        .mgmt .badge-success { background: #dcfce7; color: #166534; }
-
         .mgmt .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
         .mgmt .two-col { display: grid; grid-template-columns: 1.5fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+
+        /* Underspend / detail rows */
+        .mgmt .underspend-row {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 0.5rem 0; border-bottom: 1px solid #1E293B;
+        }
+        .mgmt .underspend-row:last-child { border-bottom: none; }
 
         /* ── RESPONSIVE ── */
         @media (max-width: 800px) {
@@ -350,7 +403,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </div>
         )}
 
-        {/* KPI row */}
+        {/* KPI row – now includes Monthly Spending */}
         <div className="kpi-grid">
           <div className="kpi-card" onClick={() => router.push("/dashboard/reports/budget-summary" + detailQuery())}>
             <div className="kpi-label">Total Budget</div>
@@ -383,20 +436,35 @@ export default function ManagementDashboard({ role }: { role: string }) {
             </div>
             <div className="kpi-meta">{Math.round((1 - filteredOverspentCount / Math.max(filteredProjectRows.length, 1)) * 100)}% health score</div>
           </div>
+          {/* Monthly Spending */}
+          <div className="kpi-card">
+            <div className="kpi-label">📆 Monthly Spending</div>
+            <div className="kpi-value" style={{ color: "#EF4444" }}>{formatPKR(monthlySpending)}</div>
+            <div className="kpi-meta">{new Date().toLocaleString('default', { month: 'long' })}</div>
+          </div>
         </div>
 
         {/* Project Utilization & Donor Balances */}
         <div className="two-col">
           <div className="card">
-            <div className="section-title">📊 Project Utilization</div>
+            <div className="kpi-label" style={{ fontWeight: 700, fontSize: "0.95rem", color: "#F1F5F9", marginBottom: "0.8rem" }}>📊 Project Utilization</div>
             {filteredProjectRows.map((p, idx) => (
-              <div key={idx} className="project-row" onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}`)}>
+              <div key={idx} className="project-row" onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}`)} style={{
+                display: "flex", alignItems: "center", gap: "0.8rem",
+                background: "#111827", borderRadius: "12px", padding: "0.5rem 1rem",
+                border: "1px solid #1E293B", cursor: "pointer", marginBottom: "0.5rem",
+                flexWrap: "wrap",
+              }}>
                 <div style={{ width: 8, height: 8, borderRadius: "50%", background: p.pct > 100 ? "#dc2626" : p.pct > 80 ? "#f59e0b" : "#16a34a", flexShrink: 0 }}></div>
                 <span style={{ flex: 1, fontWeight: 600, fontSize: "0.85rem", color: "#E2E8F0" }}>{p.name}</span>
                 <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
                   <span style={{ fontWeight: 600, minWidth: 60, fontSize: "0.8rem", color: "#E2E8F0" }}>{formatPKR(p.actual)}</span>
                   <span style={{ minWidth: 50, color: p.pct > 100 ? "#dc2626" : p.pct > 80 ? "#d97706" : "#16a34a", fontSize: "0.8rem" }}>{p.pct}%</span>
-                  <span className={`badge ${p.pct > 100 ? "badge-danger" : p.pct > 80 ? "badge-warning" : "badge-success"}`}>
+                  <span className={`badge ${p.pct > 100 ? "badge-danger" : p.pct > 80 ? "badge-warning" : "badge-success"}`} style={{
+                    padding: "0.1rem 0.6rem", borderRadius: "12px", fontSize: "0.7rem", fontWeight: 700,
+                    background: p.pct > 100 ? "#fee2e2" : p.pct > 80 ? "#fef3c7" : "#dcfce7",
+                    color: p.pct > 100 ? "#991b1b" : p.pct > 80 ? "#92400e" : "#166534",
+                  }}>
                     {p.pct > 100 ? "Overspent" : p.pct > 80 ? "Review" : "On Track"}
                   </span>
                 </div>
@@ -405,9 +473,14 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </div>
 
           <div className="card">
-            <div className="section-title">💧 Donor Balances</div>
+            <div className="kpi-label" style={{ fontWeight: 700, fontSize: "0.95rem", color: "#F1F5F9", marginBottom: "0.8rem" }}>💧 Donor Balances</div>
             {filteredDonorBalances.map((d, idx) => (
-              <div key={idx} className="donor-row" onClick={() => router.push(`/dashboard/settings/budgets?donor=${d.donor_id}`)}>
+              <div key={idx} className="donor-row" onClick={() => router.push(`/dashboard/settings/budgets?donor=${d.donor_id}`)} style={{
+                display: "flex", alignItems: "center", gap: "0.8rem",
+                background: "#111827", borderRadius: "12px", padding: "0.5rem 1rem",
+                border: "1px solid #1E293B", cursor: "pointer", marginBottom: "0.5rem",
+                flexWrap: "wrap",
+              }}>
                 <div style={{ width: 8, height: 8, borderRadius: "50%", background: d.overspent ? "#dc2626" : "#1e3a8a", flexShrink: 0 }}></div>
                 <span style={{ flex: 1, fontWeight: 600, fontSize: "0.85rem", color: "#E2E8F0" }}>{d.name}</span>
                 <span style={{ fontWeight: 700, fontSize: "0.85rem", color: "#E2E8F0" }}>{formatPKR(d.remaining)}</span>
@@ -417,27 +490,44 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </div>
         </div>
 
-        {/* Quick stats + CRM */}
+        {/* Quick stats + Underspend */}
         <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginBottom: "1rem" }}>
-          <div className="card" style={{ flex: 1, minWidth: 140 }}>
-            <div className="kpi-label">📋 Payables</div>
-            <div className="kpi-value">{formatPKR(totalPayables)}</div>
-          </div>
+          {/* Receivables */}
           <div className="card" style={{ flex: 1, minWidth: 140 }}>
             <div className="kpi-label">🧾 Receivables</div>
             <div className="kpi-value">{formatPKR(totalReceivables)}</div>
           </div>
-          <div className="card" style={{ flex: 1, minWidth: 140 }}>
-            <div className="kpi-label">📦 Unpaid Invoices</div>
-            <div className="kpi-value">{unpaidInvoices}</div>
+          {/* Unpaid Invoices – expanded detail */}
+          <div className="card" style={{ flex: 2, minWidth: 280 }}>
+            <div className="kpi-label" style={{ marginBottom: "0.8rem" }}>📦 Unpaid Invoices</div>
+            <div className="kpi-value" style={{ fontSize: "1.4rem" }}>{unpaidInvoices} invoices</div>
+            {unpaidDetails.length > 0 && (
+              <div style={{ marginTop: "0.8rem" }}>
+                {unpaidDetails.map((inv, idx) => (
+                  <div key={idx} className="underspend-row">
+                    <span style={{ fontSize: "0.8rem", color: "#E2E8F0" }}>{inv.invoice_no}</span>
+                    <span style={{ fontSize: "0.8rem", color: "#94A3B8" }}>{inv.customers?.name || "—"}</span>
+                    <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#FCA5A5" }}>{formatDetail(inv.total)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="crm-card" style={{ flex: 2, minWidth: 220 }}>
-            <div className="kpi-label">🧑‍🤝‍🧑 CRM</div>
-            <div className="crm-labels">
-              <span className="crm-pill">Customers</span>
-              <span className="crm-pill">Investors</span>
-              <span className="crm-pill">Suppliers</span>
-            </div>
+          {/* Top 3 Underspend Activities */}
+          <div className="card" style={{ flex: 2, minWidth: 280 }}>
+            <div className="kpi-label" style={{ marginBottom: "0.8rem" }}>💡 Top 3 Underspend Activities</div>
+            {underspentActivities.length === 0 ? (
+              <div style={{ fontSize: "0.8rem", color: "#94A3B8" }}>No activities with remaining budget this month.</div>
+            ) : (
+              underspentActivities.map((act, idx) => (
+                <div key={idx} className="underspend-row">
+                  <span style={{ fontSize: "0.8rem", color: "#E2E8F0", fontWeight: 600 }}>{act.name}</span>
+                  <span style={{ fontSize: "0.8rem", color: "#94A3B8" }}>Budget: {formatDetail(act.budget)}</span>
+                  <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#10B981" }}>{formatDetail(act.remaining)}</span>
+                  <span style={{ fontSize: "0.7rem", color: "#10B981" }}>({act.pct}%)</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
