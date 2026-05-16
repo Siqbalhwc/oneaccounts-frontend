@@ -90,7 +90,7 @@ async function createBillJournalEntry(
 
     debitLines.push(line)
 
-    // ✅ Update product stock safely (read‑modify‑write)
+    // Update product stock safely (read‑modify‑write)
     if (item.product_id) {
       const { data: currentProduct } = await supabase
         .from('products')
@@ -263,12 +263,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Journal entry failed: ' + e.message }, { status: 500 })
   }
 
+  // Update supplier balance (increase payable)
+  const { data: supplier } = await supabase.from('suppliers')
+    .select('balance').eq('id', party_id).eq('company_id', companyId).single()
+  if (supplier) {
+    await supabase.from('suppliers')
+      .update({ balance: (supplier.balance || 0) + total })
+      .eq('id', party_id).eq('company_id', companyId)
+  }
+
   await logDataChange('invoices', String(updatedBill.id), 'INSERT', undefined, updatedBill)
 
   return NextResponse.json({ success: true, bill: updatedBill })
 }
 
-// ── PUT (Update) ─────────────────────────────────────────────────────────
+// ═══════════════════ PUT – Update Bill (now updates supplier balance) ═══════════════════
 export async function PUT(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -325,6 +334,18 @@ export async function PUT(request: NextRequest) {
     }
   }
 
+  // Reverse old supplier balance (remove old bill total)
+  if (oldBill.party_id) {
+    const { data: supp } = await supabase.from('suppliers')
+      .select('balance').eq('id', oldBill.party_id).eq('company_id', companyId).single()
+    if (supp) {
+      // Subtract the old total because it was added when the bill was created
+      await supabase.from('suppliers')
+        .update({ balance: (supp.balance || 0) - (oldBill.total || 0) })
+        .eq('id', oldBill.party_id).eq('company_id', companyId)
+    }
+  }
+
   // Delete old items and insert new
   await supabase.from('invoice_items').delete().eq('invoice_id', id)
 
@@ -366,6 +387,17 @@ export async function PUT(request: NextRequest) {
     await createBillJournalEntry(supabase, updatedBill, items, companyId, businessType)
   } catch (e: any) {
     return NextResponse.json({ error: 'Journal entry failed after update: ' + e.message }, { status: 500 })
+  }
+
+  // Apply new supplier balance (add new total)
+  if (updatedBill.party_id) {
+    const { data: supp } = await supabase.from('suppliers')
+      .select('balance').eq('id', updatedBill.party_id).eq('company_id', companyId).single()
+    if (supp) {
+      await supabase.from('suppliers')
+        .update({ balance: (supp.balance || 0) + total })
+        .eq('id', updatedBill.party_id).eq('company_id', companyId)
+    }
   }
 
   if (oldBill) {
@@ -423,6 +455,17 @@ export async function DELETE(request: NextRequest) {
 
   const { data: oldBill } = await supabase.from('invoices')
     .select('*').eq('id', id).eq('company_id', companyId).single()
+
+  // Reverse supplier balance
+  if (oldBill?.party_id) {
+    const { data: supp } = await supabase.from('suppliers')
+      .select('balance').eq('id', oldBill.party_id).eq('company_id', companyId).single()
+    if (supp) {
+      await supabase.from('suppliers')
+        .update({ balance: (supp.balance || 0) - (oldBill.total || 0) })
+        .eq('id', oldBill.party_id).eq('company_id', companyId)
+    }
+  }
 
   await supabase.from('invoice_items').delete().eq('invoice_id', id)
   const { error } = await supabase.from('invoices')
