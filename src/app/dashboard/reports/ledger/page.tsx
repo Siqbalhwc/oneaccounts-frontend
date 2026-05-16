@@ -55,7 +55,7 @@ export default function LedgerPage() {
       .then((r) => r.data && setAccounts(r.data))
   }, [])
 
-  // Load ledger
+  // Load ledger – universal rule
   const loadLedger = useCallback(async () => {
     if (!accountId) return
     setLoading(true)
@@ -72,12 +72,9 @@ export default function LedgerPage() {
     const { data } = await query
     if (data) {
       let balance = 0
-      const acc = accounts.find((a) => a.id === accountId)
-      const isDr = acc && ["Asset", "Expense"].includes(acc.type)
       const enriched = data.map((l: any) => {
-        balance = isDr
-          ? balance + l.debit - l.credit
-          : balance + l.credit - l.debit
+        // Universal rule: balance = balance + debit - credit
+        balance = balance + (l.debit || 0) - (l.credit || 0)
         return {
           ...l,
           balance,
@@ -92,7 +89,7 @@ export default function LedgerPage() {
       setLines([])
     }
     setLoading(false)
-  }, [accountId, startDate, endDate, supabase, accounts])
+  }, [accountId, startDate, endDate, supabase])
 
   useEffect(() => {
     loadLedger()
@@ -100,7 +97,7 @@ export default function LedgerPage() {
 
   const acc = accounts.find((a) => a.id === accountId)
 
-  // Sorting logic (client‑side on already fetched data)
+  // Sorting logic (client‑side)
   const sortedLines = useMemo(() => {
     const list = [...lines]
     list.sort((a, b) => {
@@ -260,7 +257,9 @@ export default function LedgerPage() {
               <span style={{ color: "#94A3B8" }}>{l.description}</span>
               <span style={{ textAlign: "right", color: l.debit > 0 ? "#EF4444" : "#94A3B8" }}>{l.debit > 0 ? `PKR ${l.debit.toLocaleString()}` : "-"}</span>
               <span style={{ textAlign: "right", color: l.credit > 0 ? "#10B981" : "#94A3B8" }}>{l.credit > 0 ? `PKR ${l.credit.toLocaleString()}` : "-"}</span>
-              <span style={{ textAlign: "right", fontWeight: 600 }}>PKR {l.balance.toLocaleString()}</span>
+              <span style={{ textAlign: "right", fontWeight: 600, color: l.balance >= 0 ? "#10B981" : "#EF4444" }}>
+                PKR {l.balance.toLocaleString()}
+              </span>
             </div>
           ))}
         </div>
