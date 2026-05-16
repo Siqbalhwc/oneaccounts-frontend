@@ -69,23 +69,16 @@ export default function TrialBalancePage() {
         return
       }
 
-      // Build trial balance rows with CORRECT accounting logic
+      // Build trial balance rows with ONE UNIVERSAL RULE
       const rows = accounts.map(acc => {
-        const balance = acc.balance || 0
-        const typeLower = (acc.type || "").toLowerCase()
+        const balance = acc.balance || 0   // balance = Dr - Cr
         let debit = 0, credit = 0
 
-        // ── ONE UNIFIED LOGIC ──
-        // balance = Dr - Cr for every account
-        // Asset / Expense : normal balance is Debit  → positive balance = Debit
-        // Liability / Equity / Revenue : normal balance is Credit → negative balance = Credit
-        if (typeLower === "asset" || typeLower === "expense") {
-          debit = balance > 0 ? balance : 0
-          credit = balance < 0 ? -balance : 0
-        } else {
-          // Liability, Equity, Revenue
-          credit = balance < 0 ? -balance : 0   // negative → credit (normal)
-          debit = balance > 0 ? balance : 0      // positive → debit (abnormal)
+        // Universal rule: positive → Debit, negative → Credit
+        if (balance > 0) {
+          debit = balance
+        } else if (balance < 0) {
+          credit = -balance
         }
 
         const category = acc.category || getFallbackCategory(acc.code)
