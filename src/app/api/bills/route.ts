@@ -263,13 +263,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Journal entry failed: ' + e.message }, { status: 500 })
   }
 
-  // Update supplier balance (increase payable)
-  const { data: supplier } = await supabase.from('suppliers')
+  // ── Update supplier balance (increase payable) WITH ERROR CHECK ──
+  const { data: supplier, error: suppFetchErr } = await supabase.from('suppliers')
     .select('balance').eq('id', party_id).eq('company_id', companyId).single()
-  if (supplier) {
-    await supabase.from('suppliers')
-      .update({ balance: (supplier.balance || 0) + total })
-      .eq('id', party_id).eq('company_id', companyId)
+  if (suppFetchErr || !supplier) {
+    // Clean up the bill if supplier not found
+    await supabase.from('invoice_items').delete().eq('invoice_id', updatedBill.id)
+    await supabase.from('invoices').delete().eq('id', updatedBill.id)
+    return NextResponse.json({ error: 'Supplier not found' }, { status: 500 })
+  }
+  const { error: balanceUpdateErr } = await supabase.from('suppliers')
+    .update({ balance: (supplier.balance || 0) + total })
+    .eq('id', party_id).eq('company_id', companyId)
+  if (balanceUpdateErr) {
+    // Clean up the bill
+    await supabase.from('invoice_items').delete().eq('invoice_id', updatedBill.id)
+    await supabase.from('invoices').delete().eq('id', updatedBill.id)
+    return NextResponse.json({ error: 'Failed to update supplier balance: ' + balanceUpdateErr.message }, { status: 500 })
   }
 
   await logDataChange('invoices', String(updatedBill.id), 'INSERT', undefined, updatedBill)
@@ -277,7 +287,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ success: true, bill: updatedBill })
 }
 
-// ═══════════════════ PUT – Update Bill (now updates supplier balance) ═══════════════════
+// ═══════════════════ PUT – Update Bill ═══════════════════
 export async function PUT(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -334,15 +344,18 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  // Reverse old supplier balance (remove old bill total)
+  // Reverse old supplier balance (remove old bill total) WITH ERROR CHECK
   if (oldBill.party_id) {
-    const { data: supp } = await supabase.from('suppliers')
+    const { data: supp, error: oldSuppErr } = await supabase.from('suppliers')
       .select('balance').eq('id', oldBill.party_id).eq('company_id', companyId).single()
-    if (supp) {
-      // Subtract the old total because it was added when the bill was created
-      await supabase.from('suppliers')
-        .update({ balance: (supp.balance || 0) - (oldBill.total || 0) })
-        .eq('id', oldBill.party_id).eq('company_id', companyId)
+    if (oldSuppErr || !supp) {
+      return NextResponse.json({ error: 'Failed to fetch supplier for reversal' }, { status: 500 })
+    }
+    const { error: revErr } = await supabase.from('suppliers')
+      .update({ balance: (supp.balance || 0) - (oldBill.total || 0) })
+      .eq('id', oldBill.party_id).eq('company_id', companyId)
+    if (revErr) {
+      return NextResponse.json({ error: 'Reversal failed: ' + revErr.message }, { status: 500 })
     }
   }
 
@@ -389,14 +402,18 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'Journal entry failed after update: ' + e.message }, { status: 500 })
   }
 
-  // Apply new supplier balance (add new total)
+  // Apply new supplier balance (add new total) WITH ERROR CHECK
   if (updatedBill.party_id) {
-    const { data: supp } = await supabase.from('suppliers')
+    const { data: supp, error: suppErr } = await supabase.from('suppliers')
       .select('balance').eq('id', updatedBill.party_id).eq('company_id', companyId).single()
-    if (supp) {
-      await supabase.from('suppliers')
-        .update({ balance: (supp.balance || 0) + total })
-        .eq('id', updatedBill.party_id).eq('company_id', companyId)
+    if (suppErr || !supp) {
+      return NextResponse.json({ error: 'Supplier not found for new balance' }, { status: 500 })
+    }
+    const { error: newBalErr } = await supabase.from('suppliers')
+      .update({ balance: (supp.balance || 0) + total })
+      .eq('id', updatedBill.party_id).eq('company_id', companyId)
+    if (newBalErr) {
+      return NextResponse.json({ error: 'Failed to update supplier balance: ' + newBalErr.message }, { status: 500 })
     }
   }
 
@@ -456,14 +473,18 @@ export async function DELETE(request: NextRequest) {
   const { data: oldBill } = await supabase.from('invoices')
     .select('*').eq('id', id).eq('company_id', companyId).single()
 
-  // Reverse supplier balance
+  // Reverse supplier balance WITH ERROR CHECK
   if (oldBill?.party_id) {
-    const { data: supp } = await supabase.from('suppliers')
+    const { data: supp, error: suppErr } = await supabase.from('suppliers')
       .select('balance').eq('id', oldBill.party_id).eq('company_id', companyId).single()
-    if (supp) {
-      await supabase.from('suppliers')
-        .update({ balance: (supp.balance || 0) - (oldBill.total || 0) })
-        .eq('id', oldBill.party_id).eq('company_id', companyId)
+    if (suppErr || !supp) {
+      return NextResponse.json({ error: 'Failed to fetch supplier for deletion reversal' }, { status: 500 })
+    }
+    const { error: revErr } = await supabase.from('suppliers')
+      .update({ balance: (supp.balance || 0) - (oldBill.total || 0) })
+      .eq('id', oldBill.party_id).eq('company_id', companyId)
+    if (revErr) {
+      return NextResponse.json({ error: 'Balance reversal failed: ' + revErr.message }, { status: 500 })
     }
   }
 
