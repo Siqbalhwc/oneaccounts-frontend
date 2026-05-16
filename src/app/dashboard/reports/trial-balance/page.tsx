@@ -8,7 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 type SortField = "code" | "name" | "type" | "category"
 type SortDir = "asc" | "desc"
 
-// Fallback category for accounts that have no category stored
+// Fallback category for accounts without stored category
 function getFallbackCategory(code?: string): string {
   if (!code) return "Other"
   const num = parseFloat(code)
@@ -38,51 +38,64 @@ export default function TrialBalancePage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
+  // Date range – default to current fiscal year
+  const now = new Date()
+  const [startDate, setStartDate] = useState(`${now.getFullYear()}-01-01`)
+  const [endDate, setEndDate] = useState(now.toISOString().split("T")[0])
+
   const [trialData, setTrialData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [sortField, setSortField] = useState<SortField>("code")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
-  // Read filter parameters from URL (type, category)
+  // Read type/category filters from URL
   const filterType = searchParams.get("type") || ""
   const filterCategory = searchParams.get("category") || ""
 
+  // Fetch period‑based trial balance
   useEffect(() => {
     const fetchData = async () => {
-      // Get company ID
       const { data: { user } } = await supabase.auth.getUser()
       const cid = (user?.app_metadata as any)?.company_id
-      if (!cid) {
-        setLoading(false)
-        return
-      }
+      if (!cid) { setLoading(false); return }
 
-      // Fetch all accounts for this company
+      // 1. Get all accounts for company (for type, name, category info)
       const { data: accounts } = await supabase
         .from("accounts")
-        .select("*")
+        .select("id, code, name, type, category")
         .eq("company_id", cid)
         .order("code")
 
-      if (!accounts) {
-        setLoading(false)
-        return
-      }
+      if (!accounts) { setLoading(false); return }
 
-      // Build trial balance rows with ONE UNIVERSAL RULE
+      // 2. Fetch journal lines within the period (exclude soft‑deleted)
+      let query = supabase
+        .from("journal_lines")
+        .select("account_id, debit, credit, journal_entries!inner(date, deleted_at, company_id)")
+        .eq("company_id", cid)
+        .is("journal_entries.deleted_at", null)
+        .eq("journal_entries.company_id", cid)
+
+      if (startDate) query = query.gte("journal_entries.date", startDate)
+      if (endDate)   query = query.lte("journal_entries.date", endDate)
+
+      const { data: lines } = await query
+
+      // 3. Aggregate by account: net = sum(debit) - sum(credit)
+      const agg: Record<number, number> = {}
+      ;(lines || []).forEach((l: any) => {
+        const aid = l.account_id
+        agg[aid] = (agg[aid] || 0) + (l.debit || 0) - (l.credit || 0)
+      })
+
+      // 4. Build rows with universal rule: positive → Debit, negative → Credit
       const rows = accounts.map(acc => {
-        const balance = acc.balance || 0   // balance = Dr - Cr
+        const net = agg[acc.id] || 0
         let debit = 0, credit = 0
-
-        // Universal rule: positive → Debit, negative → Credit
-        if (balance > 0) {
-          debit = balance
-        } else if (balance < 0) {
-          credit = -balance
-        }
+        if (net > 0) debit = net
+        else if (net < 0) credit = -net
 
         const category = acc.category || getFallbackCategory(acc.code)
-
         return {
           id: acc.id,
           code: acc.code,
@@ -94,7 +107,7 @@ export default function TrialBalancePage() {
         }
       })
 
-      // Apply filters
+      // Apply filters from URL
       let filtered = rows
       if (filterType) {
         filtered = filtered.filter(r => r.type.toLowerCase() === filterType.toLowerCase())
@@ -108,7 +121,7 @@ export default function TrialBalancePage() {
     }
 
     fetchData()
-  }, [])
+  }, [startDate, endDate])  // re‑fetch when dates change
 
   // Sorting
   const sortedData = useMemo(() => {
@@ -149,10 +162,10 @@ export default function TrialBalancePage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
+  // Open Ledger with the same date range
   const openLedger = (accountId: number) => {
-    const now = new Date()
     router.push(
-      `/dashboard/reports/ledger?accountId=${accountId}&startDate=${now.getFullYear()}-01-01&endDate=${now.toISOString().split("T")[0]}`
+      `/dashboard/reports/ledger?accountId=${accountId}&startDate=${startDate}&endDate=${endDate}`
     )
   }
 
@@ -168,6 +181,15 @@ export default function TrialBalancePage() {
         .tb-row:last-child { border-bottom: none; }
         .tb-sort-btn { background: none; border: none; cursor: pointer; font: inherit; color: inherit; display: inline-flex; align-items: center; gap: 4px; padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px; }
         .tb-sort-btn:hover { color: #93C5FD; }
+        .date-input {
+          height: 38px; border: 1.5px solid #334155; border-radius: 8px;
+          padding: 0 12px; font-size: 13px; background: #1E293B; color: #F1F5F9;
+          outline: none; font-family: inherit; width: 150px;
+        }
+        .date-input:focus { border-color: #64748B; }
+        .btn { padding: 8px 16px; border-radius: 8px; border: 1.5px solid #334155; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-outline { background: transparent; color: white; border-color: #334155; }
+        .btn-outline:hover { background: #1E293B; }
         @media (max-width: 640px) {
           .tb-table-header, .tb-row { grid-template-columns: 60px 1fr 70px 70px; }
           .tb-table-header span:nth-child(3), .tb-row span:nth-child(3) { display: none; }
@@ -175,15 +197,42 @@ export default function TrialBalancePage() {
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        <button onClick={() => router.push("/dashboard/reports")} style={{ background: "transparent", border: "1px solid #334155", borderRadius: 8, padding: "8px 12px", cursor: "pointer", color: "#CBD5E1" }}>
+        <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}>
           <ArrowLeft size={16} />
         </button>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>⚖️ Trial Balance</h1>
           <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>
-            {filterType || filterCategory ? `Filtered: ${filterType || ""} ${filterCategory || ""}` : "All accounts"}
+            {filterType || filterCategory ? `Filtered: ${filterType || ""} ${filterCategory || ""}` : "All accounts · Select period"}
           </p>
         </div>
+      </div>
+
+      {/* Period selector */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
+        <input
+          type="date"
+          className="date-input"
+          value={startDate}
+          onChange={e => setStartDate(e.target.value)}
+        />
+        <span style={{ color: "#94A3B8" }}>to</span>
+        <input
+          type="date"
+          className="date-input"
+          value={endDate}
+          onChange={e => setEndDate(e.target.value)}
+        />
+        <button
+          className="btn btn-outline"
+          onClick={() => {
+            // Trigger re‑fetch by toggling loading (the useEffect depends on startDate/endDate)
+            setLoading(true)
+            // The actual fetch is handled by the useEffect
+          }}
+        >
+          Refresh
+        </button>
       </div>
 
       {/* Summary tiles */}

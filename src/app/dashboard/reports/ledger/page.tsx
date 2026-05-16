@@ -34,17 +34,24 @@ export default function LedgerPage() {
     if (idFromUrl) {
       setAccountId(Number(idFromUrl))
     }
+    // Also read start/end dates if passed
+    const start = searchParams.get("startDate")
+    const end   = searchParams.get("endDate")
+    if (start) setStartDate(start)
+    if (end)   setEndDate(end)
   }, [searchParams])
 
   // Default date range: current fiscal year
   useEffect(() => {
-    const now = new Date()
-    const year = now.getFullYear()
-    const fiscalStart = `${year}-01-01`
-    const today = now.toISOString().split("T")[0]
-    setStartDate(fiscalStart)
-    setEndDate(today)
-  }, [])
+    if (!startDate) {
+      const now = new Date()
+      const year = now.getFullYear()
+      setStartDate(`${year}-01-01`)
+    }
+    if (!endDate) {
+      setEndDate(new Date().toISOString().split("T")[0])
+    }
+  }, [startDate, endDate])
 
   // Fetch accounts
   useEffect(() => {
@@ -67,13 +74,12 @@ export default function LedgerPage() {
       .order("journal_entries(date)")
 
     if (startDate) query = query.gte("journal_entries.date", startDate)
-    if (endDate) query = query.lte("journal_entries.date", endDate)
+    if (endDate)   query = query.lte("journal_entries.date", endDate)
 
     const { data } = await query
     if (data) {
       let balance = 0
       const enriched = data.map((l: any) => {
-        // Universal rule: balance = balance + debit - credit
         balance = balance + (l.debit || 0) - (l.credit || 0)
         return {
           ...l,
@@ -96,6 +102,9 @@ export default function LedgerPage() {
   }, [loadLedger])
 
   const acc = accounts.find((a) => a.id === accountId)
+
+  // Closing balance = last balance in the sorted array (or 0 if no lines)
+  const computedClosing = sortedLines.length > 0 ? sortedLines[sortedLines.length - 1].balance : 0
 
   // Sorting logic (client‑side)
   const sortedLines = useMemo(() => {
@@ -140,6 +149,7 @@ export default function LedgerPage() {
     return list
   }, [lines, sortField, sortDir])
 
+  // Use computedClosing for display
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDir((prev) => (prev === "asc" ? "desc" : "asc"))
@@ -215,7 +225,7 @@ export default function LedgerPage() {
         </div>
       </div>
 
-      {/* Summary Cards (account info) */}
+      {/* Summary Cards (account info) – now uses computed closing balance */}
       {acc && (
         <div className="summary-grid">
           <div className="summary-item">
@@ -227,9 +237,9 @@ export default function LedgerPage() {
             <div className="summary-value" style={{ fontSize: 18 }}>{acc.type}</div>
           </div>
           <div className="summary-item">
-            <div className="summary-label">Closing Balance</div>
-            <div className="summary-value" style={{ color: acc.balance >= 0 ? "#10B981" : "#EF4444" }}>
-              PKR {(acc.balance || 0).toLocaleString()}
+            <div className="summary-label">Closing Balance (Period)</div>
+            <div className="summary-value" style={{ color: computedClosing >= 0 ? "#10B981" : "#EF4444" }}>
+              PKR {computedClosing.toLocaleString()}
             </div>
           </div>
         </div>
