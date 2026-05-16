@@ -14,12 +14,9 @@ function getCategory(account: any): string {
   return "Other"
 }
 
+// Format a number as a positive value (used for both revenue and expenses)
 function fmt(n: number) {
   return Math.abs(n).toLocaleString("en-PK")
-}
-
-function sign(n: number) {
-  return n < 0 ? "-" : ""
 }
 
 export default function ProfitLossPage() {
@@ -48,24 +45,25 @@ export default function ProfitLossPage() {
   const operatingExpenses = expenseAccounts.filter(a => getCategory(a) === "Operating Expenses")
   const otherExpenses = expenseAccounts.filter(a => !["Direct Expenses", "Operating Expenses"].includes(getCategory(a)))
 
-  const totalRevenue = revenueAccounts.reduce((s, a) => s + (a.balance || 0), 0)
-  const totalDirect = directExpenses.reduce((s, a) => s + (a.balance || 0), 0)
-  const totalOpEx = operatingExpenses.reduce((s, a) => s + (a.balance || 0), 0)
-  const totalOther = otherExpenses.reduce((s, a) => s + (a.balance || 0), 0)
+  // Use absolute values for all revenue and expenses (credit balances become positive)
+  const totalRevenue = revenueAccounts.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
+  const totalDirect = directExpenses.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
+  const totalOpEx = operatingExpenses.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
+  const totalOther = otherExpenses.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
+
   const grossProfit = totalRevenue - totalDirect
   const netProfit = grossProfit - totalOpEx - totalOther
   const margin = totalRevenue !== 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : "0.0"
 
-  // Drill‑down to Trial Balance – the correct next step in the chain
-  const navigateToTrialBalance = (type: string, category?: string, code?: string) => {
+  // Drill‑down to Trial Balance (the correct next step)
+  const navigateToTrialBalance = (type: string, category?: string) => {
     const params = new URLSearchParams()
     params.set("type", type)
     if (category) params.set("category", category)
-    if (code) params.set("code", code)           // will be used when Trial Balance supports single‑account filter
     router.push(`/dashboard/reports/trial-balance?${params.toString()}`)
   }
 
-  // For now, individual account rows also go to Trial Balance (filtered by type/category)
+  // For individual accounts, also go to Trial Balance (filtered by type/category)
   const openTrialForAccount = (account: any) => {
     if (account.type === "Revenue") {
       navigateToTrialBalance("Revenue")
@@ -310,22 +308,22 @@ export default function ProfitLossPage() {
       <div className="kpi-strip">
         <div className="kpi-cell">
           <div className="kpi-label">Total Revenue</div>
-          <div className="kpi-value" style={{ color: totalRevenue >= 0 ? "#10B981" : "#EF4444" }}>
-            {sign(totalRevenue)}PKR {fmt(totalRevenue)}
+          <div className="kpi-value" style={{ color: "#10B981" }}>
+            PKR {fmt(totalRevenue)}
           </div>
           <div className="kpi-sub">All income accounts</div>
         </div>
         <div className="kpi-cell">
           <div className="kpi-label">Gross Profit</div>
           <div className="kpi-value" style={{ color: grossProfit >= 0 ? "#10B981" : "#EF4444" }}>
-            {sign(grossProfit)}PKR {fmt(grossProfit)}
+            {grossProfit < 0 ? "-" : ""}PKR {fmt(grossProfit)}
           </div>
           <div className="kpi-sub">After cost of goods</div>
         </div>
         <div className="kpi-cell">
           <div className="kpi-label">Net Profit / Loss</div>
           <div className="kpi-value" style={{ color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
-            {sign(netProfit)}PKR {fmt(netProfit)}
+            {netProfit < 0 ? "-" : ""}PKR {fmt(netProfit)}
           </div>
           <div className="kpi-sub" style={{ display: "flex", alignItems: "center", gap: 4 }}>
             {netProfit >= 0 ? <TrendingUp size={11} color="#10B981" /> : <TrendingDown size={11} color="#EF4444" />}
@@ -365,15 +363,15 @@ export default function ProfitLossPage() {
               <div key={a.id} className="account-row" onClick={() => openTrialForAccount(a)}>
                 <span className="acc-code">{a.code}</span>
                 <span className="acc-name">{a.name}</span>
-                <span className="acc-amount" style={{ color: (a.balance || 0) >= 0 ? "#10B981" : "#EF4444" }}>
-                  {sign(a.balance || 0)}PKR {fmt(a.balance || 0)}
+                <span className="acc-amount" style={{ color: "#10B981" }}>
+                  PKR {fmt(a.balance || 0)}
                 </span>
               </div>
             ))}
             <div className="subtotal-row">
               <span className="subtotal-label">Total Revenue</span>
-              <span className="subtotal-amount" style={{ color: totalRevenue >= 0 ? "#10B981" : "#EF4444" }}>
-                {sign(totalRevenue)}PKR {fmt(totalRevenue)}
+              <span className="subtotal-amount" style={{ color: "#10B981" }}>
+                PKR {fmt(totalRevenue)}
               </span>
             </div>
           </div>
@@ -403,7 +401,7 @@ export default function ProfitLossPage() {
           <div className="divider-row">
             <span className="divider-label">Gross Profit</span>
             <span className="divider-amount" style={{ color: grossProfit >= 0 ? "#10B981" : "#EF4444" }}>
-              {sign(grossProfit)}PKR {fmt(grossProfit)}
+              {grossProfit < 0 ? "-" : ""}PKR {fmt(grossProfit)}
             </span>
           </div>
         </div>
@@ -462,7 +460,7 @@ export default function ProfitLossPage() {
             <div className="divider-row" style={{ marginTop: 0 }}>
               <span className="divider-label">Operating Profit</span>
               <span className="divider-amount" style={{ color: (grossProfit - totalOpEx) >= 0 ? "#10B981" : "#EF4444" }}>
-                {sign(grossProfit - totalOpEx)}PKR {fmt(grossProfit - totalOpEx)}
+                {(grossProfit - totalOpEx) < 0 ? "-" : ""}PKR {fmt(grossProfit - totalOpEx)}
               </span>
             </div>
           )}
@@ -475,7 +473,7 @@ export default function ProfitLossPage() {
               <div style={{ fontSize: 11, color: "#64748B", marginTop: 3 }}>Profit margin: {margin}%</div>
             </div>
             <div className="net-amount" style={{ color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
-              {sign(netProfit)}PKR {fmt(netProfit)}
+              {netProfit < 0 ? "-" : ""}PKR {fmt(netProfit)}
             </div>
           </div>
 
