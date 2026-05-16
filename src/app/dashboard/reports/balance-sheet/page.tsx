@@ -73,12 +73,22 @@ function BalanceSheetContent() {
   const totalAssets = accounts.filter(a => a.type === "Asset").reduce((s, a) => s + (a.balance || 0), 0)
   const totalLiabilities = accounts.filter(a => a.type === "Liability").reduce((s, a) => s + (a.balance || 0), 0)
   const totalEquityAccounts = accounts.filter(a => a.type === "Equity").reduce((s, a) => s + (a.balance || 0), 0)
-  const revenue = accounts.filter(a => a.type === "Revenue").reduce((s, a) => s + (a.balance || 0), 0)
-  const expenses = accounts.filter(a => a.type === "Expense").reduce((s, a) => s + (a.balance || 0), 0)
-  const retainedEarnings = revenue - expenses
-  const totalEquity = totalEquityAccounts + retainedEarnings
+
+  // ✅ Corrected Net Profit calculation – uses absolute values, just like the P&L
+  const revenue = accounts.filter(a => a.type === "Revenue").reduce((s, a) => s + Math.abs(a.balance || 0), 0)
+  const expenses = accounts.filter(a => a.type === "Expense").reduce((s, a) => s + Math.abs(a.balance || 0), 0)
+  const netProfit = revenue - expenses
+
+  const totalEquity = totalEquityAccounts + netProfit
   const totalLiabEquity = totalLiabilities + totalEquity
   const isBalanced = Math.abs(totalAssets - totalLiabEquity) < 1
+
+  const navigateToTrialBalance = (type: string, category?: string) => {
+    const params = new URLSearchParams()
+    params.set("type", type)
+    if (category) params.set("category", category)
+    router.push(`/dashboard/reports/trial-balance?${params.toString()}`)
+  }
 
   const openLedger = (id: number) => {
     router.push(`/dashboard/reports/ledger?accountId=${id}&startDate=${now.getFullYear()}-01-01&endDate=${now.toISOString().split("T")[0]}`)
@@ -99,7 +109,7 @@ function BalanceSheetContent() {
     const color = CAT_COLORS[cat] || "#94A3B8"
     return (
       <div style={{ marginBottom: 16 }}>
-        <div className="cat-header" onClick={() => router.push(`/dashboard/reports/trial-balance?type=${type}&category=${cat}`)}>
+        <div className="cat-header" onClick={() => navigateToTrialBalance(type, cat)}>
           <div style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0 }} />
           <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color, flex: 1 }}>{cat}</span>
           <span style={{ fontSize: 12, fontFamily: "'Inter', sans-serif", fontWeight: 600, color }}>{sign(total)}PKR {fmt(total)}</span>
@@ -205,7 +215,7 @@ function BalanceSheetContent() {
           font-size: 16px;
           background: #1E293B;
         }
-        .col-title { font-size: 16px; font-weight: 700; color: #F1F5F9; }
+        .col-title { font-size: 16px; font-weight: 700; color: "#F1F5F9"; }
         .col-subtitle { font-size: 11px; color: #64748B; margin-top: 2px; }
 
         .sub-section-head {
@@ -389,8 +399,8 @@ function BalanceSheetContent() {
           <div className="acc-row" style={{ cursor: "default" }}>
             <span style={{ fontSize: 10, color: "#94A3B8", minWidth: 40 }}>R/E</span>
             <span style={{ fontSize: 12, color: "#E2E8F0", flex: 1, paddingLeft: 10 }}>Retained Earnings (Net P&amp;L)</span>
-            <span style={{ fontSize: 12, color: retainedEarnings >= 0 ? "#10B981" : "#EF4444" }}>
-              {sign(retainedEarnings)}PKR {fmt(retainedEarnings)}
+            <span style={{ fontSize: 12, color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
+              {sign(netProfit)}PKR {fmt(netProfit)}
             </span>
           </div>
           <div className="subtotal-band" style={{ color: "#C4B5FD", marginTop: 4 }}>
