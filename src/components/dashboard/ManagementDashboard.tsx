@@ -236,11 +236,11 @@ export default function ManagementDashboard({ role }: { role: string }) {
   }
 
   if (loading) {
-    return <div style={{ padding: 40, textAlign: "center", background: "#0B1120", minHeight: "100vh", color: "#94A3B8" }}>Loading…</div>
+    return <div style={{ padding: 40, textAlign: "center", background: "#0A0A0A", minHeight: "100vh", color: "#94A3B8" }}>Loading…</div>
   }
 
   return (
-    <div style={{ background: "#0B1120", minHeight: "100%", flex: 1, fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: "#E2E8F0" }}>
+    <div style={{ background: "#0A0A0A", minHeight: "100%", flex: 1, fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: "#E2E8F0" }}>
       <style>{`
         .mgmt * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -285,13 +285,13 @@ export default function ManagementDashboard({ role }: { role: string }) {
           background-position: right 0.5rem center;
           padding-right: 1.8rem;
         }
-        .mgmt .filter-pill:focus { outline: none; border-color: #2563EB; }
+        .mgmt .filter-pill:focus { outline: none; border-color: #64748B; }   /* ← no blue */
 
         /* ── Warning banner ── */
         .mgmt .warning-banner {
           background: #1E293B;
           border: 1px solid #1E293B;
-          border-left: 6px solid #1E3A8A;
+          border-left: 6px solid #334155;            /* ← no blue */
           border-radius: 10px; padding: 8px 16px;
           margin-bottom: 1rem; display: flex;
           align-items: center; justify-content: space-between;
@@ -300,7 +300,8 @@ export default function ManagementDashboard({ role }: { role: string }) {
           font-weight: 500;
         }
         .mgmt .warning-btn {
-          background: #1E3A8A; color: white; border: none;
+          background: #374151;          /* ← no blue */
+          color: white; border: none;
           border-radius: 6px; padding: 6px 14px;
           font-weight: 600; cursor: pointer; font-size: 0.8rem;
           white-space: nowrap;
@@ -523,7 +524,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
         {/* ── Footer summary ── */}
         <div style={{
-          background: "#0F172A", borderRadius: 12, padding: "0.6rem 1.2rem",
+          background: "#111827", borderRadius: 12, padding: "0.6rem 1.2rem",
           border: "1px solid #1E293B", display: "flex", justifyContent: "space-between",
           flexWrap: "wrap", gap: "0.8rem", fontSize: "0.8rem", color: "#94A3B8", fontWeight: 500
         }}>
