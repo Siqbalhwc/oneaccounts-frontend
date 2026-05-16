@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Download, Printer, Calendar, TrendingUp, TrendingDown, Minus } from "lucide-react"
+import { ArrowLeft, Download, Printer, Calendar, TrendingUp, TrendingDown } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 function getCategory(account: any): string {
@@ -56,8 +56,22 @@ export default function ProfitLossPage() {
   const netProfit = grossProfit - totalOpEx - totalOther
   const margin = totalRevenue !== 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : "0.0"
 
-  const openLedger = (accountId: number) => {
-    router.push(`/dashboard/reports/ledger?accountId=${accountId}&startDate=${startDate}&endDate=${endDate}`)
+  // Drill‑down to Trial Balance – the correct next step in the chain
+  const navigateToTrialBalance = (type: string, category?: string, code?: string) => {
+    const params = new URLSearchParams()
+    params.set("type", type)
+    if (category) params.set("category", category)
+    if (code) params.set("code", code)           // will be used when Trial Balance supports single‑account filter
+    router.push(`/dashboard/reports/trial-balance?${params.toString()}`)
+  }
+
+  // For now, individual account rows also go to Trial Balance (filtered by type/category)
+  const openTrialForAccount = (account: any) => {
+    if (account.type === "Revenue") {
+      navigateToTrialBalance("Revenue")
+    } else {
+      navigateToTrialBalance("Expense", getCategory(account))
+    }
   }
 
   if (loading) return (
@@ -268,7 +282,7 @@ export default function ProfitLossPage() {
 
       {/* Sticky Header */}
       <div className="pl-header">
-        <div className="pl-header-left" style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <button className="back-btn" onClick={() => router.push("/dashboard/reports")}>
             <ArrowLeft size={15} />
           </button>
@@ -279,7 +293,7 @@ export default function ProfitLossPage() {
                 FY {now.getFullYear()}
               </span>
             </div>
-            <div style={{ fontSize: 11, color: "#94A3B8" }}>Shahid Iqbal &amp; Co · Click any account to view ledger</div>
+            <div style={{ fontSize: 11, color: "#94A3B8" }}>Shahid Iqbal &amp; Co · Click any row to drill into Trial Balance</div>
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -340,16 +354,15 @@ export default function ProfitLossPage() {
       <div className="report-body">
         {/* LEFT COL: Revenue + Gross Profit */}
         <div className="report-col">
-          {/* Revenue */}
           <div className="section">
-            <div className="section-head" onClick={() => router.push(`/dashboard/reports/trial-balance?type=Revenue`)}>
+            <div className="section-head" onClick={() => navigateToTrialBalance("Revenue")}>
               <div className="section-badge" style={{ background: "#10B981" }} />
               <span className="section-title-text">Income / Revenue</span>
             </div>
             {revenueAccounts.length === 0 ? (
               <div className="zero-state">No revenue accounts found</div>
             ) : revenueAccounts.map(a => (
-              <div key={a.id} className="account-row" onClick={() => openLedger(a.id)}>
+              <div key={a.id} className="account-row" onClick={() => openTrialForAccount(a)}>
                 <span className="acc-code">{a.code}</span>
                 <span className="acc-name">{a.name}</span>
                 <span className="acc-amount" style={{ color: (a.balance || 0) >= 0 ? "#10B981" : "#EF4444" }}>
@@ -365,15 +378,14 @@ export default function ProfitLossPage() {
             </div>
           </div>
 
-          {/* Direct Expenses */}
           {directExpenses.length > 0 && (
             <div className="section">
-              <div className="section-head" onClick={() => router.push(`/dashboard/reports/trial-balance?type=Expense&category=Direct Expenses`)}>
+              <div className="section-head" onClick={() => navigateToTrialBalance("Expense", "Direct Expenses")}>
                 <div className="section-badge" style={{ background: "#EF4444" }} />
                 <span className="section-title-text">Cost of Goods Sold / Direct Expenses</span>
               </div>
               {directExpenses.map(a => (
-                <div key={a.id} className="account-row" onClick={() => openLedger(a.id)}>
+                <div key={a.id} className="account-row" onClick={() => openTrialForAccount(a)}>
                   <span className="acc-code">{a.code}</span>
                   <span className="acc-name">{a.name}</span>
                   <span className="acc-amount" style={{ color: "#F87171" }}>
@@ -388,7 +400,6 @@ export default function ProfitLossPage() {
             </div>
           )}
 
-          {/* Gross Profit */}
           <div className="divider-row">
             <span className="divider-label">Gross Profit</span>
             <span className="divider-amount" style={{ color: grossProfit >= 0 ? "#10B981" : "#EF4444" }}>
@@ -399,15 +410,14 @@ export default function ProfitLossPage() {
 
         {/* RIGHT COL: OpEx + Net Profit */}
         <div className="report-col">
-          {/* Operating Expenses */}
           {operatingExpenses.length > 0 && (
             <div className="section">
-              <div className="section-head" onClick={() => router.push(`/dashboard/reports/trial-balance?type=Expense&category=Operating Expenses`)}>
+              <div className="section-head" onClick={() => navigateToTrialBalance("Expense", "Operating Expenses")}>
                 <div className="section-badge" style={{ background: "#F59E0B" }} />
                 <span className="section-title-text">Operating Expenses</span>
               </div>
               {operatingExpenses.map(a => (
-                <div key={a.id} className="account-row" onClick={() => openLedger(a.id)}>
+                <div key={a.id} className="account-row" onClick={() => openTrialForAccount(a)}>
                   <span className="acc-code">{a.code}</span>
                   <span className="acc-name">{a.name}</span>
                   <span className="acc-amount" style={{ color: "#FCD34D" }}>
@@ -422,15 +432,14 @@ export default function ProfitLossPage() {
             </div>
           )}
 
-          {/* Other Expenses */}
           {otherExpenses.length > 0 && (
             <div className="section">
-              <div className="section-head" onClick={() => router.push(`/dashboard/reports/trial-balance?type=Expense`)}>
+              <div className="section-head" onClick={() => navigateToTrialBalance("Expense")}>
                 <div className="section-badge" style={{ background: "#8B5CF6" }} />
                 <span className="section-title-text">Other Expenses</span>
               </div>
               {otherExpenses.map(a => (
-                <div key={a.id} className="account-row" onClick={() => openLedger(a.id)}>
+                <div key={a.id} className="account-row" onClick={() => openTrialForAccount(a)}>
                   <span className="acc-code">{a.code}</span>
                   <span className="acc-name">{a.name}</span>
                   <span className="acc-amount" style={{ color: "#C4B5FD" }}>
@@ -449,7 +458,6 @@ export default function ProfitLossPage() {
             <div className="zero-state">No operating expense accounts found</div>
           )}
 
-          {/* Operating Profit line (before other) */}
           {operatingExpenses.length > 0 && (
             <div className="divider-row" style={{ marginTop: 0 }}>
               <span className="divider-label">Operating Profit</span>
@@ -459,7 +467,6 @@ export default function ProfitLossPage() {
             </div>
           )}
 
-          {/* Net Profit */}
           <div className="net-row">
             <div>
               <div className="net-label" style={{ color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
@@ -472,7 +479,6 @@ export default function ProfitLossPage() {
             </div>
           </div>
 
-          {/* Watermark/footer note */}
           <div style={{ marginTop: 24, padding: "12px 0", borderTop: "1px solid #1E293B", display: "flex", justifyContent: "space-between", fontSize: 10, color: "#64748B" }}>
             <span>Generated {new Date().toLocaleString("en-PK")}</span>
             <span>OneAccounts · Shahid Iqbal &amp; Co</span>
