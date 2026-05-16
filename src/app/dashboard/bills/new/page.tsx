@@ -71,8 +71,9 @@ export default function NewBillPage() {
       supabase.from("companies").select("business_type").eq("id", cid).single()
         .then(r => r.data && setBusinessType(r.data.business_type || ""))
 
-      loadSuppliers()
-      loadProducts()
+      // Pass cid directly so the functions don't rely on stale state
+      loadSuppliers(cid)
+      loadProducts(cid)
 
       supabase.from("accounts")
         .select("id,code,name,type")
@@ -93,24 +94,26 @@ export default function NewBillPage() {
     })
   }, [])
 
-  // ── Load suppliers ──
-  const loadSuppliers = () => {
-    if (!companyId) return
+  // ── Load suppliers (accepts optional cid to avoid stale state) ──
+  const loadSuppliers = (cid?: string) => {
+    const targetId = cid || companyId
+    if (!targetId) return
     supabase.from("suppliers")
       .select("id,code,name,phone,balance,default_project_id,default_location_id,default_activity_id")
-      .eq("company_id", companyId)
+      .eq("company_id", targetId)
       .order("name")
       .then(r => {
         if (r.data) setSuppliers(r.data)
       })
   }
 
-  // ── Load products ──
-  const loadProducts = () => {
-    if (!companyId) return
+  // ── Load products (accepts optional cid to avoid stale state) ──
+  const loadProducts = (cid?: string) => {
+    const targetId = cid || companyId
+    if (!targetId) return
     supabase.from("products")
       .select("id,code,name,cost_price,qty_on_hand,image_path")
-      .eq("company_id", companyId)
+      .eq("company_id", targetId)
       .is("deleted_at", null)
       .order("name")
       .then(r => r.data && setProducts(r.data))
@@ -323,7 +326,7 @@ export default function NewBillPage() {
       .select("invoice_no")
       .like("invoice_no", `${suppCode}-%`)
       .eq("type", "purchase")
-      .is("deleted_at", null)               // ← FIX: ignore soft‑deleted bills
+      .is("deleted_at", null)
       .order("invoice_no", { ascending: false })
       .limit(1)
     let nextNum = 1
@@ -409,7 +412,7 @@ export default function NewBillPage() {
       }
 
       setFlash(`✅ Bill ${editId ? "updated" : "saved"} successfully!`)
-      // Refresh supplier list to show updated balances
+      // Refresh supplier list so balances are up‑to‑date
       loadSuppliers()
       if (editId) {
         router.push(`/dashboard/bills/${editId}`)
