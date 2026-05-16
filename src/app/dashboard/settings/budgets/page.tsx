@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRole } from "@/contexts/RoleContext"
 import * as XLSX from "xlsx"
-import { Upload, Download } from "lucide-react"
+import { Upload, Download, Edit } from "lucide-react"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
@@ -31,34 +31,32 @@ export default function BudgetsPage() {
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
   const [businessType, setBusinessType] = useState<string>("")
 
-  // Master data – Fixed Assets (1400-1499) + ALL Expense accounts
   const [accounts, setAccounts] = useState<any[]>([])
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
   const [allActivities, setAllActivities] = useState<any[]>([])
 
-  // Filters
   const [selectedProjectId, setSelectedProjectId] = useState<string>(initialProject)
   const [selectedDonorId, setSelectedDonorId] = useState<string>(initialDonor)
   const [filterActivityId, setFilterActivityId] = useState<string>("")
   const [filterLocationId, setFilterLocationId] = useState<string>("")
 
-  // View mode: "gl" or "month"
   const [viewMode, setViewMode] = useState<"gl" | "month">("gl")
   const [projectDuration, setProjectDuration] = useState<number>(12)
 
-  // Data (annual GL budgets + actuals)
   const [data, setData] = useState<Record<string, Record<string, Record<string, { budget: number; actual: number }>>>>({})
   const [loading, setLoading] = useState(true)
 
-  // Month view: monthly actuals keyed by activity→location→month
   const [monthlyActuals, setMonthlyActuals] = useState<Record<string, Record<string, Record<number, number>>>>({})
   const [monthBudgetOverrides, setMonthBudgetOverrides] = useState<Record<string, Record<string, Record<number, number | null>>>>({})
   const [saving, setSaving] = useState(false)
   const [flash, setFlash] = useState<string>("")
   const [budgetImportFile, setBudgetImportFile] = useState<File | null>(null)
   const [importingBudget, setImportingBudget] = useState(false)
+
+  // ── Edit mode – when true, all accounts are shown ──────────────────────
+  const [editMode, setEditMode] = useState(false)
 
   // ── 1. Load master data ──────────────────────────────────────────────────
   useEffect(() => {
@@ -68,8 +66,7 @@ export default function BudgetsPage() {
       supabase.from("companies").select("business_type").eq("id", cid).single()
         .then(r => r.data && setBusinessType(r.data.business_type || ""))
 
-      // ✅ Fetch Fixed Assets (1400-1499) AND all Expense accounts
-            // Fetch Fixed Assets (Asset accounts with codes 1400‑1499) – scoped to company
+      // Fetch Fixed Assets (1400‑1499) scoped to company
       supabase.from("accounts")
         .select("id, code, name, type")
         .eq("company_id", cid)
@@ -79,7 +76,7 @@ export default function BudgetsPage() {
         .order("code")
         .then(r => {
           const fixedAssets = r.data || []
-          // Fetch all Expense accounts – scoped to company
+          // Fetch all Expense accounts scoped to company
           supabase.from("accounts")
             .select("id, code, name, type")
             .eq("company_id", cid)
@@ -87,7 +84,9 @@ export default function BudgetsPage() {
             .order("code")
             .then(r2 => {
               const expenses = r2.data || []
-              setAccounts([...fixedAssets, ...expenses].sort((a, b) => a.code.localeCompare(b.code, undefined, {numeric: true})))
+              setAccounts([...fixedAssets, ...expenses].sort((a, b) =>
+                a.code.localeCompare(b.code, undefined, { numeric: true })
+              ))
             })
         })
 
@@ -109,7 +108,7 @@ export default function BudgetsPage() {
       .then(r => r.data && setAllActivities(r.data))
   }, [companyId, selectedProjectId])
 
-  // ── 2b. Auto‑select donor from project (when project is selected) ───────
+  // ── 2b. Auto‑select donor ───────────────────────────────────────────────
   useEffect(() => {
     if (!selectedProjectId || businessType !== "ngo") return
     if (initialDonor) return
@@ -129,7 +128,7 @@ export default function BudgetsPage() {
     }
   }, [selectedProjectId, projects, businessType, initialDonor, companyId])
 
-  // ── 3. Load budgets + actuals (annual) ───────────────────────────────────
+  // ── 3. Load budgets + actuals ───────────────────────────────────────────
   useEffect(() => {
     if (!companyId || !selectedProjectId) { setData({}); setLoading(false); return }
     if (businessType === "ngo" && !selectedDonorId) { setData({}); setLoading(false); return }
@@ -175,7 +174,7 @@ export default function BudgetsPage() {
     })
   }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, filterLocationId, businessType])
 
-  // ── 4. Monthly actuals (only needed in month view) ──────────────────────
+  // ── 4. Monthly actuals ──────────────────────────────────────────────────
   useEffect(() => {
     if (viewMode !== "month" || !companyId || !selectedProjectId) return
     if (businessType === "ngo" && !selectedDonorId) return
@@ -204,7 +203,6 @@ export default function BudgetsPage() {
   }, [viewMode, companyId, selectedProjectId, selectedDonorId, filterLocationId, fiscalYear, businessType])
 
   // ── Determine which accounts to display ────────────────────────────────
-  // Only accounts that have budget > 0 OR actual ≠ 0 will appear AFTER data exists
   const usedAccountIds = new Set<string>()
   for (const actId of Object.keys(data)) {
     for (const locId of Object.keys(data[actId])) {
@@ -214,10 +212,11 @@ export default function BudgetsPage() {
       }
     }
   }
-  // Fallback: show all accounts if no data exists yet (initial data entry)
-  const relevantAccounts = usedAccountIds.size > 0
-    ? accounts.filter(a => usedAccountIds.has(String(a.id)))
-    : accounts
+
+  // Show all accounts when editMode is true, otherwise only accounts with data
+  const relevantAccounts = editMode || usedAccountIds.size === 0
+    ? accounts
+    : accounts.filter(a => usedAccountIds.has(String(a.id)))
 
   // ── Helpers ─────────────────────────────────────────────────────────────
   const rowTotalBudget = (actId: string, locId: string) => {
@@ -317,7 +316,6 @@ export default function BudgetsPage() {
       }
     }
 
-    // Delete old budgets
     let deleteQuery = supabase.from("budgets").delete()
       .eq("company_id", companyId).eq("project_id", selectedProjectId)
       .eq("fiscal_year", fiscalYear).is("month", null)
@@ -329,7 +327,6 @@ export default function BudgetsPage() {
       if (error) { setFlash("Error: " + error.message); setSaving(false); return }
     }
 
-    // Audit log
     try {
       const { data: { user } } = await supabase.auth.getUser()
       await supabase.from("data_change_logs").insert({
@@ -345,6 +342,7 @@ export default function BudgetsPage() {
 
     setFlash("Budget saved!")
     setSaving(false)
+    setEditMode(false)   // after save, exit edit mode → empty columns will be hidden on next render
     setTimeout(() => setFlash(""), 4000)
   }
 
@@ -452,7 +450,6 @@ export default function BudgetsPage() {
 
   const displayActivities = filterActivityId ? allActivities.filter(a => a.id == filterActivityId) : allActivities
 
-  // ── Grand totals (GL view) ─────────────────────────────────────────────
   let grandBudget = 0, grandActual = 0
   for (const actId of Object.keys(data)) for (const locId of Object.keys(data[actId])) {
     for (const accId of Object.keys(data[actId][locId])) {
@@ -486,6 +483,16 @@ export default function BudgetsPage() {
         .btn-outline:hover { background: #1E293B; }
         h2 { color: #F1F5F9; }
         p { color: #94A3B8; }
+
+        /* Remove number input spinners */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        input[type="number"] {
+          -moz-appearance: textfield;
+        }
       `}</style>
 
       <div className="budget-shell">
@@ -558,10 +565,19 @@ export default function BudgetsPage() {
           /* ───────────────── GL‑wise view ───────────────── */
           relevantAccounts.length === 0 ? (
             <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>
-              No budget or actual data found. Enter a budget to see columns.
+              No budget accounts found. Add Fixed Asset or Expense accounts to start budgeting.
             </div>
           ) : (
             <>
+              {/* Edit Budget button */}
+              <div style={{ marginBottom: 12 }}>
+                {!editMode && (
+                  <button className="btn-outline" style={{ padding: "6px 14px", fontSize: 13 }} onClick={() => setEditMode(true)}>
+                    <Edit size={14} /> Edit Budget
+                  </button>
+                )}
+              </div>
+
               <table className="table">
                 <thead>
                   <tr>
@@ -718,7 +734,7 @@ export default function BudgetsPage() {
           /* ───────────────── Month‑wise view ───────────────── */
           relevantAccounts.length === 0 ? (
             <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>
-              No budget or actual data found. Enter a budget to see columns.
+              No budget accounts found. Add Fixed Asset or Expense accounts to start budgeting.
             </div>
           ) : (
             <>
