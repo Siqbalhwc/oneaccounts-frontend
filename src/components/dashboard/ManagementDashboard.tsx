@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { Sun, Moon } from "lucide-react"
 
 export default function ManagementDashboard({ role }: { role: string }) {
   const supabase = createBrowserClient(
@@ -14,9 +13,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
   const [companyId, setCompanyId] = useState("")
   const [loading, setLoading] = useState(true)
-
-  // ── Theme state ──
-  const [darkMode, setDarkMode] = useState(true)
 
   // Filters
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
@@ -239,25 +235,23 @@ export default function ManagementDashboard({ role }: { role: string }) {
     return "?" + params.toString()
   }
 
-  // ── Theme colors ──
+  // Dark‑only theme (hardcoded)
   const theme = {
-    bg: darkMode ? "#0B1120" : "#F8FAFC",
-    cardBg: darkMode ? "#111827" : "#FFFFFF",
-    cardBorder: darkMode ? "#1E293B" : "#E2E8F0",
-    text: darkMode ? "#E2E8F0" : "#1E293B",
-    muted: darkMode ? "#94A3B8" : "#64748B",
-    subtle: darkMode ? "#64748B" : "#94A3B8",
-    heroBg: darkMode ? "#111827" : "#FFFFFF",
-    inputBg: darkMode ? "#1E293B" : "#F8FAFC",
-    inputBorder: darkMode ? "#334155" : "#E2E8F0",
-    inputText: darkMode ? "#F1F5F9" : "#1E293B",
-    warningBg: darkMode ? "#1E293B" : "#FEF2F2",
-    warningBorder: darkMode ? "#1E293B" : "#FECACA",
-    warningText: darkMode ? "#FCA5A5" : "#B91C1C",
-    footerBg: darkMode ? "#0F172A" : "#FFFFFF",
-    footerBorder: darkMode ? "#1E293B" : "#E2E8F0",
-    pillBg: darkMode ? "#1E293B" : "#F1F5F9",
-    pillBorder: darkMode ? "#334155" : "#E2E8F0",
+    bg: "#0B1120",
+    cardBg: "#111827",
+    cardBorder: "#1E293B",
+    text: "#E2E8F0",
+    muted: "#94A3B8",
+    subtle: "#64748B",
+    heroBg: "#111827",
+    inputBg: "#1E293B",
+    inputBorder: "#334155",
+    inputText: "#F1F5F9",
+    warningBg: "#1E293B",
+    warningBorder: "#1E293B",
+    warningText: "#FCA5A5",
+    footerBg: "#0F172A",
+    footerBorder: "#1E293B",
   }
 
   if (loading) {
@@ -270,39 +264,38 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .mgmt * { box-sizing: border-box; margin: 0; padding: 0; }
 
         .mgmt .card {
-          background: var(--card-bg); border: 1px solid var(--card-border);
+          background: #111827; border: 1px solid #1E293B;
           border-radius: 18px; padding: 1.2rem 1.3rem;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
           transition: all 0.2s;
         }
-        .mgmt .card:hover { background: var(--card-hover); border-color: #334155; }
+        .mgmt .card:hover { background: #1E293B; border-color: #334155; }
 
-        /* ── Hero / Greeting bar ── */
         .mgmt .hero {
-          background: var(--hero-bg);
-          border: 1px solid var(--card-border);
+          background: #111827;
+          border: 1px solid #1E293B;
           border-radius: 16px; padding: 1rem 1.5rem;
           margin-bottom: 1rem; display: flex;
           align-items: center; justify-content: space-between;
           flex-wrap: wrap; gap: 0.8rem;
         }
         .mgmt .hero-greeting h2 {
-          font-size: 1.3rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.15rem; white-space: nowrap;
+          font-size: 1.3rem; font-weight: 700; color: #F1F5F9; margin-bottom: 0.15rem; white-space: nowrap;
         }
         .mgmt .hero-greeting p {
-          color: var(--text-muted); font-size: 0.85rem; margin: 0; white-space: nowrap;
+          color: #94A3B8; font-size: 0.85rem; margin: 0; white-space: nowrap;
         }
         .mgmt .hero-filters {
           display: flex; align-items: center; gap: 0.5rem;
           flex-wrap: wrap;
         }
         .mgmt .filter-label {
-          font-weight: 600; color: var(--text-muted); font-size: 0.75rem; margin-right: 0.1rem;
+          font-weight: 600; color: #94A3B8; font-size: 0.75rem; margin-right: 0.1rem;
         }
         .mgmt .filter-pill {
-          background: var(--input-bg); border: 1px solid var(--input-border);
+          background: #1E293B; border: 1px solid #334155;
           padding: 0.2rem 0.6rem; border-radius: 20px;
-          font-size: 0.78rem; font-weight: 500; color: var(--input-text);
+          font-size: 0.78rem; font-weight: 500; color: #F1F5F9;
           cursor: pointer; transition: 0.15s;
           -webkit-appearance: none; appearance: none;
           background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
@@ -312,16 +305,15 @@ export default function ManagementDashboard({ role }: { role: string }) {
         }
         .mgmt .filter-pill:focus { outline: none; border-color: #2563EB; }
 
-        /* ── Warning banner ── */
         .mgmt .warning-banner {
-          background: var(--warning-bg);
-          border: 1px solid var(--warning-border);
+          background: #1E293B;
+          border: 1px solid #1E293B;
           border-left: 6px solid #1E3A8A;
           border-radius: 10px; padding: 8px 16px;
           margin-bottom: 1rem; display: flex;
           align-items: center; justify-content: space-between;
           flex-wrap: wrap; gap: 10px;
-          font-size: 0.9rem; color: var(--warning-text);
+          font-size: 0.9rem; color: #FCA5A5;
           font-weight: 500;
         }
         .mgmt .warning-btn {
@@ -331,7 +323,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
           white-space: nowrap;
         }
 
-        /* ── Unified 5‑column grid ── */
         .dashboard-grid {
           display: grid;
           grid-template-columns: repeat(5, 1fr);
@@ -339,44 +330,34 @@ export default function ManagementDashboard({ role }: { role: string }) {
           margin-bottom: 1rem;
         }
 
-        /* Underspend / detail rows */
+        .kpi-label { text-transform: uppercase; font-size: 0.7rem; font-weight: 700; color: #94A3B8; letter-spacing: 0.04em; }
+        .kpi-value { font-size: 1.7rem; font-weight: 700; color: #F1F5F9; line-height: 1.2; }
+        .kpi-meta { font-size: 0.8rem; color: #64748B; display: flex; align-items: center; gap: 0.3rem; }
+
         .underspend-row {
           display: flex; justify-content: space-between; align-items: center;
-          padding: 0.5rem 0; border-bottom: 1px solid var(--card-border);
+          padding: 0.5rem 0; border-bottom: 1px solid #1E293B;
           gap: 0.8rem;
         }
         .underspend-row:last-child { border-bottom: none; }
         .progress-bg { height: 5px; background: #334155; border-radius: 10px; flex: 1; overflow: hidden; }
         .progress-fill { height: 100%; border-radius: 10px; background: #10B981; }
 
-        .theme-btn {
-          background: var(--input-bg); border: 1px solid var(--input-border);
-          border-radius: 8px; padding: 6px 12px; cursor: pointer;
-          color: var(--input-text); font-size: 0.85rem;
-          display: flex; align-items: center; gap: 6px;
-        }
-
         /* Responsive: collapse to 3 columns, then 2, then stack */
         @media (max-width: 1100px) {
-          .dashboard-grid {
-            grid-template-columns: repeat(3, 1fr);
-          }
+          .dashboard-grid { grid-template-columns: repeat(3, 1fr); }
           .span-3 { grid-column: span 2 !important; }
           .span-2 { grid-column: span 1 !important; }
           .span-1 { grid-column: span 1 !important; }
         }
         @media (max-width: 800px) {
-          .dashboard-grid {
-            grid-template-columns: repeat(2, 1fr);
-          }
+          .dashboard-grid { grid-template-columns: repeat(2, 1fr); }
           .span-3, .span-2, .span-1 { grid-column: span 1 !important; }
           .hero { flex-direction: column; align-items: flex-start; }
           .hero-filters { width: 100%; }
         }
         @media (max-width: 640px) {
-          .dashboard-grid {
-            grid-template-columns: 1fr;
-          }
+          .dashboard-grid { grid-template-columns: 1fr; }
           .span-3, .span-2, .span-1 { grid-column: span 1 !important; }
           .hero { padding: 1rem; }
           .hero-greeting h2 { font-size: 1.1rem; white-space: normal; }
@@ -392,28 +373,8 @@ export default function ManagementDashboard({ role }: { role: string }) {
         }
       `}</style>
 
-      {/* Inject CSS variables based on theme */}
-      <style>{`
-        .mgmt {
-          --card-bg: ${theme.cardBg};
-          --card-border: ${theme.cardBorder};
-          --card-hover: ${darkMode ? "#1E293B" : "#F8FAFC"};
-          --hero-bg: ${theme.heroBg};
-          --text-primary: ${theme.text};
-          --text-muted: ${theme.muted};
-          --input-bg: ${theme.inputBg};
-          --input-border: ${theme.inputBorder};
-          --input-text: ${theme.inputText};
-          --warning-bg: ${theme.warningBg};
-          --warning-border: ${theme.warningBorder};
-          --warning-text: ${theme.warningText};
-          --footer-bg: ${theme.footerBg};
-          --footer-border: ${theme.footerBorder};
-        }
-      `}</style>
-
       <div className="mgmt" style={{ padding: "0.8rem 1.2rem" }}>
-        {/* ── Hero bar: greeting + filters + theme toggle ── */}
+        {/* ── Hero bar (no theme toggle) ── */}
         <div className="hero">
           <div className="hero-greeting">
             <h2>{getGreeting()}, siqbalhwc</h2>
@@ -434,10 +395,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
               <option value="">All Donors</option>
               {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
-            <button className="theme-btn" onClick={() => setDarkMode(!darkMode)}>
-              {darkMode ? <Sun size={16} /> : <Moon size={16} />}
-              {darkMode ? "Light" : "Dark"}
-            </button>
           </div>
         </div>
 
@@ -447,68 +404,64 @@ export default function ManagementDashboard({ role }: { role: string }) {
             <span>
               ⚠️ Portfolio overspent by {formatPKR(filteredTotalSpent - filteredTotalBudget)}. {filteredOverspentCount} {filteredOverspentCount === 1 ? "project" : "projects"} need review.
             </span>
-            <button
-              className="warning-btn"
-              onClick={() => router.push("/dashboard/reports/overspent" + detailQuery())}
-            >
+            <button className="warning-btn" onClick={() => router.push("/dashboard/reports/overspent" + detailQuery())}>
               View overspent projects →
             </button>
           </div>
         )}
 
-        {/* ── KPI Row (5 columns) ── */}
+        {/* ── Row 1: KPI cards (5 columns, as is) ── */}
         <div className="dashboard-grid">
-          <div className="card kpi-card span-1" onClick={() => router.push("/dashboard/reports/budget-summary" + detailQuery())}>
-            <div className="kpi-label" style={{ textTransform: "uppercase", fontSize: "0.7rem", fontWeight: 700, color: theme.muted, letterSpacing: "0.04em" }}>Total Budget</div>
-            <div className="kpi-value" style={{ fontSize: "1.7rem", fontWeight: 700, color: theme.text, lineHeight: 1.2 }}>{formatPKR(filteredTotalBudget)}</div>
-            <div className="kpi-meta" style={{ fontSize: "0.8rem", color: theme.subtle }}>{filteredProjectRows.length} projects</div>
+          <div className="card span-1" onClick={() => router.push("/dashboard/reports/budget-summary" + detailQuery())}>
+            <div className="kpi-label">Total Budget</div>
+            <div className="kpi-value">{formatPKR(filteredTotalBudget)}</div>
+            <div className="kpi-meta">{filteredProjectRows.length} projects</div>
           </div>
-          <div className="card kpi-card span-1" onClick={() => router.push("/dashboard/reports/spending-detail" + detailQuery())}>
-            <div className="kpi-label" style={{ textTransform: "uppercase", fontSize: "0.7rem", fontWeight: 700, color: theme.muted, letterSpacing: "0.04em" }}>Total Spent</div>
-            <div className="kpi-value" style={{ fontSize: "1.7rem", fontWeight: 700, color: theme.text, lineHeight: 1.2 }}>{formatPKR(filteredTotalSpent)}</div>
-            <div className="kpi-meta" style={{ fontSize: "0.8rem", color: theme.subtle }}>{spentPct}% of budget</div>
+          <div className="card span-1" onClick={() => router.push("/dashboard/reports/spending-detail" + detailQuery())}>
+            <div className="kpi-label">Total Spent</div>
+            <div className="kpi-value">{formatPKR(filteredTotalSpent)}</div>
+            <div className="kpi-meta">{spentPct}% of budget</div>
           </div>
-          <div className="card kpi-card span-1"
+          <div className="card span-1"
             style={{ cursor: remainingFunds < 0 ? "pointer" : "default" }}
             onClick={() => { if (remainingFunds < 0) router.push("/dashboard/reports/overspent" + detailQuery()) }}>
-            <div className="kpi-label" style={{ textTransform: "uppercase", fontSize: "0.7rem", fontWeight: 700, color: theme.muted, letterSpacing: "0.04em" }}>{remainingFunds < 0 ? "Overspent" : "Remaining"}</div>
-            <div className="kpi-value" style={{ fontSize: "1.7rem", fontWeight: 700, color: theme.text, lineHeight: 1.2 }}>{formatPKR(remainingFunds)}</div>
-            <div className="kpi-meta" style={{ fontSize: "0.8rem", color: theme.subtle }}>
+            <div className="kpi-label">{remainingFunds < 0 ? "Overspent" : "Remaining"}</div>
+            <div className="kpi-value">{formatPKR(remainingFunds)}</div>
+            <div className="kpi-meta">
               {remainingFunds < 0
                 ? `${Math.abs(Math.round((remainingFunds / filteredTotalBudget) * 100))}% over budget`
-                : `${Math.round((remainingFunds / filteredTotalBudget) * 100)}% unspent`
-              }
+                : `${Math.round((remainingFunds / filteredTotalBudget) * 100)}% unspent`}
             </div>
           </div>
-          <div className="card kpi-card span-1" onClick={() => router.push("/dashboard/reports/overspent" + detailQuery())}>
-            <div className="kpi-label" style={{ textTransform: "uppercase", fontSize: "0.7rem", fontWeight: 700, color: theme.muted, letterSpacing: "0.04em" }}>Portfolio Health</div>
-            <div className="kpi-value" style={{ fontSize: "1.7rem", fontWeight: 700, color: filteredOverspentCount > 0 ? "#F59E0B" : theme.text, lineHeight: 1.2 }}>
+          <div className="card span-1" onClick={() => router.push("/dashboard/reports/overspent" + detailQuery())}>
+            <div className="kpi-label">Portfolio Health</div>
+            <div className="kpi-value" style={{ color: filteredOverspentCount > 0 ? "#F59E0B" : "#F1F5F9" }}>
               {filteredOverspentCount > 0 ? "⚠️ Needs Attention" : "Healthy"}
             </div>
-            <div className="kpi-meta" style={{ fontSize: "0.8rem", color: theme.subtle }}>{Math.round((1 - filteredOverspentCount / Math.max(filteredProjectRows.length, 1)) * 100)}% health score</div>
+            <div className="kpi-meta">{Math.round((1 - filteredOverspentCount / Math.max(filteredProjectRows.length, 1)) * 100)}% health score</div>
           </div>
-          <div className="card kpi-card span-1">
-            <div className="kpi-label" style={{ textTransform: "uppercase", fontSize: "0.7rem", fontWeight: 700, color: theme.muted, letterSpacing: "0.04em" }}>📆 Monthly Spending</div>
-            <div className="kpi-value" style={{ fontSize: "1.7rem", fontWeight: 700, color: "#EF4444", lineHeight: 1.2 }}>{formatPKR(monthlySpending)}</div>
-            <div className="kpi-meta" style={{ fontSize: "0.8rem", color: theme.subtle }}>{new Date().toLocaleString('default', { month: 'long' })}</div>
+          <div className="card span-1">
+            <div className="kpi-label">📆 Monthly Spending</div>
+            <div className="kpi-value" style={{ color: "#EF4444" }}>{formatPKR(monthlySpending)}</div>
+            <div className="kpi-meta">{new Date().toLocaleString('default', { month: 'long' })}</div>
           </div>
         </div>
 
-        {/* ── Project Utilization (3 cols) + Donor Balances (2 cols) ── */}
+        {/* ── Row 2: Project Utilization (span 3) + Donor Balances (span 2) ── */}
         <div className="dashboard-grid">
-          <div className="card span-3" style={{ padding: "1.2rem 1.3rem" }}>
-            <div className="kpi-label" style={{ fontWeight: 700, fontSize: "0.95rem", color: theme.text, marginBottom: "0.8rem" }}>📊 Project Utilization</div>
+          <div className="card span-3">
+            <div className="kpi-label" style={{ fontWeight: 700, fontSize: "0.95rem", color: "#F1F5F9", marginBottom: "0.8rem" }}>📊 Project Utilization</div>
             {filteredProjectRows.map((p, idx) => (
               <div key={idx} onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}`)} style={{
                 display: "flex", alignItems: "center", gap: "0.8rem",
-                background: theme.cardBg, borderRadius: "12px", padding: "0.5rem 1rem",
-                border: `1px solid ${theme.cardBorder}`, cursor: "pointer", marginBottom: "0.5rem",
+                background: "#111827", borderRadius: "12px", padding: "0.5rem 1rem",
+                border: "1px solid #1E293B", cursor: "pointer", marginBottom: "0.5rem",
                 flexWrap: "wrap",
               }}>
                 <div style={{ width: 8, height: 8, borderRadius: "50%", background: p.pct > 100 ? "#dc2626" : p.pct > 80 ? "#f59e0b" : "#16a34a", flexShrink: 0 }}></div>
-                <span style={{ flex: 1, fontWeight: 600, fontSize: "0.85rem", color: theme.text }}>{p.name}</span>
+                <span style={{ flex: 1, fontWeight: 600, fontSize: "0.85rem", color: "#E2E8F0" }}>{p.name}</span>
                 <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
-                  <span style={{ fontWeight: 600, minWidth: 60, fontSize: "0.8rem", color: theme.text }}>{formatPKR(p.actual)}</span>
+                  <span style={{ fontWeight: 600, minWidth: 60, fontSize: "0.8rem", color: "#E2E8F0" }}>{formatPKR(p.actual)}</span>
                   <span style={{ minWidth: 50, color: p.pct > 100 ? "#dc2626" : p.pct > 80 ? "#d97706" : "#16a34a", fontSize: "0.8rem" }}>{p.pct}%</span>
                   <span style={{
                     padding: "0.1rem 0.6rem", borderRadius: "12px", fontSize: "0.7rem", fontWeight: 700,
@@ -521,58 +474,58 @@ export default function ManagementDashboard({ role }: { role: string }) {
               </div>
             ))}
           </div>
-          <div className="card span-2" style={{ padding: "1.2rem 1.3rem" }}>
-            <div className="kpi-label" style={{ fontWeight: 700, fontSize: "0.95rem", color: theme.text, marginBottom: "0.8rem" }}>💧 Donor Balances</div>
+          <div className="card span-2">
+            <div className="kpi-label" style={{ fontWeight: 700, fontSize: "0.95rem", color: "#F1F5F9", marginBottom: "0.8rem" }}>💧 Donor Balances</div>
             {filteredDonorBalances.map((d, idx) => (
               <div key={idx} onClick={() => router.push(`/dashboard/settings/budgets?donor=${d.donor_id}`)} style={{
                 display: "flex", alignItems: "center", gap: "0.8rem",
-                background: theme.cardBg, borderRadius: "12px", padding: "0.5rem 1rem",
-                border: `1px solid ${theme.cardBorder}`, cursor: "pointer", marginBottom: "0.5rem",
+                background: "#111827", borderRadius: "12px", padding: "0.5rem 1rem",
+                border: "1px solid #1E293B", cursor: "pointer", marginBottom: "0.5rem",
                 flexWrap: "wrap",
               }}>
                 <div style={{ width: 8, height: 8, borderRadius: "50%", background: d.overspent ? "#dc2626" : "#1e3a8a", flexShrink: 0 }}></div>
-                <span style={{ flex: 1, fontWeight: 600, fontSize: "0.85rem", color: theme.text }}>{d.name}</span>
-                <span style={{ fontWeight: 700, fontSize: "0.85rem", color: theme.text }}>{formatPKR(d.remaining)}</span>
-                <span style={{ fontSize: "0.75rem", color: theme.muted, minWidth: 30, textAlign: "right" }}>{d.pct}%</span>
+                <span style={{ flex: 1, fontWeight: 600, fontSize: "0.85rem", color: "#E2E8F0" }}>{d.name}</span>
+                <span style={{ fontWeight: 700, fontSize: "0.85rem", color: "#E2E8F0" }}>{formatPKR(d.remaining)}</span>
+                <span style={{ fontSize: "0.75rem", color: "#94A3B8", minWidth: 30, textAlign: "right" }}>{d.pct}%</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* ── Underspend (3 cols) + Receivables (1) + Unpaid (1) ── */}
+        {/* ── Row 3: Underspend (span 3) + Receivables (span 1) + Unpaid (span 1) ── */}
         <div className="dashboard-grid">
-          <div className="card span-3" style={{ padding: "1.2rem 1.3rem" }}>
-            <div className="kpi-label" style={{ fontWeight: 700, fontSize: "0.95rem", color: theme.text, marginBottom: "0.8rem" }}>💡 Top 3 Underspend Activities</div>
+          <div className="card span-3">
+            <div className="kpi-label" style={{ fontWeight: 700, fontSize: "0.95rem", color: "#F1F5F9", marginBottom: "0.8rem" }}>💡 Top 3 Underspend Activities</div>
             {underspentActivities.length === 0 ? (
-              <div style={{ fontSize: "0.8rem", color: theme.muted }}>No activities with remaining budget this month.</div>
+              <div style={{ fontSize: "0.8rem", color: "#94A3B8" }}>No activities with remaining budget this month.</div>
             ) : (
               underspentActivities.map((act, idx) => (
                 <div key={idx} className="underspend-row">
-                  <span style={{ fontSize: "0.8rem", color: theme.text, fontWeight: 600, width: "30%" }}>{act.name}</span>
-                  <span style={{ fontSize: "0.8rem", color: theme.muted, width: "20%" }}>Budget: {formatDetail(act.budget)}</span>
-                  <span style={{ fontSize: "0.8rem", color: theme.muted, width: "20%" }}>Actual: {formatDetail(act.actual)}</span>
+                  <span style={{ fontSize: "0.8rem", color: "#E2E8F0", fontWeight: 600, width: "25%" }}>{act.name}</span>
+                  <span style={{ fontSize: "0.8rem", color: "#94A3B8", width: "18%" }}>Budget: {formatDetail(act.budget)}</span>
+                  <span style={{ fontSize: "0.8rem", color: "#94A3B8", width: "18%" }}>Actual: {formatDetail(act.actual)}</span>
                   <div style={{ width: "20%", display: "flex", alignItems: "center", gap: "0.4rem" }}>
                     <div className="progress-bg"><div className="progress-fill" style={{ width: `${Math.min(act.pct, 100)}%` }}></div></div>
                     <span style={{ fontSize: "0.7rem", color: "#10B981", fontWeight: 600 }}>{act.pct}%</span>
                   </div>
-                  <span style={{ width: "10%", textAlign: "right", fontSize: "0.8rem", fontWeight: 600, color: "#10B981" }}>{formatDetail(act.remaining)}</span>
+                  <span style={{ width: "12%", textAlign: "right", fontSize: "0.8rem", fontWeight: 600, color: "#10B981" }}>{formatDetail(act.remaining)}</span>
                 </div>
               ))
             )}
           </div>
-          <div className="card span-1" style={{ padding: "1.2rem 1.3rem" }}>
-            <div className="kpi-label" style={{ fontWeight: 700, fontSize: "0.95rem", color: theme.text, marginBottom: "0.8rem" }}>🧾 Receivables</div>
-            <div className="kpi-value" style={{ fontSize: "1.7rem", fontWeight: 700, color: theme.text }}>{formatPKR(totalReceivables)}</div>
+          <div className="card span-1">
+            <div className="kpi-label" style={{ fontWeight: 700, fontSize: "0.95rem", color: "#F1F5F9", marginBottom: "0.8rem" }}>🧾 Receivables</div>
+            <div className="kpi-value">{formatPKR(totalReceivables)}</div>
           </div>
-          <div className="card span-1" style={{ padding: "1.2rem 1.3rem" }}>
-            <div className="kpi-label" style={{ fontWeight: 700, fontSize: "0.95rem", color: theme.text, marginBottom: "0.8rem" }}>📦 Unpaid Invoices</div>
-            <div className="kpi-value" style={{ fontSize: "1.7rem", fontWeight: 700, color: theme.text }}>{unpaidInvoices}</div>
+          <div className="card span-1">
+            <div className="kpi-label" style={{ fontWeight: 700, fontSize: "0.95rem", color: "#F1F5F9", marginBottom: "0.8rem" }}>📦 Unpaid Invoices</div>
+            <div className="kpi-value">{unpaidInvoices}</div>
             {unpaidDetails.length > 0 && (
               <div style={{ marginTop: "0.8rem" }}>
                 {unpaidDetails.map((inv, idx) => (
                   <div key={idx} className="underspend-row">
-                    <span style={{ fontSize: "0.8rem", color: theme.text }}>{inv.invoice_no}</span>
-                    <span style={{ fontSize: "0.8rem", color: theme.muted }}>{inv.customers?.name || "—"}</span>
+                    <span style={{ fontSize: "0.8rem", color: "#E2E8F0" }}>{inv.invoice_no}</span>
+                    <span style={{ fontSize: "0.8rem", color: "#94A3B8" }}>{inv.customers?.name || "—"}</span>
                     <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#FCA5A5" }}>{formatDetail(inv.total)}</span>
                   </div>
                 ))}
@@ -583,10 +536,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
         {/* ── Footer summary ── */}
         <div style={{
-          background: theme.footerBg, borderTop: `1px solid ${theme.footerBorder}`,
-          padding: "0.6rem 1.2rem", borderRadius: 12, display: "flex",
-          justifyContent: "space-between", flexWrap: "wrap", gap: "0.8rem",
-          fontSize: "0.8rem", color: theme.muted, fontWeight: 500
+          background: "#0F172A", borderRadius: 12, padding: "0.6rem 1.2rem",
+          border: "1px solid #1E293B", display: "flex", justifyContent: "space-between",
+          flexWrap: "wrap", gap: "0.8rem", fontSize: "0.8rem", color: "#94A3B8", fontWeight: 500
         }}>
           <span>⚠️ Portfolio Health: {filteredOverspentCount > 0 ? "Needs Attention" : "Healthy"}</span>
           <span>💰 Total Budget: {formatPKR(filteredTotalBudget)}</span>
