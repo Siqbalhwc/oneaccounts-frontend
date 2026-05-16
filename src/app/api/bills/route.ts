@@ -30,11 +30,11 @@ async function getDefaultExpenseAccount(supabase: any, companyId: string, type: 
   return null
 }
 
-// ── Create journal entry for a bill ────────────────────────────────────────
+// ── Create journal entry for a bill (now with product support) ────────────
 async function createBillJournalEntry(
   supabase: any,
   bill: any,
-  items: any[],          // each item may have account_id, location_id, activity_id, etc.
+  items: any[],          // original items array from request (has product_id, etc.)
   companyId: string,
   businessType: string
 ) {
@@ -42,14 +42,22 @@ async function createBillJournalEntry(
   let totalDebit = 0
 
   for (const item of items) {
-    // 1. Determine the debit account
+    const amount = (item.qty || 0) * (item.unit_price || 0)
+    if (amount <= 0) continue
+
+    // Determine the debit account
     let accountId = item.account_id || null
+    if (!accountId && item.product_id) {
+      // Product purchase → debit Inventory (1200)
+      const invAcc = await supabase.from('accounts')
+        .select('id').eq('code','1200').eq('company_id', companyId).maybeSingle()
+      accountId = invAcc?.id || null
+    }
     if (!accountId) {
       accountId = await getDefaultExpenseAccount(supabase, companyId, businessType)
     }
     if (!accountId) continue
 
-    const amount = item.qty * item.unit_price
     totalDebit += amount
 
     const line: any = {
@@ -60,16 +68,14 @@ async function createBillJournalEntry(
       activity_id: item.activity_id || null,
     }
 
-    // 2. For NGO, attach project/donor from activity + budget
+    // For NGO, attach project/donor from activity + budget
     if (businessType === 'ngo' && item.activity_id) {
-      // Fetch project from activity
       const { data: actData } = await supabase.from('activities')
         .select('project_id')
         .eq('id', item.activity_id)
         .single()
       line.project_id = actData?.project_id || null
 
-      // Fetch donor from budgets
       const { data: donorRow } = await supabase.from('budgets')
         .select('donor_id')
         .eq('company_id', companyId)
@@ -84,6 +90,15 @@ async function createBillJournalEntry(
     }
 
     debitLines.push(line)
+
+    // Increase product stock for product purchases
+    if (item.product_id) {
+      await supabase
+        .from('products')
+        .update({ qty_on_hand: supabase.raw(`qty_on_hand + ${item.qty || 0}`) })
+        .eq('id', item.product_id)
+        .eq('company_id', companyId)
+    }
   }
 
   if (debitLines.length === 0) return null
@@ -109,7 +124,7 @@ async function createBillJournalEntry(
 
   if (entryErr || !entry) throw new Error(entryErr?.message || 'JE insert failed')
 
-  // Insert journal lines – now with project/activity/location/donor tags + source tracking
+  // Insert journal lines – now tagged
   const lineRows = debitLines.map(l => ({
     company_id: companyId,
     entry_id: entry.id,
@@ -137,10 +152,6 @@ async function createBillJournalEntry(
 
   return entry.id
 }
-
-// … rest of the route (POST, PUT, DELETE) remains unchanged, but the items passed to createBillJournalEntry now carry the new fields.
-// The POST handler already passes `itemRows` which contain `account_id`, `location_id`, `activity_id`. We just need to make sure they are included.
-// In the existing POST, `itemRows` only contained `account_id`. We'll update the POST to include the new fields from the request.
 
 // ═══════════════════ POST – Create Bill ═══════════════════
 export async function POST(request: NextRequest) {
@@ -198,9 +209,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: headerError?.message || 'Failed to create bill' }, { status: 500 })
   }
 
-  // Insert items – now with account_id, location_id, activity_id
+  // Insert items – only basic columns (no activity_id, location_id, etc.)
   let total = 0
-  const itemRows = items.map((item: any) => {
+  const itemRowsForDb = items.map((item: any) => {
     const qty = Number(item.qty || 0)
     const unit_price = Number(item.unit_price || 0)
     const lineTotal = qty * unit_price
@@ -211,15 +222,12 @@ export async function POST(request: NextRequest) {
       qty,
       unit_price,
       total: lineTotal,
-      account_id: item.account_id || null,
-      location_id: item.location_id || null,
-      activity_id: item.activity_id || null,
       company_id: companyId,
     }
   })
 
-  if (itemRows.length > 0) {
-    const { error: itemsError } = await supabase.from('invoice_items').insert(itemRows)
+  if (itemRowsForDb.length > 0) {
+    const { error: itemsError } = await supabase.from('invoice_items').insert(itemRowsForDb)
     if (itemsError) {
       return NextResponse.json({ error: itemsError.message }, { status: 500 })
     }
@@ -237,9 +245,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: updateError?.message || 'Failed to update total' }, { status: 500 })
   }
 
-  // ── Create journal entry ──
+  // ── Create journal entry (using original items array with tags) ──
   try {
-    await createBillJournalEntry(supabase, updatedBill, itemRows, companyId, businessType)
+    await createBillJournalEntry(supabase, updatedBill, items, companyId, businessType)
   } catch (e: any) {
     await supabase.from('invoice_items').delete().eq('invoice_id', bill.id)
     await supabase.from('invoices').delete().eq('id', bill.id)
@@ -251,4 +259,4 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ success: true, bill: updatedBill })
 }
 
-// … PUT and DELETE handlers remain the same (only POST had item changes).
+// … PUT and DELETE handlers unchanged (they don't need the new fields)
