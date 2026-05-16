@@ -69,20 +69,25 @@ export default function TrialBalancePage() {
         return
       }
 
-      // Build trial balance rows
+      // Build trial balance rows with CORRECTED debit/credit logic
       const rows = accounts.map(acc => {
         const balance = acc.balance || 0
         const typeLower = (acc.type || "").toLowerCase()
         let debit = 0, credit = 0
 
+        // ── CORRECTED SIGN HANDLING ──
+        // balance is stored as Dr - Cr for ALL accounts
+        // Asset/Expense → normal is positive (debit)
+        // Liability/Equity/Revenue → normal is negative (credit)
         if (typeLower === "asset" || typeLower === "expense") {
-          // Normal debit balance
+          // Positive balance = debit, negative = credit
           debit = balance > 0 ? balance : 0
           credit = balance < 0 ? -balance : 0
         } else {
-          // Liability, Equity, Revenue – normal credit balance
-          credit = balance > 0 ? balance : 0
-          debit = balance < 0 ? -balance : 0
+          // Liability / Equity / Revenue
+          // Negative balance = credit (normal), positive = debit (abnormal)
+          credit = balance < 0 ? -balance : 0   // negative → credit
+          debit = balance > 0 ? balance : 0      // positive → debit
         }
 
         const category = acc.category || getFallbackCategory(acc.code)
@@ -137,7 +142,7 @@ export default function TrialBalancePage() {
 
   const totalDebit = sortedData.reduce((s, r) => s + r.debit, 0)
   const totalCredit = sortedData.reduce((s, r) => s + r.credit, 0)
-  const isBalanced = Math.abs(totalDebit - totalCredit) < 0.01 && totalDebit > 0
+  const isBalanced = Math.abs(totalDebit - totalCredit) < 0.01
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
