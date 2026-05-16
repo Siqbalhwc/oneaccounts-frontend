@@ -235,31 +235,12 @@ export default function ManagementDashboard({ role }: { role: string }) {
     return "?" + params.toString()
   }
 
-  // Dark‑only theme (hardcoded)
-  const theme = {
-    bg: "#0B1120",
-    cardBg: "#111827",
-    cardBorder: "#1E293B",
-    text: "#E2E8F0",
-    muted: "#94A3B8",
-    subtle: "#64748B",
-    heroBg: "#111827",
-    inputBg: "#1E293B",
-    inputBorder: "#334155",
-    inputText: "#F1F5F9",
-    warningBg: "#1E293B",
-    warningBorder: "#1E293B",
-    warningText: "#FCA5A5",
-    footerBg: "#0F172A",
-    footerBorder: "#1E293B",
-  }
-
   if (loading) {
-    return <div style={{ padding: 40, textAlign: "center", background: theme.bg, minHeight: "100vh", color: theme.muted }}>Loading…</div>
+    return <div style={{ padding: 40, textAlign: "center", background: "#0B1120", minHeight: "100vh", color: "#94A3B8" }}>Loading…</div>
   }
 
   return (
-    <div style={{ background: theme.bg, minHeight: "100%", flex: 1, fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: theme.text }}>
+    <div style={{ background: "#0B1120", minHeight: "100%", flex: 1, fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: "#E2E8F0" }}>
       <style>{`
         .mgmt * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -271,6 +252,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         }
         .mgmt .card:hover { background: #1E293B; border-color: #334155; }
 
+        /* ── Hero / Greeting bar ── */
         .mgmt .hero {
           background: #111827;
           border: 1px solid #1E293B;
@@ -305,6 +287,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         }
         .mgmt .filter-pill:focus { outline: none; border-color: #2563EB; }
 
+        /* ── Warning banner ── */
         .mgmt .warning-banner {
           background: #1E293B;
           border: 1px solid #1E293B;
@@ -323,12 +306,16 @@ export default function ManagementDashboard({ role }: { role: string }) {
           white-space: nowrap;
         }
 
+        /* ── Unified 5‑column grid ── */
         .dashboard-grid {
           display: grid;
           grid-template-columns: repeat(5, 1fr);
           gap: 1rem;
           margin-bottom: 1rem;
         }
+        .span-1 { grid-column: span 1; }
+        .span-2 { grid-column: span 2; }
+        .span-3 { grid-column: span 3; }
 
         .kpi-label { text-transform: uppercase; font-size: 0.7rem; font-weight: 700; color: #94A3B8; letter-spacing: 0.04em; }
         .kpi-value { font-size: 1.7rem; font-weight: 700; color: #F1F5F9; line-height: 1.2; }
@@ -374,7 +361,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
       `}</style>
 
       <div className="mgmt" style={{ padding: "0.8rem 1.2rem" }}>
-        {/* ── Hero bar (no theme toggle) ── */}
+        {/* ── Hero bar: greeting + filters ── */}
         <div className="hero">
           <div className="hero-greeting">
             <h2>{getGreeting()}, siqbalhwc</h2>
@@ -410,7 +397,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </div>
         )}
 
-        {/* ── Row 1: KPI cards (5 columns, as is) ── */}
+        {/* ── Row 1: KPI cards (5 equal columns) ── */}
         <div className="dashboard-grid">
           <div className="card span-1" onClick={() => router.push("/dashboard/reports/budget-summary" + detailQuery())}>
             <div className="kpi-label">Total Budget</div>
