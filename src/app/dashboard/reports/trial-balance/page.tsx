@@ -47,25 +47,33 @@ export default function TrialBalancePage() {
   const [loading, setLoading] = useState(true)
   const [sortField, setSortField] = useState<SortField>("code")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
+  const [errorMsg, setErrorMsg] = useState("")
 
   // Read type/category filters from URL
   const filterType = searchParams.get("type") || ""
   const filterCategory = searchParams.get("category") || ""
 
   // Fetch period‑based trial balance
-  useEffect(() => {
-    const fetchData = async () => {
+  const fetchTrial = async () => {
+    setLoading(true)
+    setErrorMsg("")
+    try {
       const { data: { user } } = await supabase.auth.getUser()
       const cid = (user?.app_metadata as any)?.company_id
-      if (!cid) { setLoading(false); return }
+      if (!cid) {
+        setErrorMsg("Company not found")
+        setLoading(false)
+        return
+      }
 
-      // 1. Get all accounts for company (for type, name, category info)
-      const { data: accounts } = await supabase
+      // 1. Get all accounts for company
+      const { data: accounts, error: accErr } = await supabase
         .from("accounts")
         .select("id, code, name, type, category")
         .eq("company_id", cid)
         .order("code")
 
+      if (accErr) throw accErr
       if (!accounts) { setLoading(false); return }
 
       // 2. Fetch journal lines within the period (exclude soft‑deleted)
@@ -79,7 +87,8 @@ export default function TrialBalancePage() {
       if (startDate) query = query.gte("journal_entries.date", startDate)
       if (endDate)   query = query.lte("journal_entries.date", endDate)
 
-      const { data: lines } = await query
+      const { data: lines, error: linesErr } = await query
+      if (linesErr) throw linesErr
 
       // 3. Aggregate by account: net = sum(debit) - sum(credit)
       const agg: Record<number, number> = {}
@@ -107,7 +116,7 @@ export default function TrialBalancePage() {
         }
       })
 
-      // Apply filters from URL
+      // Apply URL filters
       let filtered = rows
       if (filterType) {
         filtered = filtered.filter(r => r.type.toLowerCase() === filterType.toLowerCase())
@@ -117,11 +126,16 @@ export default function TrialBalancePage() {
       }
 
       setTrialData(filtered)
+    } catch (e: any) {
+      setErrorMsg(e.message || "Failed to load trial balance")
+    } finally {
       setLoading(false)
     }
+  }
 
-    fetchData()
-  }, [startDate, endDate])  // re‑fetch when dates change
+  useEffect(() => {
+    fetchTrial()
+  }, [startDate, endDate, filterType, filterCategory]) // re‑fetch when dates or filters change
 
   // Sorting
   const sortedData = useMemo(() => {
@@ -182,9 +196,9 @@ export default function TrialBalancePage() {
         .tb-sort-btn { background: none; border: none; cursor: pointer; font: inherit; color: inherit; display: inline-flex; align-items: center; gap: 4px; padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px; }
         .tb-sort-btn:hover { color: #93C5FD; }
         .date-input {
-          height: 38px; border: 1.5px solid #334155; border-radius: 8px;
-          padding: 0 12px; font-size: 13px; background: #1E293B; color: #F1F5F9;
-          outline: none; font-family: inherit; width: 150px;
+          height: 34px; border: 1.5px solid #334155; border-radius: 8px;
+          padding: 0 10px; font-size: 12px; background: #1E293B; color: #F1F5F9;
+          outline: none; font-family: inherit; width: 140px;
         }
         .date-input:focus { border-color: #64748B; }
         .btn { padding: 8px 16px; border-radius: 8px; border: 1.5px solid #334155; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
@@ -196,44 +210,43 @@ export default function TrialBalancePage() {
         }
       `}</style>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+      {/* Header with date filter on the right */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
         <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}>
           <ArrowLeft size={16} />
         </button>
-        <div>
+        <div style={{ flex: 1, minWidth: 200 }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>⚖️ Trial Balance</h1>
           <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>
-            {filterType || filterCategory ? `Filtered: ${filterType || ""} ${filterCategory || ""}` : "All accounts · Select period"}
+            {filterType || filterCategory ? `Filtered: ${filterType || ""} ${filterCategory || ""}` : "All accounts"}
           </p>
+        </div>
+        {/* Date filter on the right */}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input
+            type="date"
+            className="date-input"
+            value={startDate}
+            onChange={e => setStartDate(e.target.value)}
+          />
+          <span style={{ color: "#94A3B8", fontSize: 12 }}>to</span>
+          <input
+            type="date"
+            className="date-input"
+            value={endDate}
+            onChange={e => setEndDate(e.target.value)}
+          />
+          <button className="btn btn-outline" onClick={fetchTrial}>
+            Refresh
+          </button>
         </div>
       </div>
 
-      {/* Period selector */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
-        <input
-          type="date"
-          className="date-input"
-          value={startDate}
-          onChange={e => setStartDate(e.target.value)}
-        />
-        <span style={{ color: "#94A3B8" }}>to</span>
-        <input
-          type="date"
-          className="date-input"
-          value={endDate}
-          onChange={e => setEndDate(e.target.value)}
-        />
-        <button
-          className="btn btn-outline"
-          onClick={() => {
-            // Trigger re‑fetch by toggling loading (the useEffect depends on startDate/endDate)
-            setLoading(true)
-            // The actual fetch is handled by the useEffect
-          }}
-        >
-          Refresh
-        </button>
-      </div>
+      {errorMsg && (
+        <div style={{ background: "#1E293B", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
+          {errorMsg}
+        </div>
+      )}
 
       {/* Summary tiles */}
       <div className="tb-summary-grid">
@@ -263,7 +276,7 @@ export default function TrialBalancePage() {
       {loading ? (
         <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading accounts…</div>
       ) : sortedData.length === 0 ? (
-        <div className="tb-card" style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>No accounts match the selected filter.</div>
+        <div className="tb-card" style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>No accounts match the selected filter or date range.</div>
       ) : (
         <div className="tb-card" style={{ padding: 0, overflowX: "auto" }}>
           <div className="tb-table-header">
