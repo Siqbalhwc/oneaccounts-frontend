@@ -103,8 +103,8 @@ export default function LedgerPage() {
 
   const acc = accounts.find((a) => a.id === accountId)
 
-  // Closing balance = last balance in the sorted array (or 0 if no lines)
-  const computedClosing = sortedLines.length > 0 ? sortedLines[sortedLines.length - 1].balance : 0
+  // Closing balance computed from the original (already date‑sorted) lines
+  const computedClosing = lines.length > 0 ? lines[lines.length - 1].balance : 0
 
   // Sorting logic (client‑side)
   const sortedLines = useMemo(() => {
@@ -149,7 +149,6 @@ export default function LedgerPage() {
     return list
   }, [lines, sortField, sortDir])
 
-  // Use computedClosing for display
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDir((prev) => (prev === "asc" ? "desc" : "asc"))
@@ -225,7 +224,7 @@ export default function LedgerPage() {
         </div>
       </div>
 
-      {/* Summary Cards (account info) – now uses computed closing balance */}
+      {/* Summary Cards (account info) – uses computedClosing */}
       {acc && (
         <div className="summary-grid">
           <div className="summary-item">
