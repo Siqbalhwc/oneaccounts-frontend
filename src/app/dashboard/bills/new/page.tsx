@@ -52,9 +52,17 @@ export default function NewBillPage() {
   const [activities, setActivities] = useState<any[]>([])
   const [allAccounts, setAllAccounts] = useState<any[]>([])
 
+  // Project/donor cache per activity
+  const [projectCache, setProjectCache] = useState<Record<number, { id: number | null; name: string }>>({})
+  const [donorCache, setDonorCache] = useState<Record<number, { id: number | null; name: string }>>({})
+
+  // Budget info per activity+account
+  const [budgetInfo, setBudgetInfo] = useState<Record<string, { budget: number; spent: number; available: number }>>({})
+  const [budgetError, setBudgetError] = useState("")
+
   const fiscalYear = new Date().getFullYear()
 
-  // ── Load company, suppliers, products, master data ────────────────────
+  // ── Load master data ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -97,7 +105,7 @@ export default function NewBillPage() {
     })
   }, [])
 
-  // ── If editing, load existing bill ────────────────────────────────────
+  // ── If editing, load existing bill ──
   useEffect(() => {
     if (!editId || !companyId) return
     supabase.from("invoices")
@@ -140,7 +148,7 @@ export default function NewBillPage() {
       })
   }, [editId, companyId, suppliers])
 
-  // ── Supplier helpers ───────────────────────────────────────────────────
+  // ── Supplier helpers ──
   const filteredSuppliers = suppliers.filter(s =>
     s.name.toLowerCase().includes(supplierSearch.toLowerCase()) ||
     s.code.toLowerCase().includes(supplierSearch.toLowerCase()) ||
@@ -178,29 +186,79 @@ export default function NewBillPage() {
       })
   }
 
-  // ── Product search helpers ────────────────────────────────────────────
+  // ── Fetch project/donor for an activity ──
+  const fetchProjectAndDonor = async (activityId: number) => {
+    if (projectCache[activityId] && donorCache[activityId]) return
+    try {
+      const { data: actData } = await supabase.from("activities")
+        .select("project_id, projects(name)")
+        .eq("id", activityId).single()
+      const proj = { id: actData?.project_id ?? null, name: (actData?.projects as any)?.name || "" }
+      setProjectCache(prev => ({ ...prev, [activityId]: proj }))
+
+      const { data: donorData } = await supabase.from("budgets")
+        .select("donor_id, donors(name)")
+        .eq("company_id", companyId)
+        .eq("activity_id", activityId)
+        .eq("fiscal_year", fiscalYear)
+        .is("month", null)
+        .order("budgeted_amount", { ascending: false })
+        .limit(1)
+      const don = { id: donorData?.[0]?.donor_id ?? null, name: (donorData?.[0]?.donors as any)?.name || "" }
+      setDonorCache(prev => ({ ...prev, [activityId]: don }))
+    } catch { /* ignore */ }
+  }
+
+  // ── Fetch budget for activity + account ──
+  const fetchBudget = async (activityId: number, accountId: number) => {
+    const key = `${activityId}_${accountId}`
+    if (budgetInfo[key]) return
+
+    // Get budget amount
+    const { data: budgetRows } = await supabase.from("budgets")
+      .select("budgeted_amount")
+      .eq("company_id", companyId)
+      .eq("activity_id", activityId)
+      .eq("account_id", accountId)
+      .eq("fiscal_year", fiscalYear)
+      .is("month", null)
+      .maybeSingle()
+
+    // Get actual spent on this activity+account (from journal_lines)
+    const { data: spentRows } = await supabase.from("journal_lines")
+      .select("debit, credit")
+      .eq("company_id", companyId)
+      .eq("activity_id", activityId)
+      .eq("account_id", accountId)
+
+    const spent = (spentRows || []).reduce((sum, line) => sum + (line.debit || 0) - (line.credit || 0), 0)
+    const budget = budgetRows?.budgeted_amount || 0
+    const available = budget - spent
+
+    setBudgetInfo(prev => ({ ...prev, [key]: { budget, spent, available } }))
+  }
+
+  // ── Product helpers ──
   const filteredProducts = products.filter(p =>
     p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
     p.code.toLowerCase().includes(productSearch.toLowerCase())
   )
 
-  // Add a product‑based item (inventory)
   const addProductItem = (prod: any) => {
     setItems([...items, {
       product_id: prod.id,
       description: `${prod.code} - ${prod.name}`,
       qty: 1,
-      unit_price: prod.cost_price,   // cost price for purchase
+      unit_price: prod.cost_price,
       total: prod.cost_price,
-      location_id: "",               // not needed for product
+      location_id: "",
       activity_id: "",
-      account_id: null,              // will use inventory account
+      account_id: null,
     }])
     setProductSearch("")
     setShowProductList(false)
   }
 
-  // Add a manual expense item
   const addManualItem = () => {
     setItems([...items, {
       product_id: null,
@@ -214,20 +272,46 @@ export default function NewBillPage() {
     }])
   }
 
-  const updateItem = (idx: number, field: string, value: any) => {
+  const updateItem = async (idx: number, field: string, value: any) => {
     const updated = [...items]
     updated[idx] = { ...updated[idx], [field]: value }
     if (field === "qty" || field === "unit_price") {
       updated[idx].total = updated[idx].qty * updated[idx].unit_price
     }
+    if (field === "activity_id" && value) {
+      fetchProjectAndDonor(Number(value))
+    }
+    // Check budget when activity or account changes
+    if ((field === "activity_id" || field === "account_id") && updated[idx].activity_id && updated[idx].account_id) {
+      fetchBudget(Number(updated[idx].activity_id), Number(updated[idx].account_id))
+    }
     setItems(updated)
+
+    // Budget warning
+    checkBudgetOverrun(updated)
   }
 
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
 
+  // ── Budget overrun check ──
+  const checkBudgetOverrun = (currentItems: any[]) => {
+    let overBudget = false
+    for (const item of currentItems) {
+      if (!item.product_id && item.activity_id && item.account_id) {
+        const key = `${item.activity_id}_${item.account_id}`
+        const info = budgetInfo[key]
+        if (info && item.total > info.available) {
+          overBudget = true
+          break
+        }
+      }
+    }
+    setBudgetError(overBudget ? "⚠️ Some lines exceed the available budget" : "")
+  }
+
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
 
-  // ── Bill number generation ────────────────────────────────────────────
+  // ── Bill number ──
   const getNextBillNo = async (suppCode: string): Promise<string> => {
     const { data } = await supabase
       .from("invoices").select("invoice_no")
@@ -257,28 +341,34 @@ export default function NewBillPage() {
       }
     }
 
-    // NGO donor enforcement (from the activity of first manual item or none)
-    const manualItems = items.filter(i => !i.product_id)
-    if (businessType === "ngo" && manualItems.length > 0) {
-      const actId = Number(manualItems[0].activity_id)
-      const { data: donorRow } = await supabase.from("budgets")
-        .select("donor_id")
-        .eq("company_id", companyId)
-        .eq("activity_id", actId)
-        .eq("fiscal_year", fiscalYear)
-        .is("month", null)
-        .limit(1)
-      if (!donorRow || donorRow.length === 0) {
-        setError("Donor is required for NGO bills. Please select an activity that has a donor.")
-        return
+    // NGO donor enforcement
+    if (businessType === "ngo" && items.some(i => !i.product_id && i.activity_id)) {
+      const firstActivityId = Number(items.find(i => !i.product_id && i.activity_id)?.activity_id)
+      if (firstActivityId) {
+        const { data: donorRow } = await supabase.from("budgets")
+          .select("donor_id")
+          .eq("company_id", companyId)
+          .eq("activity_id", firstActivityId)
+          .eq("fiscal_year", fiscalYear)
+          .is("month", null)
+          .limit(1)
+        if (!donorRow || donorRow.length === 0) {
+          setError("Donor is required for NGO bills. Please select an activity that has a donor.")
+          return
+        }
       }
+    }
+
+    // Budget overrun block
+    if (budgetError) {
+      setError("Cannot save: some lines exceed the available budget. Adjust amounts or select a different activity.")
+      return
     }
 
     setSaving(true); setError("")
     const suppCode = selectedSupplier?.code || "BILL"
     const billNo = editId ? selectedSupplier?.code + "-EDIT" : await getNextBillNo(suppCode)
 
-    // Build payload with per‑item tags
     const payloadItems = items.map(i => ({
       product_id: i.product_id || null,
       description: i.description,
@@ -350,7 +440,6 @@ export default function NewBillPage() {
     doc.save(`bill-preview-${billNo}.pdf`)
   }
 
-  // Close supplier dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (supplierRef.current && !supplierRef.current.contains(e.target as Node)) {
@@ -369,7 +458,7 @@ export default function NewBillPage() {
     <div style={{ padding: "16px", background: "#0B1120", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
       <style>{`
         .inv-shell { max-width: 1200px; margin: 0 auto; }
-        .inv-title { font-size: 18px; font-weight: 700; color: #F1F5F9; }
+        .inv-title { font-size: 18px; font-weight: 700; color: "#F1F5F9"; }
         .inv-card {
           background: #111827; border-radius: 12px; border: 1px solid #1E293B;
           padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
@@ -425,18 +514,20 @@ export default function NewBillPage() {
         }
         .cust-option:last-child { border-bottom: none; }
         .cust-option:hover { background: #1E293B; }
-        .cust-option-name { font-size: 13px; font-weight: 600; color: #F1F5F9; }
+        .cust-option-name { font-size: 13px; font-weight: 600; color: "#F1F5F9"; }
         .cust-option-meta { font-size: 11px; color: #94A3B8; }
         .cust-option-bal { font-size: 12px; font-weight: 600; color: #93C5FD; white-space: nowrap; }
         .cust-selected-badge {
           display: inline-flex; align-items: center; gap: 6px;
           background: #1E293B; border: 1.5px solid #334155;
           border-radius: 8px; padding: 6px 12px; font-size: 13px;
-          font-weight: 600; color: #F1F5F9; width: 100%; cursor: pointer;
+          font-weight: 600; color: "#F1F5F9"; width: 100%; cursor: pointer;
         }
 
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
         @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
+
+        .budget-warning { background: #1E293B; border: 1px solid #EF4444; color: #FCA5A5; padding: 8px 12px; border-radius: 6px; font-size: 12px; display: flex; align-items: center; gap: 6px; }
       `}</style>
 
       <div className="inv-shell">
@@ -521,7 +612,7 @@ export default function NewBillPage() {
                 <div><label className="inv-label">Notes</label><input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" /></div>
               </div>
 
-              {/* Product search + manual add */}
+              {/* Product search + manual */}
               <div style={{ marginTop: 14 }}>
                 <label className="inv-label">Add Item</label>
                 <div style={{ display: "flex", gap: 8 }}>
@@ -577,13 +668,18 @@ export default function NewBillPage() {
                 <span>Total</span>
                 <span>PKR {totalAmount.toLocaleString()}</span>
               </div>
+              {budgetError && (
+                <div className="budget-warning" style={{ marginTop: 8 }}>
+                  ⚠️ {budgetError}
+                </div>
+              )}
             </div>
             <div className="inv-card">
               <button
                 className="inv-btn inv-btn-primary"
                 style={{ justifyContent: "center", padding: 10, width: "100%" }}
                 onClick={handleSubmit}
-                disabled={saving}
+                disabled={saving || budgetError !== ""}
               >
                 {saving ? "Posting..." : editId ? "💾 UPDATE Bill" : "💾 POST Bill"}
               </button>
@@ -615,46 +711,66 @@ export default function NewBillPage() {
                 <span style={{ textAlign: "right" }}>Total</span>
                 <span></span>
               </div>
-              {items.map((item, idx) => (
-                <div key={idx}>
-                  <div className="inv-item-row">
-                    <input
-                      className="inv-input"
-                      style={{ height: 34, fontSize: 12 }}
-                      value={item.description}
-                      onChange={e => updateItem(idx, "description", e.target.value)}
-                      placeholder="Description"
-                    />
-                    <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                    <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                    {/* Location and Activity only for manual items */}
-                    {item.product_id ? (
-                      <>
-                        <span style={{ fontSize: 11, color: "#64748B" }}>—</span>
-                        <span style={{ fontSize: 11, color: "#64748B" }}>—</span>
-                        <span style={{ fontSize: 11, color: "#64748B" }}>Inventory</span>
-                      </>
-                    ) : (
-                      <>
-                        <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.location_id} onChange={e => updateItem(idx, "location_id", e.target.value)}>
-                          <option value="">—</option>
-                          {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                        </select>
-                        <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.activity_id} onChange={e => updateItem(idx, "activity_id", e.target.value)}>
-                          <option value="">—</option>
-                          {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                        </select>
-                        <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.account_id ?? ""} onChange={e => updateItem(idx, "account_id", e.target.value ? Number(e.target.value) : null)}>
-                          <option value="">—</option>
-                          {allAccounts.map(a => <option key={a.id} value={a.id}>{a.code}</option>)}
-                        </select>
-                      </>
+              {items.map((item, idx) => {
+                const budgetKey = item.activity_id && item.account_id ? `${item.activity_id}_${item.account_id}` : null
+                const budgetData = budgetKey ? budgetInfo[budgetKey] : null
+                return (
+                  <div key={idx}>
+                    <div className="inv-item-row">
+                      <input
+                        className="inv-input"
+                        style={{ height: 34, fontSize: 12 }}
+                        value={item.description}
+                        onChange={e => updateItem(idx, "description", e.target.value)}
+                        placeholder="Description"
+                      />
+                      <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                      <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                      {item.product_id ? (
+                        <>
+                          <span style={{ fontSize: 11, color: "#64748B" }}>—</span>
+                          <span style={{ fontSize: 11, color: "#64748B" }}>—</span>
+                          <span style={{ fontSize: 11, color: "#64748B" }}>Inventory</span>
+                        </>
+                      ) : (
+                        <>
+                          <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.location_id} onChange={e => updateItem(idx, "location_id", e.target.value)}>
+                            <option value="">—</option>
+                            {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                          </select>
+                          <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.activity_id} onChange={e => updateItem(idx, "activity_id", e.target.value)}>
+                            <option value="">—</option>
+                            {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                          </select>
+                          <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.account_id ?? ""} onChange={e => updateItem(idx, "account_id", e.target.value ? Number(e.target.value) : null)}>
+                            <option value="">—</option>
+                            {allAccounts.map(a => <option key={a.id} value={a.id}>{a.code}</option>)}
+                          </select>
+                        </>
+                      )}
+                      <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>PKR {item.total.toLocaleString()}</span>
+                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
+                    </div>
+                    {/* Show project and donor below activity */}
+                    {item.activity_id && !item.product_id && (
+                      <div style={{ fontSize: 10, color: "#94A3B8", marginLeft: 8, display: "flex", gap: 12, padding: "2px 0" }}>
+                        <span>Project: <strong>{projectCache[item.activity_id]?.name || "Fetching…"}</strong></span>
+                        <span>Donor: <strong>{donorCache[item.activity_id]?.name || "Fetching…"}</strong></span>
+                      </div>
                     )}
-                    <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>PKR {item.total.toLocaleString()}</span>
-                    <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
+                    {/* Budget info */}
+                    {budgetData && (
+                      <div style={{ fontSize: 10, color: "#94A3B8", marginLeft: 8, display: "flex", gap: 12, padding: "2px 0" }}>
+                        <span>Budget: PKR {budgetData.budget.toLocaleString()}</span>
+                        <span>Spent: PKR {budgetData.spent.toLocaleString()}</span>
+                        <span style={{ color: budgetData.available < item.total ? "#EF4444" : "#10B981" }}>
+                          Available: PKR {budgetData.available.toLocaleString()}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

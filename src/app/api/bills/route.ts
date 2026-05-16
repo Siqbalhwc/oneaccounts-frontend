@@ -30,11 +30,11 @@ async function getDefaultExpenseAccount(supabase: any, companyId: string, type: 
   return null
 }
 
-// ── Create journal entry for a bill (now with product support) ────────────
+// ── Create journal entry for a bill (with product stock update) ───────────
 async function createBillJournalEntry(
   supabase: any,
   bill: any,
-  items: any[],          // original items array from request (has product_id, etc.)
+  items: any[],
   companyId: string,
   businessType: string
 ) {
@@ -48,7 +48,6 @@ async function createBillJournalEntry(
     // Determine the debit account
     let accountId = item.account_id || null
     if (!accountId && item.product_id) {
-      // Product purchase → debit Inventory (1200)
       const invAcc = await supabase.from('accounts')
         .select('id').eq('code','1200').eq('company_id', companyId).maybeSingle()
       accountId = invAcc?.id || null
@@ -91,13 +90,23 @@ async function createBillJournalEntry(
 
     debitLines.push(line)
 
-    // Increase product stock for product purchases
+    // ✅ Update product stock safely (read‑modify‑write)
     if (item.product_id) {
-      await supabase
+      const { data: currentProduct } = await supabase
         .from('products')
-        .update({ qty_on_hand: supabase.raw(`qty_on_hand + ${item.qty || 0}`) })
+        .select('qty_on_hand')
         .eq('id', item.product_id)
         .eq('company_id', companyId)
+        .single()
+
+      if (currentProduct) {
+        const newQty = (currentProduct.qty_on_hand || 0) + (item.qty || 0)
+        await supabase
+          .from('products')
+          .update({ qty_on_hand: newQty })
+          .eq('id', item.product_id)
+          .eq('company_id', companyId)
+      }
     }
   }
 
@@ -124,7 +133,7 @@ async function createBillJournalEntry(
 
   if (entryErr || !entry) throw new Error(entryErr?.message || 'JE insert failed')
 
-  // Insert journal lines – now tagged
+  // Insert journal lines – tagged with project/activity/location/donor + source
   const lineRows = debitLines.map(l => ({
     company_id: companyId,
     entry_id: entry.id,
@@ -209,7 +218,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: headerError?.message || 'Failed to create bill' }, { status: 500 })
   }
 
-  // Insert items – only basic columns (no activity_id, location_id, etc.)
+  // Insert items – only basic columns
   let total = 0
   const itemRowsForDb = items.map((item: any) => {
     const qty = Number(item.qty || 0)
@@ -245,7 +254,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: updateError?.message || 'Failed to update total' }, { status: 500 })
   }
 
-  // ── Create journal entry (using original items array with tags) ──
+  // ── Create journal entry ──
   try {
     await createBillJournalEntry(supabase, updatedBill, items, companyId, businessType)
   } catch (e: any) {
@@ -259,4 +268,171 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ success: true, bill: updatedBill })
 }
 
-// … PUT and DELETE handlers unchanged (they don't need the new fields)
+// ── PUT (Update) ─────────────────────────────────────────────────────────
+export async function PUT(request: NextRequest) {
+  const cookieStore = await cookies()
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll() },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const body = await request.json()
+  const { id, invoice_no, party_id, invoice_date, due_date, items, reference, notes } = body
+  if (!id) return NextResponse.json({ error: 'Bill ID required' }, { status: 400 })
+
+  const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
+
+  const { data: company } = await supabase.from('companies')
+    .select('business_type').eq('id', companyId).single()
+  const businessType = company?.business_type || ''
+
+  const { data: oldBill } = await supabase.from('invoices')
+    .select('*').eq('id', id).eq('company_id', companyId).single()
+  if (!oldBill) return NextResponse.json({ error: 'Bill not found' }, { status: 404 })
+
+  // ── Reverse old journal entry ──
+  const { data: oldEntries } = await supabase.from('journal_entries')
+    .select('id')
+    .eq('company_id', companyId)
+    .ilike('description', `%Purchase Bill%`)
+  if (oldEntries) {
+    for (const e of oldEntries) {
+      const { data: lines } = await supabase.from('journal_lines').select('account_id, debit, credit').eq('entry_id', e.id)
+      if (lines) {
+        for (const l of lines) {
+          const { data: acc } = await supabase.from('accounts').select('balance').eq('id', l.account_id).eq('company_id', companyId).single()
+          if (acc) {
+            const newBal = acc.balance - (l.debit || 0) + (l.credit || 0)
+            await supabase.from('accounts').update({ balance: newBal }).eq('id', l.account_id).eq('company_id', companyId)
+          }
+        }
+      }
+      await supabase.from('journal_lines').delete().eq('entry_id', e.id)
+      await supabase.from('journal_entries').delete().eq('id', e.id)
+    }
+  }
+
+  // Delete old items and insert new
+  await supabase.from('invoice_items').delete().eq('invoice_id', id)
+
+  let total = 0
+  const itemRows = (items || []).map((item: any) => {
+    const qty = Number(item.qty || 0)
+    const unit_price = Number(item.unit_price || 0)
+    const lineTotal = qty * unit_price
+    total += lineTotal
+    return {
+      invoice_id: id,
+      description: item.description,
+      qty,
+      unit_price,
+      total: lineTotal,
+      company_id: companyId,
+    }
+  })
+
+  if (itemRows.length > 0) {
+    await supabase.from('invoice_items').insert(itemRows)
+  }
+
+  const { data: updatedBill, error: updateError } = await supabase
+    .from('invoices')
+    .update({
+      invoice_no, party_id, date: invoice_date, due_date, total, reference, notes,
+    })
+    .eq('id', id)
+    .select('*')
+    .single()
+
+  if (updateError || !updatedBill) {
+    return NextResponse.json({ error: updateError?.message || 'Update failed' }, { status: 500 })
+  }
+
+  // ── Create new journal entry ──
+  try {
+    await createBillJournalEntry(supabase, updatedBill, items, companyId, businessType)
+  } catch (e: any) {
+    return NextResponse.json({ error: 'Journal entry failed after update: ' + e.message }, { status: 500 })
+  }
+
+  if (oldBill) {
+    await logDataChange('invoices', String(id), 'UPDATE', oldBill, updatedBill)
+  }
+
+  return NextResponse.json({ success: true, bill: updatedBill })
+}
+
+// ── DELETE (remove bill and reverse JE) ───────────────────────────────────
+export async function DELETE(request: NextRequest) {
+  const cookieStore = await cookies()
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll() },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = await request.json()
+  if (!id) return NextResponse.json({ error: 'Bill ID required' }, { status: 400 })
+
+  const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
+
+  // Reverse JE (same logic as PUT)
+  const { data: entries } = await supabase.from('journal_entries')
+    .select('id').eq('company_id', companyId).ilike('description', `%Purchase Bill%`)
+  if (entries) {
+    for (const e of entries) {
+      const { data: lines } = await supabase.from('journal_lines').select('account_id, debit, credit').eq('entry_id', e.id)
+      if (lines) {
+        for (const l of lines) {
+          const { data: acc } = await supabase.from('accounts').select('balance').eq('id', l.account_id).eq('company_id', companyId).single()
+          if (acc) {
+            const newBal = acc.balance - (l.debit || 0) + (l.credit || 0)
+            await supabase.from('accounts').update({ balance: newBal }).eq('id', l.account_id).eq('company_id', companyId)
+          }
+        }
+      }
+      await supabase.from('journal_lines').delete().eq('entry_id', e.id)
+      await supabase.from('journal_entries').delete().eq('id', e.id)
+    }
+  }
+
+  const { data: oldBill } = await supabase.from('invoices')
+    .select('*').eq('id', id).eq('company_id', companyId).single()
+
+  await supabase.from('invoice_items').delete().eq('invoice_id', id)
+  const { error } = await supabase.from('invoices')
+    .update({ deleted_at: new Date().toISOString() }).eq('id', id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  if (oldBill) {
+    await logDataChange('invoices', String(id), 'DELETE', oldBill, undefined)
+  }
+
+  return NextResponse.json({ success: true })
+}
