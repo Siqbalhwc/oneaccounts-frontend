@@ -69,12 +69,27 @@ export default function BudgetsPage() {
         .then(r => r.data && setBusinessType(r.data.business_type || ""))
 
       // ✅ Fetch Fixed Assets (1400-1499) AND all Expense accounts
+            // Fetch Fixed Assets (Asset accounts with codes 1400‑1499) – scoped to company
       supabase.from("accounts")
         .select("id, code, name, type")
         .eq("company_id", cid)
-        .or("(type.eq.Asset,code.gte.1400,code.lte.1499),(type.eq.Expense)")
+        .eq("type", "Asset")
+        .gte("code", "1400")
+        .lte("code", "1499")
         .order("code")
-        .then(r => r.data && setAccounts(r.data))
+        .then(r => {
+          const fixedAssets = r.data || []
+          // Fetch all Expense accounts – scoped to company
+          supabase.from("accounts")
+            .select("id, code, name, type")
+            .eq("company_id", cid)
+            .eq("type", "Expense")
+            .order("code")
+            .then(r2 => {
+              const expenses = r2.data || []
+              setAccounts([...fixedAssets, ...expenses].sort((a, b) => a.code.localeCompare(b.code, undefined, {numeric: true})))
+            })
+        })
 
       supabase.from("projects").select("id, name, donor_id").eq("company_id", cid).is("deleted_at", null).order("name")
         .then(r => r.data && setProjects(r.data))
