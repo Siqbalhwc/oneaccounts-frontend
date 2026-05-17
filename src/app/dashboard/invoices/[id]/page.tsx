@@ -192,71 +192,91 @@ export default function InvoiceDetailPage() {
     doc.save(`Invoice_${invoice.invoice_no}.pdf`)
   }
 
-  if (loading) return <div style={{ padding: 24, textAlign: "center" }}>Loading…</div>
-  if (!invoice) return <div style={{ padding: 24, textAlign: "center" }}>Invoice not found</div>
+  if (loading) return <div style={{ padding: 24, textAlign: "center", background: "#0B1120", minHeight: "100vh", color: "#94A3B8" }}>Loading…</div>
+  if (!invoice) return <div style={{ padding: 24, textAlign: "center", background: "#0B1120", minHeight: "100vh", color: "#94A3B8" }}>Invoice not found</div>
 
   const balanceDue = invoice.total - (invoice.paid || 0)
   const waLink = getWhatsAppLink()
   const remindLink = getReminderLink()
 
   return (
-    <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
       <style>{`
-        .card {
-          background: white; border-radius: 14px; border: 1px solid #d6e0eb;
-          padding: 24px; margin-bottom: 16px;
-          box-shadow: 0 2px 8px rgba(0,25,45,0.04);
+        .card { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        .row { display: flex; margin-bottom: 10px; font-size: 14px; align-items: center; }
+        .label { width: 130px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+        .value { color: #E2E8F0; font-weight: 500; }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        th { text-align: left; padding: 10px 12px; background: #1E293B; font-weight: 700; color: #94A3B8; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #334155; }
+        td { padding: 10px 12px; border-bottom: 1px solid #1E293B; font-size: 13px; color: #E2E8F0; }
+        tr:hover td { background: rgba(30,41,59,0.5); }
+        .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid #334155; background: transparent; color: #CBD5E1; font-family: inherit; }
+        .btn:hover { background: #1E293B; }
+        .btn-primary { background: #1E3A8A; color: white; border-color: #1E3A8A; }
+        .btn-primary:hover { background: #1E40AF; }
+        .btn-success { background: #25D366; color: white; border-color: #25D366; }
+        .btn-success:hover { background: #22C55E; }
+        .btn-warning { background: #F59E0B; color: white; border-color: #F59E0B; }
+        .btn-warning:hover { background: #D97706; }
+        .badge {
+          display: inline-block;
+          padding: 2px 10px;
+          border-radius: 12px;
+          font-size: 12px;
+          font-weight: 700;
         }
-        .row { display: flex; margin-bottom: 10px; font-size: 14px; }
-        .label { width: 130px; color: #2c5778; font-weight: 600; }
-        .value { color: #0a2940; font-weight: 500; }
-        table { width: 100%; border-collapse: collapse; }
-        th { text-align: left; padding: 10px 12px; background: #f8fafc; font-weight: 700; color: #2c5778; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #d6e0eb; }
-        td { padding: 10px 12px; border-bottom: 1px solid #f0f3f7; font-size: 13px; }
-        .btn { padding: 8px 18px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-family: inherit; }
-        .btn-outline { background: white; border: 1.5px solid #d6e0eb; color: #2c5778; }
-        .btn-primary { background: #1e3a8a; color: white; }
-        .btn-success { background: #25D366; color: white; }
-        .btn-warning { background: #F59E0B; color: white; }
+        .badge-paid { background: #065F46; color: #6EE7B7; }
+        .badge-unpaid { background: #7C2D12; color: #FCA5A5; }
+        .badge-overdue { background: #7C2D12; color: #FCA5A5; }
+        /* Override RecordHistory's internal light styles */
+        .card :global(.record-history) { background: #111827; color: #E2E8F0; }
+        .card :global(.record-history th) { background: #1E293B; color: #94A3B8; }
+        .card :global(.record-history td) { color: #E2E8F0; border-color: #1E293B; }
+        @media (max-width: 640px) {
+          .row { flex-direction: column; align-items: flex-start; }
+          .label { margin-bottom: 2px; }
+        }
       `}</style>
 
+      {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button className="btn btn-outline" onClick={() => router.push("/dashboard/invoices")}>
-            <ArrowLeft size={18} />
+          <button className="btn" onClick={() => router.push("/dashboard/invoices")}>
+            <ArrowLeft size={16} />
           </button>
           <div>
-            <h1 style={{ fontSize: 24, fontWeight: 800, color: "#0a2940", margin: 0 }}>Invoice #{invoice.invoice_no}</h1>
-            <p style={{ color: "#2c5778", fontSize: 13, margin: 0 }}>{invoice.customer?.name || "Unknown Customer"}</p>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>Invoice #{invoice.invoice_no}</h1>
+            <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>{invoice.customer?.name || "Unknown Customer"}</p>
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-outline" onClick={() => router.push(`/dashboard/invoices/new?id=${invoice.id}`)}>
+          <button className="btn" onClick={() => router.push(`/dashboard/invoices/new?id=${invoice.id}`)}>
             ✏️ Edit
           </button>
           {remindLink && (
-            <a href={remindLink} target="_blank" rel="noopener noreferrer" className="btn btn-warning">
-              <Send size={16} /> Remind
+            <a href={remindLink} target="_blank" rel="noopener noreferrer" className="btn btn-warning" style={{ textDecoration: "none" }}>
+              <Send size={14} /> Remind
             </a>
           )}
           {waLink && (
-            <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success">
-              <Send size={16} /> WhatsApp
+            <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success" style={{ textDecoration: "none" }}>
+              <Send size={14} /> WhatsApp
             </a>
           )}
           <button className="btn btn-primary" onClick={handlePrintPDF}>
-            <Printer size={16} /> Print PDF
+            <Printer size={14} /> Print PDF
           </button>
         </div>
       </div>
 
+      {/* Details card */}
       <div className="card">
         <div className="row"><span className="label">Date</span><span className="value">{invoice.date}</span></div>
         <div className="row"><span className="label">Due Date</span><span className="value">{invoice.due_date}</span></div>
         <div className="row"><span className="label">Customer</span><span className="value">{invoice.customer?.code} – {invoice.customer?.name}</span></div>
-        <div className="row"><span className="label">Total</span><span className="value" style={{ fontSize: 18, fontWeight: 700 }}>PKR {invoice.total?.toLocaleString()}</span></div>
+        <div className="row"><span className="label">Total</span><span className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B" }}>PKR {invoice.total?.toLocaleString()}</span></div>
         <div className="row"><span className="label">Paid</span><span className="value">PKR {invoice.paid?.toLocaleString()}</span></div>
-        <div className="row"><span className="label">Due</span><span className="value" style={{ color: balanceDue > 0 ? "#dc2626" : "#166534" }}>PKR {balanceDue.toLocaleString()}</span></div>
+        <div className="row"><span className="label">Due</span><span className="value" style={{ color: balanceDue > 0 ? "#EF4444" : "#10B981", fontWeight: 600 }}>PKR {balanceDue.toLocaleString()}</span></div>
         <div className="row">
           <span className="label">Status</span>
           <span className={`badge ${
@@ -266,9 +286,10 @@ export default function InvoiceDetailPage() {
         </div>
       </div>
 
+      {/* Items table */}
       {invoice.items && invoice.items.length > 0 && (
         <div className="card">
-          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#0a2940", marginBottom: 12 }}>Items</h3>
+          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>Items</h3>
           <table>
             <thead>
               <tr>
@@ -284,7 +305,7 @@ export default function InvoiceDetailPage() {
                   <td>{item.description}</td>
                   <td style={{ textAlign: "center" }}>{item.qty}</td>
                   <td style={{ textAlign: "right" }}>PKR {item.unit_price?.toLocaleString()}</td>
-                  <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {item.total?.toLocaleString()}</td>
+                  <td style={{ textAlign: "right", fontWeight: 600, color: "#E2E8F0" }}>PKR {item.total?.toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -292,13 +313,15 @@ export default function InvoiceDetailPage() {
         </div>
       )}
 
-      {/* ── ODOO‑STYLE HISTORY ── */}
+      {/* Change History */}
       {invoice && (
         <div className="card">
-          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#0a2940", marginBottom: 12 }}>
+          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>
             📝 Change History
           </h3>
-          <RecordHistory tableName="invoices" recordId={String(invoice.id)} />
+          <div style={{ background: "#0F172A", borderRadius: 8, padding: 8 }}>
+            <RecordHistory tableName="invoices" recordId={String(invoice.id)} />
+          </div>
         </div>
       )}
     </div>
