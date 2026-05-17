@@ -172,23 +172,152 @@ export default function CustomerLedgerPage() {
 
   const handlePrint = () => {
     if (printRef.current) {
-      const style = document.createElement('style')
-      style.innerHTML = `
-        @page { size: ${orientation}; margin: 10mm; }
-        @media print {
-          body { background: white !important; }
-          body * { color: #000 !important; background: white !important; border-color: #ddd !important; }
-          .print-area { position: absolute; left: 0; top: 0; width: 100%; }
-          .no-print { display: none !important; }
-          .card { border: 1px solid #ddd !important; box-shadow: none !important; }
-          .header-row { background: #f1f5f9 !important; color: #000 !important; font-weight: 700 !important; }
-          .data-row { border-bottom: 1px solid #ddd !important; }
-          .print-header { display: block !important; margin-bottom: 20px; }
-        }
-      `
-      document.head.appendChild(style)
-      window.print()
-      document.head.removeChild(style)
+      const printWindow = window.open("", "_blank")
+      if (!printWindow) return
+      const doc = printWindow.document
+      doc.write(`
+        <html>
+          <head>
+            <title>Customer Ledger</title>
+            <style>
+              @page { size: ${orientation}; margin: 15mm; }
+              body {
+                font-family: 'Segoe UI', Arial, sans-serif;
+                color: #000;
+                background: #fff;
+                margin: 0;
+                padding: 0;
+              }
+              .header {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                margin-bottom: 20px;
+              }
+              .company-info {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+              }
+              .company-info img {
+                max-height: 60px;
+              }
+              .company-info div h2 {
+                margin: 0 0 2px 0;
+                font-size: 16px;
+                font-weight: 700;
+              }
+              .company-info div p {
+                margin: 0;
+                font-size: 11px;
+                color: #333;
+              }
+              .report-info {
+                text-align: right;
+                font-size: 11px;
+              }
+              .report-info h1 {
+                font-size: 18px;
+                margin: 0 0 4px 0;
+                font-weight: 700;
+              }
+              .report-info p {
+                margin: 2px 0;
+                color: #333;
+              }
+              table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 20px;
+              }
+              th {
+                background: #f1f5f9;
+                font-size: 10px;
+                font-weight: 700;
+                text-transform: uppercase;
+                color: #333;
+                padding: 10px 8px;
+                border: 1px solid #ddd;
+                text-align: left;
+              }
+              td {
+                padding: 8px;
+                border: 1px solid #ddd;
+                font-size: 12px;
+              }
+              .text-right { text-align: right; }
+              .text-center { text-align: center; }
+              .summary {
+                margin-top: 20px;
+                display: flex;
+                justify-content: flex-end;
+                gap: 40px;
+                font-size: 12px;
+              }
+              .summary div span:first-child {
+                font-weight: 600;
+                margin-right: 8px;
+              }
+              .summary .balance {
+                font-weight: 700;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <div class="company-info">
+                ${company?.logo_url ? `<img src="${company.logo_url}" alt="logo" />` : ""}
+                <div>
+                  <h2>${company?.name || company?.company_name || "Company"}</h2>
+                  ${company?.tagline ? `<p>${company.tagline}</p>` : ""}
+                  ${company?.address ? `<p>${company.address}</p>` : ""}
+                </div>
+              </div>
+              <div class="report-info">
+                <h1>Customer Ledger</h1>
+                <p>Customer: ${cust?.code || ""} - ${cust?.name || ""}</p>
+                <p>Period: ${dateFrom || "All"} to ${dateTo || "All"}</p>
+                <p>Date: ${new Date().toLocaleDateString()}</p>
+              </div>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:5%">#</th>
+                  <th style="width:10%">Date</th>
+                  <th style="width:12%">Reference</th>
+                  <th style="width:35%">Description</th>
+                  <th style="width:13%" class="text-right">Debit (PKR)</th>
+                  <th style="width:13%" class="text-right">Credit (PKR)</th>
+                  <th style="width:12%" class="text-right">Balance (PKR)</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${sortedEntries.map((e, i) => `
+                  <tr>
+                    <td class="text-center">${i + 1}</td>
+                    <td>${e.date}</td>
+                    <td>${e.ref}</td>
+                    <td>${e.desc}</td>
+                    <td class="text-right">${e.debit > 0 ? e.debit.toLocaleString() : "-"}</td>
+                    <td class="text-right">${e.credit > 0 ? e.credit.toLocaleString() : "-"}</td>
+                    <td class="text-right">${e.balance.toLocaleString()}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+            <div class="summary">
+              <div><span>Total Debit:</span> PKR ${totalDebit.toLocaleString()}</div>
+              <div><span>Total Credit:</span> PKR ${totalCredit.toLocaleString()}</div>
+              <div class="balance"><span>Closing Balance:</span> PKR ${finalBalance.toLocaleString()}</div>
+            </div>
+          </body>
+        </html>
+      `)
+      doc.close()
+      printWindow.focus()
+      printWindow.print()
+      printWindow.close()
     }
   }
 
@@ -206,11 +335,11 @@ export default function CustomerLedgerPage() {
       [`Period: ${dateFrom || "All"} to ${dateTo || "All"}`],
       [`Printed: ${new Date().toLocaleDateString()}`],
       [],
-      ["Sr", "Transaction #", "Date", "Description", "Debit (PKR)", "Credit (PKR)", "Balance (PKR)"]
+      ["Sr", "Date", "Reference", "Description", "Debit (PKR)", "Credit (PKR)", "Balance (PKR)"]
     ]
     let totalDr = 0, totalCr = 0
     sortedEntries.forEach((e, i) => {
-      rows.push([i + 1, e.ref, e.date, e.desc, e.debit || "", e.credit || "", e.balance])
+      rows.push([i + 1, e.date, e.ref, e.desc, e.debit || "", e.credit || "", e.balance])
       totalDr += e.debit || 0
       totalCr += e.credit || 0
     })
@@ -244,14 +373,6 @@ export default function CustomerLedgerPage() {
         .sort-btn { background: none; border: none; color: inherit; font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px; }
         .sort-btn:hover { color: #93C5FD; }
         .summary-item { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 16px; }
-        @media print {
-          body { background: white !important; }
-          body * { color: #000 !important; background: white !important; border-color: #ddd !important; }
-          .card { border: 1px solid #ddd !important; box-shadow: none !important; }
-          .header-row { background: #f1f5f9 !important; color: #000 !important; }
-          .data-row { border-bottom: 1px solid #ddd !important; }
-          .print-header { display: block !important; margin-bottom: 20px; }
-        }
       `}</style>
 
       {/* Header */}
@@ -312,36 +433,16 @@ export default function CustomerLedgerPage() {
         </div>
       )}
 
-      {/* Ledger table */}
+      {/* Ledger table (screen) */}
       {loading ? (
         <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading...</div>
       ) : sortedEntries.length > 0 ? (
-        <div ref={printRef} className="print-area">
-          {/* Print-only company header */}
-          <div className="print-header" style={{ display: "none" }}>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                {company?.logo_url && <img src={company.logo_url} alt="logo" style={{ maxHeight: 60 }} />}
-                <div>
-                  <h2 style={{ margin: 0 }}>{company?.name || company?.company_name || ""}</h2>
-                  {company?.tagline && <p style={{ margin: 0 }}>{company.tagline}</p>}
-                  {company?.address && <p style={{ margin: 0 }}>{company.address}</p>}
-                </div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <strong>Customer Ledger</strong><br />
-                Customer: {cust?.code} - {cust?.name}<br />
-                Period: {dateFrom || "All"} to {dateTo || "All"}<br />
-                Printed: {new Date().toLocaleDateString()}
-              </div>
-            </div>
-          </div>
-
+        <div>
           <div className="card">
             <div className="header-row">
               <button className="sort-btn" onClick={() => handleSort("sr")}>Sr {getSortIcon("sr")}</button>
-              <button className="sort-btn" onClick={() => handleSort("ref")}>Trans # {getSortIcon("ref")}</button>
               <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
+              <button className="sort-btn" onClick={() => handleSort("ref")}>Ref {getSortIcon("ref")}</button>
               <button className="sort-btn" onClick={() => handleSort("desc")}>Description {getSortIcon("desc")}</button>
               <button className="sort-btn" style={{ justifyContent: "flex-end" }} onClick={() => handleSort("debit")}>Debit {getSortIcon("debit")}</button>
               <button className="sort-btn" style={{ justifyContent: "flex-end" }} onClick={() => handleSort("credit")}>Credit {getSortIcon("credit")}</button>
@@ -350,8 +451,8 @@ export default function CustomerLedgerPage() {
             {sortedEntries.map((e, i) => (
               <div key={i} className="data-row">
                 <span style={{ color: "#94A3B8" }}>{i + 1}</span>
-                <span style={{ color: "#93C5FD", fontWeight: 600 }}>{e.ref}</span>
                 <span>{e.date}</span>
+                <span style={{ color: "#93C5FD", fontWeight: 600 }}>{e.ref}</span>
                 <span style={{ color: "#CBD5E1" }}>{e.desc}</span>
                 <span style={{ textAlign: "right", color: "#F87171" }}>{e.debit > 0 ? `PKR ${e.debit.toLocaleString()}` : "-"}</span>
                 <span style={{ textAlign: "right", color: "#2DD4BF" }}>{e.credit > 0 ? `PKR ${e.credit.toLocaleString()}` : "-"}</span>
@@ -360,7 +461,7 @@ export default function CustomerLedgerPage() {
             ))}
           </div>
 
-          {/* Sub total summary */}
+          {/* Sub total summary (screen) */}
           <div className="card" style={{ padding: 16, marginTop: 16, display: "flex", justifyContent: "flex-end", gap: 32 }}>
             <div><span style={{ color: "#94A3B8", fontSize: 12 }}>Total Debit: </span><span style={{ color: "#F87171", fontWeight: 600 }}>PKR {totalDebit.toLocaleString()}</span></div>
             <div><span style={{ color: "#94A3B8", fontSize: 12 }}>Total Credit: </span><span style={{ color: "#2DD4BF", fontWeight: 600 }}>PKR {totalCredit.toLocaleString()}</span></div>
