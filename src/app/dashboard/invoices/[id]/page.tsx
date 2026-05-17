@@ -101,9 +101,7 @@ export default function InvoiceDetailPage() {
             .single()
             .then(({ data: cust }) => {
               inv.customer = cust || undefined
-            })
-            .finally(() => {
-              // 3. Load items
+              // 3. Load items after customer is set
               supabase
                 .from("invoice_items")
                 .select("*")
@@ -131,12 +129,12 @@ export default function InvoiceDetailPage() {
       })
 
     // 4. Load journal lines for this invoice
-    // We look for a journal entry with description matching "Sales Invoice {invoice_no}"
+    // We look for a journal entry with description matching the invoice
     supabase
       .from("journal_entries")
       .select("id")
       .eq("company_id", companyId)
-      .ilike("description", `%Sales Invoice%${invoiceId}%`) // adjust if needed
+      .ilike("description", `%Sales Invoice%${invoiceId}%`)
       .maybeSingle()
       .then(({ data: entry }) => {
         if (entry) {
@@ -273,7 +271,7 @@ export default function InvoiceDetailPage() {
         .badge-unpaid { background: #7C2D12; color: #FCA5A5; }
         .badge-overdue { background: #7C2D12; color: #FCA5A5; }
 
-        /* ── Force dark theme inside RecordHistory ── */
+        /* Force dark theme inside RecordHistory */
         .card .record-history,
         .card .record-history * {
           background: #0F172A !important;
