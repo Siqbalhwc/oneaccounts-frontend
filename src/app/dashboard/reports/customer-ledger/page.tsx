@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useSearchParams, useRouter } from "next/navigation"
 import { ArrowLeft, Download, Printer, ArrowUpDown, ArrowUp, ArrowDown, FileText } from "lucide-react"
@@ -32,7 +32,7 @@ export default function CustomerLedgerPage() {
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
-  // ── Orientation: inject @page rule dynamically so it actually works ──
+  // Inject @page rule dynamically for orientation
   useEffect(() => {
     const style = document.createElement("style")
     style.id = "print-orientation-style"
@@ -43,13 +43,16 @@ export default function CustomerLedgerPage() {
     return () => { document.getElementById("print-orientation-style")?.remove() }
   }, [orientation])
 
+  // Fetch company info
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
       if (cid) {
+        // Try company_settings first, then companies table
         supabase.from("company_settings").select("*").eq("company_id", cid).single().then(r => {
-          if (r.data) setCompany(r.data)
-          else {
+          if (r.data) {
+            setCompany(r.data)
+          } else {
             supabase.from("companies").select("name, logo_url, tagline, address").eq("id", cid).single().then(r2 => {
               if (r2.data) setCompany(r2.data)
             })
@@ -59,16 +62,21 @@ export default function CustomerLedgerPage() {
     })
   }, [])
 
+  // Fetch customers list
   useEffect(() => {
     supabase.from("customers").select("id,code,name,balance").order("name").then(r => {
       if (r.data) setCustomers(r.data)
     })
   }, [])
 
+  // Auto-select customer if ID passed in URL
   useEffect(() => {
-    if (initialCustomerId && customers.length > 0) setCustomerId(Number(initialCustomerId))
+    if (initialCustomerId && customers.length > 0) {
+      setCustomerId(Number(initialCustomerId))
+    }
   }, [initialCustomerId, customers])
 
+  // Load ledger when customer/filters change
   useEffect(() => {
     if (customerId && customers.length > 0) loadLedger()
   }, [customerId, customers, dateFrom, dateTo])
@@ -159,7 +167,6 @@ export default function CustomerLedgerPage() {
     return 0
   })
 
-  // ── Print: hides everything except the report pane ──
   const handlePrint = () => window.print()
 
   const exportExcel = () => {
@@ -167,10 +174,13 @@ export default function CustomerLedgerPage() {
     const companyName = company?.name || company?.company_name || "Company"
     const customerName = cust ? `${cust.code} - ${cust.name}` : ""
     const rows: any[] = [
-      [companyName], [company?.tagline || ""], [company?.address || ""],
+      [companyName],
+      [company?.tagline || ""],
+      [company?.address || ""],
       [`Customer Ledger: ${customerName}`],
       [`Period: ${dateFrom || "All"} to ${dateTo || "All"}`],
-      [`Printed: ${new Date().toLocaleDateString()}`], [],
+      [`Printed: ${new Date().toLocaleDateString()}`],
+      [],
       ["Sr", "Date", "Reference", "Description", "Debit (PKR)", "Credit (PKR)", "Balance (PKR)"]
     ]
     let totalDr = 0, totalCr = 0
@@ -190,17 +200,16 @@ export default function CustomerLedgerPage() {
   const totalDebit = sortedEntries.reduce((s, e) => s + (e.debit || 0), 0)
   const totalCredit = sortedEntries.reduce((s, e) => s + (e.credit || 0), 0)
   const finalBalance = sortedEntries.length ? sortedEntries[sortedEntries.length - 1].balance : 0
-  const companyName = company?.name || company?.company_name || ""
+
+  // Final company info for display
+  const companyName = company?.name || company?.company_name || "Your Company"
+  const companyTagline = company?.tagline || ""
+  const companyAddress = company?.address || ""
 
   const fmt = (n: number) => n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
   return (
     <>
-      {/* ── Global print styles ──
-          Critical: hides layout shell (sidebar, nav, topbar) so only .print-root renders.
-          Your layout likely wraps this page in a div with class like "layout", "sidebar-layout", etc.
-          Adjust selectors to match your actual layout wrapper class names.
-      */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
 
@@ -221,57 +230,35 @@ export default function CustomerLedgerPage() {
         .r { text-align: right; }
         .mono { font-family: 'DM Mono', monospace; }
 
-        /* ═══ PRINT STYLES ═══
-           This is the critical section. It:
-           1. Hides ALL screen UI elements
-           2. Shows only the .print-root div
-           3. Forces white background on html/body
-           4. Removes sidebar / nav that your layout injects
-        */
+        /* ═══ PRINT STYLES ═══ */
         @media print {
-          /* Force browser to print backgrounds/colors */
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-
-          /* Hide the entire page body content except our print root */
           body > * { display: none !important; }
-
-          /* Show next.js app root and our print root */
           body > #__next,
           body > div#__next > * { display: none !important; }
-
-          /* Our dedicated print portal will be appended to body */
           #cl-print-portal { display: block !important; }
-
-          /* White clean background */
           html, body { background: #fff !important; margin: 0; padding: 0; }
-
           .pr-page {
             background: white;
             color: #111;
             font-family: 'DM Sans', Georgia, serif;
             padding: 0;
           }
-
-          /* Header band — white background, dark text */
           .pr-header-band {
             background: #ffffff;
             color: #0F172A;
             padding: 18px 24px 14px;
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: flex-start;
             margin-bottom: 0;
             border-bottom: 2.5px solid #1E3A5F;
           }
-
           .pr-company-name { font-size: 18pt; font-weight: 800; margin: 0 0 2px; letter-spacing: -0.01em; color: #0F172A; }
           .pr-company-sub { font-size: 8.5pt; color: #64748B; margin: 0; }
-
           .pr-report-badge { text-align: right; }
           .pr-report-title { font-size: 14pt; font-weight: 700; margin: 0 0 4px; color: #1E3A5F; }
           .pr-report-meta { font-size: 8pt; color: #64748B; line-height: 1.6; }
-
-          /* Sub-header: customer info bar */
           .pr-info-bar {
             background: #F8FAFC;
             border-bottom: 1px solid #E2E8F0;
@@ -283,11 +270,8 @@ export default function CustomerLedgerPage() {
           }
           .pr-info-label { color: #64748B; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 7pt; }
           .pr-info-value { color: #0F172A; font-weight: 700; font-size: 9pt; margin-top: 1px; }
-
-          /* Table */
-          .pr-table-wrap { padding: 0 0; }
+          .pr-table-wrap { padding: 0; }
           .pr-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
-
           .pr-table thead tr { background: #1E3A5F; color: white; }
           .pr-table th {
             padding: 8px 10px;
@@ -300,24 +284,19 @@ export default function CustomerLedgerPage() {
           }
           .pr-table th.r, .pr-table td.r { text-align: right; }
           .pr-table th.c, .pr-table td.c { text-align: center; }
-
           .pr-table tbody tr:nth-child(even) { background: #F8FAFC; }
           .pr-table tbody tr:nth-child(odd) { background: #fff; }
-
           .pr-table td {
             padding: 7px 10px;
             border-bottom: 1px solid #E2E8F0;
             color: #1E293B;
             vertical-align: middle;
           }
-
           .pr-table td.td-ref { color: #1E3A5F; font-weight: 600; }
           .pr-table td.td-dr { color: #B91C1C; font-weight: 500; }
           .pr-table td.td-cr { color: #047857; font-weight: 500; }
           .pr-table td.td-bal { color: #1E3A5F; font-weight: 700; }
           .pr-table td.td-open { color: #7C3AED; font-style: italic; }
-
-          /* Footer totals */
           .pr-totals-row { background: #1E3A5F !important; }
           .pr-totals-row td {
             color: white !important;
@@ -326,8 +305,6 @@ export default function CustomerLedgerPage() {
             padding: 9px 10px;
             border: none !important;
           }
-
-          /* Page footer */
           .pr-footer {
             margin-top: 20px;
             padding: 8px 24px;
@@ -337,7 +314,6 @@ export default function CustomerLedgerPage() {
             font-size: 7.5pt;
             color: #64748B;
           }
-
           .pr-stripe { display: none; }
         }
 
@@ -347,7 +323,6 @@ export default function CustomerLedgerPage() {
 
       {/* ── SCREEN UI ── */}
       <div className="cl-wrap">
-
         {/* Topbar */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
           <button className="cl-btn" onClick={() => router.push("/dashboard/customers")}>
@@ -425,7 +400,6 @@ export default function CustomerLedgerPage() {
           </div>
         ) : sortedEntries.length > 0 ? (
           <div className="cl-card">
-            {/* Column headers */}
             <div className="cl-th-row">
               <button className="cl-sort-btn" onClick={() => handleSort("sr")}># {getSortIcon("sr")}</button>
               <button className="cl-sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
@@ -446,7 +420,6 @@ export default function CustomerLedgerPage() {
                 <span className="r mono" style={{ color: "#A78BFA", fontWeight: 700, fontSize: 12.5 }}>{fmt(e.balance)}</span>
               </div>
             ))}
-            {/* Totals footer */}
             <div style={{ display: "grid", gridTemplateColumns: "44px 100px 110px 1fr 120px 120px 120px", gap: 8, padding: "10px 18px", background: "#0F172A", borderTop: "2px solid #334155" }}>
               <span />
               <span />
@@ -467,17 +440,11 @@ export default function CustomerLedgerPage() {
         )}
       </div>
 
-      {/* ── PRINT PORTAL ──
-          This div is appended to <body> via a Portal (see PrintPortal component below).
-          It lives OUTSIDE the Next.js layout, so sidebar/topbar never print.
-      */}
+      {/* ── PRINT PORTAL ── */}
       <PrintPortal>
         <div id="cl-print-portal">
           <div className="pr-page">
-            {/* Accent stripe */}
             <div className="pr-stripe" />
-
-            {/* Header band */}
             <div className="pr-header-band">
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                 {company?.logo_url && (
@@ -488,12 +455,9 @@ export default function CustomerLedgerPage() {
                   />
                 )}
                 <div>
-                  <p className="pr-company-name">{companyName || "Company Name"}</p>
-                  {(company?.tagline || company?.address) && (
-                    <p className="pr-company-sub">
-                      {company?.tagline}{company?.tagline && company?.address ? " · " : ""}{company?.address}
-                    </p>
-                  )}
+                  <p className="pr-company-name">{companyName}</p>
+                  {companyTagline && <p className="pr-company-sub">{companyTagline}</p>}
+                  {companyAddress && <p className="pr-company-sub">{companyAddress}</p>}
                 </div>
               </div>
               <div className="pr-report-badge">
@@ -505,7 +469,6 @@ export default function CustomerLedgerPage() {
               </div>
             </div>
 
-            {/* Customer info bar */}
             <div className="pr-info-bar">
               <div>
                 <div className="pr-info-label">Customer</div>
@@ -519,7 +482,6 @@ export default function CustomerLedgerPage() {
               </div>
             </div>
 
-            {/* Table */}
             <div className="pr-table-wrap">
               <table className="pr-table">
                 <thead>
@@ -545,7 +507,6 @@ export default function CustomerLedgerPage() {
                       <td className="r td-bal">{fmt(e.balance)}</td>
                     </tr>
                   ))}
-                  {/* Totals row */}
                   <tr className="pr-totals-row">
                     <td colSpan={4} style={{ textTransform: "uppercase", letterSpacing: "0.06em" }}>Grand Total</td>
                     <td className="r">{fmt(totalDebit)}</td>
@@ -556,7 +517,6 @@ export default function CustomerLedgerPage() {
               </table>
             </div>
 
-            {/* Footer */}
             <div className="pr-footer">
               <span>{companyName} — Confidential</span>
               <span>Customer Ledger · {cust?.name}</span>
