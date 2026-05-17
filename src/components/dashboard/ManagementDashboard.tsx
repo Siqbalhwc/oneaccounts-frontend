@@ -33,10 +33,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
   // Quick stats
   const [totalReceivables, setTotalReceivables] = useState(0)
-  const [topReceivables, setTopReceivables] = useState<any[]>([])
-
   const [totalPayables, setTotalPayables] = useState(0)
-  const [topPayables, setTopPayables] = useState<any[]>([])
 
   // Monthly Spending & trend
   const [monthlySpending, setMonthlySpending] = useState(0)
@@ -135,17 +132,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
       // Quick stats: Receivables & Payables
       const { data: custBals } = await supabase.from("customers").select("balance").eq("company_id", companyId)
       setTotalReceivables(custBals?.reduce((s, c) => s + (c.balance || 0), 0) || 0)
-      const { data: topCusts } = await supabase.from("customers")
-        .select("id, name, balance").eq("company_id", companyId)
-        .order("balance", { ascending: false }).limit(3)
-      setTopReceivables(topCusts || [])
 
       const { data: suppBals } = await supabase.from("suppliers").select("balance").eq("company_id", companyId)
       setTotalPayables(suppBals?.reduce((s, s2) => s + (s2.balance || 0), 0) || 0)
-      const { data: topSupps } = await supabase.from("suppliers")
-        .select("id, name, balance").eq("company_id", companyId)
-        .order("balance", { ascending: false }).limit(3)
-      setTopPayables(topSupps || [])
 
       // ── Monthly Spending (Expense + Fixed Asset accounts) ──
       const { data: expenseAccounts } = await supabase.from("accounts")
@@ -349,11 +338,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
     return `${sign}PKR ${(abs / 1_000_000).toFixed(1)}M`
   }
 
-  const formatDetail = (v: number) => {
-    const sign = v < 0 ? "-" : ""
-    return `${sign}PKR ${Math.abs(v).toLocaleString()}`
-  }
-
   const detailQuery = (extra: Record<string, string> = {}) => {
     const params = new URLSearchParams({ fy: String(fiscalYear) })
     if (selectedProjectId) params.set("project", selectedProjectId)
@@ -498,25 +482,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
           border-bottom: 1px solid #1E293B; font-size: 0.8rem;
         }
         .underspend-row-grid:last-child { border-bottom: none; }
-
-        /* Mini-table for receivables/payables */
-        .mini-table-header {
-          display: flex; justify-content: space-between;
-          font-size: 0.65rem; font-weight: 700; color: #94A3B8;
-          text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid #1E293B;
-          margin-bottom: 6px;
-        }
-        .mini-table-row {
-          display: flex; align-items: center; gap: 6px; padding: 4px 0;
-          font-size: 0.75rem; color: #E2E8F0;
-          transition: background 0.1s;
-        }
-        .mini-table-row:hover { background: #1E293B; border-radius: 4px; padding-left: 4px; padding-right: 4px; }
-        .mini-dot {
-          width: 6px; height: 6px; border-radius: 50%; background: #2DD4BF;
-          flex-shrink: 0;
-        }
-        .mini-amount { margin-left: auto; font-weight: 600; }
 
         @media (max-width: 1100px) {
           .dashboard-grid { grid-template-columns: repeat(3, 1fr); }
@@ -698,7 +663,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </div>
         </div>
 
-        {/* ── Row 3: Underspend + Receivables + Payables ── */}
+        {/* ── Row 3: Underspend + Combined Receivables & Payables ── */}
         <div className="dashboard-grid">
           <div className="card span-3">
             <div className="kpi-label" style={{ fontWeight: 700, fontSize: "0.95rem", color: "#F1F5F9", marginBottom: "0.8rem" }}>💡 Top 5 Underspend Activities</div>
@@ -736,43 +701,29 @@ export default function ManagementDashboard({ role }: { role: string }) {
               </>
             )}
           </div>
-          <div className="card span-1">
-            <div className="kpi-label" style={{ fontWeight: 700, fontSize: "0.95rem", color: "#F1F5F9", marginBottom: "0.8rem" }}>🧾 Receivables</div>
-            <div className="kpi-value" style={{ color: totalReceivables > 0 ? "#F97316" : "#94A3B8", fontSize: "1.4rem" }}>{formatPKR(totalReceivables)}</div>
-            {topReceivables.length > 0 && (
-              <div style={{ marginTop: 8 }}>
-                <div className="mini-table-header">
-                  <span>Clients</span>
-                  <span>Balance</span>
-                </div>
-                {topReceivables.map((cust: any) => (
-                  <div key={cust.id} className="mini-table-row">
-                    <span className="mini-dot" style={{ background: "#2DD4BF" }}></span>
-                    <span>{cust.name}</span>
-                    <span className="mini-amount">{formatPKR(cust.balance)}</span>
-                  </div>
-                ))}
+          {/* Combined Receivables & Payables card */}
+          <div className="card span-2">
+            <div className="kpi-label" style={{ fontWeight: 700, fontSize: "0.95rem", color: "#F1F5F9", marginBottom: "1rem" }}>⚖️ Receivables vs Payables</div>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", marginBottom: "0.8rem" }}>
+              <div>
+                <div style={{ fontSize: "0.7rem", textTransform: "uppercase", color: "#94A3B8", marginBottom: 2 }}>Receivables</div>
+                <div style={{ fontSize: "1.3rem", fontWeight: 700, color: totalReceivables > 0 ? "#F97316" : "#94A3B8" }}>{formatPKR(totalReceivables)}</div>
               </div>
-            )}
-          </div>
-          <div className="card span-1">
-            <div className="kpi-label" style={{ fontWeight: 700, fontSize: "0.95rem", color: "#F1F5F9", marginBottom: "0.8rem" }}>💳 Payables</div>
-            <div className="kpi-value" style={{ color: totalPayables > 0 ? "#F97316" : "#94A3B8", fontSize: "1.4rem" }}>{formatPKR(totalPayables)}</div>
-            {topPayables.length > 0 && (
-              <div style={{ marginTop: 8 }}>
-                <div className="mini-table-header">
-                  <span>Vendors</span>
-                  <span>Balance</span>
-                </div>
-                {topPayables.map((supp: any) => (
-                  <div key={supp.id} className="mini-table-row">
-                    <span className="mini-dot" style={{ background: "#F97316" }}></span>
-                    <span>{supp.name}</span>
-                    <span className="mini-amount">{formatPKR(supp.balance)}</span>
-                  </div>
-                ))}
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: "0.7rem", textTransform: "uppercase", color: "#94A3B8", marginBottom: 2 }}>Payables</div>
+                <div style={{ fontSize: "1.3rem", fontWeight: 700, color: totalPayables > 0 ? "#F97316" : "#94A3B8" }}>{formatPKR(totalPayables)}</div>
               </div>
-            )}
+            </div>
+            <div style={{
+              padding: "0.4rem 0.8rem", borderRadius: 8,
+              background: totalReceivables > totalPayables ? "#064E3B" : "#3B1212",
+              color: totalReceivables > totalPayables ? "#6EE7B7" : "#FCA5A5",
+              fontWeight: 600, fontSize: "0.85rem", textAlign: "center"
+            }}>
+              {totalReceivables > totalPayables
+                ? `✅ Healthy — Receivables exceed Payables by ${formatPKR(totalReceivables - totalPayables)}`
+                : `⚠️ Unhealthy — Payables exceed Receivables by ${formatPKR(totalPayables - totalReceivables)}`}
+            </div>
           </div>
         </div>
 
