@@ -67,11 +67,16 @@ export default function NewReceiptPage() {
       .then(r => r.data && setIncomeAccounts(r.data))
   }, [companyId])
 
+  // Fetch invoices when a customer is selected (remove status filter to see all)
   useEffect(() => {
-    if (!companyId || !customerId || isDonation) return
+    if (!companyId || !customerId || isDonation) {
+      setInvoices([])
+      setAllocations({})
+      return
+    }
     supabase.from("invoices")
-      .select("id, invoice_no, date, due_date, total, paid")
-      .eq("company_id", companyId).eq("party_id", customerId).eq("status", "Unpaid")
+      .select("id, invoice_no, date, due_date, total, paid, status")
+      .eq("company_id", companyId).eq("party_id", customerId)
       .order("date")
       .then(r => {
         const invs = r.data || []
@@ -187,38 +192,61 @@ export default function NewReceiptPage() {
   if (!companyId) return <div style={{ padding: 40, textAlign: "center" }}>Loading company data…</div>
 
   return (
-    <div style={{ padding: "16px", background: "#F4F6FB", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div style={{ padding: "16px", background: "#0B1120", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
       <style>{`
         .inv-shell { max-width: 1100px; margin: 0 auto; }
-        .inv-title { font-size: 18px; font-weight: 700; color: #1E293B; }
+        .inv-title { font-size: 18px; font-weight: 700; color: #F1F5F9; }
         .inv-card {
-          background: white; border-radius: 12px; border: 1px solid #E5EAF2;
-          padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); margin-bottom: 12px;
+          background: #111827; border-radius: 12px; border: 1px solid #1E293B;
+          padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); margin-bottom: 12px;
         }
-        .inv-label { font-size: 10px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block; }
-        .inv-input, .inv-select { width: 100%; height: 38px; border: 1.5px solid #E5EAF2; border-radius: 8px; padding: 0 12px; font-size: 13px; font-family: inherit; background: #FAFBFF; outline: none; box-sizing: border-box; }
-        .inv-input:focus, .inv-select:focus { border-color: #1740C8; background: white; }
+        .inv-label { font-size: 10px; font-weight: 600; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block; }
+        .inv-input, .inv-select {
+          width: 100%; height: 38px; border: 1.5px solid #334155; border-radius: 8px;
+          padding: 0 12px; font-size: 13px; font-family: inherit;
+          background: #1E293B; color: #F1F5F9; outline: none; box-sizing: border-box;
+        }
+        .inv-input:focus, .inv-select:focus { border-color: #64748B; }
         .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .inv-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all 0.15s; white-space: nowrap; }
-        .inv-btn-primary { background: #1e3a8a; color: white; }
-        .inv-btn-outline { background: white; border: 1.5px solid #E5EAF2; color: #475569; }
+        .inv-btn {
+          display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px;
+          font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit;
+          transition: all 0.15s; white-space: nowrap;
+        }
+        .inv-btn-primary { background: #1E3A8A; color: white; }
+        .inv-btn-primary:hover { background: #1E40AF; }
+        .inv-btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
+        .inv-btn-outline:hover { background: #1E293B; }
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
-        .cust-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: white; border: 1.5px solid #C7D2FE; border-radius: 10px; max-height: 220px; overflow-y: auto; z-index: 100; box-shadow: 0 8px 24px rgba(30,58,138,0.12); }
-        .cust-option { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #F1F5F9; display: flex; justify-content: space-between; align-items: center; }
+        .cust-dropdown {
+          position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+          background: #111827; border: 1.5px solid #334155; border-radius: 10px;
+          max-height: 220px; overflow-y: auto; z-index: 100;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        }
+        .cust-option {
+          padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #1E293B;
+          display: flex; justify-content: space-between; align-items: center;
+        }
         .cust-option:last-child { border-bottom: none; }
-        .cust-option:hover { background: #EEF2FF; }
-        .cust-option-name { font-size: 13px; font-weight: 600; color: #1E293B; }
+        .cust-option:hover { background: #1E293B; }
+        .cust-option-name { font-size: 13px; font-weight: 600; color: #F1F5F9; }
         .cust-option-meta { font-size: 11px; color: #94A3B8; }
-        .cust-option-bal { font-size: 12px; font-weight: 600; color: #1E3A8A; white-space: nowrap; }
-        .cust-selected-badge { display: inline-flex; align-items: center; gap: 6px; background: #EEF2FF; border: 1.5px solid #C7D2FE; border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 600; color: #1E3A8A; width: 100%; cursor: pointer; }
+        .cust-option-bal { font-size: 12px; font-weight: 600; color: #93C5FD; white-space: nowrap; }
+        .cust-selected-badge {
+          display: inline-flex; align-items: center; gap: 6px;
+          background: #1E293B; border: 1.5px solid #334155;
+          border-radius: 8px; padding: 6px 12px; font-size: 13px;
+          font-weight: 600; color: #F1F5F9; width: 100%; cursor: pointer;
+        }
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
         @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
         .chk-box { width: 18px; height: 18px; cursor: pointer; accent-color: #1D4ED8; }
-        .alloc-input { width: 80px; height: 28px; border: 1px solid #E2E8F0; border-radius: 4px; padding: 2px 6px; text-align: right; }
+        .alloc-input { width: 80px; height: 28px; border: 1px solid #334155; border-radius: 4px; padding: 2px 6px; text-align: right; background: #1E293B; color: #F1F5F9; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8; text-align: left; padding: 8px 6px; border-bottom: 1px solid #E2E8F0; }
-        td { padding: 8px 6px; border-bottom: 1px solid #F1F5F9; vertical-align: middle; }
+        th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8; text-align: left; padding: 8px 6px; border-bottom: 1px solid #1E293B; }
+        td { padding: 8px 6px; border-bottom: 1px solid #1E293B; vertical-align: middle; }
       `}</style>
 
       <div className="inv-shell">
@@ -230,8 +258,8 @@ export default function NewReceiptPage() {
           </div>
         </div>
 
-        {error && <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#B91C1C", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
-        {flash && <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#15803D", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
+        {error && <div style={{ background: "#1E293B", border: "1px solid #EF4444", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
+        {flash && <div style={{ background: "#064E3B", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
 
         <div className="header-grid">
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -250,9 +278,9 @@ export default function NewReceiptPage() {
                     {selectedCustomer ? (
                       <div className="cust-selected-badge" onClick={clearCustomer} style={{ position: "relative", paddingRight: 40 }}>
                         <span>👤</span><span style={{ flex: 1 }}>{selectedCustomer.code} — {selectedCustomer.name}</span>
-                        <span style={{ fontSize: 11, color: "#64748B" }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
-                        <button className="cust-clear" style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)" }} onClick={(e) => { e.stopPropagation(); clearCustomer(); }}><X size={14} /></button>
-                        <button className="cust-clear" style={{ position: "absolute", right: 22, top: "50%", transform: "translateY(-50%)", color: "#1e3a8a" }} onClick={(e) => { e.stopPropagation(); loadCustomers(); }} title="Refresh"><RefreshCw size={13} /></button>
+                        <span style={{ fontSize: 11, color: "#94A3B8" }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
+                        <button className="cust-clear" style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#94A3B8", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); clearCustomer(); }}><X size={14} /></button>
+                        <button className="cust-clear" style={{ position: "absolute", right: 22, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#93C5FD", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); loadCustomers(); }} title="Refresh"><RefreshCw size={13} /></button>
                       </div>
                     ) : (
                       <>
@@ -262,7 +290,7 @@ export default function NewReceiptPage() {
                             onChange={e => { setCustomerSearch(e.target.value); setShowCustomerList(true) }}
                             onFocus={() => setShowCustomerList(true)} autoComplete="off"
                           />
-                          {customerSearch && <button className="cust-clear" onClick={() => setCustomerSearch("")}><X size={13} /></button>}
+                          {customerSearch && <button className="cust-clear" onClick={() => setCustomerSearch("")} style={{ background: "none", border: "none", color: "#94A3B8", cursor: "pointer" }}><X size={13} /></button>}
                         </div>
                         {showCustomerList && (
                           <div className="cust-dropdown">
@@ -301,7 +329,7 @@ export default function NewReceiptPage() {
               </div>
 
               <div className="inv-row" style={{ marginTop: 10 }}>
-                <div><label className="inv-label">Amount *</label><input className="inv-input" type="number" min="0" step="100" value={receiptAmount} onChange={e => setReceiptAmount(e.target.value ? Number(e.target.value) : "")} placeholder="0" /></div>
+                <div><label className="inv-label">Amount <span style={{ color: "#EF4444" }}>*</span></label><input className="inv-input" type="number" min="0" step="100" value={receiptAmount} onChange={e => setReceiptAmount(e.target.value ? Number(e.target.value) : "")} placeholder="0" /></div>
                 <div><label className="inv-label">Date</label><input className="inv-input" type="date" value={receiptDate} onChange={e => setReceiptDate(e.target.value)} /></div>
               </div>
               <div className="inv-row" style={{ marginTop: 10 }}>
@@ -312,7 +340,7 @@ export default function NewReceiptPage() {
 
             {customerId && !isDonation && invoices.length > 0 && (
               <div className="inv-card">
-                <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 12px 0" }}>Allocate to Invoices</h3>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: "#F1F5F9", margin: "0 0 12px 0" }}>Allocate to Invoices</h3>
                 <table>
                   <thead>
                     <tr>
@@ -342,12 +370,12 @@ export default function NewReceiptPage() {
                         </tr>
                       )
                     })}
-                    <tr style={{ borderTop: "2px solid #E2E8F0", fontWeight: 700 }}>
+                    <tr style={{ borderTop: "2px solid #1E293B", fontWeight: 700 }}>
                       <td colSpan={5} style={{ textAlign: "right" }}>Allocated</td>
                       <td style={{ textAlign: "right" }}>PKR {totalAllocated.toLocaleString()}</td>
                     </tr>
                     {unallocated > 0 && (
-                      <tr style={{ fontSize: 12, color: "#64748B" }}>
+                      <tr style={{ fontSize: 12, color: "#94A3B8" }}>
                         <td colSpan={6} style={{ textAlign: "right", paddingTop: 4 }}>
                           Unallocated (advance): PKR {unallocated.toLocaleString()}
                         </td>
@@ -366,7 +394,7 @@ export default function NewReceiptPage() {
 
           <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 16 }}>
             <div className="inv-card">
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: "#1E293B", margin: "0 0 10px" }}>Summary</h3>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: "#F1F5F9", margin: "0 0 10px" }}>Summary</h3>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
                 <span>Amount</span><span>PKR {totalAmount.toLocaleString()}</span>
               </div>
@@ -375,7 +403,7 @@ export default function NewReceiptPage() {
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginTop: 4 }}>
                     <span>Allocated</span><span>PKR {totalAllocated.toLocaleString()}</span>
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: unallocated > 0 ? "#dc2626" : "#64748B" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: unallocated > 0 ? "#EF4444" : "#94A3B8" }}>
                     <span>Advance</span><span>PKR {unallocated.toLocaleString()}</span>
                   </div>
                 </>
