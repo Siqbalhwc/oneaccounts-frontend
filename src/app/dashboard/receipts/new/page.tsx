@@ -24,7 +24,6 @@ export default function NewReceiptPage() {
   const [banks, setBanks] = useState<any[]>([])
   const [selectedBankId, setSelectedBankId] = useState<number | null>(null)
 
-  // Donation mode
   const [incomeAccounts, setIncomeAccounts] = useState<any[]>([])
   const [selectedIncomeAccountId, setSelectedIncomeAccountId] = useState<number | null>(null)
   const [isDonation, setIsDonation] = useState(false)
@@ -67,7 +66,6 @@ export default function NewReceiptPage() {
       .then(r => r.data && setIncomeAccounts(r.data))
   }, [companyId])
 
-  // Fetch invoices when a customer is selected (remove status filter to see all)
   useEffect(() => {
     if (!companyId || !customerId || isDonation) {
       setInvoices([])
@@ -205,6 +203,7 @@ export default function NewReceiptPage() {
           width: 100%; height: 38px; border: 1.5px solid #334155; border-radius: 8px;
           padding: 0 12px; font-size: 13px; font-family: inherit;
           background: #1E293B; color: #F1F5F9; outline: none; box-sizing: border-box;
+          max-width: 100%;
         }
         .inv-input:focus, .inv-select:focus { border-color: #64748B; }
         .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -243,10 +242,20 @@ export default function NewReceiptPage() {
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
         @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
         .chk-box { width: 18px; height: 18px; cursor: pointer; accent-color: #1D4ED8; }
-        .alloc-input { width: 80px; height: 28px; border: 1px solid #334155; border-radius: 4px; padding: 2px 6px; text-align: right; background: #1E293B; color: #F1F5F9; }
+        .alloc-input { width: 90px; height: 28px; border: 1px solid #334155; border-radius: 4px; padding: 2px 6px; text-align: right; background: #1E293B; color: #F1F5F9; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
         th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8; text-align: left; padding: 8px 6px; border-bottom: 1px solid #1E293B; }
         td { padding: 8px 6px; border-bottom: 1px solid #1E293B; vertical-align: middle; }
+
+        /* Remove number input spinners */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        input[type="number"] {
+          -moz-appearance: textfield;
+        }
       `}</style>
 
       <div className="inv-shell">
@@ -279,8 +288,8 @@ export default function NewReceiptPage() {
                       <div className="cust-selected-badge" onClick={clearCustomer} style={{ position: "relative", paddingRight: 40 }}>
                         <span>👤</span><span style={{ flex: 1 }}>{selectedCustomer.code} — {selectedCustomer.name}</span>
                         <span style={{ fontSize: 11, color: "#94A3B8" }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
-                        <button className="cust-clear" style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#94A3B8", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); clearCustomer(); }}><X size={14} /></button>
-                        <button className="cust-clear" style={{ position: "absolute", right: 22, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#93C5FD", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); loadCustomers(); }} title="Refresh"><RefreshCw size={13} /></button>
+                        <button style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#94A3B8", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); clearCustomer(); }}><X size={14} /></button>
+                        <button style={{ position: "absolute", right: 22, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#93C5FD", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); loadCustomers(); }} title="Refresh"><RefreshCw size={13} /></button>
                       </div>
                     ) : (
                       <>
@@ -290,7 +299,7 @@ export default function NewReceiptPage() {
                             onChange={e => { setCustomerSearch(e.target.value); setShowCustomerList(true) }}
                             onFocus={() => setShowCustomerList(true)} autoComplete="off"
                           />
-                          {customerSearch && <button className="cust-clear" onClick={() => setCustomerSearch("")} style={{ background: "none", border: "none", color: "#94A3B8", cursor: "pointer" }}><X size={13} /></button>}
+                          {customerSearch && <button onClick={() => setCustomerSearch("")} style={{ background: "none", border: "none", color: "#94A3B8", cursor: "pointer" }}><X size={13} /></button>}
                         </div>
                         {showCustomerList && (
                           <div className="cust-dropdown">
@@ -329,12 +338,24 @@ export default function NewReceiptPage() {
               </div>
 
               <div className="inv-row" style={{ marginTop: 10 }}>
-                <div><label className="inv-label">Amount <span style={{ color: "#EF4444" }}>*</span></label><input className="inv-input" type="number" min="0" step="100" value={receiptAmount} onChange={e => setReceiptAmount(e.target.value ? Number(e.target.value) : "")} placeholder="0" /></div>
-                <div><label className="inv-label">Date</label><input className="inv-input" type="date" value={receiptDate} onChange={e => setReceiptDate(e.target.value)} /></div>
+                <div>
+                  <label className="inv-label">Amount <span style={{ color: "#EF4444" }}>*</span></label>
+                  <input className="inv-input" type="number" min="0" step="100" value={receiptAmount} onChange={e => setReceiptAmount(e.target.value ? Number(e.target.value) : "")} placeholder="0" />
+                </div>
+                <div>
+                  <label className="inv-label">Date</label>
+                  <input className="inv-input" type="date" value={receiptDate} onChange={e => setReceiptDate(e.target.value)} />
+                </div>
               </div>
               <div className="inv-row" style={{ marginTop: 10 }}>
-                <div><label className="inv-label">Reference</label><input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="Optional" /></div>
-                <div><label className="inv-label">Notes</label><input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" /></div>
+                <div>
+                  <label className="inv-label">Reference</label>
+                  <input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="Optional" />
+                </div>
+                <div>
+                  <label className="inv-label">Notes</label>
+                  <input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" />
+                </div>
               </div>
             </div>
 
