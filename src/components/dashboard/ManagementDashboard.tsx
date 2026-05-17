@@ -225,8 +225,8 @@ export default function ManagementDashboard({ role }: { role: string }) {
       setUnpaidDetails(unpaidInvs || [])
 
       // ── Activity health per project (for project utilisation card) ──
-      if (enrichedProjects.length > 0) {
-        const projectIds = enrichedProjects.map(p => p.id)
+      if ((enrichedProjects as any[]).length > 0) {
+        const projectIds = enrichedProjects.map((p: any) => p.id)
         const { data: actBudgetsAll } = await supabase
           .from("budgets")
           .select("project_id, activity_id, budgeted_amount")
