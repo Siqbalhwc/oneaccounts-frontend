@@ -135,7 +135,14 @@ export default function NewReceiptPage() {
     if (!companyId) { setError("Company not loaded"); return }
     if (!selectedBankId) { setError("Please select a bank account"); return }
     if (totalAmount <= 0) { setError("Enter a valid receipt amount"); return }
-    if (!customerId && !isDonation) { setError("Please select a customer or enable donation mode"); return }
+    if (!customerId && !isDonation) {
+      setError("Please select a customer. To record a donation, enable the Donation / Other Income checkbox.")
+      return
+    }
+    if (isDonation && !selectedIncomeAccountId) {
+      setError("Please select an income account for the donation.")
+      return
+    }
 
     setLoading(true); setError("")
 
@@ -238,7 +245,7 @@ export default function NewReceiptPage() {
 
               {!isDonation ? (
                 <>
-                  <label className="inv-label">Customer *</label>
+                  <label className="inv-label">Customer <span style={{ color: "#EF4444" }}>*</span></label>
                   <div className="cust-wrap" ref={customerRef}>
                     {selectedCustomer ? (
                       <div className="cust-selected-badge" onClick={clearCustomer} style={{ position: "relative", paddingRight: 40 }}>
@@ -277,7 +284,7 @@ export default function NewReceiptPage() {
                 </>
               ) : (
                 <div>
-                  <label className="inv-label">Income Account *</label>
+                  <label className="inv-label">Income Account <span style={{ color: "#EF4444" }}>*</span></label>
                   <select className="inv-select" value={selectedIncomeAccountId ?? ""} onChange={e => setSelectedIncomeAccountId(e.target.value ? Number(e.target.value) : null)}>
                     <option value="">— Select Income Account —</option>
                     {incomeAccounts.map(a => <option key={a.id} value={a.id}>{a.code} – {a.name}</option>)}
@@ -286,7 +293,7 @@ export default function NewReceiptPage() {
               )}
 
               <div style={{ marginTop: 10 }}>
-                <label className="inv-label">Bank Account *</label>
+                <label className="inv-label">Bank Account <span style={{ color: "#EF4444" }}>*</span></label>
                 <select className="inv-select" value={selectedBankId ?? ""} onChange={e => setSelectedBankId(e.target.value ? Number(e.target.value) : null)}>
                   <option value="">— Select Bank —</option>
                   {banks.map((b: any) => <option key={b.id} value={b.id}>{b.name}{b.glCode ? ` (${b.glCode})` : ""}</option>)}

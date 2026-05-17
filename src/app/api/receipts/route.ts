@@ -16,7 +16,7 @@ async function getAccount(supabase: any, code: string, companyId: string) {
   return data
 }
 
-// ── Robust receipt number generation (fix duplicate) ───────────────────
+// ── Robust receipt number generation ───────────────────────────────────
 async function generateReceiptNo(companyId: string): Promise<string> {
   const { data } = await supabaseAdmin
     .from('receipts')
@@ -69,8 +69,16 @@ export async function POST(request: NextRequest) {
     party_id, amount, payment_method, bank_account_id,
     income_account_id, unallocated_amount, date, reference, notes, allocations
   } = await request.json()
+
   if (!amount || amount <= 0) {
     return NextResponse.json({ error: 'Amount is required' }, { status: 400 })
+  }
+
+  // ── New server‑side validation ────────────────────────────────────────
+  if (!party_id && !income_account_id) {
+    return NextResponse.json({
+      error: 'Customer is required when not a donation. Please select a customer or enable donation mode.'
+    }, { status: 400 })
   }
 
   // ── Generate unique receipt number with retry ──────────────────────────
@@ -158,7 +166,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // ── Determine the bank's GL account (replace hardcoded 1000) ──────────
+  // ── Determine the bank's GL account ────────────────────────────────────
   let bankGlAccountId: number | null = null
   if (bank_account_id) {
     const { data: bank } = await supabaseAdmin.from('bank_accounts')
@@ -242,18 +250,17 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Audit log
   // Audit log with user email
-const { data: { user: auditUser } } = await supabase.auth.getUser()
-await supabaseAdmin.from("data_change_logs").insert({
-  table_name: "receipts",
-  record_id: String(receipt.id),
-  action: "INSERT",
-  old_data: null,
-  new_data: receipt,
-  changed_by: auditUser?.email || auditUser?.id || null,
-  changed_at: new Date().toISOString(),
-})
+  const { data: { user: auditUser } } = await supabase.auth.getUser()
+  await supabaseAdmin.from("data_change_logs").insert({
+    table_name: "receipts",
+    record_id: String(receipt.id),
+    action: "INSERT",
+    old_data: null,
+    new_data: receipt,
+    changed_by: auditUser?.email || auditUser?.id || null,
+    changed_at: new Date().toISOString(),
+  })
 
   return NextResponse.json({ success: true, receipt_no: recNo, receipt })
 }
