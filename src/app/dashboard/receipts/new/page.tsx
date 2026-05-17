@@ -209,13 +209,11 @@ export default function NewReceiptPage() {
         .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .inv-btn {
           display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px;
-          font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit;
-          transition: all 0.15s; white-space: nowrap;
+          font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid #334155;
+          background: transparent; color: #CBD5E1; font-family: inherit;
+          transition: all 0.15s; white-space: nowrap; text-decoration: none;
         }
-        .inv-btn-primary { background: #1E3A8A; color: white; }
-        .inv-btn-primary:hover { background: #1E40AF; }
-        .inv-btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
-        .inv-btn-outline:hover { background: #1E293B; }
+        .inv-btn:hover { background: #1E293B; }
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
         .cust-dropdown {
@@ -247,20 +245,14 @@ export default function NewReceiptPage() {
         th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8; text-align: left; padding: 8px 6px; border-bottom: 1px solid #1E293B; }
         td { padding: 8px 6px; border-bottom: 1px solid #1E293B; vertical-align: middle; }
 
-        /* Remove number input spinners */
         input[type="number"]::-webkit-inner-spin-button,
-        input[type="number"]::-webkit-outer-spin-button {
-          -webkit-appearance: none;
-          margin: 0;
-        }
-        input[type="number"] {
-          -moz-appearance: textfield;
-        }
+        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type="number"] { -moz-appearance: textfield; }
       `}</style>
 
       <div className="inv-shell">
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-          <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/receipts")}><ArrowLeft size={16} /></button>
+          <button className="inv-btn" onClick={() => router.push("/dashboard/receipts")}><ArrowLeft size={16} /></button>
           <div style={{ flex: 1 }}>
             <div className="inv-title">📥 New Receipt</div>
             <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 1 }}>Record customer payment or donation</div>
@@ -413,7 +405,7 @@ export default function NewReceiptPage() {
             )}
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 16 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="inv-card">
               <h3 style={{ fontSize: 15, fontWeight: 700, color: "#F1F5F9", margin: "0 0 10px" }}>Summary</h3>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
@@ -431,7 +423,7 @@ export default function NewReceiptPage() {
               )}
             </div>
             <div className="inv-card">
-              <button className="inv-btn inv-btn-primary" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading}>
+              <button className="inv-btn" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading}>
                 {loading ? "Posting..." : "💾 Save Receipt"}
               </button>
             </div>
