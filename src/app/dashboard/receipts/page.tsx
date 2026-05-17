@@ -49,10 +49,9 @@ export default function ReceiptsPage() {
       return
     }
 
-    supabase
+        supabase
       .from("receipts")
       .select("*")
-      .is("deleted_at", null)
       .order("date", { ascending: false })
       .then(({ data }) => {
         setReceipts(data || [])
