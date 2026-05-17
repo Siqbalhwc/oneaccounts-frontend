@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useSearchParams, useRouter } from "next/navigation"
-import { ArrowLeft, Download, Printer, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { ArrowLeft, Download, Printer, ArrowUpDown, ArrowUp, ArrowDown, FileText } from "lucide-react"
 import * as XLSX from "xlsx"
 
 type SortField = "sr" | "ref" | "date" | "desc" | "debit" | "credit" | "balance"
@@ -31,7 +31,17 @@ export default function CustomerLedgerPage() {
   const [orientation, setOrientation] = useState<"landscape" | "portrait">("landscape")
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
-  const printRef = useRef<HTMLDivElement>(null)
+
+  // ── Orientation: inject @page rule dynamically so it actually works ──
+  useEffect(() => {
+    const style = document.createElement("style")
+    style.id = "print-orientation-style"
+    style.innerHTML = `@page { size: A4 ${orientation}; margin: 15mm; }`
+    const existing = document.getElementById("print-orientation-style")
+    if (existing) existing.remove()
+    document.head.appendChild(style)
+    return () => { document.getElementById("print-orientation-style")?.remove() }
+  }, [orientation])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -56,15 +66,11 @@ export default function CustomerLedgerPage() {
   }, [])
 
   useEffect(() => {
-    if (initialCustomerId && customers.length > 0) {
-      setCustomerId(Number(initialCustomerId))
-    }
+    if (initialCustomerId && customers.length > 0) setCustomerId(Number(initialCustomerId))
   }, [initialCustomerId, customers])
 
   useEffect(() => {
-    if (customerId && customers.length > 0) {
-      loadLedger()
-    }
+    if (customerId && customers.length > 0) loadLedger()
   }, [customerId, customers, dateFrom, dateTo])
 
   const loadLedger = async () => {
@@ -76,6 +82,9 @@ export default function CustomerLedgerPage() {
     const { data: custData } = await supabase.from("customers").select("opening_balance").eq("id", customerId).single()
     let opening = custData?.opening_balance || 0
 
+    const { data: { user } } = await supabase.auth.getUser()
+    const companyId = (user?.app_metadata as any)?.company_id
+
     let invQuery = supabase.from("invoices")
       .select("*").eq("type", "sale").eq("party_id", customerId)
     if (dateFrom) invQuery = invQuery.gte("date", dateFrom)
@@ -84,7 +93,7 @@ export default function CustomerLedgerPage() {
 
     let recQuery = supabase.from("journal_entries")
       .select("*, journal_lines(debit,credit)")
-      .eq("company_id", (await supabase.auth.getUser()).data.user?.app_metadata?.company_id)
+      .eq("company_id", companyId)
       .ilike("description", `%${cust.name}%`)
     if (dateFrom) recQuery = recQuery.gte("date", dateFrom)
     if (dateTo) recQuery = recQuery.lte("date", dateTo)
@@ -94,22 +103,14 @@ export default function CustomerLedgerPage() {
     let balance = opening
 
     if (opening !== 0) {
-      txns.push({
-        date: dateFrom || "Start",
-        type: "Opening",
-        ref: "",
-        desc: "Opening Balance",
-        debit: opening > 0 ? opening : 0,
-        credit: opening < 0 ? -opening : 0,
-        balance
-      })
+      txns.push({ date: dateFrom || "Start", type: "Opening", ref: "", desc: "Opening Balance", debit: opening > 0 ? opening : 0, credit: opening < 0 ? -opening : 0, balance })
     }
 
     if (invoices) {
       invoices.forEach((inv: any) => {
         const debit = inv.total || 0
         balance += debit
-        txns.push({ date: inv.date, type: "Invoice", ref: inv.invoice_no, desc: `Sales Invoice`, debit, credit: 0, balance })
+        txns.push({ date: inv.date, type: "Invoice", ref: inv.invoice_no, desc: "Sales Invoice", debit, credit: 0, balance })
       })
     }
 
@@ -136,70 +137,49 @@ export default function CustomerLedgerPage() {
   }
 
   const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDir(prev => prev === "asc" ? "desc" : "asc")
-    } else {
-      setSortField(field)
-      setSortDir("asc")
-    }
+    if (sortField === field) setSortDir(prev => prev === "asc" ? "desc" : "asc")
+    else { setSortField(field); setSortDir("asc") }
   }
 
   const getSortIcon = (field: SortField) => {
-    if (sortField !== field) return <ArrowUpDown size={12} style={{ opacity: 0.5 }} />
-    return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+    if (sortField !== field) return <ArrowUpDown size={11} style={{ opacity: 0.45 }} />
+    return sortDir === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />
   }
 
   const sortedEntries = [...entries].sort((a, b) => {
-    let valA, valB
-    if (sortField === "sr") {
-      valA = entries.indexOf(a) + 1
-      valB = entries.indexOf(b) + 1
-    } else {
-      valA = a[sortField] ?? ""
-      valB = b[sortField] ?? ""
-      if (sortField === "debit" || sortField === "credit" || sortField === "balance") {
-        valA = Number(valA) || 0
-        valB = Number(valB) || 0
-      } else {
-        valA = String(valA).toLowerCase()
-        valB = String(valB).toLowerCase()
-      }
+    let valA: any, valB: any
+    if (sortField === "sr") { valA = entries.indexOf(a); valB = entries.indexOf(b) }
+    else {
+      valA = a[sortField] ?? ""; valB = b[sortField] ?? ""
+      if (["debit", "credit", "balance"].includes(sortField)) { valA = Number(valA) || 0; valB = Number(valB) || 0 }
+      else { valA = String(valA).toLowerCase(); valB = String(valB).toLowerCase() }
     }
     if (valA < valB) return sortDir === "asc" ? -1 : 1
     if (valA > valB) return sortDir === "asc" ? 1 : -1
     return 0
   })
 
-  const handlePrint = () => {
-    window.print()
-  }
+  // ── Print: hides everything except the report pane ──
+  const handlePrint = () => window.print()
 
   const exportExcel = () => {
     const cust = customers.find(c => c.id === customerId)
     const companyName = company?.name || company?.company_name || "Company"
-    const tagline = company?.tagline || ""
-    const address = company?.address || ""
     const customerName = cust ? `${cust.code} - ${cust.name}` : ""
     const rows: any[] = [
-      [companyName],
-      [tagline],
-      [address],
+      [companyName], [company?.tagline || ""], [company?.address || ""],
       [`Customer Ledger: ${customerName}`],
       [`Period: ${dateFrom || "All"} to ${dateTo || "All"}`],
-      [`Printed: ${new Date().toLocaleDateString()}`],
-      [],
+      [`Printed: ${new Date().toLocaleDateString()}`], [],
       ["Sr", "Date", "Reference", "Description", "Debit (PKR)", "Credit (PKR)", "Balance (PKR)"]
     ]
     let totalDr = 0, totalCr = 0
     sortedEntries.forEach((e, i) => {
       rows.push([i + 1, e.date, e.ref, e.desc, e.debit || "", e.credit || "", e.balance])
-      totalDr += e.debit || 0
-      totalCr += e.credit || 0
+      totalDr += e.debit || 0; totalCr += e.credit || 0
     })
-    rows.push([])
-    rows.push(["", "", "", "Sub Total:", totalDr, totalCr, ""])
+    rows.push([], ["", "", "", "Sub Total:", totalDr, totalCr, ""])
     rows.push(["", "", "", "Balance:", "", "", sortedEntries.length ? sortedEntries[sortedEntries.length - 1].balance : 0])
-
     const ws = XLSX.utils.aoa_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Customer Ledger")
@@ -210,183 +190,396 @@ export default function CustomerLedgerPage() {
   const totalDebit = sortedEntries.reduce((s, e) => s + (e.debit || 0), 0)
   const totalCredit = sortedEntries.reduce((s, e) => s + (e.credit || 0), 0)
   const finalBalance = sortedEntries.length ? sortedEntries[sortedEntries.length - 1].balance : 0
+  const companyName = company?.name || company?.company_name || ""
+
+  const fmt = (n: number) => n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
   return (
-    <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
+    <>
+      {/* ── Global print styles ──
+          Critical: hides layout shell (sidebar, nav, topbar) so only .print-root renders.
+          Your layout likely wraps this page in a div with class like "layout", "sidebar-layout", etc.
+          Adjust selectors to match your actual layout wrapper class names.
+      */}
       <style>{`
-        .card { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.2); overflow: hidden; }
-        .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid #334155; background: transparent; color: #CBD5E1; }
-        .btn:hover { background: #1E293B; }
-        .input { width: 100%; height: 38px; border: 1.5px solid #334155; border-radius: 8px; padding: 0 12px; font-size: 13px; background: #1E293B; color: #F1F5F9; outline: none; }
-        .select { width: 100%; height: 38px; border: 1.5px solid #334155; border-radius: 8px; padding: 0 12px; font-size: 13px; background: #1E293B; color: #F1F5F9; }
-        .header-row { display: grid; grid-template-columns: 40px 100px 90px 1fr 100px 100px 100px; gap: 8px; padding: 12px 20px; background: #1E293B; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94A3B8; border-bottom: 1px solid #1E293B; }
-        .data-row { display: grid; grid-template-columns: 40px 100px 90px 1fr 100px 100px 100px; gap: 8px; padding: 10px 20px; border-bottom: 1px solid #1E293B; font-size: 13px; align-items: center; transition: background 0.15s; }
-        .data-row:hover { background: #1E293B; }
-        .data-row:last-child { border-bottom: none; }
-        .sort-btn { background: none; border: none; color: inherit; font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px; }
-        .sort-btn:hover { color: #93C5FD; }
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
 
-        /* Print styles */
-        .print-only { display: none; }
+        /* ═══ SCREEN STYLES ═══ */
+        .cl-wrap { padding: 20px 24px; background: #0B1120; min-height: 100vh; font-family: 'DM Sans', sans-serif; color: #E2E8F0; }
+        .cl-card { background: #111827; border: 1px solid #1E293B; border-radius: 12px; overflow: hidden; }
+        .cl-btn { padding: 7px 14px; border-radius: 8px; font-size: 12.5px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; border: 1.5px solid #334155; background: transparent; color: #CBD5E1; transition: 0.15s; font-family: inherit; }
+        .cl-btn:hover { background: #1E293B; color: #F1F5F9; }
+        .cl-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .cl-input { width: 100%; height: 36px; border: 1.5px solid #334155; border-radius: 8px; padding: 0 11px; font-size: 13px; background: #1E293B; color: #F1F5F9; outline: none; font-family: inherit; box-sizing: border-box; }
+        .cl-select { width: 100%; height: 36px; border: 1.5px solid #334155; border-radius: 8px; padding: 0 11px; font-size: 13px; background: #1E293B; color: #F1F5F9; font-family: inherit; }
+        .cl-th-row { display: grid; grid-template-columns: 44px 100px 110px 1fr 120px 120px 120px; gap: 8px; padding: 11px 18px; background: #0F172A; border-bottom: 1px solid #1E293B; }
+        .cl-sort-btn { background: none; border: none; color: #94A3B8; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; font: 600 10px/1 'DM Sans', sans-serif; letter-spacing: 0.06em; text-transform: uppercase; padding: 0; }
+        .cl-sort-btn:hover { color: #93C5FD; }
+        .cl-dr { display: grid; grid-template-columns: 44px 100px 110px 1fr 120px 120px 120px; gap: 8px; padding: 9px 18px; border-bottom: 1px solid #1E293B; font-size: 13px; align-items: center; transition: background 0.12s; }
+        .cl-dr:hover { background: rgba(30,41,59,0.6); }
+        .cl-dr:last-child { border-bottom: none; }
+        .r { text-align: right; }
+        .mono { font-family: 'DM Mono', monospace; }
+
+        /* ═══ PRINT STYLES ═══
+           This is the critical section. It:
+           1. Hides ALL screen UI elements
+           2. Shows only the .print-root div
+           3. Forces white background on html/body
+           4. Removes sidebar / nav that your layout injects
+        */
         @media print {
-          body { background: white !important; }
-          .no-print { display: none !important; }
-          .print-only { display: block !important; }
-          .print-area { background: white; color: black; padding: 30px; }
-          .print-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; }
-          .print-header img { max-height: 60px; }
-          .print-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-          .print-table th { background: #f1f5f9; font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 10px 8px; border: 1px solid #ddd; text-align: left; }
-          .print-table td { padding: 8px; border: 1px solid #ddd; font-size: 12px; }
-          .print-summary { display: flex; justify-content: flex-end; gap: 40px; margin-top: 20px; font-size: 12px; }
-          .text-right { text-align: right; }
-          .text-center { text-align: center; }
+          /* Force browser to print backgrounds/colors */
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+          /* Hide the entire page body content except our print root */
+          body > * { display: none !important; }
+
+          /* Show next.js app root and our print root */
+          body > #__next,
+          body > div#__next > * { display: none !important; }
+
+          /* Our dedicated print portal will be appended to body */
+          #cl-print-portal { display: block !important; }
+
+          /* White clean background */
+          html, body { background: #fff !important; margin: 0; padding: 0; }
+
+          .pr-page {
+            background: white;
+            color: #111;
+            font-family: 'DM Sans', Georgia, serif;
+            padding: 0;
+          }
+
+          /* Header band */
+          .pr-header-band {
+            background: #1E3A5F;
+            color: white;
+            padding: 18px 24px 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0;
+          }
+
+          .pr-company-name { font-size: 18pt; font-weight: 800; margin: 0 0 2px; letter-spacing: -0.01em; }
+          .pr-company-sub { font-size: 8.5pt; opacity: 0.82; margin: 0; }
+
+          .pr-report-badge {
+            text-align: right;
+          }
+          .pr-report-title { font-size: 14pt; font-weight: 700; margin: 0 0 4px; }
+          .pr-report-meta { font-size: 8pt; opacity: 0.85; line-height: 1.6; }
+
+          /* Sub-header: customer info bar */
+          .pr-info-bar {
+            background: #F1F5F9;
+            border-bottom: 2px solid #1E3A5F;
+            padding: 8px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 8.5pt;
+          }
+          .pr-info-label { color: #64748B; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 7pt; }
+          .pr-info-value { color: #0F172A; font-weight: 700; font-size: 9pt; margin-top: 1px; }
+
+          /* Table */
+          .pr-table-wrap { padding: 0 0; }
+          .pr-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+
+          .pr-table thead tr { background: #1E3A5F; color: white; }
+          .pr-table th {
+            padding: 8px 10px;
+            font-size: 7.5pt;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            border: none;
+            white-space: nowrap;
+          }
+          .pr-table th.r, .pr-table td.r { text-align: right; }
+          .pr-table th.c, .pr-table td.c { text-align: center; }
+
+          .pr-table tbody tr:nth-child(even) { background: #F8FAFC; }
+          .pr-table tbody tr:nth-child(odd) { background: #fff; }
+
+          .pr-table td {
+            padding: 7px 10px;
+            border-bottom: 1px solid #E2E8F0;
+            color: #1E293B;
+            vertical-align: middle;
+          }
+
+          .pr-table td.td-ref { color: #1E3A5F; font-weight: 600; }
+          .pr-table td.td-dr { color: #B91C1C; font-weight: 500; }
+          .pr-table td.td-cr { color: #047857; font-weight: 500; }
+          .pr-table td.td-bal { color: #1E3A5F; font-weight: 700; }
+          .pr-table td.td-open { color: #7C3AED; font-style: italic; }
+
+          /* Footer totals */
+          .pr-totals-row { background: #1E3A5F !important; }
+          .pr-totals-row td {
+            color: white !important;
+            font-weight: 700 !important;
+            font-size: 8.5pt;
+            padding: 9px 10px;
+            border: none !important;
+          }
+
+          /* Page footer */
+          .pr-footer {
+            margin-top: 20px;
+            padding: 8px 24px;
+            border-top: 1px solid #CBD5E1;
+            display: flex;
+            justify-content: space-between;
+            font-size: 7.5pt;
+            color: #64748B;
+          }
+
+          /* Watermark stripe */
+          .pr-stripe {
+            height: 4px;
+            background: linear-gradient(90deg, #1E3A5F 0%, #2563EB 50%, #1E3A5F 100%);
+          }
         }
+
+        /* Hide print portal on screen */
+        #cl-print-portal { display: none; }
       `}</style>
 
-      {/* Top bar (visible on screen only) */}
-      <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-        <button className="btn" onClick={() => router.push("/dashboard/customers")}>
-          <ArrowLeft size={16} />
-        </button>
-        <div style={{ flex: 1 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>📒 Customer Ledger</h1>
-          <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>Full transaction history</p>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn" onClick={exportExcel}><Download size={16} /> Excel</button>
-          <button className="btn" onClick={handlePrint}><Printer size={16} /> Print</button>
-          <select className="select" style={{ width: 120 }} value={orientation} onChange={e => setOrientation(e.target.value as any)}>
-            <option value="landscape">Landscape</option>
-            <option value="portrait">Portrait</option>
-          </select>
-        </div>
-      </div>
+      {/* ── SCREEN UI ── */}
+      <div className="cl-wrap">
 
-      {/* Filters + Generate (compact single row) */}
-      <div className="no-print card" style={{ padding: 12, marginBottom: 16, display: "flex", gap: 12, alignItems: "flex-end" }}>
-        <div style={{ flex: 2 }}>
-          <label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 2 }}>Customer</label>
-          <select className="select" value={customerId || ""} onChange={e => { setCustomerId(Number(e.target.value) || null); }}>
-            <option value="">Select customer...</option>
-            {customers.map(c => <option key={c.id} value={c.id}>{c.code} - {c.name}</option>)}
-          </select>
-        </div>
-        <div style={{ flex: 1 }}>
-          <label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 2 }}>Date From</label>
-          <input className="input" type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
-        </div>
-        <div style={{ flex: 1 }}>
-          <label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 2 }}>Date To</label>
-          <input className="input" type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
-        </div>
-        <button className="btn" onClick={loadLedger} disabled={!customerId} style={{ height: 38 }}>
-          Generate
-        </button>
-      </div>
-
-      {/* Customer info & totals (screen only) */}
-      {cust && (
-        <div className="no-print card" style={{ padding: 12, marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <span style={{ fontWeight: 600, color: "#F1F5F9" }}>{cust.name}</span>
-            <span style={{ marginLeft: 12, color: "#93C5FD" }}>{cust.code}</span>
+        {/* Topbar */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+          <button className="cl-btn" onClick={() => router.push("/dashboard/customers")}>
+            <ArrowLeft size={15} />
+          </button>
+          <div style={{ flex: 1 }}>
+            <h1 style={{ fontSize: 20, fontWeight: 800, color: "#F1F5F9", margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
+              <FileText size={20} style={{ color: "#60A5FA" }} />
+              Customer Ledger
+            </h1>
+            <p style={{ color: "#64748B", fontSize: 12, margin: 0 }}>Full transaction history per customer</p>
           </div>
-          <div style={{ display: "flex", gap: 24 }}>
-            <div><span style={{ color: "#94A3B8", fontSize: 11 }}>Total Dr: </span><span style={{ fontWeight: 600, color: "#F87171" }}>PKR {totalDebit.toLocaleString()}</span></div>
-            <div><span style={{ color: "#94A3B8", fontSize: 11 }}>Total Cr: </span><span style={{ fontWeight: 600, color: "#2DD4BF" }}>PKR {totalCredit.toLocaleString()}</span></div>
-            <div><span style={{ color: "#94A3B8", fontSize: 11 }}>Balance: </span><span style={{ fontWeight: 700, color: "#A78BFA" }}>PKR {finalBalance.toLocaleString()}</span></div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button className="cl-btn" onClick={exportExcel} disabled={!sortedEntries.length}>
+              <Download size={14} /> Excel
+            </button>
+            <select
+              className="cl-select"
+              style={{ width: 130 }}
+              value={orientation}
+              onChange={e => setOrientation(e.target.value as any)}
+            >
+              <option value="landscape">🖨 Landscape</option>
+              <option value="portrait">🖨 Portrait</option>
+            </select>
+            <button className="cl-btn" onClick={handlePrint} disabled={!sortedEntries.length}
+              style={{ borderColor: "#3B82F6", color: "#93C5FD" }}>
+              <Printer size={14} /> Print / PDF
+            </button>
           </div>
         </div>
-      )}
 
-      {/* Screen table (visible on screen only) */}
-      {loading ? (
-        <div className="no-print" style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading...</div>
-      ) : sortedEntries.length > 0 ? (
-        <div className="no-print">
-          <div className="card">
-            <div className="header-row">
-              <button className="sort-btn" onClick={() => handleSort("sr")}>Sr {getSortIcon("sr")}</button>
-              <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
-              <button className="sort-btn" onClick={() => handleSort("ref")}>Ref {getSortIcon("ref")}</button>
-              <button className="sort-btn" onClick={() => handleSort("desc")}>Description {getSortIcon("desc")}</button>
-              <button className="sort-btn" style={{ justifyContent: "flex-end" }} onClick={() => handleSort("debit")}>Debit {getSortIcon("debit")}</button>
-              <button className="sort-btn" style={{ justifyContent: "flex-end" }} onClick={() => handleSort("credit")}>Credit {getSortIcon("credit")}</button>
-              <button className="sort-btn" style={{ justifyContent: "flex-end" }} onClick={() => handleSort("balance")}>Balance {getSortIcon("balance")}</button>
+        {/* Filters */}
+        <div className="cl-card" style={{ padding: 14, marginBottom: 14, display: "flex", gap: 12, alignItems: "flex-end" }}>
+          <div style={{ flex: 2, minWidth: 0 }}>
+            <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#64748B", marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.06em" }}>Customer</label>
+            <select className="cl-select" value={customerId || ""} onChange={e => setCustomerId(Number(e.target.value) || null)}>
+              <option value="">Select customer…</option>
+              {customers.map(c => <option key={c.id} value={c.id}>{c.code} – {c.name}</option>)}
+            </select>
+          </div>
+          <div style={{ flex: 1, minWidth: 110 }}>
+            <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#64748B", marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.06em" }}>From</label>
+            <input className="cl-input" type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+          </div>
+          <div style={{ flex: 1, minWidth: 110 }}>
+            <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#64748B", marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.06em" }}>To</label>
+            <input className="cl-input" type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+          </div>
+          <button className="cl-btn" onClick={loadLedger} disabled={!customerId}
+            style={{ height: 36, borderColor: "#3B82F6", color: "#93C5FD" }}>
+            Generate
+          </button>
+        </div>
+
+        {/* Summary strip */}
+        {cust && (
+          <div className="cl-card" style={{ padding: "10px 18px", marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <span style={{ fontWeight: 700, color: "#F1F5F9" }}>{cust.name}</span>
+              <span style={{ marginLeft: 10, color: "#60A5FA", fontSize: 12, background: "#1E3A5F", padding: "2px 8px", borderRadius: 4 }}>{cust.code}</span>
+            </div>
+            <div style={{ display: "flex", gap: 28, fontSize: 13 }}>
+              <div><span style={{ color: "#64748B", fontSize: 11 }}>Total Dr </span><span style={{ fontWeight: 700, color: "#F87171", fontFamily: "'DM Mono', monospace" }}>PKR {fmt(totalDebit)}</span></div>
+              <div><span style={{ color: "#64748B", fontSize: 11 }}>Total Cr </span><span style={{ fontWeight: 700, color: "#34D399", fontFamily: "'DM Mono', monospace" }}>PKR {fmt(totalCredit)}</span></div>
+              <div><span style={{ color: "#64748B", fontSize: 11 }}>Balance </span><span style={{ fontWeight: 800, color: "#A78BFA", fontFamily: "'DM Mono', monospace" }}>PKR {fmt(finalBalance)}</span></div>
+            </div>
+          </div>
+        )}
+
+        {/* Table */}
+        {loading ? (
+          <div style={{ textAlign: "center", padding: 48, color: "#64748B" }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>⏳</div>Loading ledger…
+          </div>
+        ) : sortedEntries.length > 0 ? (
+          <div className="cl-card">
+            {/* Column headers */}
+            <div className="cl-th-row">
+              <button className="cl-sort-btn" onClick={() => handleSort("sr")}># {getSortIcon("sr")}</button>
+              <button className="cl-sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
+              <button className="cl-sort-btn" onClick={() => handleSort("ref")}>Ref {getSortIcon("ref")}</button>
+              <button className="cl-sort-btn" onClick={() => handleSort("desc")}>Description {getSortIcon("desc")}</button>
+              <button className="cl-sort-btn r" style={{ justifyContent: "flex-end" }} onClick={() => handleSort("debit")}>Debit {getSortIcon("debit")}</button>
+              <button className="cl-sort-btn r" style={{ justifyContent: "flex-end" }} onClick={() => handleSort("credit")}>Credit {getSortIcon("credit")}</button>
+              <button className="cl-sort-btn r" style={{ justifyContent: "flex-end" }} onClick={() => handleSort("balance")}>Balance {getSortIcon("balance")}</button>
             </div>
             {sortedEntries.map((e, i) => (
-              <div key={i} className="data-row">
-                <span style={{ color: "#94A3B8" }}>{i + 1}</span>
-                <span>{e.date}</span>
-                <span style={{ color: "#93C5FD", fontWeight: 600 }}>{e.ref}</span>
-                <span style={{ color: "#CBD5E1" }}>{e.desc}</span>
-                <span style={{ textAlign: "right", color: "#F87171" }}>{e.debit > 0 ? `PKR ${e.debit.toLocaleString()}` : "-"}</span>
-                <span style={{ textAlign: "right", color: "#2DD4BF" }}>{e.credit > 0 ? `PKR ${e.credit.toLocaleString()}` : "-"}</span>
-                <span style={{ textAlign: "right", fontWeight: 600, color: "#A78BFA" }}>PKR {e.balance.toLocaleString()}</span>
+              <div key={i} className="cl-dr">
+                <span style={{ color: "#475569", fontSize: 12 }}>{i + 1}</span>
+                <span style={{ fontSize: 12.5 }}>{e.date}</span>
+                <span style={{ color: "#60A5FA", fontWeight: 600, fontSize: 12 }}>{e.ref}</span>
+                <span style={{ color: "#CBD5E1", fontSize: 12.5 }}>{e.desc}</span>
+                <span className="r mono" style={{ color: e.debit > 0 ? "#F87171" : "#475569", fontSize: 12.5 }}>{e.debit > 0 ? fmt(e.debit) : "–"}</span>
+                <span className="r mono" style={{ color: e.credit > 0 ? "#34D399" : "#475569", fontSize: 12.5 }}>{e.credit > 0 ? fmt(e.credit) : "–"}</span>
+                <span className="r mono" style={{ color: "#A78BFA", fontWeight: 700, fontSize: 12.5 }}>{fmt(e.balance)}</span>
               </div>
             ))}
-          </div>
-          <div className="card" style={{ padding: 12, marginTop: 12, display: "flex", justifyContent: "flex-end", gap: 32 }}>
-            <div><span style={{ color: "#94A3B8", fontSize: 12 }}>Total Debit: </span><span style={{ color: "#F87171", fontWeight: 600 }}>PKR {totalDebit.toLocaleString()}</span></div>
-            <div><span style={{ color: "#94A3B8", fontSize: 12 }}>Total Credit: </span><span style={{ color: "#2DD4BF", fontWeight: 600 }}>PKR {totalCredit.toLocaleString()}</span></div>
-            <div><span style={{ color: "#94A3B8", fontSize: 12 }}>Closing Balance: </span><span style={{ color: "#A78BFA", fontWeight: 700 }}>PKR {finalBalance.toLocaleString()}</span></div>
-          </div>
-        </div>
-      ) : (
-        customerId && <div className="no-print" style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>No transactions found for selected period.</div>
-      )}
-
-      {/* Print-only section (hidden on screen, visible when printing) */}
-      <div className="print-only print-area">
-        <div className="print-header">
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {company?.logo_url && <img src={company.logo_url} alt="logo" style={{ maxHeight: 60 }} />}
-            <div>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{company?.name || company?.company_name || "Company"}</h2>
-              {company?.tagline && <p style={{ margin: 0, fontSize: 12 }}>{company.tagline}</p>}
-              {company?.address && <p style={{ margin: 0, fontSize: 12 }}>{company.address}</p>}
+            {/* Totals footer */}
+            <div style={{ display: "grid", gridTemplateColumns: "44px 100px 110px 1fr 120px 120px 120px", gap: 8, padding: "10px 18px", background: "#0F172A", borderTop: "2px solid #334155" }}>
+              <span />
+              <span />
+              <span />
+              <span style={{ fontWeight: 700, color: "#94A3B8", fontSize: 12, textTransform: "uppercase", letterSpacing: "0.06em" }}>Totals</span>
+              <span className="r mono" style={{ color: "#F87171", fontWeight: 700, fontSize: 12.5 }}>{fmt(totalDebit)}</span>
+              <span className="r mono" style={{ color: "#34D399", fontWeight: 700, fontSize: 12.5 }}>{fmt(totalCredit)}</span>
+              <span className="r mono" style={{ color: "#A78BFA", fontWeight: 800, fontSize: 13 }}>{fmt(finalBalance)}</span>
             </div>
           </div>
-          <div style={{ textAlign: "right", fontSize: 12 }}>
-            <strong style={{ fontSize: 16 }}>Customer Ledger</strong><br />
-            Customer: {cust?.code} - {cust?.name}<br />
-            Period: {dateFrom || "All"} to {dateTo || "All"}<br />
-            Date: {new Date().toLocaleDateString()}
+        ) : (
+          customerId && !loading && (
+            <div style={{ textAlign: "center", padding: 48, color: "#475569" }}>
+              <div style={{ fontSize: 36, marginBottom: 8 }}>📭</div>
+              No transactions found for the selected period.
+            </div>
+          )
+        )}
+      </div>
+
+      {/* ── PRINT PORTAL ──
+          This div is appended to <body> via a Portal (see PrintPortal component below).
+          It lives OUTSIDE the Next.js layout, so sidebar/topbar never print.
+      */}
+      <PrintPortal>
+        <div id="cl-print-portal">
+          <div className="pr-page">
+            {/* Accent stripe */}
+            <div className="pr-stripe" />
+
+            {/* Header band */}
+            <div className="pr-header-band">
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                {company?.logo_url && (
+                  <img
+                    src={company.logo_url}
+                    alt="logo"
+                    style={{ maxHeight: 48, maxWidth: 100, objectFit: "contain", borderRadius: 4 }}
+                  />
+                )}
+                <div>
+                  <p className="pr-company-name">{companyName || "Company Name"}</p>
+                  {(company?.tagline || company?.address) && (
+                    <p className="pr-company-sub">
+                      {company?.tagline}{company?.tagline && company?.address ? " · " : ""}{company?.address}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="pr-report-badge">
+                <p className="pr-report-title">Customer Ledger</p>
+                <p className="pr-report-meta">
+                  Period: {dateFrom || "All dates"} – {dateTo || "present"}<br />
+                  Printed: {new Date().toLocaleDateString("en-PK", { day: "2-digit", month: "long", year: "numeric" })}
+                </p>
+              </div>
+            </div>
+
+            {/* Customer info bar */}
+            <div className="pr-info-bar">
+              <div>
+                <div className="pr-info-label">Customer</div>
+                <div className="pr-info-value">{cust ? `${cust.code} – ${cust.name}` : "–"}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div className="pr-info-label">Closing Balance</div>
+                <div className="pr-info-value" style={{ color: "#1E3A5F", fontSize: "11pt" }}>
+                  PKR {fmt(finalBalance)}
+                </div>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="pr-table-wrap">
+              <table className="pr-table">
+                <thead>
+                  <tr>
+                    <th className="c" style={{ width: "4%" }}>#</th>
+                    <th style={{ width: "9%" }}>Date</th>
+                    <th style={{ width: "11%" }}>Reference</th>
+                    <th style={{ width: "36%" }}>Description</th>
+                    <th className="r" style={{ width: "13%" }}>Debit (PKR)</th>
+                    <th className="r" style={{ width: "13%" }}>Credit (PKR)</th>
+                    <th className="r" style={{ width: "14%" }}>Balance (PKR)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedEntries.map((e, i) => (
+                    <tr key={i}>
+                      <td className="c" style={{ color: "#94A3B8" }}>{i + 1}</td>
+                      <td>{e.date}</td>
+                      <td className="td-ref">{e.ref}</td>
+                      <td className={e.type === "Opening" ? "td-open" : ""}>{e.desc}</td>
+                      <td className={`r td-dr`}>{e.debit > 0 ? fmt(e.debit) : "–"}</td>
+                      <td className={`r td-cr`}>{e.credit > 0 ? fmt(e.credit) : "–"}</td>
+                      <td className="r td-bal">{fmt(e.balance)}</td>
+                    </tr>
+                  ))}
+                  {/* Totals row */}
+                  <tr className="pr-totals-row">
+                    <td colSpan={4} style={{ textTransform: "uppercase", letterSpacing: "0.06em" }}>Grand Total</td>
+                    <td className="r">{fmt(totalDebit)}</td>
+                    <td className="r">{fmt(totalCredit)}</td>
+                    <td className="r">{fmt(finalBalance)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer */}
+            <div className="pr-footer">
+              <span>{companyName} — Confidential</span>
+              <span>Customer Ledger · {cust?.name}</span>
+              <span>Generated by OneAccounts</span>
+            </div>
           </div>
         </div>
-        <table className="print-table">
-          <thead>
-            <tr>
-              <th style={{ width: "5%" }}>#</th>
-              <th style={{ width: "10%" }}>Date</th>
-              <th style={{ width: "12%" }}>Reference</th>
-              <th style={{ width: "35%" }}>Description</th>
-              <th style={{ width: "13%" }} className="text-right">Debit (PKR)</th>
-              <th style={{ width: "13%" }} className="text-right">Credit (PKR)</th>
-              <th style={{ width: "12%" }} className="text-right">Balance (PKR)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedEntries.map((e, i) => (
-              <tr key={i}>
-                <td className="text-center">{i + 1}</td>
-                <td>{e.date}</td>
-                <td>{e.ref}</td>
-                <td>{e.desc}</td>
-                <td className="text-right">{e.debit > 0 ? e.debit.toLocaleString() : "-"}</td>
-                <td className="text-right">{e.credit > 0 ? e.credit.toLocaleString() : "-"}</td>
-                <td className="text-right">{e.balance.toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="print-summary">
-          <div><span>Total Debit:</span> PKR {totalDebit.toLocaleString()}</div>
-          <div><span>Total Credit:</span> PKR {totalCredit.toLocaleString()}</div>
-          <div><span>Closing Balance:</span> PKR {finalBalance.toLocaleString()}</div>
-        </div>
-      </div>
-    </div>
+      </PrintPortal>
+    </>
   )
+}
+
+/* ── PrintPortal: renders children into document.body, outside the Next.js layout ── */
+import { createPortal } from "react-dom"
+
+function PrintPortal({ children }: { children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+  if (!mounted) return null
+  return createPortal(children, document.body)
 }
