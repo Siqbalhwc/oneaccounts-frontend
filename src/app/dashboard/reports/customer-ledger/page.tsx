@@ -3,8 +3,11 @@
 import { useState, useEffect, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useSearchParams, useRouter } from "next/navigation"
-import { ArrowLeft, Download, Printer } from "lucide-react"
+import { ArrowLeft, Download, Printer, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import * as XLSX from "xlsx"
+
+type SortField = "sr" | "ref" | "date" | "desc" | "debit" | "credit" | "balance"
+type SortDir = "asc" | "desc"
 
 export default function CustomerLedgerPage() {
   const router = useRouter()
@@ -26,6 +29,8 @@ export default function CustomerLedgerPage() {
   const [entries, setEntries] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [orientation, setOrientation] = useState<"landscape" | "portrait">("landscape")
+  const [sortField, setSortField] = useState<SortField>("date")
+  const [sortDir, setSortDir] = useState<SortDir>("asc")
   const printRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -130,6 +135,42 @@ export default function CustomerLedgerPage() {
     setLoading(false)
   }
 
+  // Sorting logic
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === "asc" ? "desc" : "asc")
+    } else {
+      setSortField(field)
+      setSortDir("asc")
+    }
+  }
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown size={12} style={{ opacity: 0.5 }} />
+    return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+  }
+
+  const sortedEntries = [...entries].sort((a, b) => {
+    let valA, valB
+    if (sortField === "sr") {
+      valA = entries.indexOf(a) + 1
+      valB = entries.indexOf(b) + 1
+    } else {
+      valA = a[sortField] ?? ""
+      valB = b[sortField] ?? ""
+      if (sortField === "debit" || sortField === "credit" || sortField === "balance") {
+        valA = Number(valA) || 0
+        valB = Number(valB) || 0
+      } else {
+        valA = String(valA).toLowerCase()
+        valB = String(valB).toLowerCase()
+      }
+    }
+    if (valA < valB) return sortDir === "asc" ? -1 : 1
+    if (valA > valB) return sortDir === "asc" ? 1 : -1
+    return 0
+  })
+
   const handlePrint = () => {
     if (printRef.current) {
       const style = document.createElement('style')
@@ -140,6 +181,10 @@ export default function CustomerLedgerPage() {
           .print-area, .print-area * { visibility: visible; }
           .print-area { position: absolute; left: 0; top: 0; width: 100%; }
           .no-print { display: none !important; }
+          .card { background: white !important; border: 1px solid #ddd !important; }
+          .header-row { background: #f1f5f9 !important; color: #000 !important; }
+          .data-row { color: #000 !important; border-color: #ddd !important; }
+          .btn, .select, .input { display: none !important; }
         }
       `
       document.head.appendChild(style)
@@ -165,14 +210,14 @@ export default function CustomerLedgerPage() {
       ["Sr", "Transaction #", "Date", "Description", "Debit (PKR)", "Credit (PKR)", "Balance (PKR)"]
     ]
     let totalDr = 0, totalCr = 0
-    entries.forEach((e, i) => {
+    sortedEntries.forEach((e, i) => {
       rows.push([i + 1, e.ref, e.date, e.desc, e.debit || "", e.credit || "", e.balance])
       totalDr += e.debit || 0
       totalCr += e.credit || 0
     })
     rows.push([])
     rows.push(["", "", "", "Sub Total:", totalDr, totalCr, ""])
-    rows.push(["", "", "", "Balance:", "", "", entries.length ? entries[entries.length - 1].balance : 0])
+    rows.push(["", "", "", "Balance:", "", "", sortedEntries.length ? sortedEntries[sortedEntries.length - 1].balance : 0])
 
     const ws = XLSX.utils.aoa_to_sheet(rows)
     const wb = XLSX.utils.book_new()
@@ -181,37 +226,36 @@ export default function CustomerLedgerPage() {
   }
 
   const cust = customers.find(c => c.id === customerId)
-  const totalDebit = entries.reduce((s, e) => s + (e.debit || 0), 0)
-  const totalCredit = entries.reduce((s, e) => s + (e.credit || 0), 0)
-  const finalBalance = entries.length ? entries[entries.length - 1].balance : 0
+  const totalDebit = sortedEntries.reduce((s, e) => s + (e.debit || 0), 0)
+  const totalCredit = sortedEntries.reduce((s, e) => s + (e.credit || 0), 0)
+  const finalBalance = sortedEntries.length ? sortedEntries[sortedEntries.length - 1].balance : 0
 
   return (
     <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
       <style>{`
         .card { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-        .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; }
-        .btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
-        .btn-outline:hover { background: #1E293B; }
-        .btn-primary { background: #1E3A8A; color: white; border: none; }
-        .btn-primary:hover { background: #1E40AF; }
+        .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid #334155; background: transparent; color: #CBD5E1; }
+        .btn:hover { background: #1E293B; }
+        .btn-outline { border: 1.5px solid #334155; }
         .input { width: 100%; height: 38px; border: 1.5px solid #334155; border-radius: 8px; padding: 0 12px; font-size: 13px; background: #1E293B; color: #F1F5F9; outline: none; }
         .select { width: 100%; height: 40px; border: 1.5px solid #334155; border-radius: 8px; padding: 0 12px; font-size: 13px; background: #1E293B; color: #F1F5F9; }
         .header-row { display: grid; grid-template-columns: 40px 100px 90px 1fr 100px 100px 100px; gap: 8px; padding: 10px 14px; background: #1E293B; font-size: 9px; font-weight: 700; text-transform: uppercase; color: #94A3B8; border-bottom: 1px solid #1E293B; }
         .data-row { display: grid; grid-template-columns: 40px 100px 90px 1fr 100px 100px 100px; gap: 8px; padding: 8px 14px; border-bottom: 1px solid #1E293B; font-size: 12px; align-items: center; }
         .data-row:last-child { border-bottom: none; }
-        .print-header { display: none; }
+        .sort-btn { background: none; border: none; color: inherit; font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; padding: 0; }
+        .sort-btn:hover { color: #93C5FD; }
         @media print {
-          .print-header { display: block; margin-bottom: 20px; }
-          .print-header .two-col { display: flex; justify-content: space-between; }
-          .ledger-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-          .ledger-table th, .ledger-table td { border: 1px solid #ddd; padding: 6px 8px; font-size: 12px; }
-          .ledger-table th { background: #f1f5f9; }
+          body { background: white !important; }
+          .card { background: white !important; border: 1px solid #ddd !important; }
+          .header-row { background: #f1f5f9 !important; color: #000 !important; }
+          .data-row { color: #000 !important; border-color: #ddd !important; }
+          .print-header { display: block !important; margin-bottom: 20px; }
         }
       `}</style>
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        <button className="btn btn-outline" onClick={() => router.push("/dashboard/customers")}>
+        <button className="btn" onClick={() => router.push("/dashboard/customers")}>
           <ArrowLeft size={16} />
         </button>
         <div>
@@ -219,8 +263,8 @@ export default function CustomerLedgerPage() {
           <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>Full transaction history</p>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-          <button className="btn btn-outline" onClick={exportExcel}><Download size={16} /> Excel</button>
-          <button className="btn btn-outline" onClick={handlePrint}><Printer size={16} /> Print</button>
+          <button className="btn" onClick={exportExcel}><Download size={16} /> Excel</button>
+          <button className="btn" onClick={handlePrint}><Printer size={16} /> Print</button>
           <select className="select" style={{ width: 120, height: 38 }} value={orientation} onChange={e => setOrientation(e.target.value as any)}>
             <option value="landscape">Landscape</option>
             <option value="portrait">Portrait</option>
@@ -246,7 +290,7 @@ export default function CustomerLedgerPage() {
             <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Date To</label>
             <input className="input" type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
           </div>
-          <button className="btn btn-primary" onClick={loadLedger} disabled={!customerId}>
+          <button className="btn" onClick={loadLedger} disabled={!customerId}>
             Generate
           </button>
         </div>
@@ -260,9 +304,9 @@ export default function CustomerLedgerPage() {
             <span style={{ marginLeft: 12, color: "#93C5FD" }}>{cust.code}</span>
           </div>
           <div style={{ display: "flex", gap: 24 }}>
-            <div><span style={{ color: "#94A3B8", fontSize: 11 }}>Total Dr: </span><span style={{ fontWeight: 600, color: "#EF4444" }}>PKR {totalDebit.toLocaleString()}</span></div>
-            <div><span style={{ color: "#94A3B8", fontSize: 11 }}>Total Cr: </span><span style={{ fontWeight: 600, color: "#10B981" }}>PKR {totalCredit.toLocaleString()}</span></div>
-            <div><span style={{ color: "#94A3B8", fontSize: 11 }}>Balance: </span><span style={{ fontWeight: 700, color: "#F59E0B" }}>PKR {finalBalance.toLocaleString()}</span></div>
+            <div><span style={{ color: "#94A3B8", fontSize: 11 }}>Total Dr: </span><span style={{ fontWeight: 600, color: "#F87171" }}>PKR {totalDebit.toLocaleString()}</span></div>
+            <div><span style={{ color: "#94A3B8", fontSize: 11 }}>Total Cr: </span><span style={{ fontWeight: 600, color: "#2DD4BF" }}>PKR {totalCredit.toLocaleString()}</span></div>
+            <div><span style={{ color: "#94A3B8", fontSize: 11 }}>Balance: </span><span style={{ fontWeight: 700, color: "#A78BFA" }}>PKR {finalBalance.toLocaleString()}</span></div>
           </div>
         </div>
       )}
@@ -270,11 +314,11 @@ export default function CustomerLedgerPage() {
       {/* Ledger table */}
       {loading ? (
         <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading...</div>
-      ) : entries.length > 0 ? (
+      ) : sortedEntries.length > 0 ? (
         <div ref={printRef} className="print-area">
           {/* Print-only header */}
-          <div className="print-header">
-            <div className="two-col">
+          <div className="print-header" style={{ display: "none" }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 {company?.logo_url && <img src={company.logo_url} alt="logo" style={{ maxHeight: 60 }} />}
                 <div>
@@ -292,35 +336,34 @@ export default function CustomerLedgerPage() {
             </div>
           </div>
 
-          {/* Data table */}
           <div className="card" style={{ overflowX: "auto" }}>
             <div className="header-row">
-              <span>Sr</span>
-              <span>Trans #</span>
-              <span>Date</span>
-              <span>Description</span>
-              <span style={{ textAlign: "right" }}>Debit</span>
-              <span style={{ textAlign: "right" }}>Credit</span>
-              <span style={{ textAlign: "right" }}>Balance</span>
+              <button className="sort-btn" onClick={() => handleSort("sr")}>Sr {getSortIcon("sr")}</button>
+              <button className="sort-btn" onClick={() => handleSort("ref")}>Trans # {getSortIcon("ref")}</button>
+              <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
+              <button className="sort-btn" onClick={() => handleSort("desc")}>Description {getSortIcon("desc")}</button>
+              <button className="sort-btn" style={{ justifyContent: "flex-end" }} onClick={() => handleSort("debit")}>Debit {getSortIcon("debit")}</button>
+              <button className="sort-btn" style={{ justifyContent: "flex-end" }} onClick={() => handleSort("credit")}>Credit {getSortIcon("credit")}</button>
+              <button className="sort-btn" style={{ justifyContent: "flex-end" }} onClick={() => handleSort("balance")}>Balance {getSortIcon("balance")}</button>
             </div>
-            {entries.map((e, i) => (
+            {sortedEntries.map((e, i) => (
               <div key={i} className="data-row">
                 <span style={{ color: "#94A3B8" }}>{i + 1}</span>
                 <span style={{ color: "#93C5FD", fontWeight: 600 }}>{e.ref}</span>
                 <span>{e.date}</span>
                 <span style={{ color: "#CBD5E1" }}>{e.desc}</span>
-                <span style={{ textAlign: "right", color: "#EF4444" }}>{e.debit > 0 ? `PKR ${e.debit.toLocaleString()}` : "-"}</span>
-                <span style={{ textAlign: "right", color: "#10B981" }}>{e.credit > 0 ? `PKR ${e.credit.toLocaleString()}` : "-"}</span>
-                <span style={{ textAlign: "right", fontWeight: 600 }}>PKR {e.balance.toLocaleString()}</span>
+                <span style={{ textAlign: "right", color: "#F87171" }}>{e.debit > 0 ? `PKR ${e.debit.toLocaleString()}` : "-"}</span>
+                <span style={{ textAlign: "right", color: "#2DD4BF" }}>{e.credit > 0 ? `PKR ${e.credit.toLocaleString()}` : "-"}</span>
+                <span style={{ textAlign: "right", fontWeight: 600, color: "#A78BFA" }}>PKR {e.balance.toLocaleString()}</span>
               </div>
             ))}
           </div>
 
           {/* Sub total summary */}
           <div className="card" style={{ display: "flex", justifyContent: "flex-end", gap: 32, marginTop: 16 }}>
-            <div><span style={{ color: "#94A3B8", fontSize: 12 }}>Total Debit: </span><span style={{ color: "#EF4444", fontWeight: 600 }}>PKR {totalDebit.toLocaleString()}</span></div>
-            <div><span style={{ color: "#94A3B8", fontSize: 12 }}>Total Credit: </span><span style={{ color: "#10B981", fontWeight: 600 }}>PKR {totalCredit.toLocaleString()}</span></div>
-            <div><span style={{ color: "#94A3B8", fontSize: 12 }}>Closing Balance: </span><span style={{ color: "#F59E0B", fontWeight: 700 }}>PKR {finalBalance.toLocaleString()}</span></div>
+            <div><span style={{ color: "#94A3B8", fontSize: 12 }}>Total Debit: </span><span style={{ color: "#F87171", fontWeight: 600 }}>PKR {totalDebit.toLocaleString()}</span></div>
+            <div><span style={{ color: "#94A3B8", fontSize: 12 }}>Total Credit: </span><span style={{ color: "#2DD4BF", fontWeight: 600 }}>PKR {totalCredit.toLocaleString()}</span></div>
+            <div><span style={{ color: "#94A3B8", fontSize: 12 }}>Closing Balance: </span><span style={{ color: "#A78BFA", fontWeight: 700 }}>PKR {finalBalance.toLocaleString()}</span></div>
           </div>
         </div>
       ) : (
