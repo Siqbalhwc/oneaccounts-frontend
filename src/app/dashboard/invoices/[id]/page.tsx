@@ -37,6 +37,14 @@ interface Invoice {
   }
 }
 
+interface JournalLine {
+  account_id: number
+  account_code?: string
+  account_name?: string
+  debit: number
+  credit: number
+}
+
 export default function InvoiceDetailPage() {
   const router = useRouter()
   const params = useParams()
@@ -58,6 +66,8 @@ export default function InvoiceDetailPage() {
     logo_url?: string
   }>({})
 
+  const [journalLines, setJournalLines] = useState<JournalLine[]>([])
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -70,6 +80,7 @@ export default function InvoiceDetailPage() {
     if (!companyId || !invoiceId) return
     setLoading(true)
 
+    // 1. Load invoice
     supabase
       .from("invoices")
       .select("*")
@@ -81,7 +92,7 @@ export default function InvoiceDetailPage() {
 
         const inv: Invoice = data
 
-        // Fetch customer
+        // 2. Load customer
         if (inv.party_id) {
           supabase
             .from("customers")
@@ -91,8 +102,8 @@ export default function InvoiceDetailPage() {
             .then(({ data: cust }) => {
               inv.customer = cust || undefined
             })
-            .then(() => {
-              // Fetch items
+            .finally(() => {
+              // 3. Load items
               supabase
                 .from("invoice_items")
                 .select("*")
@@ -105,6 +116,7 @@ export default function InvoiceDetailPage() {
                 })
             })
         } else {
+          // No customer? Still load items
           supabase
             .from("invoice_items")
             .select("*")
@@ -118,7 +130,36 @@ export default function InvoiceDetailPage() {
         }
       })
 
-    // Fetch company settings for PDF
+    // 4. Load journal lines for this invoice
+    // We look for a journal entry with description matching "Sales Invoice {invoice_no}"
+    supabase
+      .from("journal_entries")
+      .select("id")
+      .eq("company_id", companyId)
+      .ilike("description", `%Sales Invoice%${invoiceId}%`) // adjust if needed
+      .maybeSingle()
+      .then(({ data: entry }) => {
+        if (entry) {
+          supabase
+            .from("journal_lines")
+            .select("account_id, debit, credit, accounts(code, name)")
+            .eq("entry_id", entry.id)
+            .then(({ data: lines }) => {
+              if (lines) {
+                const formatted = lines.map((l: any) => ({
+                  account_id: l.account_id,
+                  account_code: l.accounts?.code || "",
+                  account_name: l.accounts?.name || "",
+                  debit: l.debit || 0,
+                  credit: l.credit || 0,
+                }))
+                setJournalLines(formatted)
+              }
+            })
+        }
+      })
+
+    // Company settings (for PDF)
     supabase
       .from("company_settings")
       .select("company_name, address, phone, email, logo_url")
@@ -199,6 +240,9 @@ export default function InvoiceDetailPage() {
   const waLink = getWhatsAppLink()
   const remindLink = getReminderLink()
 
+  const totalDebit = journalLines.reduce((s, l) => s + l.debit, 0)
+  const totalCredit = journalLines.reduce((s, l) => s + l.credit, 0)
+
   return (
     <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
       <style>{`
@@ -210,7 +254,7 @@ export default function InvoiceDetailPage() {
         th { text-align: left; padding: 10px 12px; background: #1E293B; font-weight: 700; color: #94A3B8; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #334155; }
         td { padding: 10px 12px; border-bottom: 1px solid #1E293B; font-size: 13px; color: #E2E8F0; }
         tr:hover td { background: rgba(30,41,59,0.5); }
-        .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid #334155; background: transparent; color: #CBD5E1; font-family: inherit; }
+        .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid #334155; background: transparent; color: #CBD5E1; font-family: inherit; text-decoration: none; }
         .btn:hover { background: #1E293B; }
         .btn-primary { background: #1E3A8A; color: white; border-color: #1E3A8A; }
         .btn-primary:hover { background: #1E40AF; }
@@ -228,13 +272,20 @@ export default function InvoiceDetailPage() {
         .badge-paid { background: #065F46; color: #6EE7B7; }
         .badge-unpaid { background: #7C2D12; color: #FCA5A5; }
         .badge-overdue { background: #7C2D12; color: #FCA5A5; }
-        /* Override RecordHistory's internal light styles */
-        .card :global(.record-history) { background: #111827; color: #E2E8F0; }
-        .card :global(.record-history th) { background: #1E293B; color: #94A3B8; }
-        .card :global(.record-history td) { color: #E2E8F0; border-color: #1E293B; }
-        @media (max-width: 640px) {
-          .row { flex-direction: column; align-items: flex-start; }
-          .label { margin-bottom: 2px; }
+
+        /* ── Force dark theme inside RecordHistory ── */
+        .card .record-history,
+        .card .record-history * {
+          background: #0F172A !important;
+          color: #E2E8F0 !important;
+          border-color: #1E293B !important;
+        }
+        .card .record-history th {
+          background: #1E293B !important;
+          color: #94A3B8 !important;
+        }
+        .card .record-history td {
+          background: #0F172A !important;
         }
       `}</style>
 
@@ -254,12 +305,12 @@ export default function InvoiceDetailPage() {
             ✏️ Edit
           </button>
           {remindLink && (
-            <a href={remindLink} target="_blank" rel="noopener noreferrer" className="btn btn-warning" style={{ textDecoration: "none" }}>
+            <a href={remindLink} target="_blank" rel="noopener noreferrer" className="btn btn-warning">
               <Send size={14} /> Remind
             </a>
           )}
           {waLink && (
-            <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success" style={{ textDecoration: "none" }}>
+            <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success">
               <Send size={14} /> WhatsApp
             </a>
           )}
@@ -313,13 +364,49 @@ export default function InvoiceDetailPage() {
         </div>
       )}
 
+      {/* Journal Entry (Head Dr / Head Cr) */}
+      {journalLines.length > 0 && (
+        <div className="card">
+          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>📒 Journal Entry</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Account</th>
+                <th style={{ textAlign: "right" }}>Debit (PKR)</th>
+                <th style={{ textAlign: "right" }}>Credit (PKR)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {journalLines.map((line, idx) => (
+                <tr key={idx}>
+                  <td>{line.account_code} – {line.account_name}</td>
+                  <td style={{ textAlign: "right", color: line.debit > 0 ? "#F87171" : "#475569" }}>
+                    {line.debit > 0 ? line.debit.toLocaleString() : "–"}
+                  </td>
+                  <td style={{ textAlign: "right", color: line.credit > 0 ? "#2DD4BF" : "#475569" }}>
+                    {line.credit > 0 ? line.credit.toLocaleString() : "–"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr style={{ background: "#1E293B", fontWeight: 700 }}>
+                <td>Total</td>
+                <td style={{ textAlign: "right", color: "#F87171" }}>{totalDebit.toLocaleString()}</td>
+                <td style={{ textAlign: "right", color: "#2DD4BF" }}>{totalCredit.toLocaleString()}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+
       {/* Change History */}
       {invoice && (
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>
             📝 Change History
           </h3>
-          <div style={{ background: "#0F172A", borderRadius: 8, padding: 8 }}>
+          <div className="record-history" style={{ background: "#0F172A", borderRadius: 8, padding: 8 }}>
             <RecordHistory tableName="invoices" recordId={String(invoice.id)} />
           </div>
         </div>
