@@ -29,13 +29,20 @@ export default function InvoicesPage() {
     })
   }, [])
 
-  useEffect(() => {
-    if (!role || !canView) {
-      setLoading(false)
-      return
-    }
-    // Only run when companyId is available
-    if (!companyId) return
+    useEffect(() => {
+    if (!role) return
+    if (!canView) { setLoading(false); return }
+    supabase
+      .from("invoices")
+      .select("*")
+      .eq("type", "sale")
+      .is("deleted_at", null)
+      .order("date", { ascending: false })
+      .then(({ data }) => {
+        setInvoices(data || [])
+        setLoading(false)
+      })
+  }, [role, canView])
 
     supabase
       .from("invoices")
