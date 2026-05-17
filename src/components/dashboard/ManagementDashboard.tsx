@@ -34,7 +34,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
   // Quick stats
   const [unpaidInvoices, setUnpaidInvoices] = useState(0)
   const [totalReceivables, setTotalReceivables] = useState(0)
-  const [topReceivables, setTopReceivables] = useState<any[]>([])   // top 3 customers by balance
+  const [topReceivables, setTopReceivables] = useState<any[]>([])
 
   // Monthly Spending & trend
   const [monthlySpending, setMonthlySpending] = useState(0)
@@ -45,8 +45,8 @@ export default function ManagementDashboard({ role }: { role: string }) {
   // Unpaid invoices details (top 3)
   const [unpaidDetails, setUnpaidDetails] = useState<any[]>([])
 
-  // Activity health per project (activities below 20% of project actual spend)
-  const [activityHealth, setActivityHealth] = useState<Record<string, { lowCount: number; message: string }>>({})
+  // Activity health per project (activities >20% below project's own spending %)
+  const [activityHealth, setActivityHealth] = useState<Record<string, { lowCount: number; threshold: number; message: string }>>({})
 
   // Last updated timestamp
   const [lastUpdated, setLastUpdated] = useState("")
@@ -76,7 +76,8 @@ export default function ManagementDashboard({ role }: { role: string }) {
       setLoading(true)
 
       const now = new Date()
-      const currentMonth = now.getMonth() + 1
+      const currentMonth = now.getMonth() + 1   // 1‑12
+      const lastDay = new Date(fiscalYear, currentMonth, 0).getDate()
 
       // Total Budget
       const { data: budgets } = await supabase
@@ -152,9 +153,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .limit(3)
       setUnpaidDetails(unpaidInvs || [])
 
-      // ── Monthly Spending (fixed query) ──
-      const currentMonthStart = `${fiscalYear}-${String(currentMonth).padStart(2, '0')}-01`
-      const currentMonthEnd = `${fiscalYear}-${String(currentMonth).padStart(2, '0')}-${new Date(fiscalYear, currentMonth, 0).getDate()}`
+      // ── Monthly Spending (FIXED – full ISO timestamps) ──
+      const currentMonthStart = `${fiscalYear}-${String(currentMonth).padStart(2, '0')}-01T00:00:00`
+      const currentMonthEnd = `${fiscalYear}-${String(currentMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}T23:59:59`
       const { data: monthLines } = await supabase
         .from("journal_lines")
         .select("debit, credit, journal_entries!inner(date)")
@@ -165,9 +166,11 @@ export default function ManagementDashboard({ role }: { role: string }) {
       setMonthlySpending(monthTotal)
 
       // Previous month spending (for trend)
-      const prevMonthDate = new Date(fiscalYear, currentMonth - 2, 1)
-      const prevMonthStart = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth()+1).padStart(2,'0')}-01`
-      const prevMonthEnd = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth()+1, 0).toISOString().split("T")[0]
+      const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1
+      const prevYear = currentMonth === 1 ? fiscalYear - 1 : fiscalYear
+      const prevLastDay = new Date(prevYear, prevMonth, 0).getDate()
+      const prevMonthStart = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01T00:00:00`
+      const prevMonthEnd = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(prevLastDay).padStart(2, '0')}T23:59:59`
       const { data: prevMonthLines } = await supabase
         .from("journal_lines")
         .select("debit, credit, journal_entries!inner(date)")
@@ -227,7 +230,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .slice(0, 3)
       setUnderspentActivities(underspent)
 
-      // ── Activity health per project (activities below 20% of project actual spend) ──
+      // ── Activity health per project (activities >20% below project's own spending %) ──
       if (enrichedProjects.length > 0) {
         const projectIds = enrichedProjects.map((p: any) => p.id)
         const { data: actBudgetsAll } = await supabase
@@ -237,7 +240,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
           .eq("fiscal_year", fiscalYear)
           .in("project_id", projectIds)
           .is("month", null)
-        // Build activity budget map per project
         const projActBudget: Record<string, Record<string, number>> = {}
         actBudgetsAll?.forEach((b: any) => {
           const pid = String(b.project_id)
@@ -245,7 +247,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
           if (!projActBudget[pid]) projActBudget[pid] = {}
           projActBudget[pid][aid] = (projActBudget[pid][aid] || 0) + (b.budgeted_amount || 0)
         })
-        // Fetch actuals for those activities
         const allActIds = Array.from(new Set(actBudgetsAll?.map((b: any) => b.activity_id) || []))
         const { data: actActuals } = await supabase
           .from("journal_lines")
@@ -259,21 +260,23 @@ export default function ManagementDashboard({ role }: { role: string }) {
           const aid = String(l.activity_id)
           actActualMap[aid] = (actActualMap[aid] || 0) + (l.debit || 0) - (l.credit || 0)
         })
-        // Calculate low‑spend activities
-        const healthData: Record<string, { lowCount: number; message: string }> = {}
+
+        const healthData: Record<string, { lowCount: number; threshold: number; message: string }> = {}
         enrichedProjects.forEach((proj: any) => {
           const pid = String(proj.id)
-          const projActual = proj.actual || 0
+          const projPct = proj.pct   // e.g. 80
           const activities = projActBudget[pid] || {}
           let lowCount = 0
-          if (projActual > 0) {
-            Object.keys(activities).forEach(aid => {
-              const actActual = actActualMap[aid] || 0
-              if ((actActual / projActual) < 0.2) lowCount++
+          const threshold = Math.max(0, projPct - 20)   // activities below this % are flagged
+          if (projPct > 0) {
+            Object.entries(activities).forEach(([aid, budget]) => {
+              const actual = actActualMap[aid] || 0
+              const actPct = budget > 0 ? (actual / budget) * 100 : 0
+              if (actPct < threshold) lowCount++
             })
           }
           if (lowCount > 0) {
-            healthData[pid] = { lowCount, message: `⚠️ ${lowCount} act. below 20%` }
+            healthData[pid] = { lowCount, threshold, message: `⚠️ ${lowCount} act. below ${threshold}%` }
           }
         })
         setActivityHealth(healthData)
@@ -359,6 +362,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
   if (loading) {
     return <div style={{ padding: 40, textAlign: "center", background: "#0A0A0A", minHeight: "100vh", color: "#94A3B8" }}>Loading…</div>
   }
+
+  const currentMonth = new Date().getMonth() + 1
+  const currentYear = new Date().getFullYear()
 
   return (
     <div style={{ background: "#0A0A0A", minHeight: "100%", flex: 1, fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: "#E2E8F0" }}>
@@ -456,7 +462,12 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
         .clickable { color: #93C5FD; text-decoration: underline; cursor: pointer; }
 
-        /* Responsive */
+        /* Vertical alignment in project rows */
+        .project-row-right {
+          display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+          font-size: 0.8rem;
+        }
+
         @media (max-width: 1100px) {
           .dashboard-grid { grid-template-columns: repeat(3, 1fr); }
           .span-3 { grid-column: span 2 !important; }
@@ -529,9 +540,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           <div className="card span-1" onClick={() => router.push("/dashboard/reports/budget-summary" + detailQuery())}>
             <div className="kpi-label">Total Budget</div>
             <div className="kpi-value" style={{ color: "#A78BFA" }}>{formatPKR(filteredTotalBudget)}</div>
-            <div className="kpi-meta">
-              {filteredProjectRows.length} projects
-            </div>
+            <div className="kpi-meta">{filteredProjectRows.length} projects</div>
           </div>
           <div className="card span-1" onClick={() => router.push("/dashboard/reports/spending-detail" + detailQuery())}>
             <div className="kpi-label">Total Spent</div>
@@ -540,7 +549,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
               {spentPct}% of budget
               {projectsAbove70.length > 0 && (
                 <span style={{ fontSize: "0.65rem", marginLeft: 6, color: "#93C5FD" }}>
-                  ({projectsAbove70.join(", ")})
+                  Projects &gt; 70%: {projectsAbove70.join(", ")}
                 </span>
               )}
             </div>
@@ -565,7 +574,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
               {Math.round((1 - filteredOverspentCount / Math.max(filteredProjectRows.length, 1)) * 100)}% health score
             </div>
           </div>
-          <div className="card span-1" onClick={() => router.push("/dashboard/reports/spending-detail" + detailQuery())}>
+          {/* Monthly Spending – now clickable to the monthly report */}
+          <div className="card span-1"
+               onClick={() => router.push(`/dashboard/reports/spending-detail?fy=${fiscalYear}&month=${currentMonth}&year=${currentYear}`)}>
             <div className="kpi-label">📆 Monthly Spending</div>
             <div className="kpi-value" style={{ color: monthlySpending > 0 ? "#F97316" : "#94A3B8" }}>
               {monthlySpending > 0 ? formatPKR(monthlySpending) : "—"}
@@ -598,9 +609,10 @@ export default function ManagementDashboard({ role }: { role: string }) {
                 }}>
                   <div style={{ width: 8, height: 8, borderRadius: "50%", background: p.status === "Overspent" ? "#F87171" : p.status === "Review" ? "#F97316" : p.status === "At Risk" ? "#F97316" : "#2DD4BF", flexShrink: 0 }}></div>
                   <span style={{ flex: 1, fontWeight: 600, fontSize: "0.85rem", color: "#E2E8F0" }}>{p.name}</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
-                    <span style={{ fontWeight: 600, minWidth: 60, fontSize: "0.8rem", color: "#E2E8F0" }}>{formatPKR(p.actual)}</span>
-                    <span style={{ minWidth: 50, color: p.pct > 100 ? "#F87171" : p.pct > 80 ? "#F97316" : "#2DD4BF", fontSize: "0.8rem" }}>{p.pct}%</span>
+                  {/* Right side – vertical column for actual, %, status */}
+                  <div className="project-row-right">
+                    <span style={{ fontWeight: 600, color: "#E2E8F0" }}>{formatPKR(p.actual)}</span>
+                    <span style={{ color: p.pct > 100 ? "#F87171" : p.pct > 80 ? "#F97316" : "#2DD4BF" }}>{p.pct}%</span>
                     <span style={{
                       padding: "0.1rem 0.6rem", borderRadius: "12px", fontSize: "0.7rem", fontWeight: 700,
                       background: p.status === "Overspent" ? "#fee2e2" : p.status === "Review" ? "#fef3c7" : p.status === "At Risk" ? "#fef3c7" : "#dcfce7",
@@ -609,7 +621,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
                       {p.status}
                     </span>
                     {health && (
-                      <span style={{ fontSize: "0.65rem", color: "#F97316", marginLeft: 4, whiteSpace: "nowrap" }}>{health.message}</span>
+                      <span style={{ fontSize: "0.65rem", color: "#F97316", whiteSpace: "nowrap" }}>{health.message}</span>
                     )}
                   </div>
                 </div>
