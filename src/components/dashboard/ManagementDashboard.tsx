@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { TrendingUp, TrendingDown, Minus } from "lucide-react"
+import { TrendingUp, TrendingDown, Minus, CheckCircle, AlertTriangle } from "lucide-react"
 
 export default function ManagementDashboard({ role }: { role: string }) {
   const supabase = createBrowserClient(
@@ -39,7 +39,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [monthlySpending, setMonthlySpending] = useState(0)
   const [lastMonthSpending, setLastMonthSpending] = useState(0)
   const [spendingTrend, setSpendingTrend] = useState(0)
-  // Top 5 underspent activities
+  // Top 5 underspent activities (now includes projectId)
   const [underspentActivities, setUnderspentActivities] = useState<any[]>([])
 
   // Activity health per project (activities >20% below project's own spending %)
@@ -193,11 +193,11 @@ export default function ManagementDashboard({ role }: { role: string }) {
       // ── Top 5 underspent activities (this month, expense accounts) ──
       const { data: actBudgets } = await supabase
         .from("budgets")
-        .select("activity_id, activities(name), budgeted_amount")
+        .select("activity_id, activities(name), budgeted_amount, project_id")
         .eq("company_id", companyId)
         .eq("fiscal_year", fiscalYear)
         .is("month", null)
-      const activityMap: Record<number, { name: string; budget: number; actual: number }> = {}
+      const activityMap: Record<number, { name: string; budget: number; actual: number; projectId: number | null }> = {}
       actBudgets?.forEach((b: any) => {
         if (!b.activity_id) return
         if (!activityMap[b.activity_id]) {
@@ -205,6 +205,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
             name: b.activities?.name || `Activity ${b.activity_id}`,
             budget: 0,
             actual: 0,
+            projectId: b.project_id || null,
           }
         }
         activityMap[b.activity_id].budget += b.budgeted_amount || 0
@@ -230,6 +231,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           actual: a.actual,
           remaining: a.budget - a.actual,
           pct: Math.round(((a.budget - a.actual) / a.budget) * 100),
+          projectId: a.projectId,
         }))
         .sort((a, b) => b.remaining - a.remaining)
         .slice(0, 5)
@@ -483,6 +485,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
         }
         .underspend-row-grid:last-child { border-bottom: none; }
 
+        .health-positive { color: #6EE7B7; }
+        .health-negative { color: #FCA5A5; }
+
         @media (max-width: 1100px) {
           .dashboard-grid { grid-template-columns: repeat(3, 1fr); }
           .span-3 { grid-column: span 2 !important; }
@@ -663,7 +668,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </div>
         </div>
 
-        {/* ── Row 3: Underspend + Combined Receivables & Payables ── */}
+        {/* ── Row 3: Underspend + Receivables vs Payables ── */}
         <div className="dashboard-grid">
           <div className="card span-3">
             <div className="kpi-label" style={{ fontWeight: 700, fontSize: "0.95rem", color: "#F1F5F9", marginBottom: "0.8rem" }}>💡 Top 5 Underspend Activities</div>
@@ -683,7 +688,11 @@ export default function ManagementDashboard({ role }: { role: string }) {
                       className="clickable"
                       onClick={(e) => {
                         e.stopPropagation()
-                        router.push(`/dashboard/reports/spending-detail?activity=${act.id}&fy=${fiscalYear}`)
+                        if (act.projectId) {
+                          router.push(`/dashboard/settings/budgets?project=${act.projectId}&activity=${act.id}`)
+                        } else {
+                          router.push(`/dashboard/reports/spending-detail?activity=${act.id}&fy=${fiscalYear}`)
+                        }
                       }}
                     >
                       {act.name}
@@ -701,28 +710,33 @@ export default function ManagementDashboard({ role }: { role: string }) {
               </>
             )}
           </div>
-          {/* Combined Receivables & Payables card */}
+
+          {/* Combined Receivables vs Payables card */}
           <div className="card span-2">
             <div className="kpi-label" style={{ fontWeight: 700, fontSize: "0.95rem", color: "#F1F5F9", marginBottom: "1rem" }}>⚖️ Receivables vs Payables</div>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", marginBottom: "0.8rem" }}>
-              <div>
-                <div style={{ fontSize: "0.7rem", textTransform: "uppercase", color: "#94A3B8", marginBottom: 2 }}>Receivables</div>
-                <div style={{ fontSize: "1.3rem", fontWeight: 700, color: totalReceivables > 0 ? "#F97316" : "#94A3B8" }}>{formatPKR(totalReceivables)}</div>
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "0.5rem", marginBottom: "0.8rem" }}>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: "0.65rem", textTransform: "uppercase", color: "#94A3B8", marginBottom: 2 }}>Receivables</div>
+                <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "#F97316" }}>{formatPKR(totalReceivables)}</div>
               </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: "0.7rem", textTransform: "uppercase", color: "#94A3B8", marginBottom: 2 }}>Payables</div>
-                <div style={{ fontSize: "1.3rem", fontWeight: 700, color: totalPayables > 0 ? "#F97316" : "#94A3B8" }}>{formatPKR(totalPayables)}</div>
+              <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "#64748B" }}>VS</div>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: "0.65rem", textTransform: "uppercase", color: "#94A3B8", marginBottom: 2 }}>Payables</div>
+                <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "#F97316" }}>{formatPKR(totalPayables)}</div>
               </div>
             </div>
-            <div style={{
-              padding: "0.4rem 0.8rem", borderRadius: 8,
-              background: totalReceivables > totalPayables ? "#064E3B" : "#3B1212",
-              color: totalReceivables > totalPayables ? "#6EE7B7" : "#FCA5A5",
-              fontWeight: 600, fontSize: "0.85rem", textAlign: "center"
-            }}>
-              {totalReceivables > totalPayables
-                ? `✅ Healthy — Receivables exceed Payables by ${formatPKR(totalReceivables - totalPayables)}`
-                : `⚠️ Unhealthy — Payables exceed Receivables by ${formatPKR(totalPayables - totalReceivables)}`}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem", fontSize: "0.75rem", fontWeight: 600 }}>
+              {totalReceivables > totalPayables ? (
+                <>
+                  <CheckCircle size={16} className="health-positive" />
+                  <span className="health-positive">Healthy — Receivables exceed Payables by {formatPKR(totalReceivables - totalPayables)}</span>
+                </>
+              ) : (
+                <>
+                  <AlertTriangle size={16} className="health-negative" />
+                  <span className="health-negative">Unhealthy — Payables exceed Receivables by {formatPKR(totalPayables - totalReceivables)}</span>
+                </>
+              )}
             </div>
           </div>
         </div>
