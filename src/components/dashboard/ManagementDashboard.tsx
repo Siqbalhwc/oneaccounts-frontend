@@ -79,7 +79,14 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
       const now = new Date()
       const currentMonth = now.getMonth() + 1   // 1‑12
-      const lastDay = new Date(fiscalYear, currentMonth, 0).getDate()
+      const fiscalYearNow = now.getFullYear()
+      const yearForMonth = (fiscalYear === fiscalYearNow) ? fiscalYearNow : fiscalYear // ensure we query correct year
+
+      // Compute ISO timestamps for the current month in UTC
+      const startOfMonth = new Date(Date.UTC(fiscalYear, currentMonth - 1, 1, 0, 0, 0))
+      const endOfMonth = new Date(Date.UTC(fiscalYear, currentMonth, 0, 23, 59, 59, 999))
+      const currentMonthStartISO = startOfMonth.toISOString()
+      const currentMonthEndISO = endOfMonth.toISOString()
 
       // Total Budget
       const { data: budgets } = await supabase
@@ -153,30 +160,29 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .order("balance", { ascending: false }).limit(3)
       setTopPayables(topSupps || [])
 
-      // ── Monthly Spending (fixed – use simple date strings) ──
-      const currentMonthStart = `${fiscalYear}-${String(currentMonth).padStart(2, '0')}-01`
-      const currentMonthEnd = `${fiscalYear}-${String(currentMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+      // ── Monthly Spending (FIXED: full ISO timestamps, UTC) ──
       const { data: monthLines } = await supabase
         .from("journal_lines")
         .select("debit, credit, journal_entries!inner(date)")
         .eq("company_id", companyId)
-        .gte("journal_entries.date", currentMonthStart)
-        .lte("journal_entries.date", currentMonthEnd)
+        .gte("journal_entries.date", currentMonthStartISO)
+        .lte("journal_entries.date", currentMonthEndISO)
       const monthTotal = (monthLines || []).reduce((sum, l) => sum + (l.debit || 0) - (l.credit || 0), 0)
       setMonthlySpending(monthTotal)
 
       // Previous month spending
       const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1
       const prevYear = currentMonth === 1 ? fiscalYear - 1 : fiscalYear
-      const prevLastDay = new Date(prevYear, prevMonth, 0).getDate()
-      const prevMonthStart = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`
-      const prevMonthEnd = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(prevLastDay).padStart(2, '0')}`
+      const startPrevMonth = new Date(Date.UTC(prevYear, prevMonth - 1, 1, 0, 0, 0))
+      const endPrevMonth = new Date(Date.UTC(prevYear, prevMonth, 0, 23, 59, 59, 999))
+      const prevMonthStartISO = startPrevMonth.toISOString()
+      const prevMonthEndISO = endPrevMonth.toISOString()
       const { data: prevMonthLines } = await supabase
         .from("journal_lines")
         .select("debit, credit, journal_entries!inner(date)")
         .eq("company_id", companyId)
-        .gte("journal_entries.date", prevMonthStart)
-        .lte("journal_entries.date", prevMonthEnd)
+        .gte("journal_entries.date", prevMonthStartISO)
+        .lte("journal_entries.date", prevMonthEndISO)
       const prevMonthTotal = (prevMonthLines || []).reduce((sum, l) => sum + (l.debit || 0) - (l.credit || 0), 0)
       setLastMonthSpending(prevMonthTotal)
       if (prevMonthTotal > 0) {
@@ -210,8 +216,8 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .from("journal_lines")
         .select("activity_id, debit, credit, journal_entries!inner(date)")
         .eq("company_id", companyId)
-        .gte("journal_entries.date", currentMonthStart)
-        .lte("journal_entries.date", currentMonthEnd)
+        .gte("journal_entries.date", currentMonthStartISO)
+        .lte("journal_entries.date", currentMonthEndISO)
       actLines?.forEach((l: any) => {
         if (!l.activity_id || !activityMap[l.activity_id]) return
         activityMap[l.activity_id].actual += (l.debit || 0) - (l.credit || 0)
@@ -227,7 +233,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           pct: Math.round(((a.budget - a.actual) / a.budget) * 100),
         }))
         .sort((a, b) => b.remaining - a.remaining)
-        .slice(0, 5)   // top 5
+        .slice(0, 5)
       setUnderspentActivities(underspent)
 
       // ── Activity health per project (activities >20% below project's own spending %) ──
@@ -445,30 +451,49 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .kpi-label { text-transform: uppercase; font-size: 0.7rem; font-weight: 700; color: #94A3B8; letter-spacing: 0.04em; }
         .kpi-value { font-size: 1.7rem; font-weight: 700; color: #F1F5F9; line-height: 1.2; }
         .kpi-meta { font-size: 0.8rem; color: #64748B; display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
+        .kpi-extra { font-size: 0.65rem; color: #93C5FD; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
         .clickable { color: #93C5FD; text-decoration: underline; cursor: pointer; }
 
-        /* Vertical alignment for project rows */
-        .project-row-right {
-          display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
-          font-size: 0.8rem;
+        /* Project row layout: name + 4 inline items */
+        .project-row {
+          display: flex; align-items: center; gap: 0.8rem;
+          background: #111827; border-radius: 12px; padding: 0.5rem 1rem;
+          border: 1px solid #1E293B; cursor: pointer; margin-bottom: 0.5rem;
         }
+        .project-metrics {
+          display: flex; align-items: center; gap: 1rem;
+          margin-left: auto;
+        }
+        .project-metric { font-size: 0.8rem; white-space: nowrap; }
 
         /* Underspend table style */
         .underspend-header {
           display: grid;
-          grid-template-columns: 1fr 80px 80px 90px;
+          grid-template-columns: 1fr 80px 80px 100px;
           gap: 8px; font-size: 0.65rem; font-weight: 700; color: #94A3B8;
           text-transform: uppercase; padding-bottom: 6px; border-bottom: 1px solid #1E293B;
           margin-bottom: 6px;
         }
         .underspend-row-grid {
           display: grid;
-          grid-template-columns: 1fr 80px 80px 90px;
+          grid-template-columns: 1fr 80px 80px 100px;
           gap: 8px; align-items: center; padding: 5px 0;
           border-bottom: 1px solid #1E293B; font-size: 0.8rem;
         }
         .underspend-row-grid:last-child { border-bottom: none; }
+
+        /* Mini-table for receivables/payables */
+        .mini-table-header {
+          display: flex; justify-content: space-between;
+          font-size: 0.65rem; font-weight: 700; color: #94A3B8;
+          text-transform: uppercase; padding-bottom: 4px; border-bottom: 1px solid #1E293B;
+          margin-bottom: 6px;
+        }
+        .mini-table-row {
+          display: flex; justify-content: space-between; padding: 3px 0;
+          font-size: 0.75rem; color: #E2E8F0;
+        }
 
         @media (max-width: 1100px) {
           .dashboard-grid { grid-template-columns: repeat(3, 1fr); }
@@ -549,12 +574,12 @@ export default function ManagementDashboard({ role }: { role: string }) {
             <div className="kpi-value" style={{ color: "#F97316" }}>{formatPKR(filteredTotalSpent)}</div>
             <div className="kpi-meta">
               {spentPct}% of budget
-              {projectsAbove70.length > 0 && (
-                <span style={{ fontSize: "0.65rem", marginLeft: 6, color: "#93C5FD" }}>
-                  Projects &gt; 70%: {projectsAbove70.join(", ")}
-                </span>
-              )}
             </div>
+            {projectsAbove70.length > 0 && (
+              <div className="kpi-extra">
+                Projects &gt; 70%: {projectsAbove70.join(", ")}
+              </div>
+            )}
           </div>
           <div className="card span-1"
             style={{ cursor: remainingFunds < 0 ? "pointer" : "default" }}
@@ -603,27 +628,22 @@ export default function ManagementDashboard({ role }: { role: string }) {
             {filteredProjectRows.map((p, idx) => {
               const health = activityHealth[p.id]
               return (
-                <div key={idx} onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}`)} style={{
-                  display: "flex", alignItems: "center", gap: "0.8rem",
-                  background: "#111827", borderRadius: "12px", padding: "0.5rem 1rem",
-                  border: "1px solid #1E293B", cursor: "pointer", marginBottom: "0.5rem",
-                  flexWrap: "wrap",
-                }}>
+                <div key={idx} className="project-row" onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}`)}>
                   <div style={{ width: 8, height: 8, borderRadius: "50%", background: p.status === "Overspent" ? "#F87171" : p.status === "Review" ? "#F97316" : p.status === "At Risk" ? "#F97316" : "#2DD4BF", flexShrink: 0 }}></div>
-                  <span style={{ flex: 1, fontWeight: 600, fontSize: "0.85rem", color: "#E2E8F0" }}>{p.name}</span>
-                  {/* Vertical alignment for the rest */}
-                  <div className="project-row-right">
-                    <span style={{ fontWeight: 600, color: "#E2E8F0" }}>{formatPKR(p.actual)}</span>
-                    <span style={{ color: p.pct > 100 ? "#F87171" : p.pct > 80 ? "#F97316" : "#2DD4BF" }}>{p.pct}%</span>
+                  <span style={{ fontWeight: 600, fontSize: "0.85rem", color: "#E2E8F0", marginRight: "auto" }}>{p.name}</span>
+                  <div className="project-metrics">
+                    <span className="project-metric" style={{ fontWeight: 600, color: "#E2E8F0" }}>{formatPKR(p.actual)}</span>
+                    <span className="project-metric" style={{ color: p.pct > 100 ? "#F87171" : p.pct > 80 ? "#F97316" : "#2DD4BF" }}>{p.pct}%</span>
                     <span style={{
                       padding: "0.1rem 0.6rem", borderRadius: "12px", fontSize: "0.7rem", fontWeight: 700,
                       background: p.status === "Overspent" ? "#fee2e2" : p.status === "Review" ? "#fef3c7" : p.status === "At Risk" ? "#fef3c7" : "#dcfce7",
                       color: p.status === "Overspent" ? "#991b1b" : p.status === "Review" ? "#92400e" : p.status === "At Risk" ? "#92400e" : "#166534",
+                      whiteSpace: "nowrap"
                     }}>
                       {p.status}
                     </span>
                     {health && (
-                      <span style={{ fontSize: "0.65rem", color: "#F97316", whiteSpace: "nowrap" }}>{health.message}</span>
+                      <span className="project-metric" style={{ fontSize: "0.65rem", color: "#F97316", maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis" }}>{health.message}</span>
                     )}
                   </div>
                 </div>
@@ -665,7 +685,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
                   <span>Activity</span>
                   <span>Budget</span>
                   <span>Actual</span>
-                  <span>Available</span>
+                  <span>Unspent</span>
                 </div>
                 {underspentActivities.map((act, idx) => (
                   <div key={idx} className="underspend-row-grid">
@@ -680,7 +700,13 @@ export default function ManagementDashboard({ role }: { role: string }) {
                     </span>
                     <span style={{ color: "#E2E8F0" }}>{formatPKR(act.budget)}</span>
                     <span style={{ color: "#E2E8F0" }}>{formatPKR(act.actual)}</span>
-                    <span style={{ color: "#2DD4BF", fontWeight: 600 }}>{formatPKR(act.remaining)}</span>
+                    {/* Progress bar for unspent */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                      <div style={{ flex: 1, height: 5, background: "#334155", borderRadius: 10, overflow: "hidden" }}>
+                        <div style={{ width: `${Math.min(act.pct, 100)}%`, height: "100%", background: "#2DD4BF", borderRadius: 10 }}></div>
+                      </div>
+                      <span style={{ fontSize: "0.7rem", color: "#2DD4BF", fontWeight: 600 }}>{formatPKR(act.remaining)}</span>
+                    </div>
                   </div>
                 ))}
               </>
@@ -690,9 +716,13 @@ export default function ManagementDashboard({ role }: { role: string }) {
             <div className="kpi-label" style={{ fontWeight: 700, fontSize: "0.95rem", color: "#F1F5F9", marginBottom: "0.8rem" }}>🧾 Receivables</div>
             <div className="kpi-value" style={{ color: totalReceivables > 0 ? "#F97316" : "#94A3B8", fontSize: "1.4rem" }}>{formatPKR(totalReceivables)}</div>
             {topReceivables.length > 0 && (
-              <div style={{ marginTop: 6, fontSize: "0.75rem" }}>
+              <div style={{ marginTop: 8 }}>
+                <div className="mini-table-header">
+                  <span>Customer</span>
+                  <span>Balance</span>
+                </div>
                 {topReceivables.map((cust: any) => (
-                  <div key={cust.id} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", color: "#E2E8F0" }}>
+                  <div key={cust.id} className="mini-table-row">
                     <span>{cust.name}</span>
                     <span style={{ fontWeight: 600 }}>{formatPKR(cust.balance)}</span>
                   </div>
@@ -704,9 +734,13 @@ export default function ManagementDashboard({ role }: { role: string }) {
             <div className="kpi-label" style={{ fontWeight: 700, fontSize: "0.95rem", color: "#F1F5F9", marginBottom: "0.8rem" }}>💳 Payables</div>
             <div className="kpi-value" style={{ color: totalPayables > 0 ? "#F97316" : "#94A3B8", fontSize: "1.4rem" }}>{formatPKR(totalPayables)}</div>
             {topPayables.length > 0 && (
-              <div style={{ marginTop: 6, fontSize: "0.75rem" }}>
+              <div style={{ marginTop: 8 }}>
+                <div className="mini-table-header">
+                  <span>Supplier</span>
+                  <span>Balance</span>
+                </div>
                 {topPayables.map((supp: any) => (
-                  <div key={supp.id} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", color: "#E2E8F0" }}>
+                  <div key={supp.id} className="mini-table-row">
                     <span>{supp.name}</span>
                     <span style={{ fontWeight: 600 }}>{formatPKR(supp.balance)}</span>
                   </div>
