@@ -477,10 +477,24 @@ export default function BudgetsPage() {
         .sub-header th { background: #1E293B; font-weight: 600; font-size: 9px; color: #94A3B8; }
         .input-budget { width: 70px; text-align: right; border: 1px solid #334155; border-radius: 4px; padding: 2px 4px; font-size: 10px; background: #1E293B; color: #F1F5F9; }
         .total-row td { font-weight: 700; background: #1E293B; color: #F1F5F9; }
-        .btn-primary { padding: 10px 20px; background: #1E3A8A; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; margin-top: 16px; display: inline-flex; align-items: center; gap: 6px; }
+        /* Button styles (consistent with other pages) */
+        .btn-primary {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 8px 14px; border-radius: 8px; font-size: 13px;
+          font-weight: 600; cursor: pointer; border: none;
+          background: #1E3A8A; color: white;
+          transition: all 0.15s; white-space: nowrap;
+        }
         .btn-primary:hover { background: #1E40AF; }
-        .btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-outline {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 8px 14px; border-radius: 8px; font-size: 13px;
+          font-weight: 600; cursor: pointer;
+          background: transparent; border: 1.5px solid #334155; color: #CBD5E1;
+          transition: all 0.15s; white-space: nowrap;
+        }
         .btn-outline:hover { background: #1E293B; }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
         h2 { color: #F1F5F9; }
         p { color: #94A3B8; }
 
@@ -535,10 +549,10 @@ export default function BudgetsPage() {
               placeholder="Months"
             />
           )}
-          <button className="btn-primary" style={{ margin: 0, padding: "6px 12px", background: "#1E3A8A" }} onClick={exportExcel}>
+          <button className="btn-outline btn-sm" onClick={exportExcel}>
             <Download size={14} /> Excel
           </button>
-          <button className="btn-primary" style={{ margin: 0, padding: "6px 12px", background: "#1E3A8A" }} onClick={exportPDF}>
+          <button className="btn-outline btn-sm" onClick={exportPDF}>
             <Download size={14} /> PDF
           </button>
         </div>
@@ -572,7 +586,7 @@ export default function BudgetsPage() {
               {/* Edit Budget button */}
               <div style={{ marginBottom: 12 }}>
                 {!editMode && (
-                  <button className="btn-outline" style={{ padding: "6px 14px", fontSize: 13 }} onClick={() => setEditMode(true)}>
+                  <button className="btn-outline" onClick={() => setEditMode(true)}>
                     <Edit size={14} /> Edit Budget
                   </button>
                 )}
@@ -722,9 +736,9 @@ export default function BudgetsPage() {
                 {canEdit && (
                   <>
                     <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save Budget"}</button>
-                    <button className="btn-primary" style={{ background: '#1E3A8A' }} onClick={() => document.getElementById('budget-file-input')?.click()}><Upload size={14} /> Import Budget</button>
+                    <button className="btn-primary" onClick={() => document.getElementById('budget-file-input')?.click()}><Upload size={14} /> Import Budget</button>
                     <input id="budget-file-input" type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={e => setBudgetImportFile(e.target.files?.[0] || null)} />
-                    {budgetImportFile && <button className="btn-primary" style={{ background: '#1E3A8A' }} onClick={handleBudgetImport} disabled={importingBudget}>Start Import</button>}
+                    {budgetImportFile && <button className="btn-primary" onClick={handleBudgetImport} disabled={importingBudget}>Start Import</button>}
                   </>
                 )}
               </div>
@@ -809,9 +823,9 @@ export default function BudgetsPage() {
                 {canEdit && (
                   <>
                     <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save Budget"}</button>
-                    <button className="btn-primary" style={{ background: '#1E3A8A' }} onClick={() => document.getElementById('budget-file-input')?.click()}><Upload size={14} /> Import Budget</button>
+                    <button className="btn-primary" onClick={() => document.getElementById('budget-file-input')?.click()}><Upload size={14} /> Import Budget</button>
                     <input id="budget-file-input" type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={e => setBudgetImportFile(e.target.files?.[0] || null)} />
-                    {budgetImportFile && <button className="btn-primary" style={{ background: '#1E3A8A' }} onClick={handleBudgetImport} disabled={importingBudget}>Start Import</button>}
+                    {budgetImportFile && <button className="btn-primary" onClick={handleBudgetImport} disabled={importingBudget}>Start Import</button>}
                   </>
                 )}
               </div>
