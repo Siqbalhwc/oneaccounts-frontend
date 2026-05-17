@@ -56,7 +56,7 @@ export default function RecordHistory({
               {new Date(log.changed_at).toLocaleString()}
             </div>
             <div style={{ fontSize: 11, color: "#64748B" }}>
-              by {log.changed_by || "Unknown"}
+              by {log.changed_by || "System"}
             </div>
             <div
               style={{
