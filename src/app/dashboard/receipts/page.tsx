@@ -41,7 +41,7 @@ export default function ReceiptsPage() {
       })
   }, [role])
 
-  // 2. Fetch receipts (same working query, no broken joins)
+  // 2. Fetch receipts (no deleted_at column in this table)
   useEffect(() => {
     if (!role) return
     if (!canView) {
@@ -49,7 +49,7 @@ export default function ReceiptsPage() {
       return
     }
 
-        supabase
+    supabase
       .from("receipts")
       .select("*")
       .order("date", { ascending: false })
@@ -94,8 +94,9 @@ export default function ReceiptsPage() {
     <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
       <style>{`
         .card { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.2); overflow: hidden; }
-        .header-row { display: grid; grid-template-columns: 130px 90px 1fr 100px 80px 80px 80px; padding: 12px 20px; background: #1E293B; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94A3B8; border-bottom: 1px solid #1E293B; }
-        .data-row { display: grid; grid-template-columns: 130px 90px 1fr 100px 80px 80px 80px; padding: 10px 20px; border-bottom: 1px solid #1E293B; font-size: 13px; align-items: center; transition: background 0.15s; }
+        /* Increased Method column width to 110px to prevent wrapping */
+        .header-row { display: grid; grid-template-columns: 130px 90px 1fr 100px 110px 80px 80px; padding: 12px 20px; background: #1E293B; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94A3B8; border-bottom: 1px solid #1E293B; }
+        .data-row { display: grid; grid-template-columns: 130px 90px 1fr 100px 110px 80px 80px; padding: 10px 20px; border-bottom: 1px solid #1E293B; font-size: 13px; align-items: center; transition: background 0.15s; }
         .data-row:hover { background: #1E293B; }
         .data-row:last-child { border-bottom: none; }
         .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid #334155; background: transparent; color: #CBD5E1; }
@@ -106,8 +107,10 @@ export default function ReceiptsPage() {
         .summary-item { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 16px; }
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94A3B8; margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: #F1F5F9; }
+        /* Prevent text wrap in method column */
+        .nowrap { white-space: nowrap; }
         @media (max-width: 640px) {
-          .header-row, .data-row { grid-template-columns: 90px 70px 1fr 70px 60px 50px 50px; }
+          .header-row, .data-row { grid-template-columns: 90px 70px 1fr 70px 80px 50px 50px; }
         }
       `}</style>
 
@@ -174,7 +177,7 @@ export default function ReceiptsPage() {
                 <span>{rec.date}</span>
                 <span>{custName}</span>
                 <span style={{ fontWeight: 600, color: "#10B981" }}>PKR {rec.amount?.toLocaleString()}</span>
-                <span>{rec.payment_method || "—"}</span>
+                <span className="nowrap">{rec.payment_method || "—"}</span>
                 {/* View button */}
                 <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/${rec.id}`)} title="View receipt">
                   <Eye size={14} />
