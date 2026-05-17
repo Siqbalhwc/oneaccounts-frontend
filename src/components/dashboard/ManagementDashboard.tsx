@@ -258,7 +258,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         })
         // Calculate per-activity % and compare with project %
         const healthData: Record<string, { total: number; withinRange: number; message: string }> = {}
-        enrichedProjects.forEach(proj => {
+        enrichedProjects.forEach((proj: any) => {
           const pId = String(proj.id)
           const projPct = proj.pct
           const activities = actBudgetMap[pId] || {}
