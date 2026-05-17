@@ -128,32 +128,23 @@ export default function InvoiceDetailPage() {
         }
       })
 
-    // 4. Load journal lines for this invoice
-    // We look for a journal entry with description matching the invoice
+    // 4. Load journal lines directly via source_type and source_id
     supabase
-      .from("journal_entries")
-      .select("id")
+      .from("journal_lines")
+      .select("account_id, debit, credit, accounts(code, name)")
       .eq("company_id", companyId)
-      .ilike("description", `%Sales Invoice%${invoiceId}%`)
-      .maybeSingle()
-      .then(({ data: entry }) => {
-        if (entry) {
-          supabase
-            .from("journal_lines")
-            .select("account_id, debit, credit, accounts(code, name)")
-            .eq("entry_id", entry.id)
-            .then(({ data: lines }) => {
-              if (lines) {
-                const formatted = lines.map((l: any) => ({
-                  account_id: l.account_id,
-                  account_code: l.accounts?.code || "",
-                  account_name: l.accounts?.name || "",
-                  debit: l.debit || 0,
-                  credit: l.credit || 0,
-                }))
-                setJournalLines(formatted)
-              }
-            })
+      .eq("source_type", "sale_invoice")
+      .eq("source_id", invoiceId)
+      .then(({ data: lines }) => {
+        if (lines && lines.length > 0) {
+          const formatted = lines.map((l: any) => ({
+            account_id: l.account_id,
+            account_code: l.accounts?.code || "",
+            account_name: l.accounts?.name || "",
+            debit: l.debit || 0,
+            credit: l.credit || 0,
+          }))
+          setJournalLines(formatted)
         }
       })
 

@@ -43,28 +43,36 @@ export default function RecordHistory({
         <div
           key={log.id}
           style={{
-            borderBottom: "1px solid #E2E8F0",
+            borderBottom: "1px solid #1E293B",
             padding: "10px 0",
             display: "grid",
-            gridTemplateColumns: "140px 80px 1fr",
+            gridTemplateColumns: "140px 1fr",
             gap: 12,
+            alignItems: "start",
           }}
         >
-          <div style={{ color: "#64748B" }}>
-            {new Date(log.changed_at).toLocaleString()}
-          </div>
-          <div
-            style={{
-              fontWeight: 600,
-              color:
-                log.action === "INSERT"
-                  ? "#10B981"
-                  : log.action === "DELETE"
-                  ? "#EF4444"
-                  : "#F59E0B",
-            }}
-          >
-            {log.action}
+          <div>
+            <div style={{ color: "#94A3B8", fontSize: 12, marginBottom: 2 }}>
+              {new Date(log.changed_at).toLocaleString()}
+            </div>
+            <div style={{ fontSize: 11, color: "#64748B" }}>
+              by {log.changed_by || "Unknown"}
+            </div>
+            <div
+              style={{
+                fontWeight: 600,
+                fontSize: 11,
+                marginTop: 4,
+                color:
+                  log.action === "INSERT"
+                    ? "#10B981"
+                    : log.action === "DELETE"
+                    ? "#EF4444"
+                    : "#F59E0B",
+              }}
+            >
+              {log.action}
+            </div>
           </div>
           <div>
             {log.action === "UPDATE" ? (
@@ -89,7 +97,7 @@ function FieldValues({ values }: { values: any }) {
       {Object.entries(obj)
         .filter(([key]) => !["id", "company_id", "deleted_at", "updated_at", "created_at"].includes(key))
         .map(([key, value]) => (
-          <span key={key} style={{ background: "#F1F5F9", borderRadius: 4, padding: "2px 6px", fontSize: 11 }}>
+          <span key={key} style={{ background: "#0F172A", borderRadius: 4, padding: "2px 6px", fontSize: 11, color: "#E2E8F0" }}>
             <strong>{key}:</strong> {String(value)}
           </span>
         ))}
@@ -113,7 +121,7 @@ function DiffViewer({ old, new: newVals }: { old: any; new: any }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       {changes.map((key) => (
         <div key={key} style={{ fontSize: 11 }}>
-          <strong>{key}:</strong>{" "}
+          <strong style={{ color: "#E2E8F0" }}>{key}:</strong>{" "}
           <span style={{ color: "#EF4444", textDecoration: "line-through" }}>
             {String(oldObj[key] ?? "—")}
           </span>{" "}
