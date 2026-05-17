@@ -135,7 +135,6 @@ export default function CustomerLedgerPage() {
     setLoading(false)
   }
 
-  // Sorting logic
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDir(prev => prev === "asc" ? "desc" : "asc")
@@ -177,14 +176,14 @@ export default function CustomerLedgerPage() {
       style.innerHTML = `
         @page { size: ${orientation}; margin: 10mm; }
         @media print {
-          body * { visibility: hidden; }
-          .print-area, .print-area * { visibility: visible; }
+          body { background: white !important; }
+          body * { color: #000 !important; background: white !important; border-color: #ddd !important; }
           .print-area { position: absolute; left: 0; top: 0; width: 100%; }
           .no-print { display: none !important; }
-          .card { background: white !important; border: 1px solid #ddd !important; }
-          .header-row { background: #f1f5f9 !important; color: #000 !important; }
-          .data-row { color: #000 !important; border-color: #ddd !important; }
-          .btn, .select, .input { display: none !important; }
+          .card { border: 1px solid #ddd !important; box-shadow: none !important; }
+          .header-row { background: #f1f5f9 !important; color: #000 !important; font-weight: 700 !important; }
+          .data-row { border-bottom: 1px solid #ddd !important; }
+          .print-header { display: block !important; margin-bottom: 20px; }
         }
       `
       document.head.appendChild(style)
@@ -233,22 +232,24 @@ export default function CustomerLedgerPage() {
   return (
     <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
       <style>{`
-        .card { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+        .card { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.2); overflow: hidden; }
         .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid #334155; background: transparent; color: #CBD5E1; }
         .btn:hover { background: #1E293B; }
-        .btn-outline { border: 1.5px solid #334155; }
         .input { width: 100%; height: 38px; border: 1.5px solid #334155; border-radius: 8px; padding: 0 12px; font-size: 13px; background: #1E293B; color: #F1F5F9; outline: none; }
         .select { width: 100%; height: 40px; border: 1.5px solid #334155; border-radius: 8px; padding: 0 12px; font-size: 13px; background: #1E293B; color: #F1F5F9; }
-        .header-row { display: grid; grid-template-columns: 40px 100px 90px 1fr 100px 100px 100px; gap: 8px; padding: 10px 14px; background: #1E293B; font-size: 9px; font-weight: 700; text-transform: uppercase; color: #94A3B8; border-bottom: 1px solid #1E293B; }
-        .data-row { display: grid; grid-template-columns: 40px 100px 90px 1fr 100px 100px 100px; gap: 8px; padding: 8px 14px; border-bottom: 1px solid #1E293B; font-size: 12px; align-items: center; }
+        .header-row { display: grid; grid-template-columns: 40px 100px 90px 1fr 100px 100px 100px; gap: 8px; padding: 12px 20px; background: #1E293B; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94A3B8; border-bottom: 1px solid #1E293B; }
+        .data-row { display: grid; grid-template-columns: 40px 100px 90px 1fr 100px 100px 100px; gap: 8px; padding: 10px 20px; border-bottom: 1px solid #1E293B; font-size: 13px; align-items: center; transition: background 0.15s; }
+        .data-row:hover { background: #1E293B; }
         .data-row:last-child { border-bottom: none; }
-        .sort-btn { background: none; border: none; color: inherit; font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; padding: 0; }
+        .sort-btn { background: none; border: none; color: inherit; font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px; }
         .sort-btn:hover { color: #93C5FD; }
+        .summary-item { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 16px; }
         @media print {
           body { background: white !important; }
-          .card { background: white !important; border: 1px solid #ddd !important; }
+          body * { color: #000 !important; background: white !important; border-color: #ddd !important; }
+          .card { border: 1px solid #ddd !important; box-shadow: none !important; }
           .header-row { background: #f1f5f9 !important; color: #000 !important; }
-          .data-row { color: #000 !important; border-color: #ddd !important; }
+          .data-row { border-bottom: 1px solid #ddd !important; }
           .print-header { display: block !important; margin-bottom: 20px; }
         }
       `}</style>
@@ -273,7 +274,7 @@ export default function CustomerLedgerPage() {
       </div>
 
       {/* Filters card */}
-      <div className="card">
+      <div className="card" style={{ padding: 16, marginBottom: 16 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 120px", gap: 12, alignItems: "end" }}>
           <div>
             <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Customer</label>
@@ -298,7 +299,7 @@ export default function CustomerLedgerPage() {
 
       {/* Customer info & balances */}
       {cust && (
-        <div className="card" style={{ display: "flex", justifyContent: "space-between" }}>
+        <div className="card" style={{ padding: 16, marginBottom: 16, display: "flex", justifyContent: "space-between" }}>
           <div>
             <span style={{ fontWeight: 600, color: "#F1F5F9" }}>{cust.name}</span>
             <span style={{ marginLeft: 12, color: "#93C5FD" }}>{cust.code}</span>
@@ -316,7 +317,7 @@ export default function CustomerLedgerPage() {
         <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading...</div>
       ) : sortedEntries.length > 0 ? (
         <div ref={printRef} className="print-area">
-          {/* Print-only header */}
+          {/* Print-only company header */}
           <div className="print-header" style={{ display: "none" }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -336,7 +337,7 @@ export default function CustomerLedgerPage() {
             </div>
           </div>
 
-          <div className="card" style={{ overflowX: "auto" }}>
+          <div className="card">
             <div className="header-row">
               <button className="sort-btn" onClick={() => handleSort("sr")}>Sr {getSortIcon("sr")}</button>
               <button className="sort-btn" onClick={() => handleSort("ref")}>Trans # {getSortIcon("ref")}</button>
@@ -360,7 +361,7 @@ export default function CustomerLedgerPage() {
           </div>
 
           {/* Sub total summary */}
-          <div className="card" style={{ display: "flex", justifyContent: "flex-end", gap: 32, marginTop: 16 }}>
+          <div className="card" style={{ padding: 16, marginTop: 16, display: "flex", justifyContent: "flex-end", gap: 32 }}>
             <div><span style={{ color: "#94A3B8", fontSize: 12 }}>Total Debit: </span><span style={{ color: "#F87171", fontWeight: 600 }}>PKR {totalDebit.toLocaleString()}</span></div>
             <div><span style={{ color: "#94A3B8", fontSize: 12 }}>Total Credit: </span><span style={{ color: "#2DD4BF", fontWeight: 600 }}>PKR {totalCredit.toLocaleString()}</span></div>
             <div><span style={{ color: "#94A3B8", fontSize: 12 }}>Closing Balance: </span><span style={{ color: "#A78BFA", fontWeight: 700 }}>PKR {finalBalance.toLocaleString()}</span></div>
