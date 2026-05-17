@@ -10,6 +10,18 @@ import {
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
 
+// ── Helper: convert payment terms to days ──────────────────────────────
+function getCreditDays(term?: string | null): number {
+  if (!term) return 30
+  const s = term.toLowerCase()
+  if (s.includes("receipt")) return 0
+  if (s.includes("net 7")) return 7
+  if (s.includes("net 15")) return 15
+  if (s.includes("net 30")) return 30
+  if (s.includes("net 60")) return 60
+  return 30
+}
+
 export default function NewInvoicePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -32,7 +44,7 @@ export default function NewInvoicePage() {
   const customerRef = useRef<HTMLDivElement>(null)
 
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0])
-  const [dueDate, setDueDate] = useState(new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0])
+  const [dueDate, setDueDate] = useState("")
   const [reference, setReference] = useState("")
   const [notes, setNotes] = useState("")
   const [items, setItems] = useState<any[]>([])
@@ -42,34 +54,28 @@ export default function NewInvoicePage() {
   const [productSearch, setProductSearch] = useState("")
   const [showProductList, setShowProductList] = useState(false)
 
-  // ── Price History state ──────────────────────────────────────────────
   const [priceHistory, setPriceHistory] = useState<any[]>([])
   const [showHistory, setShowHistory] = useState(false)
   const [lastSelectedProduct, setLastSelectedProduct] = useState<any>(null)
-
-  // ── Customer refresh indicator ────────────────────────────────────────
   const [refreshingCustomers, setRefreshingCustomers] = useState(false)
 
-  // ── 1. Load company ID, customers, and products ONCE ─────────────────
+  // ── 1. Load company ID, customers, and products ──────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
 
-      // Always load customers
       supabase.from("customers")
-        .select("id,code,name,phone,balance,country_code")
+        .select("id,code,name,phone,balance,country_code,payment_terms")
         .eq("company_id", cid)
         .order("name")
         .then(r => {
           if (r.data) setCustomers(r.data)
-          else setCustomers([])
         })
 
-      // Always load active products (exclude soft‑deleted)
       supabase.from("products")
         .select("id,code,name,sale_price,cost_price,qty_on_hand,image_path")
-        .is("deleted_at", null)                    // ← filter soft‑deleted
+        .is("deleted_at", null)
         .order("name")
         .then(r => r.data && setProducts(r.data))
 
@@ -77,7 +83,7 @@ export default function NewInvoicePage() {
     })
   }, [])
 
-  // ── 2. If editing, load the existing invoice data AFTER customers/products are ready ──
+  // ── 2. If editing, load existing invoice ────────────────────────────
   useEffect(() => {
     if (!editId || !companyId) return
     supabase.from("invoices")
@@ -117,18 +123,17 @@ export default function NewInvoicePage() {
       })
   }, [editId, companyId, customers])
 
-  // ── Reload customers (preserves search) ─────────────────────────────
+  // ── Reload customers (preserves search) ──────────────────────────────
   const refreshCustomers = () => {
     if (!companyId) return
     setRefreshingCustomers(true)
     supabase.from("customers")
-      .select("id,code,name,phone,balance,country_code")
+      .select("id,code,name,phone,balance,country_code,payment_terms")
       .eq("company_id", companyId)
       .order("name")
       .then(r => {
         if (r.data) setCustomers(r.data)
         setRefreshingCustomers(false)
-        // Update selected customer balance if present
         if (selectedCustomer) {
           const updated = r.data?.find((c: any) => c.id === selectedCustomer.id)
           if (updated) setSelectedCustomer(updated)
@@ -136,7 +141,7 @@ export default function NewInvoicePage() {
       })
   }
 
-  // ── Customer helpers ───────────────────────────────────────────────────
+  // ── Customer selection ───────────────────────────────────────────────
   const filteredCustomers = customers.filter(c =>
     c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
     c.code.toLowerCase().includes(customerSearch.toLowerCase()) ||
@@ -148,6 +153,14 @@ export default function NewInvoicePage() {
     setSelectedCustomer(c)
     setCustomerSearch(c.name)
     setShowCustomerList(false)
+
+    // Auto‑set due date based on credit terms
+    if (invoiceDate) {
+      const days = getCreditDays(c.payment_terms)
+      const dt = new Date(invoiceDate)
+      dt.setDate(dt.getDate() + days)
+      setDueDate(dt.toISOString().split("T")[0])
+    }
   }
 
   const clearCustomer = () => {
@@ -157,58 +170,11 @@ export default function NewInvoicePage() {
     setShowCustomerList(true)
   }
 
-  // ── Product / Item management ─────────────────────────────────────────
+  // ── Product helpers ──────────────────────────────────────────────────
   const filteredProducts = products.filter((p: any) =>
     p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
     p.code.toLowerCase().includes(productSearch.toLowerCase())
   )
-
-  // Safe price history fetch (two‑step)
-  const fetchPriceHistory = async (productId: number, custId: number) => {
-    // Step 1: get invoice_items for this product (limited)
-    const { data: items } = await supabase
-      .from("invoice_items")
-      .select("id, invoice_id, unit_price")
-      .eq("product_id", productId)
-      .order("id", { ascending: false })
-      .limit(20)
-
-    if (!items || items.length === 0) {
-      setPriceHistory([])
-      setShowHistory(true)
-      return
-    }
-
-    const invoiceIds = [...new Set(items.map((i: any) => i.invoice_id))]
-
-    // Step 2: fetch only invoices belonging to this customer
-    const { data: invoices } = await supabase
-      .from("invoices")
-      .select("id, invoice_no, date")
-      .in("id", invoiceIds)
-      .eq("party_id", custId)
-
-    if (!invoices || invoices.length === 0) {
-      setPriceHistory([])
-      setShowHistory(true)
-      return
-    }
-
-    const invMap: Record<number, any> = {}
-    invoices.forEach((inv: any) => { invMap[inv.id] = inv })
-
-    const history = items
-      .filter((item: any) => invMap[item.invoice_id])
-      .map((item: any) => ({
-        unit_price: item.unit_price,
-        invoice_no: invMap[item.invoice_id].invoice_no,
-        date: invMap[item.invoice_id].date,
-      }))
-      .slice(0, 5)
-
-    setPriceHistory(history)
-    setShowHistory(true)
-  }
 
   const addProductItem = (prod: any) => {
     setItems([...items, {
@@ -223,13 +189,9 @@ export default function NewInvoicePage() {
     }])
     setProductSearch("")
     setShowProductList(false)
-
     setLastSelectedProduct(prod)
-    if (customerId) {
-      fetchPriceHistory(prod.id, customerId)
-    } else {
-      setShowHistory(false)
-    }
+    if (customerId) fetchPriceHistory(prod.id, customerId)
+    else setShowHistory(false)
   }
 
   const addManualItem = () => {
@@ -256,7 +218,37 @@ export default function NewInvoicePage() {
 
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
 
-  // ── Invoice number generation ─────────────────────────────────────────
+  // ── Price history ────────────────────────────────────────────────────
+  const fetchPriceHistory = async (productId: number, custId: number) => {
+    const { data: items } = await supabase
+      .from("invoice_items")
+      .select("id, invoice_id, unit_price")
+      .eq("product_id", productId)
+      .order("id", { ascending: false })
+      .limit(20)
+    if (!items || items.length === 0) { setPriceHistory([]); setShowHistory(true); return }
+    const invoiceIds = [...new Set(items.map((i: any) => i.invoice_id))]
+    const { data: invoices } = await supabase
+      .from("invoices")
+      .select("id, invoice_no, date")
+      .in("id", invoiceIds)
+      .eq("party_id", custId)
+    if (!invoices || invoices.length === 0) { setPriceHistory([]); setShowHistory(true); return }
+    const invMap: Record<number, any> = {}
+    invoices.forEach((inv: any) => { invMap[inv.id] = inv })
+    const history = items
+      .filter((item: any) => invMap[item.invoice_id])
+      .map((item: any) => ({
+        unit_price: item.unit_price,
+        invoice_no: invMap[item.invoice_id].invoice_no,
+        date: invMap[item.invoice_id].date,
+      }))
+      .slice(0, 5)
+    setPriceHistory(history)
+    setShowHistory(true)
+  }
+
+  // ── Invoice number generation ────────────────────────────────────────
   const getNextInvoiceNo = async (custCode: string): Promise<string> => {
     const { data } = await supabase
       .from("invoices")
@@ -275,7 +267,7 @@ export default function NewInvoicePage() {
 
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
 
-  // ── WhatsApp link ─────────────────────────────────────────────────────
+  // ── WhatsApp link ────────────────────────────────────────────────────
   const waLink = () => {
     if (!selectedCustomer) return ""
     const code = (selectedCustomer.country_code || "+92").replace(/\D/g, "")
@@ -285,7 +277,7 @@ export default function NewInvoicePage() {
     return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
   }
 
-  // ── Submit ────────────────────────────────────────────────────────────
+  // ── Submit ───────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (!customerId) { setError("Please select a customer"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
@@ -365,7 +357,6 @@ export default function NewInvoicePage() {
     doc.save(`invoice-preview.pdf`)
   }
 
-  // Close customer dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (customerRef.current && !customerRef.current.contains(e.target as Node)) {
@@ -383,7 +374,7 @@ export default function NewInvoicePage() {
   return (
     <div style={{ padding: "16px", background: "#0B1120", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
       <style>{`
-        .inv-shell { max-width: 1200px; margin: 0 auto; }
+        .inv-shell { max-width: 100%; margin: 0 auto; }
         .inv-title { font-size: 18px; font-weight: 700; color: #F1F5F9; }
         .inv-card {
           background: #111827; border-radius: 12px; border: 1px solid #1E293B;
@@ -404,24 +395,24 @@ export default function NewInvoicePage() {
         .inv-btn {
           display: inline-flex; align-items: center; gap: 6px;
           padding: 8px 14px; border-radius: 8px; font-size: 13px;
-          font-weight: 600; cursor: pointer; border: none;
-          font-family: inherit; transition: all 0.15s; white-space: nowrap;
+          font-weight: 600; cursor: pointer; border: 1.5px solid #334155;
+          background: transparent; color: #CBD5E1; font-family: inherit;
+          transition: all 0.15s; white-space: nowrap; text-decoration: none;
         }
-        .inv-btn-primary { background: #1E3A8A; color: white; }
-        .inv-btn-primary:hover { background: #1E40AF; }
-        .inv-btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
-        .inv-btn-outline:hover { background: #1E293B; }
-        .inv-btn-success { background: #25D366; color: white; }
+        .inv-btn:hover { background: #1E293B; }
+        .inv-btn-success { background: #25D366; color: white; border-color: #25D366; }
+        .inv-btn-success:hover { background: #22C55E; }
 
+        /* Fixed-width items grid (no cost column) */
         .inv-item-row {
           display: grid;
-          grid-template-columns: 30px 150px 3fr 70px 90px 90px auto 30px;
+          grid-template-columns: 30px 150px 3fr 80px 110px 110px 30px;
           gap: 6px; align-items: center; padding: 6px 0;
           border-bottom: 1px solid #1E293B;
         }
         .inv-item-header {
           display: grid;
-          grid-template-columns: 30px 150px 3fr 70px 90px 90px auto 30px;
+          grid-template-columns: 30px 150px 3fr 80px 110px 110px 30px;
           gap: 6px; font-size: 9px; font-weight: 700;
           text-transform: uppercase; color: #94A3B8; padding-bottom: 6px;
         }
@@ -462,16 +453,21 @@ export default function NewInvoicePage() {
           display: flex; justify-content: space-between; padding: 4px 0;
           border-bottom: 1px solid #334155;
         }
+
+        /* Remove number spinners */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type="number"] { -moz-appearance: textfield; }
       `}</style>
 
       <div className="inv-shell">
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-          <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/invoices")}><ArrowLeft size={16} /></button>
+          <button className="inv-btn" onClick={() => router.push("/dashboard/invoices")}><ArrowLeft size={16} /></button>
           <div style={{ flex: 1 }}>
             <div className="inv-title">{editId ? "✏️ Edit Sales Invoice" : "🧾 New Sales Invoice"}</div>
             <div style={{ fontSize: 12, color: "#94A3B8" }}>{editId ? "Modify invoice details and items" : "Create invoice with full accounting automation"}</div>
           </div>
-          <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/invoices")}>View List</button>
+          <button className="inv-btn" onClick={() => router.push("/dashboard/invoices")}>View List</button>
         </div>
 
         {error && <div style={{ background: "#1E293B", border: "1px solid #EF4444", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
@@ -492,14 +488,12 @@ export default function NewInvoicePage() {
                     <span>👤</span><span style={{ flex: 1 }}>{selectedCustomer.code} — {selectedCustomer.name}</span>
                     <span style={{ fontSize: 11, color: "#94A3B8" }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
                     <button
-                      className="cust-clear"
                       style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#94A3B8", cursor: "pointer" }}
                       onClick={(e) => { e.stopPropagation(); clearCustomer(); }}
                     >
                       <X size={14} />
                     </button>
                     <button
-                      className="cust-clear"
                       style={{ position: "absolute", right: 22, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#93C5FD", cursor: "pointer" }}
                       onClick={(e) => { e.stopPropagation(); refreshCustomers(); }}
                       title="Refresh customer list"
@@ -521,7 +515,7 @@ export default function NewInvoicePage() {
                         onClick={() => setShowCustomerList(true)}
                         autoComplete="off"
                       />
-                      {customerSearch && <button className="cust-clear" onClick={() => setCustomerSearch("")} style={{ background: "none", border: "none", color: "#94A3B8", cursor: "pointer" }}><X size={13} /></button>}
+                      {customerSearch && <button onClick={() => setCustomerSearch("")} style={{ background: "none", border: "none", color: "#94A3B8", cursor: "pointer" }}><X size={13} /></button>}
                     </div>
                     {showCustomerList && (
                       <div className="cust-dropdown">
@@ -570,7 +564,7 @@ export default function NewInvoicePage() {
                         onBlur={() => setTimeout(() => setShowProductList(false), 200)}
                       />
                     </div>
-                    <button className="inv-btn inv-btn-outline" onClick={addManualItem}><Plus size={14} /> Manual</button>
+                    <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
                   </div>
                   {showProductList && (
                     <div className="cust-dropdown" style={{ marginTop: 4 }}>
@@ -626,7 +620,7 @@ export default function NewInvoicePage() {
           </div>
 
           {/* RIGHT: Summary & Actions */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 16 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="inv-card">
               <h3 style={{ fontSize: 15, fontWeight: 700, color: "#F1F5F9", margin: "0 0 10px" }}>Summary</h3>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
@@ -634,14 +628,14 @@ export default function NewInvoicePage() {
               </div>
             </div>
             <div className="inv-card">
-              <button className="inv-btn inv-btn-primary" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={saving}>
+              <button className="inv-btn" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={saving}>
                 {saving ? "Posting..." : editId ? "💾 UPDATE Invoice" : "💾 POST Invoice"}
               </button>
-              <button className="inv-btn inv-btn-outline" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleBeforeSavePdf}>
+              <button className="inv-btn" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleBeforeSavePdf}>
                 <Download size={14} /> PDF Preview
               </button>
               {selectedCustomer && waLink() && (
-                <a href={waLink()} target="_blank" rel="noopener noreferrer" className="inv-btn inv-btn-success" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%", textDecoration: "none" }}>
+                <a href={waLink()} target="_blank" rel="noopener noreferrer" className="inv-btn inv-btn-success" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }}>
                   <Send size={14} /> WhatsApp
                 </a>
               )}
@@ -662,7 +656,6 @@ export default function NewInvoicePage() {
                 <span>Description</span>
                 <span>Qty</span>
                 <span>Price</span>
-                <span>Cost</span>
                 <span style={{ textAlign: "right" }}>Total</span>
                 <span></span>
               </div>
@@ -683,11 +676,10 @@ export default function NewInvoicePage() {
                     style={{ height: 34, fontSize: 12 }}
                     value={item.description}
                     onChange={e => updateItem(idx, "description", e.target.value)}
-                    placeholder="Description / product name"
+                    placeholder="Description"
                   />
                   <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
                   <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                  <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.cost_price} onChange={e => updateItem(idx, "cost_price", Number(e.target.value))} />
                   <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>
                     PKR {item.total.toLocaleString()}
                   </span>
