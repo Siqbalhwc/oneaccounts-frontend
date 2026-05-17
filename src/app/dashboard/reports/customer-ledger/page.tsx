@@ -252,30 +252,29 @@ export default function CustomerLedgerPage() {
             padding: 0;
           }
 
-          /* Header band */
+          /* Header band — white background, dark text */
           .pr-header-band {
-            background: #1E3A5F;
-            color: white;
+            background: #ffffff;
+            color: #0F172A;
             padding: 18px 24px 14px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 0;
+            border-bottom: 2.5px solid #1E3A5F;
           }
 
-          .pr-company-name { font-size: 18pt; font-weight: 800; margin: 0 0 2px; letter-spacing: -0.01em; }
-          .pr-company-sub { font-size: 8.5pt; opacity: 0.82; margin: 0; }
+          .pr-company-name { font-size: 18pt; font-weight: 800; margin: 0 0 2px; letter-spacing: -0.01em; color: #0F172A; }
+          .pr-company-sub { font-size: 8.5pt; color: #64748B; margin: 0; }
 
-          .pr-report-badge {
-            text-align: right;
-          }
-          .pr-report-title { font-size: 14pt; font-weight: 700; margin: 0 0 4px; }
-          .pr-report-meta { font-size: 8pt; opacity: 0.85; line-height: 1.6; }
+          .pr-report-badge { text-align: right; }
+          .pr-report-title { font-size: 14pt; font-weight: 700; margin: 0 0 4px; color: #1E3A5F; }
+          .pr-report-meta { font-size: 8pt; color: #64748B; line-height: 1.6; }
 
           /* Sub-header: customer info bar */
           .pr-info-bar {
-            background: #F1F5F9;
-            border-bottom: 2px solid #1E3A5F;
+            background: #F8FAFC;
+            border-bottom: 1px solid #E2E8F0;
             padding: 8px 24px;
             display: flex;
             justify-content: space-between;
@@ -339,11 +338,7 @@ export default function CustomerLedgerPage() {
             color: #64748B;
           }
 
-          /* Watermark stripe */
-          .pr-stripe {
-            height: 4px;
-            background: linear-gradient(90deg, #1E3A5F 0%, #2563EB 50%, #1E3A5F 100%);
-          }
+          .pr-stripe { display: none; }
         }
 
         /* Hide print portal on screen */
