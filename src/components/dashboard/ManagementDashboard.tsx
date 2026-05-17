@@ -32,11 +32,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [overspentCount, setOverspentCount] = useState(0)
 
   // Quick stats
-  const [unpaidInvoices, setUnpaidInvoices] = useState(0)
   const [totalReceivables, setTotalReceivables] = useState(0)
   const [topReceivables, setTopReceivables] = useState<any[]>([])
 
-  // Payables
   const [totalPayables, setTotalPayables] = useState(0)
   const [topPayables, setTopPayables] = useState<any[]>([])
 
@@ -78,15 +76,10 @@ export default function ManagementDashboard({ role }: { role: string }) {
       setLoading(true)
 
       const now = new Date()
-      const currentMonth = now.getMonth() + 1   // 1‑12
-      const fiscalYearNow = now.getFullYear()
-      const yearForMonth = (fiscalYear === fiscalYearNow) ? fiscalYearNow : fiscalYear // ensure we query correct year
-
-      // Compute ISO timestamps for the current month in UTC
-      const startOfMonth = new Date(Date.UTC(fiscalYear, currentMonth - 1, 1, 0, 0, 0))
-      const endOfMonth = new Date(Date.UTC(fiscalYear, currentMonth, 0, 23, 59, 59, 999))
-      const currentMonthStartISO = startOfMonth.toISOString()
-      const currentMonthEndISO = endOfMonth.toISOString()
+      const currentMonth = now.getMonth() + 1
+      const currentYear = now.getFullYear()
+      const startOfMonthISO = new Date(Date.UTC(currentYear, currentMonth - 1, 1)).toISOString().split("T")[0]
+      const todayISO = now.toISOString().split("T")[0]
 
       // Total Budget
       const { data: budgets } = await supabase
@@ -139,12 +132,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
       setProjectRows(enrichedProjects.sort((a: any, b: any) => b.pct - a.pct))
       setOverspentCount(enrichedProjects.filter((p: any) => p.actual > p.budget).length)
 
-      // Quick stats
-      const { count: unpaidCount } = await supabase.from("invoices")
-        .select("*", { count: "exact", head: true }).eq("company_id", companyId).eq("status", "Unpaid")
-      setUnpaidInvoices(unpaidCount || 0)
-
-      // Receivables total + top 3
+      // Quick stats: Receivables & Payables
       const { data: custBals } = await supabase.from("customers").select("balance").eq("company_id", companyId)
       setTotalReceivables(custBals?.reduce((s, c) => s + (c.balance || 0), 0) || 0)
       const { data: topCusts } = await supabase.from("customers")
@@ -152,7 +140,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .order("balance", { ascending: false }).limit(3)
       setTopReceivables(topCusts || [])
 
-      // Payables total + top 3
       const { data: suppBals } = await supabase.from("suppliers").select("balance").eq("company_id", companyId)
       setTotalPayables(suppBals?.reduce((s, s2) => s + (s2.balance || 0), 0) || 0)
       const { data: topSupps } = await supabase.from("suppliers")
@@ -160,40 +147,61 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .order("balance", { ascending: false }).limit(3)
       setTopPayables(topSupps || [])
 
-      // ── Monthly Spending (FIXED: full ISO timestamps, UTC) ──
-      const { data: monthLines } = await supabase
-        .from("journal_lines")
-        .select("debit, credit, journal_entries!inner(date)")
-        .eq("company_id", companyId)
-        .gte("journal_entries.date", currentMonthStartISO)
-        .lte("journal_entries.date", currentMonthEndISO)
-      const monthTotal = (monthLines || []).reduce((sum, l) => sum + (l.debit || 0) - (l.credit || 0), 0)
-      setMonthlySpending(monthTotal)
+      // ── Monthly Spending (Expense + Fixed Asset accounts) ──
+      const { data: expenseAccounts } = await supabase.from("accounts")
+        .select("id").eq("company_id", companyId).eq("type", "Expense")
+      const { data: fixedAssets } = await supabase.from("accounts")
+        .select("id").eq("company_id", companyId).eq("type", "Asset")
+        .gte("code", "1400").lte("code", "1499")
 
-      // Previous month spending
-      const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1
-      const prevYear = currentMonth === 1 ? fiscalYear - 1 : fiscalYear
-      const startPrevMonth = new Date(Date.UTC(prevYear, prevMonth - 1, 1, 0, 0, 0))
-      const endPrevMonth = new Date(Date.UTC(prevYear, prevMonth, 0, 23, 59, 59, 999))
-      const prevMonthStartISO = startPrevMonth.toISOString()
-      const prevMonthEndISO = endPrevMonth.toISOString()
-      const { data: prevMonthLines } = await supabase
-        .from("journal_lines")
-        .select("debit, credit, journal_entries!inner(date)")
-        .eq("company_id", companyId)
-        .gte("journal_entries.date", prevMonthStartISO)
-        .lte("journal_entries.date", prevMonthEndISO)
-      const prevMonthTotal = (prevMonthLines || []).reduce((sum, l) => sum + (l.debit || 0) - (l.credit || 0), 0)
-      setLastMonthSpending(prevMonthTotal)
-      if (prevMonthTotal > 0) {
-        setSpendingTrend(Math.round(((monthTotal - prevMonthTotal) / prevMonthTotal) * 100))
-      } else if (monthTotal > 0) {
-        setSpendingTrend(100)
+      const accountIds = [
+        ...(expenseAccounts?.map(a => a.id) || []),
+        ...(fixedAssets?.map(a => a.id) || [])
+      ]
+
+      if (accountIds.length > 0) {
+        const { data: monthLines } = await supabase
+          .from("journal_lines")
+          .select("debit, credit, journal_entries!inner(date)")
+          .eq("company_id", companyId)
+          .in("account_id", accountIds)
+          .gte("journal_entries.date", startOfMonthISO)
+          .lte("journal_entries.date", todayISO)
+
+        const monthTotal = (monthLines || []).reduce((sum, l) => sum + (l.debit || 0) - (l.credit || 0), 0)
+        setMonthlySpending(monthTotal)
+
+        // Previous month (last full month)
+        const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1
+        const prevYear = currentMonth === 1 ? currentYear - 1 : currentYear
+        const prevStart = new Date(Date.UTC(prevYear, prevMonth - 1, 1)).toISOString().split("T")[0]
+        const prevEnd = new Date(Date.UTC(prevYear, prevMonth, 0)).toISOString().split("T")[0]
+
+        const { data: prevMonthLines } = await supabase
+          .from("journal_lines")
+          .select("debit, credit, journal_entries!inner(date)")
+          .eq("company_id", companyId)
+          .in("account_id", accountIds)
+          .gte("journal_entries.date", prevStart)
+          .lte("journal_entries.date", prevEnd)
+
+        const prevMonthTotal = (prevMonthLines || []).reduce((sum, l) => sum + (l.debit || 0) - (l.credit || 0), 0)
+        setLastMonthSpending(prevMonthTotal)
+
+        if (prevMonthTotal > 0) {
+          setSpendingTrend(Math.round(((monthTotal - prevMonthTotal) / prevMonthTotal) * 100))
+        } else if (monthTotal > 0) {
+          setSpendingTrend(100)
+        } else {
+          setSpendingTrend(0)
+        }
       } else {
+        setMonthlySpending(0)
+        setLastMonthSpending(0)
         setSpendingTrend(0)
       }
 
-      // ── Top 5 underspent activities (this month) ──
+      // ── Top 5 underspent activities (this month, expense accounts) ──
       const { data: actBudgets } = await supabase
         .from("budgets")
         .select("activity_id, activities(name), budgeted_amount")
@@ -212,12 +220,14 @@ export default function ManagementDashboard({ role }: { role: string }) {
         }
         activityMap[b.activity_id].budget += b.budgeted_amount || 0
       })
+      // Get actuals from expense accounts for the current month
       const { data: actLines } = await supabase
         .from("journal_lines")
         .select("activity_id, debit, credit, journal_entries!inner(date)")
         .eq("company_id", companyId)
-        .gte("journal_entries.date", currentMonthStartISO)
-        .lte("journal_entries.date", currentMonthEndISO)
+        .in("account_id", accountIds)
+        .gte("journal_entries.date", startOfMonthISO)
+        .lte("journal_entries.date", todayISO)
       actLines?.forEach((l: any) => {
         if (!l.activity_id || !activityMap[l.activity_id]) return
         activityMap[l.activity_id].actual += (l.debit || 0) - (l.credit || 0)
@@ -236,7 +246,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .slice(0, 5)
       setUnderspentActivities(underspent)
 
-      // ── Activity health per project (activities >20% below project's own spending %) ──
+      // ── Activity health per project ──
       if (enrichedProjects.length > 0) {
         const projectIds = enrichedProjects.map((p: any) => p.id)
         const { data: actBudgetsAll } = await supabase
@@ -451,18 +461,24 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .kpi-label { text-transform: uppercase; font-size: 0.7rem; font-weight: 700; color: #94A3B8; letter-spacing: 0.04em; }
         .kpi-value { font-size: 1.7rem; font-weight: 700; color: #F1F5F9; line-height: 1.2; }
         .kpi-meta { font-size: 0.8rem; color: #64748B; display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
-        .kpi-extra { font-size: 0.65rem; color: #93C5FD; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .kpi-extra {
+          font-size: 0.65rem; color: #93C5FD; margin-top: 4px;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          max-width: 200px;
+        }
 
         .clickable { color: #93C5FD; text-decoration: underline; cursor: pointer; }
 
-        /* Project row layout: name + 4 inline items */
+        /* Project row layout */
         .project-row {
           display: flex; align-items: center; gap: 0.8rem;
           background: #111827; border-radius: 12px; padding: 0.5rem 1rem;
           border: 1px solid #1E293B; cursor: pointer; margin-bottom: 0.5rem;
         }
         .project-metrics {
-          display: flex; align-items: center; gap: 1rem;
+          display: grid;
+          grid-template-columns: 80px 50px 90px 120px;
+          gap: 0.5rem; align-items: center;
           margin-left: auto;
         }
         .project-metric { font-size: 0.8rem; white-space: nowrap; }
@@ -491,9 +507,16 @@ export default function ManagementDashboard({ role }: { role: string }) {
           margin-bottom: 6px;
         }
         .mini-table-row {
-          display: flex; justify-content: space-between; padding: 3px 0;
+          display: flex; align-items: center; gap: 6px; padding: 4px 0;
           font-size: 0.75rem; color: #E2E8F0;
+          transition: background 0.1s;
         }
+        .mini-table-row:hover { background: #1E293B; border-radius: 4px; padding-left: 4px; padding-right: 4px; }
+        .mini-dot {
+          width: 6px; height: 6px; border-radius: 50%; background: #2DD4BF;
+          flex-shrink: 0;
+        }
+        .mini-amount { margin-left: auto; font-weight: 600; }
 
         @media (max-width: 1100px) {
           .dashboard-grid { grid-template-columns: repeat(3, 1fr); }
@@ -576,7 +599,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
               {spentPct}% of budget
             </div>
             {projectsAbove70.length > 0 && (
-              <div className="kpi-extra">
+              <div className="kpi-extra" title={projectsAbove70.join(", ")}>
                 Projects &gt; 70%: {projectsAbove70.join(", ")}
               </div>
             )}
@@ -630,7 +653,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
               return (
                 <div key={idx} className="project-row" onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}`)}>
                   <div style={{ width: 8, height: 8, borderRadius: "50%", background: p.status === "Overspent" ? "#F87171" : p.status === "Review" ? "#F97316" : p.status === "At Risk" ? "#F97316" : "#2DD4BF", flexShrink: 0 }}></div>
-                  <span style={{ fontWeight: 600, fontSize: "0.85rem", color: "#E2E8F0", marginRight: "auto" }}>{p.name}</span>
+                  <span style={{ fontWeight: 600, fontSize: "0.85rem", color: "#E2E8F0" }}>{p.name}</span>
                   <div className="project-metrics">
                     <span className="project-metric" style={{ fontWeight: 600, color: "#E2E8F0" }}>{formatPKR(p.actual)}</span>
                     <span className="project-metric" style={{ color: p.pct > 100 ? "#F87171" : p.pct > 80 ? "#F97316" : "#2DD4BF" }}>{p.pct}%</span>
@@ -638,12 +661,14 @@ export default function ManagementDashboard({ role }: { role: string }) {
                       padding: "0.1rem 0.6rem", borderRadius: "12px", fontSize: "0.7rem", fontWeight: 700,
                       background: p.status === "Overspent" ? "#fee2e2" : p.status === "Review" ? "#fef3c7" : p.status === "At Risk" ? "#fef3c7" : "#dcfce7",
                       color: p.status === "Overspent" ? "#991b1b" : p.status === "Review" ? "#92400e" : p.status === "At Risk" ? "#92400e" : "#166534",
-                      whiteSpace: "nowrap"
+                      whiteSpace: "nowrap", textAlign: "center"
                     }}>
                       {p.status}
                     </span>
-                    {health && (
-                      <span className="project-metric" style={{ fontSize: "0.65rem", color: "#F97316", maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis" }}>{health.message}</span>
+                    {health ? (
+                      <span className="project-metric" style={{ fontSize: "0.65rem", color: "#F97316", maxWidth: "110px", overflow: "hidden", textOverflow: "ellipsis" }}>{health.message}</span>
+                    ) : (
+                      <span></span>
                     )}
                   </div>
                 </div>
@@ -700,12 +725,11 @@ export default function ManagementDashboard({ role }: { role: string }) {
                     </span>
                     <span style={{ color: "#E2E8F0" }}>{formatPKR(act.budget)}</span>
                     <span style={{ color: "#E2E8F0" }}>{formatPKR(act.actual)}</span>
-                    {/* Progress bar for unspent */}
                     <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                       <div style={{ flex: 1, height: 5, background: "#334155", borderRadius: 10, overflow: "hidden" }}>
                         <div style={{ width: `${Math.min(act.pct, 100)}%`, height: "100%", background: "#2DD4BF", borderRadius: 10 }}></div>
                       </div>
-                      <span style={{ fontSize: "0.7rem", color: "#2DD4BF", fontWeight: 600 }}>{formatPKR(act.remaining)}</span>
+                      <span style={{ fontSize: "0.7rem", color: "#2DD4BF", fontWeight: 600, whiteSpace: "nowrap" }}>{act.pct}%</span>
                     </div>
                   </div>
                 ))}
@@ -718,13 +742,14 @@ export default function ManagementDashboard({ role }: { role: string }) {
             {topReceivables.length > 0 && (
               <div style={{ marginTop: 8 }}>
                 <div className="mini-table-header">
-                  <span>Customer</span>
+                  <span>Clients</span>
                   <span>Balance</span>
                 </div>
                 {topReceivables.map((cust: any) => (
                   <div key={cust.id} className="mini-table-row">
+                    <span className="mini-dot" style={{ background: "#2DD4BF" }}></span>
                     <span>{cust.name}</span>
-                    <span style={{ fontWeight: 600 }}>{formatPKR(cust.balance)}</span>
+                    <span className="mini-amount">{formatPKR(cust.balance)}</span>
                   </div>
                 ))}
               </div>
@@ -736,13 +761,14 @@ export default function ManagementDashboard({ role }: { role: string }) {
             {topPayables.length > 0 && (
               <div style={{ marginTop: 8 }}>
                 <div className="mini-table-header">
-                  <span>Supplier</span>
+                  <span>Vendors</span>
                   <span>Balance</span>
                 </div>
                 {topPayables.map((supp: any) => (
                   <div key={supp.id} className="mini-table-row">
+                    <span className="mini-dot" style={{ background: "#F97316" }}></span>
                     <span>{supp.name}</span>
-                    <span style={{ fontWeight: 600 }}>{formatPKR(supp.balance)}</span>
+                    <span className="mini-amount">{formatPKR(supp.balance)}</span>
                   </div>
                 ))}
               </div>
