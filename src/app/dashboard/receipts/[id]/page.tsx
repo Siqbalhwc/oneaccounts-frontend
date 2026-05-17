@@ -33,7 +33,6 @@ interface Bank {
   id: number
   bank_name: string
   account_number?: string
-  accounts?: { code: string }
 }
 
 interface JournalLine {
@@ -82,14 +81,14 @@ export default function ReceiptDetailPage() {
         setCustomer(cust)
       }
 
-      // 3. Bank
+      // 3. Bank – simple query, no nested join
       if (rec.bank_account_id) {
         const { data: bk } = await supabase
           .from("bank_accounts")
-          .select("id, bank_name, account_number, accounts(code)")
+          .select("id, bank_name, account_number")
           .eq("id", rec.bank_account_id)
           .single()
-        setBank(bk)
+        setBank(bk ? { id: bk.id, bank_name: bk.bank_name, account_number: bk.account_number } : null)
       }
 
       // 4. Journal lines
@@ -143,8 +142,6 @@ export default function ReceiptDetailPage() {
         .value { font-size: 14px; font-weight: 500; color: #E2E8F0; }
         .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid #334155; background: transparent; color: #CBD5E1; font-family: inherit; text-decoration: none; }
         .btn:hover { background: #1E293B; }
-        .btn-primary { background: #1E3A8A; color: white; border-color: #1E3A8A; }
-        .btn-primary:hover { background: #1E40AF; }
         .btn-success { background: #25D366; color: white; border-color: #25D366; }
         .btn-success:hover { background: #22C55E; }
         table { width: 100%; border-collapse: collapse; margin-top: 12px; }
