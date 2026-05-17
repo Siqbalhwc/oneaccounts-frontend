@@ -189,7 +189,7 @@ export default function CustomersPage() {
                 <span style={{ textAlign: "right", fontWeight: 600, color: cust.balance >= 0 ? "#10B981" : "#EF4444" }}>
                   PKR {(cust.balance || 0).toLocaleString()}
                 </span>
-                <button className="btn-icon" onClick={() => router.push(`/dashboard/customers/${cust.id}`)} title="View details">
+                <button className="btn-icon" onClick={() => router.push(`/dashboard/reports/customer-ledger?customerId=${cust.id}`)} title="View ledger">
                   <Eye size={14} />
                 </button>
               </div>
