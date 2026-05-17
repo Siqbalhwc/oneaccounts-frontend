@@ -135,8 +135,8 @@ export default function ReceiptsPage() {
     <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
       <style>{`
         .card { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.2); overflow: hidden; }
-        .header-row { display: grid; grid-template-columns: 130px 90px 1fr 100px 110px 80px 80px; padding: 12px 20px; background: #1E293B; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94A3B8; border-bottom: 1px solid #1E293B; }
-        .data-row { display: grid; grid-template-columns: 130px 90px 1fr 100px 110px 80px 80px; padding: 10px 20px; border-bottom: 1px solid #1E293B; font-size: 13px; align-items: center; transition: background 0.15s; }
+        .header-row { display: grid; grid-template-columns: 130px 90px 1fr 115px 125px 75px 75px; padding: 12px 20px; background: #1E293B; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94A3B8; border-bottom: 1px solid #1E293B; }
+        .data-row { display: grid; grid-template-columns: 130px 90px 1fr 115px 125px 75px 75px; padding: 10px 20px; border-bottom: 1px solid #1E293B; font-size: 13px; align-items: center; transition: background 0.15s; }
         .data-row:hover { background: #1E293B; }
         .data-row:last-child { border-bottom: none; }
         .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid #334155; background: transparent; color: #CBD5E1; }
@@ -219,7 +219,7 @@ export default function ReceiptsPage() {
                 <span>{custName}</span>
                 <span style={{ fontWeight: 600, color: "#10B981", textAlign: "right" }}>PKR {rec.amount?.toLocaleString()}</span>
                 <span className="nowrap">{rec.payment_method || "—"}</span>
-                <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/${rec.id}`)} title="View receipt">
+                <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/${rec.id}`)} title="View receipt" style={{ marginLeft: 4 }}>
                   <Eye size={14} />
                 </button>
                 <button className="btn-icon" onClick={() => sendWhatsApp(rec)} title="Send via WhatsApp" style={{ color: "#25D366" }}>
