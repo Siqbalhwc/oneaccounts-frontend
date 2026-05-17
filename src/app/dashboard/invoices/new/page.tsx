@@ -123,7 +123,16 @@ export default function NewInvoicePage() {
       })
   }, [editId, companyId, customers])
 
-  // ── Reload customers (preserves search) ──────────────────────────────
+  // ── 3. Auto‑update due date when invoice date or customer changes ────
+  useEffect(() => {
+    if (!invoiceDate || !selectedCustomer) return
+    const days = getCreditDays(selectedCustomer.payment_terms)
+    const dt = new Date(invoiceDate)
+    dt.setDate(dt.getDate() + days)
+    setDueDate(dt.toISOString().split("T")[0])
+  }, [invoiceDate, selectedCustomer])
+
+  // ── Reload customers ────────────────────────────────────────────────
   const refreshCustomers = () => {
     if (!companyId) return
     setRefreshingCustomers(true)
@@ -153,14 +162,7 @@ export default function NewInvoicePage() {
     setSelectedCustomer(c)
     setCustomerSearch(c.name)
     setShowCustomerList(false)
-
-    // Auto‑set due date based on credit terms
-    if (invoiceDate) {
-      const days = getCreditDays(c.payment_terms)
-      const dt = new Date(invoiceDate)
-      dt.setDate(dt.getDate() + days)
-      setDueDate(dt.toISOString().split("T")[0])
-    }
+    // Due date will be set by the useEffect above
   }
 
   const clearCustomer = () => {
@@ -417,6 +419,15 @@ export default function NewInvoicePage() {
           text-transform: uppercase; color: #94A3B8; padding-bottom: 6px;
         }
 
+        /* Uneditable cells to look like inputs */
+        .inv-cell {
+          height: 38px; border: 1.5px solid #334155;
+          border-radius: 8px; padding: 0 12px; font-size: 13px;
+          font-family: inherit; background: #1E293B; color: #F1F5F9;
+          display: flex; align-items: center; box-sizing: border-box;
+          overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+        }
+
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
         .cust-dropdown {
@@ -668,9 +679,10 @@ export default function NewInvoicePage() {
                       <ImageIcon size={14} color="#94A3B8" />
                     )}
                   </div>
-                  <span style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {/* Product name styled like an input */}
+                  <div className="inv-cell" style={{ paddingLeft: 12 }}>
                     {item.product_name || "—"}
-                  </span>
+                  </div>
                   <input
                     className="inv-input"
                     style={{ height: 34, fontSize: 12 }}
@@ -680,9 +692,10 @@ export default function NewInvoicePage() {
                   />
                   <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
                   <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                  <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>
+                  {/* Total styled like an input */}
+                  <div className="inv-cell" style={{ justifyContent: "flex-end", fontWeight: 600 }}>
                     PKR {item.total.toLocaleString()}
-                  </span>
+                  </div>
                   <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}>
                     <Trash2 size={12} />
                   </button>
