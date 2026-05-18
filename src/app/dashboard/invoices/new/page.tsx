@@ -381,7 +381,7 @@ export default function NewInvoicePage() {
   return (
     <div style={{ padding: "16px", background: "#0B1120", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
       <style>{`
-        .inv-shell { max-width: 100%; margin: 0 auto; }
+        .inv-shell { width: 100%; margin: 0; }
         .inv-title { font-size: 18px; font-weight: 700; color: #F1F5F9; }
         .inv-card {
           background: #111827; border-radius: 12px; border: 1px solid #1E293B;
