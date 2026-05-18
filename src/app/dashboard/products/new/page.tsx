@@ -8,7 +8,7 @@ import { ArrowLeft, Plus, CheckCircle, ImagePlus, Save } from "lucide-react"
 export default function ProductFormPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const editId = searchParams.get("id")   // if present → edit mode
+  const editId = searchParams.get("id")
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,7 +28,11 @@ export default function ProductFormPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  // ── Load company & generate code (new) / fetch product (edit) ──────
+  // For summary calculation
+  const qty = parseFloat(openingQty) || 0
+  const cost = parseFloat(costPrice) || 0
+  const totalCost = qty * cost
+
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
@@ -36,7 +40,6 @@ export default function ProductFormPage() {
       setCompanyId(cid)
 
       if (editId) {
-        // Fetch existing product
         const { data: product } = await supabase
           .from("products")
           .select("*")
@@ -53,7 +56,6 @@ export default function ProductFormPage() {
           if (product.image_path) setImagePreview(product.image_path)
         }
       } else {
-        // Generate next product code
         const { data } = await supabase
           .from("products")
           .select("code")
@@ -121,7 +123,6 @@ export default function ProductFormPage() {
     }
 
     if (editId) {
-      // Update existing product
       const { error: updateErr } = await supabase
         .from("products")
         .update(payload)
@@ -130,7 +131,6 @@ export default function ProductFormPage() {
       if (updateErr) { setError(updateErr.message); setLoading(false); return }
       setFlash("✅ Product updated successfully!")
     } else {
-      // Insert new product
       const { error: insertErr } = await supabase
         .from("products")
         .insert(payload)
@@ -139,7 +139,6 @@ export default function ProductFormPage() {
     }
 
     if (!editId) {
-      // Reset form only for new
       setName("")
       setSalePrice("")
       setCostPrice("")
@@ -147,7 +146,6 @@ export default function ProductFormPage() {
       setImageFile(null)
       setImagePreview(null)
       setExistingImageUrl(null)
-      // Generate next code
       const { data } = await supabase
         .from("products")
         .select("code")
@@ -174,7 +172,7 @@ export default function ProductFormPage() {
       <style>{`
         .card {
           background: #111827; border: 1px solid #1E293B; border-radius: 12px;
-          padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+          padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
         }
         .label { font-size: 10px; font-weight: 600; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block; }
         .input, .select {
@@ -191,9 +189,9 @@ export default function ProductFormPage() {
         }
         .btn:hover { background: #1E293B; }
         .inline-group { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        @media (max-width: 600px) {
-          .inline-group { grid-template-columns: 1fr; }
-        }
+        .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
+        @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
+        @media (max-width: 600px) { .inline-group { grid-template-columns: 1fr; } }
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
@@ -212,49 +210,68 @@ export default function ProductFormPage() {
       {flash && <div style={{ background: "#064E3B", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
 
       <form onSubmit={handleSubmit}>
-        <div className="card">
-          <div style={{ marginBottom: 16 }}>
-            <label className="label">Product Code</label>
-            <input className="input" value={productCode} disabled />
-          </div>
-
-          <div style={{ marginBottom: 16 }}>
-            <label className="label">Product Name *</label>
-            <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Widget A" />
-          </div>
-
-          <div className="inline-group" style={{ marginBottom: 16 }}>
-            <div>
-              <label className="label">Sale Price (PKR)</label>
-              <input className="input" type="number" value={salePrice} onChange={e => setSalePrice(e.target.value)} placeholder="0" />
+        <div className="header-grid">
+          {/* Left: Form fields */}
+          <div className="card">
+            <div style={{ marginBottom: 16 }}>
+              <label className="label">Product Code</label>
+              <input className="input" value={productCode} disabled />
             </div>
-            <div>
-              <label className="label">Cost Price (PKR)</label>
-              <input className="input" type="number" value={costPrice} onChange={e => setCostPrice(e.target.value)} placeholder="0" />
+
+            <div style={{ marginBottom: 16 }}>
+              <label className="label">Product Name *</label>
+              <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Widget A" />
+            </div>
+
+            <div className="inline-group" style={{ marginBottom: 16 }}>
+              <div>
+                <label className="label">Sale Price (PKR)</label>
+                <input className="input" type="number" value={salePrice} onChange={e => setSalePrice(e.target.value)} placeholder="0" />
+              </div>
+              <div>
+                <label className="label">Cost Price (PKR)</label>
+                <input className="input" type="number" value={costPrice} onChange={e => setCostPrice(e.target.value)} placeholder="0" />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label className="label">Opening Quantity</label>
+              <input className="input" type="number" value={openingQty} onChange={e => setOpeningQty(e.target.value)} placeholder="0" />
+            </div>
+
+            <div style={{ marginBottom: 8 }}>
+              <label className="label">Product Image (optional)</label>
+              <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <label className="btn" style={{ cursor: "pointer" }}>
+                  <ImagePlus size={14} /> Choose File
+                  <input type="file" accept="image/*" onChange={handleImageChange} style={{ display: "none" }} />
+                </label>
+                {imagePreview && (
+                  <img src={imagePreview} alt="Preview" style={{ maxWidth: 100, maxHeight: 100, borderRadius: 8, objectFit: "cover" }} />
+                )}
+              </div>
             </div>
           </div>
 
-          <div style={{ marginBottom: 16 }}>
-            <label className="label">Opening Quantity</label>
-            <input className="input" type="number" value={openingQty} onChange={e => setOpeningQty(e.target.value)} placeholder="0" />
-          </div>
-
-          <div style={{ marginBottom: 20 }}>
-            <label className="label">Product Image (optional)</label>
-            <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-              <label className="btn" style={{ cursor: "pointer" }}>
-                <ImagePlus size={14} /> Choose File
-                <input type="file" accept="image/*" onChange={handleImageChange} style={{ display: "none" }} />
-              </label>
-              {imagePreview && (
-                <img src={imagePreview} alt="Preview" style={{ maxWidth: 100, maxHeight: 100, borderRadius: 8, objectFit: "cover" }} />
-              )}
+          {/* Right: Summary + Save */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div className="card">
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: "#F1F5F9", margin: "0 0 10px" }}>Summary</h3>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
+                <span>Units in Hand</span>
+                <span>{qty.toLocaleString()}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
+                <span>Total Cost</span>
+                <span style={{ color: "#F59E0B" }}>PKR {totalCost.toLocaleString()}</span>
+              </div>
+            </div>
+            <div className="card">
+              <button className="btn" type="submit" disabled={loading} style={{ width: "100%", justifyContent: "center" }}>
+                {loading ? "Saving..." : editId ? <><Save size={16} /> Update Product</> : <><Plus size={16} /> Create Product</>}
+              </button>
             </div>
           </div>
-
-          <button className="btn" type="submit" disabled={loading} style={{ width: "100%", justifyContent: "center" }}>
-            {loading ? "Saving..." : editId ? <><Save size={16} /> Update Product</> : <><Plus size={16} /> Create Product</>}
-          </button>
         </div>
       </form>
     </div>
