@@ -13,6 +13,10 @@ interface InvoiceItem {
   qty: number
   unit_price: number
   total: number
+  product_id: number | null
+  product_code?: string
+  product_name?: string
+  product_image?: string | null
 }
 
 interface Invoice {
@@ -90,10 +94,7 @@ export default function InvoiceDetailPage() {
       .eq("company_id", companyId)
       .single()
       .then(async ({ data }) => {
-        if (!data) {
-          setLoading(false)
-          return
-        }
+        if (!data) { setLoading(false); return }
 
         const inv: Invoice = data
 
@@ -107,13 +108,49 @@ export default function InvoiceDetailPage() {
           inv.customer = cust || undefined
         }
 
-        // 3. Load items – WITHOUT company_id filter (safe because invoice already scoped)
+        // 3. Load items
         const { data: items } = await supabase
           .from("invoice_items")
           .select("*")
           .eq("invoice_id", inv.id)
 
-        inv.items = items || []
+        // Enrich with product data
+        if (items && items.length > 0) {
+          const productIds = items
+            .map((i: any) => i.product_id)
+            .filter((id: any) => id != null)
+
+          if (productIds.length > 0) {
+            const { data: products } = await supabase
+              .from("products")
+              .select("id, code, name, image_path")
+              .in("id", productIds)
+
+            const productMap: Record<number, any> = {}
+            if (products) {
+              products.forEach((p: any) => { productMap[p.id] = p })
+            }
+
+            inv.items = items.map((item: any) => {
+              const prod = productMap[item.product_id]
+              return {
+                ...item,
+                product_code: prod?.code || "",
+                product_name: prod?.name || "",
+                product_image: prod?.image_path || null,
+              }
+            })
+          } else {
+            inv.items = items.map((item: any) => ({
+              ...item,
+              product_code: "",
+              product_name: "",
+              product_image: null,
+            }))
+          }
+        } else {
+          inv.items = []
+        }
 
         setInvoice(inv)
         setLoading(false)
@@ -139,7 +176,7 @@ export default function InvoiceDetailPage() {
         }
       })
 
-    // 5. Company settings (for PDF)
+    // 5. Company settings
     supabase
       .from("company_settings")
       .select("company_name, address, phone, email, tagline, logo_url, business_type")
@@ -195,9 +232,9 @@ export default function InvoiceDetailPage() {
         qty: item.qty || 0,
         unit_price: item.unit_price || 0,
         total: item.total || 0,
-        image_path: null,
-        product_id: null,
-        product_name: "",
+        image_path: item.product_image || null,
+        product_id: item.product_code || null,
+        product_name: item.product_name || "",
       })),
       subtotal: subTotal,
       total: invoice.total,
@@ -252,7 +289,6 @@ export default function InvoiceDetailPage() {
         }
       `}</style>
 
-      {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button className="btn" onClick={() => router.push("/dashboard/invoices")}>
@@ -278,7 +314,6 @@ export default function InvoiceDetailPage() {
         </div>
       </div>
 
-      {/* Invoice Details */}
       <div className="card">
         <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>Invoice Details</h3>
         <div className="row"><span className="label">Date</span><span className="value">{invoice.date}</span></div>
@@ -298,13 +333,13 @@ export default function InvoiceDetailPage() {
         {invoice.notes && <div className="row"><span className="label">Notes</span><span className="value">{invoice.notes}</span></div>}
       </div>
 
-      {/* Items Table */}
       {invoice.items && invoice.items.length > 0 && (
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>Items</h3>
           <table>
             <thead>
               <tr>
+                <th>Product</th>
                 <th>Description</th>
                 <th style={{ textAlign: "center" }}>Qty</th>
                 <th style={{ textAlign: "right" }}>Unit Price</th>
@@ -314,10 +349,18 @@ export default function InvoiceDetailPage() {
             <tbody>
               {invoice.items.map(item => (
                 <tr key={item.id}>
-                  <td>{item.description}</td>
+                  <td style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {item.product_image ? (
+                      <img src={item.product_image} alt="" style={{ width: 28, height: 28, objectFit: "cover", borderRadius: 4 }} />
+                    ) : (
+                      <div style={{ width: 28, height: 28, background: "#1E293B", borderRadius: 4 }} />
+                    )}
+                    <span style={{ fontWeight: 600 }}>{item.product_code ? `${item.product_code} – ${item.product_name || ""}` : item.description}</span>
+                  </td>
+                  <td style={{ color: "#94A3B8" }}>{item.product_code ? item.description : ""}</td>
                   <td style={{ textAlign: "center" }}>{item.qty}</td>
                   <td style={{ textAlign: "right" }}>PKR {item.unit_price?.toLocaleString()}</td>
-                  <td style={{ textAlign: "right", fontWeight: 600, color: "#E2E8F0" }}>PKR {item.total?.toLocaleString()}</td>
+                  <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {item.total?.toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -325,7 +368,6 @@ export default function InvoiceDetailPage() {
         </div>
       )}
 
-      {/* Journal Entry */}
       {journalLines.length > 0 && (
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>📒 Journal Entry</h3>
@@ -361,7 +403,6 @@ export default function InvoiceDetailPage() {
         </div>
       )}
 
-      {/* Change History */}
       {invoice && (
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>
