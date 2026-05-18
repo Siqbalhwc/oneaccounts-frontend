@@ -45,8 +45,8 @@ export interface InvoicePDFData {
 }
 
 // Navy blue colour palette
-const NAVY = [15, 23, 42]          // #0F172A
-const NAVY_LIGHT = [30, 58, 138]   // #1E3A8A
+const NAVY = [15, 23, 42] as const          // #0F172A
+const NAVY_LIGHT = [30, 58, 138] as const   // #1E3A8A
 const WHITE = 255
 const GRAY = 136
 
