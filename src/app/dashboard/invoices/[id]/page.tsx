@@ -204,7 +204,7 @@ export default function InvoiceDetailPage() {
       .then(({ data }) => {
         if (data) {
           setCompanySettings({
-            name: data.company_name || data.name || "",
+            name: data.company_name || "",
             address: data.address || "",
             phone: data.phone || "",
             email: data.email || "",
