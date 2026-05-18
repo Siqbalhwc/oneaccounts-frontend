@@ -206,7 +206,7 @@ export function generateInvoicePDF(data: InvoicePDFData) {
     body: tableRows.map(row => tableColumns.map(c => (row as any)[c.dataKey])),
     margin: { left: margin, right: margin },
     styles: { fontSize: 9, cellPadding: 4 },
-    headStyles: { fillColor: NAVY_LIGHT, textColor: WHITE, fontStyle: "bold" },
+    headStyles: { fillColor: NAVY_LIGHT as [number, number, number], textColor: WHITE, fontStyle: "bold" },
     columnStyles: tableColumns.reduce((acc, col, i) => {
       if (col.width) acc[i] = { cellWidth: col.width }
       if (col.dataKey === "amount" || col.dataKey === "rate") acc[i] = { ...acc[i], halign: "right" }
