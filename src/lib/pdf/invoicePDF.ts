@@ -203,7 +203,7 @@ export function generateInvoicePDF(data: InvoicePDFData) {
   autoTable(doc, {
     startY: y,
     head: [tableColumns.map(c => c.header)],
-    body: tableRows.map(row => tableColumns.map(c => row[c.dataKey])),
+    body: tableRows.map(row => tableColumns.map(c => (row as any)[c.dataKey])),
     margin: { left: margin, right: margin },
     styles: { fontSize: 9, cellPadding: 4 },
     headStyles: { fillColor: NAVY_LIGHT, textColor: WHITE, fontStyle: "bold" },
