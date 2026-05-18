@@ -13,11 +13,6 @@ interface InvoiceItem {
   qty: number
   unit_price: number
   total: number
-  product_id: number | null
-  // enriched fields from products table
-  product_code?: string
-  product_name?: string
-  product_image?: string | null
 }
 
 interface Invoice {
@@ -94,88 +89,38 @@ export default function InvoiceDetailPage() {
       .eq("id", invoiceId)
       .eq("company_id", companyId)
       .single()
-      .then(({ data }) => {
-        if (!data) { setLoading(false); return }
+      .then(async ({ data }) => {
+        if (!data) {
+          setLoading(false)
+          return
+        }
 
         const inv: Invoice = data
 
-        // 2. Load customer
-        const loadItems = () => {
-          supabase
-            .from("invoice_items")
-            .select("*")
-            .eq("invoice_id", inv.id)
-            .eq("company_id", companyId)
-            .then(({ data: items }) => {
-              if (!items || items.length === 0) {
-                inv.items = []
-                setInvoice(inv)
-                setLoading(false)
-                return
-              }
-
-              // Gather product IDs
-              const productIds = items
-                .map((i: any) => i.product_id)
-                .filter((id: any) => id != null)
-
-              if (productIds.length === 0) {
-                // No products linked – keep items as they are
-                inv.items = items.map((i: any) => ({
-                  ...i,
-                  product_code: "",
-                  product_name: "",
-                  product_image: null,
-                }))
-                setInvoice(inv)
-                setLoading(false)
-                return
-              }
-
-              // Fetch products for enrichment
-              supabase
-                .from("products")
-                .select("id, code, name, image_path")
-                .in("id", productIds)
-                .then(({ data: products }) => {
-                  const productMap: Record<number, any> = {}
-                  if (products) {
-                    products.forEach((p: any) => {
-                      productMap[p.id] = p
-                    })
-                  }
-
-                  inv.items = items.map((item: any) => {
-                    const prod = productMap[item.product_id]
-                    return {
-                      ...item,
-                      product_code: prod?.code || "",
-                      product_name: prod?.name || "",
-                      product_image: prod?.image_path || null,
-                    }
-                  })
-                  setInvoice(inv)
-                  setLoading(false)
-                })
-            })
-        }
-
-               if (inv.party_id) {
-          supabase
+        // 2. Load customer (if party_id exists)
+        if (inv.party_id) {
+          const { data: cust } = await supabase
             .from("customers")
             .select("name, code, phone, country_code, address, email")
             .eq("id", inv.party_id)
             .single()
-            .then(({ data: cust }) => {
-              inv.customer = cust || undefined
-              loadItems()
-            })
-        } else {
-          loadItems()
+          inv.customer = cust || undefined
         }
+
+        // 3. Load items
+        const { data: items } = await supabase
+          .from("invoice_items")
+          .select("*")
+          .eq("invoice_id", inv.id)
+          .eq("company_id", companyId)
+
+        inv.items = items || []
+
+        setInvoice(inv)
+        setLoading(false)
       })
 
-    // 3. Load journal lines
+    // 4. Load journal lines
     supabase
       .from("journal_lines")
       .select("account_id, debit, credit, accounts(code, name)")
@@ -195,7 +140,7 @@ export default function InvoiceDetailPage() {
         }
       })
 
-    // 4. Company settings
+    // 5. Company settings (for PDF)
     supabase
       .from("company_settings")
       .select("company_name, address, phone, email, tagline, logo_url, business_type")
@@ -225,15 +170,6 @@ export default function InvoiceDetailPage() {
     return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
   }
 
-  const getReminderLink = () => {
-    if (!invoice || invoice.status !== "Overdue" || !invoice.customer) return ""
-    const code = (invoice.customer.country_code || "+92").replace(/\D/g, "")
-    const phone = (invoice.customer.phone || "").replace(/\D/g, "")
-    if (!phone) return ""
-    const msg = `Dear ${invoice.customer.name},\n\nThis is a friendly reminder that your invoice ${invoice.invoice_no} for PKR ${invoice.total?.toLocaleString()} is overdue since ${invoice.due_date}. Please arrange payment at your earliest convenience.\n\nThank you.\n— OneAccounts`
-    return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
-  }
-
   const handlePrintPDF = async () => {
     if (!invoice) return
     const customer = invoice.customer
@@ -250,8 +186,6 @@ export default function InvoiceDetailPage() {
       invoiceNo: invoice.invoice_no,
       date: invoice.date,
       dueDate: invoice.due_date,
-      reference: invoice.reference,
-      notes: invoice.notes,
       customerName: customer?.name || "Unknown",
       customerAddress: customer?.address || "",
       customerPhone: customer?.phone || "",
@@ -262,9 +196,9 @@ export default function InvoiceDetailPage() {
         qty: item.qty || 0,
         unit_price: item.unit_price || 0,
         total: item.total || 0,
-        image_path: item.product_image || null,
-        product_id: item.product_code || null,
-        product_name: item.product_name || "",
+        image_path: null,
+        product_id: null,
+        product_name: "",
       })),
       subtotal: subTotal,
       total: invoice.total,
@@ -281,7 +215,6 @@ export default function InvoiceDetailPage() {
 
   const balanceDue = invoice.total - (invoice.paid || 0)
   const waLink = getWhatsAppLink()
-  const remindLink = getReminderLink()
 
   const totalDebit = journalLines.reduce((s, l) => s + l.debit, 0)
   const totalCredit = journalLines.reduce((s, l) => s + l.credit, 0)
@@ -303,8 +236,6 @@ export default function InvoiceDetailPage() {
         .btn-primary:hover { background: #1E40AF; }
         .btn-success { background: #25D366; color: white; border-color: #25D366; }
         .btn-success:hover { background: #22C55E; }
-        .btn-warning { background: #F59E0B; color: white; border-color: #F59E0B; }
-        .btn-warning:hover { background: #D97706; }
         .badge {
           display: inline-block;
           padding: 2px 10px;
@@ -337,11 +268,6 @@ export default function InvoiceDetailPage() {
           <button className="btn" onClick={() => router.push(`/dashboard/invoices/new?id=${invoice.id}`)}>
             ✏️ Edit
           </button>
-          {remindLink && (
-            <a href={remindLink} target="_blank" rel="noopener noreferrer" className="btn btn-warning">
-              <Send size={14} /> Remind
-            </a>
-          )}
           {waLink && (
             <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success">
               <Send size={14} /> WhatsApp
@@ -386,10 +312,7 @@ export default function InvoiceDetailPage() {
             <tbody>
               {invoice.items.map(item => (
                 <tr key={item.id}>
-                  <td>
-                    <div>{item.description}</div>
-                    {item.product_code && <div style={{ fontSize: 11, color: "#93C5FD" }}>{item.product_code} – {item.product_name}</div>}
-                  </td>
+                  <td>{item.description}</td>
                   <td style={{ textAlign: "center" }}>{item.qty}</td>
                   <td style={{ textAlign: "right" }}>PKR {item.unit_price?.toLocaleString()}</td>
                   <td style={{ textAlign: "right", fontWeight: 600, color: "#E2E8F0" }}>PKR {item.total?.toLocaleString()}</td>
@@ -400,7 +323,7 @@ export default function InvoiceDetailPage() {
         </div>
       )}
 
-      {/* Journal Entry (Head Dr / Head Cr) */}
+      {/* Journal Entry */}
       {journalLines.length > 0 && (
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>📒 Journal Entry</h3>
