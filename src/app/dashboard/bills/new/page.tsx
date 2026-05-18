@@ -56,7 +56,7 @@ export default function NewBillPage() {
   const [projectCache, setProjectCache] = useState<Record<number, { id: number | null; name: string }>>({})
   const [donorCache, setDonorCache] = useState<Record<number, { id: number | null; name: string }>>({})
 
-  // Budget info per activity + location + account
+  // Budget info per activity+account
   const [budgetInfo, setBudgetInfo] = useState<Record<string, { budget: number; spent: number; available: number; hasBudget: boolean }>>({})
   const [budgetError, setBudgetError] = useState("")
 
@@ -223,16 +223,15 @@ export default function NewBillPage() {
     } catch { /* ignore */ }
   }
 
-  // ── Fetch budget for activity + location + account ──
-  const fetchBudget = async (activityId: number, locationId: number, accountId: number) => {
-    const key = `${activityId}_${locationId}_${accountId}`
+  // ── Fetch budget for activity + account ──
+  const fetchBudget = async (activityId: number, accountId: number) => {
+    const key = `${activityId}_${accountId}`
     if (budgetInfo[key]) return
 
     const { data: budgetRows } = await supabase.from("budgets")
       .select("budgeted_amount")
       .eq("company_id", companyId)
       .eq("activity_id", activityId)
-      .eq("location_id", locationId)
       .eq("account_id", accountId)
       .eq("fiscal_year", fiscalYear)
       .is("month", null)
@@ -242,13 +241,12 @@ export default function NewBillPage() {
       .select("debit, credit")
       .eq("company_id", companyId)
       .eq("activity_id", activityId)
-      .eq("location_id", locationId)
       .eq("account_id", accountId)
 
     const spent = (spentRows || []).reduce((sum, line) => sum + (line.debit || 0) - (line.credit || 0), 0)
     const budget = budgetRows?.budgeted_amount || 0
     const available = budget - spent
-    const hasBudget = budgetRows !== null
+    const hasBudget = budgetRows !== null   // ← only true if a budget row exists
 
     setBudgetInfo(prev => ({ ...prev, [key]: { budget, spent, available, hasBudget } }))
   }
@@ -296,13 +294,8 @@ export default function NewBillPage() {
     if (field === "activity_id" && value) {
       fetchProjectAndDonor(Number(value))
     }
-    if ((field === "activity_id" || field === "account_id" || field === "location_id") &&
-        updated[idx].activity_id && updated[idx].location_id && updated[idx].account_id) {
-      fetchBudget(
-        Number(updated[idx].activity_id),
-        Number(updated[idx].location_id),
-        Number(updated[idx].account_id)
-      )
+    if ((field === "activity_id" || field === "account_id") && updated[idx].activity_id && updated[idx].account_id) {
+      fetchBudget(Number(updated[idx].activity_id), Number(updated[idx].account_id))
     }
     setItems(updated)
     checkBudgetOverrun(updated)
@@ -313,10 +306,10 @@ export default function NewBillPage() {
   const checkBudgetOverrun = (currentItems: any[]) => {
     let overBudget = false
     for (const item of currentItems) {
-      if (!item.product_id && item.activity_id && item.location_id && item.account_id) {
-        const key = `${item.activity_id}_${item.location_id}_${item.account_id}`
+      if (!item.product_id && item.activity_id && item.account_id) {
+        const key = `${item.activity_id}_${item.account_id}`
         const info = budgetInfo[key]
-        // Only flag if a budget row actually exists for this combination AND the amount exceeds it
+        // Only flag if a budget row actually exists for this combination
         if (info && info.hasBudget && item.total > info.available) {
           overBudget = true
           break
@@ -378,7 +371,7 @@ export default function NewBillPage() {
     }
 
     if (budgetError) {
-      setError("Cannot save: some lines exceed the available budget. Adjust amounts or select a different activity/location.")
+      setError("Cannot save: some lines exceed the available budget. Adjust amounts or select a different activity.")
       return
     }
 
@@ -437,7 +430,8 @@ export default function NewBillPage() {
     }
   }
 
-  const handleBeforeSavePdf = () => {
+  // ── PDF Preview (with await) ──
+  const handleBeforeSavePdf = async () => {
     if (!selectedSupplier) return
     const billNo = editId ? selectedSupplier.code + "-EDIT" : "PREVIEW"
     const pdfData = {
@@ -455,7 +449,7 @@ export default function NewBillPage() {
       subtotal: totalAmount,
       total: totalAmount,
     }
-    const doc = generateInvoicePDF(pdfData)
+    const doc = await generateInvoicePDF(pdfData)
     doc.save(`bill-preview-${billNo}.pdf`)
   }
 
@@ -731,9 +725,7 @@ export default function NewBillPage() {
                 <span></span>
               </div>
               {items.map((item, idx) => {
-                const budgetKey = item.activity_id && item.location_id && item.account_id
-                  ? `${item.activity_id}_${item.location_id}_${item.account_id}`
-                  : null
+                const budgetKey = item.activity_id && item.account_id ? `${item.activity_id}_${item.account_id}` : null
                 const budgetData = budgetKey ? budgetInfo[budgetKey] : null
                 return (
                   <div key={idx}>
@@ -787,12 +779,6 @@ export default function NewBillPage() {
                         <span style={{ color: budgetData.available < item.total ? "#EF4444" : "#10B981" }}>
                           Available: PKR {budgetData.available.toLocaleString()}
                         </span>
-                      </div>
-                    )}
-                    {/* If no budget row exists, show nothing or 0 */}
-                    {!budgetData && item.activity_id && item.location_id && item.account_id && (
-                      <div style={{ fontSize: 10, color: "#64748B", marginLeft: 8, padding: "2px 0" }}>
-                        Available: PKR 0 (no budget set)
                       </div>
                     )}
                   </div>
