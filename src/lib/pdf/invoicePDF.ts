@@ -75,7 +75,7 @@ export function generateInvoicePDF(data: InvoicePDFData) {
     doc.setTextColor(0, 0, 0) // reset
   }
 
-  const drawLine = (yPos: number, color: number[] = NAVY_LIGHT) => {
+  const drawLine = (yPos: number, color: readonly number[] = NAVY_LIGHT) => {
     doc.setDrawColor(color[0], color[1], color[2])
     doc.setLineWidth(0.5)
     doc.line(margin, yPos, pageWidth - margin, yPos)
