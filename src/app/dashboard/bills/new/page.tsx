@@ -52,10 +52,6 @@ export default function NewBillPage() {
   const [activities, setActivities] = useState<any[]>([])
   const [allAccounts, setAllAccounts] = useState<any[]>([])
 
-  // Project/donor cache per activity
-  const [projectCache, setProjectCache] = useState<Record<number, { id: number | null; name: string }>>({})
-  const [donorCache, setDonorCache] = useState<Record<number, { id: number | null; name: string }>>({})
-
   // Budget info per activity+account
   const [budgetInfo, setBudgetInfo] = useState<Record<string, { budget: number; spent: number; available: number; hasBudget: boolean }>>({})
   const [budgetError, setBudgetError] = useState("")
@@ -71,7 +67,6 @@ export default function NewBillPage() {
       supabase.from("companies").select("business_type").eq("id", cid).single()
         .then(r => r.data && setBusinessType(r.data.business_type || ""))
 
-      // Pass cid directly so the functions don't rely on stale state
       loadSuppliers(cid)
       loadProducts(cid)
 
@@ -94,7 +89,6 @@ export default function NewBillPage() {
     })
   }, [])
 
-  // ── Load suppliers (accepts optional cid to avoid stale state) ──
   const loadSuppliers = (cid?: string) => {
     const targetId = cid || companyId
     if (!targetId) return
@@ -102,12 +96,9 @@ export default function NewBillPage() {
       .select("id,code,name,phone,balance,default_project_id,default_location_id,default_activity_id")
       .eq("company_id", targetId)
       .order("name")
-      .then(r => {
-        if (r.data) setSuppliers(r.data)
-      })
+      .then(r => { if (r.data) setSuppliers(r.data) })
   }
 
-  // ── Load products (accepts optional cid to avoid stale state) ──
   const loadProducts = (cid?: string) => {
     const targetId = cid || companyId
     if (!targetId) return
@@ -119,7 +110,6 @@ export default function NewBillPage() {
       .then(r => r.data && setProducts(r.data))
   }
 
-  // ── If editing, load existing bill ──
   useEffect(() => {
     if (!editId || !companyId) return
     supabase.from("invoices")
@@ -131,15 +121,11 @@ export default function NewBillPage() {
         if (!bill) return
         setSupplierId(bill.party_id)
         const supp = suppliers.find((s: any) => s.id === bill.party_id)
-        if (supp) {
-          setSelectedSupplier(supp)
-          setSupplierSearch(supp.name)
-        }
+        if (supp) { setSelectedSupplier(supp); setSupplierSearch(supp.name) }
         setBillDate(bill.date)
         setDueDate(bill.due_date)
         setReference(bill.reference || "")
         setNotes(bill.notes || "")
-
         supabase.from("invoice_items")
           .select("*")
           .eq("invoice_id", bill.id)
@@ -162,7 +148,6 @@ export default function NewBillPage() {
       })
   }, [editId, companyId, suppliers])
 
-  // ── Supplier helpers ──
   const filteredSuppliers = suppliers.filter(s =>
     s.name.toLowerCase().includes(supplierSearch.toLowerCase()) ||
     s.code.toLowerCase().includes(supplierSearch.toLowerCase()) ||
@@ -200,58 +185,6 @@ export default function NewBillPage() {
       })
   }
 
-  // ── Fetch project/donor for an activity ──
-  const fetchProjectAndDonor = async (activityId: number) => {
-    if (projectCache[activityId] && donorCache[activityId]) return
-    try {
-      const { data: actData } = await supabase.from("activities")
-        .select("project_id, projects(name)")
-        .eq("id", activityId).single()
-      const proj = { id: actData?.project_id ?? null, name: (actData?.projects as any)?.name || "" }
-      setProjectCache(prev => ({ ...prev, [activityId]: proj }))
-
-      const { data: donorData } = await supabase.from("budgets")
-        .select("donor_id, donors(name)")
-        .eq("company_id", companyId)
-        .eq("activity_id", activityId)
-        .eq("fiscal_year", fiscalYear)
-        .is("month", null)
-        .order("budgeted_amount", { ascending: false })
-        .limit(1)
-      const don = { id: donorData?.[0]?.donor_id ?? null, name: (donorData?.[0]?.donors as any)?.name || "" }
-      setDonorCache(prev => ({ ...prev, [activityId]: don }))
-    } catch { /* ignore */ }
-  }
-
-  // ── Fetch budget for activity + account ──
-  const fetchBudget = async (activityId: number, accountId: number) => {
-    const key = `${activityId}_${accountId}`
-    if (budgetInfo[key]) return
-
-    const { data: budgetRows } = await supabase.from("budgets")
-      .select("budgeted_amount")
-      .eq("company_id", companyId)
-      .eq("activity_id", activityId)
-      .eq("account_id", accountId)
-      .eq("fiscal_year", fiscalYear)
-      .is("month", null)
-      .maybeSingle()
-
-    const { data: spentRows } = await supabase.from("journal_lines")
-      .select("debit, credit")
-      .eq("company_id", companyId)
-      .eq("activity_id", activityId)
-      .eq("account_id", accountId)
-
-    const spent = (spentRows || []).reduce((sum, line) => sum + (line.debit || 0) - (line.credit || 0), 0)
-    const budget = budgetRows?.budgeted_amount || 0
-    const available = budget - spent
-    const hasBudget = budgetRows !== null   // ← only true if a budget row exists
-
-    setBudgetInfo(prev => ({ ...prev, [key]: { budget, spent, available, hasBudget } }))
-  }
-
-  // ── Product helpers ──
   const filteredProducts = products.filter(p =>
     p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
     p.code.toLowerCase().includes(productSearch.toLowerCase())
@@ -291,9 +224,6 @@ export default function NewBillPage() {
     if (field === "qty" || field === "unit_price") {
       updated[idx].total = updated[idx].qty * updated[idx].unit_price
     }
-    if (field === "activity_id" && value) {
-      fetchProjectAndDonor(Number(value))
-    }
     if ((field === "activity_id" || field === "account_id") && updated[idx].activity_id && updated[idx].account_id) {
       fetchBudget(Number(updated[idx].activity_id), Number(updated[idx].account_id))
     }
@@ -303,13 +233,34 @@ export default function NewBillPage() {
 
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
 
+  const fetchBudget = async (activityId: number, accountId: number) => {
+    const key = `${activityId}_${accountId}`
+    if (budgetInfo[key]) return
+    const { data: budgetRows } = await supabase.from("budgets")
+      .select("budgeted_amount")
+      .eq("company_id", companyId)
+      .eq("activity_id", activityId)
+      .eq("account_id", accountId)
+      .eq("fiscal_year", fiscalYear)
+      .is("month", null)
+      .maybeSingle()
+    const { data: spentRows } = await supabase.from("journal_lines")
+      .select("debit, credit")
+      .eq("company_id", companyId)
+      .eq("activity_id", activityId)
+      .eq("account_id", accountId)
+    const spent = (spentRows || []).reduce((sum, line) => sum + (line.debit || 0) - (line.credit || 0), 0)
+    const budget = budgetRows?.budgeted_amount || 0
+    const available = budget - spent
+    setBudgetInfo(prev => ({ ...prev, [key]: { budget, spent, available, hasBudget: budgetRows !== null } }))
+  }
+
   const checkBudgetOverrun = (currentItems: any[]) => {
     let overBudget = false
     for (const item of currentItems) {
       if (!item.product_id && item.activity_id && item.account_id) {
         const key = `${item.activity_id}_${item.account_id}`
         const info = budgetInfo[key]
-        // Only flag if a budget row actually exists for this combination
         if (info && info.hasBudget && item.total > info.available) {
           overBudget = true
           break
@@ -321,7 +272,6 @@ export default function NewBillPage() {
 
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
 
-  // ── Bill number (exclude soft‑deleted bills) ──
   const getNextBillNo = async (suppCode: string): Promise<string> => {
     const { data } = await supabase
       .from("invoices")
@@ -341,8 +291,8 @@ export default function NewBillPage() {
   }
 
   const handleSubmit = async () => {
-    if (!supplierId)          { setError("Please select a supplier"); return }
-    if (items.length === 0)   { setError("Add at least one item"); return }
+    if (!supplierId) { setError("Please select a supplier"); return }
+    if (items.length === 0) { setError("Add at least one item"); return }
 
     for (const item of items) {
       if (!item.product_id) {
@@ -353,25 +303,8 @@ export default function NewBillPage() {
       }
     }
 
-    if (businessType === "ngo" && items.some(i => !i.product_id && i.activity_id)) {
-      const firstActivityId = Number(items.find(i => !i.product_id && i.activity_id)?.activity_id)
-      if (firstActivityId) {
-        const { data: donorRow } = await supabase.from("budgets")
-          .select("donor_id")
-          .eq("company_id", companyId)
-          .eq("activity_id", firstActivityId)
-          .eq("fiscal_year", fiscalYear)
-          .is("month", null)
-          .limit(1)
-        if (!donorRow || donorRow.length === 0) {
-          setError("Donor is required for NGO bills. Please select an activity that has a donor.")
-          return
-        }
-      }
-    }
-
     if (budgetError) {
-      setError("Cannot save: some lines exceed the available budget. Adjust amounts or select a different activity.")
+      setError("Cannot save: some lines exceed the available budget.")
       return
     }
 
@@ -414,7 +347,6 @@ export default function NewBillPage() {
       }
 
       setFlash(`✅ Bill ${editId ? "updated" : "saved"} successfully!`)
-      // Refresh supplier list so balances are up‑to‑date
       loadSuppliers()
       if (editId) {
         router.push(`/dashboard/bills/${editId}`)
@@ -430,7 +362,6 @@ export default function NewBillPage() {
     }
   }
 
-  // ── PDF Preview (with await) ──
   const handleBeforeSavePdf = async () => {
     if (!selectedSupplier) return
     const billNo = editId ? selectedSupplier.code + "-EDIT" : "PREVIEW"
@@ -470,7 +401,7 @@ export default function NewBillPage() {
   return (
     <div style={{ padding: "16px", background: "#0B1120", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
       <style>{`
-        .inv-shell { max-width: 1200px; margin: 0 auto; }
+        .inv-shell { max-width: 100%; margin: 0 auto; }
         .inv-title { font-size: 18px; font-weight: 700; color: #F1F5F9; }
         .inv-card {
           background: #111827; border-radius: 12px; border: 1px solid #1E293B;
@@ -491,13 +422,11 @@ export default function NewBillPage() {
         .inv-btn {
           display: inline-flex; align-items: center; gap: 6px;
           padding: 8px 14px; border-radius: 8px; font-size: 13px;
-          font-weight: 600; cursor: pointer; border: none;
-          font-family: inherit; transition: all 0.15s; white-space: nowrap;
+          font-weight: 600; cursor: pointer; border: 1.5px solid #334155;
+          background: transparent; color: #CBD5E1; font-family: inherit;
+          transition: all 0.15s; white-space: nowrap;
         }
-        .inv-btn-primary { background: #1E3A8A; color: white; }
-        .inv-btn-primary:hover { background: #1E40AF; }
-        .inv-btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
-        .inv-btn-outline:hover { background: #1E293B; }
+        .inv-btn:hover { background: #1E293B; }
 
         .inv-item-row {
           display: grid;
@@ -528,31 +457,35 @@ export default function NewBillPage() {
         .cust-option:last-child { border-bottom: none; }
         .cust-option:hover { background: #1E293B; }
         .cust-option-name { font-size: 13px; font-weight: 600; color: #F1F5F9; }
-        .cust-option-meta { font-size: 11px; color: #94A3B8; }
-        .cust-option-bal { font-size: 12px; font-weight: 600; color: #93C5FD; white-space: nowrap; }
+        .cust-option-meta { font-size: 11px; color: "#94A3B8"; }
+        .cust-option-bal { font-size: 12px; font-weight: 600; color: "#93C5FD"; white-space: nowrap; }
         .cust-selected-badge {
           display: inline-flex; align-items: center; gap: 6px;
           background: #1E293B; border: 1.5px solid #334155;
           border-radius: 8px; padding: 6px 12px; font-size: 13px;
-          font-weight: 600; color: #F1F5F9; width: 100%; cursor: pointer;
+          font-weight: 600; color: "#F1F5F9"; width: 100%; cursor: pointer;
         }
 
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
         @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
 
         .budget-warning { background: #1E293B; border: 1px solid #EF4444; color: #FCA5A5; padding: 8px 12px; border-radius: 6px; font-size: 12px; display: flex; align-items: center; gap: 6px; }
+
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type="number"] { -moz-appearance: textfield; }
       `}</style>
 
       <div className="inv-shell">
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-          <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/bills")}><ArrowLeft size={16} /></button>
+          <button className="inv-btn" onClick={() => router.push("/dashboard/bills")}><ArrowLeft size={16} /></button>
           <div style={{ flex: 1 }}>
             <div className="inv-title">{editId ? "✏️ Edit Purchase Bill" : "📦 New Purchase Bill"}</div>
             <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 1 }}>
               {editId ? "Modify bill details and items" : "Select supplier → add products or manual expenses"}
             </div>
           </div>
-          <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/bills")}>View List</button>
+          <button className="inv-btn" onClick={() => router.push("/dashboard/bills")}>View List</button>
         </div>
 
         {error && (
@@ -659,14 +592,14 @@ export default function NewBillPage() {
                       </div>
                     )}
                   </div>
-                  <button className="inv-btn inv-btn-outline" onClick={addManualItem}><Plus size={14} /> Manual</button>
+                  <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
                 </div>
               </div>
             </div>
 
             {/* Change History when editing */}
             {editId && (
-              <div className="inv-card">
+              <div className="inv-card" style={{ marginTop: 12 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>📝 Change History</h3>
                 <RecordHistory tableName="invoices" recordId={editId} />
               </div>
@@ -674,7 +607,7 @@ export default function NewBillPage() {
           </div>
 
           {/* RIGHT: Summary & Post */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 16 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="inv-card">
               <h3 style={{ fontSize: 15, fontWeight: 700, color: "#F1F5F9", margin: "0 0 10px 0" }}>Summary</h3>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, fontWeight: 600 }}>
@@ -689,7 +622,7 @@ export default function NewBillPage() {
             </div>
             <div className="inv-card">
               <button
-                className="inv-btn inv-btn-primary"
+                className="inv-btn"
                 style={{ justifyContent: "center", padding: 10, width: "100%" }}
                 onClick={handleSubmit}
                 disabled={saving || budgetError !== ""}
@@ -697,7 +630,7 @@ export default function NewBillPage() {
                 {saving ? "Posting..." : editId ? "💾 UPDATE Bill" : "💾 POST Bill"}
               </button>
               <button
-                className="inv-btn inv-btn-outline"
+                className="inv-btn"
                 style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }}
                 onClick={handleBeforeSavePdf}
               >
@@ -764,13 +697,6 @@ export default function NewBillPage() {
                       <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>PKR {item.total.toLocaleString()}</span>
                       <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
                     </div>
-                    {/* Show project and donor below activity */}
-                    {item.activity_id && !item.product_id && (
-                      <div style={{ fontSize: 10, color: "#94A3B8", marginLeft: 8, display: "flex", gap: 12, padding: "2px 0" }}>
-                        <span>Project: <strong>{projectCache[item.activity_id]?.name || "Fetching…"}</strong></span>
-                        <span>Donor: <strong>{donorCache[item.activity_id]?.name || "Fetching…"}</strong></span>
-                      </div>
-                    )}
                     {/* Budget info */}
                     {budgetData && (
                       <div style={{ fontSize: 10, color: "#94A3B8", marginLeft: 8, display: "flex", gap: 12, padding: "2px 0" }}>
