@@ -148,7 +148,7 @@ export default function BillDetailPage() {
     return `https://wa.me/92${phone}?text=${encodeURIComponent(msg)}`
   }
 
-  const handlePrintPDF = () => {
+  const handlePrintPDF = async () => {
     if (!bill) return
     const supplier = bill.supplier
     const subTotal = bill.items?.reduce((s, i) => s + i.total, 0) || 0
@@ -181,8 +181,8 @@ export default function BillDetailPage() {
       status: bill.status,
     }
 
-    const doc = generateInvoicePDF(pdfData)
-    doc.save(`Bill_${bill.invoice_no}.pdf`)
+    const doc = await generateInvoicePDF(pdfData)
+doc.save(`Bill_${bill.invoice_no}.pdf`)
   }
 
   if (loading) return <div style={{ padding: 24, textAlign: "center" }}>Loading…</div>
