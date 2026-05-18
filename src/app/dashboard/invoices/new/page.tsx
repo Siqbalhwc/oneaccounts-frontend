@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import {
   ArrowLeft, Plus, Trash2, Send, Search, X, Download, CheckCircle,
-  Image as ImageIcon, RefreshCw,
+  Image as ImageIcon, RefreshCw, ExternalLink,
 } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
@@ -60,6 +60,10 @@ export default function NewInvoicePage() {
   const [lastSelectedProduct, setLastSelectedProduct] = useState<any>(null)
   const [refreshingCustomers, setRefreshingCustomers] = useState(false)
 
+  // For "View Invoice" after save
+  const [savedInvoiceId, setSavedInvoiceId] = useState<number | null>(null)
+
+  // ── Load master data ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -93,6 +97,7 @@ export default function NewInvoicePage() {
     })
   }, [])
 
+  // ── If editing, load existing invoice ──
   useEffect(() => {
     if (!editId || !companyId) return
     supabase.from("invoices")
@@ -132,6 +137,7 @@ export default function NewInvoicePage() {
       })
   }, [editId, companyId, customers])
 
+  // ── Auto‑due date ──
   useEffect(() => {
     if (!invoiceDate || !selectedCustomer) return
     const days = getCreditDays(selectedCustomer.payment_terms)
@@ -139,6 +145,13 @@ export default function NewInvoicePage() {
     dt.setDate(dt.getDate() + days)
     setDueDate(dt.toISOString().split("T")[0])
   }, [invoiceDate, selectedCustomer])
+
+  // ── Refresh price history when customer changes AND a product is selected ──
+  useEffect(() => {
+    if (customerId && lastSelectedProduct) {
+      fetchPriceHistory(lastSelectedProduct.id, customerId)
+    }
+  }, [customerId])
 
   const refreshCustomers = () => {
     if (!companyId) return
@@ -253,22 +266,6 @@ export default function NewInvoicePage() {
     setShowHistory(true)
   }
 
-  const getNextInvoiceNo = async (custCode: string): Promise<string> => {
-    const { data } = await supabase
-      .from("invoices")
-      .select("invoice_no")
-      .like("invoice_no", `${custCode}-%`)
-      .eq("type", "sale")
-      .order("invoice_no", { ascending: false }).limit(1)
-    let nextNum = 1
-    if (data && data.length > 0) {
-      const last = data[0].invoice_no
-      const match = last.match(/(\d+)$/)
-      if (match) nextNum = parseInt(match[1]) + 1
-    }
-    return `${custCode}-${String(nextNum).padStart(2, "0")}`
-  }
-
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
 
   const waLink = () => {
@@ -286,7 +283,6 @@ export default function NewInvoicePage() {
 
     setSaving(true); setError("")
     const custCode = selectedCustomer?.code || "CUST"
-    const invoiceNo = editId ? selectedCustomer?.code + "-EDIT" : await getNextInvoiceNo(custCode)
 
     const url = editId ? `/api/invoices?id=${editId}` : "/api/invoices"
     const method = editId ? "PUT" : "POST"
@@ -297,7 +293,6 @@ export default function NewInvoicePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: editId || undefined,
-          invoice_no: invoiceNo,
           party_id: customerId,
           invoice_date: invoiceDate,
           due_date: dueDate,
@@ -318,18 +313,17 @@ export default function NewInvoicePage() {
         return
       }
 
+      const newInvoiceId = result.invoice?.id
+
       setFlash(`✅ Invoice ${editId ? "updated" : "saved"} successfully!`)
+      setSavedInvoiceId(newInvoiceId || null)
+
       if (editId) {
         router.push(`/dashboard/invoices/${editId}`)
       } else {
+        // Keep form open, show success and View Invoice button
         setSaving(false)
-        setTimeout(() => {
-          setFlash(null)
-          setItems([])
-          clearCustomer()
-          setReference("")
-          setNotes("")
-        }, 2000)
+        // Do not clear the form yet – user can click "View Invoice"
       }
     } catch {
       setError("Network error")
@@ -387,7 +381,7 @@ export default function NewInvoicePage() {
   return (
     <div style={{ padding: "16px", background: "#0B1120", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
       <style>{`
-        .inv-shell { width: 100%; margin: 0; }
+        .inv-shell { max-width: 100%; margin: 0 auto; }
         .inv-title { font-size: 18px; font-weight: 700; color: #F1F5F9; }
         .inv-card {
           background: #111827; border-radius: 12px; border: 1px solid #1E293B;
@@ -470,8 +464,8 @@ export default function NewInvoicePage() {
           margin-top: 12px; font-size: 12px;
         }
         .price-history-item {
-          display: flex; justify-content: space-between; padding: 4px 0;
-          border-bottom: 1px solid #334155;
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 4px 0; border-bottom: 1px solid #334155;
         }
 
         input[type="number"]::-webkit-inner-spin-button,
@@ -493,10 +487,20 @@ export default function NewInvoicePage() {
         {flash && (
           <div style={{ background: "#064E3B", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
             <CheckCircle size={16} /> {flash}
+            {savedInvoiceId && !editId && (
+              <button
+                className="inv-btn"
+                style={{ marginLeft: 8, borderColor: "#6EE7B7", color: "#6EE7B7" }}
+                onClick={() => router.push(`/dashboard/invoices/${savedInvoiceId}`)}
+              >
+                <ExternalLink size={14} /> View Invoice
+              </button>
+            )}
           </div>
         )}
 
         <div className="header-grid">
+          {/* LEFT: Customer + Dates + Reference + Notes */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="inv-card">
               <label className="inv-label">Customer *</label>
@@ -608,9 +612,14 @@ export default function NewInvoicePage() {
               {/* Price History Panel */}
               {showHistory && lastSelectedProduct && (
                 <div className="price-history">
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                    <span style={{ fontWeight: 600, fontSize: 12, color: "#F1F5F9" }}>📋 Price history for {lastSelectedProduct.name}</span>
-                    <button style={{ background: "none", border: "none", cursor: "pointer", color: "#94A3B8" }} onClick={() => setShowHistory(false)}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                    {lastSelectedProduct.image_path && (
+                      <img src={lastSelectedProduct.image_path} alt="" style={{ width: 28, height: 28, objectFit: "cover", borderRadius: 4 }} />
+                    )}
+                    <span style={{ fontWeight: 600, fontSize: 12, color: "#F1F5F9" }}>
+                      📋 Price history for {lastSelectedProduct.name}
+                    </span>
+                    <button style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#94A3B8" }} onClick={() => setShowHistory(false)}>
                       <X size={14} />
                     </button>
                   </div>
@@ -627,6 +636,14 @@ export default function NewInvoicePage() {
                 </div>
               )}
             </div>
+
+            {/* Change History when editing */}
+            {editId && (
+              <div className="inv-card" style={{ marginTop: 12 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>📝 Change History</h3>
+                <RecordHistory tableName="invoices" recordId={editId} />
+              </div>
+            )}
           </div>
 
           {/* RIGHT: Summary & Actions */}
@@ -701,14 +718,6 @@ export default function NewInvoicePage() {
             </div>
           )}
         </div>
-
-        {/* Change History – now at the bottom, only when editing */}
-        {editId && (
-          <div className="inv-card" style={{ marginTop: 16 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>📝 Change History</h3>
-            <RecordHistory tableName="invoices" recordId={editId} />
-          </div>
-        )}
       </div>
     </div>
   )
