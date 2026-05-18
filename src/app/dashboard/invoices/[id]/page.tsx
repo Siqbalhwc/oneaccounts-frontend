@@ -160,7 +160,7 @@ export default function InvoiceDetailPage() {
             })
         }
 
-        if (inv.party_id) {
+               if (inv.party_id) {
           supabase
             .from("customers")
             .select("name, code, phone, country_code, address, email")
@@ -168,8 +168,8 @@ export default function InvoiceDetailPage() {
             .single()
             .then(({ data: cust }) => {
               inv.customer = cust || undefined
+              loadItems()
             })
-            .finally(loadItems)
         } else {
           loadItems()
         }
