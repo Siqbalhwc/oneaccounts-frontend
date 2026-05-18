@@ -13,6 +13,11 @@ interface InvoiceItem {
   qty: number
   unit_price: number
   total: number
+  product_id: number | null
+  // enriched fields from products table
+  product_code?: string
+  product_name?: string
+  product_image?: string | null
 }
 
 interface Invoice {
@@ -63,7 +68,9 @@ export default function InvoiceDetailPage() {
     address?: string
     phone?: string
     email?: string
-    logo_url?: string
+    tagline?: string
+    logo_url?: string | null
+    business_type?: string
   }>({})
 
   const [journalLines, setJournalLines] = useState<JournalLine[]>([])
@@ -93,6 +100,66 @@ export default function InvoiceDetailPage() {
         const inv: Invoice = data
 
         // 2. Load customer
+        const loadItems = () => {
+          supabase
+            .from("invoice_items")
+            .select("*")
+            .eq("invoice_id", inv.id)
+            .eq("company_id", companyId)
+            .then(({ data: items }) => {
+              if (!items || items.length === 0) {
+                inv.items = []
+                setInvoice(inv)
+                setLoading(false)
+                return
+              }
+
+              // Gather product IDs
+              const productIds = items
+                .map((i: any) => i.product_id)
+                .filter((id: any) => id != null)
+
+              if (productIds.length === 0) {
+                // No products linked – keep items as they are
+                inv.items = items.map((i: any) => ({
+                  ...i,
+                  product_code: "",
+                  product_name: "",
+                  product_image: null,
+                }))
+                setInvoice(inv)
+                setLoading(false)
+                return
+              }
+
+              // Fetch products for enrichment
+              supabase
+                .from("products")
+                .select("id, code, name, image_path")
+                .in("id", productIds)
+                .then(({ data: products }) => {
+                  const productMap: Record<number, any> = {}
+                  if (products) {
+                    products.forEach((p: any) => {
+                      productMap[p.id] = p
+                    })
+                  }
+
+                  inv.items = items.map((item: any) => {
+                    const prod = productMap[item.product_id]
+                    return {
+                      ...item,
+                      product_code: prod?.code || "",
+                      product_name: prod?.name || "",
+                      product_image: prod?.image_path || null,
+                    }
+                  })
+                  setInvoice(inv)
+                  setLoading(false)
+                })
+            })
+        }
+
         if (inv.party_id) {
           supabase
             .from("customers")
@@ -101,34 +168,14 @@ export default function InvoiceDetailPage() {
             .single()
             .then(({ data: cust }) => {
               inv.customer = cust || undefined
-              // 3. Load items after customer is set
-              supabase
-                .from("invoice_items")
-                .select("*")
-                .eq("invoice_id", inv.id)
-                .eq("company_id", companyId)
-                .then(({ data: items }) => {
-                  inv.items = items || []
-                  setInvoice(inv)
-                  setLoading(false)
-                })
             })
+            .finally(loadItems)
         } else {
-          // No customer? Still load items
-          supabase
-            .from("invoice_items")
-            .select("*")
-            .eq("invoice_id", inv.id)
-            .eq("company_id", companyId)
-            .then(({ data: items }) => {
-              inv.items = items || []
-              setInvoice(inv)
-              setLoading(false)
-            })
+          loadItems()
         }
       })
 
-    // 4. Load journal lines directly via source_type and source_id
+    // 3. Load journal lines
     supabase
       .from("journal_lines")
       .select("account_id, debit, credit, accounts(code, name)")
@@ -148,20 +195,22 @@ export default function InvoiceDetailPage() {
         }
       })
 
-    // Company settings (for PDF)
+    // 4. Company settings
     supabase
       .from("company_settings")
-      .select("company_name, address, phone, email, logo_url")
+      .select("company_name, address, phone, email, tagline, logo_url, business_type")
       .limit(1)
       .maybeSingle()
       .then(({ data }) => {
         if (data) {
           setCompanySettings({
-            name: data.company_name || "OneAccounts",
+            name: data.company_name || data.name || "",
             address: data.address || "",
             phone: data.phone || "",
             email: data.email || "",
+            tagline: data.tagline || "",
             logo_url: data.logo_url || null,
+            business_type: data.business_type || "",
           })
         }
       })
@@ -185,40 +234,45 @@ export default function InvoiceDetailPage() {
     return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
   }
 
-  const handlePrintPDF = () => {
+  const handlePrintPDF = async () => {
     if (!invoice) return
     const customer = invoice.customer
     const subTotal = invoice.items?.reduce((s, i) => s + i.total, 0) || 0
 
     const pdfData = {
-      companyName: companySettings.name || "OneAccounts",
-      companyAddress: companySettings.address,
-      companyPhone: companySettings.phone,
-      companyEmail: companySettings.email,
-      logoUrl: companySettings.logo_url,
+      companyName: companySettings.name || "",
+      companyAddress: companySettings.address || "",
+      companyPhone: companySettings.phone || "",
+      companyEmail: companySettings.email || "",
+      companyTagline: companySettings.tagline || "",
+      logoUrl: companySettings.logo_url || null,
+      businessType: companySettings.business_type || "",
       invoiceNo: invoice.invoice_no,
       date: invoice.date,
       dueDate: invoice.due_date,
       reference: invoice.reference,
       notes: invoice.notes,
       customerName: customer?.name || "Unknown",
-      customerAddress: customer?.address,
-      customerPhone: customer?.phone,
-      customerEmail: customer?.email,
+      customerAddress: customer?.address || "",
+      customerPhone: customer?.phone || "",
+      customerEmail: customer?.email || "",
+      status: invoice.status,
       items: (invoice.items || []).map(item => ({
-        description: item.description,
-        qty: item.qty,
-        unit_price: item.unit_price,
-        total: item.total,
+        description: item.description || "",
+        qty: item.qty || 0,
+        unit_price: item.unit_price || 0,
+        total: item.total || 0,
+        image_path: item.product_image || null,
+        product_id: item.product_code || null,
+        product_name: item.product_name || "",
       })),
       subtotal: subTotal,
       total: invoice.total,
       paid: invoice.paid || 0,
       balanceDue: invoice.total - (invoice.paid || 0),
-      status: invoice.status,
     }
 
-    const doc = generateInvoicePDF(pdfData)
+    const doc = await generateInvoicePDF(pdfData)
     doc.save(`Invoice_${invoice.invoice_no}.pdf`)
   }
 
@@ -261,20 +315,10 @@ export default function InvoiceDetailPage() {
         .badge-paid { background: #065F46; color: #6EE7B7; }
         .badge-unpaid { background: #7C2D12; color: #FCA5A5; }
         .badge-overdue { background: #7C2D12; color: #FCA5A5; }
-
-        /* Force dark theme inside RecordHistory */
-        .card .record-history,
-        .card .record-history * {
-          background: #0F172A !important;
-          color: #E2E8F0 !important;
-          border-color: #1E293B !important;
-        }
-        .card .record-history th {
-          background: #1E293B !important;
-          color: #94A3B8 !important;
-        }
-        .card .record-history td {
-          background: #0F172A !important;
+        .record-history { background: #0F172A; border-radius: 8px; padding: 8px; }
+        @media (max-width: 640px) {
+          .row { flex-direction: column; align-items: flex-start; }
+          .label { margin-bottom: 2px; }
         }
       `}</style>
 
@@ -342,7 +386,10 @@ export default function InvoiceDetailPage() {
             <tbody>
               {invoice.items.map(item => (
                 <tr key={item.id}>
-                  <td>{item.description}</td>
+                  <td>
+                    <div>{item.description}</div>
+                    {item.product_code && <div style={{ fontSize: 11, color: "#93C5FD" }}>{item.product_code} – {item.product_name}</div>}
+                  </td>
                   <td style={{ textAlign: "center" }}>{item.qty}</td>
                   <td style={{ textAlign: "right" }}>PKR {item.unit_price?.toLocaleString()}</td>
                   <td style={{ textAlign: "right", fontWeight: 600, color: "#E2E8F0" }}>PKR {item.total?.toLocaleString()}</td>
@@ -395,7 +442,7 @@ export default function InvoiceDetailPage() {
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>
             📝 Change History
           </h3>
-          <div className="record-history" style={{ background: "#0F172A", borderRadius: 8, padding: 8 }}>
+          <div className="record-history">
             <RecordHistory tableName="invoices" recordId={String(invoice.id)} />
           </div>
         </div>

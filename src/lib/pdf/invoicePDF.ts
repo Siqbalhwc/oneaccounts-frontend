@@ -153,7 +153,6 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   y += 6
 
   // ── 4. ITEMS TABLE ────────────────────────────────────────────────────────
-  // Fixed columns (mm): img=8 | product=36 | description=auto | qty=14 | rate=28 | amount=28
   const COL_IMG  = 8
   const COL_PROD = 36
   const COL_QTY  = 14
