@@ -484,7 +484,7 @@ export default function NewInvoicePage() {
         </div>
 
         {error && <div style={{ background: "#1E293B", border: "1px solid #EF4444", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
-        {        {flash && (
+        {flash && (
           <div style={{ background: "#064E3B", border: "1px solid #065F46", color: "#ECFDF5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
             <CheckCircle size={16} /> {flash}
             {savedInvoiceId && !editId && (
