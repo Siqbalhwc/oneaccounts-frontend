@@ -112,7 +112,6 @@ export default function InvoiceDetailPage() {
           .from("invoice_items")
           .select("*")
           .eq("invoice_id", inv.id)
-          .eq("company_id", companyId)
 
         inv.items = items || []
 
