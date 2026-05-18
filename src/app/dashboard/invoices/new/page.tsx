@@ -382,7 +382,7 @@ export default function NewInvoicePage() {
       subtotal: totalAmount,
       total: totalAmount,
     }
-    const doc = generateInvoicePDF(pdfData)
+    const doc = await generateInvoicePDF(pdfData)
     doc.save(`invoice-preview.pdf`)
   }
 
