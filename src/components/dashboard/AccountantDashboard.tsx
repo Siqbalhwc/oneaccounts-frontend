@@ -5,14 +5,9 @@ import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import {
-  TrendingUp,
-  TrendingDown,
-  Minus,
   FileText,
-  CreditCard,
   Receipt,
   Wallet,
-  ClipboardList,
   Plus,
 } from "lucide-react"
 
@@ -25,7 +20,6 @@ export default function AccountantDashboard({ role }: { role: string }) {
 
   const [companyId, setCompanyId] = useState("00000000-0000-0000-0000-000000000001")
   const [pendingBills, setPendingBills] = useState<any[]>([])
-  const [recentEntries, setRecentEntries] = useState<any[]>([])
   const [todayCounts, setTodayCounts] = useState({ bills: 0, receipts: 0, payments: 0 })
   const [loading, setLoading] = useState(true)
 
@@ -47,15 +41,6 @@ export default function AccountantDashboard({ role }: { role: string }) {
           .order("date", { ascending: false })
           .limit(6)
         setPendingBills(bills || [])
-
-        // Recent journal entries
-        const { data: entries } = await supabase
-          .from("journal_entries")
-          .select("id, entry_no, date, description, journal_lines(debit, credit, accounts(code,name))")
-          .eq("company_id", cid)
-          .order("created_at", { ascending: false })
-          .limit(10)
-        setRecentEntries(entries || [])
 
         // Today's counts
         const today = new Date().toISOString().split('T')[0]
@@ -102,11 +87,9 @@ export default function AccountantDashboard({ role }: { role: string }) {
     }),
   }
 
-  const hoverScale = { whileHover: { scale: 1.02, y: -4 } }
-
   if (loading) {
     return (
-      <div style={{ padding: 40, textAlign: "center", background: "#0A0A0A", minHeight: "100vh", color: "#94A3B8" }}>
+      <div style={{ padding: 40, textAlign: "center", background: "#071018", minHeight: "100vh", color: "#94A3B8" }}>
         Loading accountant dashboard…
       </div>
     )
@@ -173,18 +156,17 @@ export default function AccountantDashboard({ role }: { role: string }) {
           background: rgba(255,255,255,0.03);
           backdrop-filter: blur(12px);
           border: 1px solid rgba(255,255,255,0.06);
-          border-radius: 20px;
-          padding: 20px;
+          border-radius: 24px;
+          padding: 24px;
           box-shadow: 0 8px 32px rgba(0,0,0,0.2);
           transition: all 0.3s ease;
         }
         .glass-card:hover {
-          transform: translateY(-4px);
-          box-shadow: 0 12px 30px rgba(0,255,255,0.1);
+          transform: translateY(-6px);
+          box-shadow: 0 12px 40px rgba(0,255,255,0.1);
         }
         .kpi-label { text-transform: uppercase; font-size: 0.7rem; font-weight: 700; color: #94A3B8; letter-spacing: 0.04em; }
-        .kpi-value { font-size: 1.8rem; font-weight: 700; color: #F1F5F9; line-height: 1.2; margin: 4px 0; }
-        .kpi-meta { font-size: 0.8rem; color: #64748B; display: flex; align-items: center; gap: 0.3rem; }
+        .kpi-value { font-size: 2rem; font-weight: 800; color: #F1F5F9; line-height: 1.2; margin: 8px 0; }
       `}</style>
 
       <div style={{ position: "relative", zIndex: 1, padding: 24 }}>
@@ -195,11 +177,11 @@ export default function AccountantDashboard({ role }: { role: string }) {
           transition={{ duration: 0.5 }}
           style={{ marginBottom: 24 }}
         >
-          <h1 style={{ fontSize: 32, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>
+          <h1 style={{ fontSize: 36, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>
             Accountant Workspace
           </h1>
           <p style={{ color: "#94A3B8", fontSize: 14, margin: 0 }}>
-            Daily operations & financial summary
+            Daily operations & quick actions
           </p>
         </motion.div>
 
@@ -207,15 +189,15 @@ export default function AccountantDashboard({ role }: { role: string }) {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
             gap: 20,
             marginBottom: 24,
           }}
         >
           {[
-            { label: "Bills Entered Today", value: todayCounts.bills, color: "#F97316", icon: <FileText size={20} /> },
-            { label: "Receipts Today", value: todayCounts.receipts, color: "#10B981", icon: <Receipt size={20} /> },
-            { label: "Payments Today", value: todayCounts.payments, color: "#3B82F6", icon: <Wallet size={20} /> },
+            { label: "Bills Entered Today", value: todayCounts.bills, color: "#F97316", icon: <FileText size={24} /> },
+            { label: "Receipts Today", value: todayCounts.receipts, color: "#10B981", icon: <Receipt size={24} /> },
+            { label: "Payments Today", value: todayCounts.payments, color: "#3B82F6", icon: <Wallet size={24} /> },
           ].map((item, i) => (
             <motion.div
               key={item.label}
@@ -224,10 +206,10 @@ export default function AccountantDashboard({ role }: { role: string }) {
               initial="hidden"
               animate="visible"
               variants={cardVariant}
-              {...hoverScale}
+              whileHover={{ y: -4 }}
               style={{ textAlign: "center" }}
             >
-              <div style={{ marginBottom: 8, color: item.color, opacity: 0.8, display: "flex", justifyContent: "center" }}>
+              <div style={{ marginBottom: 12, color: item.color, opacity: 0.9, display: "flex", justifyContent: "center" }}>
                 {item.icon}
               </div>
               <div className="kpi-value" style={{ color: item.color }}>{item.value}</div>
@@ -244,10 +226,10 @@ export default function AccountantDashboard({ role }: { role: string }) {
           transition={{ delay: 0.2, duration: 0.5 }}
           style={{ marginBottom: 24 }}
         >
-          <h3 style={{ fontWeight: 700, fontSize: 16, marginBottom: 16, color: "#F1F5F9" }}>
+          <h3 style={{ fontWeight: 700, fontSize: 18, marginBottom: 20, color: "#F1F5F9" }}>
             Quick Actions
           </h3>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
             {[
               { label: "New Purchase Bill", link: "/dashboard/bills/new", color: "#F97316" },
               { label: "New Invoice", link: "/dashboard/invoices/new", color: "#3B82F6" },
@@ -256,32 +238,32 @@ export default function AccountantDashboard({ role }: { role: string }) {
               { label: "Budget Entry", link: "/dashboard/settings/budgets", color: "#EC4899" },
               { label: "Journal Entry", link: "/dashboard/journal/new", color: "#F59E0B" },
             ].map((action) => (
-              <button
+              <motion.button
                 key={action.label}
                 onClick={() => router.push(action.link)}
                 style={{
-                  padding: "10px 18px",
-                  borderRadius: 12,
+                  padding: "12px 22px",
+                  borderRadius: 14,
                   background: "rgba(255,255,255,0.05)",
                   border: "1px solid rgba(255,255,255,0.08)",
                   color: "#E2E8F0",
                   cursor: "pointer",
                   fontWeight: 600,
-                  fontSize: 13,
+                  fontSize: 14,
                   transition: "all 0.2s",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = `${action.color}20`
-                  e.currentTarget.style.borderColor = `${action.color}40`
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "rgba(255,255,255,0.05)"
-                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"
+                whileHover={{
+                  background: `${action.color}20`,
+                  borderColor: `${action.color}40`,
+                  scale: 1.03,
                 }}
               >
-                <Plus size={14} style={{ marginRight: 4 }} />
+                <Plus size={16} />
                 {action.label}
-              </button>
+              </motion.button>
             ))}
           </div>
         </motion.div>
@@ -292,39 +274,39 @@ export default function AccountantDashboard({ role }: { role: string }) {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3, duration: 0.5 }}
-          style={{ marginBottom: 24 }}
         >
-          <h3 style={{ fontWeight: 700, fontSize: 16, marginBottom: 16, color: "#F1F5F9" }}>
+          <h3 style={{ fontWeight: 700, fontSize: 18, marginBottom: 20, color: "#F1F5F9" }}>
             Pending Supplier Bills
           </h3>
           {pendingBills.length === 0 ? (
-            <div style={{ color: "#94A3B8", fontSize: 13 }}>No pending bills.</div>
+            <div style={{ color: "#94A3B8", fontSize: 14, padding: "12px 0" }}>No pending bills.</div>
           ) : (
             pendingBills.map((bill) => (
-              <div
+              <motion.div
                 key={bill.id}
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
-                  padding: "10px 0",
+                  padding: "14px 0",
                   borderBottom: "1px solid rgba(255,255,255,0.05)",
-                  fontSize: 13,
+                  fontSize: 14,
                   cursor: "pointer",
                 }}
                 onClick={() => router.push(`/dashboard/bills/${bill.id}`)}
+                whileHover={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, paddingLeft: 12, paddingRight: 12 }}
               >
                 <div>
                   <span style={{ color: "#93C5FD", fontWeight: 600 }}>{bill.invoice_no}</span>
-                  <span style={{ color: "#94A3B8", marginLeft: 12 }}>{bill.suppliers?.name || "—"}</span>
+                  <span style={{ color: "#94A3B8", marginLeft: 16 }}>{bill.suppliers?.name || "—"}</span>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
                   <span style={{ color: "#94A3B8" }}>{bill.date}</span>
                   <span style={{ fontWeight: 700, color: "#F97316" }}>PKR {bill.total?.toLocaleString()}</span>
                   <span style={{
-                    padding: "2px 8px",
-                    borderRadius: 12,
-                    fontSize: 10,
+                    padding: "4px 10px",
+                    borderRadius: 14,
+                    fontSize: 11,
                     fontWeight: 700,
                     background: "#7C2D12",
                     color: "#FCA5A5",
@@ -332,44 +314,7 @@ export default function AccountantDashboard({ role }: { role: string }) {
                     Unpaid
                   </span>
                 </div>
-              </div>
-            ))
-          )}
-        </motion.div>
-
-        {/* ── Recent Journal Entries ── */}
-        <motion.div
-          className="glass-card"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4, duration: 0.5 }}
-        >
-          <h3 style={{ fontWeight: 700, fontSize: 16, marginBottom: 16, color: "#F1F5F9" }}>
-            Recent Journal Entries
-          </h3>
-          {recentEntries.length === 0 ? (
-            <div style={{ color: "#94A3B8", fontSize: 13 }}>No recent entries.</div>
-          ) : (
-            recentEntries.map((entry) => (
-              <div
-                key={entry.id}
-                style={{
-                  padding: "10px 0",
-                  borderBottom: "1px solid rgba(255,255,255,0.05)",
-                  fontSize: 13,
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                  <span style={{ color: "#93C5FD", fontWeight: 600 }}>{entry.entry_no}</span>
-                  <span style={{ color: "#94A3B8" }}>{entry.date}</span>
-                </div>
-                <div style={{ color: "#CBD5E1", marginBottom: 4 }}>{entry.description}</div>
-                {entry.journal_lines?.map((line: any, i: number) => (
-                  <div key={i} style={{ fontSize: 11, color: "#64748B", paddingLeft: 8 }}>
-                    {line.accounts?.code} — {line.accounts?.name}: Dr {line.debit} / Cr {line.credit}
-                  </div>
-                ))}
-              </div>
+              </motion.div>
             ))
           )}
         </motion.div>
