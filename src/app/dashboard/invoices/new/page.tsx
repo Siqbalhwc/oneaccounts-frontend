@@ -353,7 +353,7 @@ export default function NewInvoicePage() {
   }
 
   // ── PDF Preview (with company settings & rich item data) ────────────
-  const handleBeforeSavePdf = () => {
+  const handleBeforeSavePdf = async () => {
     if (!selectedCustomer) return
     const pdfData = {
       companyName: company?.name || company?.company_name || "OneAccounts",
