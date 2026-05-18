@@ -97,7 +97,7 @@ export default function InvoiceDetailPage() {
 
         const inv: Invoice = data
 
-        // 2. Load customer (if party_id exists)
+        // 2. Load customer
         if (inv.party_id) {
           const { data: cust } = await supabase
             .from("customers")
@@ -107,7 +107,7 @@ export default function InvoiceDetailPage() {
           inv.customer = cust || undefined
         }
 
-        // 3. Load items
+        // 3. Load items – WITHOUT company_id filter (safe because invoice already scoped)
         const { data: items } = await supabase
           .from("invoice_items")
           .select("*")
@@ -278,8 +278,9 @@ export default function InvoiceDetailPage() {
         </div>
       </div>
 
-      {/* Details card */}
+      {/* Invoice Details */}
       <div className="card">
+        <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>Invoice Details</h3>
         <div className="row"><span className="label">Date</span><span className="value">{invoice.date}</span></div>
         <div className="row"><span className="label">Due Date</span><span className="value">{invoice.due_date}</span></div>
         <div className="row"><span className="label">Customer</span><span className="value">{invoice.customer?.code} – {invoice.customer?.name}</span></div>
@@ -293,9 +294,11 @@ export default function InvoiceDetailPage() {
             invoice.status === "Overdue" ? "badge-overdue" : "badge-unpaid"
           }`}>{invoice.status}</span>
         </div>
+        {invoice.reference && <div className="row"><span className="label">Reference</span><span className="value">{invoice.reference}</span></div>}
+        {invoice.notes && <div className="row"><span className="label">Notes</span><span className="value">{invoice.notes}</span></div>}
       </div>
 
-      {/* Items table */}
+      {/* Items Table */}
       {invoice.items && invoice.items.length > 0 && (
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>Items</h3>
