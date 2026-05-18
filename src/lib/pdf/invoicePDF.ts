@@ -44,11 +44,8 @@ export interface InvoicePDFData {
   balanceDue?: number
 }
 
-// Navy blue colour palette
-const NAVY = [15, 23, 42] as const          // #0F172A
-const NAVY_LIGHT = [30, 58, 138] as const   // #1E3A8A
-const WHITE = 255
-const GRAY = 136
+const HEADER_GREY: [number, number, number] = [31, 41, 55]  // #1F2937
+const WHITE: [number, number, number] = [255, 255, 255]
 
 export function generateInvoicePDF(data: InvoicePDFData) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
@@ -62,79 +59,54 @@ export function generateInvoicePDF(data: InvoicePDFData) {
     text: string,
     x: number,
     yPos: number,
-    options?: { fontSize?: number; fontStyle?: "bold" | "normal"; color?: number[]; align?: "left" | "right" }
+    options?: { fontSize?: number; fontStyle?: "bold" | "normal"; color?: [number, number, number]; align?: "left" | "right" }
   ) => {
     doc.setFontSize(options?.fontSize || 10)
     doc.setFont("helvetica", options?.fontStyle || "normal")
     if (options?.color) doc.setTextColor(options.color[0], options.color[1], options.color[2])
+    else doc.setTextColor(0, 0, 0)
     if (options?.align === "right") {
       doc.text(text, x, yPos, { align: "right" })
     } else {
       doc.text(text, x, yPos)
     }
-    doc.setTextColor(0, 0, 0) // reset
-  }
-
-  const drawLine = (yPos: number, color: readonly number[] = NAVY_LIGHT) => {
-    doc.setDrawColor(color[0], color[1], color[2])
-    doc.setLineWidth(0.5)
-    doc.line(margin, yPos, pageWidth - margin, yPos)
   }
 
   // ═══════════════════════════════════════════════════════════
-  //  HEADER BAND
+  //  HEADER – Two columns: Company info / Invoice info
   // ═══════════════════════════════════════════════════════════
-  // Navy background band for the title area
-  doc.setFillColor(NAVY[0], NAVY[1], NAVY[2])
-  doc.rect(margin, y, pageWidth - margin * 2, 18, "F")
-  addText("INVOICE", margin + 4, y + 12, { fontSize: 16, fontStyle: "bold", color: [255, 255, 255] })
-  y += 24
 
-  // ── Two‑column company + invoice info ──
-  const leftColX = margin
-  const rightColX = pageWidth - margin - 70
-  const startY = y
-
-  // Left column: company logo + name + tagline + address
+  // Company logo + name (left)
   if (data.logoUrl) {
     try {
-      doc.addImage(data.logoUrl, "JPEG", leftColX, y, 16, 16)
-      y += 18
+      doc.addImage(data.logoUrl, "JPEG", margin, y, 16, 16)
     } catch { /* ignore */ }
   }
-  addText(data.companyName, leftColX, y, { fontSize: 14, fontStyle: "bold" })
-  y += 6
+  addText(data.companyName, margin + (data.logoUrl ? 20 : 0), y + 4, { fontSize: 14, fontStyle: "bold" })
+  y += 22
+
+  // Company tagline / address
   if (data.companyTagline) {
-    addText(data.companyTagline, leftColX, y, { fontSize: 8, color: [100, 100, 100] })
+    addText(data.companyTagline, margin, y, { fontSize: 9, color: [100, 100, 100] })
     y += 5
   }
   if (data.companyAddress) {
-    addText(data.companyAddress, leftColX, y, { fontSize: 8, color: [100, 100, 100] })
+    addText(data.companyAddress, margin, y, { fontSize: 9, color: [100, 100, 100] })
     y += 5
   }
-  if (data.companyPhone) {
-    addText(data.companyPhone, leftColX, y, { fontSize: 8, color: [100, 100, 100] })
+  if (data.companyPhone || data.companyEmail) {
+    const contact = [data.companyPhone, data.companyEmail].filter(Boolean).join(" · ")
+    addText(contact, margin, y, { fontSize: 9, color: [100, 100, 100] })
     y += 5
   }
-  if (data.companyEmail) {
-    addText(data.companyEmail, leftColX, y, { fontSize: 8, color: [100, 100, 100] })
-    y += 5
-  }
+  y += 6
 
-  // Right column: invoice #, date, due date, status
-  const rightY = startY
-  const rightStart = rightY
-  addText(`Invoice #: ${data.invoiceNo}`, rightColX, rightY, { fontSize: 10, fontStyle: "bold", align: "right" })
-  addText(`Date: ${data.date}`, rightColX, rightY + 6, { fontSize: 9, align: "right" })
-  addText(`Due Date: ${data.dueDate}`, rightColX, rightY + 12, { fontSize: 9, align: "right" })
-  if (data.status) {
-    addText(`Status: ${data.status}`, rightColX, rightY + 18, { fontSize: 9, align: "right" })
-  }
+  // ── Two‑column: Bill To (left) / Invoice details (right) ──
+  const leftColX = margin
+  const rightColX = pageWidth - margin - 70
+  const billToStartY = y
 
-  // Move Y below whichever column is taller
-  y = Math.max(y, rightY + 24) + 6
-
-  // ── Bill To section ──
+  // Bill To
   addText("Bill To:", leftColX, y, { fontSize: 10, fontStyle: "bold" })
   y += 6
   addText(data.customerName, leftColX, y, { fontSize: 10 })
@@ -151,10 +123,22 @@ export function generateInvoicePDF(data: InvoicePDFData) {
     addText(data.customerEmail, leftColX, y, { fontSize: 9, color: [100, 100, 100] })
     y += 5
   }
-  y += 4
 
-  // ── Thin navy line ──
-  drawLine(y, NAVY_LIGHT)
+  // Invoice details (right)
+  const invStartY = billToStartY
+  addText(`Invoice #: ${data.invoiceNo}`, rightColX, invStartY, { fontSize: 10, fontStyle: "bold", align: "right" })
+  addText(`Date: ${data.date}`, rightColX, invStartY + 6, { fontSize: 9, align: "right" })
+  addText(`Due Date: ${data.dueDate}`, rightColX, invStartY + 12, { fontSize: 9, align: "right" })
+  if (data.status) {
+    addText(`Status: ${data.status}`, rightColX, invStartY + 18, { fontSize: 9, align: "right" })
+  }
+
+  y = Math.max(y, invStartY + 24) + 6
+
+  // ── Thin separator line ──
+  doc.setDrawColor(HEADER_GREY[0], HEADER_GREY[1], HEADER_GREY[2])
+  doc.setLineWidth(0.3)
+  doc.line(margin, y, pageWidth - margin, y)
   y += 6
 
   // ═══════════════════════════════════════════════════════════
@@ -162,11 +146,11 @@ export function generateInvoicePDF(data: InvoicePDFData) {
   // ═══════════════════════════════════════════════════════════
   const tableColumns: any[] = isTrading
     ? [
-        { header: "", dataKey: "image", width: 12 },
-        { header: "Product", dataKey: "product", width: 40 },
-        { header: "Description", dataKey: "description", width: 50 },
+        { header: "", dataKey: "image", width: 10 },
+        { header: "Product", dataKey: "product", width: 35 },
+        { header: "Description", dataKey: "description", width: 45 },
         { header: "Qty", dataKey: "qty", width: 12 },
-        { header: "Rate", dataKey: "rate", width: 20 },
+        { header: "Rate", dataKey: "rate", width: 22 },
         { header: "Amount", dataKey: "amount", width: 25 },
       ]
     : [
@@ -180,7 +164,7 @@ export function generateInvoicePDF(data: InvoicePDFData) {
   const tableRows = data.items.map((item, index) => {
     if (isTrading) {
       return {
-        image: item.image_path ? "" : "", // handled separately
+        image: "",   // image is drawn separately via didDrawCell
         product: item.product_id
           ? `${item.product_id} – ${item.product_name || item.description}`
           : item.description,
@@ -206,7 +190,7 @@ export function generateInvoicePDF(data: InvoicePDFData) {
     body: tableRows.map(row => tableColumns.map(c => (row as any)[c.dataKey])),
     margin: { left: margin, right: margin },
     styles: { fontSize: 9, cellPadding: 4 },
-    headStyles: { fillColor: NAVY_LIGHT as [number, number, number], textColor: WHITE, fontStyle: "bold" },
+    headStyles: { fillColor: HEADER_GREY, textColor: WHITE, fontStyle: "bold" },
     columnStyles: tableColumns.reduce((acc, col, i) => {
       if (col.width) acc[i] = { cellWidth: col.width }
       if (col.dataKey === "amount" || col.dataKey === "rate") acc[i] = { ...acc[i], halign: "right" }
@@ -214,8 +198,8 @@ export function generateInvoicePDF(data: InvoicePDFData) {
       return acc
     }, {} as any),
     didDrawCell: (hookData: any) => {
-      // Add product image if available (for trading)
-      if (isTrading && hookData.column.dataKey === "image" && hookData.cell.raw === "") {
+      // Draw product image for trading companies
+      if (isTrading && hookData.column.dataKey === "image") {
         const item = data.items[hookData.row.index]
         if (item?.image_path) {
           try {
@@ -244,11 +228,11 @@ export function generateInvoicePDF(data: InvoicePDFData) {
     y += 6
   }
 
-  // Navy band behind the total
-  doc.setFillColor(NAVY_LIGHT[0], NAVY_LIGHT[1], NAVY_LIGHT[2])
+  // Grey background for total
+  doc.setFillColor(HEADER_GREY[0], HEADER_GREY[1], HEADER_GREY[2])
   doc.rect(totalsX - 2, y - 2, pageWidth - totalsX - margin + 2, 10, "F")
-  addText("Total", totalsX, y + 4, { fontSize: 12, fontStyle: "bold", color: [255, 255, 255] })
-  addText(`PKR ${data.total.toLocaleString()}`, pageWidth - margin, y + 4, { fontSize: 12, fontStyle: "bold", color: [255, 255, 255], align: "right" })
+  addText("Total", totalsX, y + 4, { fontSize: 12, fontStyle: "bold", color: WHITE })
+  addText(`PKR ${data.total.toLocaleString()}`, pageWidth - margin, y + 4, { fontSize: 12, fontStyle: "bold", color: WHITE, align: "right" })
   y += 12
 
   if (data.paid !== undefined && data.paid > 0) {
@@ -271,8 +255,8 @@ export function generateInvoicePDF(data: InvoicePDFData) {
     y += 8
   }
 
-  addText("Thank you for your business!", margin, y, { fontSize: 8, color: [GRAY, GRAY, GRAY] })
-  addText("Generated by OneAccounts", pageWidth - margin, y, { fontSize: 8, color: [GRAY, GRAY, GRAY], align: "right" })
+  addText("Thank you for your business!", margin, y, { fontSize: 8, color: [136, 136, 136] })
+  addText("Generated by OneAccounts", pageWidth - margin, y, { fontSize: 8, color: [136, 136, 136], align: "right" })
 
   return doc
 }

@@ -34,6 +34,7 @@ export default function NewInvoicePage() {
 
   const [companyId, setCompanyId] = useState("")
   const [loading, setLoading] = useState(true)
+  const [company, setCompany] = useState<any>(null)   // company settings for PDF
 
   const [customers, setCustomers] = useState<any[]>([])
   const [products, setProducts] = useState<any[]>([])
@@ -59,12 +60,13 @@ export default function NewInvoicePage() {
   const [lastSelectedProduct, setLastSelectedProduct] = useState<any>(null)
   const [refreshingCustomers, setRefreshingCustomers] = useState(false)
 
-  // ── 1. Load company ID, customers, and products ──────────────────────
+  // ── 1. Load company ID, customers, products, and company settings ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
 
+      // Load customers
       supabase.from("customers")
         .select("id,code,name,phone,balance,country_code,payment_terms")
         .eq("company_id", cid)
@@ -73,11 +75,25 @@ export default function NewInvoicePage() {
           if (r.data) setCustomers(r.data)
         })
 
+      // Load active products
       supabase.from("products")
         .select("id,code,name,sale_price,cost_price,qty_on_hand,image_path")
         .is("deleted_at", null)
         .order("name")
         .then(r => r.data && setProducts(r.data))
+
+      // Load company settings for PDF preview
+      supabase.from("company_settings")
+        .select("*").eq("company_id", cid).single()
+        .then(r => {
+          if (r.data) setCompany(r.data)
+          else {
+            supabase.from("companies")
+              .select("name, logo_url, tagline, address, business_type")
+              .eq("id", cid).single()
+              .then(r2 => r2.data && setCompany(r2.data))
+          }
+        })
 
       setLoading(false)
     })
@@ -123,7 +139,7 @@ export default function NewInvoicePage() {
       })
   }, [editId, companyId, customers])
 
-  // ── 3. Auto‑update due date when invoice date or customer changes ────
+  // ── 3. Auto‑update due date when invoice date or customer changes ──
   useEffect(() => {
     if (!invoiceDate || !selectedCustomer) return
     const days = getCreditDays(selectedCustomer.payment_terms)
@@ -162,7 +178,6 @@ export default function NewInvoicePage() {
     setSelectedCustomer(c)
     setCustomerSearch(c.name)
     setShowCustomerList(false)
-    // Due date will be set by the useEffect above
   }
 
   const clearCustomer = () => {
@@ -337,20 +352,32 @@ export default function NewInvoicePage() {
     }
   }
 
+  // ── PDF Preview (with company settings & rich item data) ────────────
   const handleBeforeSavePdf = () => {
     if (!selectedCustomer) return
     const pdfData = {
-      companyName: "OneAccounts",
+      companyName: company?.name || company?.company_name || "OneAccounts",
+      companyAddress: company?.address || "",
+      companyPhone: company?.phone || "",
+      companyEmail: company?.email || "",
+      companyTagline: company?.tagline || "",
+      logoUrl: company?.logo_url || null,
+      businessType: company?.business_type || "",
       invoiceNo: "PREVIEW",
       date: invoiceDate,
       dueDate: dueDate,
       customerName: selectedCustomer.name || "Customer",
       customerPhone: selectedCustomer.phone || "",
+      customerAddress: selectedCustomer.address || "",
+      customerEmail: selectedCustomer.email || "",
       items: items.map(i => ({
         description: i.description || "",
         qty: i.qty || 0,
         unit_price: i.unit_price || 0,
         total: i.total || 0,
+        image_path: i.product_image || null,
+        product_id: i.product_id || null,
+        product_name: i.product_name || "",
       })),
       subtotal: totalAmount,
       total: totalAmount,
@@ -359,6 +386,7 @@ export default function NewInvoicePage() {
     doc.save(`invoice-preview.pdf`)
   }
 
+  // Close customer dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (customerRef.current && !customerRef.current.contains(e.target as Node)) {
