@@ -123,7 +123,7 @@ export default function PaymentDetailPage() {
       subtotal: payment.amount,
       total: payment.amount,
     }
-    const doc = generateInvoicePDF(pdfData)
+    const doc = await generateInvoicePDF(pdfData)
     doc.save(`Payment_${payment.payment_no}.pdf`)
   }
 
