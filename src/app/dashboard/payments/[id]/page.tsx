@@ -105,7 +105,7 @@ export default function PaymentDetailPage() {
     return `https://wa.me/92${phone}?text=${encodeURIComponent(msg)}`
   }
 
-  const handlePrintPDF = () => {
+  const handlePrintPDF = async () => {
     if (!payment) return
     const pdfData = {
       companyName: "OneAccounts",
