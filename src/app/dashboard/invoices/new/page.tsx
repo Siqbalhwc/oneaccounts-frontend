@@ -34,7 +34,7 @@ export default function NewInvoicePage() {
 
   const [companyId, setCompanyId] = useState("")
   const [loading, setLoading] = useState(true)
-  const [company, setCompany] = useState<any>(null)   // company settings for PDF
+  const [company, setCompany] = useState<any>(null)
 
   const [customers, setCustomers] = useState<any[]>([])
   const [products, setProducts] = useState<any[]>([])
@@ -60,29 +60,23 @@ export default function NewInvoicePage() {
   const [lastSelectedProduct, setLastSelectedProduct] = useState<any>(null)
   const [refreshingCustomers, setRefreshingCustomers] = useState(false)
 
-  // ── 1. Load company ID, customers, products, and company settings ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
 
-      // Load customers
       supabase.from("customers")
         .select("id,code,name,phone,balance,country_code,payment_terms")
         .eq("company_id", cid)
         .order("name")
-        .then(r => {
-          if (r.data) setCustomers(r.data)
-        })
+        .then(r => { if (r.data) setCustomers(r.data) })
 
-      // Load active products
       supabase.from("products")
         .select("id,code,name,sale_price,cost_price,qty_on_hand,image_path")
         .is("deleted_at", null)
         .order("name")
         .then(r => r.data && setProducts(r.data))
 
-      // Load company settings for PDF preview
       supabase.from("company_settings")
         .select("*").eq("company_id", cid).single()
         .then(r => {
@@ -99,7 +93,6 @@ export default function NewInvoicePage() {
     })
   }, [])
 
-  // ── 2. If editing, load existing invoice ────────────────────────────
   useEffect(() => {
     if (!editId || !companyId) return
     supabase.from("invoices")
@@ -139,7 +132,6 @@ export default function NewInvoicePage() {
       })
   }, [editId, companyId, customers])
 
-  // ── 3. Auto‑update due date when invoice date or customer changes ──
   useEffect(() => {
     if (!invoiceDate || !selectedCustomer) return
     const days = getCreditDays(selectedCustomer.payment_terms)
@@ -148,7 +140,6 @@ export default function NewInvoicePage() {
     setDueDate(dt.toISOString().split("T")[0])
   }, [invoiceDate, selectedCustomer])
 
-  // ── Reload customers ────────────────────────────────────────────────
   const refreshCustomers = () => {
     if (!companyId) return
     setRefreshingCustomers(true)
@@ -166,7 +157,6 @@ export default function NewInvoicePage() {
       })
   }
 
-  // ── Customer selection ───────────────────────────────────────────────
   const filteredCustomers = customers.filter(c =>
     c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
     c.code.toLowerCase().includes(customerSearch.toLowerCase()) ||
@@ -187,7 +177,6 @@ export default function NewInvoicePage() {
     setShowCustomerList(true)
   }
 
-  // ── Product helpers ──────────────────────────────────────────────────
   const filteredProducts = products.filter((p: any) =>
     p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
     p.code.toLowerCase().includes(productSearch.toLowerCase())
@@ -235,7 +224,6 @@ export default function NewInvoicePage() {
 
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
 
-  // ── Price history ────────────────────────────────────────────────────
   const fetchPriceHistory = async (productId: number, custId: number) => {
     const { data: items } = await supabase
       .from("invoice_items")
@@ -265,7 +253,6 @@ export default function NewInvoicePage() {
     setShowHistory(true)
   }
 
-  // ── Invoice number generation ────────────────────────────────────────
   const getNextInvoiceNo = async (custCode: string): Promise<string> => {
     const { data } = await supabase
       .from("invoices")
@@ -284,7 +271,6 @@ export default function NewInvoicePage() {
 
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
 
-  // ── WhatsApp link ────────────────────────────────────────────────────
   const waLink = () => {
     if (!selectedCustomer) return ""
     const code = (selectedCustomer.country_code || "+92").replace(/\D/g, "")
@@ -294,7 +280,6 @@ export default function NewInvoicePage() {
     return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
   }
 
-  // ── Submit ───────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (!customerId) { setError("Please select a customer"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
@@ -352,7 +337,6 @@ export default function NewInvoicePage() {
     }
   }
 
-  // ── PDF Preview (with company settings & rich item data) ────────────
   const handleBeforeSavePdf = async () => {
     if (!selectedCustomer) return
     const pdfData = {
@@ -386,7 +370,6 @@ export default function NewInvoicePage() {
     doc.save(`invoice-preview.pdf`)
   }
 
-  // Close customer dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (customerRef.current && !customerRef.current.contains(e.target as Node)) {
@@ -433,7 +416,6 @@ export default function NewInvoicePage() {
         .inv-btn-success { background: #25D366; color: white; border-color: #25D366; }
         .inv-btn-success:hover { background: #22C55E; }
 
-        /* Fixed-width items grid (no cost column) */
         .inv-item-row {
           display: grid;
           grid-template-columns: 30px 150px 3fr 80px 110px 110px 30px;
@@ -447,7 +429,6 @@ export default function NewInvoicePage() {
           text-transform: uppercase; color: #94A3B8; padding-bottom: 6px;
         }
 
-        /* Uneditable cells to look like inputs */
         .inv-cell {
           height: 38px; border: 1.5px solid #334155;
           border-radius: 8px; padding: 0 12px; font-size: 13px;
@@ -493,7 +474,6 @@ export default function NewInvoicePage() {
           border-bottom: 1px solid #334155;
         }
 
-        /* Remove number spinners */
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
@@ -517,7 +497,6 @@ export default function NewInvoicePage() {
         )}
 
         <div className="header-grid">
-          {/* LEFT: Customer + Dates + Reference + Notes */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="inv-card">
               <label className="inv-label">Customer *</label>
@@ -648,14 +627,6 @@ export default function NewInvoicePage() {
                 </div>
               )}
             </div>
-
-            {/* Change History when editing */}
-            {editId && (
-              <div className="inv-card">
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>📝 Change History</h3>
-                <RecordHistory tableName="invoices" recordId={editId} />
-              </div>
-            )}
           </div>
 
           {/* RIGHT: Summary & Actions */}
@@ -707,7 +678,6 @@ export default function NewInvoicePage() {
                       <ImageIcon size={14} color="#94A3B8" />
                     )}
                   </div>
-                  {/* Product name styled like an input */}
                   <div className="inv-cell" style={{ paddingLeft: 12 }}>
                     {item.product_name || "—"}
                   </div>
@@ -720,7 +690,6 @@ export default function NewInvoicePage() {
                   />
                   <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
                   <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                  {/* Total styled like an input */}
                   <div className="inv-cell" style={{ justifyContent: "flex-end", fontWeight: 600 }}>
                     PKR {item.total.toLocaleString()}
                   </div>
@@ -732,6 +701,14 @@ export default function NewInvoicePage() {
             </div>
           )}
         </div>
+
+        {/* Change History – now at the bottom, only when editing */}
+        {editId && (
+          <div className="inv-card" style={{ marginTop: 16 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>📝 Change History</h3>
+            <RecordHistory tableName="invoices" recordId={editId} />
+          </div>
+        )}
       </div>
     </div>
   )
