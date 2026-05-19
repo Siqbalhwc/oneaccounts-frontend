@@ -357,7 +357,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
   }
 
   if (loading) {
-    return <div style={{ padding: 40, textAlign: "center", background: "#0A0A0A", minHeight: "100vh", color: "#94A3B8" }}>Loading…</div>
+    return <div style={{ padding: 40, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-secondary)" }}>Loading…</div>
   }
 
   // animation variants
@@ -370,47 +370,46 @@ export default function ManagementDashboard({ role }: { role: string }) {
     }),
   }
 
-  const hoverScale = { whileHover: { scale: 1.02, y: -4 } }
-
   return (
-    <div style={{ background: "#0A0A0A", minHeight: "100%", flex: 1, fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: "#E2E8F0" }}>
+    <div style={{ background: "var(--bg)", minHeight: "100%", flex: 1, fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: "var(--text)" }}>
       <style>{`
         .mgmt * { box-sizing: border-box; margin: 0; padding: 0; }
 
         .mgmt .card {
-          background: #111827; border: 1px solid #1E293B;
+          background: var(--card-bg); border: 1px solid var(--card-border);
           border-radius: 18px; padding: 1.2rem 1.3rem;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+          box-shadow: var(--shadow);
           transition: all 0.2s;
           cursor: pointer;
         }
-        .mgmt .card:hover { background: #1E293B; border-color: #334155; }
+        .mgmt .card:hover { filter: brightness(1.1); border-color: var(--accent); }
 
+        /* ── Hero / Greeting bar ── */
         .mgmt .hero {
-          background: #111827;
-          border: 1px solid #1E293B;
+          background: var(--card-bg);
+          border: 1px solid var(--card-border);
           border-radius: 16px; padding: 1rem 1.5rem;
           margin-bottom: 1rem; display: flex;
           align-items: center; justify-content: space-between;
           flex-wrap: wrap; gap: 0.8rem;
         }
         .mgmt .hero-greeting h2 {
-          font-size: 1.3rem; font-weight: 700; color: #F1F5F9; margin-bottom: 0.15rem; white-space: nowrap;
+          font-size: 1.3rem; font-weight: 700; color: var(--text); margin-bottom: 0.15rem; white-space: nowrap;
         }
         .mgmt .hero-greeting p {
-          color: #94A3B8; font-size: 0.85rem; margin: 0; white-space: nowrap;
+          color: var(--text-secondary); font-size: 0.85rem; margin: 0; white-space: nowrap;
         }
         .mgmt .hero-filters {
           display: flex; align-items: center; gap: 0.5rem;
           flex-wrap: wrap;
         }
         .mgmt .filter-label {
-          font-weight: 600; color: #94A3B8; font-size: 0.75rem; margin-right: 0.1rem;
+          font-weight: 600; color: var(--text-secondary); font-size: 0.75rem; margin-right: 0.1rem;
         }
         .mgmt .filter-pill {
-          background: #1E293B; border: 1px solid #334155;
+          background: var(--card-bg); border: 1px solid var(--card-border);
           padding: 0.2rem 0.6rem; border-radius: 20px;
-          font-size: 0.78rem; font-weight: 500; color: #F1F5F9;
+          font-size: 0.78rem; font-weight: 500; color: var(--text);
           cursor: pointer; transition: 0.15s;
           -webkit-appearance: none; appearance: none;
           background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
@@ -418,90 +417,59 @@ export default function ManagementDashboard({ role }: { role: string }) {
           background-position: right 0.5rem center;
           padding-right: 1.8rem;
         }
-        .mgmt .filter-pill:focus { outline: none; border-color: #64748B; }
+        .mgmt .filter-pill:focus { outline: none; border-color: var(--accent); }
 
+        /* ── Warning banner ── */
         .mgmt .warning-banner {
-          background: #1E293B;
-          border: 1px solid #1E293B;
-          border-left: 6px solid #334155;
+          background: var(--card-bg);
+          border: 1px solid var(--card-border);
+          border-left: 6px solid var(--amber);
           border-radius: 10px; padding: 8px 16px;
           margin-bottom: 1rem; display: flex;
           align-items: center; justify-content: space-between;
           flex-wrap: wrap; gap: 10px;
-          font-size: 0.9rem; color: #FCA5A5;
+          font-size: 0.9rem; color: var(--red);
           font-weight: 500;
         }
         .mgmt .warning-btn {
-          background: #374151;
-          color: white; border: none;
+          background: var(--accent); color: white; border: none;
           border-radius: 6px; padding: 6px 14px;
           font-weight: 600; cursor: pointer; font-size: 0.8rem;
           white-space: nowrap;
         }
 
-        .dashboard-grid {
+        /* ── KPI Grid ── */
+        .kpi-grid {
           display: grid;
           grid-template-columns: repeat(5, 1fr);
           gap: 1rem;
           margin-bottom: 1rem;
         }
-        .span-1 { grid-column: span 1; }
-        .span-2 { grid-column: span 2; }
-        .span-3 { grid-column: span 3; }
 
-        .kpi-label { text-transform: uppercase; font-size: 0.7rem; font-weight: 700; color: #94A3B8; letter-spacing: 0.04em; }
-        .kpi-value { font-size: 1.7rem; font-weight: 700; color: #F1F5F9; line-height: 1.2; }
-        .kpi-meta { font-size: 0.8rem; color: #64748B; display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
-        .kpi-extra { font-size: 0.65rem; color: #93C5FD; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+        .kpi-label { text-transform: uppercase; font-size: 0.7rem; font-weight: 700; color: var(--text-secondary); letter-spacing: 0.04em; }
+        .kpi-value { font-size: 1.7rem; font-weight: 700; color: var(--text); line-height: 1.2; }
+        .kpi-meta { font-size: 0.8rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.3rem; }
 
-        .clickable { color: #93C5FD; text-decoration: underline; cursor: pointer; }
-
-        .project-row {
-          display: flex; align-items: center; gap: 0.8rem;
-          background: #111827; border-radius: 12px; padding: 0.5rem 1rem;
-          border: 1px solid #1E293B; cursor: pointer; margin-bottom: 0.5rem;
+        .underspend-row {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 0.5rem 0; border-bottom: 1px solid var(--card-border);
+          gap: 0.8rem;
         }
-        .project-metrics {
-          display: grid;
-          grid-template-columns: 80px 50px 90px 120px;
-          gap: 0.5rem; align-items: center;
-          margin-left: auto;
-        }
-        .project-metric { font-size: 0.8rem; white-space: nowrap; }
+        .underspend-row:last-child { border-bottom: none; }
+        .progress-bg { height: 5px; background: var(--card-border); border-radius: 10px; flex: 1; overflow: hidden; }
+        .progress-fill { height: 100%; border-radius: 10px; background: var(--green); }
 
-        .underspend-header {
-          display: grid;
-          grid-template-columns: 1fr 80px 80px 100px;
-          gap: 8px; font-size: 0.65rem; font-weight: 700; color: #94A3B8;
-          text-transform: uppercase; padding-bottom: 6px; border-bottom: 1px solid #1E293B;
-          margin-bottom: 6px;
-        }
-        .underspend-row-grid {
-          display: grid;
-          grid-template-columns: 1fr 80px 80px 100px;
-          gap: 8px; align-items: center; padding: 5px 0;
-          border-bottom: 1px solid #1E293B; font-size: 0.8rem;
-        }
-        .underspend-row-grid:last-child { border-bottom: none; }
-
-        .health-positive { color: #6EE7B7; }
-        .health-negative { color: #FCA5A5; }
-
+        /* Responsive */
         @media (max-width: 1100px) {
-          .dashboard-grid { grid-template-columns: repeat(3, 1fr); }
-          .span-3 { grid-column: span 2 !important; }
-          .span-2 { grid-column: span 1 !important; }
-          .span-1 { grid-column: span 1 !important; }
+          .kpi-grid { grid-template-columns: repeat(3, 1fr); }
         }
         @media (max-width: 800px) {
-          .dashboard-grid { grid-template-columns: repeat(2, 1fr); }
-          .span-3, .span-2, .span-1 { grid-column: span 1 !important; }
+          .kpi-grid { grid-template-columns: repeat(2, 1fr); }
           .hero { flex-direction: column; align-items: flex-start; }
           .hero-filters { width: 100%; }
         }
         @media (max-width: 640px) {
-          .dashboard-grid { grid-template-columns: repeat(2, 1fr); }
-          .span-3, .span-2, .span-1 { grid-column: span 2 !important; }
+          .kpi-grid { grid-template-columns: repeat(2, 1fr); }
           .hero { padding: 1rem; }
           .hero-greeting h2 { font-size: 1.1rem; white-space: normal; }
           .hero-greeting p { font-size: 0.8rem; white-space: normal; }
@@ -512,13 +480,12 @@ export default function ManagementDashboard({ role }: { role: string }) {
           .kpi-value { font-size: 1.4rem; }
         }
         @media (max-width: 380px) {
-          .dashboard-grid { grid-template-columns: 1fr; }
-          .span-3, .span-2, .span-1 { grid-column: span 1 !important; }
+          .kpi-grid { grid-template-columns: 1fr; }
         }
       `}</style>
 
       <div className="mgmt" style={{ padding: "0.8rem 1.2rem" }}>
-        {/* ── Hero bar ── */}
+        {/* ── Hero bar: greeting + filters ── */}
         <motion.div
           className="hero"
           initial={{ opacity: 0, y: -10 }}
@@ -564,7 +531,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         )}
 
         {/* ── Row 1: KPI cards ── */}
-        <div className="dashboard-grid">
+        <div className="kpi-grid">
           {[
             {
               label: "Total Budget",
@@ -609,12 +576,12 @@ export default function ManagementDashboard({ role }: { role: string }) {
           ].map((kpi, i) => (
             <motion.div
               key={kpi.label}
-              className="card span-1"
+              className="card"
               custom={i}
               initial="hidden"
               animate="visible"
               variants={cardVariant}
-              {...hoverScale}
+              whileHover={{ scale: 1.02, y: -4 }}
               onClick={() => kpi.link && router.push(kpi.link + detailQuery())}
             >
               <div className="kpi-label">{kpi.label}</div>
@@ -628,39 +595,48 @@ export default function ManagementDashboard({ role }: { role: string }) {
                   <Trend value={spendingTrend} positive={spendingTrend < 0} negative={spendingTrend > 0} />
                 )}
               </div>
-              {kpi.extra && <div className="kpi-extra" title={kpi.extra}>{kpi.extra}</div>}
+              {kpi.extra && (
+                <div style={{ fontSize: "0.65rem", color: "var(--accent)", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200 }}>
+                  {kpi.extra}
+                </div>
+              )}
             </motion.div>
           ))}
         </div>
 
         {/* ── Row 2: Project Utilization + Donor Balances ── */}
-        <div className="dashboard-grid">
+        <div className="kpi-grid" style={{ gridTemplateColumns: "3fr 2fr" }}>
           <motion.div
-            className="card span-3"
+            className="card"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4, duration: 0.5 }}
+            onClick={() => router.push("/dashboard/settings/budgets" + detailQuery())}
           >
-            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "#F1F5F9", marginBottom: "0.8rem" }}>📊 Project Utilization</div>
+            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>📊 Project Utilization</div>
             {filteredProjectRows.map((p, idx) => {
               const health = activityHealth[p.id]
               return (
-                <div key={idx} className="project-row" onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}`)}>
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: p.status === "Overspent" ? "#F87171" : p.status === "Review" ? "#F97316" : p.status === "At Risk" ? "#F97316" : "#2DD4BF", flexShrink: 0 }}></div>
-                  <span style={{ fontWeight: 600, fontSize: "0.85rem", color: "#E2E8F0" }}>{p.name}</span>
-                  <div className="project-metrics">
-                    <span className="project-metric" style={{ fontWeight: 600, color: "#E2E8F0" }}>{formatPKR(p.actual)}</span>
-                    <span className="project-metric" style={{ color: p.pct > 100 ? "#F87171" : p.pct > 80 ? "#F97316" : "#2DD4BF" }}>{p.pct}%</span>
+                <div key={idx} onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}`)} style={{
+                  display: "flex", alignItems: "center", gap: "0.8rem",
+                  background: "var(--card-bg)", borderRadius: "12px", padding: "0.5rem 1rem",
+                  border: "1px solid var(--card-border)", cursor: "pointer", marginBottom: "0.5rem",
+                  flexWrap: "wrap",
+                }}>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: p.status === "Overspent" ? "var(--red)" : p.status === "Review" ? "var(--amber)" : p.status === "At Risk" ? "var(--amber)" : "var(--green)", flexShrink: 0 }}></div>
+                  <span style={{ flex: 1, fontWeight: 600, fontSize: "0.85rem", color: "var(--text)" }}>{p.name}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: 600, minWidth: 60, fontSize: "0.8rem", color: "var(--text)" }}>{formatPKR(p.actual)}</span>
+                    <span style={{ minWidth: 50, color: p.pct > 100 ? "var(--red)" : p.pct > 80 ? "var(--amber)" : "var(--green)", fontSize: "0.8rem" }}>{p.pct}%</span>
                     <span style={{
                       padding: "0.1rem 0.6rem", borderRadius: "12px", fontSize: "0.7rem", fontWeight: 700,
                       background: p.status === "Overspent" ? "#fee2e2" : p.status === "Review" ? "#fef3c7" : p.status === "At Risk" ? "#fef3c7" : "#dcfce7",
                       color: p.status === "Overspent" ? "#991b1b" : p.status === "Review" ? "#92400e" : p.status === "At Risk" ? "#92400e" : "#166534",
-                      whiteSpace: "nowrap", textAlign: "center"
                     }}>
                       {p.status}
                     </span>
                     {health ? (
-                      <span className="project-metric" style={{ fontSize: "0.65rem", color: "#F97316", maxWidth: "110px", overflow: "hidden", textOverflow: "ellipsis" }}>{health.message}</span>
+                      <span style={{ fontSize: "0.65rem", color: "var(--amber)", maxWidth: "110px", overflow: "hidden", textOverflow: "ellipsis" }}>{health.message}</span>
                     ) : (
                       <span></span>
                     )}
@@ -671,56 +647,66 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </motion.div>
 
           <motion.div
-            className="card span-2"
+            className="card"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5, duration: 0.5 }}
+            onClick={() => router.push("/dashboard/reports/donor" + detailQuery())}
           >
-            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "#F1F5F9", marginBottom: "0.8rem" }}>💧 Donor Balances</div>
+            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>💧 Donor Balances</div>
             {filteredDonorBalances.map((d, idx) => (
               <div key={idx} onClick={() => router.push(`/dashboard/settings/budgets?donor=${d.donor_id}`)} style={{
                 display: "flex", alignItems: "center", gap: "0.8rem",
-                background: "#111827", borderRadius: "12px", padding: "0.5rem 1rem",
-                border: "1px solid #1E293B", cursor: "pointer", marginBottom: "0.5rem",
+                background: "var(--card-bg)", borderRadius: "12px", padding: "0.5rem 1rem",
+                border: "1px solid var(--card-border)", cursor: "pointer", marginBottom: "0.5rem",
                 flexWrap: "wrap",
               }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: d.overspent ? "#F87171" : "#A78BFA", flexShrink: 0 }}></div>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: d.overspent ? "var(--red)" : "#A78BFA", flexShrink: 0 }}></div>
                 <div style={{ flex: 1 }}>
-                  <span style={{ fontWeight: 600, fontSize: "0.85rem", color: "#E2E8F0" }}>{d.name}</span>
-                  <div style={{ fontSize: "0.65rem", color: "#94A3B8" }}>
-                    {d.monthsPassed}/{d.monthsTotal} months · {d.health === "slow" ? <span style={{ color: "#F87171", fontWeight: 600 }}>Slow: only {d.pct}% spent</span> : d.health === "ok" ? <span style={{ color: "#F97316", fontWeight: 600 }}>OK</span> : <span style={{ color: "#2DD4BF", fontWeight: 600 }}>On Track</span>}
+                  <span style={{ fontWeight: 600, fontSize: "0.85rem", color: "var(--text)" }}>{d.name}</span>
+                  <div style={{ fontSize: "0.65rem", color: "var(--text-secondary)" }}>
+                    {d.monthsPassed}/{d.monthsTotal} months · {d.health === "slow" ? <span style={{ color: "var(--red)", fontWeight: 600 }}>Slow: only {d.pct}% spent</span> : d.health === "ok" ? <span style={{ color: "var(--amber)", fontWeight: 600 }}>OK</span> : <span style={{ color: "var(--green)", fontWeight: 600 }}>On Track</span>}
                   </div>
                 </div>
-                <span style={{ fontWeight: 700, fontSize: "0.85rem", color: "#E2E8F0" }}>{formatPKR(d.remaining)}</span>
-                <span style={{ fontSize: "0.75rem", color: "#94A3B8", minWidth: 30, textAlign: "right" }}>{d.pct}%</span>
+                <span style={{ fontWeight: 700, fontSize: "0.85rem", color: "var(--text)" }}>{formatPKR(d.remaining)}</span>
+                <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)", minWidth: 30, textAlign: "right" }}>{d.pct}%</span>
               </div>
             ))}
           </motion.div>
         </div>
 
         {/* ── Row 3: Underspend + Receivables vs Payables ── */}
-        <div className="dashboard-grid">
+        <div className="kpi-grid">
           <motion.div
-            className="card span-3"
+            className="card"
+            style={{ gridColumn: "span 3" }}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.6, duration: 0.5 }}
           >
-            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "#F1F5F9", marginBottom: "0.8rem" }}>💡 Top 5 Underspend Activities</div>
+            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>💡 Top 5 Underspend Activities</div>
             {underspentActivities.length === 0 ? (
-              <div style={{ fontSize: "0.8rem", color: "#94A3B8" }}>No activities with remaining budget this month.</div>
+              <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>No activities with remaining budget this month.</div>
             ) : (
               <>
-                <div className="underspend-header">
-                  <span>Activity</span>
-                  <span>Budget</span>
-                  <span>Actual</span>
-                  <span>Unspent</span>
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 80px 80px 100px",
+                  gap: 8, fontSize: "0.65rem", fontWeight: 700, color: "var(--text-secondary)",
+                  textTransform: "uppercase", paddingBottom: 6, borderBottom: "1px solid var(--card-border)",
+                  marginBottom: 6,
+                }}>
+                  <span>Activity</span><span>Budget</span><span>Actual</span><span>Unspent</span>
                 </div>
                 {underspentActivities.map((act, idx) => (
-                  <div key={idx} className="underspend-row-grid">
+                  <div key={idx} style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 80px 80px 100px",
+                    gap: 8, alignItems: "center", padding: "5px 0",
+                    borderBottom: "1px solid var(--card-border)", fontSize: "0.8rem",
+                  }}>
                     <span
-                      className="clickable"
+                      style={{ color: "var(--accent)", textDecoration: "underline", cursor: "pointer" }}
                       onClick={(e) => {
                         e.stopPropagation()
                         if (act.projectId) {
@@ -729,16 +715,14 @@ export default function ManagementDashboard({ role }: { role: string }) {
                           router.push(`/dashboard/reports/spending-detail?activity=${act.id}&fy=${fiscalYear}`)
                         }
                       }}
-                    >
-                      {act.name}
-                    </span>
-                    <span style={{ color: "#E2E8F0" }}>{formatPKR(act.budget)}</span>
-                    <span style={{ color: "#E2E8F0" }}>{formatPKR(act.actual)}</span>
+                    >{act.name}</span>
+                    <span style={{ color: "var(--text)" }}>{formatPKR(act.budget)}</span>
+                    <span style={{ color: "var(--text)" }}>{formatPKR(act.actual)}</span>
                     <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                      <div style={{ flex: 1, height: 5, background: "#334155", borderRadius: 10, overflow: "hidden" }}>
-                        <div style={{ width: `${Math.min(act.pct, 100)}%`, height: "100%", background: "#2DD4BF", borderRadius: 10 }}></div>
+                      <div style={{ flex: 1, height: 5, background: "var(--card-border)", borderRadius: 10, overflow: "hidden" }}>
+                        <div style={{ width: `${Math.min(act.pct, 100)}%`, height: "100%", background: "var(--green)", borderRadius: 10 }}></div>
                       </div>
-                      <span style={{ fontSize: "0.7rem", color: "#2DD4BF", fontWeight: 600, whiteSpace: "nowrap" }}>{act.pct}%</span>
+                      <span style={{ fontSize: "0.7rem", color: "var(--green)", fontWeight: 600, whiteSpace: "nowrap" }}>{act.pct}%</span>
                     </div>
                   </div>
                 ))}
@@ -748,33 +732,34 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
           {/* Combined Receivables vs Payables card */}
           <motion.div
-            className="card span-2"
+            className="card"
+            style={{ gridColumn: "span 2" }}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.7, duration: 0.5 }}
           >
-            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "#F1F5F9", marginBottom: "1rem" }}>⚖️ Receivables vs Payables</div>
+            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "1rem" }}>⚖️ Receivables vs Payables</div>
             <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "0.5rem", marginBottom: "0.8rem" }}>
               <div style={{ textAlign: "center" }}>
-                <div style={{ fontSize: "0.65rem", textTransform: "uppercase", color: "#94A3B8", marginBottom: 2 }}>Receivables</div>
-                <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "#F97316" }}>{formatPKR(totalReceivables)}</div>
+                <div style={{ fontSize: "0.65rem", textTransform: "uppercase", color: "var(--text-secondary)", marginBottom: 2 }}>Receivables</div>
+                <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "var(--amber)" }}>{formatPKR(totalReceivables)}</div>
               </div>
-              <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "#64748B" }}>VS</div>
+              <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--text-secondary)" }}>VS</div>
               <div style={{ textAlign: "center" }}>
-                <div style={{ fontSize: "0.65rem", textTransform: "uppercase", color: "#94A3B8", marginBottom: 2 }}>Payables</div>
-                <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "#F97316" }}>{formatPKR(totalPayables)}</div>
+                <div style={{ fontSize: "0.65rem", textTransform: "uppercase", color: "var(--text-secondary)", marginBottom: 2 }}>Payables</div>
+                <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "var(--amber)" }}>{formatPKR(totalPayables)}</div>
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem", fontSize: "0.75rem", fontWeight: 600 }}>
               {totalReceivables > totalPayables ? (
                 <>
-                  <CheckCircle size={16} className="health-positive" />
-                  <span className="health-positive">Healthy — Receivables exceed Payables by {formatPKR(totalReceivables - totalPayables)}</span>
+                  <CheckCircle size={16} style={{ color: "var(--green)" }} />
+                  <span style={{ color: "var(--green)" }}>Healthy — Receivables exceed Payables by {formatPKR(totalReceivables - totalPayables)}</span>
                 </>
               ) : (
                 <>
-                  <AlertTriangle size={16} className="health-negative" />
-                  <span className="health-negative">Unhealthy — Payables exceed Receivables by {formatPKR(totalPayables - totalReceivables)}</span>
+                  <AlertTriangle size={16} style={{ color: "var(--red)" }} />
+                  <span style={{ color: "var(--red)" }}>Unhealthy — Payables exceed Receivables by {formatPKR(totalPayables - totalReceivables)}</span>
                 </>
               )}
             </div>
@@ -787,9 +772,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
           animate={{ opacity: 1 }}
           transition={{ delay: 1, duration: 0.5 }}
           style={{
-            background: "#111827", borderRadius: 12, padding: "0.6rem 1.2rem",
-            border: "1px solid #1E293B", display: "flex", justifyContent: "space-between",
-            flexWrap: "wrap", gap: "0.8rem", fontSize: "0.8rem", color: "#94A3B8", fontWeight: 500
+            background: "var(--card-bg)", borderRadius: 12, padding: "0.6rem 1.2rem",
+            border: "1px solid var(--card-border)", display: "flex", justifyContent: "space-between",
+            flexWrap: "wrap", gap: "0.8rem", fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: 500
           }}
         >
           <span>⚠️ Portfolio Health: {filteredOverspentCount > 0 ? "Needs Attention" : "Healthy"}</span>

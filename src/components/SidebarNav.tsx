@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { usePathname } from "next/navigation"
 import { ChevronDown, ChevronRight } from "lucide-react"
+import { motion, AnimatePresence } from "framer-motion"
 
 interface NavItem {
   label: string
@@ -119,43 +120,159 @@ export default function SidebarNav({
           const expanded = expandedSections[sec.section] ?? false
           return (
             <div key={sec.section} style={{ marginBottom: 2 }}>
-              <button className="dl-section-btn" onClick={() => toggleSection(sec.section)}>
-                {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              <button
+                className="dl-section-btn"
+                onClick={() => toggleSection(sec.section)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "8px 14px",
+                  background: "none",
+                  border: "none",
+                  color: "#94A3B8",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  width: "100%",
+                  textAlign: "left",
+                  fontFamily: "inherit",
+                  borderRadius: 8,
+                  transition: "background 0.2s, color 0.2s",
+                }}
+              >
+                <motion.span
+                  animate={{ rotate: expanded ? 90 : 0 }}
+                  transition={{ duration: 0.2 }}
+                  style={{ display: "inline-flex" }}
+                >
+                  <ChevronRight size={12} />
+                </motion.span>
                 <span>{sec.section}</span>
               </button>
 
-              {expanded && (
-                <div className="dl-section-content">
-                  {sec.groups &&
-                    sec.groups.map(group => (
-                      <div key={group.groupLabel}>
-                        <div className="dl-nav-group-label">{group.groupLabel}</div>
-                        {group.items.map(item => (
-                          <a
-                            key={item.href}
-                            href={item.href}
-                            className={`dl-nav-item${isActive(item.href) ? " active" : ""}`}
-                          >
-                            <span className="dl-nav-icon">{item.icon}</span>
-                            <span>{item.label}</span>
-                          </a>
+              <AnimatePresence initial={false}>
+                {expanded && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.25, ease: "easeInOut" }}
+                    style={{ overflow: "hidden" }}
+                  >
+                    <div style={{ paddingLeft: 10, marginTop: 4, marginBottom: 6 }}>
+                      {sec.groups &&
+                        sec.groups.map(group => (
+                          <div key={group.groupLabel}>
+                            <div
+                              style={{
+                                padding: "4px 14px 2px",
+                                color: "#475569",
+                                fontSize: 8,
+                                fontWeight: 700,
+                                textTransform: "uppercase",
+                                letterSpacing: "0.06em",
+                              }}
+                            >
+                              {group.groupLabel}
+                            </div>
+                            {group.items.map(item => {
+                              const active = isActive(item.href)
+                              return (
+                                <a
+                                  key={item.href}
+                                  href={item.href}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 8,
+                                    padding: "8px 14px",
+                                    borderRadius: 8,
+                                    color: active ? "#FFFFFF" : "#94A3B8",
+                                    fontSize: 13,
+                                    fontWeight: active ? 600 : 500,
+                                    textDecoration: "none",
+                                    position: "relative",
+                                    background: active ? "rgba(255,255,255,0.08)" : "transparent",
+                                    transition: "background 0.2s, color 0.2s",
+                                  }}
+                                >
+                                  {/* Glow pill indicator */}
+                                  {active && (
+                                    <motion.div
+                                      layoutId="sidebar-active-pill"
+                                      style={{
+                                        position: "absolute",
+                                        left: -2,
+                                        top: 6,
+                                        bottom: 6,
+                                        width: 4,
+                                        borderRadius: 4,
+                                        background: "linear-gradient(180deg, #22D3EE, #3B82F6)",
+                                        boxShadow: "0 0 12px rgba(34,211,238,0.5)",
+                                      }}
+                                      transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                                    />
+                                  )}
+                                  <span style={{ width: 20, textAlign: "center", flexShrink: 0 }}>
+                                    {item.icon}
+                                  </span>
+                                  <span>{item.label}</span>
+                                </a>
+                              )
+                            })}
+                          </div>
                         ))}
-                      </div>
-                    ))}
 
-                  {sec.items &&
-                    sec.items.map(item => (
-                      <a
-                        key={item.href}
-                        href={item.href}
-                        className={`dl-nav-item${isActive(item.href) ? " active" : ""}`}
-                      >
-                        <span className="dl-nav-icon">{item.icon}</span>
-                        <span>{item.label}</span>
-                      </a>
-                    ))}
-                </div>
-              )}
+                      {sec.items &&
+                        sec.items.map(item => {
+                          const active = isActive(item.href)
+                          return (
+                            <a
+                              key={item.href}
+                              href={item.href}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                                padding: "8px 14px",
+                                borderRadius: 8,
+                                color: active ? "#FFFFFF" : "#94A3B8",
+                                fontSize: 13,
+                                fontWeight: active ? 600 : 500,
+                                textDecoration: "none",
+                                position: "relative",
+                                background: active ? "rgba(255,255,255,0.08)" : "transparent",
+                                transition: "background 0.2s, color 0.2s",
+                              }}
+                            >
+                              {active && (
+                                <motion.div
+                                  layoutId="sidebar-active-pill"
+                                  style={{
+                                    position: "absolute",
+                                    left: -2,
+                                    top: 6,
+                                    bottom: 6,
+                                    width: 4,
+                                    borderRadius: 4,
+                                    background: "linear-gradient(180deg, #22D3EE, #3B82F6)",
+                                    boxShadow: "0 0 12px rgba(34,211,238,0.5)",
+                                  }}
+                                  transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                                />
+                              )}
+                              <span style={{ width: 20, textAlign: "center", flexShrink: 0 }}>
+                                {item.icon}
+                              </span>
+                              <span>{item.label}</span>
+                            </a>
+                          )
+                        })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )
         })}
