@@ -198,7 +198,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
       // Activity health
       if (enrichedProjects.length > 0) {
-        const projectIds = enrichedProjects.map(p => p.id)
+        const projectIds = enrichedProjects.map((p: any) => p.id)
         const { data: actBudgetsAll } = await supabase.from("budgets").select("project_id, activity_id, budgeted_amount").eq("company_id", companyId).eq("fiscal_year", fiscalYear).in("project_id", projectIds).is("month", null)
         const projActBudget: Record<string, Record<string, number>> = {}
         actBudgetsAll?.forEach((b: any) => { const pid = String(b.project_id); const aid = String(b.activity_id); if (!projActBudget[pid]) projActBudget[pid] = {}; projActBudget[pid][aid] = (projActBudget[pid][aid] || 0) + (b.budgeted_amount || 0) })
