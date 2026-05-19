@@ -1,73 +1,72 @@
+// app/dashboard/sidebar-client.tsx
 "use client"
-
 import { useEffect } from "react"
 import { usePathname } from "next/navigation"
 
 export default function SidebarClient() {
   const pathname = usePathname()
 
+  // ── Wire hamburger on mount ──
   useEffect(() => {
-    // ── Wire hamburger button ──────────────────────────────────────────────
     const hamburger = document.getElementById("dl-hamburger")
     const sidebar   = document.getElementById("dl-sidebar")
     const overlay   = document.getElementById("dl-overlay")
 
-    const openMenu  = () => {
+    const open = () => {
       sidebar?.classList.add("mobile-open")
       overlay?.classList.add("open")
-      document.body.style.overflow = "hidden" // prevent background scroll
+      document.body.style.overflow = "hidden"
     }
-
-    const closeMenu = () => {
+    const close = () => {
       sidebar?.classList.remove("mobile-open")
       overlay?.classList.remove("open")
       document.body.style.overflow = ""
     }
 
-    hamburger?.addEventListener("click", openMenu)
-    overlay?.addEventListener("click", closeMenu)
+    hamburger?.addEventListener("click", open)
+    overlay?.addEventListener("click", close)
 
-    // ── Close menu on nav link click (mobile UX) ───────────────────────────
     const navLinks = sidebar?.querySelectorAll("a.dl-nav-item")
-    navLinks?.forEach(link => link.addEventListener("click", closeMenu))
+    navLinks?.forEach(link => link.addEventListener("click", close))
 
-    // ── Close on Escape key ────────────────────────────────────────────────
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeMenu() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close() }
     document.addEventListener("keydown", onKey)
 
     return () => {
-      hamburger?.removeEventListener("click", openMenu)
-      overlay?.removeEventListener("click", closeMenu)
-      navLinks?.forEach(link => link.removeEventListener("click", closeMenu))
+      hamburger?.removeEventListener("click", open)
+      overlay?.removeEventListener("click", close)
+      navLinks?.forEach(link => link.removeEventListener("click", close))
       document.removeEventListener("keydown", onKey)
       document.body.style.overflow = ""
     }
   }, [])
 
-  // ── Close sidebar whenever route changes (after navigation) ───────────────
+  // ── Highlight active nav link on route change ──
   useEffect(() => {
-    const sidebar = document.getElementById("dl-sidebar")
-    const overlay = document.getElementById("dl-overlay")
+    const sidebar  = document.getElementById("dl-sidebar")
+    const overlay  = document.getElementById("dl-overlay")
+
+    // Close drawer on navigation
     sidebar?.classList.remove("mobile-open")
     overlay?.classList.remove("open")
     document.body.style.overflow = ""
 
-    // ── Highlight active nav item based on current path ────────────────────
+    // Active link
     const navLinks = sidebar?.querySelectorAll("a.dl-nav-item")
     navLinks?.forEach(link => {
       const href = link.getAttribute("href") || ""
-      if (href === pathname || (href !== "/dashboard" && pathname.startsWith(href))) {
-        link.classList.add("active")
-      } else {
-        link.classList.remove("active")
-      }
+      const isActive =
+        href === "/dashboard"
+          ? pathname === "/dashboard"
+          : pathname.startsWith(href)
+      link.classList.toggle("active", isActive)
     })
   }, [pathname])
 
   return (
-    <div
-      className="dl-overlay"
-      id="dl-overlay"
-    />
+    <>
+      {/* Mobile overlay */}
+      <div className="dl-overlay" id="dl-overlay" />
+    </>
   )
 }
