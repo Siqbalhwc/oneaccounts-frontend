@@ -1,6 +1,7 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react"
+import { createContext, useContext, useState, useEffect } from "react"
+import type { ReactNode } from "react"
 
 export type ThemeMode = "dark" | "green" | "light"
 
@@ -18,7 +19,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<ThemeMode>("dark")
 
   useEffect(() => {
-    // apply theme class to <html>
     document.documentElement.setAttribute("data-theme", theme)
   }, [theme])
 
