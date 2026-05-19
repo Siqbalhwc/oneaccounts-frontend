@@ -26,6 +26,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         return
       }
 
+      // ✅ Fetch role from user_roles table ONLY – never from JWT metadata
       const { data: roleData } = await supabase
         .from("user_roles")
         .select("role")
@@ -34,13 +35,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle()
 
       if (!cancelled) {
-        if (roleData?.role) {
-          setRole(roleData.role)
-        } else {
-          const jwtRole = (user.app_metadata as any)?.role as string | undefined
-          const jwtCompany = (user.app_metadata as any)?.company_id as string | undefined
-          setRole(jwtRole || (jwtCompany ? "admin" : null))
-        }
+        setRole(roleData?.role || null)
         setLoading(false)
       }
     }

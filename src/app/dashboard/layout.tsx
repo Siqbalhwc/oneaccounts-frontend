@@ -1,6 +1,6 @@
 // app/dashboard/layout.tsx
-import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { getUserCompany } from '@/lib/get-user-company'
 import SidebarClient from './sidebar-client'
 import DashboardTopBar from "@/components/DashboardTopBar"
 import BottomNav from "@/components/BottomNav"
@@ -11,10 +11,10 @@ const styles = `
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Inter', sans-serif; background: #0B1120; color: #E2E8F0; }
 
-  /* ── Shell ── */
+  /* Shell */
   .dl-shell { display: flex; min-height: 100vh; background: #0B1120; }
 
-  /* ── Sidebar ── */
+  /* Sidebar */
   .dl-sidebar {
     width: 220px; min-width: 220px;
     background: #0B1120;
@@ -92,7 +92,7 @@ const styles = `
   }
   .dl-sidebar-signout:hover { color: #EF4444; }
 
-  /* ── Main area ── */
+  /* Main area */
   .dl-main {
     flex: 1; margin-left: 220px;
     display: flex; flex-direction: column;
@@ -102,7 +102,7 @@ const styles = `
   }
   .dl-main-content { flex: 1; display: flex; flex-direction: column; }
 
-  /* ── Topbar ── */
+  /* Topbar */
   .dl-topbar {
     background: #0F172A; border-bottom: 1px solid #1E293B;
     padding: 0 24px; display: flex; align-items: center;
@@ -130,7 +130,7 @@ const styles = `
   .dl-btn-receipt:hover { background:#065F46; border-color:#10B981; color:white; }
   .dl-btn-payment:hover { background:#991B1B; border-color:#EF4444; color:white; }
 
-  /* ── Hamburger ── */
+  /* Hamburger */
   .dl-hamburger {
     display: none; background: none; border: none;
     cursor: pointer; padding: 6px; flex-shrink: 0; z-index: 100;
@@ -141,14 +141,14 @@ const styles = `
     transition: all 0.25s;
   }
 
-  /* ── Overlay ── */
+  /* Overlay */
   .dl-overlay {
     display: none; position: fixed; inset: 0;
     background: rgba(0,0,0,0.65); z-index: 35;
   }
   .dl-overlay.open { display: block; }
 
-  /* ── Mobile bottom nav ── */
+  /* Mobile bottom nav */
   .mobile-bottom-nav { display: none; }
 
   /* ════════════════════════════════
@@ -273,31 +273,12 @@ const navSections = [
 ]
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  // ✅ NEW: fetch company from database, NOT from JWT metadata
+  const tenant = await getUserCompany()
+  if (!tenant) redirect('/login')
 
-  const email   = user.email || ''
+  const email   = tenant.email
   const initial = email.charAt(0).toUpperCase()
-  let companyName    = 'OneAccounts'
-  let companyTagline = 'by Siqbal'
-  let logoUrl        = '/logo.png'
-
-  try {
-    const cid = (user?.app_metadata as any)?.company_id
-    if (cid) {
-      const { data: settings } = await supabase
-        .from('company_settings')
-        .select('business_name, logo_url, tagline')
-        .eq('company_id', cid)
-        .maybeSingle()
-      if (settings) {
-        if (settings.business_name) companyName    = settings.business_name
-        if (settings.logo_url)      logoUrl        = settings.logo_url
-        if (settings.tagline)       companyTagline = settings.tagline
-      }
-    }
-  } catch {}
 
   const getGreeting = () => {
     const h = new Date().getHours()
@@ -317,10 +298,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
         {/* ── Sidebar ── */}
         <aside className="dl-sidebar" id="dl-sidebar">
           <div className="dl-sidebar-logo">
-            <img src={logoUrl} alt={companyName} className="dl-sidebar-logo-img" />
+            <img src={tenant.companyLogo} alt={tenant.companyName} className="dl-sidebar-logo-img" />
             <div>
-              <div className="dl-sidebar-logo-name">{companyName}</div>
-              <div className="dl-sidebar-logo-sub">{companyTagline}</div>
+              <div className="dl-sidebar-logo-name">{tenant.companyName}</div>
+              <div className="dl-sidebar-logo-sub">{tenant.companyTagline}</div>
             </div>
           </div>
 

@@ -61,8 +61,8 @@ export default function LoginPage() {
       }),
     }).catch(() => {})
 
-    router.push("/dashboard")
-    router.refresh()
+    // ✅ Use hard navigation to avoid session‑hydration race
+    window.location.href = "/dashboard"
   }
 
   return (
