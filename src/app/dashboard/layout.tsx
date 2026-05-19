@@ -3,7 +3,6 @@ import { redirect } from 'next/navigation'
 import SidebarClient from './sidebar-client'
 import DashboardTopBar from "@/components/DashboardTopBar"
 import BottomNav from "@/components/BottomNav"
-import SidebarNav from "@/components/SidebarNav"
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -12,7 +11,6 @@ const styles = `
 
   .dl-shell { display: flex; min-height: 100vh; background: #0B1120; }
 
-  /* ── Sidebar – 208 px ── */
   .dl-sidebar {
     width: 208px; min-width: 208px;
     background: #0B1120;
@@ -33,14 +31,9 @@ const styles = `
     font-family: inherit; border-radius: 8px; transition: all 0.2s;
   }
   .dl-section-btn:hover { background: rgba(255,255,255,0.04); color: white; }
-  .dl-section-content { padding-left: 10px; margin-top: 4px; margin-bottom: 6px; }
 
   .dl-sidebar-nav { flex: 1; padding: 10px 8px; overflow-y: auto; }
 
-  .dl-nav-section {
-    padding: 10px 14px 4px; color: #64748B;
-    font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
-  }
   .dl-nav-group-label {
     padding: 4px 14px 2px; color: #475569;
     font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
@@ -57,7 +50,6 @@ const styles = `
     border-left: 3px solid #334155;
   }
   .dl-nav-icon { width: 20px; text-align: center; flex-shrink: 0; }
-  .dl-nav-divider { height: 1px; background: rgba(255,255,255,0.06); margin: 6px 14px; }
 
   .dl-sidebar-user { padding: 14px; border-top: 1px solid #1E293B; display: flex; align-items: center; gap: 10px; }
   .dl-sidebar-avatar { width: 34px; height: 34px; border-radius: 50%; background: #1E293B; color: white; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex-shrink: 0; }
@@ -65,7 +57,6 @@ const styles = `
   .dl-sidebar-signout { color: #64748B; font-size: 10px; cursor: pointer; background: none; border: none; font-family: inherit; padding: 0; margin-top: 2px; }
   .dl-sidebar-signout:hover { color: #EF4444; }
 
-  /* ── Main area ── */
   .dl-main { flex: 1; margin-left: 208px; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; overflow-x: hidden; background: #0B1120; }
   .dl-main-content { flex: 1; display: flex; flex-direction: column; }
   .dl-main-content > div { flex: 1; display: flex; flex-direction: column; background: #0B1120 !important; }
@@ -90,15 +81,9 @@ const styles = `
   .dl-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 35; }
   .dl-overlay.open { display: block; }
 
-  .mobile-bottom-nav { display: none; z-index: 10; }
-  @media (max-width: 768px) {
-    .mobile-bottom-nav { display: block; }
-    .dl-main { padding-bottom: 60px; }
-  }
-
   @media (max-width: 900px) {
     .dl-sidebar { width: 60px; min-width: 60px; }
-    .dl-sidebar-logo-name, .dl-sidebar-logo-sub, .dl-nav-section, .dl-nav-group-label,
+    .dl-sidebar-logo-name, .dl-sidebar-logo-sub, .dl-nav-group-label,
     .dl-nav-item span:not(.dl-nav-icon), .dl-sidebar-email, .dl-sidebar-signout { display: none; }
     .dl-sidebar-logo { justify-content: center; padding: 14px 0; }
     .dl-nav-item { justify-content: center; padding: 10px; }
@@ -106,129 +91,14 @@ const styles = `
     .dl-main { margin-left: 60px; }
   }
   @media (max-width: 640px) {
-    .dl-sidebar { transform: translateX(-208px); width: 260px; min-width: 260px; }
-    .dl-sidebar.mobile-open { transform: translateX(0); }
-    .dl-sidebar.mobile-open .dl-sidebar-logo-name, .dl-sidebar.mobile-open .dl-sidebar-logo-sub,
-    .dl-sidebar.mobile-open .dl-nav-section, .dl-sidebar.mobile-open .dl-nav-group-label,
-    .dl-sidebar.mobile-open .dl-nav-item span:not(.dl-nav-icon),
-    .dl-sidebar.mobile-open .dl-sidebar-email, .dl-sidebar.mobile-open .dl-sidebar-signout { display: block; }
-    .dl-sidebar.mobile-open .dl-sidebar-logo { justify-content: flex-start; padding: 18px 14px; }
-    .dl-sidebar.mobile-open .dl-nav-item { justify-content: flex-start; padding: 8px 14px; }
-    .dl-main { margin-left: 0; }
-    .dl-hamburger { display: block; }
-    .dl-topbar { flex-wrap: wrap; min-height: auto; padding: 12px 16px; gap: 10px; }
-    .dl-topbar-greeting { flex: 1 1 60%; }
-    .dl-topbar-actions { flex: 1 1 100%; gap: 6px; }
-    .dl-action-btn { flex: 1; justify-content: center; padding: 7px 8px; font-size: 10px; }
-  }
-  @media (max-width: 380px) {
-    .dl-topbar-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
-    .dl-action-btn { padding: 6px 4px; font-size: 9px; }
-  }
-
-  /* ══════════════════ GLOBAL DARK THEME (excludes dashboard) ══════════════════ */
-  body, .dl-shell, .dl-main, .dl-main-content { background: #0B1120 !important; }
-  .dl-main-content > div { background: #0B1120 !important; }
-
-  /* ── Target everything inside the main content EXCEPT the dashboard wrapper ── */
-  .dl-main-content > div:not(.mgmt) {
-    background: #0B1120 !important;
-    color: #E2E8F0 !important;
-  }
-
-  /* Headings (inside non‑dashboard pages) */
-  .dl-main-content > div:not(.mgmt) h1,
-  .dl-main-content > div:not(.mgmt) h2,
-  .dl-main-content > div:not(.mgmt) h3,
-  .dl-main-content > div:not(.mgmt) h4,
-  .dl-main-content > div:not(.mgmt) h5,
-  .dl-main-content > div:not(.mgmt) h6 {
-    color: #F1F5F9 !important;
-  }
-
-  /* Cards (outside dashboard) */
-  .dl-main-content > div:not(.mgmt) .card,
-  .dl-main-content > div:not(.mgmt) [class*="card"] {
-    background: #111827 !important;
-    border: 1px solid #1E293B !important;
-    color: #E2E8F0 !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2) !important;
-  }
-
-  /* Inputs, selects, textareas (outside dashboard) */
-  .dl-main-content > div:not(.mgmt) input,
-  .dl-main-content > div:not(.mgmt) select,
-  .dl-main-content > div:not(.mgmt) textarea {
-    background: #1E293B !important;
-    border-color: #334155 !important;
-    color: #F1F5F9 !important;
-  }
-  .dl-main-content > div:not(.mgmt) input:focus,
-  .dl-main-content > div:not(.mgmt) select:focus,
-  .dl-main-content > div:not(.mgmt) textarea:focus {
-    border-color: #64748B !important;
-    outline: none !important;
-  }
-
-  /* Buttons (outside dashboard) */
-  .dl-main-content > div:not(.mgmt) .btn-primary,
-  .dl-main-content > div:not(.mgmt) a.btn-primary,
-  .dl-main-content > div:not(.mgmt) button.btn-primary {
-    background: #1E3A8A !important;
-    color: white !important;
-    border: 1px solid #1E3A8A !important;
-  }
-  .dl-main-content > div:not(.mgmt) .btn-outline {
-    background: transparent !important;
-    border: 1.5px solid #334155 !important;
-    color: #CBD5E1 !important;
-  }
-
-  /* Tables (outside dashboard) */
-  .dl-main-content > div:not(.mgmt) table,
-  .dl-main-content > div:not(.mgmt) .table {
-    background: #111827 !important;
-    color: #E2E8F0 !important;
-  }
-  .dl-main-content > div:not(.mgmt) table th,
-  .dl-main-content > div:not(.mgmt) .table th {
-    background: #1E293B !important;
-    color: #94A3B8 !important;
-    border-color: #1E293B !important;
-  }
-  .dl-main-content > div:not(.mgmt) table td,
-  .dl-main-content > div:not(.mgmt) .table td {
-    border-color: #1E293B !important;
-    background: #111827 !important;
-    color: #E2E8F0 !important;
-  }
-  .dl-main-content > div:not(.mgmt) tr:hover td {
-    background: #1E293B !important;
-  }
-
-  /* Labels (outside dashboard) */
-  .dl-main-content > div:not(.mgmt) .label,
-  .dl-main-content > div:not(.mgmt) .pay-label,
-  .dl-main-content > div:not(.mgmt) .inv-label,
-  .dl-main-content > div:not(.mgmt) .ac-label,
-  .dl-main-content > div:not(.mgmt) .tb-label {
-    color: #94A3B8 !important;
-  }
-
-  /* Remove any remaining white/light inline backgrounds (outside dashboard) */
-  .dl-main-content > div:not(.mgmt) [style*="background: white"],
-  .dl-main-content > div:not(.mgmt) [style*="background: #fff"],
-  .dl-main-content > div:not(.mgmt) [style*="background: #ffffff"],
-  .dl-main-content > div:not(.mgmt) [style*="background: #f8f9fa"],
-  .dl-main-content > div:not(.mgmt) [style*="background: #f1f5f9"],
-  .dl-main-content > div:not(.mgmt) [style*="background: #EFF4FB"],
-  .dl-main-content > div:not(.mgmt) [style*="background: #F4F6FB"],
-  .dl-main-content > div:not(.mgmt) [style*="background: #FAFBFF"] {
-    background: #111827 !important;
+    .dl-sidebar { transform: translateX(0) !important; width: 208px; min-width: 208px; }
+    .dl-sidebar .dl-sidebar-logo-name, .dl-sidebar .dl-sidebar-logo-sub,
+    .dl-sidebar .dl-nav-group-label, .dl-sidebar .dl-nav-item span:not(.dl-nav-icon),
+    .dl-sidebar .dl-sidebar-email, .dl-sidebar .dl-sidebar-signout { display: block; }
+    .dl-main { margin-left: 208px; }
   }
 `
 
-// ── Navigation structure (unchanged) ──
 const navSections = [
   { section: 'MAIN', items: [ { label: 'Dashboard', icon: '📊', href: '/dashboard' } ] },
   { section: 'CRM', items: [
@@ -310,7 +180,57 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       <div className="dl-shell">
         <SidebarClient />
-        <SidebarNav navSections={navSections} email={email} initial={initial} logoUrl={logoUrl} companyName={companyName} companyTagline={companyTagline} />
+
+        {/* ── Inline Sidebar ── */}
+        <aside className="dl-sidebar" id="dl-sidebar">
+          <div className="dl-sidebar-logo">
+            <img src={logoUrl} alt={companyName} className="dl-sidebar-logo-img" />
+            <div>
+              <div className="dl-sidebar-logo-name">{companyName}</div>
+              <div className="dl-sidebar-logo-sub">{companyTagline}</div>
+            </div>
+          </div>
+
+          <nav className="dl-sidebar-nav">
+            {navSections.map((sec) => (
+              <div key={sec.section} style={{ marginBottom: 2 }}>
+                <button className="dl-section-btn">
+                  <span>{sec.section}</span>
+                </button>
+                <div style={{ paddingLeft: 10, marginTop: 4, marginBottom: 6 }}>
+                  {sec.groups && sec.groups.map(group => (
+                    <div key={group.groupLabel}>
+                      <div className="dl-nav-group-label">{group.groupLabel}</div>
+                      {group.items.map(item => (
+                        <a key={item.href} href={item.href} className="dl-nav-item">
+                          <span className="dl-nav-icon">{item.icon}</span>
+                          <span>{item.label}</span>
+                        </a>
+                      ))}
+                    </div>
+                  ))}
+                  {sec.items && sec.items.map(item => (
+                    <a key={item.href} href={item.href} className="dl-nav-item">
+                      <span className="dl-nav-icon">{item.icon}</span>
+                      <span>{item.label}</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </nav>
+
+          <div className="dl-sidebar-user">
+            <div className="dl-sidebar-avatar">{initial}</div>
+            <div style={{ overflow: "hidden" }}>
+              <div className="dl-sidebar-email">{email}</div>
+              <form action="/auth/signout" method="post">
+                <button type="submit" className="dl-sidebar-signout">Sign Out</button>
+              </form>
+            </div>
+          </div>
+        </aside>
+
         <div className="dl-main">
           <DashboardTopBar email={email} greeting={getGreeting()} />
           <div className="dl-main-content">{children}</div>
