@@ -534,7 +534,7 @@ export default function NewBillPage() {
                           <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: 13 }}>No suppliers found</div>
                         ) : (
                           filteredSuppliers.map(s => (
-                            <div key={s.id} className="cust-option" onMouseDown={() => selectCustomer(s)}>
+                            <div key={s.id} className="cust-option" onMouseDown={() => selectSupplier(s)}>
                               <div>
                                 <div className="cust-option-name">{s.name}</div>
                                 <div className="cust-option-meta">{s.code}{s.phone ? ` · ${s.phone}` : ""}</div>
