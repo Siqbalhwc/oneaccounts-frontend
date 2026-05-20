@@ -39,7 +39,7 @@ interface Supplier {
   payment_terms?: string | null
 }
 
-type SortField = "code" | "name" | "balance"
+type SortField = "code" | "name" | "phone" | "balance"
 type SortDir = "asc" | "desc"
 
 export default function SuppliersPage() {
@@ -377,8 +377,8 @@ export default function SuppliersPage() {
           <div className="header-row">
             <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
             <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
-            <span>Phone</span>
-            <button className="sort-btn" onClick={() => handleSort("balance")} style={{ textAlign: "right", justifyContent: "flex-end", paddingRight: "0" }}>Balance {getSortIcon("balance")}</button>
+            <button className="sort-btn" onClick={() => handleSort("phone")}>Phone {getSortIcon("phone")}</button>
+            <button className="sort-btn" onClick={() => handleSort("balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("balance")}</button>
             <span></span>
             <span></span>
           </div>
