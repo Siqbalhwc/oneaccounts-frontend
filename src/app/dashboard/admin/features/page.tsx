@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { ToggleLeft, ToggleRight } from "lucide-react"
-import RoleGuard from "@/components/RoleGuard"
+import { ToggleLeft, ToggleRight, Zap, ZapOff } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 
 const FEATURE_CODES = [
@@ -43,7 +42,7 @@ export default function FeatureManagerPage() {
 
   const [companyId, setCompanyId] = useState<string | null>(null)
   const [featureStates, setFeatureStates] = useState<Record<string, boolean>>({})
-  const [featureIdMap, setFeatureIdMap] = useState<Record<string, string>>({}) // code -> uuid
+  const [featureIdMap, setFeatureIdMap] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState("")
 
@@ -59,7 +58,7 @@ export default function FeatureManagerPage() {
       }
       setCompanyId(cid)
 
-      // Fetch feature IDs from features table
+      // Fetch feature IDs
       supabase
         .from("features")
         .select("id, code")
@@ -89,13 +88,10 @@ export default function FeatureManagerPage() {
               setLoading(false)
             })
         })
-          .then(
-      () => {},
-      () => {
-        setMessage("Error loading features.")
-        setLoading(false)
-      }
-    )
+        .catch(() => {
+          setMessage("Error loading features.")
+          setLoading(false)
+        })
     })
   }, [])
 
@@ -115,7 +111,7 @@ export default function FeatureManagerPage() {
       .from("company_features")
       .upsert({
         company_id: companyId,
-        features: featureId,   // correct foreign key column name
+        features: featureId,
         enabled,
       })
 
@@ -128,67 +124,123 @@ export default function FeatureManagerPage() {
     setTimeout(() => setMessage(""), 3000)
   }
 
+  // Bulk enable / disable all
+  const setAllFeatures = async (enable: boolean) => {
+    if (!canEdit || !companyId) return
+    setLoading(true)
+    for (const code of FEATURE_CODES) {
+      const featureId = featureIdMap[code]
+      if (!featureId) continue
+      await supabase
+        .from("company_features")
+        .upsert({ company_id: companyId, features: featureId, enabled: enable })
+    }
+    setFeatureStates(prev => {
+      const newStates: Record<string, boolean> = {}
+      FEATURE_CODES.forEach(code => { newStates[code] = enable })
+      return newStates
+    })
+    setLoading(false)
+    setMessage(enable ? "✅ All features enabled!" : "✅ All features disabled!")
+    setTimeout(() => setMessage(""), 3000)
+  }
+
+  if (role === null) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
+
+  // Instead of blocking, we show a friendly message – but admins always pass.
   if (!canView) {
     return (
-      <div style={{ padding: 24, textAlign: "center" }}>
+      <div style={{ padding: 40, textAlign: "center", color: "var(--text)" }}>
         <h2>Access Denied</h2>
-        <p style={{ color: "#94A3B8" }}>Only administrators can manage features.</p>
+        <p style={{ color: "var(--text-muted)" }}>Only administrators can manage features.</p>
       </div>
     )
   }
 
   return (
-    <RoleGuard allowedRoles={["admin"]}>
-      <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
-        <style>{`
-          .fm-header { margin-bottom: 16px; }
-          .fm-title { font-size: 22px; font-weight: 800; color: #1E293B; }
-          .fm-subtitle { font-size: 13px; color: #94A3B8; }
-          .fm-card { background: white; border-radius: 10px; border: 1px solid #E2E8F0; padding: 16px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
-          .fm-feature-name { font-size: 15px; font-weight: 700; color: #1E293B; }
-          .fm-feature-desc { font-size: 12px; color: #64748B; margin-top: 2px; }
-          .fm-toggle-btn { background: none; border: none; cursor: pointer; padding: 4px; border-radius: 6px; }
-          .fm-toggle-btn:hover { background: #F1F5F9; }
-        `}</style>
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+      <style>{`
+        .fm-card {
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 16px 20px;
+          margin-bottom: 10px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          box-shadow: var(--shadow-sm);
+          transition: box-shadow 0.15s;
+        }
+        .fm-card:hover { box-shadow: var(--shadow); }
+        .fm-feature-name { font-size: 15px; font-weight: 700; color: var(--text); }
+        .fm-feature-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+        .fm-toggle-btn { background: none; border: none; cursor: pointer; padding: 4px; border-radius: 6px; }
+        .fm-toggle-btn:hover { background: var(--card-hover); }
+        .btn {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 8px 14px; border-radius: 8px; border: 1.5px solid var(--border);
+          font-weight: 600; font-size: 13px; cursor: pointer;
+          background: transparent; color: var(--text-muted); font-family: inherit;
+          transition: all 0.15s;
+        }
+        .btn:hover { background: var(--card-hover); }
+        .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+        .btn-primary:hover { background: var(--primary-hover); }
+      `}</style>
 
-        <div className="fm-header">
-          <div className="fm-title">⚙️ Feature Manager</div>
-          <div className="fm-subtitle">{companyId ? "Toggle features for your company" : "No active company"}</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>⚙️ Feature Manager</h1>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
+            {companyId ? "Toggle premium features for your company" : "No active company"}
+          </p>
         </div>
-
-        {message && (
-          <div style={{
-            background: message.startsWith("✅") ? "#F0FDF4" : "#FEF2F2",
-            color: message.startsWith("✅") ? "#15803D" : "#B91C1C",
-            padding: "8px 12px", borderRadius: 6, fontSize: 13, marginBottom: 12,
-          }}>
-            {message}
+        {canEdit && companyId && (
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-primary" onClick={() => setAllFeatures(true)} disabled={loading}>
+              <Zap size={14} /> Enable All
+            </button>
+            <button className="btn" onClick={() => setAllFeatures(false)} disabled={loading}>
+              <ZapOff size={14} /> Disable All
+            </button>
           </div>
         )}
-
-        {loading ? (
-          <div style={{ textAlign: "center", padding: 30 }}>Loading features...</div>
-        ) : (
-          FEATURE_CODES.map(code => (
-            <div key={code} className="fm-card">
-              <div>
-                <div className="fm-feature-name">{FEATURE_LABELS[code] || code}</div>
-              </div>
-              <button
-                className="fm-toggle-btn"
-                onClick={() => toggleFeature(code, !featureStates[code])}
-                disabled={!canEdit}
-              >
-                {featureStates[code] ? (
-                  <ToggleRight size={24} color="#10B981" />
-                ) : (
-                  <ToggleLeft size={24} color="#CBD5E1" />
-                )}
-              </button>
-            </div>
-          ))
-        )}
       </div>
-    </RoleGuard>
+
+      {message && (
+        <div style={{
+          background: message.startsWith("✅") ? "var(--card)" : "var(--card)",
+          border: message.startsWith("✅") ? "1px solid #065F46" : "1px solid #FECACA",
+          color: message.startsWith("✅") ? "#6EE7B7" : "#FCA5A5",
+          padding: "10px 14px", borderRadius: 8, fontSize: 13, marginBottom: 12,
+        }}>
+          {message}
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading features…</div>
+      ) : (
+        FEATURE_CODES.map(code => (
+          <div key={code} className="fm-card">
+            <div>
+              <div className="fm-feature-name">{FEATURE_LABELS[code] || code}</div>
+            </div>
+            <button
+              className="fm-toggle-btn"
+              onClick={() => toggleFeature(code, !featureStates[code])}
+              disabled={!canEdit}
+            >
+              {featureStates[code] ? (
+                <ToggleRight size={24} color="#10B981" />
+              ) : (
+                <ToggleLeft size={24} color="var(--text-muted)" />
+              )}
+            </button>
+          </div>
+        ))
+      )}
+    </div>
   )
 }
