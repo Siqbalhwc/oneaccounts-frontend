@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { Shield, UserPlus, Search, Trash2, Plus, X, Save, CheckCircle, Edit3 } from "lucide-react"
+import { Shield, UserPlus, Search, Trash2, Plus, X, Save, CheckCircle, Edit3, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
 
@@ -34,7 +34,6 @@ interface User {
   email: string
   created_at: string
   role: string
-  // custom permissions if present
   customPermissions?: Record<string, boolean> | null
 }
 
@@ -43,6 +42,9 @@ interface Role {
   role_name: string
   permissions: Record<string, boolean> | null
 }
+
+type SortField = "email" | "created_at" | "role"
+type SortDir = "asc" | "desc"
 
 export default function AdminUsersPage() {
   const supabase = createBrowserClient(
@@ -62,6 +64,10 @@ export default function AdminUsersPage() {
   const [inviting, setInviting] = useState(false)
   const [search, setSearch] = useState("")
 
+  // Sorting
+  const [sortField, setSortField] = useState<SortField>("email")
+  const [sortDir, setSortDir] = useState<SortDir>("asc")
+
   // Custom roles (fetched from DB)
   const [roles, setRoles] = useState<Role[]>([])
   const [showRoleManager, setShowRoleManager] = useState(false)
@@ -77,7 +83,7 @@ export default function AdminUsersPage() {
   // Company ID
   const [companyId, setCompanyId] = useState("")
 
-  const maxUsers = 0   // unlimited for now
+  const maxUsers = 0   // unlimited
 
   useEffect(() => {
     if (!role) return
@@ -103,7 +109,6 @@ export default function AdminUsersPage() {
       const res = await fetch("/api/admin/users")
       const data = await res.json()
       if (data.users && Array.isArray(data.users)) {
-        // Fetch custom permissions for each user (from user_roles table)
         const enriched = await Promise.all(data.users.map(async (u: any) => {
           const { data: userRole } = await supabase
             .from("user_roles")
@@ -139,12 +144,9 @@ export default function AdminUsersPage() {
 
   // ── Helper: get effective permissions for a user ──
   const getEffectivePermissions = (user: User): Record<string, boolean> => {
-    // If user has custom overrides, use them
     if (user.customPermissions && Object.keys(user.customPermissions).length > 0) {
       return { ...user.customPermissions }
     }
-
-    // Otherwise, derive from role
     const rolePermissions: Record<string, boolean> = {}
     if (user.role === "admin") {
       ALL_MODULES.forEach(m => rolePermissions[m] = true)
@@ -154,14 +156,12 @@ export default function AdminUsersPage() {
       const viewerModules = ["Dashboard", "Customers", "Sales Invoices", "Receipts", "Suppliers", "Purchase Bills", "Payments", "Reports"]
       ALL_MODULES.forEach(m => rolePermissions[m] = viewerModules.includes(m))
     } else {
-      // Custom role
       const customRole = roles.find(r => r.role_name === user.role)
       if (customRole?.permissions) {
         Object.entries(customRole.permissions).forEach(([mod, enabled]) => {
           rolePermissions[mod] = enabled
         })
       }
-      // fill missing with false
       ALL_MODULES.forEach(m => { if (!(m in rolePermissions)) rolePermissions[m] = false })
     }
     return rolePermissions
@@ -261,7 +261,7 @@ export default function AdminUsersPage() {
     setTimeout(() => setMessage(""), 3000)
   }
 
-  // ── Role management (unchanged) ──
+  // ── Role management ──
   const addOrUpdateRole = async () => {
     const name = newRoleName.trim()
     if (!name || !companyId) return
@@ -314,54 +314,109 @@ export default function AdminUsersPage() {
     setPermDraft(prev => ({ ...prev, [module]: !prev[module] }))
   }
 
+  // ── Sort & Filter ──
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === "asc" ? "desc" : "asc")
+    } else {
+      setSortField(field)
+      setSortDir("asc")
+    }
+  }
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown size={12} style={{ opacity: 0.5 }} />
+    return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+  }
+
   const filtered = search.trim()
     ? users.filter(u => u.email.toLowerCase().includes(search.toLowerCase()))
     : users
 
+  const sorted = [...filtered].sort((a, b) => {
+    let valA: any, valB: any
+    if (sortField === "created_at") {
+      valA = new Date(a.created_at).getTime() || 0
+      valB = new Date(b.created_at).getTime() || 0
+    } else {
+      valA = (a[sortField] || "").toString().toLowerCase()
+      valB = (b[sortField] || "").toString().toLowerCase()
+    }
+    if (valA < valB) return sortDir === "asc" ? -1 : 1
+    if (valA > valB) return sortDir === "asc" ? 1 : -1
+    return 0
+  })
+
   const allRoles = ["admin", "accountant", "viewer", ...roles.map(r => r.role_name).filter(r => !["admin","accountant","viewer"].includes(r))]
 
   if (roleLoading || !role) {
-    return <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>Loading…</div>
+    return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
   }
   if (!canView) {
     return (
-      <div style={{ padding: 40, textAlign: "center", color: "#E2E8F0" }}>
+      <div style={{ padding: 40, textAlign: "center", color: "var(--text)" }}>
         <h2>Access Denied</h2>
-        <p style={{ color: "#94A3B8" }}>Only administrators can access this page.</p>
+        <p style={{ color: "var(--text-muted)" }}>Only administrators can access this page.</p>
       </div>
     )
   }
 
   return (
     <RoleGuard allowedRoles={["admin"]}>
-      <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
+      <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
         <style>{`
-          .card { background: #111827; border-radius: 12px; border: 1px solid #1E293B; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-          .input { height: 38px; border: 1px solid #334155; border-radius: 8px; padding: 0 12px; font-size: 13px; box-sizing: border-box; background: #1E293B; color: #F1F5F9; }
-          .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-          .btn-primary { background: #2563EB; color: white; }
-          .btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
-          .btn-danger { background: #EF4444; color: white; }
-          table { width: 100%; border-collapse: collapse; }
-          th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8; text-align: left; padding: 8px 6px; border-bottom: 1px solid #1E293B; }
-          td { padding: 10px 6px; border-bottom: 1px solid #1E293B; font-size: 13px; color: #E2E8F0; }
-          tr:hover td { background: #1E293B; }
+          .card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 16px 20px; box-shadow: var(--shadow-sm); }
+          .input, .select { height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: 13px; box-sizing: border-box; background: var(--bg); color: var(--text); }
+          .input:focus, .select:focus { border-color: var(--primary); }
+          .btn { padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; background: transparent; color: var(--text-muted); }
+          .btn:hover { background: var(--card-hover); }
+          .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+          .btn-primary:hover { background: var(--primary-hover); }
+          .btn-danger { background: #EF4444; color: white; border-color: #EF4444; }
+          .btn-danger:hover { background: #DC2626; }
           .badge { padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; display: inline-block; }
           .badge-admin { background: #D1FAE5; color: #065F46; }
           .badge-accountant { background: #FEF3C7; color: #92400E; }
           .badge-viewer { background: #FEE2E2; color: #991B1B; }
-          .badge-custom { background: #1E293B; color: #CBD5E1; }
-          .perm-badge { background: #1E293B; border: 1px solid #334155; border-radius: 4px; padding: 1px 6px; font-size: 10px; color: #CBD5E1; white-space: nowrap; }
+          .badge-custom { background: var(--card-hover); color: var(--text); border: 1px solid var(--border); }
+          .perm-badge { background: var(--card-hover); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 10px; color: var(--text-muted); white-space: nowrap; }
           .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+          .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+          .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+          .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
           .action-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
           .perm-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-          .perm-chip { background: #1E293B; border: 1px solid #334155; border-radius: 6px; padding: 2px 8px; font-size: 11px; cursor: pointer; }
-          .perm-chip.active { background: #2563EB; border-color: #2563EB; color: white; }
+          .perm-chip { background: var(--card-hover); border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; font-size: 11px; cursor: pointer; color: var(--text-muted); }
+          .perm-chip.active { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
           .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: flex; align-items: center; justify-content: center; }
-          .modal { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 24px; width: 90%; max-width: 500px; max-height: 80vh; overflow-y: auto; }
+          .modal { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width: 90%; max-width: 500px; max-height: 80vh; overflow-y: auto; }
+          .header-row {
+            display: grid;
+            grid-template-columns: 1fr 120px 120px 1fr 140px;
+            padding: 14px 24px;
+            font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+            background: var(--card);
+          }
+          .data-row {
+            display: grid;
+            grid-template-columns: 1fr 120px 120px 1fr 140px;
+            padding: 12px 24px;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px; align-items: center;
+            transition: background 0.15s;
+          }
+          .data-row:hover { background: var(--card-hover); }
+          .data-row:last-child { border-bottom: none; }
+          .sort-btn {
+            background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
+            display: inline-flex; align-items: center; gap: 4px; padding: 0;
+            font-weight: 700; text-transform: uppercase; font-size: 10px;
+          }
+          .sort-btn:hover { color: var(--primary); }
           @media (max-width: 700px) {
-            th:nth-child(2), td:nth-child(2) { display: none; }
-            .action-row { flex-direction: column; align-items: stretch; }
+            .header-row, .data-row { grid-template-columns: 1fr 80px 80px 80px; }
+            .header-row > :nth-child(2), .data-row > :nth-child(2) { display: none; }
           }
         `}</style>
 
@@ -370,10 +425,10 @@ export default function AdminUsersPage() {
           <div className="modal-overlay" onClick={() => setSelectedUser(null)}>
             <div className="modal" onClick={e => e.stopPropagation()}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                <h3 style={{ color: "#F1F5F9", fontSize: 16 }}>
+                <h3 style={{ color: "var(--text)", fontSize: 16 }}>
                   Permissions for {selectedUser.email}
                 </h3>
-                <button onClick={() => setSelectedUser(null)} style={{ background: "none", border: "none", color: "#94A3B8", cursor: "pointer" }}>
+                <button onClick={() => setSelectedUser(null)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
                   <X size={18} />
                 </button>
               </div>
@@ -389,7 +444,7 @@ export default function AdminUsersPage() {
                 ))}
               </div>
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-                <button className="btn btn-outline" onClick={() => setSelectedUser(null)}>Cancel</button>
+                <button className="btn" onClick={() => setSelectedUser(null)}>Cancel</button>
                 <button className="btn btn-primary" onClick={saveUserPerms} disabled={savingUserPerms}>
                   {savingUserPerms ? "Saving..." : "Save Permissions"}
                 </button>
@@ -398,24 +453,24 @@ export default function AdminUsersPage() {
           </div>
         )}
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>👑 Admin Panel - User Roles</h1>
-            <p style={{ fontSize: 13, color: "#94A3B8", margin: 0 }}>Manage user permissions, invite users, and customize roles</p>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>👑 Admin Panel - User Roles</h1>
+            <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Manage user permissions, invite users, and customize roles</p>
           </div>
-          <button className="btn btn-outline" onClick={() => setShowRoleManager(!showRoleManager)}>
+          <button className="btn" onClick={() => setShowRoleManager(!showRoleManager)}>
             <Shield size={14} /> Manage Roles
           </button>
         </div>
 
         {error && (
-          <div style={{ background: "#1E293B", color: "#FCA5A5", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+          <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13, border: "1px solid #FECACA" }}>
             {error}
           </div>
         )}
 
         {message && (
-          <div style={{ background: "#064E3B", color: "#6EE7B7", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+          <div style={{ background: "var(--card)", color: "#6EE7B7", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13, border: "1px solid #065F46" }}>
             {message}
           </div>
         )}
@@ -423,7 +478,7 @@ export default function AdminUsersPage() {
         {/* Custom Role Manager */}
         {showRoleManager && (
           <div className="card" style={{ marginBottom: 16 }}>
-            <h3 style={{ color: "#F1F5F9", marginBottom: 12 }}>
+            <h3 style={{ color: "var(--text)", marginBottom: 12 }}>
               {editingRoleId ? "Edit Role" : "Custom Roles"}
             </h3>
             {!editingRoleId && (
@@ -431,7 +486,7 @@ export default function AdminUsersPage() {
                 {roles.map(role => (
                   <div key={role.id} className="badge badge-custom" style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 12px" }}>
                     <span>{role.role_name}</span>
-                    <button onClick={() => startEditRole(role)} style={{ background: "none", border: "none", color: "#94A3B8", cursor: "pointer", padding: 0 }}>✏️</button>
+                    <button onClick={() => startEditRole(role)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: 0 }}>✏️</button>
                     <button onClick={() => deleteRole(role.id)} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", padding: 0 }}><X size={12} /></button>
                   </div>
                 ))}
@@ -448,7 +503,7 @@ export default function AdminUsersPage() {
               {editingRoleId ? (
                 <>
                   <button className="btn btn-primary" onClick={addOrUpdateRole}><Save size={14} /> Update</button>
-                  <button className="btn btn-outline" onClick={cancelEdit}>Cancel</button>
+                  <button className="btn" onClick={cancelEdit}>Cancel</button>
                 </>
               ) : (
                 <button className="btn btn-primary" onClick={addOrUpdateRole}><Plus size={14} /> Add</button>
@@ -456,7 +511,7 @@ export default function AdminUsersPage() {
             </div>
             {(editingRoleId || newRoleName) && (
               <>
-                <p style={{ color: "#94A3B8", fontSize: 12, margin: "0 0 8px" }}>Select permissions for this role:</p>
+                <p style={{ color: "var(--text-muted)", fontSize: 12, margin: "0 0 8px" }}>Select permissions for this role:</p>
                 <div className="perm-list">
                   {ALL_MODULES.map(mod => (
                     <div
@@ -475,18 +530,18 @@ export default function AdminUsersPage() {
 
         {/* Summary Cards */}
         <div className="summary-grid">
-          <div className="card">
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Total Users</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: "#F1F5F9" }}>{filtered.length}</div>
-            {maxUsers > 0 && <div style={{ fontSize: 11, color: "#64748B", marginTop: 4 }}>Plan limit: {maxUsers}</div>}
+          <div className="summary-item">
+            <div className="summary-label">Total Users</div>
+            <div className="summary-value">{filtered.length}</div>
+            {maxUsers > 0 && <div style={{ fontSize: 11, color: "var(--text-soft)", marginTop: 4 }}>Plan limit: {maxUsers}</div>}
           </div>
-          <div className="card">
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Admins</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: "#6EE7B7" }}>{filtered.filter(u => u.role === "admin").length}</div>
+          <div className="summary-item">
+            <div className="summary-label">Admins</div>
+            <div className="summary-value" style={{ color: "#10B981" }}>{filtered.filter(u => u.role === "admin").length}</div>
           </div>
-          <div className="card">
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8", marginBottom: 4 }}>Accountants</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: "#FCD34D" }}>{filtered.filter(u => u.role === "accountant").length}</div>
+          <div className="summary-item">
+            <div className="summary-label">Accountants</div>
+            <div className="summary-value" style={{ color: "#F59E0B" }}>{filtered.filter(u => u.role === "accountant").length}</div>
           </div>
         </div>
 
@@ -512,7 +567,7 @@ export default function AdminUsersPage() {
               <span style={{ color: "#FCA5A5", fontSize: 12 }}>Plan limit reached</span>
             )}
             <div style={{ flex: 1, maxWidth: 300, marginLeft: 'auto', position: "relative" }}>
-              <Search size={14} style={{ position: "absolute", left: 10, top: 12, color: "#94A3B8" }} />
+              <Search size={14} style={{ position: "absolute", left: 10, top: 12, color: "var(--text-muted)" }} />
               <input className="input" style={{ paddingLeft: 32, width: "100%" }} placeholder="Search by email..." value={search} onChange={e => setSearch(e.target.value)} />
             </div>
           </div>
@@ -521,86 +576,80 @@ export default function AdminUsersPage() {
         {/* Users Table */}
         <div className="card" style={{ padding: 0, overflowX: "auto" }}>
           {loading ? (
-            <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading users...</div>
-          ) : filtered.length === 0 ? (
-            <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>
+            <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading users...</div>
+          ) : sorted.length === 0 ? (
+            <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
               No users found.
             </div>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Email</th>
-                  <th>Created</th>
-                  <th>Role</th>
-                  <th>Permissions</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(u => {
-                  const perms = getEffectivePermissions(u)
-                  const permList = Object.keys(perms).filter(k => perms[k])
-                  return (
-                    <tr key={u.id}>
-                      <td style={{ fontWeight: 500 }}>{u.email}</td>
-                      <td style={{ color: "#64748B" }}>
-                        {u.created_at ? new Date(u.created_at).toLocaleDateString() : "-"}
-                      </td>
-                      <td>
-                        <span className={`badge ${
-                          u.role === "admin" ? "badge-admin" :
-                          u.role === "accountant" ? "badge-accountant" :
-                          u.role === "viewer" ? "badge-viewer" :
-                          "badge-custom"
-                        }`}>
-                          {u.role || "none"}
-                        </span>
-                      </td>
-                      <td>
-                        <div
-                          style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
-                          onClick={() => openUserPerms(u)}
-                          title="Click to edit permissions"
+            <>
+              <div className="header-row">
+                <button className="sort-btn" onClick={() => handleSort("email")}>Email {getSortIcon("email")}</button>
+                <button className="sort-btn" onClick={() => handleSort("created_at")}>Created {getSortIcon("created_at")}</button>
+                <button className="sort-btn" onClick={() => handleSort("role")}>Role {getSortIcon("role")}</button>
+                <span>Permissions</span>
+                <span style={{ textAlign: "right" }}>Action</span>
+              </div>
+              {sorted.map(u => {
+                const perms = getEffectivePermissions(u)
+                const permList = Object.keys(perms).filter(k => perms[k])
+                return (
+                  <div key={u.id} className="data-row">
+                    <span style={{ fontWeight: 500 }}>{u.email}</span>
+                    <span style={{ color: "var(--text-muted)" }}>
+                      {u.created_at ? new Date(u.created_at).toLocaleDateString() : "-"}
+                    </span>
+                    <span>
+                      <span className={`badge ${
+                        u.role === "admin" ? "badge-admin" :
+                        u.role === "accountant" ? "badge-accountant" :
+                        u.role === "viewer" ? "badge-viewer" :
+                        "badge-custom"
+                      }`}>
+                        {u.role || "none"}
+                      </span>
+                    </span>
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+                      onClick={() => openUserPerms(u)}
+                      title="Click to edit permissions"
+                    >
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, flex: 1 }}>
+                        {permList.slice(0, 3).map(perm => (
+                          <span key={perm} className="perm-badge">{perm}</span>
+                        ))}
+                        {permList.length > 3 && (
+                          <span className="perm-badge">+{permList.length - 3} more</span>
+                        )}
+                      </div>
+                      <Edit3 size={14} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+                    </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end" }}>
+                      {canEdit && (
+                        <select
+                          className="input"
+                          style={{ width: 130, height: 32, fontSize: 12, padding: "0 8px" }}
+                          value={u.role || "viewer"}
+                          onChange={(e) => assignRole(u.id, e.target.value)}
                         >
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, flex: 1 }}>
-                            {permList.slice(0, 3).map(perm => (
-                              <span key={perm} className="perm-badge">{perm}</span>
-                            ))}
-                            {permList.length > 3 && (
-                              <span className="perm-badge">+{permList.length - 3} more</span>
-                            )}
-                          </div>
-                          <Edit3 size={14} style={{ color: "#94A3B8", flexShrink: 0 }} />
-                        </div>
-                      </td>
-                      <td style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        {canEdit && (
-                          <select
-                            className="input"
-                            style={{ width: 140, height: 32, fontSize: 12, padding: "0 8px" }}
-                            value={u.role || "viewer"}
-                            onChange={(e) => assignRole(u.id, e.target.value)}
-                          >
-                            {allRoles.map(r => <option key={r} value={r}>{r}</option>)}
-                          </select>
-                        )}
-                        {canEdit && (
-                          <button
-                            className="btn btn-outline"
-                            style={{ padding: "4px 8px", color: "#EF4444", borderColor: "#FECACA" }}
-                            onClick={() => handleRemove(u.id)}
-                            title="Remove user"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                          {allRoles.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                      )}
+                      {canEdit && (
+                        <button
+                          className="btn"
+                          style={{ padding: "4px 8px", color: "#EF4444", borderColor: "#FECACA" }}
+                          onClick={() => handleRemove(u.id)}
+                          title="Remove user"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </>
           )}
         </div>
       </div>
