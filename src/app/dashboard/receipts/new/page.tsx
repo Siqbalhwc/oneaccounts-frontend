@@ -75,6 +75,7 @@ export default function NewReceiptPage() {
     supabase.from("invoices")
       .select("id, invoice_no, date, due_date, total, paid, status")
       .eq("company_id", companyId).eq("party_id", customerId)
+      .in("status", ["Unpaid","Partial"])
       .order("date")
       .then(r => {
         const invs = r.data || []
@@ -187,7 +188,7 @@ export default function NewReceiptPage() {
     }
   }
 
-  if (!companyId) return <div style={{ padding: 40, textAlign: "center" }}>Loading company data…</div>
+  if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading company data…</div>
 
   return (
     <div style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -203,7 +204,6 @@ export default function NewReceiptPage() {
           width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px;
           padding: 0 12px; font-size: 13px; font-family: inherit;
           background: var(--bg); color: var(--text); outline: none; box-sizing: border-box;
-          max-width: 100%;
         }
         .inv-input:focus, .inv-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
         .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
