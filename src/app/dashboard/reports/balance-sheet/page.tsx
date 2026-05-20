@@ -49,15 +49,42 @@ function BalanceSheetContent() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
   const [accounts, setAccounts] = useState<any[]>([])
+  const [computedBalances, setComputedBalances] = useState<Record<number, number>>({})
   const [loading, setLoading] = useState(true)
   const now = new Date()
 
   useEffect(() => {
-    supabase.from("accounts").select("*").order("code").then(r => {
-      if (r.data) setAccounts(r.data)
+    const fetchData = async () => {
+      // 1. Fetch all accounts
+      const { data: accts } = await supabase.from("accounts").select("*").order("code")
+      if (!accts) { setLoading(false); return }
+
+      // 2. Fetch all journal lines to compute real‑time balances
+      const { data: lines } = await supabase
+        .from("journal_lines")
+        .select("account_id, debit, credit")
+
+      // 3. Build balance map: sum(debit) - sum(credit) per account
+      const balances: Record<number, number> = {}
+      if (lines) {
+        lines.forEach((l: any) => {
+          const aid = l.account_id
+          balances[aid] = (balances[aid] || 0) + (l.debit || 0) - (l.credit || 0)
+        })
+      }
+      setAccounts(accts)
+      setComputedBalances(balances)
       setLoading(false)
-    })
+    }
+    fetchData()
   }, [])
+
+  // Use computed balance if available, otherwise stored balance (fallback)
+  const getBalance = (account: any) => {
+    return computedBalances[account.id] !== undefined
+      ? computedBalances[account.id]
+      : (account.balance || 0)
+  }
 
   const grouped = accounts.reduce((acc: Record<string, any[]>, a) => {
     const cat = getCategory(a)
@@ -66,27 +93,28 @@ function BalanceSheetContent() {
     return acc
   }, {})
 
-  const catTotal = (cat: string) => (grouped[cat] || []).reduce((s, a) => s + (a.balance || 0), 0)
-  const catTotalAbs = (cat: string) => Math.abs(catTotal(cat))
+  const catTotal = (cat: string) =>
+    (grouped[cat] || []).reduce((s, a) => s + getBalance(a), 0)
 
-  // Assets (raw balances)
   const totalCurrentAssets = CURRENT_ASSET_CATS.reduce((s, c) => s + catTotal(c), 0)
   const totalFixedAssets = FIXED_ASSET_CATS.reduce((s, c) => s + catTotal(c), 0)
   const totalAssets = totalCurrentAssets + totalFixedAssets
 
-  // Liabilities (absolute values)
-  const totalCurrentLiabilities = LIABILITY_CATS.reduce((s, c) => s + catTotalAbs(c), 0)
+  // Liabilities – always show positive (absolute value)
+  const totalCurrentLiabilities = Math.abs(LIABILITY_CATS.reduce((s, c) => s + catTotal(c), 0))
 
-  // Equity (absolute value)
-  const totalEquityAccounts = Math.abs(accounts.filter(a => a.type === "Equity").reduce((s, a) => s + (a.balance || 0), 0))
+  // Equity – absolute value
+  const totalEquityAccounts = Math.abs(
+    accounts.filter(a => a.type === "Equity").reduce((s, a) => s + getBalance(a), 0)
+  )
 
-  // Net Profit (same as P&L)
-  const revenue = accounts.filter(a => a.type === "Revenue").reduce((s, a) => s + Math.abs(a.balance || 0), 0)
-  const expenses = accounts.filter(a => a.type === "Expense").reduce((s, a) => s + Math.abs(a.balance || 0), 0)
+  // Net Profit – same calculation as P&L (absolute values)
+  const revenue = accounts.filter(a => a.type === "Revenue").reduce((s, a) => s + Math.abs(getBalance(a)), 0)
+  const expenses = accounts.filter(a => a.type === "Expense").reduce((s, a) => s + Math.abs(getBalance(a)), 0)
   const netProfit = revenue - expenses
 
-  const totalEquity = totalEquityAccounts + Math.abs(netProfit)   // absolute net profit added to equity
-  const totalLiabEquity = totalCurrentLiabilities + totalEquity   // both now positive
+  const totalEquity = totalEquityAccounts + Math.abs(netProfit)
+  const totalLiabEquity = totalCurrentLiabilities + totalEquity
   const isBalanced = Math.abs(totalAssets - totalLiabEquity) < 1
 
   const navigateToTrialBalance = (type: string, category?: string) => {
@@ -108,7 +136,6 @@ function BalanceSheetContent() {
     </div>
   )
 
-  // Category section reusable component
   const CategorySection = ({ cat, type, showAbsolute }: { cat: string; type: string; showAbsolute: boolean }) => {
     const items = grouped[cat] || []
     if (items.length === 0) return null
@@ -123,15 +150,18 @@ function BalanceSheetContent() {
             {showAbsolute ? `PKR ${fmtPos(total)}` : `${sign(total)}PKR ${fmt(total)}`}
           </span>
         </div>
-        {items.map((a: any) => (
-          <div key={a.id} className="acc-row" onClick={() => openLedger(a.id)}>
-            <span style={{ fontSize: 10, color: "var(--text-muted)", minWidth: 40 }}>{a.code}</span>
-            <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 10 }}>{a.name}</span>
-            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-              {showAbsolute ? `PKR ${fmtPos(a.balance || 0)}` : `${sign(a.balance || 0)}PKR ${fmt(a.balance || 0)}`}
-            </span>
-          </div>
-        ))}
+        {items.map((a: any) => {
+          const bal = getBalance(a)
+          return (
+            <div key={a.id} className="acc-row" onClick={() => openLedger(a.id)}>
+              <span style={{ fontSize: 10, color: "var(--text-muted)", minWidth: 40 }}>{a.code}</span>
+              <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 10 }}>{a.name}</span>
+              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                {showAbsolute ? `PKR ${fmtPos(bal)}` : `${sign(bal)}PKR ${fmt(bal)}`}
+              </span>
+            </div>
+          )
+        })}
       </div>
     )
   }
@@ -194,7 +224,6 @@ function BalanceSheetContent() {
         .kpi-value { font-size: 24px; font-weight: 700; letter-spacing: -0.03em; font-family: 'Inter', sans-serif; }
         .kpi-sub { font-size: 11px; color: var(--text-soft); margin-top: 4px; }
 
-        /* ── Aligned Row Grid ── */
         .bs-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
@@ -202,7 +231,7 @@ function BalanceSheetContent() {
           padding: 0 32px;
         }
         .bs-row {
-          display: contents;   /* allows children to be placed in the same grid columns */
+          display: contents;
         }
         .bs-cell {
           padding: 20px 24px;
@@ -321,7 +350,7 @@ function BalanceSheetContent() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════
-          ALIGNED REPORT BODY – each row pairs a left and right cell
+          ALIGNED REPORT BODY
           ═══════════════════════════════════════════════════════════════ */}
       <div className="bs-grid">
         {/* Row 1: Current Assets ↔ Current Liabilities */}
@@ -362,13 +391,16 @@ function BalanceSheetContent() {
           </div>
           <div className="bs-cell">
             <h3 style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginBottom: 12, marginTop: 20 }}>Equity</h3>
-            {(grouped["Equity"] || []).map((a: any) => (
-              <div key={a.id} className="acc-row" onClick={() => openLedger(a.id)}>
-                <span style={{ fontSize: 10, color: "var(--text-muted)", minWidth: 40 }}>{a.code}</span>
-                <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 10 }}>{a.name}</span>
-                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>PKR {fmtPos(a.balance || 0)}</span>
-              </div>
-            ))}
+            {(grouped["Equity"] || []).map((a: any) => {
+              const bal = getBalance(a)
+              return (
+                <div key={a.id} className="acc-row" onClick={() => openLedger(a.id)}>
+                  <span style={{ fontSize: 10, color: "var(--text-muted)", minWidth: 40 }}>{a.code}</span>
+                  <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 10 }}>{a.name}</span>
+                  <span style={{ fontSize: 12, color: "var(--text-muted)" }}>PKR {fmtPos(bal)}</span>
+                </div>
+              )
+            })}
             {/* Retained Earnings */}
             <div className="acc-row" style={{ cursor: "default" }}>
               <span style={{ fontSize: 10, color: "var(--text-muted)", minWidth: 40 }}>R/E</span>
