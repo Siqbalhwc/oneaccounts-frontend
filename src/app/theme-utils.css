@@ -1,0 +1,7 @@
+/* Theme-aware utility classes */
+.bg-theme-card       { background: var(--card); }
+.bg-theme-card-hover { background: var(--card-hover); }
+.bg-theme-bg         { background: var(--bg); }
+.text-theme          { color: var(--text); }
+.text-theme-muted    { color: var(--text-muted); }
+.border-theme        { border: 1px solid var(--border); }

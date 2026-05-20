@@ -1,25 +1,35 @@
 "use client"
+import { createContext, useContext, useEffect, useState } from "react"
 
-import { createContext, useContext, useState, useEffect } from "react"
-import type { ReactNode } from "react"
+type Theme = "light" | "dark" | "system"
 
-export type ThemeMode = "dark" | "green" | "light"
+const ThemeContext = createContext<{
+  theme: Theme
+  setTheme: (t: Theme) => void
+} | null>(null)
 
-interface ThemeContextType {
-  theme: ThemeMode
-  setTheme: (t: ThemeMode) => void
-}
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setTheme] = useState<Theme>("dark")   // keep dark as default (your current look)
 
-const ThemeContext = createContext<ThemeContextType>({
-  theme: "dark",
-  setTheme: () => {},
-})
-
-export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<ThemeMode>("dark")
-
+  // Load saved theme from localStorage on first mount
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme)
+    const saved = localStorage.getItem("theme") as Theme | null
+    if (saved) setTheme(saved)
+  }, [])
+
+  // Apply theme to <html> and save to localStorage whenever theme changes
+  useEffect(() => {
+    const root = document.documentElement
+
+    const applied =
+      theme === "system"
+        ? window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light"
+        : theme
+
+    root.setAttribute("data-theme", applied)
+    localStorage.setItem("theme", theme)
   }, [theme])
 
   return (
@@ -30,5 +40,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 }
 
 export function useTheme() {
-  return useContext(ThemeContext)
+  const ctx = useContext(ThemeContext)
+  if (!ctx) throw new Error("useTheme must be used within ThemeProvider")
+  return ctx
 }

@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { TrendingUp, TrendingDown, Minus, CheckCircle, AlertTriangle, Sun, Moon } from "lucide-react"
+import { TrendingUp, TrendingDown, Minus, CheckCircle, AlertTriangle } from "lucide-react"
 import { motion } from "framer-motion"
+import { useTheme } from "@/contexts/ThemeContext"   // ← global theme
 
 export default function ManagementDashboard({ role }: { role: string }) {
   const supabase = createBrowserClient(
@@ -13,8 +14,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
   )
   const router = useRouter()
 
-  // Theme
-  const [darkMode, setDarkMode] = useState(true)
+  // ── Global theme (light / dark) ──
+  const { theme: themeMode } = useTheme()
+  const isDark = themeMode === "dark"   // we only need the boolean
 
   // Company
   const [companyId, setCompanyId] = useState<string | null>(null)
@@ -44,28 +46,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [underspentActivities, setUnderspentActivities] = useState<any[]>([])
   const [activityHealth, setActivityHealth] = useState<Record<string, { lowCount: number; threshold: number; message: string }>>({})
   const [lastUpdated, setLastUpdated] = useState("")
-
-  // Theme tokens – hardcoded dark/light for stability
-  const theme = {
-    bg: darkMode ? "#0A0A0A" : "#F8FAFC",
-    card: darkMode ? "#111827" : "#FFFFFF",
-    cardBorder: darkMode ? "#1E293B" : "#E2E8F0",
-    cardHover: darkMode ? "#1E293B" : "#F1F5F9",
-    text: darkMode ? "#E2E8F0" : "#1E293B",
-    textMuted: darkMode ? "#94A3B8" : "#64748B",
-    textHint: darkMode ? "#64748B" : "#94A3B8",
-    heroBg: darkMode ? "#111827" : "#FFFFFF",
-    heroBorder: darkMode ? "#1E293B" : "#E2E8F0",
-    warnBg: darkMode ? "#1E293B" : "#FEF3C7",
-    warnBorder: darkMode ? "#334155" : "#FDE68A",
-    warnText: darkMode ? "#FCA5A5" : "#92400E",
-    rowBg: darkMode ? "#111827" : "#F8FAFC",
-    rowBorder: darkMode ? "#1E293B" : "#E2E8F0",
-    statusFooterBg: darkMode ? "#111827" : "#FFFFFF",
-    inputBg: darkMode ? "#1E293B" : "#F1F5F9",
-    inputBorder: darkMode ? "#334155" : "#CBD5E1",
-    inputText: darkMode ? "#F1F5F9" : "#1E293B",
-  }
 
   // ── Step 1: Fetch company ID ──
   useEffect(() => {
@@ -121,7 +101,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         const { data: spentData } = await supabase.rpc("total_spent", { cid: companyId, fy: fiscalYear })
         setTotalSpent(spentData?.[0]?.total || 0)
 
-        // Donor Balances (RPC) – with months & health
+        // Donor Balances (RPC)
         const { data: donorData } = await supabase.rpc("dashboard_donor_balances", { cid: companyId, fy: fiscalYear })
         setDonorBalances(donorData?.map((d: any) => {
           const percentSpent = d.budget ? (d.actual_spent / d.budget) * 100 : 0
@@ -165,7 +145,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         const { data: suppBals } = await supabase.from("suppliers").select("balance").eq("company_id", companyId)
         setTotalPayables(suppBals?.reduce((s, s2) => s + (s2.balance || 0), 0) || 0)
 
-        // ── Monthly Spending (Expense + Fixed Asset accounts) ──
+        // Monthly spending (Expense + Fixed Asset accounts)
         const { data: expenseAccounts } = await supabase.from("accounts")
           .select("id").eq("company_id", companyId).eq("type", "Expense")
         const { data: fixedAssets } = await supabase.from("accounts")
@@ -186,7 +166,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
           const monthTotal = (monthLines || []).reduce((sum, l) => sum + (l.debit || 0) - (l.credit || 0), 0)
           setMonthlySpending(monthTotal)
 
-          // Previous month spending (for trend)
           const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1
           const prevYear = currentMonth === 1 ? currentYear - 1 : currentYear
           const prevStart = new Date(Date.UTC(prevYear, prevMonth - 1, 1)).toISOString().split("T")[0]
@@ -212,7 +191,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           }
         }
 
-        // ── Top 5 underspent activities (this month, expense accounts) ──
+        // ── Top 5 underspent activities ──
         const { data: actBudgets } = await supabase
           .from("budgets")
           .select("activity_id, activities(name), budgeted_amount, project_id")
@@ -258,7 +237,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           .slice(0, 5)
         setUnderspentActivities(underspent)
 
-        // ── Activity health per project (activities >20% below project's own spending %) ──
+        // Activity health per project
         if (enrichedProjects.length > 0) {
           const projectIds = enrichedProjects.map((p: any) => p.id)
           const { data: actBudgetsAll } = await supabase
@@ -339,7 +318,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
     return "Good evening"
   }
 
-  // ── Formatting ──
   const formatPKR = (v: number) => {
     const sign = v < 0 ? "-" : ""
     const abs = Math.abs(v)
@@ -354,7 +332,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
     return "?" + params.toString()
   }
 
-  // ── Trend indicator component ──
   const Trend = ({ value, positive = false, negative = false }: { value: number; positive?: boolean; negative?: boolean }) => {
     if (value === 0) return <Minus size={14} style={{ color: "#94A3B8" }} />
     if (value > 0) return <span style={{ display: "flex", alignItems: "center", gap: 2, color: positive ? "#2DD4BF" : "#F97316", fontSize: "0.75rem", fontWeight: 600 }}>
@@ -368,7 +345,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
   if (companyError) {
     return (
-      <div style={{ padding: 40, textAlign: "center", background: theme.bg, minHeight: "100vh", color: theme.textMuted }}>
+      <div style={{ padding: 40, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>
         <div style={{ fontSize: "1.2rem", marginBottom: 8, color: "#F87171" }}>Could not load dashboard</div>
         <div style={{ fontSize: "0.85rem" }}>Your account may not be linked to a company. Please contact your administrator.</div>
       </div>
@@ -377,11 +354,11 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
   if (loading) {
     return (
-      <div style={{ padding: 40, textAlign: "center", background: theme.bg, minHeight: "100vh", color: theme.textMuted, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
+      <div style={{ padding: 40, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
-          style={{ width: 36, height: 36, borderRadius: "50%", border: "3px solid #1E293B", borderTop: "3px solid #A78BFA" }}
+          style={{ width: 36, height: 36, borderRadius: "50%", border: "3px solid var(--border)", borderTop: "3px solid #A78BFA" }}
         />
         <div style={{ fontSize: "0.9rem" }}>Loading your dashboard…</div>
       </div>
@@ -401,44 +378,43 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const hoverScale = { whileHover: { scale: 1.02, y: -4 } }
 
   return (
-    <div style={{ background: theme.bg, minHeight: "100%", flex: 1, fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: theme.text, transition: "background 0.3s, color 0.3s" }}>
+    <div style={{ background: "var(--bg)", minHeight: "100%", flex: 1, fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: "var(--text)", transition: "background 0.3s, color 0.3s" }}>
       <style>{`
         .mgmt * { box-sizing: border-box; margin: 0; padding: 0; }
 
         .mgmt .card {
-          background: ${theme.card}; border: 1px solid ${theme.cardBorder};
+          background: var(--card); border: 1px solid var(--border);
           border-radius: 18px; padding: 1.2rem 1.3rem;
-          box-shadow: ${darkMode ? "0 4px 12px rgba(0,0,0,0.3)" : "0 2px 8px rgba(0,0,0,0.06)"};
+          box-shadow: var(--shadow);
           transition: all 0.2s; cursor: pointer;
         }
-        .mgmt .card:hover { background: ${theme.cardHover}; border-color: ${darkMode ? "#334155" : "#CBD5E1"}; }
+        .mgmt .card:hover { background: var(--card-hover); border-color: var(--border-strong); }
 
-        /* ── Hero / Greeting bar ── */
         .mgmt .hero {
-          background: ${theme.heroBg};
-          border: 1px solid ${theme.heroBorder};
+          background: var(--card);
+          border: 1px solid var(--border);
           border-radius: 16px; padding: 1rem 1.5rem;
           margin-bottom: 1rem; display: flex;
           align-items: center; justify-content: space-between;
           flex-wrap: wrap; gap: 0.8rem;
         }
         .mgmt .hero-greeting h2 {
-          font-size: 1.3rem; font-weight: 700; color: ${theme.text}; margin-bottom: 0.15rem; white-space: nowrap;
+          font-size: 1.3rem; font-weight: 700; color: var(--text); margin-bottom: 0.15rem; white-space: nowrap;
         }
         .mgmt .hero-greeting p {
-          color: ${theme.textMuted}; font-size: 0.85rem; margin: 0; white-space: nowrap;
+          color: var(--text-muted); font-size: 0.85rem; margin: 0; white-space: nowrap;
         }
         .mgmt .hero-filters {
           display: flex; align-items: center; gap: 0.5rem;
           flex-wrap: wrap;
         }
         .mgmt .filter-label {
-          font-weight: 600; color: ${theme.textMuted}; font-size: 0.75rem; margin-right: 0.1rem;
+          font-weight: 600; color: var(--text-muted); font-size: 0.75rem; margin-right: 0.1rem;
         }
         .mgmt .filter-pill {
-          background: ${theme.inputBg}; border: 1px solid ${theme.inputBorder};
+          background: var(--card); border: 1px solid var(--border);
           padding: 0.2rem 0.6rem; border-radius: 20px;
-          font-size: 0.78rem; font-weight: 500; color: ${theme.inputText};
+          font-size: 0.78rem; font-weight: 500; color: var(--text);
           cursor: pointer; transition: 0.15s;
           -webkit-appearance: none; appearance: none;
           background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
@@ -447,18 +423,17 @@ export default function ManagementDashboard({ role }: { role: string }) {
           padding-right: 1.8rem;
           font-family: inherit;
         }
-        .mgmt .filter-pill:focus { outline: none; border-color: ${darkMode ? "#64748B" : "#94A3B8"}; }
+        .mgmt .filter-pill:focus { outline: none; border-color: var(--border-strong); }
 
-        /* ── Warning banner ── */
         .mgmt .warning-banner {
-          background: ${theme.warnBg};
-          border: 1px solid ${theme.warnBorder};
+          background: var(--warn-bg, #FEF3C7);
+          border: 1px solid var(--warn-border, #FDE68A);
           border-left: 6px solid #EF4444;
           border-radius: 10px; padding: 8px 16px;
           margin-bottom: 1rem; display: flex;
           align-items: center; justify-content: space-between;
           flex-wrap: wrap; gap: 10px;
-          font-size: 0.9rem; color: ${theme.warnText};
+          font-size: 0.9rem; color: var(--warn-text, #92400E);
           font-weight: 500;
         }
         .mgmt .warning-btn {
@@ -469,7 +444,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
           white-space: nowrap; font-family: inherit;
         }
 
-        /* ── Dashboard Grid ── */
         .dashboard-grid {
           display: grid;
           grid-template-columns: repeat(5, 1fr);
@@ -477,17 +451,17 @@ export default function ManagementDashboard({ role }: { role: string }) {
           margin-bottom: 1rem;
         }
 
-        .kpi-label { text-transform: uppercase; font-size: 0.7rem; font-weight: 700; color: ${theme.textMuted}; letter-spacing: 0.04em; }
-        .kpi-value { font-size: 1.7rem; font-weight: 700; color: ${theme.text}; line-height: 1.2; }
-        .kpi-meta { font-size: 0.8rem; color: ${theme.textHint}; display: flex; align-items: center; gap: 0.3rem; }
+        .kpi-label { text-transform: uppercase; font-size: 0.7rem; font-weight: 700; color: var(--text-muted); letter-spacing: 0.04em; }
+        .kpi-value { font-size: 1.7rem; font-weight: 700; color: var(--text); line-height: 1.2; }
+        .kpi-meta { font-size: 0.8rem; color: var(--text-soft); display: flex; align-items: center; gap: 0.3rem; }
 
         .underspend-row {
           display: flex; justify-content: space-between; align-items: center;
-          padding: 0.5rem 0; border-bottom: 1px solid ${theme.rowBorder};
+          padding: 0.5rem 0; border-bottom: 1px solid var(--border);
           gap: 0.8rem;
         }
         .underspend-row:last-child { border-bottom: none; }
-        .progress-bg { height: 5px; background: ${darkMode ? "#334155" : "#E2E8F0"}; border-radius: 10px; flex: 1; overflow: hidden; }
+        .progress-bg { height: 5px; background: var(--border); border-radius: 10px; flex: 1; overflow: hidden; }
         .progress-fill { height: 100%; border-radius: 10px; background: #2DD4BF; }
 
         .clickable { color: #93C5FD; text-decoration: underline; cursor: pointer; }
@@ -518,7 +492,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
       `}</style>
 
       <div className="mgmt" style={{ padding: "0.8rem 1.2rem" }}>
-        {/* ── Hero bar: greeting + filters ── */}
+        {/* Hero bar */}
         <motion.div
           className="hero"
           initial={{ opacity: 0, y: -10 }}
@@ -544,18 +518,11 @@ export default function ManagementDashboard({ role }: { role: string }) {
               <option value="">All Donors</option>
               {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
-            <button
-              onClick={() => setDarkMode(d => !d)}
-              style={{ background: theme.inputBg, border: `1px solid ${theme.inputBorder}`, borderRadius: 20, padding: "0.25rem 0.75rem", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, color: theme.inputText, fontSize: "0.78rem", fontWeight: 500, fontFamily: "inherit", transition: "all 0.2s" }}
-              title="Toggle dark/light mode"
-            >
-              {darkMode ? <Sun size={14} /> : <Moon size={14} />}
-              {darkMode ? "Light" : "Dark"}
-            </button>
+            {/* ⚠️ Removed the separate theme toggle button – use the sidebar one */}
           </div>
         </motion.div>
 
-        {/* ── Warning banner ── */}
+        {/* Warning banner */}
         {filteredOverspentCount > 0 && (
           <motion.div
             className="warning-banner"
@@ -571,45 +538,14 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </motion.div>
         )}
 
-        {/* ── Row 1: KPI cards (5 columns) ── */}
+        {/* KPI cards */}
         <div className="dashboard-grid">
           {[
-            {
-              label: "Total Budget",
-              value: formatPKR(filteredTotalBudget),
-              meta: `${filteredProjectRows.length} projects`,
-              color: "#A78BFA",
-              link: "/dashboard/reports/budget-summary",
-            },
-            {
-              label: "Total Spent",
-              value: formatPKR(filteredTotalSpent),
-              meta: `${spentPct}% of budget`,
-              color: "#F97316",
-              link: "/dashboard/reports/spending-detail",
-              extra: projectsAbove70.length > 0 ? `Projects > 70%: ${projectsAbove70.join(", ")}` : null,
-            },
-            {
-              label: remainingFunds < 0 ? "Overspent" : "Remaining",
-              value: formatPKR(remainingFunds),
-              meta: `${Math.abs(Math.round((remainingFunds / filteredTotalBudget) * 100))}% ${remainingFunds < 0 ? "over" : "left"}`,
-              color: remainingFunds >= 0 ? "#2DD4BF" : "#F87171",
-              link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null,
-            },
-            {
-              label: "Portfolio Health",
-              value: filteredOverspentCount > 0 ? "⚠️ Needs Attention" : "Healthy",
-              meta: `${Math.round((1 - filteredOverspentCount / Math.max(filteredProjectRows.length, 1)) * 100)}% health score`,
-              color: filteredOverspentCount > 0 ? "#F97316" : "#2DD4BF",
-              link: "/dashboard/reports/overspent",
-            },
-            {
-              label: "📆 Monthly Spending",
-              value: monthlySpending > 0 ? formatPKR(monthlySpending) : "—",
-              meta: monthlySpending === 0 ? "No transactions this month" : `vs. ${formatPKR(lastMonthSpending)} last month`,
-              color: monthlySpending > 0 ? "#F97316" : "#94A3B8",
-              link: "/dashboard/reports/spending-detail",
-            },
+            { label: "Total Budget", value: formatPKR(filteredTotalBudget), meta: `${filteredProjectRows.length} projects`, color: "#A78BFA", link: "/dashboard/reports/budget-summary" },
+            { label: "Total Spent", value: formatPKR(filteredTotalSpent), meta: `${spentPct}% of budget`, color: "#F97316", link: "/dashboard/reports/spending-detail", extra: projectsAbove70.length > 0 ? `Projects > 70%: ${projectsAbove70.join(", ")}` : null },
+            { label: remainingFunds < 0 ? "Overspent" : "Remaining", value: formatPKR(remainingFunds), meta: `${Math.abs(Math.round((remainingFunds / filteredTotalBudget) * 100))}% ${remainingFunds < 0 ? "over" : "left"}`, color: remainingFunds >= 0 ? "#2DD4BF" : "#F87171", link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null },
+            { label: "Portfolio Health", value: filteredOverspentCount > 0 ? "⚠️ Needs Attention" : "Healthy", meta: `${Math.round((1 - filteredOverspentCount / Math.max(filteredProjectRows.length, 1)) * 100)}% health score`, color: filteredOverspentCount > 0 ? "#F97316" : "#2DD4BF", link: "/dashboard/reports/overspent" },
+            { label: "📆 Monthly Spending", value: monthlySpending > 0 ? formatPKR(monthlySpending) : "—", meta: monthlySpending === 0 ? "No transactions this month" : `vs. ${formatPKR(lastMonthSpending)} last month`, color: monthlySpending > 0 ? "#F97316" : "#94A3B8", link: "/dashboard/reports/spending-detail" },
           ].map((kpi, i) => (
             <motion.div
               key={kpi.label}
@@ -625,19 +561,15 @@ export default function ManagementDashboard({ role }: { role: string }) {
               <div className="kpi-value" style={{ color: kpi.color }}>{kpi.value}</div>
               <div className="kpi-meta">
                 {kpi.meta}
-                {kpi.label === "Total Spent" && (
-                  <Trend value={spentPct > 80 ? 5 : -2} positive={false} negative={spentPct > 80} />
-                )}
-                {kpi.label === "📆 Monthly Spending" && monthlySpending > 0 && (
-                  <Trend value={spendingTrend} positive={spendingTrend < 0} negative={spendingTrend > 0} />
-                )}
+                {kpi.label === "Total Spent" && <Trend value={spentPct > 80 ? 5 : -2} positive={false} negative={spentPct > 80} />}
+                {kpi.label === "📆 Monthly Spending" && monthlySpending > 0 && <Trend value={spendingTrend} positive={spendingTrend < 0} negative={spendingTrend > 0} />}
               </div>
               {kpi.extra && <div style={{ fontSize: "0.65rem", color: "#93C5FD", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200 }}>{kpi.extra}</div>}
             </motion.div>
           ))}
         </div>
 
-        {/* ── Row 2: Project Utilization + Donor Balances ── */}
+        {/* Project Utilization + Donor Balances */}
         <div className="dashboard-grid" style={{ gridTemplateColumns: "3fr 2fr" }}>
           <motion.div
             className="card"
@@ -646,20 +578,20 @@ export default function ManagementDashboard({ role }: { role: string }) {
             transition={{ delay: 0.4, duration: 0.5 }}
             onClick={() => router.push("/dashboard/settings/budgets" + detailQuery())}
           >
-            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: theme.text, marginBottom: "0.8rem" }}>📊 Project Utilization</div>
+            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>📊 Project Utilization</div>
             {filteredProjectRows.map((p, idx) => {
               const health = activityHealth[p.id]
               return (
                 <div key={idx} onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}`)} style={{
                   display: "flex", alignItems: "center", gap: "0.8rem",
-                  background: theme.rowBg, borderRadius: "12px", padding: "0.5rem 1rem",
-                  border: `1px solid ${theme.rowBorder}`, cursor: "pointer", marginBottom: "0.5rem",
+                  background: "var(--card)", borderRadius: "12px", padding: "0.5rem 1rem",
+                  border: "1px solid var(--border)", cursor: "pointer", marginBottom: "0.5rem",
                   flexWrap: "wrap",
                 }}>
                   <div style={{ width: 8, height: 8, borderRadius: "50%", background: p.status === "Overspent" ? "#F87171" : p.status === "Review" ? "#F97316" : p.status === "At Risk" ? "#F97316" : "#2DD4BF", flexShrink: 0 }}></div>
-                  <span style={{ flex: 1, fontWeight: 600, fontSize: "0.85rem", color: theme.text }}>{p.name}</span>
+                  <span style={{ flex: 1, fontWeight: 600, fontSize: "0.85rem", color: "var(--text)" }}>{p.name}</span>
                   <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
-                    <span style={{ fontWeight: 600, minWidth: 60, fontSize: "0.8rem", color: theme.text }}>{formatPKR(p.actual)}</span>
+                    <span style={{ fontWeight: 600, minWidth: 60, fontSize: "0.8rem", color: "var(--text)" }}>{formatPKR(p.actual)}</span>
                     <span style={{ minWidth: 50, color: p.pct > 100 ? "#F87171" : p.pct > 80 ? "#F97316" : "#2DD4BF", fontSize: "0.8rem" }}>{p.pct}%</span>
                     <span style={{
                       padding: "0.1rem 0.6rem", borderRadius: "12px", fontSize: "0.7rem", fontWeight: 700,
@@ -684,29 +616,29 @@ export default function ManagementDashboard({ role }: { role: string }) {
             transition={{ delay: 0.5, duration: 0.5 }}
             onClick={() => router.push("/dashboard/reports/donor" + detailQuery())}
           >
-            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: theme.text, marginBottom: "0.8rem" }}>💧 Donor Balances</div>
+            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>💧 Donor Balances</div>
             {filteredDonorBalances.map((d, idx) => (
               <div key={idx} onClick={() => router.push(`/dashboard/settings/budgets?donor=${d.donor_id}`)} style={{
                 display: "flex", alignItems: "center", gap: "0.8rem",
-                background: theme.rowBg, borderRadius: "12px", padding: "0.5rem 1rem",
-                border: `1px solid ${theme.rowBorder}`, cursor: "pointer", marginBottom: "0.5rem",
+                background: "var(--card)", borderRadius: "12px", padding: "0.5rem 1rem",
+                border: "1px solid var(--border)", cursor: "pointer", marginBottom: "0.5rem",
                 flexWrap: "wrap",
               }}>
                 <div style={{ width: 8, height: 8, borderRadius: "50%", background: d.overspent ? "#F87171" : "#A78BFA", flexShrink: 0 }}></div>
                 <div style={{ flex: 1 }}>
-                  <span style={{ fontWeight: 600, fontSize: "0.85rem", color: theme.text }}>{d.name}</span>
-                  <div style={{ fontSize: "0.65rem", color: theme.textMuted }}>
+                  <span style={{ fontWeight: 600, fontSize: "0.85rem", color: "var(--text)" }}>{d.name}</span>
+                  <div style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>
                     {d.monthsPassed}/{d.monthsTotal} months · {d.health === "slow" ? <span style={{ color: "#F87171", fontWeight: 600 }}>Slow: only {d.pct}% spent</span> : d.health === "ok" ? <span style={{ color: "#F97316", fontWeight: 600 }}>OK</span> : <span style={{ color: "#2DD4BF", fontWeight: 600 }}>On Track</span>}
                   </div>
                 </div>
-                <span style={{ fontWeight: 700, fontSize: "0.85rem", color: theme.text }}>{formatPKR(d.remaining)}</span>
-                <span style={{ fontSize: "0.75rem", color: theme.textMuted, minWidth: 30, textAlign: "right" }}>{d.pct}%</span>
+                <span style={{ fontWeight: 700, fontSize: "0.85rem", color: "var(--text)" }}>{formatPKR(d.remaining)}</span>
+                <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", minWidth: 30, textAlign: "right" }}>{d.pct}%</span>
               </div>
             ))}
           </motion.div>
         </div>
 
-        {/* ── Row 3: Underspend + Combined Receivables vs Payables ── */}
+        {/* Underspend + Receivables vs Payables */}
         <div className="dashboard-grid">
           <motion.div
             className="card"
@@ -715,31 +647,21 @@ export default function ManagementDashboard({ role }: { role: string }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.6, duration: 0.5 }}
           >
-            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: theme.text, marginBottom: "0.8rem" }}>💡 Top 5 Underspend Activities</div>
+            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>💡 Top 5 Underspend Activities</div>
             {underspentActivities.length === 0 ? (
-              <div style={{ fontSize: "0.8rem", color: theme.textMuted }}>No activities with remaining budget this month.</div>
+              <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>No activities with remaining budget this month.</div>
             ) : (
               <>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 100px", gap: 8, fontSize: "0.65rem", fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", paddingBottom: 6, borderBottom: `1px solid ${theme.rowBorder}`, marginBottom: 6 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 100px", gap: 8, fontSize: "0.65rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", paddingBottom: 6, borderBottom: "1px solid var(--border)", marginBottom: 6 }}>
                   <span>Activity</span><span>Budget</span><span>Actual</span><span>Unspent</span>
                 </div>
                 {underspentActivities.map((act, idx) => (
-                  <div key={idx} style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 100px", gap: 8, alignItems: "center", padding: "5px 0", borderBottom: `1px solid ${theme.rowBorder}`, fontSize: "0.8rem" }}>
-                    <span
-                      className="clickable"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (act.projectId) {
-                          router.push(`/dashboard/settings/budgets?project=${act.projectId}&activity=${act.id}`)
-                        } else {
-                          router.push(`/dashboard/reports/spending-detail?activity=${act.id}&fy=${fiscalYear}`)
-                        }
-                      }}
-                    >
+                  <div key={idx} style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 100px", gap: 8, alignItems: "center", padding: "5px 0", borderBottom: "1px solid var(--border)", fontSize: "0.8rem" }}>
+                    <span className="clickable" onClick={(e) => { e.stopPropagation(); router.push(act.projectId ? `/dashboard/settings/budgets?project=${act.projectId}&activity=${act.id}` : `/dashboard/reports/spending-detail?activity=${act.id}&fy=${fiscalYear}`) }}>
                       {act.name}
                     </span>
-                    <span style={{ color: theme.text }}>{formatPKR(act.budget)}</span>
-                    <span style={{ color: theme.text }}>{formatPKR(act.actual)}</span>
+                    <span style={{ color: "var(--text)" }}>{formatPKR(act.budget)}</span>
+                    <span style={{ color: "var(--text)" }}>{formatPKR(act.actual)}</span>
                     <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                       <div className="progress-bg">
                         <div className="progress-fill" style={{ width: `${Math.min(act.pct, 100)}%` }}></div>
@@ -752,7 +674,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
             )}
           </motion.div>
 
-          {/* Combined Receivables vs Payables card */}
           <motion.div
             className="card"
             style={{ gridColumn: "span 2" }}
@@ -760,15 +681,15 @@ export default function ManagementDashboard({ role }: { role: string }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.7, duration: 0.5 }}
           >
-            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: theme.text, marginBottom: "1rem" }}>⚖️ Receivables vs Payables</div>
+            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "1rem" }}>⚖️ Receivables vs Payables</div>
             <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "0.5rem", marginBottom: "0.8rem" }}>
               <div style={{ textAlign: "center" }}>
-                <div style={{ fontSize: "0.65rem", textTransform: "uppercase", color: theme.textMuted, marginBottom: 2 }}>Receivables</div>
+                <div style={{ fontSize: "0.65rem", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 2 }}>Receivables</div>
                 <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "#F97316" }}>{formatPKR(totalReceivables)}</div>
               </div>
-              <div style={{ fontSize: "1.1rem", fontWeight: 700, color: theme.textHint }}>VS</div>
+              <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--text-soft)" }}>VS</div>
               <div style={{ textAlign: "center" }}>
-                <div style={{ fontSize: "0.65rem", textTransform: "uppercase", color: theme.textMuted, marginBottom: 2 }}>Payables</div>
+                <div style={{ fontSize: "0.65rem", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 2 }}>Payables</div>
                 <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "#F97316" }}>{formatPKR(totalPayables)}</div>
               </div>
             </div>
@@ -788,15 +709,15 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </motion.div>
         </div>
 
-        {/* ── Footer summary ── */}
+        {/* Footer summary */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 1, duration: 0.5 }}
           style={{
-            background: theme.statusFooterBg, borderRadius: 12, padding: "0.6rem 1.2rem",
-            border: `1px solid ${theme.cardBorder}`, display: "flex", justifyContent: "space-between",
-            flexWrap: "wrap", gap: "0.8rem", fontSize: "0.8rem", color: theme.textMuted, fontWeight: 500
+            background: "var(--card)", borderRadius: 12, padding: "0.6rem 1.2rem",
+            border: "1px solid var(--border)", display: "flex", justifyContent: "space-between",
+            flexWrap: "wrap", gap: "0.8rem", fontSize: "0.8rem", color: "var(--text-muted)", fontWeight: 500
           }}
         >
           <span>⚠️ Portfolio Health: {filteredOverspentCount > 0 ? "Needs Attention" : "Healthy"}</span>

@@ -1,6 +1,8 @@
 import type { Metadata } from "next"
 import { RoleProvider } from "@/contexts/RoleContext"
+import { ThemeProvider } from "@/contexts/ThemeContext"
 import "./globals.css"
+import "./theme-utils.css"
 
 export const metadata: Metadata = {
   title: "OneAccounts",
@@ -13,11 +15,13 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body>
-        <RoleProvider>
-          {children}
-        </RoleProvider>
+        <ThemeProvider>
+          <RoleProvider>
+            {children}
+          </RoleProvider>
+        </ThemeProvider>
       </body>
     </html>
   )

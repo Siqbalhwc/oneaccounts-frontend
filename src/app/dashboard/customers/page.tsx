@@ -90,30 +90,31 @@ export default function CustomersPage() {
   const totalBalance = filteredCustomers.reduce((s, c) => s + (c.balance || 0), 0)
   const activeCustomers = filteredCustomers.filter(c => (c.balance || 0) > 0).length
 
-  if (!role) return <div style={{ padding: 24, textAlign: "center", color: "#94A3B8" }}>Loading…</div>
-  if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "#E2E8F0" }}><h2>Access Denied</h2></div>
+  if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
+  if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
   return (
     <RoleGuard allowedRoles={["admin", "accountant"]}>
-      <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
+      <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
         <style>{`
-          .card { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.2); overflow: hidden; }
-          .header-row { display: grid; grid-template-columns: 80px 1fr 120px 100px 40px; padding: 12px 20px; background: #1E293B; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94A3B8; border-bottom: 1px solid #1E293B; }
-          .data-row { display: grid; grid-template-columns: 80px 1fr 120px 100px 40px; padding: 10px 20px; border-bottom: 1px solid #1E293B; font-size: 13px; align-items: center; transition: background 0.15s; }
-          .data-row:hover { background: #1E293B; }
+          .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
+          .header-row { display: grid; grid-template-columns: 80px 1fr 120px 100px 40px; padding: 12px 20px; background: var(--card-hover); font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+          .data-row { display: grid; grid-template-columns: 80px 1fr 120px 100px 40px; padding: 10px 20px; border-bottom: 1px solid var(--border); font-size: 13px; align-items: center; transition: background 0.15s; }
+          .data-row:hover { background: var(--card-hover); }
           .data-row:last-child { border-bottom: none; }
-          .sort-btn { background: none; border: none; cursor: pointer; font: inherit; color: inherit; display: inline-flex; align-items: center; gap: 4px; padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px; }
-          .sort-btn:hover { color: #93C5FD; }
-          .search-input { height: 38px; border: 1.5px solid #334155; border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px; width: 260px; box-sizing: border-box; outline: none; font-family: inherit; background: #1E293B; color: #F1F5F9; }
-          .search-input:focus { border-color: #64748B; }
-          .btn { padding: 8px 16px; border-radius: 8px; border: 1.5px solid #334155; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-          .btn-outline { background: transparent; color: white; border-color: #334155; }
-          .btn-outline:hover { background: #1E293B; }
-          .btn-icon { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; padding: 6px; border-radius: 8px; cursor: pointer; }
+          .sort-btn { background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted); display: inline-flex; align-items: center; gap: 4px; padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px; }
+          .sort-btn:hover { color: var(--primary); }
+          .search-input { height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px; width: 260px; box-sizing: border-box; outline: none; font-family: inherit; background: var(--card); color: var(--text); }
+          .search-input:focus { border-color: var(--primary); }
+          .btn { padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+          .btn-outline { background: transparent; color: var(--text); border-color: var(--border); }
+          .btn-outline:hover { background: var(--card-hover); }
+          .btn-icon { background: transparent; border: 1.5px solid var(--border); color: var(--text-muted); padding: 6px; border-radius: 8px; cursor: pointer; }
+          .btn-icon:hover { background: var(--card-hover); }
           .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
-          .summary-item { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 16px; }
-          .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94A3B8; margin-bottom: 4px; }
-          .summary-value { font-size: 22px; font-weight: 800; color: #F1F5F9; }
+          .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+          .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+          .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
           @media (max-width: 640px) {
             .header-row, .data-row { grid-template-columns: 60px 1fr 80px 60px 30px; }
             .header-row span:nth-child(3), .data-row span:nth-child(3) { display: none; }
@@ -123,8 +124,8 @@ export default function CustomersPage() {
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>👥 Customers</h1>
-            <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>Manage your customer accounts</p>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>👥 Customers</h1>
+            <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Manage your customer accounts</p>
           </div>
           {canEdit && (
             <button className="btn btn-outline" onClick={() => router.push("/dashboard/customers/new")}>
@@ -153,7 +154,7 @@ export default function CustomersPage() {
 
         {/* Search */}
         <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
-          <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#94A3B8" }} />
+          <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
           <input
             className="search-input"
             placeholder="Search by code, name, phone, email..."
@@ -164,9 +165,9 @@ export default function CustomersPage() {
 
         {/* Customers Table */}
         {loading ? (
-          <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading customers…</div>
+          <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading customers…</div>
         ) : filteredCustomers.length === 0 ? (
-          <div className="card" style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>
+          <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
             No customers found. {canEdit && "Add a customer to get started."}
           </div>
         ) : (
@@ -175,17 +176,14 @@ export default function CustomersPage() {
               <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
               <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
               <button className="sort-btn" onClick={() => handleSort("phone")}>Phone {getSortIcon("phone")}</button>
-              <button
-  className="sort-btn"
-  onClick={() => handleSort("balance")}
-  style={{ textAlign: "right", justifyContent: "flex-end", paddingRight: "0" }}>Balance {getSortIcon("balance")}</button>
+              <button className="sort-btn" onClick={() => handleSort("balance")} style={{ textAlign: "right", justifyContent: "flex-end", paddingRight: "0" }}>Balance {getSortIcon("balance")}</button>
               <span></span>
             </div>
             {filteredCustomers.map((cust) => (
               <div key={cust.id} className="data-row">
-                <span style={{ fontWeight: 600, color: "#93C5FD" }}>{cust.code}</span>
-                <span style={{ color: "#E2E8F0" }}>{cust.name}</span>
-                <span style={{ color: "#94A3B8" }}>{cust.phone || "—"}</span>
+                <span style={{ fontWeight: 600, color: "var(--primary)" }}>{cust.code}</span>
+                <span style={{ color: "var(--text)" }}>{cust.name}</span>
+                <span style={{ color: "var(--text-muted)" }}>{cust.phone || "—"}</span>
                 <span style={{ textAlign: "right", fontWeight: 600, color: cust.balance >= 0 ? "#10B981" : "#EF4444" }}>
                   PKR {(cust.balance || 0).toLocaleString()}
                 </span>

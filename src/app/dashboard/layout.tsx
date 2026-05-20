@@ -4,23 +4,24 @@ import { getUserCompany } from '@/lib/get-user-company'
 import SidebarClient from './sidebar-client'
 import DashboardTopBar from "@/components/DashboardTopBar"
 import BottomNav from "@/components/BottomNav"
+import ThemeToggleButton from "@/components/ThemeToggleButton"
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Inter', sans-serif; background: #0B1120; color: #E2E8F0; }
+  body { font-family: var(--font-family); }
 
   /* Shell */
-  .dl-shell { display: flex; min-height: 100vh; background: #0B1120; }
+  .dl-shell { display: flex; min-height: 100vh; background: var(--shell-bg); }
 
   /* Sidebar */
   .dl-sidebar {
     width: 220px; min-width: 220px;
-    background: #0B1120;
+    background: var(--sidebar-bg);
     display: flex; flex-direction: column;
     position: fixed; top: 0; left: 0; bottom: 0; z-index: 40;
-    border-right: 1px solid #1E293B;
+    border-right: 1px solid var(--sidebar-border);
     transition: transform 0.28s cubic-bezier(.4,0,.2,1), width 0.25s ease;
     overflow: hidden;
   }
@@ -28,27 +29,27 @@ const styles = `
   /* Logo */
   .dl-sidebar-logo {
     display: flex; align-items: center; gap: 10px;
-    padding: 18px 16px; border-bottom: 1px solid #1E293B;
+    padding: 18px 16px; border-bottom: 1px solid var(--sidebar-border);
     min-height: 64px; flex-shrink: 0;
   }
   .dl-sidebar-logo-img { width: 34px; height: 34px; border-radius: 9px; object-fit: contain; flex-shrink: 0; }
-  .dl-sidebar-logo-name { color: #F1F5F9; font-size: 13px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
-  .dl-sidebar-logo-sub  { color: #475569; font-size: 9px; white-space: nowrap; }
+  .dl-sidebar-logo-name { color: var(--text); font-size: 13px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+  .dl-sidebar-logo-sub  { color: var(--text-muted); font-size: 9px; white-space: nowrap; }
 
   /* Nav */
   .dl-sidebar-nav { flex: 1; padding: 10px 8px; overflow-y: auto; overflow-x: hidden; }
   .dl-sidebar-nav::-webkit-scrollbar { width: 4px; }
   .dl-sidebar-nav::-webkit-scrollbar-track { background: transparent; }
-  .dl-sidebar-nav::-webkit-scrollbar-thumb { background: #1E293B; border-radius: 4px; }
+  .dl-sidebar-nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
   .dl-section-label {
     padding: 10px 14px 4px;
-    color: #334155; font-size: 9px; font-weight: 700;
+    color: var(--text-muted); font-size: 9px; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.08em;
     white-space: nowrap;
   }
   .dl-nav-group-label {
-    padding: 6px 14px 2px; color: #334155;
+    padding: 6px 14px 2px; color: var(--text-muted);
     font-size: 8px; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.06em;
     white-space: nowrap;
@@ -56,79 +57,76 @@ const styles = `
   .dl-nav-item {
     display: flex; align-items: center; gap: 9px;
     padding: 8px 14px; border-radius: 8px;
-    color: #94A3B8; font-size: 13px; font-weight: 500;
+    color: var(--text-muted); font-size: 13px; font-weight: 500;
     text-decoration: none; transition: all 0.15s;
     margin-bottom: 1px; white-space: nowrap;
     position: relative;
   }
-  .dl-nav-item:hover { background: rgba(255,255,255,0.05); color: #E2E8F0; }
+  .dl-nav-item:hover { background: var(--card-hover); color: var(--text); }
   .dl-nav-item.active {
-    background: rgba(255,255,255,0.07);
-    color: #FFFFFF; font-weight: 600;
+    background: var(--card-hover);
+    color: var(--text); font-weight: 600;
   }
   .dl-nav-item.active::before {
     content: ''; position: absolute; left: 0; top: 6px; bottom: 6px;
     width: 3px; border-radius: 0 3px 3px 0;
-    background: linear-gradient(180deg, #22D3EE, #3B82F6);
+    background: var(--primary);
   }
   .dl-nav-icon { width: 18px; text-align: center; flex-shrink: 0; font-size: 14px; }
 
   /* User footer */
   .dl-sidebar-user {
-    padding: 14px 16px; border-top: 1px solid #1E293B;
+    padding: 14px 16px; border-top: 1px solid var(--sidebar-border);
     display: flex; align-items: center; gap: 10px; flex-shrink: 0;
   }
   .dl-sidebar-avatar {
     width: 32px; height: 32px; border-radius: 50%;
-    background: linear-gradient(135deg, #1E3A8A, #1E293B);
-    color: white; display: flex; align-items: center; justify-content: center;
+    background: var(--card); color: var(--text);
+    display: flex; align-items: center; justify-content: center;
     font-size: 13px; font-weight: 700; flex-shrink: 0;
   }
-  .dl-sidebar-email { color: #64748B; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dl-sidebar-email { color: var(--text-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dl-sidebar-signout {
-    color: #475569; font-size: 10px; cursor: pointer;
+    color: var(--text-muted); font-size: 10px; cursor: pointer;
     background: none; border: none; font-family: inherit; padding: 0; margin-top: 2px;
     transition: color 0.15s;
   }
-  .dl-sidebar-signout:hover { color: #EF4444; }
+  .dl-sidebar-signout:hover { color: var(--danger); }
 
   /* Main area */
   .dl-main {
     flex: 1; margin-left: 220px;
     display: flex; flex-direction: column;
     min-height: 100vh; min-width: 0;
-    overflow-x: hidden; background: #0B1120;
-    transition: margin-left 0.25s ease;
+    overflow-x: hidden; background: var(--main-bg);
+    transition: margin-left 0.25s ease, background 0.3s;
   }
   .dl-main-content { flex: 1; display: flex; flex-direction: column; }
 
   /* Topbar */
   .dl-topbar {
-    background: #0F172A; border-bottom: 1px solid #1E293B;
+    background: var(--topbar-bg); border-bottom: 1px solid var(--topbar-border);
     padding: 0 24px; display: flex; align-items: center;
     min-height: 60px; gap: 14px;
     position: sticky; top: 0; z-index: 30;
   }
   .dl-topbar-greeting { flex: 1; min-width: 0; }
-  .dl-topbar-title    { font-size: 14px; font-weight: 700; color: #F1F5F9; line-height: 1.2; }
-  .dl-topbar-subtitle { font-size: 11px; color: #94A3B8; }
+  .dl-topbar-title    { font-size: 14px; font-weight: 700; color: var(--text); line-height: 1.2; }
+  .dl-topbar-subtitle { font-size: 11px; color: var(--text-muted); }
   .dl-topbar-actions  { display: flex; gap: 8px; flex-shrink: 0; }
 
   .dl-action-btn {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 6px 12px; border-radius: 9px;
     font-size: 11px; font-weight: 600;
-    text-decoration: none; cursor: pointer; border: 1px solid;
+    text-decoration: none; cursor: pointer; border: 1px solid var(--border);
     font-family: inherit; transition: all 0.15s; white-space: nowrap; height: 34px;
+    background: var(--card); color: var(--text-muted);
   }
-  .dl-btn-invoice { background:#1E293B; border-color:#334155; color:#93C5FD; }
-  .dl-btn-bill    { background:#1E293B; border-color:#334155; color:#FCD34D; }
-  .dl-btn-receipt { background:#1E293B; border-color:#334155; color:#6EE7B7; }
-  .dl-btn-payment { background:#1E293B; border-color:#334155; color:#FCA5A5; }
-  .dl-btn-invoice:hover { background:#1E3A8A; border-color:#1E3A8A; color:white; }
-  .dl-btn-bill:hover    { background:#1E3A8A; border-color:#1E3A8A; color:white; }
-  .dl-btn-receipt:hover { background:#065F46; border-color:#10B981; color:white; }
-  .dl-btn-payment:hover { background:#991B1B; border-color:#EF4444; color:white; }
+  .dl-btn-invoice:hover { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+  .dl-btn-bill:hover    { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+  .dl-btn-receipt:hover { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+  .dl-btn-payment:hover { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
 
   /* Hamburger */
   .dl-hamburger {
@@ -137,7 +135,7 @@ const styles = `
   }
   .dl-hamburger span {
     display: block; width: 20px; height: 2px;
-    background: #94A3B8; margin: 4px 0; border-radius: 2px;
+    background: var(--text-muted); margin: 4px 0; border-radius: 2px;
     transition: all 0.25s;
   }
 
@@ -155,7 +153,6 @@ const styles = `
      RESPONSIVE BREAKPOINTS
   ════════════════════════════════ */
 
-  /* Tablet: collapse sidebar to icon-only */
   @media (max-width: 960px) {
     .dl-sidebar {
       width: 62px; min-width: 62px;
@@ -173,7 +170,6 @@ const styles = `
     .dl-main            { margin-left: 62px; }
   }
 
-  /* Mobile: sidebar slides in as drawer */
   @media (max-width: 640px) {
     .dl-hamburger { display: block; }
 
@@ -181,7 +177,6 @@ const styles = `
       width: 240px; min-width: 240px;
       transform: translateX(-100%);
     }
-    /* When open, restore all text */
     .dl-sidebar.mobile-open {
       transform: translateX(0);
       box-shadow: 4px 0 24px rgba(0,0,0,0.5);
@@ -204,28 +199,111 @@ const styles = `
     .mobile-bottom-nav { display: block; position: fixed; bottom: 0; left: 0; right: 0; z-index: 50; }
   }
 
-  /* Very small screens */
   @media (max-width: 380px) {
     .dl-sidebar { width: 100vw; min-width: unset; }
   }
 
-  /* ── Global dark overrides for child pages ── */
-  body, .dl-shell, .dl-main, .dl-main-content { background: #0B1120 !important; }
+  /* ════════════════════════════════════
+     SMART THEME INJECTION
+     - Only changes white/black backgrounds
+     - Leaves colored elements untouched
+     ════════════════════════════════════ */
+  .dl-main-content {
+    background: var(--main-bg);
+    color: var(--text);
+  }
 
+  /* Convert hardcoded white backgrounds to card color */
+  .dl-main-content [style*="background: #fff"],
+  .dl-main-content [style*="background: white"],
+  .dl-main-content [style*="background:#fff"],
+  .dl-main-content [style*="background:white"],
+  .dl-main-content [style*="background: rgb(255,255,255)"],
+  .dl-main-content [style*="background: #ffffff"],
+  .dl-main-content [style*="background:#ffffff"],
+  .dl-main-content [style*="background-color: #fff"],
+  .dl-main-content [style*="background-color: white"],
+  .dl-main-content [style*="background-color:#fff"],
+  .dl-main-content [style*="background-color:white"],
+  .dl-main-content .bg-white {
+    background-color: var(--card) !important;
+    box-shadow: var(--shadow-sm);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+  }
+
+  /* Convert hardcoded black/dark text to theme text color */
+  .dl-main-content [style*="color: #000"],
+  .dl-main-content [style*="color: black"],
+  .dl-main-content [style*="color:#000"],
+  .dl-main-content [style*="color:black"],
+  .dl-main-content [style*="color: rgb(0,0,0)"],
+  .dl-main-content [style*="color: #111"],
+  .dl-main-content [style*="color:#111"] {
+    color: var(--text) !important;
+  }
+
+  /* Ensure inputs, selects, textareas use theme */
   .dl-main-content input,
   .dl-main-content select,
   .dl-main-content textarea {
-    background: #1E293B !important; border-color: #334155 !important; color: #F1F5F9 !important;
+    background: var(--card) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--text) !important;
   }
   .dl-main-content input:focus,
   .dl-main-content select:focus,
   .dl-main-content textarea:focus {
-    border-color: #64748B !important; outline: none !important;
+    border-color: var(--primary) !important;
+    outline: none !important;
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
   }
-  .dl-main-content table    { background: #111827 !important; color: #E2E8F0 !important; }
-  .dl-main-content table th { background: #1E293B !important; color: #94A3B8 !important; border-color: #1E293B !important; }
-  .dl-main-content table td { border-color: #1E293B !important; background: #111827 !important; color: #E2E8F0 !important; }
-  .dl-main-content tr:hover td { background: #1E293B !important; }
+
+  /* Tables */
+  .dl-main-content table {
+    background: var(--card) !important;
+    color: var(--text) !important;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .dl-main-content table th {
+    background: var(--bg-soft) !important;
+    color: var(--text-muted) !important;
+    border-bottom: 1px solid var(--border) !important;
+    padding: 12px 16px;
+  }
+  .dl-main-content table td {
+    border-bottom: 1px solid var(--border) !important;
+    background: var(--card) !important;
+    color: var(--text) !important;
+    padding: 12px 16px;
+  }
+  .dl-main-content tr:hover td {
+    background: var(--card-hover) !important;
+  }
+
+  /* Buttons that look plain */
+  .dl-main-content button:not([class*="dl-"]):not([class*="oa-"]) {
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .dl-main-content button:not([class*="dl-"]):not([class*="oa-"]):hover {
+    background: var(--primary);
+    color: var(--primary-text);
+    border-color: var(--primary);
+  }
+
+  /* Labels and muted text */
+  .dl-main-content label {
+    color: var(--text-muted);
+    font-weight: 500;
+  }
 `
 
 const navSections = [
@@ -273,9 +351,21 @@ const navSections = [
 ]
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  // ✅ NEW: fetch company from database, NOT from JWT metadata
   const tenant = await getUserCompany()
-  if (!tenant) redirect('/login')
+
+  if (!tenant) {
+    return (
+      <html lang="en">
+        <body style={{ margin: 0, background: '#0B1120', color: '#E2E8F0', fontFamily: 'Inter, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+          <div style={{ textAlign: 'center', maxWidth: 400, padding: 24 }}>
+            <h1 style={{ fontSize: 20, marginBottom: 8 }}>No Company Linked</h1>
+            <p style={{ color: '#94A3B8', marginBottom: 16 }}>Your account is not linked to a company. Please contact your administrator.</p>
+            <a href="/login" style={{ color: '#60A5FA', fontSize: 14 }}>← Back to login</a>
+          </div>
+        </body>
+      </html>
+    )
+  }
 
   const email   = tenant.email
   const initial = email.charAt(0).toUpperCase()
@@ -342,6 +432,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
                 <button type="submit" className="dl-sidebar-signout">Sign out</button>
               </form>
             </div>
+            <ThemeToggleButton />
           </div>
         </aside>
 
