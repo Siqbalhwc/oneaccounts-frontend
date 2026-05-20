@@ -342,4 +342,4 @@ export default function NewAccountPage() {
       </div>
     </div>
   )
-}s
+}
