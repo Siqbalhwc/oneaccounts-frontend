@@ -321,9 +321,7 @@ export default function NewInvoicePage() {
       if (editId) {
         router.push(`/dashboard/invoices/${editId}`)
       } else {
-        // Keep form open, show success and View Invoice button
         setSaving(false)
-        // Do not clear the form yet – user can click "View Invoice"
       }
     } catch {
       setError("Network error")
@@ -375,38 +373,38 @@ export default function NewInvoicePage() {
   }, [])
 
   if (loading) {
-    return <div style={{ padding: 24, textAlign: "center", color: "#94A3B8", background: "#0B1120", minHeight: "100vh" }}>Loading invoice form…</div>
+    return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>Loading invoice form…</div>
   }
 
   return (
-    <div style={{ padding: "16px", background: "#0B1120", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
+    <div style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .inv-shell { width: 100%; margin: 0; }
-        .inv-title { font-size: 18px; font-weight: 700; color: #F1F5F9; }
+        .inv-title { font-size: 18px; font-weight: 700; color: var(--text); }
         .inv-card {
-          background: #111827; border-radius: 12px; border: 1px solid #1E293B;
-          padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+          background: var(--card); border-radius: 12px; border: 1px solid var(--border);
+          padding: 16px 20px; box-shadow: var(--shadow-sm);
           margin-bottom: 12px;
         }
         .inv-label {
-          font-size: 10px; font-weight: 600; color: #94A3B8;
+          font-size: 10px; font-weight: 600; color: var(--text-muted);
           text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block;
         }
         .inv-input, .inv-select {
-          width: 100%; height: 38px; border: 1.5px solid #334155;
+          width: 100%; height: 38px; border: 1.5px solid var(--border);
           border-radius: 8px; padding: 0 12px; font-size: 13px;
-          font-family: inherit; background: #1E293B; color: #F1F5F9; outline: none; box-sizing: border-box;
+          font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box;
         }
-        .inv-input:focus, .inv-select:focus { border-color: #64748B; }
+        .inv-input:focus, .inv-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
         .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .inv-btn {
           display: inline-flex; align-items: center; gap: 6px;
           padding: 8px 14px; border-radius: 8px; font-size: 13px;
-          font-weight: 600; cursor: pointer; border: 1.5px solid #334155;
-          background: transparent; color: #CBD5E1; font-family: inherit;
+          font-weight: 600; cursor: pointer; border: 1.5px solid var(--border);
+          background: transparent; color: var(--text-muted); font-family: inherit;
           transition: all 0.15s; white-space: nowrap; text-decoration: none;
         }
-        .inv-btn:hover { background: #1E293B; }
+        .inv-btn:hover { background: var(--card-hover); }
         .inv-btn-success { background: #25D366; color: white; border-color: #25D366; }
         .inv-btn-success:hover { background: #22C55E; }
 
@@ -414,19 +412,19 @@ export default function NewInvoicePage() {
           display: grid;
           grid-template-columns: 30px 150px 3fr 80px 110px 110px 30px;
           gap: 6px; align-items: center; padding: 6px 0;
-          border-bottom: 1px solid #1E293B;
+          border-bottom: 1px solid var(--border);
         }
         .inv-item-header {
           display: grid;
           grid-template-columns: 30px 150px 3fr 80px 110px 110px 30px;
           gap: 6px; font-size: 9px; font-weight: 700;
-          text-transform: uppercase; color: #94A3B8; padding-bottom: 6px;
+          text-transform: uppercase; color: var(--text-muted); padding-bottom: 6px;
         }
 
         .inv-cell {
-          height: 38px; border: 1.5px solid #334155;
+          height: 38px; border: 1.5px solid var(--border);
           border-radius: 8px; padding: 0 12px; font-size: 13px;
-          font-family: inherit; background: #1E293B; color: #F1F5F9;
+          font-family: inherit; background: var(--bg); color: var(--text);
           display: flex; align-items: center; box-sizing: border-box;
           overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
         }
@@ -435,37 +433,37 @@ export default function NewInvoicePage() {
         .cust-input-row { position: relative; display: flex; align-items: center; }
         .cust-dropdown {
           position: absolute; top: calc(100% + 4px); left: 0; right: 0;
-          background: #111827; border: 1.5px solid #334155; border-radius: 10px;
+          background: var(--card); border: 1.5px solid var(--border); border-radius: 10px;
           max-height: 220px; overflow-y: auto; z-index: 100;
-          box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.15);
         }
         .cust-option {
           padding: 8px 12px; cursor: pointer;
-          border-bottom: 1px solid #1E293B;
+          border-bottom: 1px solid var(--border);
           display: flex; justify-content: space-between; align-items: center;
         }
         .cust-option:last-child { border-bottom: none; }
-        .cust-option:hover { background: #1E293B; }
-        .cust-option-name { font-size: 13px; font-weight: 600; color: #F1F5F9; }
-        .cust-option-meta { font-size: 11px; color: #94A3B8; margin-top: 2px; }
-        .cust-option-bal { font-size: 12px; font-weight: 600; color: #93C5FD; white-space: nowrap; }
+        .cust-option:hover { background: var(--card-hover); }
+        .cust-option-name { font-size: 13px; font-weight: 600; color: var(--text); }
+        .cust-option-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        .cust-option-bal { font-size: 12px; font-weight: 600; color: var(--primary); white-space: nowrap; }
         .cust-selected-badge {
           display: inline-flex; align-items: center; gap: 6px;
-          background: #1E293B; border: 1.5px solid #334155;
+          background: var(--card); border: 1.5px solid var(--border);
           border-radius: 8px; padding: 6px 12px; font-size: 13px;
-          font-weight: 600; color: #F1F5F9; width: 100%; cursor: pointer;
+          font-weight: 600; color: var(--text); width: 100%; cursor: pointer;
         }
 
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
         @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
 
         .price-history {
-          background: #1E293B; border-radius: 8px; padding: 10px 14px;
-          margin-top: 12px; font-size: 12px;
+          background: var(--card); border-radius: 8px; padding: 10px 14px;
+          margin-top: 12px; font-size: 12px; border: 1px solid var(--border);
         }
         .price-history-item {
           display: flex; justify-content: space-between; align-items: center;
-          padding: 4px 0; border-bottom: 1px solid #334155;
+          padding: 4px 0; border-bottom: 1px solid var(--border);
         }
 
         input[type="number"]::-webkit-inner-spin-button,
@@ -478,14 +476,14 @@ export default function NewInvoicePage() {
           <button className="inv-btn" onClick={() => router.push("/dashboard/invoices")}><ArrowLeft size={16} /></button>
           <div style={{ flex: 1 }}>
             <div className="inv-title">{editId ? "✏️ Edit Sales Invoice" : "🧾 New Sales Invoice"}</div>
-            <div style={{ fontSize: 12, color: "#94A3B8" }}>{editId ? "Modify invoice details and items" : "Create invoice with full accounting automation"}</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{editId ? "Modify invoice details and items" : "Create invoice with full accounting automation"}</div>
           </div>
           <button className="inv-btn" onClick={() => router.push("/dashboard/invoices")}>View List</button>
         </div>
 
-        {error && <div style={{ background: "#1E293B", border: "1px solid #EF4444", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
+        {error && <div style={{ background: "var(--card)", border: "1px solid #EF4444", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
         {flash && (
-          <div style={{ background: "#064E3B", border: "1px solid #065F46", color: "#ECFDF5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
             <CheckCircle size={16} /> {flash}
             {savedInvoiceId && !editId && (
               <button
@@ -508,15 +506,15 @@ export default function NewInvoicePage() {
                 {selectedCustomer ? (
                   <div className="cust-selected-badge" onClick={clearCustomer} style={{ position: "relative", paddingRight: 40 }}>
                     <span>👤</span><span style={{ flex: 1 }}>{selectedCustomer.code} — {selectedCustomer.name}</span>
-                    <span style={{ fontSize: 11, color: "#94A3B8" }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
+                    <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
                     <button
-                      style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#94A3B8", cursor: "pointer" }}
+                      style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
                       onClick={(e) => { e.stopPropagation(); clearCustomer(); }}
                     >
                       <X size={14} />
                     </button>
                     <button
-                      style={{ position: "absolute", right: 22, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#93C5FD", cursor: "pointer" }}
+                      style={{ position: "absolute", right: 22, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--primary)", cursor: "pointer" }}
                       onClick={(e) => { e.stopPropagation(); refreshCustomers(); }}
                       title="Refresh customer list"
                     >
@@ -526,7 +524,7 @@ export default function NewInvoicePage() {
                 ) : (
                   <>
                     <div className="cust-input-row">
-                      <Search size={14} style={{ position: "absolute", left: 10, color: "#94A3B8" }} />
+                      <Search size={14} style={{ position: "absolute", left: 10, color: "var(--text-muted)" }} />
                       <input
                         className="inv-input"
                         style={{ paddingLeft: 32, paddingRight: 32 }}
@@ -537,12 +535,12 @@ export default function NewInvoicePage() {
                         onClick={() => setShowCustomerList(true)}
                         autoComplete="off"
                       />
-                      {customerSearch && <button onClick={() => setCustomerSearch("")} style={{ background: "none", border: "none", color: "#94A3B8", cursor: "pointer" }}><X size={13} /></button>}
+                      {customerSearch && <button onClick={() => setCustomerSearch("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}><X size={13} /></button>}
                     </div>
                     {showCustomerList && (
                       <div className="cust-dropdown">
                         {filteredCustomers.length === 0 ? (
-                          <div style={{ padding: "10px 14px", color: "#94A3B8", fontSize: 13 }}>No customers found</div>
+                          <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: 13 }}>No customers found</div>
                         ) : (
                           filteredCustomers.map(c => (
                             <div key={c.id} className="cust-option" onMouseDown={() => selectCustomer(c)}>
@@ -575,7 +573,7 @@ export default function NewInvoicePage() {
                 <div style={{ position: "relative" }}>
                   <div style={{ display: "flex", gap: 8 }}>
                     <div style={{ position: "relative", flex: 1 }}>
-                      <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "#94A3B8" }} />
+                      <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "var(--text-muted)" }} />
                       <input
                         className="inv-input"
                         style={{ paddingLeft: 36 }}
@@ -602,7 +600,7 @@ export default function NewInvoicePage() {
                         </div>
                       ))}
                       {filteredProducts.length === 0 && (
-                        <div style={{ padding: 12, color: "#94A3B8", fontSize: 12 }}>No products found</div>
+                        <div style={{ padding: 12, color: "var(--text-muted)", fontSize: 12 }}>No products found</div>
                       )}
                     </div>
                   )}
@@ -616,10 +614,10 @@ export default function NewInvoicePage() {
                     {lastSelectedProduct.image_path && (
                       <img src={lastSelectedProduct.image_path} alt="" style={{ width: 28, height: 28, objectFit: "cover", borderRadius: 4 }} />
                     )}
-                    <span style={{ fontWeight: 600, fontSize: 12, color: "#F1F5F9" }}>
+                    <span style={{ fontWeight: 600, fontSize: 12, color: "var(--text)" }}>
                       📋 Price history for {lastSelectedProduct.name}
                     </span>
-                    <button style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#94A3B8" }} onClick={() => setShowHistory(false)}>
+                    <button style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }} onClick={() => setShowHistory(false)}>
                       <X size={14} />
                     </button>
                   </div>
@@ -631,7 +629,7 @@ export default function NewInvoicePage() {
                       </div>
                     ))
                   ) : (
-                    <div style={{ color: "#94A3B8", fontSize: 12 }}>No previous sales to this customer</div>
+                    <div style={{ color: "var(--text-muted)", fontSize: 12 }}>No previous sales to this customer</div>
                   )}
                 </div>
               )}
@@ -640,7 +638,7 @@ export default function NewInvoicePage() {
             {/* Change History when editing */}
             {editId && (
               <div className="inv-card" style={{ marginTop: 12 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>📝 Change History</h3>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
                 <RecordHistory tableName="invoices" recordId={editId} />
               </div>
             )}
@@ -649,7 +647,7 @@ export default function NewInvoicePage() {
           {/* RIGHT: Summary & Actions */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="inv-card">
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: "#F1F5F9", margin: "0 0 10px" }}>Summary</h3>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
                 <span>Total</span><span>PKR {totalAmount.toLocaleString()}</span>
               </div>
@@ -673,7 +671,7 @@ export default function NewInvoicePage() {
         {/* Items table – full width */}
         <div style={{ marginTop: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: "#F1F5F9" }}>Items</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
           </div>
           {items.length > 0 && (
             <div className="inv-card" style={{ overflowX: "auto", padding: "16px 12px" }}>
@@ -692,7 +690,7 @@ export default function NewInvoicePage() {
                     {item.product_image ? (
                       <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
                     ) : (
-                      <ImageIcon size={14} color="#94A3B8" />
+                      <ImageIcon size={14} color="var(--text-muted)" />
                     )}
                   </div>
                   <div className="inv-cell" style={{ paddingLeft: 12 }}>

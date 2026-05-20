@@ -41,7 +41,7 @@ export default function InvoicesPage() {
       })
   }, [role])
 
-  // 2. Fetch invoices (same working query)
+  // 2. Fetch invoices
   useEffect(() => {
     if (!role) return
     if (!canView) {
@@ -79,7 +79,7 @@ export default function InvoicesPage() {
   const unpaidCount = filtered.filter(i => i.status === "Unpaid").length
   const unpaidAmount = filtered.filter(i => i.status === "Unpaid").reduce((s, i) => s + (i.total || 0), 0)
 
-  // WhatsApp helper – uses customer phone if available
+  // WhatsApp helper
   const sendWhatsApp = (inv: any) => {
     const cust = customerMap[inv.party_id]
     if (!cust?.phone) {
@@ -91,25 +91,27 @@ export default function InvoicesPage() {
     window.open(url, "_blank")
   }
 
-  if (!role) return <div style={{ padding: 24, textAlign: "center", color: "#94A3B8" }}>Loading…</div>
-  if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "#E2E8F0" }}><h2>Access Denied</h2></div>
+  if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
+  if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
   return (
-    <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .card { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.2); overflow: hidden; }
-        .header-row { display: grid; grid-template-columns: 130px 90px 1fr 100px 80px 80px 80px; padding: 12px 20px; background: #1E293B; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94A3B8; border-bottom: 1px solid #1E293B; }
-        .data-row { display: grid; grid-template-columns: 130px 90px 1fr 100px 80px 80px 80px; padding: 10px 20px; border-bottom: 1px solid #1E293B; font-size: 13px; align-items: center; transition: background 0.15s; }
-        .data-row:hover { background: #1E293B; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
+        .header-row { display: grid; grid-template-columns: 130px 90px 1fr 100px 80px 80px 80px; padding: 12px 20px; background: var(--card-hover); font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+        .data-row { display: grid; grid-template-columns: 130px 90px 1fr 100px 80px 80px 80px; padding: 10px 20px; border-bottom: 1px solid var(--border); font-size: 13px; align-items: center; transition: background 0.15s; }
+        .data-row:hover { background: var(--card-hover); }
         .data-row:last-child { border-bottom: none; }
-        .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid #334155; background: transparent; color: #CBD5E1; }
-        .btn:hover { background: #1E293B; }
-        .btn-icon { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; padding: 6px; border-radius: 8px; cursor: pointer; }
-        .input { width: 100%; height: 38px; border: 1.5px solid #334155; border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px; background: #1E293B; color: #F1F5F9; outline: none; box-sizing: border-box; }
+        .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); }
+        .btn:hover { background: var(--card-hover); }
+        .btn-icon { background: transparent; border: 1.5px solid var(--border); color: var(--text-muted); padding: 6px; border-radius: 8px; cursor: pointer; }
+        .btn-icon:hover { background: var(--card-hover); }
+        .input { width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px; background: var(--card); color: var(--text); outline: none; box-sizing: border-box; }
+        .input:focus { border-color: var(--primary); }
         .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
-        .summary-item { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 16px; }
-        .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94A3B8; margin-bottom: 4px; }
-        .summary-value { font-size: 22px; font-weight: 800; color: #F1F5F9; }
+        .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+        .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+        .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
         @media (max-width: 640px) {
           .header-row, .data-row { grid-template-columns: 90px 70px 1fr 70px 60px 50px 50px; }
         }
@@ -118,11 +120,11 @@ export default function InvoicesPage() {
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>🧾 Sales Invoices</h1>
-          <p style={{ fontSize: 13, color: "#94A3B8", margin: 0 }}>{canEdit ? "Create and manage invoices" : "View invoices"}</p>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>🧾 Sales Invoices</h1>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>{canEdit ? "Create and manage invoices" : "View invoices"}</p>
         </div>
         {canEdit && (
-          <button className="btn btn-outline" onClick={() => router.push("/dashboard/invoices/new")}>
+          <button className="btn" onClick={() => router.push("/dashboard/invoices/new")}>
             <Plus size={16} /> New Invoice
           </button>
         )}
@@ -150,7 +152,7 @@ export default function InvoicesPage() {
 
       {/* Search */}
       <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
-        <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#94A3B8" }} />
+        <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
         <input
           className="input"
           placeholder="Search by invoice # or customer..."
@@ -161,9 +163,9 @@ export default function InvoicesPage() {
 
       {/* Table */}
       {loading ? (
-        <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading invoices…</div>
+        <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading invoices…</div>
       ) : filtered.length === 0 ? (
-        <div className="card" style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>
+        <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
           No invoices found.
         </div>
       ) : (
@@ -182,7 +184,7 @@ export default function InvoicesPage() {
             const custName = cust?.name || "—"
             return (
               <div key={inv.id} className="data-row">
-                <span style={{ fontWeight: 600, color: "#93C5FD" }}>{inv.invoice_no}</span>
+                <span style={{ fontWeight: 600, color: "var(--primary)" }}>{inv.invoice_no}</span>
                 <span>{inv.date}</span>
                 <span>{custName}</span>
                 <span style={{ fontWeight: 600 }}>PKR {inv.total?.toLocaleString()}</span>
