@@ -272,13 +272,13 @@ export default function NewBillPage() {
 
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
 
+  // ✅ FIX: removed .is("deleted_at", null) to avoid reusing soft‑deleted bill numbers
   const getNextBillNo = async (suppCode: string): Promise<string> => {
     const { data } = await supabase
       .from("invoices")
       .select("invoice_no")
       .like("invoice_no", `${suppCode}-%`)
       .eq("type", "purchase")
-      .is("deleted_at", null)
       .order("invoice_no", { ascending: false })
       .limit(1)
     let nextNum = 1
@@ -534,7 +534,7 @@ export default function NewBillPage() {
                           <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: 13 }}>No suppliers found</div>
                         ) : (
                           filteredSuppliers.map(s => (
-                            <div key={s.id} className="cust-option" onMouseDown={() => selectSupplier(s)}>
+                            <div key={s.id} className="cust-option" onMouseDown={() => selectCustomer(s)}>
                               <div>
                                 <div className="cust-option-name">{s.name}</div>
                                 <div className="cust-option-meta">{s.code}{s.phone ? ` · ${s.phone}` : ""}</div>
