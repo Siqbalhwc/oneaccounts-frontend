@@ -49,50 +49,56 @@ export default function FeatureManagerPage() {
   useEffect(() => {
     if (!canView) { setLoading(false); return }
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      const cid = (user?.app_metadata as any)?.company_id
-      if (!cid) {
-        setMessage("No active company found.")
-        setLoading(false)
-        return
-      }
-      setCompanyId(cid)
-
-      // Fetch feature IDs
-      supabase
-        .from("features")
-        .select("id, code")
-        .in("code", FEATURE_CODES)
-        .then(({ data: featureRows }) => {
-          const map: Record<string, string> = {}
-          if (featureRows) {
-            featureRows.forEach((f: any) => { map[f.code] = f.id })
-          }
-          setFeatureIdMap(map)
-
-          // Fetch current overrides for this company
-          return supabase
-            .from("company_features")
-            .select("features(code), enabled")
-            .eq("company_id", cid)
-            .then(({ data }) => {
-              const states: Record<string, boolean> = {}
-              FEATURE_CODES.forEach(code => { states[code] = false })
-              if (data) {
-                data.forEach((row: any) => {
-                  const code = row.features?.code
-                  if (code) states[code] = row.enabled
-                })
-              }
-              setFeatureStates(states)
-              setLoading(false)
-            })
-        })
-        .catch(() => {
-          setMessage("Error loading features.")
+    const loadFeatures = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        const cid = (user?.app_metadata as any)?.company_id
+        if (!cid) {
+          setMessage("No active company found.")
           setLoading(false)
-        })
-    })
+          return
+        }
+        setCompanyId(cid)
+
+        // Fetch feature IDs
+        const { data: featureRows, error: featureErr } = await supabase
+          .from("features")
+          .select("id, code")
+          .in("code", FEATURE_CODES)
+
+        if (featureErr) throw featureErr
+
+        const map: Record<string, string> = {}
+        if (featureRows) {
+          featureRows.forEach((f: any) => { map[f.code] = f.id })
+        }
+        setFeatureIdMap(map)
+
+        // Fetch current overrides
+        const { data: overrides, error: overridesErr } = await supabase
+          .from("company_features")
+          .select("features(code), enabled")
+          .eq("company_id", cid)
+
+        if (overridesErr) throw overridesErr
+
+        const states: Record<string, boolean> = {}
+        FEATURE_CODES.forEach(code => { states[code] = false })
+        if (overrides) {
+          overrides.forEach((row: any) => {
+            const code = row.features?.code
+            if (code) states[code] = row.enabled
+          })
+        }
+        setFeatureStates(states)
+      } catch (err: any) {
+        setMessage("Error loading features: " + (err.message || ""))
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadFeatures()
   }, [])
 
   const toggleFeature = async (code: string, enabled: boolean) => {
@@ -135,11 +141,9 @@ export default function FeatureManagerPage() {
         .from("company_features")
         .upsert({ company_id: companyId, features: featureId, enabled: enable })
     }
-    setFeatureStates(prev => {
-      const newStates: Record<string, boolean> = {}
-      FEATURE_CODES.forEach(code => { newStates[code] = enable })
-      return newStates
-    })
+    const newStates: Record<string, boolean> = {}
+    FEATURE_CODES.forEach(code => { newStates[code] = enable })
+    setFeatureStates(newStates)
     setLoading(false)
     setMessage(enable ? "✅ All features enabled!" : "✅ All features disabled!")
     setTimeout(() => setMessage(""), 3000)
@@ -147,7 +151,6 @@ export default function FeatureManagerPage() {
 
   if (role === null) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
 
-  // Instead of blocking, we show a friendly message – but admins always pass.
   if (!canView) {
     return (
       <div style={{ padding: 40, textAlign: "center", color: "var(--text)" }}>
@@ -174,7 +177,6 @@ export default function FeatureManagerPage() {
         }
         .fm-card:hover { box-shadow: var(--shadow); }
         .fm-feature-name { font-size: 15px; font-weight: 700; color: var(--text); }
-        .fm-feature-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
         .fm-toggle-btn { background: none; border: none; cursor: pointer; padding: 4px; border-radius: 6px; }
         .fm-toggle-btn:hover { background: var(--card-hover); }
         .btn {
@@ -210,7 +212,7 @@ export default function FeatureManagerPage() {
 
       {message && (
         <div style={{
-          background: message.startsWith("✅") ? "var(--card)" : "var(--card)",
+          background: "var(--card)",
           border: message.startsWith("✅") ? "1px solid #065F46" : "1px solid #FECACA",
           color: message.startsWith("✅") ? "#6EE7B7" : "#FCA5A5",
           padding: "10px 14px", borderRadius: 8, fontSize: 13, marginBottom: 12,
