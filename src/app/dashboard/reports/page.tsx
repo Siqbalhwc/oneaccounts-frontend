@@ -19,22 +19,38 @@ export default function ReportsPage() {
   ]
 
   return (
-    <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", margin: "0 0 4px" }}>📈 Reports</h1>
-      <p style={{ color: "#94A3B8", fontSize: 13, marginBottom: 24 }}>Financial reports and analysis</p>
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+      <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: "0 0 4px" }}>📈 Reports</h1>
+      <p style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: 24 }}>Financial reports and analysis</p>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
         {reports.map(r => (
-          <div key={r.title} onClick={() => router.push(r.href)}
-            style={{ background: "white", borderRadius: 12, border: "1px solid #E2E8F0", borderTop: `3px solid ${r.color}`, padding: "20px 18px", cursor: "pointer", transition: "box-shadow 0.15s" }}
-            onMouseEnter={e => (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 18px rgba(0,0,0,0.08)"}
-            onMouseLeave={e => (e.currentTarget as HTMLElement).style.boxShadow = "none"}>
+          <div
+            key={r.title}
+            onClick={() => router.push(r.href)}
+            style={{
+              background: "var(--card)",
+              borderRadius: 12,
+              border: "1px solid var(--border)",
+              borderTop: `3px solid ${r.color}`,
+              padding: "20px 18px",
+              cursor: "pointer",
+              transition: "box-shadow 0.15s, background 0.15s",
+              boxShadow: "var(--shadow-sm)",
+            }}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-lg)"
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-sm)"
+            }}
+          >
             <div style={{ color: r.color, marginBottom: 12 }}>{r.icon}</div>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: "#1E293B", margin: "0 0 4px" }}>{r.title}</h3>
-            <p style={{ fontSize: 12, color: "#94A3B8", margin: 0 }}>{r.desc}</p>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 4px" }}>{r.title}</h3>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>{r.desc}</p>
           </div>
         ))}
       </div>
     </div>
   )
-}
+}s
