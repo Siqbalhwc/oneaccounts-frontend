@@ -165,29 +165,29 @@ export default function ProductFormPage() {
     setTimeout(() => setFlash(null), 4000)
   }
 
-  if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>Loading company data…</div>
+  if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading company data…</div>
 
   return (
-    <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .card {
-          background: #111827; border: 1px solid #1E293B; border-radius: 12px;
-          padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+          background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+          padding: 20px; margin-bottom: 16px; box-shadow: var(--shadow-sm);
         }
-        .label { font-size: 10px; font-weight: 600; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block; }
+        .label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block; }
         .input, .select {
-          width: 100%; height: 38px; border: 1.5px solid #334155; border-radius: 8px;
+          width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px;
           padding: 0 12px; font-size: 13px; box-sizing: border-box;
-          font-family: inherit; background: #1E293B; color: #F1F5F9; outline: none;
+          font-family: inherit; background: var(--bg); color: var(--text); outline: none;
         }
-        .input:focus, .select:focus { border-color: #64748B; }
+        .input:focus, .select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
         .input:disabled { opacity: 0.7; cursor: not-allowed; }
         .btn {
-          padding: 8px 14px; border-radius: 8px; border: 1.5px solid #334155; font-weight: 600;
+          padding: 8px 14px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600;
           font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-          background: transparent; color: #CBD5E1; transition: 0.2s;
+          background: transparent; color: var(--text-muted); transition: 0.2s;
         }
-        .btn:hover { background: #1E293B; }
+        .btn:hover { background: var(--card-hover); }
         .inline-group { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
         @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
@@ -197,17 +197,17 @@ export default function ProductFormPage() {
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
         <button className="btn" onClick={() => router.push("/dashboard/products")}><ArrowLeft size={16} /></button>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>
             {editId ? "✏️ Edit Product" : "📦 Add New Product"}
           </h1>
-          <p style={{ color: "#94A3B8", fontSize: 13 }}>
+          <p style={{ color: "var(--text-muted)", fontSize: 13 }}>
             {editId ? "Modify product details" : "Add a product to your inventory"}
           </p>
         </div>
       </div>
 
-      {error && <div style={{ background: "#1E293B", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
-      {flash && <div style={{ background: "#064E3B", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
+      {error && <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, border: "1px solid #FECACA" }}>{error}</div>}
+      {flash && <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
 
       <form onSubmit={handleSubmit}>
         <div className="header-grid">
@@ -256,7 +256,7 @@ export default function ProductFormPage() {
           {/* Right: Summary + Save */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="card">
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: "#F1F5F9", margin: "0 0 10px" }}>Summary</h3>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
                 <span>Units in Hand</span>
                 <span>{qty.toLocaleString()}</span>
