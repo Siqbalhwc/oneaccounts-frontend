@@ -81,7 +81,7 @@ export default function NewJournalPage() {
     })
   }, [])
 
-  // ── Generate entry number (reliable, no duplicate) ──
+  // ── Generate entry number ──
   const generateEntryNo = async (): Promise<string> => {
     const datePrefix = new Date().toISOString().split("T")[0].replace(/-/g, "")
 
@@ -126,7 +126,6 @@ export default function NewJournalPage() {
   const removeLine = (i: number) =>
     lines.length > 2 && setLines(lines.filter((_, idx) => idx !== i))
 
-  // ── Fetch project & donor when activity changes ──
   const fetchActivityDetails = async (activityId: number) => {
     try {
       const { data: actData } = await supabase
@@ -198,7 +197,6 @@ export default function NewJournalPage() {
   const totalCredit = lines.reduce((s, l) => s + (l.credit || 0), 0)
   const isBalanced = Math.abs(totalDebit - totalCredit) < 0.01 && totalDebit > 0
 
-  // ── Submit (with duplicate retry, rollback, source tracking, audit) ──
   const handleSubmit = async () => {
     if (!isBalanced) {
       setError("Debits must equal Credits")
@@ -216,7 +214,6 @@ export default function NewJournalPage() {
     let je: any = null
     let headerErr: any = null
 
-    // Up to 3 attempts in case of duplicate key
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         entryNo = await generateEntryNo()
@@ -240,7 +237,7 @@ export default function NewJournalPage() {
       headerErr = result.error
       je = result.data
 
-      if (!headerErr) break // success
+      if (!headerErr) break
 
       if (headerErr.message?.includes("duplicate key") && attempt < 2) {
         continue
@@ -259,7 +256,6 @@ export default function NewJournalPage() {
 
     const entryId = je.id
 
-    // Prepare valid lines
     const validLines = lines.filter(
       (l) => l.account_id && (l.debit > 0 || l.credit > 0)
     )
@@ -270,7 +266,6 @@ export default function NewJournalPage() {
       return
     }
 
-    // Insert lines (with source_type & source_id)
     const { error: linesErr } = await supabase.from("journal_lines").insert(
       validLines.map((l) => ({
         company_id: companyId,
@@ -294,7 +289,6 @@ export default function NewJournalPage() {
       return
     }
 
-    // Update account balances (with full rollback)
     try {
       for (const l of validLines) {
         const { data: acc, error: accErr } = await supabase
@@ -316,7 +310,6 @@ export default function NewJournalPage() {
         }
       }
     } catch (balErr: any) {
-      // Rollback everything on failure
       await supabase.from("journal_lines").delete().eq("entry_id", entryId)
       await supabase.from("journal_entries").delete().eq("id", entryId)
       setError("Error updating accounts, rolled back: " + balErr.message)
@@ -324,7 +317,6 @@ export default function NewJournalPage() {
       return
     }
 
-    // Audit log
     const { data: { user } } = await supabase.auth.getUser()
     const auditPayload = {
       table_name: "journal_entries",
@@ -355,227 +347,100 @@ export default function NewJournalPage() {
     }
     await supabase.from("data_change_logs").insert(auditPayload)
 
-    // Success
     setFlash(`✅ Journal Entry ${entryNo} posted!`)
     setTimeout(() => router.push("/dashboard/journal"), 1500)
     setLoading(false)
   }
 
-  // ── JSX ────────────────────────────────────────────────────────────────
+  if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading company data…</div>
+
   return (
-    <div
-      style={{
-        padding: 24,
-        background: "#EFF4FB",
-        minHeight: "100vh",
-        fontFamily: "'Plus Jakarta Sans', sans-serif",
-      }}
-    >
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+      <style>{`
+        .form-card {
+          background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+          padding: 24px; margin-bottom: 16px;
+        }
+        .label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; display: block; }
+        .input, .select {
+          width: 100%; height: 40px; border: 1.5px solid var(--border); border-radius: 8px;
+          padding: 0 12px; font-size: 13px; box-sizing: border-box;
+          font-family: inherit; background: var(--bg); color: var(--text);
+        }
+        .input:focus, .select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+        .input:disabled { opacity: 0.7; cursor: not-allowed; }
+        .btn {
+          padding: 10px 20px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600;
+          font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+        }
+        .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
+        .btn-outline:hover { background: var(--card-hover); }
+        .btn-primary {
+          background: var(--primary); color: var(--primary-text); border-color: var(--primary);
+          box-shadow: 0 4px 12px rgba(37,99,235,0.3);
+        }
+        .btn-primary:hover { background: var(--primary-hover); }
+
+        .lines-header {
+          display: grid;
+          grid-template-columns: 1fr 90px 90px 1fr 110px 110px 40px;
+          gap: 8px; font-size: 10px; font-weight: 700; color: var(--text-muted);
+          padding-bottom: 8px; align-items: end;
+        }
+        .line-row {
+          display: grid;
+          grid-template-columns: 1fr 90px 90px 1fr 110px 110px 40px;
+          gap: 8px; align-items: start; margin-bottom: 8px;
+        }
+
+        @media (max-width: 900px) {
+          .lines-header, .line-row {
+            grid-template-columns: 1fr 70px 70px 1fr 90px 90px 35px;
+          }
+        }
+      `}</style>
+
       <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-        <div
-          style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}
-        >
-          <button
-            onClick={() => router.push("/dashboard/journal")}
-            style={{
-              background: "white",
-              border: "1px solid #E2E8F0",
-              borderRadius: 8,
-              padding: "8px 12px",
-              cursor: "pointer",
-            }}
-          >
-            <ArrowLeft size={16} />
-          </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+          <button className="btn btn-outline" onClick={() => router.push("/dashboard/journal")}><ArrowLeft size={16} /></button>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", margin: 0 }}>
-              📓 New Journal Entry
-            </h1>
-            <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>
-              Debits must equal Credits
-            </p>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📓 New Journal Entry</h1>
+            <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Debits must equal Credits</p>
           </div>
         </div>
 
-        {error && (
-          <div
-            style={{
-              background: "#FEF2F2",
-              color: "#B91C1C",
-              padding: 12,
-              borderRadius: 8,
-              marginBottom: 16,
-            }}
-          >
-            {error}
-          </div>
-        )}
-        {flash && (
-          <div
-            style={{
-              background: "#F0FDF4",
-              border: "1px solid #BBF7D0",
-              color: "#15803D",
-              padding: "10px 14px",
-              borderRadius: 8,
-              marginBottom: 12,
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            <CheckCircle size={16} /> {flash}
-          </div>
-        )}
+        {error && <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, border: "1px solid #FECACA" }}>{error}</div>}
+        {flash && <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
 
         {/* Header card */}
-        <div
-          style={{
-            background: "white",
-            borderRadius: 12,
-            padding: 24,
-            border: "1px solid #E2E8F0",
-            marginBottom: 16,
-          }}
-        >
-          <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}
-          >
+        <div className="form-card">
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
             <div>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: "#64748B",
-                  marginBottom: 4,
-                }}
-              >
-                Entry No
-              </label>
-              <input
-                value="Auto‑generated"
-                disabled
-                style={{
-                  width: "100%",
-                  height: 40,
-                  border: "1.5px solid #E2E8F0",
-                  borderRadius: 8,
-                  padding: "0 12px",
-                  fontSize: 13,
-                  background: "#F8FAFC",
-                  color: "#94A3B8",
-                  cursor: "not-allowed",
-                }}
-              />
+              <label className="label">Entry No</label>
+              <input className="input" value="Auto‑generated" disabled />
             </div>
             <div>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: "#64748B",
-                  marginBottom: 4,
-                }}
-              >
-                Date *
-              </label>
-              <input
-                type="date"
-                value={entryDate}
-                onChange={(e) => setEntryDate(e.target.value)}
-                style={{
-                  width: "100%",
-                  height: 40,
-                  border: "1.5px solid #E2E8F0",
-                  borderRadius: 8,
-                  padding: "0 12px",
-                  fontSize: 13,
-                }}
-              />
+              <label className="label">Date *</label>
+              <input type="date" className="input" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
             </div>
             <div>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: "#64748B",
-                  marginBottom: 4,
-                }}
-              >
-                Description
-              </label>
-              <input
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="e.g. Office rent"
-                style={{
-                  width: "100%",
-                  height: 40,
-                  border: "1.5px solid #E2E8F0",
-                  borderRadius: 8,
-                  padding: "0 12px",
-                  fontSize: 13,
-                }}
-              />
+              <label className="label">Description</label>
+              <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Office rent" />
             </div>
           </div>
         </div>
 
         {/* Lines card */}
-        <div
-          style={{
-            background: "white",
-            borderRadius: 12,
-            padding: 24,
-            border: "1px solid #E2E8F0",
-            marginBottom: 16,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: 12,
-            }}
-          >
+        <div className="form-card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <span style={{ fontWeight: 600, fontSize: 14 }}>Journal Lines</span>
-            <button
-              onClick={addLine}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                padding: "6px 12px",
-                background: "#F1F5F9",
-                border: "1px solid #E2E8F0",
-                borderRadius: 6,
-                cursor: "pointer",
-                fontSize: 12,
-              }}
-            >
-              <Plus size={14} /> Add Line
-            </button>
+            <button className="btn btn-outline" onClick={addLine} style={{ padding: "6px 12px", fontSize: 12 }}><Plus size={14} /> Add Line</button>
           </div>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 90px 90px 1fr 110px 110px 40px",
-              gap: 8,
-              fontSize: 10,
-              fontWeight: 700,
-              color: "#94A3B8",
-              padding: "0 0 8px",
-              alignItems: "end",
-            }}
-          >
+          <div className="lines-header">
             <span>Account</span>
-            <span style={{ textAlign: "right", paddingRight: 8 }}>Debit</span>
-            <span style={{ textAlign: "right", paddingRight: 8 }}>Credit</span>
+            <span style={{ textAlign: "right" }}>Debit</span>
+            <span style={{ textAlign: "right" }}>Credit</span>
             <span>Narration</span>
             <span>Location</span>
             <span>Activity</span>
@@ -584,171 +449,78 @@ export default function NewJournalPage() {
 
           {lines.map((l, i) => (
             <div key={i} style={{ marginBottom: 8 }}>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 90px 90px 1fr 110px 110px 40px",
-                  gap: 8,
-                  alignItems: "start",
-                }}
-              >
+              <div className="line-row">
                 <select
+                  className="select"
                   value={l.account_id || ""}
                   onChange={(e) => updateLine(i, "account_id", e.target.value)}
-                  style={{
-                    height: 38,
-                    border: "1.5px solid #E2E8F0",
-                    borderRadius: 6,
-                    padding: "0 8px",
-                    fontSize: 12,
-                    width: "100%",
-                  }}
                 >
                   <option value="">Select account...</option>
                   {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.code} - {a.name}
-                    </option>
+                    <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
                   ))}
                 </select>
                 <input
+                  className="input"
                   type="number"
                   value={l.debit || ""}
                   onChange={(e) => updateLine(i, "debit", e.target.value)}
-                  style={{
-                    width: "100%",
-                    height: 38,
-                    border: "1.5px solid #E2E8F0",
-                    borderRadius: 6,
-                    padding: "0 8px",
-                    fontSize: 12,
-                    textAlign: "right",
-                  }}
+                  style={{ textAlign: "right" }}
                 />
                 <input
+                  className="input"
                   type="number"
                   value={l.credit || ""}
                   onChange={(e) => updateLine(i, "credit", e.target.value)}
-                  style={{
-                    width: "100%",
-                    height: 38,
-                    border: "1.5px solid #E2E8F0",
-                    borderRadius: 6,
-                    padding: "0 8px",
-                    fontSize: 12,
-                    textAlign: "right",
-                  }}
+                  style={{ textAlign: "right" }}
                 />
                 <input
+                  className="input"
                   type="text"
                   value={l.narration || ""}
                   onChange={(e) => updateLine(i, "narration", e.target.value)}
                   placeholder="Line narration"
-                  style={{
-                    width: "100%",
-                    height: 38,
-                    border: "1.5px solid #E2E8F0",
-                    borderRadius: 6,
-                    padding: "0 8px",
-                    fontSize: 12,
-                  }}
                 />
                 <select
+                  className="select"
                   value={l.location_id || ""}
-                  onChange={(e) =>
-                    updateLine(i, "location_id", e.target.value ? Number(e.target.value) : null)
-                  }
-                  style={{
-                    width: "100%",
-                    height: 38,
-                    border: "1.5px solid #E2E8F0",
-                    borderRadius: 6,
-                    padding: "0 4px",
-                    fontSize: 11,
-                  }}
+                  onChange={(e) => updateLine(i, "location_id", e.target.value ? Number(e.target.value) : null)}
+                  style={{ fontSize: 11 }}
                 >
                   <option value="">—</option>
-                  {locations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.name}
-                    </option>
-                  ))}
+                  {locations.map((loc) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
                 </select>
                 <select
+                  className="select"
                   value={l.activity_id || ""}
-                  onChange={(e) =>
-                    updateLine(i, "activity_id", e.target.value ? Number(e.target.value) : null)
-                  }
-                  style={{
-                    width: "100%",
-                    height: 38,
-                    border: "1.5px solid #E2E8F0",
-                    borderRadius: 6,
-                    padding: "0 4px",
-                    fontSize: 11,
-                  }}
+                  onChange={(e) => updateLine(i, "activity_id", e.target.value ? Number(e.target.value) : null)}
+                  style={{ fontSize: 11 }}
                 >
                   <option value="">—</option>
-                  {activities.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
+                  {activities.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
-                <button
-                  onClick={() => removeLine(i)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "#EF4444",
-                    height: 38,
-                  }}
-                >
+                <button onClick={() => removeLine(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", height: 38 }}>
                   <Trash2 size={14} />
                 </button>
               </div>
               {l.activity_id && (
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: "#64748B",
-                    display: "flex",
-                    gap: 16,
-                    paddingLeft: 8,
-                    marginTop: 2,
-                  }}
-                >
-                  <span>
-                    Project: <strong>{l.project_name || "—"}</strong>
-                  </span>
-                  <span>
-                    Donor: <strong>{l.donor_name || "—"}</strong>
-                  </span>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", display: "flex", gap: 16, paddingLeft: 8, marginTop: 2 }}>
+                  <span>Project: <strong>{l.project_name || "—"}</strong></span>
+                  <span>Donor: <strong>{l.donor_name || "—"}</strong></span>
                 </div>
               )}
             </div>
           ))}
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 90px 90px 1fr 110px 110px 40px",
-              gap: 8,
-              marginTop: 12,
-              paddingTop: 12,
-              borderTop: "2px solid #E2E8F0",
-              fontWeight: 700,
-              fontSize: 14,
-            }}
-          >
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 90px 90px 1fr 110px 110px 40px",
+            gap: 8, marginTop: 12, paddingTop: 12, borderTop: "2px solid var(--border)",
+            fontWeight: 700, fontSize: 14
+          }}>
             <span>Total</span>
-            <span style={{ textAlign: "right", paddingRight: 8 }}>
-              PKR {totalDebit.toLocaleString()}
-            </span>
-            <span style={{ textAlign: "right", paddingRight: 8 }}>
-              PKR {totalCredit.toLocaleString()}
-            </span>
+            <span style={{ textAlign: "right" }}>PKR {totalDebit.toLocaleString()}</span>
+            <span style={{ textAlign: "right" }}>PKR {totalCredit.toLocaleString()}</span>
             <span></span>
             <span></span>
             <span></span>
@@ -757,31 +529,19 @@ export default function NewJournalPage() {
 
           {!isBalanced && totalDebit > 0 && (
             <div style={{ color: "#EF4444", fontSize: 13, marginTop: 8 }}>
-              ⚠️ Difference: PKR{" "}
-              {Math.abs(totalDebit - totalCredit).toLocaleString()}
+              ⚠️ Difference: PKR {Math.abs(totalDebit - totalCredit).toLocaleString()}
             </div>
           )}
           {isBalanced && (
-            <div style={{ color: "#10B981", fontSize: 13, marginTop: 8 }}>
-              ✅ Balanced!
-            </div>
+            <div style={{ color: "#10B981", fontSize: 13, marginTop: 8 }}>✅ Balanced!</div>
           )}
         </div>
 
         <button
+          className="btn btn-primary"
+          style={{ width: "100%", justifyContent: "center", padding: 14 }}
           onClick={handleSubmit}
           disabled={loading || !isBalanced}
-          style={{
-            width: "100%",
-            padding: 14,
-            background: isBalanced ? "#1D4ED8" : "#94A3B8",
-            color: "white",
-            border: "none",
-            borderRadius: 9,
-            fontSize: 15,
-            fontWeight: 600,
-            cursor: isBalanced ? "pointer" : "not-allowed",
-          }}
         >
           {loading ? "Posting..." : "💾 POST JOURNAL ENTRY"}
         </button>

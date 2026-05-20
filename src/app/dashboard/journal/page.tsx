@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { Plus, Eye, ChevronDown, ChevronRight } from "lucide-react"
-import RoleGuard from "@/components/RoleGuard"
+import { Plus, Eye, ChevronDown, ChevronRight, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 
 interface JournalEntry {
@@ -16,6 +15,9 @@ interface JournalEntry {
   total_debit?: number
   total_credit?: number
 }
+
+type SortField = "entry_no" | "date" | "description" | "total_debit" | "total_credit"
+type SortDir = "asc" | "desc"
 
 export default function JournalPage() {
   const supabase = createBrowserClient(
@@ -34,7 +36,11 @@ export default function JournalPage() {
   const [expandedLines, setExpandedLines] = useState<any[]>([])
   const [loadingLines, setLoadingLines] = useState(false)
 
-  // Fetch journal entries – now excludes soft‑deleted rows
+  // Sorting state
+  const [sortField, setSortField] = useState<SortField>("date")
+  const [sortDir, setSortDir] = useState<SortDir>("desc")
+
+  // Fetch journal entries (exclude soft-deleted)
   useEffect(() => {
     if (!role) return
     if (!canView) {
@@ -44,7 +50,7 @@ export default function JournalPage() {
     supabase
       .from("journal_entries")
       .select("id, entry_no, date, description")
-      .is("deleted_at", null)                   // ← filter soft‑deletes
+      .is("deleted_at", null)
       .order("date", { ascending: false })
       .then(({ data }) => {
         if (data) {
@@ -96,347 +102,243 @@ export default function JournalPage() {
       )
     : entries
 
-  if (!role) return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
+  // Client-side sort
+  const sortedFiltered = [...filtered].sort((a, b) => {
+    let valA: any, valB: any
+    if (sortField === "total_debit" || sortField === "total_credit") {
+      valA = a[sortField] ?? 0
+      valB = b[sortField] ?? 0
+    } else {
+      valA = (a[sortField] || "").toString().toLowerCase()
+      valB = (b[sortField] || "").toString().toLowerCase()
+    }
+    if (valA < valB) return sortDir === "asc" ? -1 : 1
+    if (valA > valB) return sortDir === "asc" ? 1 : -1
+    return 0
+  })
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === "asc" ? "desc" : "asc")
+    } else {
+      setSortField(field)
+      setSortDir("asc")
+    }
+  }
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown size={12} style={{ opacity: 0.5 }} />
+    return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+  }
+
+  // Summary
+  const totalDebits = entries.reduce((s, e) => s + (e.total_debit || 0), 0)
+  const totalCredits = entries.reduce((s, e) => s + (e.total_credit || 0), 0)
+
+  if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
   if (!canView) {
     return (
-      <div style={{ padding: 24, textAlign: "center" }}>
+      <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}>
         <h2>Access Denied</h2>
-        <p style={{ color: "#94A3B8" }}>You do not have permission to view this page.</p>
+        <p style={{ color: "var(--text-muted)" }}>You do not have permission to view this page.</p>
       </div>
     )
   }
 
   return (
-    <RoleGuard allowedRoles={["admin", "accountant"]}>
-      <div
-        style={{
-          padding: 24,
-          background: "#0B1120",
-          minHeight: "100vh",
-          fontFamily: "'Inter', sans-serif",
-          color: "#E2E8F0",
-        }}
-      >
-        <style>{`
-          .card { background: #111827; border-radius: 12px; border: 1px solid #1E293B; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-          .input { height: 38px; border: 1px solid #334155; border-radius: 8px; padding: 0 12px; font-size: 13px; box-sizing: border-box; background: #1E293B; color: #F1F5F9; }
-          .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-          .btn-primary { background: #2563EB; color: white; }
-          .btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+      <style>{`
+        .card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
+        .input { height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px; box-sizing: border-box; background: var(--card); color: var(--text); }
+        .input:focus { border-color: var(--primary); }
+        .btn { padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
+        .btn-outline:hover { background: var(--card-hover); }
+        .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-icon {
+          background: transparent; border: 1.5px solid var(--border); color: var(--text-muted);
+          padding: 6px; border-radius: 8px; cursor: pointer;
+        }
+        .btn-icon:hover { background: var(--card-hover); }
 
-          .journal-row {
-            display: grid;
-            grid-template-columns: 32px 1fr 1.5fr 100px 100px 40px;
-            padding: 12px 16px;
-            border-bottom: 1px solid #1E293B;
-            font-size: 13px;
-            align-items: center;
-            transition: background 0.15s;
-            cursor: pointer;
-          }
-          .journal-row:hover { background: #1E293B; }
+        .journal-header {
+          display: grid;
+          grid-template-columns: 32px 1fr 1.5fr 120px 120px 50px;
+          padding: 14px 24px;
+          background: var(--card);
+          font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
+          border-bottom: 1px solid var(--border);
+        }
+        .journal-row {
+          display: grid;
+          grid-template-columns: 32px 1fr 1.5fr 120px 120px 50px;
+          padding: 12px 24px;
+          border-bottom: 1px solid var(--border);
+          font-size: 13px; align-items: center;
+          transition: background 0.15s;
+          cursor: pointer;
+        }
+        .journal-row:hover { background: var(--card-hover); }
+        .journal-row:last-child { border-bottom: none; }
 
-          .journal-header {
-            display: grid;
-            grid-template-columns: 32px 1fr 1.5fr 100px 100px 40px;
-            padding: 10px 16px;
-            background: #111827;
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            color: #94A3B8;
-            border-bottom: 1px solid #1E293B;
-          }
+        .sort-btn {
+          background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
+          display: inline-flex; align-items: center; gap: 4px; padding: 0;
+          font-weight: 700; text-transform: uppercase; font-size: 10px;
+        }
+        .sort-btn:hover { color: var(--primary); }
 
-          .desc-cell {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 260px;
-            display: block;
-            cursor: default;
-          }
+        .desc-cell {
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          max-width: 260px; display: block; cursor: default;
+        }
 
-          .lines-container {
-            background: #0B1120;
-            border-left: 3px solid #2563EB;
-            margin: 0 16px 8px;
-            border-radius: 0 8px 8px 0;
-            overflow: hidden;
-          }
-          .lines-header {
-            display: grid;
-            grid-template-columns: 1fr 80px 80px;
-            padding: 8px 16px;
-            font-size: 9px;
-            font-weight: 700;
-            text-transform: uppercase;
-            color: #64748B;
-            background: #1E293B;
-          }
-          .line-item {
-            display: grid;
-            grid-template-columns: 1fr 80px 80px;
-            padding: 6px 16px;
-            font-size: 12px;
-            border-bottom: 1px solid #1E293B;
-          }
-          .line-item:last-child { border-bottom: none; }
+        .lines-container {
+          background: var(--card); border-left: 3px solid var(--primary);
+          margin: 0 16px 8px; border-radius: 0 8px 8px 0; overflow: hidden;
+        }
+        .lines-header {
+          display: grid; grid-template-columns: 1fr 80px 80px;
+          padding: 8px 16px; font-size: 9px; font-weight: 700;
+          text-transform: uppercase; color: var(--text-muted); background: var(--card-hover);
+        }
+        .line-item {
+          display: grid; grid-template-columns: 1fr 80px 80px;
+          padding: 6px 16px; font-size: 12px; border-bottom: 1px solid var(--border);
+        }
+        .line-item:last-child { border-bottom: none; }
 
-          @media (max-width: 768px) {
-            .journal-row, .journal-header {
-              grid-template-columns: 30px 1fr 1fr 70px 70px 40px;
-              font-size: 12px;
-            }
-            .desc-cell { max-width: 140px; }
-          }
-          @media (max-width: 480px) {
-            .journal-row, .journal-header {
-              grid-template-columns: 24px 1fr 70px 70px 32px;
-            }
-            .desc-cell { max-width: 100px; }
-            .hide-mobile { display: none; }
-          }
-        `}</style>
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+        .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+        .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
 
-        {/* Top bar */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 20,
-          }}
-        >
-          <div>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>
-              📓 Journal Entries
-            </h1>
-            <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>
-              {canEdit ? "Manage double‑entry transactions" : "View journal entries"}
-            </p>
-          </div>
-          {canEdit && (
-            <button
-              className="btn btn-primary"
-              onClick={() => router.push("/dashboard/journal/new")}
-            >
-              <Plus size={16} /> New Entry
-            </button>
-          )}
+        @media (max-width: 768px) {
+          .journal-header, .journal-row { grid-template-columns: 30px 1fr 1fr 80px 80px 40px; }
+          .desc-cell { max-width: 140px; }
+        }
+        @media (max-width: 480px) {
+          .journal-header, .journal-row { grid-template-columns: 24px 1fr 70px 70px 32px; }
+          .desc-cell { max-width: 100px; }
+          .hide-mobile { display: none; }
+        }
+      `}</style>
+
+      {/* Top bar */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📓 Journal Entries</h1>
+          <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>{canEdit ? "Manage double‑entry transactions" : "View journal entries"}</p>
         </div>
-
-        {/* Summary Cards */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-            gap: 12,
-            marginBottom: 16,
-          }}
-        >
-          <div className="card">
-            <div
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                textTransform: "uppercase",
-                color: "#94A3B8",
-                marginBottom: 4,
-              }}
-            >
-              Total Entries
-            </div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: "#F1F5F9" }}>{entries.length}</div>
-          </div>
-          <div className="card">
-            <div
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                textTransform: "uppercase",
-                color: "#94A3B8",
-                marginBottom: 4,
-              }}
-            >
-              Total Debits
-            </div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: "#EF4444" }}>
-              PKR{" "}
-              {entries
-                .reduce((s, e) => s + (e.total_debit || 0), 0)
-                .toLocaleString()}
-            </div>
-          </div>
-          <div className="card">
-            <div
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                textTransform: "uppercase",
-                color: "#94A3B8",
-                marginBottom: 4,
-              }}
-            >
-              Total Credits
-            </div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: "#10B981" }}>
-              PKR{" "}
-              {entries
-                .reduce((s, e) => s + (e.total_credit || 0), 0)
-                .toLocaleString()}
-            </div>
-          </div>
-        </div>
-
-        {/* Search */}
-        <div style={{ maxWidth: 320, marginBottom: 16 }}>
-          <input
-            className="input"
-            style={{ width: "100%" }}
-            placeholder="Search by entry number or description..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-
-        {/* Main list */}
-        {loading ? (
-          <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>
-            Loading...
-          </div>
-        ) : filtered.length === 0 ? (
-          <div
-            className="card"
-            style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}
-          >
-            No journal entries found. {canEdit && 'Click "New Entry" to create one.'}
-          </div>
-        ) : (
-          <div className="card" style={{ padding: 0, overflowX: "auto" }}>
-            {/* Header */}
-            <div className="journal-header">
-              <span></span>
-              <span>Entry No</span>
-              <span>Description</span>
-              <span style={{ textAlign: "right", color: "#EF4444" }}>Debit</span>
-              <span style={{ textAlign: "right", color: "#10B981" }}>Credit</span>
-              <span></span>
-            </div>
-
-            {filtered.map((je) => (
-              <div key={je.id}>
-                <div
-                  className="journal-row"
-                  onClick={() => toggleExpand(je.id)}
-                  style={{ cursor: "pointer" }}
-                >
-                  <span style={{ color: "#64748B" }}>
-                    {expandedId === je.id ? (
-                      <ChevronDown size={14} />
-                    ) : (
-                      <ChevronRight size={14} />
-                    )}
-                  </span>
-                  <span style={{ fontWeight: 600, color: "#93C5FD" }}>
-                    {je.entry_no}
-                  </span>
-                  <span
-                    className="desc-cell"
-                    title={je.description || ""}
-                    style={{ color: "#E2E8F0" }}
-                  >
-                    {je.description || "—"}
-                  </span>
-                  <span
-                    style={{
-                      textAlign: "right",
-                      fontWeight: 600,
-                      color: "#EF4444",
-                    }}
-                  >
-                    {(je.total_debit ?? 0) > 0
-                      ? `PKR ${(je.total_debit ?? 0).toLocaleString()}`
-                      : "—"}
-                  </span>
-                  <span
-                    style={{
-                      textAlign: "right",
-                      fontWeight: 600,
-                      color: "#10B981",
-                    }}
-                  >
-                    {(je.total_credit ?? 0) > 0
-                      ? `PKR ${(je.total_credit ?? 0).toLocaleString()}`
-                      : "—"}
-                  </span>
-                  <button
-                    className="btn btn-outline"
-                    style={{ padding: 4, justifySelf: "center" }}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      router.push(`/dashboard/journal/${je.id}`)
-                    }}
-                    title="View details"
-                  >
-                    <Eye size={14} />
-                  </button>
-                </div>
-
-                {/* Expanded lines */}
-                {expandedId === je.id && (
-                  <div className="lines-container">
-                    <div className="lines-header">
-                      <span>Account</span>
-                      <span style={{ textAlign: "right" }}>Debit</span>
-                      <span style={{ textAlign: "right" }}>Credit</span>
-                    </div>
-                    {loadingLines ? (
-                      <div className="line-item">
-                        <span style={{ color: "#94A3B8" }}>Loading…</span>
-                      </div>
-                    ) : expandedLines.length === 0 ? (
-                      <div className="line-item">
-                        <span style={{ color: "#94A3B8" }}>No lines found.</span>
-                      </div>
-                    ) : (
-                      expandedLines.map((l, idx) => (
-                        <div key={idx} className="line-item">
-                          <span style={{ color: "#E2E8F0" }}>
-                            {l.accounts?.code} – {l.accounts?.name}
-                          </span>
-                          <span
-                            style={{
-                              textAlign: "right",
-                              color: l.debit > 0 ? "#EF4444" : "#94A3B8",
-                              fontWeight: l.debit > 0 ? 600 : 400,
-                            }}
-                          >
-                            {l.debit > 0
-                              ? `PKR ${l.debit.toLocaleString()}`
-                              : "—"}
-                          </span>
-                          <span
-                            style={{
-                              textAlign: "right",
-                              color: l.credit > 0 ? "#10B981" : "#94A3B8",
-                              fontWeight: l.credit > 0 ? 600 : 400,
-                            }}
-                          >
-                            {l.credit > 0
-                              ? `PKR ${l.credit.toLocaleString()}`
-                              : "—"}
-                          </span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+        {canEdit && (
+          <button className="btn btn-primary" onClick={() => router.push("/dashboard/journal/new")}>
+            <Plus size={16} /> New Entry
+          </button>
         )}
       </div>
-    </RoleGuard>
+
+      {/* Summary Cards */}
+      <div className="summary-grid">
+        <div className="summary-item">
+          <div className="summary-label">Total Entries</div>
+          <div className="summary-value">{entries.length}</div>
+        </div>
+        <div className="summary-item">
+          <div className="summary-label">Total Debits</div>
+          <div className="summary-value" style={{ color: "#EF4444" }}>PKR {totalDebits.toLocaleString()}</div>
+        </div>
+        <div className="summary-item">
+          <div className="summary-label">Total Credits</div>
+          <div className="summary-value" style={{ color: "#10B981" }}>PKR {totalCredits.toLocaleString()}</div>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
+        <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+        <input
+          className="input"
+          style={{ width: "100%" }}
+          placeholder="Search by entry number or description..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
+      {/* Main list */}
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading...</div>
+      ) : sortedFiltered.length === 0 ? (
+        <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
+          No journal entries found. {canEdit && 'Click "New Entry" to create one.'}
+        </div>
+      ) : (
+        <div className="card" style={{ padding: 0, overflowX: "auto" }}>
+          <div className="journal-header">
+            <span></span>
+            <button className="sort-btn" onClick={() => handleSort("entry_no")}>Entry No {getSortIcon("entry_no")}</button>
+            <button className="sort-btn" onClick={() => handleSort("description")}>Description {getSortIcon("description")}</button>
+            <button className="sort-btn" onClick={() => handleSort("total_debit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("total_debit")}</button>
+            <button className="sort-btn" onClick={() => handleSort("total_credit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("total_credit")}</button>
+            <span></span>
+          </div>
+
+          {sortedFiltered.map((je) => (
+            <div key={je.id}>
+              <div className="journal-row" onClick={() => toggleExpand(je.id)}>
+                <span style={{ color: "var(--text-muted)" }}>
+                  {expandedId === je.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                </span>
+                <span style={{ fontWeight: 600, color: "var(--primary)" }}>{je.entry_no}</span>
+                <span className="desc-cell" title={je.description || ""} style={{ color: "var(--text)" }}>{je.description || "—"}</span>
+                <span style={{ textAlign: "right", fontWeight: 600, color: "#EF4444" }}>
+                  {(je.total_debit ?? 0) > 0 ? `PKR ${(je.total_debit ?? 0).toLocaleString()}` : "—"}
+                </span>
+                <span style={{ textAlign: "right", fontWeight: 600, color: "#10B981" }}>
+                  {(je.total_credit ?? 0) > 0 ? `PKR ${(je.total_credit ?? 0).toLocaleString()}` : "—"}
+                </span>
+                <button
+                  className="btn-icon"
+                  style={{ justifySelf: "center" }}
+                  onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/journal/${je.id}`) }}
+                  title="View details"
+                >
+                  <Eye size={14} />
+                </button>
+              </div>
+
+              {/* Expanded lines */}
+              {expandedId === je.id && (
+                <div className="lines-container">
+                  <div className="lines-header">
+                    <span>Account</span>
+                    <span style={{ textAlign: "right" }}>Debit</span>
+                    <span style={{ textAlign: "right" }}>Credit</span>
+                  </div>
+                  {loadingLines ? (
+                    <div className="line-item"><span style={{ color: "var(--text-muted)" }}>Loading…</span></div>
+                  ) : expandedLines.length === 0 ? (
+                    <div className="line-item"><span style={{ color: "var(--text-muted)" }}>No lines found.</span></div>
+                  ) : (
+                    expandedLines.map((l, idx) => (
+                      <div key={idx} className="line-item">
+                        <span style={{ color: "var(--text)" }}>{l.accounts?.code} – {l.accounts?.name}</span>
+                        <span style={{ textAlign: "right", color: l.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: l.debit > 0 ? 600 : 400 }}>
+                          {l.debit > 0 ? `PKR ${l.debit.toLocaleString()}` : "—"}
+                        </span>
+                        <span style={{ textAlign: "right", color: l.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: l.credit > 0 ? 600 : 400 }}>
+                          {l.credit > 0 ? `PKR ${l.credit.toLocaleString()}` : "—"}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
