@@ -25,10 +25,10 @@ export default function ReceiptsPage() {
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
 
-  // Customer map for names & phone lookup (include all customers)
+  // Customer map for names & phone lookup
   const [customerMap, setCustomerMap] = useState<Record<number, { name: string; phone: string }>>({})
 
-  // 1. Fetch customers for mapping
+  // 1. Fetch customers
   useEffect(() => {
     if (!role) return
     supabase
@@ -63,7 +63,7 @@ export default function ReceiptsPage() {
       })
   }, [role, canView, sortField, sortDir])
 
-  // 3. Apply search filter (client‑side)
+  // 3. Filter
   const filtered = search.trim()
     ? receipts.filter((rec) => {
         const cust = customerMap[rec.party_id]
@@ -75,7 +75,7 @@ export default function ReceiptsPage() {
       })
     : receipts
 
-  // 4. Sort client‑side for customer name (since it's not a direct column)
+  // 4. Client‑side sort for customer name
   const sortedFiltered = [...filtered].sort((a, b) => {
     let valA: any, valB: any
     if (sortField === "customer") {
@@ -97,11 +97,9 @@ export default function ReceiptsPage() {
     return 0
   })
 
-  // Summary calculations
   const totalReceipts = sortedFiltered.length
   const totalAmount = sortedFiltered.reduce((s, r) => s + (r.amount || 0), 0)
 
-  // Sort handler
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDir(prev => prev === "asc" ? "desc" : "asc")
@@ -128,41 +126,73 @@ export default function ReceiptsPage() {
     window.open(url, "_blank")
   }
 
-  if (!role) return <div style={{ padding: 24, textAlign: "center", color: "#94A3B8" }}>Loading…</div>
-  if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "#E2E8F0" }}><h2>Access Denied</h2></div>
+  if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
+  if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
   return (
-    <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .card { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.2); overflow: hidden; }
-        .header-row { display: grid; grid-template-columns: 130px 90px 1fr 115px 125px 75px 75px; padding: 12px 20px; background: #1E293B; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94A3B8; border-bottom: 1px solid #1E293B; }
-        .data-row { display: grid; grid-template-columns: 130px 90px 1fr 115px 125px 75px 75px; padding: 10px 20px; border-bottom: 1px solid #1E293B; font-size: 13px; align-items: center; transition: background 0.15s; }
-        .data-row:hover { background: #1E293B; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
+        .header-row {
+          display: grid;
+          grid-template-columns: 140px 100px 1fr 120px 130px 55px 55px;
+          padding: 14px 24px;
+          font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
+          border-bottom: 1px solid var(--border);
+          background: var(--card);
+        }
+        .data-row {
+          display: grid;
+          grid-template-columns: 140px 100px 1fr 120px 130px 55px 55px;
+          padding: 12px 24px;
+          border-bottom: 1px solid var(--border);
+          font-size: 13px;
+          align-items: center;
+          transition: background 0.15s;
+        }
+        .data-row:hover { background: var(--card-hover); }
         .data-row:last-child { border-bottom: none; }
-        .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid #334155; background: transparent; color: #CBD5E1; }
-        .btn:hover { background: #1E293B; }
-        .btn-icon { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; padding: 6px; border-radius: 8px; cursor: pointer; }
-        .input { width: 100%; height: 38px; border: 1.5px solid #334155; border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px; background: #1E293B; color: #F1F5F9; outline: none; box-sizing: border-box; }
-        .sort-btn { background: none; border: none; color: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px; }
-        .sort-btn:hover { color: #93C5FD; }
+        .btn {
+          padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
+          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+          transition: 0.2s; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted);
+        }
+        .btn:hover { background: var(--card-hover); }
+        .btn-icon {
+          background: transparent; border: 1.5px solid var(--border); color: var(--text-muted);
+          padding: 6px; border-radius: 8px; cursor: pointer;
+          display: inline-flex; align-items: center; justify-content: center;
+        }
+        .btn-icon:hover { background: var(--card-hover); }
+        .input {
+          width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px;
+          padding: 0 12px 0 36px; font-size: 13px;
+          background: var(--card); color: var(--text); outline: none; box-sizing: border-box;
+        }
+        .input:focus { border-color: var(--primary); }
+        .sort-btn {
+          background: none; border: none; color: var(--text-muted); cursor: pointer;
+          display: inline-flex; align-items: center; gap: 4px; padding: 0;
+          font-weight: 700; text-transform: uppercase; font-size: 10px;
+        }
+        .sort-btn:hover { color: var(--primary); }
         .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
-        .summary-item { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 16px; }
-        .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94A3B8; margin-bottom: 4px; }
-        .summary-value { font-size: 22px; font-weight: 800; color: #F1F5F9; }
-        .nowrap { white-space: nowrap; }
+        .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+        .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+        .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
         @media (max-width: 640px) {
-          .header-row, .data-row { grid-template-columns: 90px 70px 1fr 70px 80px 50px 50px; }
+          .header-row, .data-row { grid-template-columns: 90px 70px 1fr 70px 80px 45px 45px; padding: 10px 12px; }
         }
       `}</style>
 
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>💰 Receipts</h1>
-          <p style={{ fontSize: 13, color: "#94A3B8", margin: 0 }}>{canEdit ? "Record customer payments" : "View receipts"}</p>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>💰 Receipts</h1>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>{canEdit ? "Record customer payments" : "View receipts"}</p>
         </div>
         {canEdit && (
-          <button className="btn btn-outline" onClick={() => router.push("/dashboard/receipts/new")}>
+          <button className="btn" onClick={() => router.push("/dashboard/receipts/new")}>
             <Plus size={16} /> New Receipt
           </button>
         )}
@@ -182,7 +212,7 @@ export default function ReceiptsPage() {
 
       {/* Search */}
       <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
-        <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#94A3B8" }} />
+        <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
         <input
           className="input"
           placeholder="Search by receipt # or customer..."
@@ -193,9 +223,9 @@ export default function ReceiptsPage() {
 
       {/* Table */}
       {loading ? (
-        <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading receipts…</div>
+        <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading receipts…</div>
       ) : sortedFiltered.length === 0 ? (
-        <div className="card" style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>
+        <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
           No receipts found.
         </div>
       ) : (
@@ -204,7 +234,7 @@ export default function ReceiptsPage() {
             <button className="sort-btn" onClick={() => handleSort("receipt_no")}>Receipt # {getSortIcon("receipt_no")}</button>
             <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
             <button className="sort-btn" onClick={() => handleSort("customer")}>Customer {getSortIcon("customer")}</button>
-            <button className="sort-btn" onClick={() => handleSort("amount")} style={{ justifyContent: "flex-end" }}>Amount {getSortIcon("amount")}</button>
+            <button className="sort-btn" onClick={() => handleSort("amount")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Amount {getSortIcon("amount")}</button>
             <button className="sort-btn" onClick={() => handleSort("method")}>Method {getSortIcon("method")}</button>
             <span></span>
             <span></span>
@@ -214,12 +244,12 @@ export default function ReceiptsPage() {
             const custName = rec.party_id ? (cust?.name || "—") : "🎁 Donation"
             return (
               <div key={rec.id} className="data-row">
-                <span style={{ fontWeight: 600, color: "#93C5FD" }}>{rec.receipt_no}</span>
+                <span style={{ fontWeight: 600, color: "var(--primary)" }}>{rec.receipt_no}</span>
                 <span>{rec.date}</span>
                 <span>{custName}</span>
                 <span style={{ fontWeight: 600, color: "#10B981", textAlign: "right" }}>PKR {rec.amount?.toLocaleString()}</span>
-                <span className="nowrap">{rec.payment_method || "—"}</span>
-                <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/${rec.id}`)} title="View receipt" style={{ marginLeft: 4 }}>
+                <span style={{ whiteSpace: "nowrap" }}>{rec.payment_method || "—"}</span>
+                <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/${rec.id}`)} title="View receipt">
                   <Eye size={14} />
                 </button>
                 <button className="btn-icon" onClick={() => sendWhatsApp(rec)} title="Send via WhatsApp" style={{ color: "#25D366" }}>
