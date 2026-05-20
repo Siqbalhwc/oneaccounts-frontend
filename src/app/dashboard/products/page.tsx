@@ -131,11 +131,33 @@ export default function StockRegisterPage() {
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
+        
+        /* All header cells share this base style */
+        .header-cell {
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          color: var(--text-muted);
+          text-align: center;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 4px;
+          white-space: nowrap;
+        }
+        /* Sortable header cells inherit the same base and add cursor */
+        .sort-btn {
+          background: none; border: none; cursor: pointer; font: inherit; color: inherit;
+          display: inline-flex; align-items: center; gap: 4px; padding: 0;
+          font-weight: 700; text-transform: uppercase; font-size: 10px;
+          text-align: center; justify-content: center;
+        }
+        .sort-btn:hover { color: var(--primary); }
+        
         .header-row {
           display: grid;
           grid-template-columns: 90px 1fr 90px 90px 70px 70px 70px 80px 50px 45px 45px;
           padding: 14px 24px;
-          font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
           background: var(--card);
         }
@@ -149,13 +171,7 @@ export default function StockRegisterPage() {
         }
         .data-row:hover { background: var(--card-hover); }
         .data-row:last-child { border-bottom: none; }
-        .sort-btn {
-          background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
-          display: inline-flex; align-items: center; gap: 4px; padding: 0;
-          font-weight: 700; text-transform: uppercase; font-size: 10px;
-          text-align: left;
-        }
-        .sort-btn:hover { color: var(--primary); }
+        
         .search-input {
           height: 38px; border: 1.5px solid var(--border); border-radius: 8px;
           padding: 0 12px 0 36px; font-size: 13px; width: 260px; box-sizing: border-box;
@@ -187,8 +203,19 @@ export default function StockRegisterPage() {
           .header-row, .data-row {
             grid-template-columns: 60px 1fr 60px 60px 0px 0px 0px 0px 0px 30px 30px;
           }
-          .header-row span:nth-child(n+5):nth-child(-n+9),
-          .data-row span:nth-child(n+5):nth-child(-n+9) { display: none; }
+          /* hide the Opening, Inflow, Outflow, Closing, Img columns on small screens */
+          .header-row > :nth-child(5),
+          .header-row > :nth-child(6),
+          .header-row > :nth-child(7),
+          .header-row > :nth-child(8),
+          .header-row > :nth-child(9),
+          .data-row > :nth-child(5),
+          .data-row > :nth-child(6),
+          .data-row > :nth-child(7),
+          .data-row > :nth-child(8),
+          .data-row > :nth-child(9) {
+            display: none;
+          }
         }
       `}</style>
 
@@ -243,15 +270,15 @@ export default function StockRegisterPage() {
       ) : (
         <div className="card">
           <div className="header-row">
-            <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
-            <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
-            <button className="sort-btn" onClick={() => handleSort("cost_price")}>Cost {getSortIcon("cost_price")}</button>
-            <button className="sort-btn" onClick={() => handleSort("sale_price")}>Sale {getSortIcon("sale_price")}</button>
-            <span style={{ textAlign: "center", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", fontSize: 10 }}>Opening</span>
-            <span style={{ textAlign: "center", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", fontSize: 10 }}>Inflow</span>
-            <span style={{ textAlign: "center", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", fontSize: 10 }}>Outflow</span>
-            <button className="sort-btn" onClick={() => handleSort("qty_on_hand")} style={{ justifyContent: "center" }}>Closing {getSortIcon("qty_on_hand")}</button>
-            <span style={{ textAlign: "center", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", fontSize: 10 }}>Img</span>
+            <button className="sort-btn header-cell" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
+            <button className="sort-btn header-cell" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
+            <button className="sort-btn header-cell" onClick={() => handleSort("cost_price")}>Cost {getSortIcon("cost_price")}</button>
+            <button className="sort-btn header-cell" onClick={() => handleSort("sale_price")}>Sale {getSortIcon("sale_price")}</button>
+            <span className="header-cell" style={{ cursor: "default" }}>Opening</span>
+            <span className="header-cell" style={{ cursor: "default" }}>Inflow</span>
+            <span className="header-cell" style={{ cursor: "default" }}>Outflow</span>
+            <button className="sort-btn header-cell" onClick={() => handleSort("qty_on_hand")}>Closing {getSortIcon("qty_on_hand")}</button>
+            <span className="header-cell" style={{ cursor: "default" }}>Img</span>
             <span></span>
             <span></span>
           </div>
@@ -263,12 +290,12 @@ export default function StockRegisterPage() {
               <div key={prod.id} className="data-row">
                 <span style={{ fontWeight: 600, color: "var(--primary)" }}>{prod.code}</span>
                 <span style={{ color: "var(--text)" }}>{prod.name}</span>
-                <span style={{ color: "var(--text)" }}>PKR {prod.cost_price?.toLocaleString()}</span>
-                <span style={{ color: "var(--text)" }}>PKR {prod.sale_price?.toLocaleString()}</span>
-                <span style={{ textAlign: "center", color: "var(--text)" }}>{prod.opening_qty}</span>
+                <span style={{ textAlign: "center" }}>PKR {prod.cost_price?.toLocaleString()}</span>
+                <span style={{ textAlign: "center" }}>PKR {prod.sale_price?.toLocaleString()}</span>
+                <span style={{ textAlign: "center" }}>{prod.opening_qty}</span>
                 <span style={{ textAlign: "center", color: "#10B981" }}>{inflow}</span>
                 <span style={{ textAlign: "center", color: "#EF4444" }}>{outflow}</span>
-                <span style={{ textAlign: "center", fontWeight: 600, color: "var(--text)" }}>{closing}</span>
+                <span style={{ textAlign: "center", fontWeight: 600 }}>{closing}</span>
                 <span style={{ textAlign: "center" }}>
                   {prod.image_path ? (
                     <img src={prod.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
