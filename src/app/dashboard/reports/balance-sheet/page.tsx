@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Download, Printer, Scale } from "lucide-react"
+import { ArrowLeft, Download, Printer } from "lucide-react"
 import { useRouter } from "next/navigation"
 import PremiumGuard from "@/components/PremiumGuard"
 
@@ -24,13 +24,11 @@ function getCategory(account: any): string {
 
 function fmt(n: number) { return Math.abs(n).toLocaleString("en-PK") }
 function sign(n: number) { return n < 0 ? "-" : "" }
-// For liabilities & equity, we always show the absolute value (positive)
 function fmtPos(n: number) { return Math.abs(n).toLocaleString("en-PK") }
 
-const ASSET_CATS = ["Cash & Bank", "Accounts Receivable", "Inventory", "Other Current Assets", "Fixed Assets", "Vehicles"]
-const LIABILITY_CATS = ["Accounts Payable", "Other Current Liabilities"]
 const CURRENT_ASSET_CATS = ["Cash & Bank", "Accounts Receivable", "Inventory", "Other Current Assets"]
 const FIXED_ASSET_CATS = ["Fixed Assets", "Vehicles"]
+const LIABILITY_CATS = ["Accounts Payable", "Other Current Liabilities"]
 
 const CAT_COLORS: Record<string, string> = {
   "Cash & Bank": "#10B981",
@@ -69,20 +67,26 @@ function BalanceSheetContent() {
   }, {})
 
   const catTotal = (cat: string) => (grouped[cat] || []).reduce((s, a) => s + (a.balance || 0), 0)
+  const catTotalAbs = (cat: string) => Math.abs(catTotal(cat))
 
+  // Assets (raw balances)
   const totalCurrentAssets = CURRENT_ASSET_CATS.reduce((s, c) => s + catTotal(c), 0)
   const totalFixedAssets = FIXED_ASSET_CATS.reduce((s, c) => s + catTotal(c), 0)
-  const totalAssets = accounts.filter(a => a.type === "Asset").reduce((s, a) => s + (a.balance || 0), 0)
-  const totalLiabilities = accounts.filter(a => a.type === "Liability").reduce((s, a) => s + (a.balance || 0), 0)
-  const totalEquityAccounts = accounts.filter(a => a.type === "Equity").reduce((s, a) => s + (a.balance || 0), 0)
+  const totalAssets = totalCurrentAssets + totalFixedAssets
+
+  // Liabilities (absolute values)
+  const totalCurrentLiabilities = LIABILITY_CATS.reduce((s, c) => s + catTotalAbs(c), 0)
+
+  // Equity (absolute value)
+  const totalEquityAccounts = Math.abs(accounts.filter(a => a.type === "Equity").reduce((s, a) => s + (a.balance || 0), 0))
 
   // Net Profit (same as P&L)
   const revenue = accounts.filter(a => a.type === "Revenue").reduce((s, a) => s + Math.abs(a.balance || 0), 0)
   const expenses = accounts.filter(a => a.type === "Expense").reduce((s, a) => s + Math.abs(a.balance || 0), 0)
   const netProfit = revenue - expenses
 
-  const totalEquity = totalEquityAccounts + netProfit
-  const totalLiabEquity = totalLiabilities + totalEquity
+  const totalEquity = totalEquityAccounts + Math.abs(netProfit)   // absolute net profit added to equity
+  const totalLiabEquity = totalCurrentLiabilities + totalEquity   // both now positive
   const isBalanced = Math.abs(totalAssets - totalLiabEquity) < 1
 
   const navigateToTrialBalance = (type: string, category?: string) => {
@@ -104,18 +108,19 @@ function BalanceSheetContent() {
     </div>
   )
 
-  const CategorySection = ({ cat, type, isLiabilityOrEquity }: { cat: string; type: string; isLiabilityOrEquity: boolean }) => {
+  // Category section reusable component
+  const CategorySection = ({ cat, type, showAbsolute }: { cat: string; type: string; showAbsolute: boolean }) => {
     const items = grouped[cat] || []
     if (items.length === 0) return null
     const total = catTotal(cat)
     const color = CAT_COLORS[cat] || "#94A3B8"
     return (
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 12 }}>
         <div className="cat-header" onClick={() => navigateToTrialBalance(type, cat)}>
           <div style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0 }} />
           <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color, flex: 1 }}>{cat}</span>
           <span style={{ fontSize: 12, fontFamily: "'Inter', sans-serif", fontWeight: 600, color }}>
-            {isLiabilityOrEquity ? `PKR ${fmtPos(total)}` : `${sign(total)}PKR ${fmt(total)}`}
+            {showAbsolute ? `PKR ${fmtPos(total)}` : `${sign(total)}PKR ${fmt(total)}`}
           </span>
         </div>
         {items.map((a: any) => (
@@ -123,10 +128,7 @@ function BalanceSheetContent() {
             <span style={{ fontSize: 10, color: "var(--text-muted)", minWidth: 40 }}>{a.code}</span>
             <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 10 }}>{a.name}</span>
             <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-              {isLiabilityOrEquity
-                ? `PKR ${fmtPos(a.balance || 0)}`
-                : `${sign(a.balance || 0)}PKR ${fmt(a.balance || 0)}`
-              }
+              {showAbsolute ? `PKR ${fmtPos(a.balance || 0)}` : `${sign(a.balance || 0)}PKR ${fmt(a.balance || 0)}`}
             </span>
           </div>
         ))}
@@ -192,50 +194,24 @@ function BalanceSheetContent() {
         .kpi-value { font-size: 24px; font-weight: 700; letter-spacing: -0.03em; font-family: 'Inter', sans-serif; }
         .kpi-sub { font-size: 11px; color: var(--text-soft); margin-top: 4px; }
 
-        .bs-body {
+        /* ── Aligned Row Grid ── */
+        .bs-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 0;
+          padding: 0 32px;
         }
-
-        .bs-col {
-          padding: 28px 32px;
+        .bs-row {
+          display: contents;   /* allows children to be placed in the same grid columns */
+        }
+        .bs-cell {
+          padding: 20px 24px;
+          border-bottom: 1px solid var(--border);
+          min-height: 120px;
+        }
+        .bs-cell:first-child {
           border-right: 1px solid var(--border);
         }
-        .bs-col:last-child { border-right: none; }
-
-        .col-head {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          margin-bottom: 20px;
-          padding-bottom: 14px;
-          border-bottom: 2px solid var(--border);
-        }
-        .col-head-icon {
-          width: 34px;
-          height: 34px;
-          border-radius: 8px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 16px;
-          background: var(--card-hover);
-        }
-        .col-title { font-size: 16px; font-weight: 700; color: var(--text); }
-        .col-subtitle { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-
-        .sub-section-head {
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.12em;
-          color: var(--text-muted);
-          padding: 10px 0 6px;
-          margin-top: 4px;
-          border-top: 1px solid var(--border);
-        }
-        .sub-section-head:first-child { border-top: none; margin-top: 0; }
 
         .cat-header {
           display: flex;
@@ -282,28 +258,14 @@ function BalanceSheetContent() {
           font-weight: 700;
         }
 
-        .balance-indicator {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          padding: 12px;
-          margin: 20px 32px;
-          border-radius: 8px;
-          font-size: 12px;
-          font-weight: 600;
-        }
-
         @media (max-width: 900px) {
           .kpi-strip { grid-template-columns: repeat(2, 1fr); }
-          .bs-body { grid-template-columns: 1fr; }
-          .bs-col { border-right: none; padding: 20px; }
+          .bs-grid { grid-template-columns: 1fr; padding: 0 16px; }
+          .bs-cell { border-right: none; }
           .bs-header { padding: 0 16px; }
         }
-
         @media print {
           .bs-header { display: none; }
-          .bs-body { grid-template-columns: 1fr; }
           .kpi-strip { grid-template-columns: repeat(4, 1fr); }
         }
       `}</style>
@@ -339,7 +301,7 @@ function BalanceSheetContent() {
         </div>
         <div className="kpi-cell">
           <div className="kpi-label">Total Liabilities</div>
-          <div className="kpi-value" style={{ color: "#EF4444" }}>PKR {fmtPos(totalLiabilities)}</div>
+          <div className="kpi-value" style={{ color: "#EF4444" }}>PKR {fmtPos(totalCurrentLiabilities)}</div>
           <div className="kpi-sub">AP + Other</div>
         </div>
         <div className="kpi-cell">
@@ -358,92 +320,90 @@ function BalanceSheetContent() {
         </div>
       </div>
 
-      {/* Two‑column body */}
-      <div className="bs-body">
-        {/* ASSETS */}
-        <div className="bs-col">
-          <div className="col-head">
-            <div className="col-head-icon">🏦</div>
-            <div>
-              <div className="col-title">Assets</div>
-              <div className="col-subtitle">What the business owns</div>
+      {/* ═══════════════════════════════════════════════════════════════
+          ALIGNED REPORT BODY – each row pairs a left and right cell
+          ═══════════════════════════════════════════════════════════════ */}
+      <div className="bs-grid">
+        {/* Row 1: Current Assets ↔ Current Liabilities */}
+        <div className="bs-row">
+          <div className="bs-cell">
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>Current Assets</h3>
+            {CURRENT_ASSET_CATS.map(cat => (
+              <CategorySection key={cat} cat={cat} type="Asset" showAbsolute={false} />
+            ))}
+            <div className="subtotal-band" style={{ color: "#60A5FA" }}>
+              <span>Total Current Assets</span>
+              <span>{sign(totalCurrentAssets)}PKR {fmt(totalCurrentAssets)}</span>
             </div>
           </div>
-
-          <div className="sub-section-head">Current Assets</div>
-          {CURRENT_ASSET_CATS.map(cat => (
-            <CategorySection key={cat} cat={cat} type="Asset" isLiabilityOrEquity={false} />
-          ))}
-          <div className="subtotal-band" style={{ color: "#60A5FA" }}>
-            <span>Total Current Assets</span>
-            <span>{sign(totalCurrentAssets)}PKR {fmt(totalCurrentAssets)}</span>
-          </div>
-
-          <div className="sub-section-head" style={{ marginTop: 16 }}>Fixed Assets</div>
-          {FIXED_ASSET_CATS.map(cat => (
-            <CategorySection key={cat} cat={cat} type="Asset" isLiabilityOrEquity={false} />
-          ))}
-          <div className="subtotal-band" style={{ color: "#FCD34D" }}>
-            <span>Total Fixed Assets</span>
-            <span>{sign(totalFixedAssets)}PKR {fmt(totalFixedAssets)}</span>
-          </div>
-
-          <div className="total-band" style={{ background: "#1E3A8A", color: "#93C5FD" }}>
-            <span>TOTAL ASSETS</span>
-            <span>{sign(totalAssets)}PKR {fmt(totalAssets)}</span>
+          <div className="bs-cell">
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>Current Liabilities</h3>
+            {LIABILITY_CATS.map(cat => (
+              <CategorySection key={cat} cat={cat} type="Liability" showAbsolute={true} />
+            ))}
+            <div className="subtotal-band" style={{ color: "#F87171" }}>
+              <span>Total Current Liabilities</span>
+              <span>PKR {fmtPos(totalCurrentLiabilities)}</span>
+            </div>
           </div>
         </div>
 
-        {/* LIABILITIES + EQUITY */}
-        <div className="bs-col">
-          <div className="col-head">
-            <div className="col-head-icon">⚖️</div>
-            <div>
-              <div className="col-title">Liabilities &amp; Equity</div>
-              <div className="col-subtitle">How the business is financed</div>
+        {/* Row 2: Fixed Assets ↔ Equity */}
+        <div className="bs-row">
+          <div className="bs-cell">
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginBottom: 12, marginTop: 20 }}>Fixed Assets</h3>
+            {FIXED_ASSET_CATS.map(cat => (
+              <CategorySection key={cat} cat={cat} type="Asset" showAbsolute={false} />
+            ))}
+            <div className="subtotal-band" style={{ color: "#FCD34D" }}>
+              <span>Total Fixed Assets</span>
+              <span>{sign(totalFixedAssets)}PKR {fmt(totalFixedAssets)}</span>
             </div>
           </div>
-
-          <div className="sub-section-head">Current Liabilities</div>
-          {LIABILITY_CATS.map(cat => (
-            <CategorySection key={cat} cat={cat} type="Liability" isLiabilityOrEquity={true} />
-          ))}
-          <div className="subtotal-band" style={{ color: "#F87171" }}>
-            <span>Total Liabilities</span>
-            <span>PKR {fmtPos(totalLiabilities)}</span>
-          </div>
-
-          <div className="sub-section-head" style={{ marginTop: 16 }}>Equity</div>
-          {(grouped["Equity"] || []).map((a: any) => (
-            <div key={a.id} className="acc-row" onClick={() => openLedger(a.id)}>
-              <span style={{ fontSize: 10, color: "var(--text-muted)", minWidth: 40 }}>{a.code}</span>
-              <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 10 }}>{a.name}</span>
-              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>PKR {fmtPos(a.balance || 0)}</span>
+          <div className="bs-cell">
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginBottom: 12, marginTop: 20 }}>Equity</h3>
+            {(grouped["Equity"] || []).map((a: any) => (
+              <div key={a.id} className="acc-row" onClick={() => openLedger(a.id)}>
+                <span style={{ fontSize: 10, color: "var(--text-muted)", minWidth: 40 }}>{a.code}</span>
+                <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 10 }}>{a.name}</span>
+                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>PKR {fmtPos(a.balance || 0)}</span>
+              </div>
+            ))}
+            {/* Retained Earnings */}
+            <div className="acc-row" style={{ cursor: "default" }}>
+              <span style={{ fontSize: 10, color: "var(--text-muted)", minWidth: 40 }}>R/E</span>
+              <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 10 }}>Retained Earnings (Net P&amp;L)</span>
+              <span style={{ fontSize: 12, color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
+                PKR {fmtPos(netProfit)}
+              </span>
             </div>
-          ))}
-          {/* Retained Earnings */}
-          <div className="acc-row" style={{ cursor: "default" }}>
-            <span style={{ fontSize: 10, color: "var(--text-muted)", minWidth: 40 }}>R/E</span>
-            <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 10 }}>Retained Earnings (Net P&amp;L)</span>
-            <span style={{ fontSize: 12, color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
-              PKR {fmtPos(netProfit)}
-            </span>
-          </div>
-          <div className="subtotal-band" style={{ color: "#C4B5FD", marginTop: 4 }}>
-            <span>Total Equity</span>
-            <span>PKR {fmtPos(totalEquity)}</span>
-          </div>
-
-          <div className="total-band" style={{ background: "#2D1B69", color: "#C4B5FD" }}>
-            <span>TOTAL LIABILITIES + EQUITY</span>
-            <span>PKR {fmtPos(totalLiabEquity)}</span>
-          </div>
-
-          <div style={{ marginTop: 24, padding: "12px 0", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-soft)" }}>
-            <span>Generated {new Date().toLocaleString("en-PK")}</span>
-            <span>OneAccounts · Shahid Iqbal &amp; Co</span>
+            <div className="subtotal-band" style={{ color: "#C4B5FD", marginTop: 4 }}>
+              <span>Total Equity</span>
+              <span>PKR {fmtPos(totalEquity)}</span>
+            </div>
           </div>
         </div>
+
+        {/* Row 3: TOTAL ASSETS ↔ TOTAL LIABILITIES + EQUITY */}
+        <div className="bs-row">
+          <div className="bs-cell" style={{ borderBottom: "none" }}>
+            <div className="total-band" style={{ background: "#1E3A8A", color: "#93C5FD" }}>
+              <span>TOTAL ASSETS</span>
+              <span>{sign(totalAssets)}PKR {fmt(totalAssets)}</span>
+            </div>
+          </div>
+          <div className="bs-cell" style={{ borderBottom: "none" }}>
+            <div className="total-band" style={{ background: "#2D1B69", color: "#C4B5FD" }}>
+              <span>TOTAL LIABILITIES + EQUITY</span>
+              <span>PKR {fmtPos(totalLiabEquity)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding: "12px 32px", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-soft)" }}>
+        <span>Generated {new Date().toLocaleString("en-PK")}</span>
+        <span>OneAccounts · Shahid Iqbal &amp; Co</span>
       </div>
     </div>
   )
