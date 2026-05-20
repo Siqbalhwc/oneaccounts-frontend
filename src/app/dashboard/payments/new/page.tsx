@@ -47,7 +47,6 @@ export default function NewPaymentPage() {
   const loadSuppliers = () => {
     if (!companyId) return
     setRefreshingSuppliers(true)
-    // ✅ Removed "country_code" – column does not exist in the suppliers table
     supabase.from("suppliers").select("id, code, name, phone, balance")
       .eq("company_id", companyId).order("name")
       .then(r => { if (r.data) setSuppliers(r.data); setRefreshingSuppliers(false) })
@@ -65,8 +64,9 @@ export default function NewPaymentPage() {
     if (!companyId || !supplierId) return
     supabase.from("invoices")
       .select("id, invoice_no, date, due_date, total, paid")
-      .eq("company_id", companyId).eq("party_id", supplierId).eq("status", "Unpaid")
+      .eq("company_id", companyId).eq("party_id", supplierId)
       .eq("type", "purchase")
+      .in("status", ["Unpaid","Partial"])
       .order("date")
       .then(r => {
         const invs = r.data || []
@@ -170,54 +170,81 @@ export default function NewPaymentPage() {
     }
   }
 
-  if (!companyId) return <div style={{ padding: 40, textAlign: "center" }}>Loading company data…</div>
+  if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading company data…</div>
 
   return (
-    <div style={{ padding: "16px", background: "#F4F6FB", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .pay-shell { max-width: 1100px; margin: 0 auto; }
-        .pay-title { font-size: 18px; font-weight: 700; color: #1E293B; }
+        .pay-title { font-size: 18px; font-weight: 700; color: var(--text); }
         .pay-card {
-          background: white; border-radius: 12px; border: 1px solid #E5EAF2;
-          padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); margin-bottom: 12px;
+          background: var(--card); border-radius: 12px; border: 1px solid var(--border);
+          padding: 16px 20px; box-shadow: var(--shadow-sm); margin-bottom: 12px;
         }
-        .pay-label { font-size: 10px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block; }
-        .pay-input, .pay-select { width: 100%; height: 38px; border: 1.5px solid #E5EAF2; border-radius: 8px; padding: 0 12px; font-size: 13px; font-family: inherit; background: #FAFBFF; outline: none; box-sizing: border-box; }
-        .pay-input:focus, .pay-select:focus { border-color: #1740C8; background: white; }
+        .pay-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block; }
+        .pay-input, .pay-select {
+          width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px;
+          padding: 0 12px; font-size: 13px; font-family: inherit; background: var(--bg); color: var(--text);
+          outline: none; box-sizing: border-box;
+        }
+        .pay-input:focus, .pay-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
         .pay-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .pay-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all 0.15s; white-space: nowrap; }
-        .pay-btn-primary { background: #1e3a8a; color: white; }
-        .pay-btn-outline { background: white; border: 1.5px solid #E5EAF2; color: #475569; }
+        .pay-btn {
+          display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px;
+          font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border);
+          background: transparent; color: var(--text-muted); font-family: inherit;
+          transition: all 0.15s; white-space: nowrap; text-decoration: none;
+        }
+        .pay-btn:hover { background: var(--card-hover); }
+        .pay-btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+        .pay-btn-primary:hover { background: var(--primary-hover); }
         .sup-wrap { position: relative; }
         .sup-input-row { position: relative; display: flex; align-items: center; }
-        .sup-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: white; border: 1.5px solid #C7D2FE; border-radius: 10px; max-height: 220px; overflow-y: auto; z-index: 100; box-shadow: 0 8px 24px rgba(30,58,138,0.12); }
-        .sup-option { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #F1F5F9; display: flex; justify-content: space-between; align-items: center; }
+        .sup-dropdown {
+          position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+          background: var(--card); border: 1.5px solid var(--border); border-radius: 10px;
+          max-height: 220px; overflow-y: auto; z-index: 100;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        }
+        .sup-option {
+          padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border);
+          display: flex; justify-content: space-between; align-items: center;
+        }
         .sup-option:last-child { border-bottom: none; }
-        .sup-option:hover { background: #EEF2FF; }
-        .sup-option-name { font-size: 13px; font-weight: 600; color: #1E293B; }
-        .sup-option-meta { font-size: 11px; color: #94A3B8; }
-        .sup-option-bal { font-size: 12px; font-weight: 600; color: #1E3A8A; white-space: nowrap; }
-        .sup-selected-badge { display: inline-flex; align-items: center; gap: 6px; background: #EEF2FF; border: 1.5px solid #C7D2FE; border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 600; color: #1E3A8A; width: 100%; cursor: pointer; }
+        .sup-option:hover { background: var(--card-hover); }
+        .sup-option-name { font-size: 13px; font-weight: 600; color: var(--text); }
+        .sup-option-meta { font-size: 11px; color: var(--text-muted); }
+        .sup-option-bal { font-size: 12px; font-weight: 600; color: var(--primary); white-space: nowrap; }
+        .sup-selected-badge {
+          display: inline-flex; align-items: center; gap: 6px;
+          background: var(--card); border: 1.5px solid var(--border);
+          border-radius: 8px; padding: 6px 12px; font-size: 13px;
+          font-weight: 600; color: var(--text); width: 100%; cursor: pointer;
+        }
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
         @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
-        .chk-box { width: 18px; height: 18px; cursor: pointer; accent-color: #1D4ED8; }
-        .alloc-input { width: 80px; height: 28px; border: 1px solid #E2E8F0; border-radius: 4px; padding: 2px 6px; text-align: right; }
+        .chk-box { width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary); }
+        .alloc-input { width: 80px; height: 28px; border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; text-align: right; background: var(--bg); color: var(--text); }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8; text-align: left; padding: 8px 6px; border-bottom: 1px solid #E2E8F0; }
-        td { padding: 8px 6px; border-bottom: 1px solid #F1F5F9; vertical-align: middle; }
+        th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+        td { padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type="number"] { -moz-appearance: textfield; }
       `}</style>
 
       <div className="pay-shell">
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-          <button className="pay-btn pay-btn-outline" onClick={() => router.push("/dashboard/payments")}><ArrowLeft size={16} /></button>
+          <button className="pay-btn" onClick={() => router.push("/dashboard/payments")}><ArrowLeft size={16} /></button>
           <div style={{ flex: 1 }}>
             <div className="pay-title">💳 New Payment</div>
-            <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 1 }}>Pay a supplier and allocate to outstanding bills</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>Pay a supplier and allocate to outstanding bills</div>
           </div>
         </div>
 
-        {error && <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#B91C1C", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
-        {flash && <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#15803D", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
+        {error && <div style={{ background: "var(--card)", border: "1px solid #EF4444", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
+        {flash && <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
 
         <div className="header-grid">
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -228,24 +255,24 @@ export default function NewPaymentPage() {
                   {selectedSupplier ? (
                     <div className="sup-selected-badge" onClick={clearSupplier} style={{ position: "relative", paddingRight: 40 }}>
                       <span>🚚</span><span style={{ flex: 1 }}>{selectedSupplier.code} — {selectedSupplier.name}</span>
-                      <span style={{ fontSize: 11, color: "#64748B" }}>Bal: PKR {(selectedSupplier.balance || 0).toLocaleString()}</span>
-                      <button className="sup-clear" style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)" }} onClick={(e) => { e.stopPropagation(); clearSupplier(); }}><X size={14} /></button>
-                      <button className="sup-clear" style={{ position: "absolute", right: 22, top: "50%", transform: "translateY(-50%)", color: "#1e3a8a" }} onClick={(e) => { e.stopPropagation(); loadSuppliers(); }} title="Refresh"><RefreshCw size={13} /></button>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Bal: PKR {(selectedSupplier.balance || 0).toLocaleString()}</span>
+                      <button style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); clearSupplier(); }}><X size={14} /></button>
+                      <button style={{ position: "absolute", right: 22, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--primary)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); loadSuppliers(); }} title="Refresh"><RefreshCw size={13} /></button>
                     </div>
                   ) : (
                     <>
                       <div className="sup-input-row">
-                        <Search size={14} style={{ position: "absolute", left: 10, color: "#94A3B8" }} />
+                        <Search size={14} style={{ position: "absolute", left: 10, color: "var(--text-muted)" }} />
                         <input className="pay-input" style={{ paddingLeft: 32, paddingRight: 32 }} placeholder="Search by name, code or phone..." value={supplierSearch}
                           onChange={e => { setSupplierSearch(e.target.value); setShowSupplierList(true) }}
                           onFocus={() => setShowSupplierList(true)} autoComplete="off"
                         />
-                        {supplierSearch && <button className="sup-clear" onClick={() => setSupplierSearch("")}><X size={13} /></button>}
+                        {supplierSearch && <button onClick={() => setSupplierSearch("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}><X size={13} /></button>}
                       </div>
                       {showSupplierList && (
                         <div className="sup-dropdown">
                           {filteredSuppliers.length === 0 ? (
-                            <div style={{ padding: "10px 14px", color: "#94A3B8", fontSize: 13 }}>No suppliers found</div>
+                            <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: 13 }}>No suppliers found</div>
                           ) : (
                             filteredSuppliers.map(s => (
                               <div key={s.id} className="sup-option" onMouseDown={() => selectSupplier(s)}>
@@ -281,7 +308,7 @@ export default function NewPaymentPage() {
 
             {supplierId && bills.length > 0 && (
               <div className="pay-card">
-                <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 12px 0" }}>Allocate to Purchase Bills</h3>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 12px 0" }}>Allocate to Purchase Bills</h3>
                 <table>
                   <thead>
                     <tr>
@@ -311,12 +338,12 @@ export default function NewPaymentPage() {
                         </tr>
                       )
                     })}
-                    <tr style={{ borderTop: "2px solid #E2E8F0", fontWeight: 700 }}>
+                    <tr style={{ borderTop: "2px solid var(--border)", fontWeight: 700 }}>
                       <td colSpan={5} style={{ textAlign: "right" }}>Allocated</td>
                       <td style={{ textAlign: "right" }}>PKR {totalAllocated.toLocaleString()}</td>
                     </tr>
                     {unallocated > 0 && (
-                      <tr style={{ fontSize: 12, color: "#64748B" }}>
+                      <tr style={{ fontSize: 12, color: "var(--text-muted)" }}>
                         <td colSpan={6} style={{ textAlign: "right", paddingTop: 4 }}>
                           Unallocated: PKR {unallocated.toLocaleString()}
                         </td>
@@ -327,7 +354,7 @@ export default function NewPaymentPage() {
               </div>
             )}
             {supplierId && bills.length === 0 && (
-              <div className="pay-card" style={{ textAlign: "center", color: "#94A3B8" }}>
+              <div className="pay-card" style={{ textAlign: "center", color: "var(--text-muted)" }}>
                 No unpaid purchase bills for this supplier. The full amount will be recorded as unallocated.
               </div>
             )}
@@ -335,14 +362,14 @@ export default function NewPaymentPage() {
 
           <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 16 }}>
             <div className="pay-card">
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: "#1E293B", margin: "0 0 10px" }}>Summary</h3>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
                 <span>Amount</span><span>PKR {totalAmount.toLocaleString()}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginTop: 4 }}>
                 <span>Allocated</span><span>PKR {totalAllocated.toLocaleString()}</span>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: unallocated > 0 ? "#dc2626" : "#64748B" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: unallocated > 0 ? "#EF4444" : "var(--text-muted)" }}>
                 <span>Unallocated</span><span>PKR {unallocated.toLocaleString()}</span>
               </div>
             </div>
