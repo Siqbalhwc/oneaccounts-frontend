@@ -98,10 +98,10 @@ export default function LedgerPage() {
         openingBalance = openingLines.reduce((sum, line) => sum + (line.debit || 0) - (line.credit || 0), 0)
       }
 
-      // Period lines
+      // Period lines – now also fetch entry_id for drill‑down
       let query = supabase
         .from("journal_lines")
-        .select("id, debit, credit, journal_entries!inner(entry_no, date, description, deleted_at, company_id)")
+        .select("id, entry_id, debit, credit, journal_entries!inner(entry_no, date, description, deleted_at, company_id)")
         .eq("account_id", selectedAccountId)
         .eq("company_id", companyId)
         .is("journal_entries.deleted_at", null)
@@ -112,12 +112,13 @@ export default function LedgerPage() {
 
       const { data: lines } = await query
 
-      // Build running balance
+      // Build running balance – include entry_id for navigation
       let running = openingBalance
       const rows = (lines || []).map((l: any) => {
         running = running + (l.debit || 0) - (l.credit || 0)
         return {
           id: l.id,
+          entry_id: l.entry_id,   // ← journal_entries.id
           entry_no: l.journal_entries?.entry_no || "",
           date: l.journal_entries?.date || "",
           description: l.journal_entries?.description || "",
@@ -177,6 +178,11 @@ export default function LedgerPage() {
   const totalCredit = sortedLines.reduce((s, l) => s + l.credit, 0)
   const closingBalance = sortedLines.length > 0 ? sortedLines[sortedLines.length - 1].running_balance : 0
 
+  // Navigate to journal entry detail when a row is clicked
+  const openJournalEntry = (entryId: number) => {
+    if (entryId) router.push(`/dashboard/journal/${entryId}`)
+  }
+
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
   if (!canView) {
     return (
@@ -210,6 +216,7 @@ export default function LedgerPage() {
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
           transition: background 0.15s;
+          cursor: pointer;
         }
         .ledger-row:hover { background: var(--card-hover); }
         .ledger-row:last-child { border-bottom: none; }
@@ -343,7 +350,12 @@ export default function LedgerPage() {
                 <button className="sort-btn" onClick={() => handleSort("running_balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("running_balance")}</button>
               </div>
               {sortedLines.map((line, idx) => (
-                <div key={line.id || idx} className="ledger-row">
+                <div
+                  key={line.id || idx}
+                  className="ledger-row"
+                  onClick={() => openJournalEntry(line.entry_id)}
+                  title="Click to view journal entry"
+                >
                   <span style={{ fontSize: 12 }}>{line.date}</span>
                   <span style={{ color: "var(--primary)", fontSize: 12 }}>{line.entry_no}</span>
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line.description}</span>
