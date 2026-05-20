@@ -135,7 +135,7 @@ export default function TrialBalancePage() {
 
   useEffect(() => {
     fetchTrial()
-  }, [startDate, endDate, filterType, filterCategory]) // re‑fetch when dates or filters change
+  }, [startDate, endDate, filterType, filterCategory])
 
   // Sorting
   const sortedData = useMemo(() => {
@@ -184,26 +184,44 @@ export default function TrialBalancePage() {
   }
 
   return (
-    <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .tb-card { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        .tb-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; box-shadow: var(--shadow-sm); }
         .tb-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
-        .tb-summary-item { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 18px 20px; display: flex; align-items: center; gap: 14px; }
-        .tb-table-header { display: grid; grid-template-columns: 80px 1fr 80px 100px 100px; padding: 10px 20px; background: #1E293B; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94A3B8; border-bottom: 1px solid #1E293B; }
-        .tb-row { display: grid; grid-template-columns: 80px 1fr 80px 100px 100px; padding: 10px 20px; border-bottom: 1px solid #1E293B; font-size: 13px; align-items: center; transition: background 0.15s; cursor: pointer; }
-        .tb-row:hover { background: #1E293B; }
+        .tb-summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; display: flex; align-items: center; gap: 14px; }
+        .tb-table-header {
+          display: grid;
+          grid-template-columns: 80px 1fr 80px 100px 100px;
+          padding: 14px 24px;
+          background: var(--card);
+          font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
+          border-bottom: 1px solid var(--border);
+        }
+        .tb-row {
+          display: grid;
+          grid-template-columns: 80px 1fr 80px 100px 100px;
+          padding: 12px 24px;
+          border-bottom: 1px solid var(--border);
+          font-size: 13px; align-items: center;
+          transition: background 0.15s; cursor: pointer;
+        }
+        .tb-row:hover { background: var(--card-hover); }
         .tb-row:last-child { border-bottom: none; }
-        .tb-sort-btn { background: none; border: none; cursor: pointer; font: inherit; color: inherit; display: inline-flex; align-items: center; gap: 4px; padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px; }
-        .tb-sort-btn:hover { color: #93C5FD; }
+        .tb-sort-btn {
+          background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
+          display: inline-flex; align-items: center; gap: 4px; padding: 0;
+          font-weight: 700; text-transform: uppercase; font-size: 10px;
+        }
+        .tb-sort-btn:hover { color: var(--primary); }
         .date-input {
-          height: 34px; border: 1.5px solid #334155; border-radius: 8px;
-          padding: 0 10px; font-size: 12px; background: #1E293B; color: #F1F5F9;
+          height: 34px; border: 1.5px solid var(--border); border-radius: 8px;
+          padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text);
           outline: none; font-family: inherit; width: 140px;
         }
-        .date-input:focus { border-color: #64748B; }
-        .btn { padding: 8px 16px; border-radius: 8px; border: 1.5px solid #334155; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-        .btn-outline { background: transparent; color: white; border-color: #334155; }
-        .btn-outline:hover { background: #1E293B; }
+        .date-input:focus { border-color: var(--primary); }
+        .btn { padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
+        .btn-outline:hover { background: var(--card-hover); }
         @media (max-width: 640px) {
           .tb-table-header, .tb-row { grid-template-columns: 60px 1fr 70px 70px; }
           .tb-table-header span:nth-child(3), .tb-row span:nth-child(3) { display: none; }
@@ -216,8 +234,8 @@ export default function TrialBalancePage() {
           <ArrowLeft size={16} />
         </button>
         <div style={{ flex: 1, minWidth: 200 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>⚖️ Trial Balance</h1>
-          <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>⚖️ Trial Balance</h1>
+          <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
             {filterType || filterCategory ? `Filtered: ${filterType || ""} ${filterCategory || ""}` : "All accounts"}
           </p>
         </div>
@@ -229,7 +247,7 @@ export default function TrialBalancePage() {
             value={startDate}
             onChange={e => setStartDate(e.target.value)}
           />
-          <span style={{ color: "#94A3B8", fontSize: 12 }}>to</span>
+          <span style={{ color: "var(--text-muted)", fontSize: 12 }}>to</span>
           <input
             type="date"
             className="date-input"
@@ -243,7 +261,7 @@ export default function TrialBalancePage() {
       </div>
 
       {errorMsg && (
-        <div style={{ background: "#1E293B", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
+        <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, border: "1px solid #FECACA" }}>
           {errorMsg}
         </div>
       )}
@@ -253,30 +271,30 @@ export default function TrialBalancePage() {
         <div className="tb-summary-item">
           <div style={{ background: "#FEE2E2", borderRadius: 10, padding: 10 }}>📊</div>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8" }}>Total Debits</div>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Total Debits</div>
             <div style={{ fontSize: 22, fontWeight: 800, color: "#EF4444" }}>PKR {totalDebit.toLocaleString()}</div>
           </div>
         </div>
         <div className="tb-summary-item">
           <div style={{ background: "#D1FAE5", borderRadius: 10, padding: 10 }}>💰</div>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8" }}>Total Credits</div>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Total Credits</div>
             <div style={{ fontSize: 22, fontWeight: 800, color: "#10B981" }}>PKR {totalCredit.toLocaleString()}</div>
           </div>
         </div>
         <div className="tb-summary-item">
           <div style={{ background: isBalanced ? "#D1FAE5" : "#FEE2E2", borderRadius: 10, padding: 10 }}>⚖️</div>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94A3B8" }}>Status</div>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Status</div>
             <div style={{ fontSize: 18, fontWeight: 800, color: isBalanced ? "#10B981" : "#EF4444" }}>{isBalanced ? "✅ Balanced" : "❌ Not Balanced"}</div>
           </div>
         </div>
       </div>
 
       {loading ? (
-        <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading accounts…</div>
+        <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading accounts…</div>
       ) : sortedData.length === 0 ? (
-        <div className="tb-card" style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>No accounts match the selected filter or date range.</div>
+        <div className="tb-card" style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>No accounts match the selected filter or date range.</div>
       ) : (
         <div className="tb-card" style={{ padding: 0, overflowX: "auto" }}>
           <div className="tb-table-header">
@@ -288,13 +306,13 @@ export default function TrialBalancePage() {
           </div>
           {sortedData.map((a, i) => (
             <div key={a.id} className="tb-row" onClick={() => openLedger(a.id)} title={`View ledger for ${a.code}`}>
-              <span style={{ fontWeight: 600, color: "#93C5FD" }}>{a.code}</span>
-              <span style={{ color: "#E2E8F0" }}>{a.name}</span>
-              <span style={{ fontSize: 10, color: "#94A3B8" }}>{a.type}</span>
-              <span style={{ textAlign: "right", color: a.debit > 0 ? "#EF4444" : "#94A3B8", fontWeight: a.debit > 0 ? 600 : 400 }}>
+              <span style={{ fontWeight: 600, color: "var(--primary)" }}>{a.code}</span>
+              <span style={{ color: "var(--text)" }}>{a.name}</span>
+              <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{a.type}</span>
+              <span style={{ textAlign: "right", color: a.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: a.debit > 0 ? 600 : 400 }}>
                 {a.debit > 0 ? `PKR ${a.debit.toLocaleString()}` : "-"}
               </span>
-              <span style={{ textAlign: "right", color: a.credit > 0 ? "#10B981" : "#94A3B8", fontWeight: a.credit > 0 ? 600 : 400 }}>
+              <span style={{ textAlign: "right", color: a.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: a.credit > 0 ? 600 : 400 }}>
                 {a.credit > 0 ? `PKR ${a.credit.toLocaleString()}` : "-"}
               </span>
             </div>
