@@ -49,12 +49,17 @@ export default function NewCustomerPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  // Generate next customer code per company
+  // Summary state
+  const [totalCustomers, setTotalCustomers] = useState(0)
+  const [totalReceivables, setTotalReceivables] = useState(0)
+
+  // Generate next customer code per company + fetch summary
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
       if (cid) {
         setCompanyId(cid)
+        // Generate code
         supabase
           .from("customers")
           .select("code")
@@ -72,6 +77,20 @@ export default function NewCustomerPage() {
             }
             const code = `CUST-${String(nextNum).padStart(3, "0")}`
             setCustomerCode(code)
+          })
+
+        // Fetch summary
+        supabase
+          .from("customers")
+          .select("id, balance")
+          .eq("company_id", cid)
+          .is("deleted_at", null)
+          .then(({ data }) => {
+            if (data) {
+              setTotalCustomers(data.length)
+              const total = data.reduce((sum, c) => sum + (c.balance || 0), 0)
+              setTotalReceivables(total)
+            }
           })
       }
     })
@@ -121,103 +140,147 @@ export default function NewCustomerPage() {
     setOpeningBalance("0")
     setPaymentTerms("Net 15")
     setLoading(false)
+    // Refresh summary
+    setTotalCustomers(prev => prev + 1)
+    setTotalReceivables(prev => prev + balance)
     setTimeout(() => router.push("/dashboard/customers"), 1500)
   }
 
-  if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>Loading company data…</div>
+  if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading company data…</div>
 
   return (
-    <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .form-card {
-          background: #111827; border: 1px solid #1E293B; border-radius: 12px;
-          padding: 24px; margin-bottom: 16px; max-width: 560px;
-          margin-left: auto; margin-right: auto;
+          background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+          padding: 24px; margin-bottom: 16px;
         }
-        .label { font-size: 11px; font-weight: 600; color: #94A3B8; text-transform: uppercase; margin-bottom: 4px; display: block; }
+        .summary-card {
+          background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+          padding: 20px;
+        }
+        .label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; display: block; }
         .input, .select {
-          width: 100%; height: 40px; border: 1.5px solid #334155; border-radius: 8px;
+          width: 100%; height: 40px; border: 1.5px solid var(--border); border-radius: 8px;
           padding: 0 12px; font-size: 13px; box-sizing: border-box;
-          font-family: inherit; background: #1E293B; color: #F1F5F9;
+          font-family: inherit; background: var(--bg); color: var(--text);
         }
-        .input:focus, .select:focus { border-color: #64748B; outline: none; }
+        .input:focus, .select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
         .input:disabled { opacity: 0.7; cursor: not-allowed; }
         .btn {
-          padding: 10px 20px; border-radius: 8px; border: 1.5px solid #334155; font-weight: 600;
+          padding: 10px 20px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600;
           font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
         }
-        .btn-outline { background: transparent; color: white; border-color: #334155; }
-        .btn-outline:hover { background: #1E293B; }
-        .btn-back { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
+        .btn-outline { background: transparent; color: var(--text); border-color: var(--border); }
+        .btn-outline:hover { background: var(--card-hover); }
+        .btn-back { background: transparent; border: 1.5px solid var(--border); color: var(--text-muted); }
+        .btn-back:hover { background: var(--card-hover); }
         .phone-row { display: grid; grid-template-columns: 130px 1fr; gap: 8px; }
         .inline-group { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+        .layout {
+          display: flex;
+          gap: 24px;
+          align-items: flex-start;
+        }
+        .form-side { flex: 1; min-width: 0; }
+        .summary-side { width: 260px; flex-shrink: 0; }
+
+        @media (max-width: 860px) {
+          .layout { flex-direction: column; }
+          .summary-side { width: 100%; }
+          .phone-row { grid-template-columns: 110px 1fr; }
+        }
       `}</style>
 
-      <div style={{ maxWidth: 600, margin: "0 auto" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
           <button className="btn btn-back" onClick={() => router.push("/dashboard/customers")}><ArrowLeft size={16} /></button>
           <div>
-            <h1 style={{ fontSize: 20, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>➕ New Customer</h1>
-            <p style={{ color: "#94A3B8", fontSize: 13 }}>Add a customer to your system</p>
+            <h1 style={{ fontSize: 20, fontWeight: 800, color: "var(--text)", margin: 0 }}>➕ New Customer</h1>
+            <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Add a customer to your system</p>
           </div>
         </div>
 
-        {error && <div style={{ background: "#1E293B", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
-        {flash && <div style={{ background: "#064E3B", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
+        {error && <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, border: "1px solid #FECACA" }}>{error}</div>}
+        {flash && <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
 
-        <div className="form-card">
-          {/* Customer Code – system generated, read‑only */}
-          <div style={{ marginBottom: 16 }}>
-            <label className="label">Customer Code</label>
-            <input className="input" value={customerCode} disabled />
-            <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 4 }}>System‑generated, unique per company</div>
-          </div>
+        <div className="layout">
+          <div className="form-side">
+            <div className="form-card">
+              {/* Customer Code – system generated, read‑only */}
+              <div style={{ marginBottom: 16 }}>
+                <label className="label">Customer Code</label>
+                <input className="input" value={customerCode} disabled />
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>System‑generated, unique per company</div>
+              </div>
 
-          <div style={{ marginBottom: 16 }}>
-            <label className="label">Customer Name *</label>
-            <input className="input" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="e.g. ABC Corporation" />
-          </div>
+              <div style={{ marginBottom: 16 }}>
+                <label className="label">Customer Name *</label>
+                <input className="input" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="e.g. ABC Corporation" />
+              </div>
 
-          {/* Phone with country code */}
-          <div style={{ marginBottom: 16 }}>
-            <label className="label">Phone</label>
-            <div className="phone-row">
-              <select className="select" value={countryCode} onChange={e => setCountryCode(e.target.value)}>
-                {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
-              </select>
-              <input className="input" type="tel" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} placeholder="300 1234567" />
+              {/* Phone with country code */}
+              <div style={{ marginBottom: 16 }}>
+                <label className="label">Phone</label>
+                <div className="phone-row">
+                  <select className="select" value={countryCode} onChange={e => setCountryCode(e.target.value)}>
+                    {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+                  </select>
+                  <input className="input" type="tel" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} placeholder="300 1234567" />
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Combined for WhatsApp messaging</div>
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <label className="label">Email</label>
+                <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="abc@example.com" />
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <label className="label">Address</label>
+                <input className="input" value={address} onChange={e => setAddress(e.target.value)} placeholder="Street, City" />
+              </div>
+
+              <div className="inline-group" style={{ marginBottom: 16 }}>
+                <div>
+                  <label className="label">Opening Balance</label>
+                  <input className="input" type="number" value={openingBalance} onChange={e => setOpeningBalance(e.target.value)} placeholder="0" />
+                </div>
+                <div>
+                  <label className="label">Payment Terms</label>
+                  <select className="select" value={paymentTerms} onChange={e => setPaymentTerms(e.target.value)}>
+                    {PAYMENT_TERMS.map(term => <option key={term} value={term}>{term}</option>)}
+                  </select>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Used for invoice reminders</div>
+                </div>
+              </div>
+
+              {/* Create button – outline style, aligned with theme */}
+              <button className="btn btn-outline" style={{ width: "100%", justifyContent: "center" }} onClick={handleSubmit} disabled={loading}>
+                {loading ? "Saving..." : <> <Plus size={16} /> Create Customer </>}
+              </button>
             </div>
-            <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 4 }}>Combined for WhatsApp messaging</div>
           </div>
 
-          <div style={{ marginBottom: 16 }}>
-            <label className="label">Email</label>
-            <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="abc@example.com" />
-          </div>
-
-          <div style={{ marginBottom: 16 }}>
-            <label className="label">Address</label>
-            <input className="input" value={address} onChange={e => setAddress(e.target.value)} placeholder="Street, City" />
-          </div>
-
-          <div className="inline-group" style={{ marginBottom: 16 }}>
-            <div>
-              <label className="label">Opening Balance</label>
-              <input className="input" type="number" value={openingBalance} onChange={e => setOpeningBalance(e.target.value)} placeholder="0" />
-            </div>
-            <div>
-              <label className="label">Payment Terms</label>
-              <select className="select" value={paymentTerms} onChange={e => setPaymentTerms(e.target.value)}>
-                {PAYMENT_TERMS.map(term => <option key={term} value={term}>{term}</option>)}
-              </select>
-              <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 4 }}>Used for invoice reminders</div>
+          {/* Right side summary */}
+          <div className="summary-side">
+            <div className="summary-card">
+              <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 16 }}>📊 Customers Summary</h2>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <div style={{ background: "var(--bg-soft)", borderRadius: 10, padding: 14 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 4 }}>Total Customers</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: "var(--text)" }}>{totalCustomers}</div>
+                </div>
+                <div style={{ background: "var(--bg-soft)", borderRadius: 10, padding: 14 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 4 }}>Total Receivables</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: totalReceivables >= 0 ? "#10B981" : "#EF4444" }}>
+                    PKR {totalReceivables.toLocaleString()}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-
-          {/* Create button – outline style, aligned with theme */}
-          <button className="btn btn-outline" style={{ width: "100%", justifyContent: "center" }} onClick={handleSubmit} disabled={loading}>
-            {loading ? "Saving..." : <> <Plus size={16} /> Create Customer </>}
-          </button>
         </div>
       </div>
     </div>
