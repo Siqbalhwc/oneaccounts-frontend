@@ -255,15 +255,10 @@ export default function NewCustomerPage() {
                   <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Used for invoice reminders</div>
                 </div>
               </div>
-
-              {/* Create button – outline style, aligned with theme */}
-              <button className="btn btn-outline" style={{ width: "100%", justifyContent: "center" }} onClick={handleSubmit} disabled={loading}>
-                {loading ? "Saving..." : <> <Plus size={16} /> Create Customer </>}
-              </button>
             </div>
           </div>
 
-          {/* Right side summary */}
+          {/* Right side: Summary + Create button */}
           <div className="summary-side">
             <div className="summary-card">
               <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 16 }}>📊 Customers Summary</h2>
@@ -280,6 +275,16 @@ export default function NewCustomerPage() {
                 </div>
               </div>
             </div>
+
+            {/* Create button moved below summary */}
+            <button
+              className="btn btn-outline"
+              style={{ width: "100%", justifyContent: "center", marginTop: 16 }}
+              onClick={handleSubmit}
+              disabled={loading}
+            >
+              {loading ? "Saving..." : <> <Plus size={16} /> Create Customer </>}
+            </button>
           </div>
         </div>
       </div>
