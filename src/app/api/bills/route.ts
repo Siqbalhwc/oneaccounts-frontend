@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { logDataChange } from '@/lib/audit'
 
-// ── Helper: get or create Accounts Payable ─────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────
 async function getPayableAccount(supabase: any, companyId: string) {
   let { data: acc } = await supabase.from('accounts')
     .select('id,balance').eq('code','2000').eq('company_id', companyId).maybeSingle()
@@ -17,7 +17,6 @@ async function getPayableAccount(supabase: any, companyId: string) {
   return created
 }
 
-// ── Helper: default GL per business type ──────────────────────────────────
 async function getDefaultExpenseAccount(supabase: any, companyId: string, type: string) {
   if (type === 'trading') {
     const { data: inv } = await supabase.from('accounts')
@@ -30,7 +29,39 @@ async function getDefaultExpenseAccount(supabase: any, companyId: string, type: 
   return null
 }
 
-// ── Create journal entry for a bill (with product stock update) ───────────
+// ── Apply stock changes for a set of items (positive = inflow, negative = outflow) ─
+async function applyStockChanges(supabase: any, companyId: string, items: any[], direction: 'add' | 'remove') {
+  for (const item of items) {
+    if (!item.product_id) continue
+    const qty = Number(item.qty || 0)
+    if (qty <= 0) continue
+
+    // Read current stock
+    const { data: product } = await supabase
+      .from('products')
+      .select('qty_on_hand, total_inflow')
+      .eq('id', item.product_id)
+      .eq('company_id', companyId)
+      .single()
+
+    if (!product) continue
+
+    const multiplier = direction === 'add' ? 1 : -1
+    const newQtyOnHand = (product.qty_on_hand || 0) + qty * multiplier
+    const newTotalInflow = (product.total_inflow || 0) + qty * multiplier
+
+    await supabase
+      .from('products')
+      .update({
+        qty_on_hand: newQtyOnHand,
+        total_inflow: newTotalInflow,
+      })
+      .eq('id', item.product_id)
+      .eq('company_id', companyId)
+  }
+}
+
+// ── Create journal entry for a bill (with product stock update) ───────
 async function createBillJournalEntry(
   supabase: any,
   bill: any,
@@ -45,7 +76,6 @@ async function createBillJournalEntry(
     const amount = (item.qty || 0) * (item.unit_price || 0)
     if (amount <= 0) continue
 
-    // Determine the debit account
     let accountId = item.account_id || null
     if (!accountId && item.product_id) {
       const invAcc = await supabase.from('accounts')
@@ -67,7 +97,6 @@ async function createBillJournalEntry(
       activity_id: item.activity_id || null,
     }
 
-    // For NGO, attach project/donor from activity + budget
     if (businessType === 'ngo' && item.activity_id) {
       const { data: actData } = await supabase.from('activities')
         .select('project_id')
@@ -89,25 +118,6 @@ async function createBillJournalEntry(
     }
 
     debitLines.push(line)
-
-    // Update product stock safely (read‑modify‑write)
-    if (item.product_id) {
-      const { data: currentProduct } = await supabase
-        .from('products')
-        .select('qty_on_hand')
-        .eq('id', item.product_id)
-        .eq('company_id', companyId)
-        .single()
-
-      if (currentProduct) {
-        const newQty = (currentProduct.qty_on_hand || 0) + (item.qty || 0)
-        await supabase
-          .from('products')
-          .update({ qty_on_hand: newQty })
-          .eq('id', item.product_id)
-          .eq('company_id', companyId)
-      }
-    }
   }
 
   if (debitLines.length === 0) return null
@@ -133,7 +143,7 @@ async function createBillJournalEntry(
 
   if (entryErr || !entry) throw new Error(entryErr?.message || 'JE insert failed')
 
-  // Insert journal lines – tagged with project/activity/location/donor + source
+  // Insert journal lines
   const lineRows = debitLines.map(l => ({
     company_id: companyId,
     entry_id: entry.id,
@@ -158,6 +168,9 @@ async function createBillJournalEntry(
       await supabase.from('accounts').update({ balance: newBal }).eq('id', l.account_id).eq('company_id', companyId)
     }
   }
+
+  // ── Product stock: increase inflow and qty_on_hand ──
+  await applyStockChanges(supabase, companyId, items, 'add')
 
   return entry.id
 }
@@ -218,7 +231,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: headerError?.message || 'Failed to create bill' }, { status: 500 })
   }
 
-  // Insert items – only basic columns
+  // Insert items
   let total = 0
   const itemRowsForDb = items.map((item: any) => {
     const qty = Number(item.qty || 0)
@@ -254,7 +267,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: updateError?.message || 'Failed to update total' }, { status: 500 })
   }
 
-  // ── Create journal entry ──
+  // ── Create journal entry (includes stock inflow) ──
   try {
     await createBillJournalEntry(supabase, updatedBill, items, companyId, businessType)
   } catch (e: any) {
@@ -263,23 +276,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Journal entry failed: ' + e.message }, { status: 500 })
   }
 
-  // ── Update supplier balance (increase payable) WITH ERROR CHECK ──
-  const { data: supplier, error: suppFetchErr } = await supabase.from('suppliers')
+  // Update supplier balance
+  const { data: supplier } = await supabase.from('suppliers')
     .select('balance').eq('id', party_id).eq('company_id', companyId).single()
-  if (suppFetchErr || !supplier) {
-    // Clean up the bill if supplier not found
-    await supabase.from('invoice_items').delete().eq('invoice_id', updatedBill.id)
-    await supabase.from('invoices').delete().eq('id', updatedBill.id)
-    return NextResponse.json({ error: 'Supplier not found' }, { status: 500 })
-  }
-  const { error: balanceUpdateErr } = await supabase.from('suppliers')
-    .update({ balance: (supplier.balance || 0) + total })
-    .eq('id', party_id).eq('company_id', companyId)
-  if (balanceUpdateErr) {
-    // Clean up the bill
-    await supabase.from('invoice_items').delete().eq('invoice_id', updatedBill.id)
-    await supabase.from('invoices').delete().eq('id', updatedBill.id)
-    return NextResponse.json({ error: 'Failed to update supplier balance: ' + balanceUpdateErr.message }, { status: 500 })
+  if (supplier) {
+    await supabase.from('suppliers')
+      .update({ balance: (supplier.balance || 0) + total })
+      .eq('id', party_id).eq('company_id', companyId)
   }
 
   await logDataChange('invoices', String(updatedBill.id), 'INSERT', undefined, updatedBill)
@@ -322,7 +325,16 @@ export async function PUT(request: NextRequest) {
     .select('*').eq('id', id).eq('company_id', companyId).single()
   if (!oldBill) return NextResponse.json({ error: 'Bill not found' }, { status: 404 })
 
-  // ── Reverse old journal entry ──
+  // Fetch old items for reversal
+  const { data: oldItems } = await supabase.from('invoice_items')
+    .select('*').eq('invoice_id', id)
+
+  // ── Reverse old stock changes (remove inflow) ──
+  if (oldItems) {
+    await applyStockChanges(supabase, companyId, oldItems, 'remove')
+  }
+
+  // Reverse old journal entry
   const { data: oldEntries } = await supabase.from('journal_entries')
     .select('id')
     .eq('company_id', companyId)
@@ -344,18 +356,14 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  // Reverse old supplier balance (remove old bill total) WITH ERROR CHECK
+  // Reverse old supplier balance
   if (oldBill.party_id) {
-    const { data: supp, error: oldSuppErr } = await supabase.from('suppliers')
+    const { data: supp } = await supabase.from('suppliers')
       .select('balance').eq('id', oldBill.party_id).eq('company_id', companyId).single()
-    if (oldSuppErr || !supp) {
-      return NextResponse.json({ error: 'Failed to fetch supplier for reversal' }, { status: 500 })
-    }
-    const { error: revErr } = await supabase.from('suppliers')
-      .update({ balance: (supp.balance || 0) - (oldBill.total || 0) })
-      .eq('id', oldBill.party_id).eq('company_id', companyId)
-    if (revErr) {
-      return NextResponse.json({ error: 'Reversal failed: ' + revErr.message }, { status: 500 })
+    if (supp) {
+      await supabase.from('suppliers')
+        .update({ balance: (supp.balance || 0) - (oldBill.total || 0) })
+        .eq('id', oldBill.party_id).eq('company_id', companyId)
     }
   }
 
@@ -395,25 +403,21 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: updateError?.message || 'Update failed' }, { status: 500 })
   }
 
-  // ── Create new journal entry ──
+  // ── Create new journal entry (adds new inflow) ──
   try {
     await createBillJournalEntry(supabase, updatedBill, items, companyId, businessType)
   } catch (e: any) {
     return NextResponse.json({ error: 'Journal entry failed after update: ' + e.message }, { status: 500 })
   }
 
-  // Apply new supplier balance (add new total) WITH ERROR CHECK
+  // Apply new supplier balance
   if (updatedBill.party_id) {
-    const { data: supp, error: suppErr } = await supabase.from('suppliers')
+    const { data: supp } = await supabase.from('suppliers')
       .select('balance').eq('id', updatedBill.party_id).eq('company_id', companyId).single()
-    if (suppErr || !supp) {
-      return NextResponse.json({ error: 'Supplier not found for new balance' }, { status: 500 })
-    }
-    const { error: newBalErr } = await supabase.from('suppliers')
-      .update({ balance: (supp.balance || 0) + total })
-      .eq('id', updatedBill.party_id).eq('company_id', companyId)
-    if (newBalErr) {
-      return NextResponse.json({ error: 'Failed to update supplier balance: ' + newBalErr.message }, { status: 500 })
+    if (supp) {
+      await supabase.from('suppliers')
+        .update({ balance: (supp.balance || 0) + total })
+        .eq('id', updatedBill.party_id).eq('company_id', companyId)
     }
   }
 
@@ -424,7 +428,7 @@ export async function PUT(request: NextRequest) {
   return NextResponse.json({ success: true, bill: updatedBill })
 }
 
-// ── DELETE (remove bill and reverse JE) ───────────────────────────────────
+// ── DELETE ────────────────────────────────────────────────────────────
 export async function DELETE(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -450,7 +454,15 @@ export async function DELETE(request: NextRequest) {
 
   const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
 
-  // Reverse JE (same logic as PUT)
+  // Fetch old items for stock reversal
+  const { data: oldItems } = await supabase.from('invoice_items')
+    .select('*').eq('invoice_id', id)
+
+  if (oldItems) {
+    await applyStockChanges(supabase, companyId, oldItems, 'remove')
+  }
+
+  // Reverse JE
   const { data: entries } = await supabase.from('journal_entries')
     .select('id').eq('company_id', companyId).ilike('description', `%Purchase Bill%`)
   if (entries) {
@@ -473,18 +485,14 @@ export async function DELETE(request: NextRequest) {
   const { data: oldBill } = await supabase.from('invoices')
     .select('*').eq('id', id).eq('company_id', companyId).single()
 
-  // Reverse supplier balance WITH ERROR CHECK
+  // Reverse supplier balance
   if (oldBill?.party_id) {
-    const { data: supp, error: suppErr } = await supabase.from('suppliers')
+    const { data: supp } = await supabase.from('suppliers')
       .select('balance').eq('id', oldBill.party_id).eq('company_id', companyId).single()
-    if (suppErr || !supp) {
-      return NextResponse.json({ error: 'Failed to fetch supplier for deletion reversal' }, { status: 500 })
-    }
-    const { error: revErr } = await supabase.from('suppliers')
-      .update({ balance: (supp.balance || 0) - (oldBill.total || 0) })
-      .eq('id', oldBill.party_id).eq('company_id', companyId)
-    if (revErr) {
-      return NextResponse.json({ error: 'Balance reversal failed: ' + revErr.message }, { status: 500 })
+    if (supp) {
+      await supabase.from('suppliers')
+        .update({ balance: (supp.balance || 0) - (oldBill.total || 0) })
+        .eq('id', oldBill.party_id).eq('company_id', companyId)
     }
   }
 

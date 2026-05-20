@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { logDataChange } from '@/lib/audit'
 
-// ── Helpers ─────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────
 async function getAccount(supabase: any, code: string, companyId: string) {
   const { data } = await supabase.from('accounts')
     .select('id,balance').eq('code', code).eq('company_id', companyId).maybeSingle()
@@ -46,7 +46,37 @@ async function createJE(
   }
 }
 
-// ── Generate unique invoice number with random suffix ──────────────────
+// ── Apply stock changes for sales (outflow) ──────────────────────────
+async function applyStockOutflow(supabase: any, companyId: string, items: any[], direction: 'add' | 'remove') {
+  for (const item of items) {
+    if (!item.product_id) continue
+    const qty = Number(item.qty || 0)
+    if (qty <= 0) continue
+
+    const { data: product } = await supabase
+      .from('products')
+      .select('qty_on_hand, total_outflow')
+      .eq('id', item.product_id)
+      .eq('company_id', companyId)
+      .single()
+
+    if (!product) continue
+
+    const multiplier = direction === 'add' ? 1 : -1
+    const newQtyOnHand = (product.qty_on_hand || 0) - qty * multiplier   // outflow reduces qty_on_hand
+    const newTotalOutflow = (product.total_outflow || 0) + qty * multiplier
+
+    await supabase
+      .from('products')
+      .update({
+        qty_on_hand: newQtyOnHand,
+        total_outflow: newTotalOutflow,
+      })
+      .eq('id', item.product_id)
+      .eq('company_id', companyId)
+  }
+}
+
 function generateInvoiceNo(customerCode: string): string {
   const rand = Math.floor(1000 + Math.random() * 9000)
   return `${customerCode}-${String(rand).padStart(4, '0')}`
@@ -81,16 +111,15 @@ export async function POST(request: NextRequest) {
 
   const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
 
-  // Get customer code for invoice prefix
   const { data: cust } = await supabase.from('customers')
     .select('code').eq('id', party_id).single()
   const custCode = cust?.code || 'CUST'
 
-  // Business type & automation
   const { data: company } = await supabase.from('companies')
     .select('business_type').eq('id', companyId).single()
   const businessType = company?.business_type || ''
 
+  // Automation settings (unchanged)
   const { data: settings } = await supabase.from('company_settings')
     .select('invoice_automation_config')
     .eq('company_id', companyId).maybeSingle()
@@ -100,7 +129,7 @@ export async function POST(request: NextRequest) {
   const expenseRules = automationConfig.expenseRules || []
   const partners = automationConfig.partners || []
 
-  // ── Insert with retry ─────────────────────────────────────────────────
+  // Insert with retry
   let invoice: any = null
   let invoiceNo = ''
   let attempts = 0
@@ -108,7 +137,6 @@ export async function POST(request: NextRequest) {
 
   while (attempts < maxAttempts) {
     invoiceNo = generateInvoiceNo(custCode)
-
     const { data: inv, error: headerError } = await supabase
       .from('invoices')
       .insert({
@@ -134,7 +162,6 @@ export async function POST(request: NextRequest) {
       }
       return NextResponse.json({ error: headerError.message }, { status: 500 })
     }
-
     invoice = inv
     break
   }
@@ -143,7 +170,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to generate unique invoice number after multiple attempts.' }, { status: 500 })
   }
 
-  // 2. Insert items (no cost_price column)
+  // Items
   const itemRows = items.map((item: any) => {
     const qty = Number(item.qty || 0)
     const unit_price = Number(item.unit_price || 0)
@@ -253,21 +280,8 @@ export async function POST(request: NextRequest) {
 
     await createJE(supabase, companyId, invoice_date, `Sales Invoice ${invoiceNo}`, jeLines, 'sale_invoice', updatedInv.id)
 
-    // Update inventory
-    for (const item of items) {
-      if (!item.product_id) continue
-      const qty = Number(item.qty || 0)
-      if (qty <= 0) continue
-      const { data: product } = await supabase.from('products')
-        .select('qty_on_hand')
-        .eq('id', item.product_id)
-        .eq('company_id', companyId)
-        .single()
-      if (product) {
-        const newQty = (product.qty_on_hand || 0) - qty
-        await supabase.from('products').update({ qty_on_hand: newQty }).eq('id', item.product_id).eq('company_id', companyId)
-      }
-    }
+    // ── Product stock: increase outflow, decrease qty_on_hand ──
+    await applyStockOutflow(supabase, companyId, items, 'add')
 
   } catch (e: any) {
     await supabase.from('invoice_items').delete().eq('invoice_id', invoice.id)
@@ -312,6 +326,12 @@ export async function PUT(request: NextRequest) {
 
   const { data: oldInv } = await supabase.from('invoices').select('*').eq('id', id).eq('company_id', companyId).single()
   if (!oldInv) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
+
+  // Reverse old stock outflow
+  const { data: oldItems } = await supabase.from('invoice_items').select('*').eq('invoice_id', id)
+  if (oldItems) {
+    await applyStockOutflow(supabase, companyId, oldItems, 'remove')
+  }
 
   // Reverse old JE
   const { data: oldEntries } = await supabase.from('journal_entries')
@@ -372,6 +392,7 @@ export async function PUT(request: NextRequest) {
 
   if (!updatedInv) return NextResponse.json({ error: 'Update failed' }, { status: 500 })
 
+  // Apply new customer balance
   if (party_id) {
     const { data: cust } = await supabase.from('customers').select('balance').eq('id', party_id).single()
     if (cust) {
@@ -379,7 +400,9 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  // Re‑create JE (simplified – for full automation, copy POST logic)
+  // Re‑apply stock outflow for new items
+  await applyStockOutflow(supabase, companyId, items, 'add')
+
   await logDataChange('invoices', String(id), 'UPDATE', oldInv, updatedInv)
 
   return NextResponse.json({ success: true, invoice: updatedInv })
