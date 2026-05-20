@@ -54,6 +54,9 @@ export default function NewAccountPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
+  // Summary state
+  const [totalAccounts, setTotalAccounts] = useState(0)
+
   const availablePredefined = PREDEFINED_CATEGORIES.filter((c) => c.type === accountType)
   const isCustom = selectedCategory === CUSTOM_OPTION
   const finalCategory = isCustom ? customCategoryName.trim() : selectedCategory
@@ -80,11 +83,19 @@ export default function NewAccountPage() {
     return cat ? cat.codeEnd : null
   })()
 
-  // Get company ID
+  // Get company ID and summary
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
-      if (cid) setCompanyId(cid)
+      if (cid) {
+        setCompanyId(cid)
+        // Fetch total accounts for summary
+        supabase
+          .from("accounts")
+          .select("id", { count: "exact", head: true })
+          .eq("company_id", cid)
+          .then(({ count }) => setTotalAccounts(count || 0))
+      }
     })
   }, [])
 
@@ -184,120 +195,151 @@ export default function NewAccountPage() {
     setCustomCategoryName("")
     setCustomCodeStart("")
     setCustomCodeEnd("")
+    setTotalAccounts(prev => prev + 1)
     setLoading(false)
     setTimeout(() => router.push("/dashboard/accounts"), 1500)
   }
 
-  if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>Loading company data…</div>
+  if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading company data…</div>
 
   return (
-    <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .form-card {
-          background: #111827; border: 1px solid #1E293B; border-radius: 12px;
-          padding: 24px; margin-bottom: 16px; max-width: 560px;
-          margin-left: auto; margin-right: auto;   /* center the card */
+          background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+          padding: 24px; margin-bottom: 16px;
         }
-        .label { font-size: 11px; font-weight: 600; color: #94A3B8; text-transform: uppercase; margin-bottom: 4px; display: block; }
+        .summary-card {
+          background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+          padding: 20px;
+        }
+        .label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; display: block; }
         .input, .select {
-          width: 100%; height: 40px; border: 1.5px solid #334155; border-radius: 8px;
+          width: 100%; height: 40px; border: 1.5px solid var(--border); border-radius: 8px;
           padding: 0 12px; font-size: 13px; box-sizing: border-box;
-          font-family: inherit; background: #1E293B; color: #F1F5F9;
+          font-family: inherit; background: var(--bg); color: var(--text);
         }
-        /* Focus border – now a soft gray, matching the theme */
-        .input:focus, .select:focus { border-color: #64748B; outline: none; }
-
+        .input:focus, .select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
         .btn {
-          padding: 10px 20px; border-radius: 8px; border: none; font-weight: 600;
+          padding: 10px 20px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600;
           font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
         }
+        .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
+        .btn-outline:hover { background: var(--card-hover); }
         .btn-primary {
-          background: #1E3A8A;   /* navy, same as logo */
-          color: white;
-          box-shadow: 0 4px 12px rgba(30,58,138,0.4);  /* subtle glow */
-          transition: all 0.2s;
+          background: var(--primary); color: var(--primary-text); border-color: var(--primary);
+          box-shadow: 0 4px 12px rgba(37,99,235,0.3);
         }
         .btn-primary:hover {
-          background: #1E40AF;   /* slightly lighter navy on hover */
-          box-shadow: 0 6px 16px rgba(30,64,175,0.5);
-        }
-        .btn-outline {
-          background: transparent; border: 1.5px solid #334155; color: #CBD5E1;
+          background: var(--primary-hover); box-shadow: 0 6px 16px rgba(37,99,235,0.4);
         }
         .inline-group { display: flex; gap: 8px; }
         .inline-group > * { flex: 1; }
+
+        .layout {
+          display: flex;
+          gap: 24px;
+          align-items: flex-start;
+        }
+        .form-side { flex: 1; min-width: 0; }
+        .summary-side { width: 260px; flex-shrink: 0; }
+
+        @media (max-width: 860px) {
+          .layout { flex-direction: column; }
+          .summary-side { width: 100%; }
+        }
       `}</style>
 
-      <div style={{ maxWidth: 600, margin: "0 auto" }}>
-        {/* Back button and title */}
+      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
           <button className="btn btn-outline" onClick={() => router.push("/dashboard/accounts")}><ArrowLeft size={16} /></button>
           <div>
-            <h1 style={{ fontSize: 20, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>➕ New Account</h1>
-            <p style={{ color: "#94A3B8", fontSize: 13 }}>Add a new GL account</p>
+            <h1 style={{ fontSize: 20, fontWeight: 800, color: "var(--text)", margin: 0 }}>➕ New Account</h1>
+            <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Add a new GL account</p>
           </div>
         </div>
 
-        {error && <div style={{ background: "#1E293B", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
-        {flash && <div style={{ background: "#064E3B", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
+        {error && <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, border: "1px solid #FECACA" }}>{error}</div>}
+        {flash && <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
 
-        <div className="form-card">
-          <div style={{ marginBottom: 16 }}>
-            <label className="label">Account Type *</label>
-            <select className="select" value={accountType} onChange={(e) => { setAccountType(e.target.value); setSelectedCategory(""); setCustomCategoryName(""); setCustomCodeStart(""); setCustomCodeEnd(""); }}>
-              <option value="">— Select Type —</option>
-              {["Asset", "Liability", "Equity", "Revenue", "Expense"].map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
-
-          {accountType && (
-            <div style={{ marginBottom: 16 }}>
-              <label className="label">Category *</label>
-              <select className="select" value={selectedCategory} onChange={(e) => { setSelectedCategory(e.target.value); setCustomCategoryName(""); setCustomCodeStart(""); setCustomCodeEnd(""); }}>
-                <option value="">— Select Category —</option>
-                {availablePredefined.map((c) => <option key={c.label} value={c.label}>{c.label} ({c.codeStart}-{c.codeEnd})</option>)}
-                <option value={CUSTOM_OPTION}>{CUSTOM_OPTION}</option>
-              </select>
-            </div>
-          )}
-
-          {isCustom && (
-            <>
+        <div className="layout">
+          {/* Left: Form */}
+          <div className="form-side">
+            <div className="form-card">
               <div style={{ marginBottom: 16 }}>
-                <label className="label">Custom Category Name *</label>
-                <input className="input" value={customCategoryName} onChange={(e) => setCustomCategoryName(e.target.value)} placeholder="e.g. Land & Building" />
+                <label className="label">Account Type *</label>
+                <select className="select" value={accountType} onChange={(e) => { setAccountType(e.target.value); setSelectedCategory(""); setCustomCategoryName(""); setCustomCodeStart(""); setCustomCodeEnd(""); }}>
+                  <option value="">— Select Type —</option>
+                  {["Asset", "Liability", "Equity", "Revenue", "Expense"].map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
               </div>
-              <div className="inline-group" style={{ marginBottom: 16 }}>
-                <div>
-                  <label className="label">Code Start (optional)</label>
-                  <input className="input" type="number" value={customCodeStart} onChange={(e) => setCustomCodeStart(e.target.value)} placeholder="1000" />
-                </div>
-                <div>
-                  <label className="label">Code End (optional)</label>
-                  <input className="input" type="number" value={customCodeEnd} onChange={(e) => setCustomCodeEnd(e.target.value)} placeholder="1999" />
-                </div>
-              </div>
-            </>
-          )}
 
-          {effectiveCodeStart !== null && effectiveCodeEnd !== null && suggestedCode !== null && (
-            <div style={{ marginBottom: 16 }}>
-              <label className="label">Account Code</label>
-              <input className="input" type="number" value={customCode} onChange={(e) => setCustomCode(e.target.value)} placeholder={`Suggested: ${suggestedCode}`} />
-              <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 4 }}>Suggested next free code in the selected range</div>
+              {accountType && (
+                <div style={{ marginBottom: 16 }}>
+                  <label className="label">Category *</label>
+                  <select className="select" value={selectedCategory} onChange={(e) => { setSelectedCategory(e.target.value); setCustomCategoryName(""); setCustomCodeStart(""); setCustomCodeEnd(""); }}>
+                    <option value="">— Select Category —</option>
+                    {availablePredefined.map((c) => <option key={c.label} value={c.label}>{c.label} ({c.codeStart}-{c.codeEnd})</option>)}
+                    <option value={CUSTOM_OPTION}>{CUSTOM_OPTION}</option>
+                  </select>
+                </div>
+              )}
+
+              {isCustom && (
+                <>
+                  <div style={{ marginBottom: 16 }}>
+                    <label className="label">Custom Category Name *</label>
+                    <input className="input" value={customCategoryName} onChange={(e) => setCustomCategoryName(e.target.value)} placeholder="e.g. Land & Building" />
+                  </div>
+                  <div className="inline-group" style={{ marginBottom: 16 }}>
+                    <div>
+                      <label className="label">Code Start (optional)</label>
+                      <input className="input" type="number" value={customCodeStart} onChange={(e) => setCustomCodeStart(e.target.value)} placeholder="1000" />
+                    </div>
+                    <div>
+                      <label className="label">Code End (optional)</label>
+                      <input className="input" type="number" value={customCodeEnd} onChange={(e) => setCustomCodeEnd(e.target.value)} placeholder="1999" />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {effectiveCodeStart !== null && effectiveCodeEnd !== null && suggestedCode !== null && (
+                <div style={{ marginBottom: 16 }}>
+                  <label className="label">Account Code</label>
+                  <input className="input" type="number" value={customCode} onChange={(e) => setCustomCode(e.target.value)} placeholder={`Suggested: ${suggestedCode}`} />
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Suggested next free code in the selected range</div>
+                </div>
+              )}
+
+              <div style={{ marginBottom: 16 }}>
+                <label className="label">Account Name *</label>
+                <input className="input" value={accountName} onChange={(e) => setAccountName(e.target.value)} placeholder="e.g. Main Bank Account" />
+              </div>
             </div>
-          )}
-
-          <div style={{ marginBottom: 16 }}>
-            <label className="label">Account Name *</label>
-            <input className="input" value={accountName} onChange={(e) => setAccountName(e.target.value)} placeholder="e.g. Main Bank Account" />
           </div>
 
-          <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={handleSubmit} disabled={loading}>
-            {loading ? "Creating..." : <> <Plus size={16} /> Create Account </>}
-          </button>
+          {/* Right: Summary + Create button */}
+          <div className="summary-side">
+            <div className="summary-card">
+              <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 16 }}>📋 Accounts Summary</h2>
+              <div style={{ background: "var(--bg-soft)", borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 4 }}>Total Accounts</div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: "var(--text)" }}>{totalAccounts}</div>
+              </div>
+            </div>
+
+            <button
+              className="btn btn-primary"
+              style={{ width: "100%", justifyContent: "center", marginTop: 16 }}
+              onClick={handleSubmit}
+              disabled={loading}
+            >
+              {loading ? "Creating..." : <> <Plus size={16} /> Create Account </>}
+            </button>
+          </div>
         </div>
       </div>
     </div>
   )
-}
+}s
