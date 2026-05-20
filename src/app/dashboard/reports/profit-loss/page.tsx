@@ -14,7 +14,6 @@ function getCategory(account: any): string {
   return "Other"
 }
 
-// Format a number as a positive value (used for both revenue and expenses)
 function fmt(n: number) {
   return Math.abs(n).toLocaleString("en-PK")
 }
@@ -45,7 +44,6 @@ export default function ProfitLossPage() {
   const operatingExpenses = expenseAccounts.filter(a => getCategory(a) === "Operating Expenses")
   const otherExpenses = expenseAccounts.filter(a => !["Direct Expenses", "Operating Expenses"].includes(getCategory(a)))
 
-  // Use absolute values for all revenue and expenses (credit balances become positive)
   const totalRevenue = revenueAccounts.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
   const totalDirect = directExpenses.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
   const totalOpEx = operatingExpenses.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
@@ -54,8 +52,8 @@ export default function ProfitLossPage() {
   const grossProfit = totalRevenue - totalDirect
   const netProfit = grossProfit - totalOpEx - totalOther
   const margin = totalRevenue !== 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : "0.0"
+  const totalExpenses = totalDirect + totalOpEx + totalOther
 
-  // Drill‑down to Trial Balance (the correct next step)
   const navigateToTrialBalance = (type: string, category?: string) => {
     const params = new URLSearchParams()
     params.set("type", type)
@@ -63,7 +61,6 @@ export default function ProfitLossPage() {
     router.push(`/dashboard/reports/trial-balance?${params.toString()}`)
   }
 
-  // For individual accounts, also go to Trial Balance (filtered by type/category)
   const openTrialForAccount = (account: any) => {
     if (account.type === "Revenue") {
       navigateToTrialBalance("Revenue")
@@ -73,21 +70,21 @@ export default function ProfitLossPage() {
   }
 
   if (loading) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#0B1120", color: "#94A3B8", fontFamily: "'Inter', sans-serif", gap: 12 }}>
-      <div style={{ width: 20, height: 20, border: "2px solid #1E3A8A", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "var(--bg)", color: "var(--text-muted)", fontFamily: "'Inter', sans-serif", gap: 12 }}>
+      <div style={{ width: 20, height: 20, border: "2px solid var(--primary)", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
       Loading financial data…
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 
   return (
-    <div style={{ background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
+    <div style={{ background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         * { box-sizing: border-box; }
 
         .pl-header {
-          background: #0F172A;
-          border-bottom: 1px solid #1E293B;
+          background: var(--topbar-bg);
+          border-bottom: 1px solid var(--border);
           padding: 0 32px;
           display: flex;
           align-items: center;
@@ -100,24 +97,24 @@ export default function ProfitLossPage() {
 
         .back-btn {
           background: transparent;
-          border: 1px solid #334155;
+          border: 1px solid var(--border);
           border-radius: 8px;
           padding: 7px 10px;
           cursor: pointer;
-          color: #94A3B8;
+          color: var(--text-muted);
           display: inline-flex;
           align-items: center;
           transition: all 0.15s;
         }
-        .back-btn:hover { border-color: #64748B; color: #CBD5E1; background: #1E293B; }
+        .back-btn:hover { border-color: var(--border-strong); color: var(--text); background: var(--card-hover); }
 
         .action-btn {
-          background: #1E293B;
-          border: 1px solid #334155;
+          background: var(--card);
+          border: 1px solid var(--border);
           border-radius: 8px;
           padding: 7px 14px;
           cursor: pointer;
-          color: #94A3B8;
+          color: var(--text-muted);
           font-size: 12px;
           font-weight: 500;
           display: inline-flex;
@@ -126,45 +123,47 @@ export default function ProfitLossPage() {
           font-family: inherit;
           transition: all 0.15s;
         }
-        .action-btn:hover { border-color: #64748B; color: #E2E8F0; background: #1E293B; }
+        .action-btn:hover { border-color: var(--border-strong); color: var(--text); background: var(--card-hover); }
 
         .kpi-strip {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
           gap: 0;
-          border-bottom: 1px solid #1E293B;
-          background: #111827;
+          border-bottom: 1px solid var(--border);
+          background: var(--card);
         }
         .kpi-cell {
           padding: 20px 32px;
-          border-right: 1px solid #1E293B;
+          border-right: 1px solid var(--border);
         }
         .kpi-cell:last-child { border-right: none; }
-        .kpi-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: #94A3B8; margin-bottom: 6px; }
+        .kpi-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 6px; }
         .kpi-value { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; font-family: 'Inter', sans-serif; }
-        .kpi-sub { font-size: 11px; color: #64748B; margin-top: 4px; }
+        .kpi-sub { font-size: 11px; color: var(--text-soft); margin-top: 4px; }
 
         .date-bar {
-          background: #111827;
-          border-bottom: 1px solid #1E293B;
+          background: var(--card);
+          border-bottom: 1px solid var(--border);
           padding: 12px 32px;
           display: flex;
           align-items: center;
           gap: 12px;
+          flex-wrap: wrap;
         }
-        .date-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #94A3B8; }
+        .date-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
         .date-input {
-          background: #1E293B;
-          border: 1px solid #334155;
+          background: var(--bg);
+          border: 1px solid var(--border);
           border-radius: 6px;
-          color: #CBD5E1;
+          color: var(--text);
           padding: 5px 10px;
           font-size: 12px;
           font-family: inherit;
           outline: none;
         }
-        .date-input:focus { border-color: #1E3A8A; }
-        .date-sep { color: #64748B; font-size: 12px; }
+        .date-input:focus { border-color: var(--primary); }
+        .date-sep { color: var(--text-muted); font-size: 12px; }
+        .date-actions { margin-left: auto; display: flex; gap: 8px; }
 
         .report-body {
           display: grid;
@@ -175,7 +174,7 @@ export default function ProfitLossPage() {
 
         .report-col {
           padding: 32px;
-          border-right: 1px solid #1E293B;
+          border-right: 1px solid var(--border);
         }
         .report-col:last-child { border-right: none; }
 
@@ -189,10 +188,10 @@ export default function ProfitLossPage() {
           gap: 8px;
           margin-bottom: 2px;
           padding-bottom: 8px;
-          border-bottom: 1px solid #1E293B;
+          border-bottom: 1px solid var(--border);
           cursor: pointer;
         }
-        .section-head:hover .section-title-text { color: #93C5FD; }
+        .section-head:hover .section-title-text { color: var(--primary); }
         .section-badge {
           width: 3px;
           height: 16px;
@@ -204,7 +203,7 @@ export default function ProfitLossPage() {
           font-weight: 700;
           text-transform: uppercase;
           letter-spacing: 0.1em;
-          color: #94A3B8;
+          color: var(--text-muted);
           transition: color 0.15s;
         }
 
@@ -213,16 +212,16 @@ export default function ProfitLossPage() {
           justify-content: space-between;
           align-items: center;
           padding: 9px 0 9px 11px;
-          border-bottom: 1px solid #1E293B;
+          border-bottom: 1px solid var(--border);
           cursor: pointer;
           transition: background 0.1s;
           border-radius: 4px;
           margin: 1px 0;
         }
-        .account-row:hover { background: #1E293B; }
-        .acc-code { font-size: 10px; color: #94A3B8; min-width: 42px; }
-        .acc-name { font-size: 13px; color: #E2E8F0; flex: 1; padding: 0 10px; }
-        .acc-amount { font-size: 13px; font-weight: 500; color: #CBD5E1; }
+        .account-row:hover { background: var(--card-hover); }
+        .acc-code { font-size: 10px; color: var(--text-muted); min-width: 42px; }
+        .acc-name { font-size: 13px; color: var(--text); flex: 1; padding: 0 10px; }
+        .acc-amount { font-size: 13px; font-weight: 500; }
 
         .subtotal-row {
           display: flex;
@@ -232,9 +231,9 @@ export default function ProfitLossPage() {
           margin-top: 2px;
           font-size: 13px;
           font-weight: 600;
-          border-top: 1px solid #1E293B;
+          border-top: 1px solid var(--border);
         }
-        .subtotal-label { color: #E2E8F0; padding-left: 11px; }
+        .subtotal-label { color: var(--text); padding-left: 11px; }
         .subtotal-amount { font-weight: 600; }
 
         .divider-row {
@@ -244,11 +243,11 @@ export default function ProfitLossPage() {
           padding: 12px 0;
           font-size: 14px;
           font-weight: 700;
-          border-top: 2px solid #1E293B;
-          border-bottom: 2px solid #1E293B;
+          border-top: 2px solid var(--border-strong);
+          border-bottom: 2px solid var(--border-strong);
           margin: 8px 0;
         }
-        .divider-label { color: #F1F5F9; padding-left: 11px; }
+        .divider-label { color: var(--text); padding-left: 11px; }
         .divider-amount { font-weight: 700; }
 
         .net-row {
@@ -256,8 +255,8 @@ export default function ProfitLossPage() {
           justify-content: space-between;
           align-items: center;
           padding: 16px 20px;
-          background: #1E293B;
-          border: 1px solid #1E3A8A;
+          background: var(--card-hover);
+          border: 1px solid var(--primary);
           border-radius: 10px;
           margin-top: 20px;
         }
@@ -267,8 +266,15 @@ export default function ProfitLossPage() {
         .zero-state {
           padding: 16px 11px;
           font-size: 12px;
-          color: #64748B;
+          color: var(--text-soft);
           font-style: italic;
+        }
+
+        @media (max-width: 900px) {
+          .kpi-strip { grid-template-columns: repeat(2, 1fr); }
+          .report-body { grid-template-columns: 1fr; }
+          .report-col { border-right: none; padding: 20px; }
+          .pl-header { padding: 0 16px; }
         }
 
         @media print {
@@ -285,26 +291,18 @@ export default function ProfitLossPage() {
             <ArrowLeft size={15} />
           </button>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#F1F5F9", display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", display: "flex", alignItems: "center", gap: 8 }}>
               Profit &amp; Loss Statement
               <span style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "#93C5FD", background: "#1E3A5F", padding: "2px 8px", borderRadius: 4 }}>
                 FY {now.getFullYear()}
               </span>
             </div>
-            <div style={{ fontSize: 11, color: "#94A3B8" }}>Shahid Iqbal &amp; Co · Click any row to drill into Trial Balance</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Click any row to drill into Trial Balance</div>
           </div>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="action-btn" onClick={() => window.print()}>
-            <Printer size={13} /> Print
-          </button>
-          <button className="action-btn">
-            <Download size={13} /> Export
-          </button>
         </div>
       </div>
 
-      {/* KPI Strip */}
+      {/* KPI Strip – 4 Summary Cards */}
       <div className="kpi-strip">
         <div className="kpi-cell">
           <div className="kpi-label">Total Revenue</div>
@@ -333,19 +331,27 @@ export default function ProfitLossPage() {
         <div className="kpi-cell">
           <div className="kpi-label">Total Expenses</div>
           <div className="kpi-value" style={{ color: "#F59E0B" }}>
-            PKR {fmt(totalDirect + totalOpEx + totalOther)}
+            PKR {fmt(totalExpenses)}
           </div>
           <div className="kpi-sub">All expense accounts</div>
         </div>
       </div>
 
-      {/* Date Range Bar */}
+      {/* Date Range + Actions – all in one row */}
       <div className="date-bar">
-        <Calendar size={13} color="#94A3B8" />
+        <Calendar size={13} color="var(--text-muted)" />
         <span className="date-label">Period</span>
         <input className="date-input" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
         <span className="date-sep">—</span>
         <input className="date-input" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+        <div className="date-actions">
+          <button className="action-btn" onClick={() => window.print()}>
+            <Printer size={13} /> Print
+          </button>
+          <button className="action-btn">
+            <Download size={13} /> Export
+          </button>
+        </div>
       </div>
 
       {/* Two-column Report Body */}
@@ -470,14 +476,14 @@ export default function ProfitLossPage() {
               <div className="net-label" style={{ color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
                 {netProfit >= 0 ? "✦ Net Profit" : "▼ Net Loss"}
               </div>
-              <div style={{ fontSize: 11, color: "#64748B", marginTop: 3 }}>Profit margin: {margin}%</div>
+              <div style={{ fontSize: 11, color: "var(--text-soft)", marginTop: 3 }}>Profit margin: {margin}%</div>
             </div>
             <div className="net-amount" style={{ color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
               {netProfit < 0 ? "-" : ""}PKR {fmt(netProfit)}
             </div>
           </div>
 
-          <div style={{ marginTop: 24, padding: "12px 0", borderTop: "1px solid #1E293B", display: "flex", justifyContent: "space-between", fontSize: 10, color: "#64748B" }}>
+          <div style={{ marginTop: 24, padding: "12px 0", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-soft)" }}>
             <span>Generated {new Date().toLocaleString("en-PK")}</span>
             <span>OneAccounts · Shahid Iqbal &amp; Co</span>
           </div>
