@@ -395,81 +395,81 @@ export default function NewBillPage() {
   }, [])
 
   if (loading) {
-    return <div style={{ padding: 24, textAlign: "center", color: "#94A3B8", background: "#0B1120", minHeight: "100vh" }}>Loading bill form…</div>
+    return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>Loading bill form…</div>
   }
 
   return (
-    <div style={{ padding: "16px", background: "#0B1120", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
+    <div style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .inv-shell { max-width: 100%; margin: 0 auto; }
-        .inv-title { font-size: 18px; font-weight: 700; color: #F1F5F9; }
+        .inv-title { font-size: 18px; font-weight: 700; color: var(--text); }
         .inv-card {
-          background: #111827; border-radius: 12px; border: 1px solid #1E293B;
-          padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+          background: var(--card); border-radius: 12px; border: 1px solid var(--border);
+          padding: 16px 20px; box-shadow: var(--shadow-sm);
           margin-bottom: 12px;
         }
         .inv-label {
-          font-size: 10px; font-weight: 600; color: #94A3B8;
+          font-size: 10px; font-weight: 600; color: var(--text-muted);
           text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block;
         }
         .inv-input, .inv-select {
-          width: 100%; height: 38px; border: 1.5px solid #334155;
+          width: 100%; height: 38px; border: 1.5px solid var(--border);
           border-radius: 8px; padding: 0 12px; font-size: 13px;
-          font-family: inherit; background: #1E293B; color: #F1F5F9; outline: none; box-sizing: border-box;
+          font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box;
         }
-        .inv-input:focus, .inv-select:focus { border-color: #64748B; }
+        .inv-input:focus, .inv-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
         .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .inv-btn {
           display: inline-flex; align-items: center; gap: 6px;
           padding: 8px 14px; border-radius: 8px; font-size: 13px;
-          font-weight: 600; cursor: pointer; border: 1.5px solid #334155;
-          background: transparent; color: #CBD5E1; font-family: inherit;
+          font-weight: 600; cursor: pointer; border: 1.5px solid var(--border);
+          background: transparent; color: var(--text-muted); font-family: inherit;
           transition: all 0.15s; white-space: nowrap;
         }
-        .inv-btn:hover { background: #1E293B; }
+        .inv-btn:hover { background: var(--card-hover); }
 
         .inv-item-row {
           display: grid;
           grid-template-columns: 2fr 70px 90px 110px 110px 80px 90px 30px;
           gap: 6px; align-items: center; padding: 6px 0;
-          border-bottom: 1px solid #1E293B;
+          border-bottom: 1px solid var(--border);
         }
         .inv-item-header {
           display: grid;
           grid-template-columns: 2fr 70px 90px 110px 110px 80px 90px 30px;
           gap: 6px; font-size: 9px; font-weight: 700;
-          text-transform: uppercase; color: #94A3B8; padding-bottom: 6px;
+          text-transform: uppercase; color: var(--text-muted); padding-bottom: 6px;
         }
 
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
         .cust-dropdown {
           position: absolute; top: calc(100% + 4px); left: 0; right: 0;
-          background: #111827; border: 1.5px solid #334155; border-radius: 10px;
+          background: var(--card); border: 1.5px solid var(--border); border-radius: 10px;
           max-height: 220px; overflow-y: auto; z-index: 100;
-          box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.15);
         }
         .cust-option {
           padding: 8px 12px; cursor: pointer;
-          border-bottom: 1px solid #1E293B;
+          border-bottom: 1px solid var(--border);
           display: flex; justify-content: space-between; align-items: center;
         }
         .cust-option:last-child { border-bottom: none; }
-        .cust-option:hover { background: #1E293B; }
-        .cust-option-name { font-size: 13px; font-weight: 600; color: #F1F5F9; }
-        .cust-option-meta { font-size: 11px; color: "#94A3B8"; }
-        .cust-option-bal { font-size: 12px; font-weight: 600; color: "#93C5FD"; white-space: nowrap; }
+        .cust-option:hover { background: var(--card-hover); }
+        .cust-option-name { font-size: 13px; font-weight: 600; color: var(--text); }
+        .cust-option-meta { font-size: 11px; color: var(--text-muted); }
+        .cust-option-bal { font-size: 12px; font-weight: 600; color: var(--primary); white-space: nowrap; }
         .cust-selected-badge {
           display: inline-flex; align-items: center; gap: 6px;
-          background: #1E293B; border: 1.5px solid #334155;
+          background: var(--card); border: 1.5px solid var(--border);
           border-radius: 8px; padding: 6px 12px; font-size: 13px;
-          font-weight: 600; color: "#F1F5F9"; width: 100%; cursor: pointer;
+          font-weight: 600; color: var(--text); width: 100%; cursor: pointer;
         }
 
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
         @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
 
-        .budget-warning { background: #1E293B; border: 1px solid #EF4444; color: #FCA5A5; padding: 8px 12px; border-radius: 6px; font-size: 12px; display: flex; align-items: center; gap: 6px; }
+        .budget-warning { background: var(--card); border: 1px solid #EF4444; color: #FCA5A5; padding: 8px 12px; border-radius: 6px; font-size: 12px; display: flex; align-items: center; gap: 6px; }
 
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
@@ -481,7 +481,7 @@ export default function NewBillPage() {
           <button className="inv-btn" onClick={() => router.push("/dashboard/bills")}><ArrowLeft size={16} /></button>
           <div style={{ flex: 1 }}>
             <div className="inv-title">{editId ? "✏️ Edit Purchase Bill" : "📦 New Purchase Bill"}</div>
-            <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 1 }}>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>
               {editId ? "Modify bill details and items" : "Select supplier → add products or manual expenses"}
             </div>
           </div>
@@ -489,12 +489,12 @@ export default function NewBillPage() {
         </div>
 
         {error && (
-          <div style={{ background: "#1E293B", border: "1px solid #EF4444", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
+          <div style={{ background: "var(--card)", border: "1px solid #EF4444", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
             {error}
           </div>
         )}
         {flash && (
-          <div style={{ background: "#064E3B", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
             <CheckCircle size={16} /> {flash}
           </div>
         )}
@@ -508,14 +508,14 @@ export default function NewBillPage() {
                 {selectedSupplier ? (
                   <div className="cust-selected-badge" onClick={clearSupplier} style={{ position: "relative", paddingRight: 40 }}>
                     <span>🚚</span><span style={{ flex: 1 }}>{selectedSupplier.code} — {selectedSupplier.name}</span>
-                    <span style={{ fontSize: 11, color: "#94A3B8" }}>Bal: PKR {(selectedSupplier.balance || 0).toLocaleString()}</span>
-                    <button className="cust-clear" style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#94A3B8", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); clearSupplier(); }}><X size={14} /></button>
-                    <button className="cust-clear" style={{ position: "absolute", right: 22, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#93C5FD", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); refreshSuppliers(); }} title="Refresh"><RefreshCw size={13} /></button>
+                    <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Bal: PKR {(selectedSupplier.balance || 0).toLocaleString()}</span>
+                    <button style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); clearSupplier(); }}><X size={14} /></button>
+                    <button style={{ position: "absolute", right: 22, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--primary)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); refreshSuppliers(); }} title="Refresh"><RefreshCw size={13} /></button>
                   </div>
                 ) : (
                   <>
                     <div className="cust-input-row">
-                      <Search size={14} style={{ position: "absolute", left: 10, color: "#94A3B8" }} />
+                      <Search size={14} style={{ position: "absolute", left: 10, color: "var(--text-muted)" }} />
                       <input
                         className="inv-input"
                         style={{ paddingLeft: 32, paddingRight: 32 }}
@@ -526,12 +526,12 @@ export default function NewBillPage() {
                         onClick={() => setShowSupplierList(true)}
                         autoComplete="off"
                       />
-                      {supplierSearch && <button className="cust-clear" onClick={() => setSupplierSearch("")} style={{ background: "none", border: "none", color: "#94A3B8", cursor: "pointer" }}><X size={13} /></button>}
+                      {supplierSearch && <button onClick={() => setSupplierSearch("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}><X size={13} /></button>}
                     </div>
                     {showSupplierList && (
                       <div className="cust-dropdown">
                         {filteredSuppliers.length === 0 ? (
-                          <div style={{ padding: "10px 14px", color: "#94A3B8", fontSize: 13 }}>No suppliers found</div>
+                          <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: 13 }}>No suppliers found</div>
                         ) : (
                           filteredSuppliers.map(s => (
                             <div key={s.id} className="cust-option" onMouseDown={() => selectSupplier(s)}>
@@ -563,7 +563,7 @@ export default function NewBillPage() {
                 <label className="inv-label">Add Item</label>
                 <div style={{ display: "flex", gap: 8 }}>
                   <div style={{ position: "relative", flex: 1 }}>
-                    <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "#94A3B8" }} />
+                    <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "var(--text-muted)" }} />
                     <input
                       className="inv-input"
                       style={{ paddingLeft: 36 }}
@@ -587,7 +587,7 @@ export default function NewBillPage() {
                           </div>
                         ))}
                         {filteredProducts.length === 0 && (
-                          <div style={{ padding: 12, color: "#94A3B8", fontSize: 12 }}>No products found</div>
+                          <div style={{ padding: 12, color: "var(--text-muted)", fontSize: 12 }}>No products found</div>
                         )}
                       </div>
                     )}
@@ -600,7 +600,7 @@ export default function NewBillPage() {
             {/* Change History when editing */}
             {editId && (
               <div className="inv-card" style={{ marginTop: 12 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>📝 Change History</h3>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
                 <RecordHistory tableName="invoices" recordId={editId} />
               </div>
             )}
@@ -609,7 +609,7 @@ export default function NewBillPage() {
           {/* RIGHT: Summary & Post */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="inv-card">
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: "#F1F5F9", margin: "0 0 10px 0" }}>Summary</h3>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px 0" }}>Summary</h3>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, fontWeight: 600 }}>
                 <span>Total</span>
                 <span>PKR {totalAmount.toLocaleString()}</span>
@@ -643,7 +643,7 @@ export default function NewBillPage() {
         {/* Items table */}
         <div style={{ marginTop: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: "#F1F5F9" }}>Items</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
           </div>
           {items.length > 0 && (
             <div className="inv-card" style={{ overflowX: "auto", padding: "16px 12px" }}>
@@ -674,9 +674,9 @@ export default function NewBillPage() {
                       <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
                       {item.product_id ? (
                         <>
-                          <span style={{ fontSize: 11, color: "#64748B" }}>—</span>
-                          <span style={{ fontSize: 11, color: "#64748B" }}>—</span>
-                          <span style={{ fontSize: 11, color: "#64748B" }}>Inventory</span>
+                          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>—</span>
+                          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>—</span>
+                          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Inventory</span>
                         </>
                       ) : (
                         <>
@@ -697,9 +697,8 @@ export default function NewBillPage() {
                       <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>PKR {item.total.toLocaleString()}</span>
                       <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
                     </div>
-                    {/* Budget info */}
                     {budgetData && (
-                      <div style={{ fontSize: 10, color: "#94A3B8", marginLeft: 8, display: "flex", gap: 12, padding: "2px 0" }}>
+                      <div style={{ fontSize: 10, color: "var(--text-muted)", marginLeft: 8, display: "flex", gap: 12, padding: "2px 0" }}>
                         <span>Budget: PKR {budgetData.budget.toLocaleString()}</span>
                         <span>Spent: PKR {budgetData.spent.toLocaleString()}</span>
                         <span style={{ color: budgetData.available < item.total ? "#EF4444" : "#10B981" }}>
