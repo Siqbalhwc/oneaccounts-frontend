@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { Plus, ArrowUpDown, ArrowUp, ArrowDown, Search } from "lucide-react"
-import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
 
 // Fallback category mapping for accounts without a stored category
@@ -27,7 +26,7 @@ function getFallbackCategory(code?: string): string {
   return "—"
 }
 
-type SortField = "code" | "name" | "type" | "category"
+type SortField = "code" | "name" | "type" | "category" | "balance"
 type SortDir = "asc" | "desc"
 
 export default function AccountsPage() {
@@ -76,15 +75,16 @@ export default function AccountsPage() {
     }
 
     list = [...list].sort((a, b) => {
-      let valA = (a[sortField] || "").toString().toLowerCase()
-      let valB = (b[sortField] || "").toString().toLowerCase()
-      if (sortField === "code") {
-        const numA = parseFloat(a.code)
-        const numB = parseFloat(b.code)
-        if (!isNaN(numA) && !isNaN(numB)) {
-          valA = numA.toString().padStart(10, "0")
-          valB = numB.toString().padStart(10, "0")
-        }
+      let valA: any, valB: any
+      if (sortField === "balance") {
+        valA = a.balance || 0
+        valB = b.balance || 0
+      } else if (sortField === "code") {
+        valA = parseFloat(a.code) || 0
+        valB = parseFloat(b.code) || 0
+      } else {
+        valA = (a[sortField] || "").toString().toLowerCase()
+        valB = (b[sortField] || "").toString().toLowerCase()
       }
       if (valA < valB) return sortDir === "asc" ? -1 : 1
       if (valA > valB) return sortDir === "asc" ? 1 : -1
@@ -114,112 +114,135 @@ export default function AccountsPage() {
   const totalLiabilities = filteredAccounts.filter(a => a.type === "Liability").reduce((s, a) => s + (a.balance || 0), 0)
   const totalEquity = filteredAccounts.filter(a => a.type === "Equity").reduce((s, a) => s + (a.balance || 0), 0)
 
-  if (!role) return <div style={{ padding: 24, textAlign: "center", color: "#94A3B8" }}>Loading…</div>
+  if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
   if (!canView) {
     return (
-      <div style={{ padding: 24, textAlign: "center", color: "#E2E8F0" }}>
+      <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}>
         <h2>Access Denied</h2>
-        <p style={{ color: "#94A3B8" }}>You do not have permission to view this page.</p>
+        <p style={{ color: "var(--text-muted)" }}>You do not have permission to view this page.</p>
       </div>
     )
   }
 
   return (
-    <RoleGuard allowedRoles={["admin", "accountant"]}>
-      <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
-        <style>{`
-          .ac-card { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.2); overflow: hidden; }
-          .ac-header { display: grid; grid-template-columns: 70px 1fr 100px 120px 90px; padding: 12px 20px; background: #1E293B; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94A3B8; border-bottom: 1px solid #1E293B; }
-          .ac-row { display: grid; grid-template-columns: 70px 1fr 100px 120px 90px; padding: 10px 20px; border-bottom: 1px solid #1E293B; font-size: 13px; align-items: center; transition: background 0.15s; }
-          .ac-row:hover { background: #1E293B; }
-          .ac-row:last-child { border-bottom: none; }
-          .ac-sort-btn { background: none; border: none; cursor: pointer; font: inherit; color: inherit; display: inline-flex; align-items: center; gap: 4px; padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px; }
-          .ac-sort-btn:hover { color: #93C5FD; }
-          .ac-search { height: 38px; border: 1.5px solid #334155; border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px; width: 260px; box-sizing: border-box; outline: none; font-family: inherit; background: #1E293B; color: #F1F5F9; }
-          .ac-search:focus { border-color: #64748B; }
-          .btn { padding: 8px 16px; border-radius: 8px; border: 1.5px solid #334155; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-          .btn-outline { background: transparent; color: white; border-color: #334155; }
-          .btn-outline:hover { background: #1E293B; }
-          .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
-          .summary-item { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 16px; }
-          .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94A3B8; margin-bottom: 4px; }
-          .summary-value { font-size: 22px; font-weight: 800; color: #F1F5F9; }
-          @media (max-width: 640px) {
-            .ac-header, .ac-row { grid-template-columns: 60px 1fr 80px 80px; }
-            .ac-header span:nth-child(4), .ac-row span:nth-child(4) { display: none; }
-            .ac-search { width: 100%; }
-          }
-        `}</style>
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+      <style>{`
+        .ac-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
+        .ac-header {
+          display: grid;
+          grid-template-columns: 80px 1fr 100px 130px 110px;
+          padding: 14px 24px;
+          font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
+          border-bottom: 1px solid var(--border);
+          background: var(--card);
+        }
+        .ac-row {
+          display: grid;
+          grid-template-columns: 80px 1fr 100px 130px 110px;
+          padding: 12px 24px;
+          border-bottom: 1px solid var(--border);
+          font-size: 13px; align-items: center;
+          transition: background 0.15s;
+        }
+        .ac-row:hover { background: var(--card-hover); }
+        .ac-row:last-child { border-bottom: none; }
+        .ac-sort-btn {
+          background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
+          display: inline-flex; align-items: center; gap: 4px; padding: 0;
+          font-weight: 700; text-transform: uppercase; font-size: 10px;
+        }
+        .ac-sort-btn:hover { color: var(--primary); }
+        .ac-search {
+          height: 38px; border: 1.5px solid var(--border); border-radius: 8px;
+          padding: 0 12px 0 36px; font-size: 13px; width: 260px; box-sizing: border-box;
+          outline: none; font-family: inherit; background: var(--card); color: var(--text);
+        }
+        .ac-search:focus { border-color: var(--primary); }
+        .btn {
+          padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border);
+          font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+        }
+        .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
+        .btn-outline:hover { background: var(--card-hover); }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+        .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+        .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
 
-        {/* Header with Add Account button */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
-          <div>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>📋 Chart of Accounts</h1>
-            <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>Manage your general ledger accounts</p>
-          </div>
-          {canEdit && (
-            <button className="btn btn-outline" onClick={() => router.push("/dashboard/accounts/new")}>
-              <Plus size={16} /> Add Account
-            </button>
-          )}
+        @media (max-width: 640px) {
+          .ac-header, .ac-row { grid-template-columns: 60px 1fr 80px 90px 80px; }
+          .ac-search { width: 100%; }
+        }
+      `}</style>
+
+      {/* Header with Add Account button */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📋 Chart of Accounts</h1>
+          <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Manage your general ledger accounts</p>
         </div>
-
-        {/* Summary Cards */}
-        <div className="summary-grid">
-          <div className="summary-item">
-            <div className="summary-label">Total Accounts</div>
-            <div className="summary-value">{totalAccounts}</div>
-          </div>
-          <div className="summary-item">
-            <div className="summary-label">Total Assets</div>
-            <div className="summary-value" style={{ color: "#10B981" }}>PKR {totalAssets.toLocaleString()}</div>
-          </div>
-          <div className="summary-item">
-            <div className="summary-label">Total Liabilities</div>
-            <div className="summary-value" style={{ color: "#EF4444" }}>PKR {totalLiabilities.toLocaleString()}</div>
-          </div>
-          <div className="summary-item">
-            <div className="summary-label">Total Equity</div>
-            <div className="summary-value" style={{ color: "#F59E0B" }}>PKR {totalEquity.toLocaleString()}</div>
-          </div>
-        </div>
-
-        {/* Search */}
-        <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
-          <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#94A3B8" }} />
-          <input className="ac-search" placeholder="Filter by code, name, type..." value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-
-        {/* Table */}
-        {loading ? (
-          <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading accounts…</div>
-        ) : filteredAccounts.length === 0 ? (
-          <div className="ac-card" style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>
-            No accounts found. {canEdit && "Add a new account to get started."}
-          </div>
-        ) : (
-          <div className="ac-card">
-            <div className="ac-header">
-              <button className="ac-sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
-              <button className="ac-sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
-              <button className="ac-sort-btn" onClick={() => handleSort("type")}>Type {getSortIcon("type")}</button>
-              <button className="ac-sort-btn" onClick={() => handleSort("category")}>Category {getSortIcon("category")}</button>
-              <span style={{ textAlign: "right" }}>Balance</span>
-            </div>
-            {filteredAccounts.map(a => (
-              <div key={a.id} className="ac-row">
-                <span style={{ fontWeight: 600, color: "#93C5FD" }}>{a.code}</span>
-                <span style={{ color: "#E2E8F0" }}>{a.name}</span>
-                <span style={{ fontSize: 11, color: "#94A3B8" }}>{a.type}</span>
-                <span style={{ fontSize: 11, color: "#94A3B8" }}>{a.category || "—"}</span>
-                <span style={{ textAlign: "right", fontWeight: 600, color: a.balance >= 0 ? "#10B981" : "#EF4444" }}>
-                  PKR {(a.balance || 0).toLocaleString()}
-                </span>
-              </div>
-            ))}
-          </div>
+        {canEdit && (
+          <button className="btn btn-outline" onClick={() => router.push("/dashboard/accounts/new")}>
+            <Plus size={16} /> Add Account
+          </button>
         )}
       </div>
-    </RoleGuard>
+
+      {/* Summary Cards */}
+      <div className="summary-grid">
+        <div className="summary-item">
+          <div className="summary-label">Total Accounts</div>
+          <div className="summary-value">{totalAccounts}</div>
+        </div>
+        <div className="summary-item">
+          <div className="summary-label">Total Assets</div>
+          <div className="summary-value" style={{ color: "#10B981" }}>PKR {totalAssets.toLocaleString()}</div>
+        </div>
+        <div className="summary-item">
+          <div className="summary-label">Total Liabilities</div>
+          <div className="summary-value" style={{ color: "#EF4444" }}>PKR {totalLiabilities.toLocaleString()}</div>
+        </div>
+        <div className="summary-item">
+          <div className="summary-label">Total Equity</div>
+          <div className="summary-value" style={{ color: "#F59E0B" }}>PKR {totalEquity.toLocaleString()}</div>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
+        <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+        <input className="ac-search" placeholder="Filter by code, name, type..." value={search} onChange={e => setSearch(e.target.value)} />
+      </div>
+
+      {/* Table */}
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading accounts…</div>
+      ) : filteredAccounts.length === 0 ? (
+        <div className="ac-card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
+          No accounts found. {canEdit && "Add a new account to get started."}
+        </div>
+      ) : (
+        <div className="ac-card">
+          <div className="ac-header">
+            <button className="ac-sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
+            <button className="ac-sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
+            <button className="ac-sort-btn" onClick={() => handleSort("type")}>Type {getSortIcon("type")}</button>
+            <button className="ac-sort-btn" onClick={() => handleSort("category")}>Category {getSortIcon("category")}</button>
+            <button className="ac-sort-btn" onClick={() => handleSort("balance")} style={{ justifyContent: "flex-end" }}>Balance {getSortIcon("balance")}</button>
+          </div>
+          {filteredAccounts.map(a => (
+            <div key={a.id} className="ac-row">
+              <span style={{ fontWeight: 600, color: "var(--primary)" }}>{a.code}</span>
+              <span style={{ color: "var(--text)" }}>{a.name}</span>
+              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{a.type}</span>
+              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{a.category || "—"}</span>
+              <span style={{ textAlign: "right", fontWeight: 600, color: a.balance >= 0 ? "#10B981" : "#EF4444" }}>
+                PKR {(a.balance || 0).toLocaleString()}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
