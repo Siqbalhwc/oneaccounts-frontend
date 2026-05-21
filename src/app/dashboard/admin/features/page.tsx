@@ -47,7 +47,10 @@ export default function FeatureManagerPage() {
   const [message, setMessage] = useState("")
 
   useEffect(() => {
-    if (!canView) { setLoading(false); return }
+    if (!canView) {
+      setLoading(false)
+      return
+    }
 
     const loadFeatures = async () => {
       try {
@@ -68,14 +71,11 @@ export default function FeatureManagerPage() {
 
         if (featureErr) throw featureErr
 
-        console.log("Feature rows from DB:", featureRows)   // 🔍 DEBUG
-
         const map: Record<string, string> = {}
         if (featureRows) {
           featureRows.forEach((f: any) => { map[f.code] = f.id })
         }
         setFeatureIdMap(map)
-        console.log("Feature ID map:", map)   // 🔍 DEBUG
 
         // Fetch which features are enabled for this company
         const { data: overrides, error: overridesErr } = await supabase
@@ -84,8 +84,6 @@ export default function FeatureManagerPage() {
           .eq("company_id", cid)
 
         if (overridesErr) throw overridesErr
-
-        console.log("Company overrides:", overrides)   // 🔍 DEBUG
 
         const states: Record<string, boolean> = {}
         FEATURE_CODES.forEach(code => { states[code] = false })
@@ -98,25 +96,21 @@ export default function FeatureManagerPage() {
           })
         }
         setFeatureStates(states)
-        console.log("Initial states:", states)   // 🔍 DEBUG
       } catch (err: any) {
         setMessage("Error loading features: " + (err.message || ""))
-        console.error(err)   // 🔍 DEBUG
       } finally {
         setLoading(false)
       }
     }
 
     loadFeatures()
-  }, [])
+  }, [canView])   // ✅ added canView
 
   const toggleFeature = async (code: string, enabled: boolean) => {
-    console.log("TOGGLE CLICKED", code, enabled)   // 🔍 DEBUG
     if (!canEdit || !companyId) return
     const featureId = featureIdMap[code]
-    console.log("Feature ID for toggle:", featureId)   // 🔍 DEBUG
     if (!featureId) {
-      setMessage("Feature not found in database. Check the features table.")
+      setMessage("Feature not found in database.")
       return
     }
 
@@ -126,11 +120,10 @@ export default function FeatureManagerPage() {
 
     const { error } = await supabase
       .from("company_features")
-      .upsert({
-        company_id: companyId,
-        feature_id: featureId,
-        enabled,
-      })
+      .upsert(
+        { company_id: companyId, feature_id: featureId, enabled },
+        { onConflict: "company_id,feature_id" }    // ✅ added conflict target
+      )
 
     if (error) {
       setMessage("Error: " + error.message)
@@ -141,8 +134,8 @@ export default function FeatureManagerPage() {
     setTimeout(() => setMessage(""), 3000)
   }
 
+  // Bulk enable / disable all
   const setAllFeatures = async (enable: boolean) => {
-    console.log("SET ALL", enable)   // 🔍 DEBUG
     if (!canEdit || !companyId) return
     setLoading(true)
     for (const code of FEATURE_CODES) {
@@ -150,7 +143,10 @@ export default function FeatureManagerPage() {
       if (!featureId) continue
       await supabase
         .from("company_features")
-        .upsert({ company_id: companyId, feature_id: featureId, enabled: enable })
+        .upsert(
+          { company_id: companyId, feature_id: featureId, enabled: enable },
+          { onConflict: "company_id,feature_id" }  // ✅ added conflict target
+        )
     }
     const newStates: Record<string, boolean> = {}
     FEATURE_CODES.forEach(code => { newStates[code] = enable })
