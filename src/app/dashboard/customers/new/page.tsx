@@ -21,6 +21,22 @@ const COUNTRY_CODES = [
   { code: "+27", label: "🇿🇦 +27" },
 ]
 
+// ── Digits required per country code ──
+const PHONE_LENGTHS: Record<string, number> = {
+  "+92": 10,   // Pakistan
+  "+1":  10,   // USA
+  "+44": 10,   // UK
+  "+971": 9,   // UAE
+  "+966": 9,   // Saudi
+  "+91": 10,   // India
+  "+86": 11,   // China
+  "+81": 10,   // Japan
+  "+49": 10,   // Germany
+  "+33": 9,    // France
+  "+61": 9,    // Australia
+  "+27": 9,    // South Africa
+}
+
 const PAYMENT_TERMS = [
   "Due on Receipt",
   "Net 7",
@@ -41,7 +57,7 @@ export default function NewCustomerPage() {
 
   const [companyId, setCompanyId] = useState("")
   const [customerName, setCustomerName] = useState("")
-  const [customerCode, setCustomerCode] = useState("")      // system generated, display only
+  const [customerCode, setCustomerCode] = useState("")
   const [countryCode, setCountryCode] = useState("+92")
   const [phoneNumber, setPhoneNumber] = useState("")
   const [email, setEmail] = useState("")
@@ -89,7 +105,6 @@ export default function NewCustomerPage() {
         if (customer) {
           setCustomerCode(customer.code)
           setCustomerName(customer.name)
-          // try to split phone into country code + number
           const fullPhone = customer.phone || ""
           const match = fullPhone.match(/^(\+\d{1,3})(.*)$/)
           if (match) {
@@ -130,6 +145,17 @@ export default function NewCustomerPage() {
     if (!companyId) { setError("Company not loaded"); return }
     if (!customerName.trim()) { setError("Customer name is required"); return }
 
+    // ── Validate phone number length for the selected country ──
+    if (phoneNumber.trim()) {
+      const digitsOnly = phoneNumber.trim().replace(/\D/g, "")
+      const expectedLength = PHONE_LENGTHS[countryCode]
+      if (expectedLength && digitsOnly.length !== expectedLength) {
+        setError(`Phone number must be ${expectedLength} digits for ${countryCode}. Current: ${digitsOnly.length} digits.`)
+        setLoading(false)
+        return
+      }
+    }
+
     setLoading(true)
     setError("")
 
@@ -150,7 +176,6 @@ export default function NewCustomerPage() {
           email: email.trim() || null,
           address: address.trim() || null,
           opening_balance: isNaN(balance) ? 0 : balance,
-          // Note: we do not change the balance here; balance is managed by transactions
           payment_terms: paymentTerms,
           updated_by: userEmail,
         })
