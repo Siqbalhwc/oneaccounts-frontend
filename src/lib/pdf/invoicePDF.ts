@@ -1,282 +1,423 @@
+/**
+ * invoicePDF.ts
+ * Generates a sales invoice PDF that matches the Shahid Iqbal & Co sample design.
+ *
+ * Dependencies (already in most Next.js setups):
+ *   npm install jspdf jspdf-autotable
+ *
+ * Place this file at:  src/lib/pdf/invoicePDF.ts
+ */
+
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
+// ─── Brand colours (from the sample invoice) ────────────────────────────────
+const NAVY   = [7,   8,  91] as [number, number, number]  // #07085B — header stripe
+const BLUE   = [29,  78, 216] as [number, number, number] // #1D4ED8 — accent / INVOICE title
+const RED    = [220,  38,  38] as [number, number, number]// #DC2626 — UNPAID badge
+const AMBER  = [245, 158, 11] as [number, number, number] // amount-due highlight
+const DARK   = [17,  24,  39] as [number, number, number] // near-black body text
+const MUTED  = [107, 114, 128] as [number, number, number]// grey labels
+const BORDER = [229, 231, 235] as [number, number, number]// light table border
+const WHITE  = [255, 255, 255] as [number, number, number]
+const TABLE_HEADER_BG = [30, 58, 138] as [number, number, number] // #1E3A8A
+const ROW_ALT = [248, 249, 252] as [number, number, number]        // very light blue-grey
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 export interface InvoiceItem {
-  description: string
-  qty: number
-  unit_price: number
-  total: number
-  image_path?: string | null
-  product_id?: string | number | null
-  product_name?: string
+  description:  string
+  qty:          number
+  unit_price:   number
+  total:        number
+  image_path?:  string | null
+  product_id?:  string | null
+  product_name?:string
 }
 
 export interface InvoicePDFData {
-  companyName: string
-  companyAddress?: string
-  companyPhone?: string
-  companyEmail?: string
-  companyTagline?: string
-  logoUrl?: string | null
-  businessType?: string
-  invoiceNo: string
-  date: string
-  dueDate: string
+  // Company (pulled from company_settings)
+  companyName:    string
+  companyAddress: string
+  companyPhone:   string
+  companyEmail:   string
+  companyTagline: string
+  logoUrl?:       string | null
+  businessType?:  string
+
+  // Invoice header
+  invoiceNo:  string
+  date:       string
+  dueDate:    string
+
+  // Customer
+  customerName:    string
+  customerAddress: string
+  customerPhone:   string
+  customerEmail?:  string
+
+  // Status & amounts
+  status:     string   // "Paid" | "Unpaid" | "Overdue" | "Partial"
+  items:      InvoiceItem[]
+  subtotal:   number
+  total:      number
+  paid:       number
+  balanceDue: number
+
+  // Optional
   reference?: string
-  notes?: string
-  status?: string
-  customerName: string
-  customerAddress?: string
-  customerPhone?: string
-  customerEmail?: string
-  items: InvoiceItem[]
-  subtotal: number
-  tax?: number
-  total: number
-  paid?: number
-  balanceDue?: number
+  notes?:     string
 }
 
-// ── Palette ──────────────────────────────────────────────────────────────────
-const C = {
-  headerBg:   [15,  23,  42] as [number,number,number],
-  headerText: [255,255,255]  as [number,number,number],
-  rowAlt:     [248,250,252]  as [number,number,number],
-  totalBg:    [15,  23,  42] as [number,number,number],
-  totalText:  [255,255,255]  as [number,number,number],
-  line:       [203,213,225]  as [number,number,number],
-  black:      [15,  23,  42] as [number,number,number],
-  muted:      [100,116,139]  as [number,number,number],
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Load a remote or data-URL image and return a base-64 data URL */
+async function loadImage(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const blob = await res.blob()
+    return await new Promise<string>(resolve => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = () => resolve("")
+      reader.readAsDataURL(blob)
+    })
+  } catch {
+    return null
+  }
 }
 
-function txt(
+/** Format a number as Pakistani rupees */
+const pkr = (n: number) =>
+  "PKR " + n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+/** Set fill + text colour, draw a rounded rect, then reset colours */
+function filledRect(
   doc: jsPDF,
-  text: string,
-  x: number,
-  y: number,
-  opts?: { size?: number; bold?: boolean; color?: [number,number,number]; align?: "left"|"right"|"center" }
+  x: number, y: number, w: number, h: number,
+  fillRgb: [number,number,number],
+  radius = 0,
 ) {
-  doc.setFontSize(opts?.size ?? 9)
-  doc.setFont("helvetica", opts?.bold ? "bold" : "normal")
-  const c = opts?.color ?? C.black
-  doc.setTextColor(c[0], c[1], c[2])
-  doc.text(text, x, y, { align: opts?.align ?? "left" })
+  doc.setFillColor(...fillRgb)
+  if (radius > 0) {
+    doc.roundedRect(x, y, w, h, radius, radius, "F")
+  } else {
+    doc.rect(x, y, w, h, "F")
+  }
 }
 
-async function toBase64(url: string): Promise<string | null> {
-  return new Promise(resolve => {
-    try {
-      const img = new Image()
-      img.crossOrigin = "anonymous"
-      img.onload = () => {
-        const canvas = document.createElement("canvas")
-        canvas.width = img.width; canvas.height = img.height
-        const ctx = canvas.getContext("2d")
-        if (!ctx) { resolve(null); return }
-        ctx.drawImage(img, 0, 0)
-        resolve(canvas.toDataURL("image/jpeg"))
-      }
-      img.onerror = () => resolve(null)
-      img.src = url
-    } catch { resolve(null) }
-  })
-}
+// ─── Main export ─────────────────────────────────────────────────────────────
 
 export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
-  const doc   = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
-  const pw    = doc.internal.pageSize.getWidth()
-  const ph    = doc.internal.pageSize.getHeight()
-  const ml    = 14
-  const mr    = pw - 14
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
 
-  // Pre-load images
-  const imgCache: Record<string, string | null> = {}
-  for (const item of data.items) {
-    if (item.product_id && item.image_path && !imgCache[item.image_path]) {
-      imgCache[item.image_path] = await toBase64(item.image_path)
-    }
-  }
-  let logoB64: string | null = null
-  if (data.logoUrl) logoB64 = await toBase64(data.logoUrl)
+  const PW  = 210  // page width  (A4)
+  const PH  = 297  // page height (A4)
+  const ML  = 14   // margin left
+  const MR  = 14   // margin right
+  const CW  = PW - ML - MR  // usable width
 
-  // ── 1. HEADER BAR ─────────────────────────────────────────────────────────
-  doc.setFillColor(C.headerBg[0], C.headerBg[1], C.headerBg[2])
-  doc.rect(0, 0, pw, 38, "F")
+  // ── 1. Top navy header bar ──────────────────────────────────────────────
+  filledRect(doc, 0, 0, PW, 38, NAVY)
 
-  let logoEndX = ml
-  if (logoB64) {
-    try { doc.addImage(logoB64, "JPEG", ml, 6, 26, 26); logoEndX = ml + 30 } catch {}
-  }
-  txt(doc, data.companyName.toUpperCase(), logoEndX, 15, { size: 13, bold: true, color: C.headerText })
-  if (data.companyTagline)
-    txt(doc, data.companyTagline, logoEndX, 21, { size: 8, color: [148,163,184] })
-  const contact = [data.companyAddress, data.companyPhone, data.companyEmail].filter(Boolean).join("  ·  ")
-  if (contact) txt(doc, contact, logoEndX, 27, { size: 7.5, color: [148,163,184] })
-
-  txt(doc, "SALES INVOICE", mr, 16, { size: 16, bold: true, color: C.headerText, align: "right" })
-  txt(doc, `# ${data.invoiceNo}`, mr, 24, { size: 9, color: [148,163,184], align: "right" })
-
-  let y = 46
-
-  // ── 2. BILL TO + INVOICE META ─────────────────────────────────────────────
-  const billStartY = y
-  txt(doc, "BILL TO", ml, y, { size: 7, bold: true, color: C.muted }); y += 4
-  txt(doc, data.customerName, ml, y, { size: 10, bold: true }); y += 5
-  if (data.customerAddress) { txt(doc, data.customerAddress, ml, y, { size: 8, color: C.muted }); y += 4 }
-  if (data.customerPhone)   { txt(doc, `Tel: ${data.customerPhone}`, ml, y, { size: 8, color: C.muted }); y += 4 }
-  if (data.customerEmail)   { txt(doc, data.customerEmail, ml, y, { size: 8, color: C.muted }); y += 4 }
-
-  // Right side meta
-  const detX = pw / 2 + 8
-  let dy = billStartY
-  const metaRows: [string, string][] = [
-    ["Invoice No",  data.invoiceNo],
-    ["Date",        data.date],
-    ["Due Date",    data.dueDate],
-  ]
-  if (data.reference) metaRows.push(["Reference", data.reference])
-  if (data.status)    metaRows.push(["Status",    data.status])
-
-  for (const [label, value] of metaRows) {
-    txt(doc, label, detX, dy, { size: 8, color: C.muted })
-    txt(doc, ":", detX + 22, dy, { size: 8, color: C.muted })
-    txt(doc, value, detX + 26, dy, { size: 8, bold: true })
-    dy += 5
+  let logoData: string | null = null
+  if (data.logoUrl) {
+    logoData = await loadImage(data.logoUrl)
   }
 
-  y = Math.max(y, dy) + 8
+  // Logo (32×32 circle clipped — jsPDF doesn't support clip, so we just place
+  // the image in a square; the sample uses a dark-circle logo)
+  const LOGO_SIZE = 20
+  const LOGO_X    = ML
+  const LOGO_Y    = 9
+  if (logoData) {
+    // White circle behind logo
+    doc.setFillColor(255, 255, 255)
+    doc.circle(LOGO_X + LOGO_SIZE / 2, LOGO_Y + LOGO_SIZE / 2, LOGO_SIZE / 2 + 1, "F")
+    doc.addImage(logoData, "PNG", LOGO_X, LOGO_Y, LOGO_SIZE, LOGO_SIZE)
+  }
 
-  // ── 3. DIVIDER ────────────────────────────────────────────────────────────
-  doc.setDrawColor(C.line[0], C.line[1], C.line[2])
+  // Company name & tagline in header
+  const textX = logoData ? LOGO_X + LOGO_SIZE + 5 : ML
+  doc.setTextColor(...WHITE)
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(14)
+  doc.text(data.companyName || "Your Company", textX, 18)
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(9)
+  doc.setTextColor(180, 190, 220)
+  doc.text(data.companyTagline || "", textX, 24)
+
+  // "INVOICE" title — right side of header
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(28)
+  doc.setTextColor(...WHITE)
+  doc.text("INVOICE", PW - MR, 20, { align: "right" })
+
+  // Invoice No & Date below the big title
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(8.5)
+  doc.setTextColor(200, 210, 235)
+  doc.text(`Invoice No:`, PW - MR - 38, 28, { align: "left" })
+  doc.text(`Date:`,       PW - MR - 38, 33, { align: "left" })
+  doc.setFont("helvetica", "bold")
+  doc.setTextColor(...WHITE)
+  doc.text(data.invoiceNo,  PW - MR, 28, { align: "right" })
+  doc.text(data.date,       PW - MR, 33, { align: "right" })
+
+  // ── 2. Bill-To / Amount-Due row ─────────────────────────────────────────
+  let Y = 48
+
+  // Left: BILL TO
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(7.5)
+  doc.setTextColor(...MUTED)
+  doc.text("BILL TO", ML, Y)
+
+  // Right: AMOUNT DUE label
+  doc.text("AMOUNT DUE", PW - MR, Y, { align: "right" })
+
+  Y += 5
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(13)
+  doc.setTextColor(...DARK)
+  doc.text(data.customerName, ML, Y)
+
+  // Amount Due value — large amber
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(18)
+  doc.setTextColor(...AMBER)
+  doc.text(pkr(data.balanceDue), PW - MR, Y, { align: "right" })
+
+  Y += 5
+  // Customer phone
+  if (data.customerPhone) {
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(9)
+    doc.setTextColor(...MUTED)
+    doc.text(`▪ ${data.customerPhone}`, ML, Y)
+    Y += 4.5
+  }
+
+  // Customer address
+  if (data.customerAddress) {
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(9)
+    doc.setTextColor(...MUTED)
+    doc.text(`▪ ${data.customerAddress}`, ML, Y)
+    Y += 4.5
+  }
+
+  // Customer email
+  if (data.customerEmail) {
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(9)
+    doc.setTextColor(...MUTED)
+    doc.text(`▪ ${data.customerEmail}`, ML, Y)
+    Y += 4.5
+  }
+
+  // STATUS badge (right-aligned under Amount Due)
+  const statusText  = (data.status || "Unpaid").toUpperCase()
+  const isUnpaid    = ["UNPAID","OVERDUE"].includes(statusText)
+  const isPaid      = statusText === "PAID"
+  const badgeColor  = isPaid ? [5, 150, 105] as [number,number,number]
+                    : isUnpaid ? RED
+                    : AMBER
+
+  // "STATUS" label
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(7.5)
+  doc.setTextColor(...MUTED)
+  doc.text("STATUS", PW - MR, 58, { align: "right" })
+
+  // Pill badge
+  const badgeW = 22
+  const badgeH = 6
+  const badgeX = PW - MR - badgeW
+  const badgeY = 60
+  filledRect(doc, badgeX, badgeY, badgeW, badgeH, badgeColor, 2)
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(7.5)
+  doc.setTextColor(...WHITE)
+  doc.text(statusText, badgeX + badgeW / 2, badgeY + 4, { align: "center" })
+
+  // Thin divider line
+  Y = Math.max(Y, badgeY + badgeH) + 4
+  doc.setDrawColor(...BORDER)
   doc.setLineWidth(0.3)
-  doc.line(ml, y, mr, y)
-  y += 6
+  doc.line(ML, Y, PW - MR, Y)
+  Y += 6
 
-  // ── 4. ITEMS TABLE ────────────────────────────────────────────────────────
-  const COL_IMG  = 8
-  const COL_PROD = 36
-  const COL_QTY  = 14
-  const COL_RATE = 28
-  const COL_AMT  = 28
-  const totalW   = mr - ml
-  const COL_DESC = totalW - COL_IMG - COL_PROD - COL_QTY - COL_RATE - COL_AMT
+  // ── 3. Items table ──────────────────────────────────────────────────────
+  const tableColumns = [
+    { header: "",          dataKey: "img"         },
+    { header: "#",         dataKey: "num"         },
+    { header: "Description",dataKey: "description"},
+    { header: "Qty",       dataKey: "qty"         },
+    { header: "Unit Price",dataKey: "unit_price"  },
+    { header: "Amount",    dataKey: "amount"      },
+  ]
 
-  const headRow  = ["", "Product", "Description", "Qty", "Rate (PKR)", "Amount (PKR)"]
-  const bodyRows = data.items.map(item => {
-    const hasProduct = Boolean(item.product_id)
-    return [
-      "",
-      hasProduct ? (item.product_name || "") : "",
-      item.description || "",
-      String(item.qty),
-      Number(item.unit_price).toLocaleString("en-PK"),
-      Number(item.total).toLocaleString("en-PK"),
-    ]
-  })
+  // Pre-load product images (parallel)
+  const imageCache: Record<string, string> = {}
+  await Promise.all(
+    data.items.map(async (item, i) => {
+      if (item.image_path) {
+        const img = await loadImage(item.image_path)
+        if (img) imageCache[i] = img
+      }
+    })
+  )
+
+  const tableRows = data.items.map((item, i) => ({
+    img:         i,            // index into imageCache
+    num:         i + 1,
+    description: item.product_id
+      ? `${item.product_id}${item.product_name ? " – " + item.product_name : ""}\n${item.description || ""}`
+      : item.description,
+    qty:         item.qty,
+    unit_price:  pkr(item.unit_price),
+    amount:      pkr(item.total),
+  }))
+
+  const ROW_H = 14  // row height in mm
 
   autoTable(doc, {
-    startY: y,
-    head: [headRow],
-    body: bodyRows,
-    margin: { left: ml, right: ml },
-    tableWidth: totalW,
+    startY:        Y,
+    margin:        { left: ML, right: MR },
+    columns:       tableColumns,
+    body:          tableRows,
+    rowPageBreak:  "avoid",
     styles: {
-      fontSize: 8.5,
-      cellPadding: { top: 4, bottom: 4, left: 3, right: 3 },
-      valign: "middle",
-      textColor: C.black as [number,number,number],
-      font: "helvetica",
-      lineColor: C.line as [number,number,number],
-      lineWidth: 0.1,
+      fontSize:    9,
+      cellPadding: { top: 3, bottom: 3, left: 3, right: 3 },
+      textColor:   DARK,
+      lineColor:   BORDER,
+      lineWidth:   0.2,
+      minCellHeight: ROW_H,
     },
     headStyles: {
-      fillColor: C.headerBg as [number,number,number],
-      textColor: C.headerText as [number,number,number],
-      fontStyle: "bold",
-      fontSize: 7.5,
-      halign: "left",
-      cellPadding: { top: 5, bottom: 5, left: 3, right: 3 },
+      fillColor:   TABLE_HEADER_BG,
+      textColor:   WHITE,
+      fontStyle:   "bold",
+      fontSize:    9,
+      halign:      "left",
     },
-    alternateRowStyles: { fillColor: C.rowAlt as [number,number,number] },
+    alternateRowStyles: {
+      fillColor: ROW_ALT,
+    },
     columnStyles: {
-      0: { cellWidth: COL_IMG,  halign: "center", overflow: "hidden" },
-      1: { cellWidth: COL_PROD, halign: "left",   fontStyle: "bold" },
-      2: { cellWidth: COL_DESC, halign: "left",   overflow: "linebreak" },
-      3: { cellWidth: COL_QTY,  halign: "center" },
-      4: { cellWidth: COL_RATE, halign: "right" },
-      5: { cellWidth: COL_AMT,  halign: "right",  fontStyle: "bold" },
+      img:          { cellWidth: 14, halign: "center" },
+      num:          { cellWidth: 8,  halign: "center" },
+      description:  { cellWidth: "auto" },
+      qty:          { cellWidth: 16, halign: "center" },
+      unit_price:   { cellWidth: 32, halign: "right" },
+      amount:       { cellWidth: 34, halign: "right", fontStyle: "bold" },
     },
-    didDrawCell: (hookData: any) => {
-      if (hookData.section === "body" && hookData.column.index === 0) {
-        const item = data.items[hookData.row.index]
-        if (item?.product_id && item.image_path) {
-          const b64 = imgCache[item.image_path]
-          if (b64) {
-            try {
-              const cell = hookData.cell
-              const size = Math.min(cell.height - 2, 8)
-              doc.addImage(b64, "JPEG", cell.x + (cell.width - size) / 2, cell.y + (cell.height - size) / 2, size, size)
-            } catch {}
-          }
+    didDrawCell(hookData) {
+      // Draw product image in the first column
+      if (hookData.section === "body" && hookData.column.dataKey === "img") {
+        const rowIdx = hookData.row.index
+        const imgData = imageCache[rowIdx]
+        if (imgData) {
+          const { x, y, width, height } = hookData.cell
+          const pad  = 2
+          const size = Math.min(width, height) - pad * 2
+          doc.addImage(
+            imgData, "JPEG",
+            x + (width  - size) / 2,
+            y + (height - size) / 2,
+            size, size,
+          )
         }
       }
     },
   })
 
-  // @ts-ignore
-  y = (doc as any).lastAutoTable.finalY + 8
+  // ── 4. Subtotal / Tax / Total block ────────────────────────────────────
+  const afterTable = (doc as any).lastAutoTable.finalY as number
+  Y = afterTable + 6
 
-  // ── 5. TOTALS ─────────────────────────────────────────────────────────────
-  const totW = 70
-  const totX = mr - totW
+  const sumX  = PW - MR - 70   // left edge of summary block
+  const valX  = PW - MR        // right edge
 
-  const addTotal = (label: string, value: number, highlight = false) => {
-    if (highlight) {
-      doc.setFillColor(C.totalBg[0], C.totalBg[1], C.totalBg[2])
-      doc.rect(totX - 2, y - 4, totW + 2, 10, "F")
-      txt(doc, label, totX, y + 2, { size: 10, bold: true, color: C.totalText })
-      txt(doc, `PKR ${value.toLocaleString("en-PK")}`, mr, y + 2, { size: 10, bold: true, color: C.totalText, align: "right" })
-      y += 14
-    } else {
-      txt(doc, label, totX, y, { size: 9, color: C.muted })
-      txt(doc, `PKR ${value.toLocaleString("en-PK")}`, mr, y, { size: 9, bold: false, align: "right" })
-      y += 6
-    }
+  const summaryRows: Array<{ label: string; value: string; bold?: boolean; color?: [number,number,number] }> = [
+    { label: "Subtotal",  value: pkr(data.subtotal) },
+    { label: "Tax (0%)",  value: pkr(0), bold: true },
+  ]
+
+  for (const row of summaryRows) {
+    doc.setFont("helvetica", row.bold ? "bold" : "normal")
+    doc.setFontSize(9)
+    doc.setTextColor(...MUTED)
+    doc.text(row.label, sumX, Y)
+    doc.setTextColor(...DARK)
+    doc.text(row.value, valX, Y, { align: "right" })
+    Y += 5.5
   }
 
-  addTotal("Subtotal", data.subtotal)
-  if (data.tax && data.tax > 0) addTotal("Tax", data.tax)
+  // Total row — filled navy background
+  filledRect(doc, sumX - 2, Y - 4, valX - sumX + 4, 9, NAVY, 2)
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(10)
+  doc.setTextColor(...WHITE)
+  doc.text("Total", sumX + 2, Y + 1.5)
+  doc.text(pkr(data.total), valX - 2, Y + 1.5, { align: "right" })
+  Y += 10
 
-  doc.setDrawColor(C.line[0], C.line[1], C.line[2])
-  doc.setLineWidth(0.2)
-  doc.line(totX - 2, y - 2, mr, y - 2)
-  y += 2
-
-  addTotal("TOTAL DUE", data.total, true)
-
-  if (data.paid !== undefined && data.paid > 0) {
-    addTotal("Amount Paid", data.paid)
-    addTotal("Balance Due", data.balanceDue ?? 0)
+  // If there's a paid amount show Balance Due row too
+  if (data.paid > 0) {
+    Y += 2
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(9)
+    doc.setTextColor(...MUTED)
+    doc.text("Amount Paid", sumX, Y)
+    doc.setTextColor(16, 185, 129)
+    doc.text(`– ${pkr(data.paid)}`, valX, Y, { align: "right" })
+    Y += 5.5
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(...RED)
+    doc.text("Balance Due", sumX, Y)
+    doc.text(pkr(data.balanceDue), valX, Y, { align: "right" })
+    Y += 5
   }
 
-  // ── 6. NOTES ──────────────────────────────────────────────────────────────
-  if (data.notes) {
-    y += 4
-    txt(doc, "NOTES", ml, y, { size: 7, bold: true, color: C.muted }); y += 4
-    const lines = doc.splitTextToSize(data.notes, pw / 2)
-    txt(doc, lines, ml, y, { size: 8.5 }); y += lines.length * 5 + 4
-  }
+  // ── 5. Notes & Terms ───────────────────────────────────────────────────
+  Y += 6
+  const defaultNotes =
+    "Payment is due within 30 days of invoice date.\nPlease reference the invoice number with your payment."
+  const notesText = data.notes || defaultNotes
 
-  // ── 7. FOOTER BAR ─────────────────────────────────────────────────────────
-  const footerY = ph - 12
-  doc.setFillColor(C.headerBg[0], C.headerBg[1], C.headerBg[2])
-  doc.rect(0, footerY - 4, pw, 16, "F")
-  txt(doc, "Thank you for your business!", ml, footerY + 2, { size: 8, color: [148,163,184] })
-  txt(doc, "Generated by OneAccounts", mr, footerY + 2, { size: 8, color: [148,163,184], align: "right" })
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(7.5)
+  doc.setTextColor(...MUTED)
+  doc.text("NOTES & TERMS", ML, Y)
+  Y += 4
 
-  // Set viewer to open at 100% zoom
-  doc.setDisplayMode(100, "continuous");
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(8.5)
+  doc.setTextColor(...DARK)
+  const noteLines = doc.splitTextToSize(notesText, CW)
+  doc.text(noteLines, ML, Y)
+  Y += noteLines.length * 4.5 + 4
 
-  return doc;
+  // ── 6. Footer ──────────────────────────────────────────────────────────
+  // Thin top border
+  doc.setDrawColor(...BORDER)
+  doc.setLineWidth(0.3)
+  doc.line(ML, PH - 16, PW - MR, PH - 16)
+
+  const footerText = [
+    "Thank you for your business!",
+    data.companyName,
+    data.companyTagline,
+  ].filter(Boolean).join(" · ")
+
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(8)
+  doc.setTextColor(...MUTED)
+  doc.text(footerText, PW / 2, PH - 10, { align: "center" })
+
   return doc
 }
