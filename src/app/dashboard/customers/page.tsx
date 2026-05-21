@@ -7,7 +7,7 @@ import { Plus, Eye, Edit, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown } from
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
 
-type SortField = "code" | "name" | "phone" | "balance" | "created_at" | "updated_at"
+type SortField = "code" | "name" | "phone" | "balance"
 type SortDir = "asc" | "desc"
 
 export default function CustomersPage() {
@@ -61,13 +61,9 @@ export default function CustomersPage() {
     return [...list].sort((a, b) => {
       let valA = (a[sortField] || "").toString().toLowerCase()
       let valB = (b[sortField] || "").toString().toLowerCase()
-      if (sortField === "balance" || sortField === "created_at" || sortField === "updated_at") {
-        valA = a[sortField] || ""
-        valB = b[sortField] || ""
-        if (sortField === "balance") {
-          valA = parseFloat(a.balance || 0)
-          valB = parseFloat(b.balance || 0)
-        }
+      if (sortField === "balance") {
+        valA = parseFloat(a.balance || 0)
+        valB = parseFloat(b.balance || 0)
       }
       if (valA < valB) return sortDir === "asc" ? -1 : 1
       if (valA > valB) return sortDir === "asc" ? 1 : -1
@@ -110,7 +106,7 @@ export default function CustomersPage() {
           .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
           .header-row {
             display: grid;
-            grid-template-columns: 80px 1fr 120px 100px 100px 100px 50px 50px;
+            grid-template-columns: 80px 1fr 130px 130px 120px 100px 50px 50px;
             padding: 14px 24px;
             background: var(--card-hover);
             font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
@@ -118,7 +114,7 @@ export default function CustomersPage() {
           }
           .data-row {
             display: grid;
-            grid-template-columns: 80px 1fr 120px 100px 100px 100px 50px 50px;
+            grid-template-columns: 80px 1fr 130px 130px 120px 100px 50px 50px;
             padding: 12px 24px;
             border-bottom: 1px solid var(--border);
             font-size: 13px; align-items: center;
@@ -152,7 +148,7 @@ export default function CustomersPage() {
           .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
           .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
           @media (max-width: 640px) {
-            .header-row, .data-row { grid-template-columns: 60px 1fr 80px 60px 60px 30px 30px; }
+            .header-row, .data-row { grid-template-columns: 60px 1fr 80px 80px 80px 60px 30px 30px; }
             .search-input { width: 100%; }
           }
         `}</style>
@@ -210,10 +206,10 @@ export default function CustomersPage() {
             <div className="header-row">
               <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
               <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Created By</span>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Edited By</span>
               <button className="sort-btn" onClick={() => handleSort("phone")}>Phone {getSortIcon("phone")}</button>
               <button className="sort-btn" onClick={() => handleSort("balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("balance")}</button>
-              <button className="sort-btn" onClick={() => handleSort("created_at")} style={{ fontSize: 10 }}>Created {getSortIcon("created_at")}</button>
-              <button className="sort-btn" onClick={() => handleSort("updated_at")} style={{ fontSize: 10 }}>Edited {getSortIcon("updated_at")}</button>
               <span></span>
               <span></span>
             </div>
@@ -221,15 +217,11 @@ export default function CustomersPage() {
               <div key={cust.id} className="data-row">
                 <span style={{ fontWeight: 600, color: "var(--primary)" }}>{cust.code}</span>
                 <span style={{ color: "var(--text)" }}>{cust.name}</span>
+                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{cust.created_by || "—"}</span>
+                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{cust.updated_by || "—"}</span>
                 <span style={{ color: "var(--text-muted)" }}>{cust.phone || "—"}</span>
                 <span style={{ textAlign: "right", fontWeight: 600, color: cust.balance >= 0 ? "#10B981" : "#EF4444" }}>
                   PKR {(cust.balance || 0).toLocaleString()}
-                </span>
-                <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                  {cust.created_at ? new Date(cust.created_at).toLocaleDateString() : "—"}
-                </span>
-                <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                  {cust.updated_at ? new Date(cust.updated_at).toLocaleDateString() : "—"}
                 </span>
                 <button className="btn-icon" onClick={() => router.push(`/dashboard/customers/new?id=${cust.id}`)} title="Edit">
                   <Edit size={14} />

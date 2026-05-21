@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Plus, CheckCircle } from "lucide-react"
 
@@ -31,6 +31,9 @@ const PAYMENT_TERMS = [
 
 export default function NewCustomerPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const editId = searchParams.get("id")
+
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -53,13 +56,55 @@ export default function NewCustomerPage() {
   const [totalCustomers, setTotalCustomers] = useState(0)
   const [totalReceivables, setTotalReceivables] = useState(0)
 
-  // Generate next customer code per company + fetch summary
+  // Load company, generate code, fetch summary, and if editing → load existing data
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    const init = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
       const cid = (user?.app_metadata as any)?.company_id
-      if (cid) {
-        setCompanyId(cid)
-        // Generate code
+      if (!cid) return
+      setCompanyId(cid)
+
+      // Summary
+      supabase
+        .from("customers")
+        .select("id, balance")
+        .eq("company_id", cid)
+        .is("deleted_at", null)
+        .then(({ data }) => {
+          if (data) {
+            setTotalCustomers(data.length)
+            setTotalReceivables(data.reduce((sum, c) => sum + (c.balance || 0), 0))
+          }
+        })
+
+      if (editId) {
+        // Editing existing customer
+        const { data: customer } = await supabase
+          .from("customers")
+          .select("*")
+          .eq("id", editId)
+          .eq("company_id", cid)
+          .single()
+
+        if (customer) {
+          setCustomerCode(customer.code)
+          setCustomerName(customer.name)
+          // try to split phone into country code + number
+          const fullPhone = customer.phone || ""
+          const match = fullPhone.match(/^(\+\d{1,3})(.*)$/)
+          if (match) {
+            setCountryCode(match[1])
+            setPhoneNumber(match[2].trim())
+          } else {
+            setPhoneNumber(fullPhone)
+          }
+          setEmail(customer.email || "")
+          setAddress(customer.address || "")
+          setOpeningBalance(String(customer.opening_balance || 0))
+          setPaymentTerms(customer.payment_terms || "Net 15")
+        }
+      } else {
+        // New customer → generate next code
         supabase
           .from("customers")
           .select("code")
@@ -71,30 +116,15 @@ export default function NewCustomerPage() {
             let nextNum = 1
             if (data && data.length > 0) {
               const match = data[0].code?.match(/CUST-(\d+)/)
-              if (match) {
-                nextNum = parseInt(match[1], 10) + 1
-              }
+              if (match) nextNum = parseInt(match[1], 10) + 1
             }
-            const code = `CUST-${String(nextNum).padStart(3, "0")}`
-            setCustomerCode(code)
-          })
-
-        // Fetch summary
-        supabase
-          .from("customers")
-          .select("id, balance")
-          .eq("company_id", cid)
-          .is("deleted_at", null)
-          .then(({ data }) => {
-            if (data) {
-              setTotalCustomers(data.length)
-              const total = data.reduce((sum, c) => sum + (c.balance || 0), 0)
-              setTotalReceivables(total)
-            }
+            setCustomerCode(`CUST-${String(nextNum).padStart(3, "0")}`)
           })
       }
-    })
-  }, [])
+    }
+
+    init()
+  }, [editId])
 
   const handleSubmit = async () => {
     if (!companyId) { setError("Company not loaded"); return }
@@ -103,21 +133,55 @@ export default function NewCustomerPage() {
     setLoading(true)
     setError("")
 
-    const balance = parseFloat(openingBalance || "0")
-    // Combine country code and phone number for WhatsApp compatibility
-    const fullPhone = countryCode + (phoneNumber.trim().replace(/\D/g, "")) // e.g. "+923001234567"
+    // Get current user email for audit
+    const { data: { user } } = await supabase.auth.getUser()
+    const userEmail = user?.email || "system"
 
+    const balance = parseFloat(openingBalance || "0")
+    const fullPhone = countryCode + (phoneNumber.trim().replace(/\D/g, ""))
+
+    if (editId) {
+      // ── UPDATE existing customer ──
+      const { error: updateErr } = await supabase
+        .from("customers")
+        .update({
+          name: customerName.trim(),
+          phone: fullPhone || null,
+          email: email.trim() || null,
+          address: address.trim() || null,
+          opening_balance: isNaN(balance) ? 0 : balance,
+          // Note: we do not change the balance here; balance is managed by transactions
+          payment_terms: paymentTerms,
+          updated_by: userEmail,
+        })
+        .eq("id", editId)
+        .eq("company_id", companyId)
+
+      if (updateErr) {
+        setError(updateErr.message)
+        setLoading(false)
+        return
+      }
+      setFlash(`✅ Customer ${customerCode} updated!`)
+      setLoading(false)
+      setTimeout(() => router.push("/dashboard/customers"), 1500)
+      return
+    }
+
+    // ── INSERT new customer ──
     const { data, error: insertErr } = await supabase
       .from("customers")
       .insert({
         company_id: companyId,
-        code: customerCode,           // system generated, never duplicated per company
+        code: customerCode,
         name: customerName.trim(),
         phone: fullPhone || null,
         email: email.trim() || null,
         address: address.trim() || null,
         balance: isNaN(balance) ? 0 : balance,
         payment_terms: paymentTerms,
+        created_by: userEmail,
+        updated_by: userEmail,
       })
       .select("id, code, name")
       .single()
@@ -132,7 +196,7 @@ export default function NewCustomerPage() {
       return
     }
 
-    // ✅ Post opening balance journal entry (if amount > 0)
+    // ── Post opening balance journal entry (if amount > 0) ──
     if (balance > 0 && data) {
       try {
         await fetch("/api/customers/opening-entry", {
@@ -146,7 +210,6 @@ export default function NewCustomerPage() {
         })
       } catch (err) {
         console.error("Opening entry failed:", err)
-        // do not block – customer is already created
       }
     }
 
@@ -158,7 +221,6 @@ export default function NewCustomerPage() {
     setOpeningBalance("0")
     setPaymentTerms("Net 15")
     setLoading(false)
-    // Refresh summary
     setTotalCustomers(prev => prev + 1)
     setTotalReceivables(prev => prev + balance)
     setTimeout(() => router.push("/dashboard/customers"), 1500)
@@ -215,8 +277,12 @@ export default function NewCustomerPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
           <button className="btn btn-back" onClick={() => router.push("/dashboard/customers")}><ArrowLeft size={16} /></button>
           <div>
-            <h1 style={{ fontSize: 20, fontWeight: 800, color: "var(--text)", margin: 0 }}>➕ New Customer</h1>
-            <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Add a customer to your system</p>
+            <h1 style={{ fontSize: 20, fontWeight: 800, color: "var(--text)", margin: 0 }}>
+              {editId ? "✏️ Edit Customer" : "➕ New Customer"}
+            </h1>
+            <p style={{ color: "var(--text-muted)", fontSize: 13 }}>
+              {editId ? "Modify customer details" : "Add a customer to your system"}
+            </p>
           </div>
         </div>
 
@@ -294,14 +360,13 @@ export default function NewCustomerPage() {
               </div>
             </div>
 
-            {/* Create button moved below summary */}
             <button
               className="btn btn-outline"
               style={{ width: "100%", justifyContent: "center", marginTop: 16 }}
               onClick={handleSubmit}
               disabled={loading}
             >
-              {loading ? "Saving..." : <> <Plus size={16} /> Create Customer </>}
+              {loading ? "Saving..." : editId ? "💾 Update Customer" : <><Plus size={16} /> Create Customer</>}
             </button>
           </div>
         </div>
