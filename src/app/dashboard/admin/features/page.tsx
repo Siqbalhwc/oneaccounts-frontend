@@ -68,11 +68,14 @@ export default function FeatureManagerPage() {
 
         if (featureErr) throw featureErr
 
+        console.log("Feature rows from DB:", featureRows)   // 🔍 DEBUG
+
         const map: Record<string, string> = {}
         if (featureRows) {
           featureRows.forEach((f: any) => { map[f.code] = f.id })
         }
         setFeatureIdMap(map)
+        console.log("Feature ID map:", map)   // 🔍 DEBUG
 
         // Fetch which features are enabled for this company
         const { data: overrides, error: overridesErr } = await supabase
@@ -82,21 +85,23 @@ export default function FeatureManagerPage() {
 
         if (overridesErr) throw overridesErr
 
+        console.log("Company overrides:", overrides)   // 🔍 DEBUG
+
         const states: Record<string, boolean> = {}
         FEATURE_CODES.forEach(code => { states[code] = false })
 
         if (overrides) {
-          // Match by feature_id → code
           overrides.forEach((row: any) => {
             const fid = row.feature_id
-            // find the code for this feature_id
             const code = Object.keys(map).find(k => map[k] === fid)
             if (code) states[code] = row.enabled
           })
         }
         setFeatureStates(states)
+        console.log("Initial states:", states)   // 🔍 DEBUG
       } catch (err: any) {
         setMessage("Error loading features: " + (err.message || ""))
+        console.error(err)   // 🔍 DEBUG
       } finally {
         setLoading(false)
       }
@@ -106,10 +111,12 @@ export default function FeatureManagerPage() {
   }, [])
 
   const toggleFeature = async (code: string, enabled: boolean) => {
+    console.log("TOGGLE CLICKED", code, enabled)   // 🔍 DEBUG
     if (!canEdit || !companyId) return
     const featureId = featureIdMap[code]
+    console.log("Feature ID for toggle:", featureId)   // 🔍 DEBUG
     if (!featureId) {
-      setMessage("Feature not found in database.")
+      setMessage("Feature not found in database. Check the features table.")
       return
     }
 
@@ -121,7 +128,7 @@ export default function FeatureManagerPage() {
       .from("company_features")
       .upsert({
         company_id: companyId,
-        feature_id: featureId,      // ← correct column
+        feature_id: featureId,
         enabled,
       })
 
@@ -134,8 +141,8 @@ export default function FeatureManagerPage() {
     setTimeout(() => setMessage(""), 3000)
   }
 
-  // Bulk enable / disable all
   const setAllFeatures = async (enable: boolean) => {
+    console.log("SET ALL", enable)   // 🔍 DEBUG
     if (!canEdit || !companyId) return
     setLoading(true)
     for (const code of FEATURE_CODES) {
