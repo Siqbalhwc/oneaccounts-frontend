@@ -1,8 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,46 +22,85 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { customerId, customerName, amount } = await request.json()
-  if (!customerId || !customerName || amount <= 0) {
+  const { customerId, amount, date } = await request.json()
+  if (!customerId || !amount || amount <= 0) {
     return NextResponse.json({ error: 'Invalid data' }, { status: 400 })
   }
 
-  // Fetch required accounts
-  const arAcc = await supabase.from('accounts').select('id,balance').eq('code', '1100').single()
-  const eqAcc = await supabase.from('accounts').select('id,balance').eq('code', '3000').single()
+  const companyId = (user?.app_metadata as any)?.company_id
+  if (!companyId) return NextResponse.json({ error: 'No company' }, { status: 400 })
 
-  if (!arAcc.data || !eqAcc.data) {
-    return NextResponse.json({ error: 'Required accounts (1100, 3000) not found' }, { status: 500 })
+  // Find AR account (1100)
+  const { data: arAccount } = await supabase
+    .from('accounts')
+    .select('id,balance')
+    .eq('code', '1100')
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  // Find or create Opening Balance Equity account (3000)
+  let { data: equityAccount } = await supabase
+    .from('accounts')
+    .select('id,balance')
+    .eq('code', '3000')
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  if (!equityAccount) {
+    const { data: newEq } = await supabase
+      .from('accounts')
+      .insert({
+        code: '3000',
+        name: 'Opening Balance Equity',
+        type: 'Equity',
+        company_id: companyId,
+        balance: 0,
+      })
+      .select('id,balance')
+      .single()
+    equityAccount = newEq
   }
 
-  const entryNo = `OB-CUST-${customerId}-${Date.now()}`
-  const description = `Opening Balance - ${customerName}`
+  if (!arAccount || !equityAccount) {
+    return NextResponse.json({ error: 'Required accounts not found' }, { status: 500 })
+  }
 
   // Create journal entry
   const { data: entry, error: entryErr } = await supabase
     .from('journal_entries')
     .insert({
-      entry_no: entryNo,
-      date: new Date().toISOString().split('T')[0],
-      description,
+      company_id: companyId,
+      entry_no: `JE-OP-${customerId}-${Date.now()}`,
+      date,
+      description: `Opening balance for customer ${customerId}`,
     })
     .select('id')
     .single()
 
-  if (entryErr || !entry) {
-    return NextResponse.json({ error: entryErr?.message || 'Failed to create journal entry' }, { status: 500 })
-  }
+  if (entryErr) return NextResponse.json({ error: entryErr.message }, { status: 500 })
 
   // Insert lines
-  await supabase.from('journal_lines').insert([
-    { entry_id: entry.id, account_id: arAcc.data.id, debit: amount, credit: 0 },
-    { entry_id: entry.id, account_id: eqAcc.data.id, debit: 0, credit: amount },
-  ])
+  const lines = [
+    { entry_id: entry.id, account_id: arAccount.id, debit: amount, credit: 0, company_id: companyId },
+    { entry_id: entry.id, account_id: equityAccount.id, debit: 0, credit: amount, company_id: companyId },
+  ]
+
+  const { error: linesErr } = await supabase.from('journal_lines').insert(lines)
+  if (linesErr) {
+    await supabase.from('journal_entries').delete().eq('id', entry.id)
+    return NextResponse.json({ error: linesErr.message }, { status: 500 })
+  }
 
   // Update account balances
-  await supabase.from('accounts').update({ balance: arAcc.data.balance + amount }).eq('id', arAcc.data.id)
-  await supabase.from('accounts').update({ balance: eqAcc.data.balance + amount }).eq('id', eqAcc.data.id)
+  await supabase
+    .from('accounts')
+    .update({ balance: (arAccount.balance || 0) + amount })
+    .eq('id', arAccount.id)
 
-  return NextResponse.json({ success: true, entryId: entry.id })
+  await supabase
+    .from('accounts')
+    .update({ balance: (equityAccount.balance || 0) - amount })
+    .eq('id', equityAccount.id)
+
+  return NextResponse.json({ success: true })
 }

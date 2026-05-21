@@ -132,6 +132,24 @@ export default function NewCustomerPage() {
       return
     }
 
+    // ✅ Post opening balance journal entry (if amount > 0)
+    if (balance > 0 && data) {
+      try {
+        await fetch("/api/customers/opening-entry", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            customerId: data.id,
+            amount: balance,
+            date: new Date().toISOString().split("T")[0],
+          }),
+        })
+      } catch (err) {
+        console.error("Opening entry failed:", err)
+        // do not block – customer is already created
+      }
+    }
+
     setFlash(`✅ Customer ${data.code} – ${data.name} created!`)
     setCustomerName("")
     setPhoneNumber("")
@@ -258,7 +276,7 @@ export default function NewCustomerPage() {
             </div>
           </div>
 
-          {/* Right side: Summary + Create button */}
+          {/* Right side summary */}
           <div className="summary-side">
             <div className="summary-card">
               <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 16 }}>📊 Customers Summary</h2>
