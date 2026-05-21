@@ -4,7 +4,7 @@ import { getUserCompany } from '@/lib/get-user-company'
 import SidebarClient from './sidebar-client'
 import DashboardTopBar from "@/components/DashboardTopBar"
 import BottomNav from "@/components/BottomNav"
-import ThemeToggleButton from "@/components/ThemeToggleButton"
+import DashboardSidebar from "@/components/DashboardSidebar"  // ← new feature‑aware sidebar
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -205,15 +205,12 @@ const styles = `
 
   /* ════════════════════════════════════
      SMART THEME INJECTION
-     - Only changes white/black backgrounds
-     - Leaves colored elements untouched
      ════════════════════════════════════ */
   .dl-main-content {
     background: var(--main-bg);
     color: var(--text);
   }
 
-  /* Convert hardcoded white backgrounds to card color */
   .dl-main-content [style*="background: #fff"],
   .dl-main-content [style*="background: white"],
   .dl-main-content [style*="background:#fff"],
@@ -232,7 +229,6 @@ const styles = `
     border: 1px solid var(--border);
   }
 
-  /* Convert hardcoded black/dark text to theme text color */
   .dl-main-content [style*="color: #000"],
   .dl-main-content [style*="color: black"],
   .dl-main-content [style*="color:#000"],
@@ -243,7 +239,6 @@ const styles = `
     color: var(--text) !important;
   }
 
-  /* Ensure inputs, selects, textareas use theme */
   .dl-main-content input,
   .dl-main-content select,
   .dl-main-content textarea {
@@ -259,7 +254,6 @@ const styles = `
     box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
   }
 
-  /* Tables */
   .dl-main-content table {
     background: var(--card) !important;
     color: var(--text) !important;
@@ -282,7 +276,6 @@ const styles = `
     background: var(--card-hover) !important;
   }
 
-  /* Buttons that look plain */
   .dl-main-content button:not([class*="dl-"]):not([class*="oa-"]) {
     background: var(--card);
     color: var(--text);
@@ -299,56 +292,11 @@ const styles = `
     border-color: var(--primary);
   }
 
-  /* Labels and muted text */
   .dl-main-content label {
     color: var(--text-muted);
     font-weight: 500;
   }
 `
-
-const navSections = [
-  { section: 'MAIN', items: [
-    { label: 'Dashboard', icon: '📊', href: '/dashboard' },
-  ]},
-  { section: 'CRM', items: [
-    { label: 'Customers',      icon: '👥', href: '/dashboard/customers' },
-    { label: 'Sales Invoices', icon: '🧾', href: '/dashboard/invoices'  },
-    { label: 'Receipts',       icon: '💰', href: '/dashboard/receipts'  },
-    { label: 'Suppliers',      icon: '🚚', href: '/dashboard/suppliers' },
-    { label: 'Purchase Bills', icon: '📦', href: '/dashboard/bills'     },
-    { label: 'Payments',       icon: '💳', href: '/dashboard/payments'  },
-  ]},
-  { section: 'BANKING', items: [
-    { label: 'Bank Accounts',  icon: '🏦', href: '/dashboard/banking/bank-accounts'  },
-    { label: 'Bank Transfers', icon: '🔄', href: '/dashboard/banking/bank-transfers' },
-  ]},
-  { section: 'INVENTORY', items: [
-    { label: 'Products',       icon: '📦', href: '/dashboard/products'              },
-    { label: 'Inventory Adj.', icon: '⚖️', href: '/dashboard/inventory/adjustments' },
-  ]},
-  { section: 'ACCOUNTING', groups: [
-    { groupLabel: 'General', items: [
-      { label: 'Chart of Accounts', icon: '📋', href: '/dashboard/accounts' },
-      { label: 'Journal Entries',   icon: '📓', href: '/dashboard/journal'  },
-    ]},
-    { groupLabel: 'Reports', items: [
-      { label: 'All Reports', icon: '📈', href: '/dashboard/reports' },
-    ]},
-    { groupLabel: 'Automation', items: [
-      { label: 'Invoice Automation', icon: '⚙️', href: '/dashboard/settings/invoice-automation' },
-      { label: 'Investors',          icon: '💼', href: '/dashboard/investors'                   },
-    ]},
-  ]},
-  { section: 'SYSTEM', items: [
-    { label: 'Admin Panel',     icon: '👑', href: '/dashboard/admin/users'      },
-    { label: 'Feature Manager', icon: '⚙️', href: '/dashboard/admin/features'   },
-    { label: 'Audit Logs',      icon: '📋', href: '/dashboard/admin/audit-logs' },
-    { label: 'Settings',        icon: '⚙️', href: '/dashboard/settings'         },
-    { label: 'New Company',     icon: '🏢', href: '/dashboard/companies/new'    },
-    { label: 'Upgrade Plan',    icon: '⭐', href: '/dashboard/upgrade'          },
-    { label: 'Super Admin',     icon: '🛡️', href: '/dashboard/super-admin'      },
-  ]},
-]
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const tenant = await getUserCompany()
@@ -385,56 +333,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
         {/* SidebarClient: hamburger wiring + active link highlighting */}
         <SidebarClient />
 
-        {/* ── Sidebar ── */}
-        <aside className="dl-sidebar" id="dl-sidebar">
-          <div className="dl-sidebar-logo">
-            <img src={tenant.companyLogo} alt={tenant.companyName} className="dl-sidebar-logo-img" />
-            <div>
-              <div className="dl-sidebar-logo-name">{tenant.companyName}</div>
-              <div className="dl-sidebar-logo-sub">{tenant.companyTagline}</div>
-            </div>
-          </div>
-
-          <nav className="dl-sidebar-nav">
-            {navSections.map((sec) => (
-              <div key={sec.section}>
-                <div className="dl-section-label">{sec.section}</div>
-
-                {/* Grouped items (e.g. ACCOUNTING) */}
-                {sec.groups && sec.groups.map(group => (
-                  <div key={group.groupLabel}>
-                    <div className="dl-nav-group-label">{group.groupLabel}</div>
-                    {group.items.map(item => (
-                      <a key={item.href} href={item.href} className="dl-nav-item">
-                        <span className="dl-nav-icon">{item.icon}</span>
-                        <span>{item.label}</span>
-                      </a>
-                    ))}
-                  </div>
-                ))}
-
-                {/* Flat items */}
-                {sec.items && sec.items.map(item => (
-                  <a key={item.href} href={item.href} className="dl-nav-item">
-                    <span className="dl-nav-icon">{item.icon}</span>
-                    <span>{item.label}</span>
-                  </a>
-                ))}
-              </div>
-            ))}
-          </nav>
-
-          <div className="dl-sidebar-user">
-            <div className="dl-sidebar-avatar">{initial}</div>
-            <div style={{ overflow: 'hidden', flex: 1, minWidth: 0 }}>
-              <div className="dl-sidebar-email">{email}</div>
-              <form action="/auth/signout" method="post">
-                <button type="submit" className="dl-sidebar-signout">Sign out</button>
-              </form>
-            </div>
-            <ThemeToggleButton />
-          </div>
-        </aside>
+        {/* ── Feature‑aware Sidebar ── */}
+        <DashboardSidebar
+          email={email}
+          initial={initial}
+          logoUrl={tenant.companyLogo}
+          companyName={tenant.companyName}
+          companyTagline={tenant.companyTagline}
+        />
 
         {/* ── Main ── */}
         <div className="dl-main">
