@@ -272,7 +272,6 @@ export default function NewBillPage() {
 
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
 
-  // ✅ FIX: removed .is("deleted_at", null) to avoid reusing soft‑deleted bill numbers
   const getNextBillNo = async (suppCode: string): Promise<string> => {
     const { data } = await supabase
       .from("invoices")
@@ -365,12 +364,21 @@ export default function NewBillPage() {
   const handleBeforeSavePdf = async () => {
     if (!selectedSupplier) return
     const billNo = editId ? selectedSupplier.code + "-EDIT" : "PREVIEW"
+    // Complete PDF data with all required fields
     const pdfData = {
       companyName: "OneAccounts",
+      companyAddress: "",
+      companyPhone: "",
+      companyEmail: "",
+      companyTagline: "",
+      logoUrl: null,
       invoiceNo: billNo,
       date: billDate,
       dueDate: dueDate,
       customerName: selectedSupplier.name,
+      customerAddress: selectedSupplier.address || "",
+      customerPhone: selectedSupplier.phone || "",
+      customerEmail: selectedSupplier.email || "",
       items: items.map(i => ({
         description: i.description || "",
         qty: i.qty || 0,
@@ -379,6 +387,9 @@ export default function NewBillPage() {
       })),
       subtotal: totalAmount,
       total: totalAmount,
+      paid: 0,
+      balanceDue: totalAmount,
+      status: "Unpaid",
     }
     const doc = await generateInvoicePDF(pdfData)
     doc.save(`bill-preview-${billNo}.pdf`)
