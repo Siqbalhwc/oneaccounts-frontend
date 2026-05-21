@@ -49,7 +49,6 @@ export default function BillDetailPage() {
   const [loading, setLoading] = useState(true)
   const [companyId, setCompanyId] = useState<string>("")
 
-  // Store all company settings including tagline
   const [companySettings, setCompanySettings] = useState<{
     name?: string
     address?: string
@@ -71,7 +70,6 @@ export default function BillDetailPage() {
     if (!companyId || !billId) return
     setLoading(true)
 
-    // 1. Fetch bill
     supabase
       .from("invoices")
       .select("*")
@@ -86,7 +84,6 @@ export default function BillDetailPage() {
         }
         const b: Bill = data
 
-        // 2. Fetch supplier separately
         if (b.party_id) {
           supabase
             .from("suppliers")
@@ -97,7 +94,6 @@ export default function BillDetailPage() {
               b.supplier = supp || undefined
             })
             .then(() => {
-              // 3. Fetch items
               supabase
                 .from("invoice_items")
                 .select("*")
@@ -123,7 +119,6 @@ export default function BillDetailPage() {
         }
       })
 
-    // 4. Fetch company settings (including tagline)
     supabase
       .from("company_settings")
       .select("company_name, address, phone, email, tagline, logo_url")
@@ -156,33 +151,34 @@ export default function BillDetailPage() {
     const supplier = bill.supplier
     const subTotal = bill.items?.reduce((s, i) => s + i.total, 0) || 0
 
+    // ── Build pdfData with guaranteed string types ──
     const pdfData = {
-      companyName: companySettings.name || "OneAccounts",
-      companyAddress: companySettings.address,
-      companyPhone: companySettings.phone,
-      companyEmail: companySettings.email,
-      companyTagline: companySettings.tagline || "",   // ✅ added
-      logoUrl: companySettings.logo_url,
-      invoiceNo: bill.invoice_no,
-      date: bill.date,
-      dueDate: bill.due_date,
-      reference: bill.reference,
-      notes: bill.notes,
-      customerName: supplier?.name || "Unknown",
-      customerAddress: supplier?.address,
-      customerPhone: supplier?.phone,
-      customerEmail: supplier?.email,
+      companyName:    companySettings.name || "OneAccounts",
+      companyAddress: companySettings.address || "",
+      companyPhone:   companySettings.phone || "",
+      companyEmail:   companySettings.email || "",
+      companyTagline: companySettings.tagline || "",
+      logoUrl:        companySettings.logo_url || null,
+      invoiceNo:      bill.invoice_no,
+      date:           bill.date,
+      dueDate:        bill.due_date,
+      reference:      bill.reference || "",
+      notes:          bill.notes || "",
+      customerName:    supplier?.name || "Unknown",
+      customerAddress: supplier?.address || "",
+      customerPhone:   supplier?.phone || "",
+      customerEmail:   supplier?.email || "",
       items: (bill.items || []).map(item => ({
         description: item.description,
-        qty: item.qty,
-        unit_price: item.unit_price,
-        total: item.total,
+        qty:          item.qty,
+        unit_price:   item.unit_price,
+        total:        item.total,
       })),
-      subtotal: subTotal,
-      total: bill.total,
-      paid: bill.paid || 0,
+      subtotal:   subTotal,
+      total:      bill.total,
+      paid:       bill.paid || 0,
       balanceDue: bill.total - (bill.paid || 0),
-      status: bill.status,
+      status:     bill.status,
     }
 
     const doc = await generateInvoicePDF(pdfData)
