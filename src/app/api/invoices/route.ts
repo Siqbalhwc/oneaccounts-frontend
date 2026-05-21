@@ -46,10 +46,42 @@ async function createJE(
   }
 }
 
-// ── Generate a unique invoice number (random 4‑digit suffix) ──────────
-function generateInvoiceNo(customerCode: string): string {
-  const rand = Math.floor(1000 + Math.random() * 9000)
-  return `${customerCode}-${String(rand).padStart(4, '0')}`
+// ── Generate unique sequential invoice number: SI/YYYYMM/0001 ──────────
+async function generateInvoiceNo(supabase: any, companyId: string): Promise<string> {
+  const now = new Date()
+  const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`
+  const prefix = `SI/${ym}/`
+  const { data: lastInv } = await supabase
+    .from("invoices")
+    .select("invoice_no")
+    .like("invoice_no", `${prefix}%`)
+    .order("invoice_no", { ascending: false })
+    .limit(1)
+  let nextNum = 1
+  if (lastInv && lastInv.length > 0) {
+    const last = lastInv[0].invoice_no
+    const match = last.match(/\/(\d+)$/)
+    if (match) nextNum = parseInt(match[1], 10) + 1
+  }
+  return `${prefix}${String(nextNum).padStart(4, "0")}`
+}
+
+// ── Stock validation helper ────────────────────────────────────────────
+async function validateStock(supabase: any, companyId: string, items: any[]) {
+  for (const item of items) {
+    if (item.product_id) {
+      const { data: product } = await supabase
+        .from("products")
+        .select("id, code, name, qty_on_hand")
+        .eq("id", item.product_id)
+        .eq("company_id", companyId)
+        .single()
+      if (product && (item.qty || 0) > (product.qty_on_hand || 0)) {
+        return `Insufficient stock for "${product.name}". Available: ${product.qty_on_hand}, requested: ${item.qty}.`
+      }
+    }
+  }
+  return null
 }
 
 // ── POST ──────────────────────────────────────────────────────────────
@@ -80,13 +112,15 @@ export async function POST(request: NextRequest) {
   }
 
   const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
+  const userEmail = user.email || 'system'
 
-  // Get customer code for invoice prefix
-  const { data: cust } = await supabase.from('customers')
-    .select('code').eq('id', party_id).single()
-  const custCode = cust?.code || 'CUST'
+  // Stock validation
+  const stockErr = await validateStock(supabase, companyId, items)
+  if (stockErr) {
+    return NextResponse.json({ error: stockErr }, { status: 400 })
+  }
 
-  // Business type & automation settings
+  // Business type & automation
   const { data: company } = await supabase.from('companies')
     .select('business_type').eq('id', companyId).single()
   const businessType = company?.business_type || ''
@@ -100,14 +134,12 @@ export async function POST(request: NextRequest) {
   const expenseRules = automationConfig.expenseRules || []
   const partners = automationConfig.partners || []
 
-  // ── Insert with server‑generated number and retry ─────────────────
+  // Generate unique invoice number (with retry on duplicate key)
   let invoice: any = null
   let invoiceNo = ''
-  const MAX_RETRIES = 5
-
+  const MAX_RETRIES = 3
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    invoiceNo = generateInvoiceNo(custCode)
-
+    invoiceNo = await generateInvoiceNo(supabase, companyId)
     const { data: inv, error: headerError } = await supabase
       .from('invoices')
       .insert({
@@ -122,28 +154,18 @@ export async function POST(request: NextRequest) {
         reference,
         notes,
         company_id: companyId,
+        created_by: userEmail,
+        updated_by: userEmail,
       })
       .select('*')
       .single()
-
-    if (!headerError) {
-      invoice = inv
-      break
-    }
-
-    if (headerError.code === '23505' || headerError.message?.includes('duplicate key')) {
-      continue   // try another random number
-    }
-
-    // some other error
+    if (!headerError) { invoice = inv; break }
+    if (headerError.code === '23505' || headerError.message?.includes('duplicate key')) continue
     return NextResponse.json({ error: headerError.message }, { status: 500 })
   }
+  if (!invoice) return NextResponse.json({ error: 'Could not generate unique invoice number' }, { status: 500 })
 
-  if (!invoice) {
-    return NextResponse.json({ error: 'Could not generate unique invoice number after multiple attempts' }, { status: 500 })
-  }
-
-  // 2. Insert items
+  // Insert items
   const itemRows = items.map((item: any) => {
     const qty = Number(item.qty || 0)
     const unit_price = Number(item.unit_price || 0)
@@ -155,10 +177,9 @@ export async function POST(request: NextRequest) {
       unit_price,
       total: lineTotal,
       product_id: item.product_id || null,
-      company_id: invoice.company_id,
+      company_id: companyId,
     }
   })
-
   if (itemRows.length > 0) {
     const { error: itemsError } = await supabase.from('invoice_items').insert(itemRows)
     if (itemsError) {
@@ -168,7 +189,6 @@ export async function POST(request: NextRequest) {
   }
 
   const totalSalesAmount = itemRows.reduce((s: number, i: any) => s + (i.total || 0), 0)
-
   const { data: updatedInv } = await supabase
     .from('invoices')
     .update({ total: totalSalesAmount })
@@ -189,24 +209,20 @@ export async function POST(request: NextRequest) {
 
     const jeLines: any[] = []
 
+    // First pass: AR / Revenue for each item
     for (const item of items) {
       const lineTotal = Number(item.qty || 0) * Number(item.unit_price || 0)
       if (lineTotal <= 0) continue
-
       jeLines.push({ account_id: arAccount.id, debit: lineTotal, credit: 0 })
+      jeLines.push({ account_id: revenueAccount.id, debit: 0, credit: lineTotal })
+    }
 
-      const revenueLine: any = { account_id: revenueAccount.id, debit: 0, credit: lineTotal }
-      if (businessType === 'ngo') {
-        revenueLine.activity_id = item.activity_id || null
-        revenueLine.location_id = item.location_id || null
-        revenueLine.project_id = item.project_id || null
-        revenueLine.donor_id = item.donor_id || null
-      }
-      jeLines.push(revenueLine)
-
-      if (businessType === 'trading' && item.product_id) {
-        const cost = Number(item.cost_price || 0) * Number(item.qty || 0)
-        if (cost > 0) {
+    // COGS for trading companies (if product and cost_price present)
+    if (businessType === 'trading') {
+      for (const item of items) {
+        if (item.product_id && Number(item.qty || 0) > 0 && (item.cost_price || 0) > 0) {
+          const qty = Number(item.qty)
+          const cost = qty * item.cost_price
           const cogsAccount = await getAccount(supabase, '5000', companyId)
           const inventoryAccount = await getAccount(supabase, '1200', companyId)
           if (cogsAccount && inventoryAccount) {
@@ -228,16 +244,18 @@ export async function POST(request: NextRequest) {
       }
       if (totalAutomationExpense > 0) {
         const payableExpAccount = await getAccount(supabase, '2001', companyId)
-        if (payableExpAccount) {
-          jeLines.push({ account_id: payableExpAccount.id, debit: 0, credit: totalAutomationExpense })
-        }
+        if (payableExpAccount) jeLines.push({ account_id: payableExpAccount.id, debit: 0, credit: totalAutomationExpense })
       }
     }
 
     // Profit allocation
     if (profitEnabled && partners.length > 0) {
       let netProfit = totalSalesAmount - totalAutomationExpense
-      if (businessType === 'trading') netProfit -= items.reduce((s: number, i: any) => s + (Number(i.cost_price || 0) * Number(i.qty || 0)), 0)
+      // For trading, also deduct COGS from net profit for allocation
+      if (businessType === 'trading') {
+        const totalCogs = items.reduce((s: number, i: any) => s + (Number(i.qty || 0) * (i.cost_price || 0)), 0)
+        netProfit -= totalCogs
+      }
       if (netProfit > 0) {
         const retainedEarnings = await getAccount(supabase, '3000', companyId)
         if (retainedEarnings) {
@@ -253,7 +271,7 @@ export async function POST(request: NextRequest) {
 
     await createJE(supabase, companyId, invoice_date, `Sales Invoice ${invoiceNo}`, jeLines, 'sale_invoice', updatedInv.id)
 
-    // ── Product stock: increase outflow, decrease qty_on_hand ──
+    // Update product stock (outflow)
     for (const item of items) {
       if (!item.product_id) continue
       const qty = Number(item.qty || 0)
@@ -264,7 +282,6 @@ export async function POST(request: NextRequest) {
         .eq('id', item.product_id)
         .eq('company_id', companyId)
         .single()
-
       if (product) {
         const newQtyOnHand = (product.qty_on_hand || 0) - qty
         const newTotalOutflow = (product.total_outflow || 0) + qty
@@ -312,12 +329,20 @@ export async function PUT(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
-  const { id, invoice_no, party_id, invoice_date, due_date, items, reference, notes } = body
+  const { id, party_id, invoice_date, due_date, items, reference, notes } = body
   if (!id) return NextResponse.json({ error: 'Invoice ID required' }, { status: 400 })
 
   const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
+  const userEmail = user.email || 'system'
 
-  const { data: oldInv } = await supabase.from('invoices').select('*').eq('id', id).eq('company_id', companyId).single()
+  // Stock validation for new items
+  const stockErr = await validateStock(supabase, companyId, items)
+  if (stockErr) {
+    return NextResponse.json({ error: stockErr }, { status: 400 })
+  }
+
+  const { data: oldInv } = await supabase.from('invoices')
+    .select('*').eq('id', id).eq('company_id', companyId).single()
   if (!oldInv) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
 
   // Reverse old stock outflow
@@ -397,7 +422,15 @@ export async function PUT(request: NextRequest) {
 
   const { data: updatedInv } = await supabase
     .from('invoices')
-    .update({ invoice_no, party_id, date: invoice_date, due_date, total: totalSalesAmount, reference, notes })
+    .update({
+      party_id,
+      date: invoice_date,
+      due_date,
+      total: totalSalesAmount,
+      reference,
+      notes,
+      updated_by: userEmail,
+    })
     .eq('id', id)
     .select('*')
     .single()
@@ -411,7 +444,7 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  // Re‑apply stock outflow for new items
+  // Apply new stock outflow
   for (const item of items) {
     if (!item.product_id) continue
     const qty = Number(item.qty || 0)

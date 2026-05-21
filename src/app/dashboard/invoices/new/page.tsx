@@ -268,6 +268,19 @@ export default function NewInvoicePage() {
 
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
 
+  // ── Stock validation ──
+  const validateStock = () => {
+    for (const item of items) {
+      if (item.product_id) {
+        const product = products.find(p => p.id === item.product_id)
+        if (product && item.qty > (product.qty_on_hand || 0)) {
+          return `Insufficient stock for "${product.name}". Available: ${product.qty_on_hand}, requested: ${item.qty}.`
+        }
+      }
+    }
+    return null
+  }
+
   const waLink = () => {
     if (!selectedCustomer) return ""
     const code = (selectedCustomer.country_code || "+92").replace(/\D/g, "")
@@ -277,12 +290,79 @@ export default function NewInvoicePage() {
     return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
   }
 
+  // ── WhatsApp with PDF ──
+  const handleWhatsAppWithPDF = async () => {
+    if (!selectedCustomer) return
+    const phone = (selectedCustomer.phone || "").replace(/\D/g, "")
+    if (!phone) {
+      alert("No phone number for this customer.")
+      return
+    }
+    // Generate PDF
+    const pdfData = {
+      companyName: company?.name || company?.company_name || "OneAccounts",
+      companyAddress: company?.address || "",
+      companyPhone: company?.phone || "",
+      companyEmail: company?.email || "",
+      companyTagline: company?.tagline || "",
+      logoUrl: company?.logo_url || null,
+      businessType: company?.business_type || "",
+      invoiceNo: "PREVIEW",
+      date: invoiceDate,
+      dueDate: dueDate,
+      customerName: selectedCustomer.name || "Customer",
+      customerPhone: selectedCustomer.phone || "",
+      customerAddress: selectedCustomer.address || "",
+      customerEmail: selectedCustomer.email || "",
+      items: items.map(i => ({
+        description: i.description || "",
+        qty: i.qty || 0,
+        unit_price: i.unit_price || 0,
+        total: i.total || 0,
+        image_path: i.product_image || null,
+        product_id: i.product_id || null,
+        product_name: i.product_name || "",
+      })),
+      subtotal: totalAmount,
+      total: totalAmount,
+    }
+    const doc = await generateInvoicePDF(pdfData)
+    const blob = doc.output("blob")
+    // Upload to Supabase storage (public bucket "invoice-pdfs")
+    const filePath = `invoices/${Date.now()}-${Math.random().toString(36).substr(2,5)}.pdf`
+    try {
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from("invoice-pdfs")
+        .upload(filePath, blob, { contentType: "application/pdf", upsert: false })
+      if (!uploadErr) {
+        const { data: publicUrlData } = supabase.storage
+          .from("invoice-pdfs")
+          .getPublicUrl(filePath)
+        const pdfLink = publicUrlData.publicUrl
+        const msg = `Dear ${selectedCustomer.name},\n\nYour invoice PDF is ready.\nDownload: ${pdfLink}\n\nDate: ${invoiceDate}\nDue: ${dueDate}\n\nThank you.\n— OneAccounts`
+        const waURL = `https://wa.me/${(selectedCustomer.country_code || "+92").replace(/\D/g, "")}${phone}?text=${encodeURIComponent(msg)}`
+        window.open(waURL, "_blank")
+        return
+      }
+    } catch (e) {
+      console.warn("Upload failed, fallback to text only")
+    }
+    // Fallback: text only
+    window.open(waLink(), "_blank")
+  }
+
   const handleSubmit = async () => {
     if (!customerId) { setError("Please select a customer"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
 
+    // ── Stock check ──
+    const stockError = validateStock()
+    if (stockError) {
+      setError(stockError)
+      return
+    }
+
     setSaving(true); setError("")
-    const custCode = selectedCustomer?.code || "CUST"
 
     const url = editId ? `/api/invoices?id=${editId}` : "/api/invoices"
     const method = editId ? "PUT" : "POST"
@@ -395,6 +475,10 @@ export default function NewInvoicePage() {
           border-radius: 8px; padding: 0 12px; font-size: 13px;
           font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box;
         }
+        /* Fix dark calendar */
+        input[type="date"] {
+          color-scheme: dark;
+        }
         .inv-input:focus, .inv-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
         .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .inv-btn {
@@ -410,13 +494,13 @@ export default function NewInvoicePage() {
 
         .inv-item-row {
           display: grid;
-          grid-template-columns: 30px 150px 3fr 80px 110px 110px 30px;
+          grid-template-columns: 30px 150px 3fr 80px 110px 110px 110px 30px;
           gap: 6px; align-items: center; padding: 6px 0;
           border-bottom: 1px solid var(--border);
         }
         .inv-item-header {
           display: grid;
-          grid-template-columns: 30px 150px 3fr 80px 110px 110px 30px;
+          grid-template-columns: 30px 150px 3fr 80px 110px 110px 110px 30px;
           gap: 6px; font-size: 9px; font-weight: 700;
           text-transform: uppercase; color: var(--text-muted); padding-bottom: 6px;
         }
@@ -452,6 +536,7 @@ export default function NewInvoicePage() {
           background: var(--card); border: 1.5px solid var(--border);
           border-radius: 8px; padding: 6px 12px; font-size: 13px;
           font-weight: 600; color: var(--text); width: 100%; cursor: pointer;
+          position: relative;
         }
 
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
@@ -504,19 +589,19 @@ export default function NewInvoicePage() {
               <label className="inv-label">Customer *</label>
               <div className="cust-wrap" ref={customerRef}>
                 {selectedCustomer ? (
-                  <div className="cust-selected-badge" onClick={clearCustomer} style={{ position: "relative", paddingRight: 40 }}>
+                  <div className="cust-selected-badge" onClick={clearCustomer}>
                     <span>👤</span><span style={{ flex: 1 }}>{selectedCustomer.code} — {selectedCustomer.name}</span>
                     <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
                     <button
-                      style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
+                      style={{ marginLeft: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
                       onClick={(e) => { e.stopPropagation(); clearCustomer(); }}
                     >
                       <X size={14} />
                     </button>
                     <button
-                      style={{ position: "absolute", right: 22, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--primary)", cursor: "pointer" }}
+                      style={{ marginLeft: 2, background: "none", border: "none", color: "var(--primary)", cursor: "pointer" }}
                       onClick={(e) => { e.stopPropagation(); refreshCustomers(); }}
-                      title="Refresh customer list"
+                      title="Refresh"
                     >
                       <RefreshCw size={13} />
                     </button>
@@ -570,40 +655,38 @@ export default function NewInvoicePage() {
               {/* Product search + manual */}
               <div style={{ marginTop: 14 }}>
                 <label className="inv-label">Add Product</label>
-                <div style={{ position: "relative" }}>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <div style={{ position: "relative", flex: 1 }}>
-                      <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "var(--text-muted)" }} />
-                      <input
-                        className="inv-input"
-                        style={{ paddingLeft: 36 }}
-                        placeholder="Search product..."
-                        value={productSearch}
-                        onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
-                        onFocus={() => setShowProductList(true)}
-                        onBlur={() => setTimeout(() => setShowProductList(false), 200)}
-                      />
-                    </div>
-                    <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
-                  </div>
-                  {showProductList && (
-                    <div className="cust-dropdown" style={{ marginTop: 4 }}>
-                      {filteredProducts.map((p: any) => (
-                        <div key={p.id} className="cust-option" onMouseDown={() => addProductItem(p)}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            {p.image_path && <img src={p.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />}
-                            <div>
-                              <div className="cust-option-name">{p.code} - {p.name}</div>
-                              <div className="cust-option-meta">PKR {p.sale_price} | Stock: {p.qty_on_hand}</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ position: "relative", flex: 1 }}>
+                    <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "var(--text-muted)" }} />
+                    <input
+                      className="inv-input"
+                      style={{ paddingLeft: 36 }}
+                      placeholder="Search product..."
+                      value={productSearch}
+                      onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
+                      onFocus={() => setShowProductList(true)}
+                      onBlur={() => setTimeout(() => setShowProductList(false), 200)}
+                    />
+                    {showProductList && (
+                      <div className="cust-dropdown" style={{ marginTop: 4 }}>
+                        {filteredProducts.map((p: any) => (
+                          <div key={p.id} className="cust-option" onMouseDown={() => addProductItem(p)}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              {p.image_path && <img src={p.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />}
+                              <div>
+                                <div className="cust-option-name">{p.code} - {p.name}</div>
+                                <div className="cust-option-meta">PKR {p.sale_price} | Stock: {p.qty_on_hand}</div>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
-                      {filteredProducts.length === 0 && (
-                        <div style={{ padding: 12, color: "var(--text-muted)", fontSize: 12 }}>No products found</div>
-                      )}
-                    </div>
-                  )}
+                        ))}
+                        {filteredProducts.length === 0 && (
+                          <div style={{ padding: 12, color: "var(--text-muted)", fontSize: 12 }}>No products found</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
                 </div>
               </div>
 
@@ -659,16 +742,16 @@ export default function NewInvoicePage() {
               <button className="inv-btn" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleBeforeSavePdf}>
                 <Download size={14} /> PDF Preview
               </button>
-              {selectedCustomer && waLink() && (
-                <a href={waLink()} target="_blank" rel="noopener noreferrer" className="inv-btn inv-btn-success" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }}>
-                  <Send size={14} /> WhatsApp
-                </a>
+              {selectedCustomer && (
+                <button className="inv-btn inv-btn-success" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleWhatsAppWithPDF}>
+                  <Send size={14} /> WhatsApp (PDF)
+                </button>
               )}
             </div>
           </div>
         </div>
 
-        {/* Items table – full width */}
+        {/* Items table */}
         <div style={{ marginTop: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
@@ -682,6 +765,7 @@ export default function NewInvoicePage() {
                 <span>Qty</span>
                 <span>Price</span>
                 <span style={{ textAlign: "right" }}>Total</span>
+                <span style={{ textAlign: "right" }}>Cost</span>
                 <span></span>
               </div>
               {items.map((item, idx) => (
@@ -707,6 +791,9 @@ export default function NewInvoicePage() {
                   <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
                   <div className="inv-cell" style={{ justifyContent: "flex-end", fontWeight: 600 }}>
                     PKR {item.total.toLocaleString()}
+                  </div>
+                  <div className="inv-cell" style={{ justifyContent: "flex-end", color: "var(--text-muted)" }}>
+                    {item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}
                   </div>
                   <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}>
                     <Trash2 size={12} />
