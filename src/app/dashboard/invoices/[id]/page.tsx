@@ -246,8 +246,8 @@ export default function InvoiceDetailPage() {
     doc.save(`Invoice_${invoice.invoice_no}.pdf`)
   }
 
-  if (loading) return <div style={{ padding: 24, textAlign: "center", background: "#0B1120", minHeight: "100vh", color: "#94A3B8" }}>Loading…</div>
-  if (!invoice) return <div style={{ padding: 24, textAlign: "center", background: "#0B1120", minHeight: "100vh", color: "#94A3B8" }}>Invoice not found</div>
+  if (loading) return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>Loading…</div>
+  if (!invoice) return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>Invoice not found</div>
 
   const balanceDue = invoice.total - (invoice.paid || 0)
   const waLink = getWhatsAppLink()
@@ -256,20 +256,20 @@ export default function InvoiceDetailPage() {
   const totalCredit = journalLines.reduce((s, l) => s + l.credit, 0)
 
   return (
-    <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .card { background: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: var(--shadow-sm); }
         .row { display: flex; margin-bottom: 10px; font-size: 14px; align-items: center; }
-        .label { width: 130px; color: #94A3B8; font-weight: 600; font-size: 12px; text-transform: uppercase; }
-        .value { color: #E2E8F0; font-weight: 500; }
+        .label { width: 130px; color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+        .value { color: var(--text); font-weight: 500; }
         table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-        th { text-align: left; padding: 10px 12px; background: #1E293B; font-weight: 700; color: #94A3B8; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #334155; }
-        td { padding: 10px 12px; border-bottom: 1px solid #1E293B; font-size: 13px; color: #E2E8F0; }
-        tr:hover td { background: rgba(30,41,59,0.5); }
-        .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid #334155; background: transparent; color: #CBD5E1; font-family: inherit; text-decoration: none; }
-        .btn:hover { background: #1E293B; }
-        .btn-primary { background: #1E3A8A; color: white; border-color: #1E3A8A; }
-        .btn-primary:hover { background: #1E40AF; }
+        th { text-align: left; padding: 10px 12px; background: var(--card-hover); font-weight: 700; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); }
+        td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); }
+        tr:hover td { background: var(--card-hover); }
+        .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; text-decoration: none; }
+        .btn:hover { background: var(--card-hover); }
+        .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+        .btn-primary:hover { background: var(--primary-hover); }
         .btn-success { background: #25D366; color: white; border-color: #25D366; }
         .btn-success:hover { background: #22C55E; }
         .badge {
@@ -282,7 +282,7 @@ export default function InvoiceDetailPage() {
         .badge-paid { background: #065F46; color: #6EE7B7; }
         .badge-unpaid { background: #7C2D12; color: #FCA5A5; }
         .badge-overdue { background: #7C2D12; color: #FCA5A5; }
-        .record-history { background: #0F172A; border-radius: 8px; padding: 8px; }
+        .record-history { background: var(--bg-soft); border-radius: 8px; padding: 8px; }
         @media (max-width: 640px) {
           .row { flex-direction: column; align-items: flex-start; }
           .label { margin-bottom: 2px; }
@@ -295,8 +295,8 @@ export default function InvoiceDetailPage() {
             <ArrowLeft size={16} />
           </button>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", margin: 0 }}>Invoice #{invoice.invoice_no}</h1>
-            <p style={{ color: "#94A3B8", fontSize: 13, margin: 0 }}>{invoice.customer?.name || "Unknown Customer"}</p>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>Invoice #{invoice.invoice_no}</h1>
+            <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>{invoice.customer?.name || "Unknown Customer"}</p>
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -315,7 +315,7 @@ export default function InvoiceDetailPage() {
       </div>
 
       <div className="card">
-        <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>Invoice Details</h3>
+        <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>Invoice Details</h3>
         <div className="row"><span className="label">Date</span><span className="value">{invoice.date}</span></div>
         <div className="row"><span className="label">Due Date</span><span className="value">{invoice.due_date}</span></div>
         <div className="row"><span className="label">Customer</span><span className="value">{invoice.customer?.code} – {invoice.customer?.name}</span></div>
@@ -335,7 +335,7 @@ export default function InvoiceDetailPage() {
 
       {invoice.items && invoice.items.length > 0 && (
         <div className="card">
-          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>Items</h3>
+          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>Items</h3>
           <table>
             <thead>
               <tr>
@@ -353,11 +353,11 @@ export default function InvoiceDetailPage() {
                     {item.product_image ? (
                       <img src={item.product_image} alt="" style={{ width: 28, height: 28, objectFit: "cover", borderRadius: 4 }} />
                     ) : (
-                      <div style={{ width: 28, height: 28, background: "#1E293B", borderRadius: 4 }} />
+                      <div style={{ width: 28, height: 28, background: "var(--card-hover)", borderRadius: 4 }} />
                     )}
                     <span style={{ fontWeight: 600 }}>{item.product_code ? `${item.product_code} – ${item.product_name || ""}` : item.description}</span>
                   </td>
-                  <td style={{ color: "#94A3B8" }}>{item.product_code ? item.description : ""}</td>
+                  <td style={{ color: "var(--text-muted)" }}>{item.product_code ? item.description : ""}</td>
                   <td style={{ textAlign: "center" }}>{item.qty}</td>
                   <td style={{ textAlign: "right" }}>PKR {item.unit_price?.toLocaleString()}</td>
                   <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {item.total?.toLocaleString()}</td>
@@ -370,7 +370,7 @@ export default function InvoiceDetailPage() {
 
       {journalLines.length > 0 && (
         <div className="card">
-          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>📒 Journal Entry</h3>
+          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📒 Journal Entry</h3>
           <table>
             <thead>
               <tr>
@@ -383,17 +383,17 @@ export default function InvoiceDetailPage() {
               {journalLines.map((line, idx) => (
                 <tr key={idx}>
                   <td>{line.account_code} – {line.account_name}</td>
-                  <td style={{ textAlign: "right", color: line.debit > 0 ? "#F87171" : "#475569" }}>
+                  <td style={{ textAlign: "right", color: line.debit > 0 ? "#F87171" : "var(--text-muted)" }}>
                     {line.debit > 0 ? line.debit.toLocaleString() : "–"}
                   </td>
-                  <td style={{ textAlign: "right", color: line.credit > 0 ? "#2DD4BF" : "#475569" }}>
+                  <td style={{ textAlign: "right", color: line.credit > 0 ? "#2DD4BF" : "var(--text-muted)" }}>
                     {line.credit > 0 ? line.credit.toLocaleString() : "–"}
                   </td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
-              <tr style={{ background: "#1E293B", fontWeight: 700 }}>
+              <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
                 <td>Total</td>
                 <td style={{ textAlign: "right", color: "#F87171" }}>{totalDebit.toLocaleString()}</td>
                 <td style={{ textAlign: "right", color: "#2DD4BF" }}>{totalCredit.toLocaleString()}</td>
@@ -405,7 +405,7 @@ export default function InvoiceDetailPage() {
 
       {invoice && (
         <div className="card">
-          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>
+          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>
             📝 Change History
           </h3>
           <div className="record-history">
