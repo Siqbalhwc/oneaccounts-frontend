@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { RoleProvider } from "@/contexts/RoleContext"
 import { ThemeProvider } from "@/contexts/ThemeContext"
+import { PlanProvider } from "@/contexts/PlanContext"
 import "./globals.css"
 import "./theme-utils.css"
 
@@ -19,7 +20,9 @@ export default function RootLayout({
       <body>
         <ThemeProvider>
           <RoleProvider>
-            {children}
+            <PlanProvider>
+              {children}
+            </PlanProvider>
           </RoleProvider>
         </ThemeProvider>
       </body>

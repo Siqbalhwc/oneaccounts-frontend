@@ -60,7 +60,7 @@ export default function FeatureManagerPage() {
         }
         setCompanyId(cid)
 
-        // Fetch feature IDs
+        // Get all feature UUIDs
         const { data: featureRows, error: featureErr } = await supabase
           .from("features")
           .select("id, code")
@@ -74,19 +74,23 @@ export default function FeatureManagerPage() {
         }
         setFeatureIdMap(map)
 
-        // Fetch current overrides
+        // Fetch which features are enabled for this company
         const { data: overrides, error: overridesErr } = await supabase
           .from("company_features")
-          .select("features(code), enabled")
+          .select("feature_id, enabled")
           .eq("company_id", cid)
 
         if (overridesErr) throw overridesErr
 
         const states: Record<string, boolean> = {}
         FEATURE_CODES.forEach(code => { states[code] = false })
+
         if (overrides) {
+          // Match by feature_id → code
           overrides.forEach((row: any) => {
-            const code = row.features?.code
+            const fid = row.feature_id
+            // find the code for this feature_id
+            const code = Object.keys(map).find(k => map[k] === fid)
             if (code) states[code] = row.enabled
           })
         }
@@ -117,7 +121,7 @@ export default function FeatureManagerPage() {
       .from("company_features")
       .upsert({
         company_id: companyId,
-        features: featureId,
+        feature_id: featureId,      // ← correct column
         enabled,
       })
 
@@ -139,7 +143,7 @@ export default function FeatureManagerPage() {
       if (!featureId) continue
       await supabase
         .from("company_features")
-        .upsert({ company_id: companyId, features: featureId, enabled: enable })
+        .upsert({ company_id: companyId, feature_id: featureId, enabled: enable })
     }
     const newStates: Record<string, boolean> = {}
     FEATURE_CODES.forEach(code => { newStates[code] = enable })
@@ -173,9 +177,7 @@ export default function FeatureManagerPage() {
           justify-content: space-between;
           align-items: center;
           box-shadow: var(--shadow-sm);
-          transition: box-shadow 0.15s;
         }
-        .fm-card:hover { box-shadow: var(--shadow); }
         .fm-feature-name { font-size: 15px; font-weight: 700; color: var(--text); }
         .fm-toggle-btn { background: none; border: none; cursor: pointer; padding: 4px; border-radius: 6px; }
         .fm-toggle-btn:hover { background: var(--card-hover); }
