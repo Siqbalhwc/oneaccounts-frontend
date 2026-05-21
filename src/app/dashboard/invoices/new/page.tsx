@@ -325,6 +325,9 @@ export default function NewInvoicePage() {
       })),
       subtotal: totalAmount,
       total: totalAmount,
+      status: "Unpaid",      // ← Added
+      paid: 0,               // ← Added
+      balanceDue: totalAmount, // ← Added
     }
     const doc = await generateInvoicePDF(pdfData)
     const blob = doc.output("blob")
@@ -437,6 +440,9 @@ export default function NewInvoicePage() {
       })),
       subtotal: totalAmount,
       total: totalAmount,
+      status: "Unpaid",      // ← Added
+      paid: 0,               // ← Added
+      balanceDue: totalAmount, // ← Added
     }
     const doc = await generateInvoicePDF(pdfData)
     doc.save(`invoice-preview.pdf`)
