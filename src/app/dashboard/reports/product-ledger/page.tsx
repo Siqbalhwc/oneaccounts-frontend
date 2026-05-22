@@ -21,12 +21,10 @@ export default function ProductLedgerPage() {
   const [ledgerLines, setLedgerLines] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Date filters – default to current fiscal year
   const now = new Date()
   const [startDate, setStartDate] = useState(`${now.getFullYear()}-01-01`)
   const [endDate, setEndDate] = useState(now.toISOString().split("T")[0])
 
-  // Sorting
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
@@ -34,17 +32,16 @@ export default function ProductLedgerPage() {
     if (!productId) return
     setLoading(true)
 
-    // 1. Get product details
+    // 1. Product details
     const { data: prod } = await supabase
       .from("products")
       .select("*")
       .eq("id", productId)
       .single()
     setProduct(prod)
-
     if (!prod) { setLoading(false); return }
 
-    // 2. Fetch all invoice items for this product, joined with invoices for date & type
+    // 2. All invoice items for this product (both purchases and sales)
     const { data: items } = await supabase
       .from("invoice_items")
       .select(`
@@ -61,58 +58,56 @@ export default function ProductLedgerPage() {
       .eq("product_id", productId)
       .order("id", { ascending: true })
 
-    // 3. Build ledger lines sorted by date ascending
+    // 3. Build chronological list of movements
     const allLines: any[] = []
-    let opening = prod.opening_qty || 0
+    const opening = prod.opening_qty || 0
 
     if (items) {
       items.forEach((item: any) => {
         const inv = item.invoices
-        if (!inv) return
+        if (!inv || !inv.date) return   // skip invalid entries
         const isPurchase = inv.type === "purchase"
         const isSale = inv.type === "sale"
-        const qtyIn = isPurchase ? item.qty : 0
-        const qtyOut = isSale ? item.qty : 0
 
         allLines.push({
           id: item.id,
           date: inv.date,
           type: inv.type,
-          invoice_no: inv.invoice_no,
-          qty_in: qtyIn,
-          qty_out: qtyOut,
+          invoice_no: inv.invoice_no || "",
+          qty_in: isPurchase ? item.qty : 0,
+          qty_out: isSale ? item.qty : 0,
         })
       })
     }
 
-    // 4. Filter by date range and compute running balance
+    // 4. Compute opening balance (before start date) and period lines
     const runningLines: any[] = []
-    let runningQty = opening   // start with opening balance
+    let runningQty = opening
 
-    // Opening balance row (before start date)
+    // Opening balance before start date
     for (const line of allLines) {
       if (line.date < startDate) {
         runningQty = runningQty + line.qty_in - line.qty_out
       }
     }
     const openingBalanceQty = runningQty
-    // Add opening balance as a special row
-    if (startDate) {
-      runningLines.push({
-        id: "opening",
-        date: startDate,
-        type: "Opening",
-        invoice_no: "",
-        qty_in: openingBalanceQty,
-        qty_out: 0,
-        balance: openingBalanceQty,
-        isOpening: true,
-      })
-    }
 
-    // Reset running for period
+    // Opening balance row
+    runningLines.push({
+      id: "opening",
+      date: startDate,
+      type: "Opening",
+      invoice_no: "",
+      qty_in: 0,
+      qty_out: 0,
+      balance: openingBalanceQty,
+      isOpening: true,
+    })
+
+    // Reset running for period display
     runningQty = openingBalanceQty
 
+    // Period lines
     for (const line of allLines) {
       if (line.date >= startDate && line.date <= endDate) {
         runningQty = runningQty + line.qty_in - line.qty_out
@@ -124,28 +119,11 @@ export default function ProductLedgerPage() {
       }
     }
 
-    // If no opening row was added (no startDate), just use current
-    if (runningLines.length === 0 && startDate) {
-      // still add opening with zero transactions? We'll add an opening balance row even if no period transactions
-      runningLines.push({
-        id: "opening",
-        date: startDate,
-        type: "Opening",
-        invoice_no: "",
-        qty_in: openingBalanceQty,
-        qty_out: 0,
-        balance: openingBalanceQty,
-        isOpening: true,
-      })
-    }
-
     setLedgerLines(runningLines)
     setLoading(false)
   }
 
-  useEffect(() => {
-    if (productId) fetchLedger()
-  }, [productId, startDate, endDate])
+  useEffect(() => { if (productId) fetchLedger() }, [productId, startDate, endDate])
 
   // Sorting
   const sortedLines = [...ledgerLines].sort((a, b) => {
@@ -153,8 +131,7 @@ export default function ProductLedgerPage() {
     if (!a.isOpening && b.isOpening) return 1
     let valA: any, valB: any
     if (sortField === "balance" || sortField === "qty_in" || sortField === "qty_out") {
-      valA = a[sortField] || 0
-      valB = b[sortField] || 0
+      valA = a[sortField] || 0; valB = b[sortField] || 0
     } else {
       valA = (a[sortField] || "").toString().toLowerCase()
       valB = (b[sortField] || "").toString().toLowerCase()
@@ -244,7 +221,6 @@ export default function ProductLedgerPage() {
         </div>
       </div>
 
-      {/* Summary Cards */}
       <div className="summary-grid">
         <div className="summary-item">
           <div className="summary-label">Total Inflow</div>
@@ -262,7 +238,6 @@ export default function ProductLedgerPage() {
         </div>
       </div>
 
-      {/* Ledger Table */}
       {loading ? (
         <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading ledger entries…</div>
       ) : sortedLines.length === 0 ? (
@@ -281,7 +256,7 @@ export default function ProductLedgerPage() {
           </div>
           {sortedLines.map((line, idx) => (
             <div key={line.id || idx} className={`ledger-row ${line.isOpening ? "opening-row" : ""}`}>
-              <span style={{ fontSize: 12 }}>{line.date}</span>
+              <span style={{ fontSize: 12 }}>{line.isOpening ? "" : line.date}</span>
               <span>{line.type === "purchase" ? "Purchase" : line.type === "sale" ? "Sale" : "Opening"}</span>
               <span style={{ color: line.invoice_no ? "var(--primary)" : "var(--text-muted)" }}>{line.invoice_no || "Opening Balance"}</span>
               <span style={{ textAlign: "right", color: line.qty_in > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.qty_in > 0 ? 600 : 400 }}>
