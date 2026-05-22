@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
 import { useRole } from "@/contexts/RoleContext"
-import { Plus, Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Search } from "lucide-react"
+import { Plus, Edit, Trash2, Eye, ArrowUpDown, ArrowUp, ArrowDown, Search } from "lucide-react"
 
 interface Product {
   id: number
@@ -17,6 +17,8 @@ interface Product {
   total_inflow: number
   total_outflow: number
   image_path: string
+  created_by?: string | null
+  updated_by?: string | null
 }
 
 type SortField = "code" | "name" | "cost_price" | "sale_price" | "opening_qty" | "qty_on_hand" | "total_inflow" | "total_outflow"
@@ -79,7 +81,7 @@ export default function StockRegisterPage() {
         ...p,
         total_inflow: p.total_inflow || 0,
         total_outflow: p.total_outflow || 0,
-        qty_on_hand: (p.opening_qty || 0) + (p.total_inflow || 0) - (p.total_outflow || 0),  // dynamic closing
+        qty_on_hand: (p.opening_qty || 0) + (p.total_inflow || 0) - (p.total_outflow || 0),
       }))
       setProducts(enriched)
       setTotal(count || 0)
@@ -113,8 +115,11 @@ export default function StockRegisterPage() {
     setTimeout(() => setFlash(""), 3000)
   }
 
-  // Summary stats
-  const totalStockValue = products.reduce((sum, p) => sum + (p.qty_on_hand || 0) * (p.cost_price || 0), 0)
+  // ── Summary: (Opening + Inflow - Outflow) * Cost ──
+  const totalStockValue = products.reduce((sum, p) => {
+    const qty = (p.opening_qty || 0) + (p.total_inflow || 0) - (p.total_outflow || 0)
+    return sum + (qty * (p.cost_price || 0))
+  }, 0)
   const totalProducts = total
 
   if (roleLoading || !role) {
@@ -131,39 +136,17 @@ export default function StockRegisterPage() {
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
-        
-        /* All header cells share this base style */
-        .header-cell {
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-          color: var(--text-muted);
-          text-align: center;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 4px;
-          white-space: nowrap;
-        }
-        /* Sortable header cells inherit the same base and add cursor */
-        .sort-btn {
-          background: none; border: none; cursor: pointer; font: inherit; color: inherit;
-          display: inline-flex; align-items: center; gap: 4px; padding: 0;
-          font-weight: 700; text-transform: uppercase; font-size: 10px;
-          text-align: center; justify-content: center;
-        }
-        .sort-btn:hover { color: var(--primary); }
-        
         .header-row {
           display: grid;
-          grid-template-columns: 90px 1fr 90px 90px 70px 70px 70px 80px 50px 45px 45px;
+          grid-template-columns: 90px 1fr 90px 90px 70px 70px 70px 80px 50px 45px 45px 50px;
           padding: 14px 24px;
+          font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
           background: var(--card);
         }
         .data-row {
           display: grid;
-          grid-template-columns: 90px 1fr 90px 90px 70px 70px 70px 80px 50px 45px 45px;
+          grid-template-columns: 90px 1fr 90px 90px 70px 70px 70px 80px 50px 45px 45px 50px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
@@ -171,7 +154,13 @@ export default function StockRegisterPage() {
         }
         .data-row:hover { background: var(--card-hover); }
         .data-row:last-child { border-bottom: none; }
-        
+        .sort-btn {
+          background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
+          display: inline-flex; align-items: center; gap: 4px; padding: 0;
+          font-weight: 700; text-transform: uppercase; font-size: 10px;
+          text-align: left;
+        }
+        .sort-btn:hover { color: var(--primary); }
         .search-input {
           height: 38px; border: 1.5px solid var(--border); border-radius: 8px;
           padding: 0 12px 0 36px; font-size: 13px; width: 260px; box-sizing: border-box;
@@ -193,17 +182,19 @@ export default function StockRegisterPage() {
         .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
-
+        .creator-editor-cell {
+          display: flex; flex-direction: column; font-size: 11px; color: var(--text-muted);
+          line-height: 1.3; word-wrap: break-word;
+        }
         @media (max-width: 1100px) {
           .header-row, .data-row {
-            grid-template-columns: 70px 1fr 70px 70px 50px 50px 50px 60px 40px 35px 35px;
+            grid-template-columns: 70px 1fr 70px 70px 50px 50px 50px 60px 40px 35px 35px 40px;
           }
         }
         @media (max-width: 800px) {
           .header-row, .data-row {
-            grid-template-columns: 60px 1fr 60px 60px 0px 0px 0px 0px 0px 30px 30px;
+            grid-template-columns: 60px 1fr 60px 60px 0px 0px 0px 0px 0px 30px 30px 30px;
           }
-          /* hide the Opening, Inflow, Outflow, Closing, Img columns on small screens */
           .header-row > :nth-child(5),
           .header-row > :nth-child(6),
           .header-row > :nth-child(7),
@@ -213,9 +204,7 @@ export default function StockRegisterPage() {
           .data-row > :nth-child(6),
           .data-row > :nth-child(7),
           .data-row > :nth-child(8),
-          .data-row > :nth-child(9) {
-            display: none;
-          }
+          .data-row > :nth-child(9) { display: none; }
         }
       `}</style>
 
@@ -239,7 +228,9 @@ export default function StockRegisterPage() {
         </div>
         <div className="summary-item">
           <div className="summary-label">Total Stock Value</div>
-          <div className="summary-value" style={{ color: "#10B981" }}>PKR {totalStockValue.toLocaleString()}</div>
+          <div className="summary-value" style={{ color: "#10B981" }}>
+            PKR {totalStockValue.toLocaleString()}
+          </div>
         </div>
       </div>
 
@@ -270,15 +261,16 @@ export default function StockRegisterPage() {
       ) : (
         <div className="card">
           <div className="header-row">
-            <button className="sort-btn header-cell" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
-            <button className="sort-btn header-cell" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
-            <button className="sort-btn header-cell" onClick={() => handleSort("cost_price")}>Cost {getSortIcon("cost_price")}</button>
-            <button className="sort-btn header-cell" onClick={() => handleSort("sale_price")}>Sale {getSortIcon("sale_price")}</button>
-            <span className="header-cell" style={{ cursor: "default" }}>Opening</span>
-            <span className="header-cell" style={{ cursor: "default" }}>Inflow</span>
-            <span className="header-cell" style={{ cursor: "default" }}>Outflow</span>
-            <button className="sort-btn header-cell" onClick={() => handleSort("qty_on_hand")}>Closing {getSortIcon("qty_on_hand")}</button>
-            <span className="header-cell" style={{ cursor: "default" }}>Img</span>
+            <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
+            <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
+            <button className="sort-btn" onClick={() => handleSort("cost_price")}>Cost {getSortIcon("cost_price")}</button>
+            <button className="sort-btn" onClick={() => handleSort("sale_price")}>Sale {getSortIcon("sale_price")}</button>
+            <span style={{ textAlign: "center", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", fontSize: 10 }}>Opening</span>
+            <span style={{ textAlign: "center", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", fontSize: 10 }}>Inflow</span>
+            <span style={{ textAlign: "center", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", fontSize: 10 }}>Outflow</span>
+            <button className="sort-btn" onClick={() => handleSort("qty_on_hand")} style={{ justifyContent: "center" }}>Closing {getSortIcon("qty_on_hand")}</button>
+            <span style={{ textAlign: "center", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", fontSize: 10 }}>Img</span>
+            <span></span>
             <span></span>
             <span></span>
           </div>
@@ -303,6 +295,13 @@ export default function StockRegisterPage() {
                 </span>
                 <button className="btn-icon" onClick={() => router.push(`/dashboard/products/new?id=${prod.id}`)} title="Edit"><Edit size={14} /></button>
                 <button className="btn-icon" onClick={() => handleDelete(prod.id)} style={{ color: "#EF4444" }} title="Delete"><Trash2 size={14} /></button>
+                <button
+                  className="btn-icon"
+                  onClick={() => router.push(`/dashboard/reports/product-ledger?productId=${prod.id}`)}
+                  title="View Ledger"
+                >
+                  <Eye size={14} />
+                </button>
               </div>
             )
           })}
