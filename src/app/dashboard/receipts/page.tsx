@@ -135,7 +135,7 @@ export default function ReceiptsPage() {
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
         .header-row {
           display: grid;
-          grid-template-columns: 140px 100px 1fr 120px 130px 55px 55px;
+          grid-template-columns: 140px 100px 1fr 120px 130px 130px 55px 55px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
@@ -143,11 +143,10 @@ export default function ReceiptsPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: 140px 100px 1fr 120px 130px 55px 55px;
+          grid-template-columns: 140px 100px 1fr 120px 130px 130px 55px 55px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
-          font-size: 13px;
-          align-items: center;
+          font-size: 13px; align-items: center;
           transition: background 0.15s;
         }
         .data-row:hover { background: var(--card-hover); }
@@ -180,8 +179,16 @@ export default function ReceiptsPage() {
         .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
+        .creator-editor-cell {
+          display: flex;
+          flex-direction: column;
+          font-size: 11px;
+          color: var(--text-muted);
+          line-height: 1.3;
+          word-wrap: break-word;
+        }
         @media (max-width: 640px) {
-          .header-row, .data-row { grid-template-columns: 90px 70px 1fr 70px 80px 45px 45px; padding: 10px 12px; }
+          .header-row, .data-row { grid-template-columns: 90px 70px 1fr 70px 80px 80px 45px 45px; padding: 10px 12px; }
         }
       `}</style>
 
@@ -236,6 +243,7 @@ export default function ReceiptsPage() {
             <button className="sort-btn" onClick={() => handleSort("customer")}>Customer {getSortIcon("customer")}</button>
             <button className="sort-btn" onClick={() => handleSort("amount")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Amount {getSortIcon("amount")}</button>
             <button className="sort-btn" onClick={() => handleSort("method")}>Method {getSortIcon("method")}</button>
+            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Created / Edited By</span>
             <span></span>
             <span></span>
           </div>
@@ -249,6 +257,10 @@ export default function ReceiptsPage() {
                 <span>{custName}</span>
                 <span style={{ fontWeight: 600, color: "#10B981", textAlign: "right" }}>PKR {rec.amount?.toLocaleString()}</span>
                 <span style={{ whiteSpace: "nowrap" }}>{rec.payment_method || "—"}</span>
+                <div className="creator-editor-cell">
+                  <span>Created: {rec.created_by || "—"}</span>
+                  <span>Edited: {rec.updated_by || "—"}</span>
+                </div>
                 <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/${rec.id}`)} title="View receipt">
                   <Eye size={14} />
                 </button>
