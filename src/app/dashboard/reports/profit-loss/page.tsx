@@ -36,6 +36,7 @@ export default function ProfitLossPage() {
   const [compareRows, setCompareRows] = useState<any[]>([])
   const [compareLoading, setCompareLoading] = useState(false)
 
+  // Standard P&L from account balances (used when compare mode is off)
   const revenueAccounts = accounts.filter(a => a.type === "Revenue")
   const expenseAccounts = accounts.filter(a => a.type === "Expense")
   const directExpenses = expenseAccounts.filter(a => getCategory(a) === "Direct Expenses")
@@ -60,6 +61,7 @@ export default function ProfitLossPage() {
       .then(r => r.data && setProjects(r.data))
   }, [])
 
+  // ── Fixed fetch for project‑wise comparison ──
   useEffect(() => {
     if (!compareMode || accounts.length === 0) {
       setCompareRows([])
@@ -73,13 +75,21 @@ export default function ProfitLossPage() {
       const expenseIds = accounts.filter(a => a.type === "Expense").map(a => a.id)
       const allRelIds = [...revenueIds, ...expenseIds]
 
-      const { data: lines } = await supabase
+      // ✅ Corrected query – removed the invalid .not("journal_entries", …) filter
+      const { data: lines, error } = await supabase
         .from("journal_lines")
         .select("account_id, debit, credit, project_id")
         .in("account_id", allRelIds)
         .gte("journal_entries.date", startDate)
         .lte("journal_entries.date", endDate)
-        .not("journal_entries", "is", null)
+        // .not("entry_id", "is", null)   // optional – omit for safety
+
+      if (error) {
+        console.error("Failed to load project comparison:", error)
+        setCompareRows([])
+        setCompareLoading(false)
+        return
+      }
 
       const accountTotals: Record<number, number> = {}
       const accountProject: Record<number, Record<string, number>> = {}
@@ -323,7 +333,6 @@ export default function ProfitLossPage() {
           table-layout: fixed;
         }
 
-        /* Column widths: account name gets the remaining space; numeric cols are fixed */
         .compare-table col.col-account { width: 260px; }
         .compare-table col.col-num     { width: 110px; }
 
@@ -360,7 +369,6 @@ export default function ProfitLossPage() {
           word-break: break-word;
         }
 
-        /* Section header rows */
         .compare-table tr.tr-section-head td {
           font-weight: 700;
           font-size: 10px;
@@ -372,7 +380,6 @@ export default function ProfitLossPage() {
           background: var(--bg);
         }
 
-        /* Subtotal rows */
         .compare-table tr.tr-subtotal td {
           font-weight: 700;
           font-size: 13px;
@@ -383,7 +390,6 @@ export default function ProfitLossPage() {
           padding-bottom: 10px;
         }
 
-        /* Bold separator rows (Gross Profit, Net Profit) */
         .compare-table tr.tr-bold td {
           font-weight: 700;
           font-size: 13px;
@@ -592,7 +598,13 @@ export default function ProfitLossPage() {
           {compareLoading ? (
             <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading project comparison…</div>
           ) : compareRows.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>No transactions found for this period.</div>
+            <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>
+              No transactions found for this period.
+              <br />
+              <span style={{ fontSize: 12 }}>
+                💡 To see project‑wise data, tag invoices, bills, or journal entries with a project.
+              </span>
+            </div>
           ) : (
             <>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 16 }}>
@@ -600,12 +612,11 @@ export default function ProfitLossPage() {
               </h3>
 
               <table className="compare-table">
-                {/* Fixed column widths — this is the key fix */}
                 <colgroup>
                   <col className="col-account" />
                   {projects.map(p => <col key={p.id} className="col-num" />)}
-                  <col className="col-num" /> {/* Unallocated */}
-                  <col className="col-num" /> {/* Total */}
+                  <col className="col-num" />
+                  <col className="col-num" />
                 </colgroup>
 
                 <thead>
