@@ -92,7 +92,7 @@ export default function ProfitLossPage() {
 
       if (lines) {
         lines.forEach((l: any) => {
-          const net = (l.credit || 0) - (l.debit || 0)  // revenue positive, expense negative? We'll store signed and later take absolute for display
+          const net = (l.credit || 0) - (l.debit || 0)
           accountTotals[l.account_id] = (accountTotals[l.account_id] || 0) + net
           if (!accountProject[l.account_id]) accountProject[l.account_id] = {}
           const pid = l.project_id || "unallocated"
@@ -105,12 +105,12 @@ export default function ProfitLossPage() {
         .filter(a => a.type === "Revenue" || a.type === "Expense")
         .map(a => {
           const signedTotal = accountTotals[a.id] || 0
-          const displayTotal = a.type === "Revenue" ? Math.abs(signedTotal) : Math.abs(signedTotal)  // both shown positive
+          const displayTotal = Math.abs(signedTotal)
           const projAmounts: Record<string, number> = {}
           let allocatedTotal = 0
           projects.forEach(p => {
             const amt = accountProject[a.id]?.[p.id] || 0
-            const displayAmt = a.type === "Revenue" ? Math.abs(amt) : Math.abs(amt)
+            const displayAmt = Math.abs(amt)
             projAmounts[p.id] = displayAmt
             allocatedTotal += displayAmt
           })
@@ -331,7 +331,7 @@ export default function ProfitLossPage() {
         .compare-table td:first-child { text-align: left; font-weight: 500; color: var(--text); }
         .compare-table .section-header td {
           font-weight: 700; color: var(--text-muted); font-size: 11px; text-transform: uppercase;
-          padding-top: 16px;
+          padding-top: 16px; background: var(--bg-soft);
         }
         .compare-table .subtotal-row td { font-weight: 700; border-top: 1px solid var(--border); }
         .compare-table .bold-row td { font-weight: 700; border-top: 2px solid var(--border-strong); }
