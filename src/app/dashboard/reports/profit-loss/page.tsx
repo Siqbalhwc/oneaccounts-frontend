@@ -36,7 +36,6 @@ export default function ProfitLossPage() {
   const [compareRows, setCompareRows] = useState<any[]>([])
   const [compareLoading, setCompareLoading] = useState(false)
 
-  // Standard P&L from account balances (used when compare mode is off)
   const revenueAccounts = accounts.filter(a => a.type === "Revenue")
   const expenseAccounts = accounts.filter(a => a.type === "Expense")
   const directExpenses = expenseAccounts.filter(a => getCategory(a) === "Direct Expenses")
@@ -61,7 +60,7 @@ export default function ProfitLossPage() {
       .then(r => r.data && setProjects(r.data))
   }, [])
 
-  // ── Fixed fetch for project‑wise comparison ──
+  // Fetch per‑account, per‑project amounts – fixed with explicit join and JS date filter
   useEffect(() => {
     if (!compareMode || accounts.length === 0) {
       setCompareRows([])
@@ -75,14 +74,11 @@ export default function ProfitLossPage() {
       const expenseIds = accounts.filter(a => a.type === "Expense").map(a => a.id)
       const allRelIds = [...revenueIds, ...expenseIds]
 
-      // ✅ Corrected query – removed the invalid .not("journal_entries", …) filter
+      // ✅ Use journal_entries!inner(date) and filter dates in JavaScript
       const { data: lines, error } = await supabase
         .from("journal_lines")
-        .select("account_id, debit, credit, project_id")
+        .select("account_id, debit, credit, project_id, journal_entries!inner(date)")
         .in("account_id", allRelIds)
-        .gte("journal_entries.date", startDate)
-        .lte("journal_entries.date", endDate)
-        // .not("entry_id", "is", null)   // optional – omit for safety
 
       if (error) {
         console.error("Failed to load project comparison:", error)
@@ -95,7 +91,14 @@ export default function ProfitLossPage() {
       const accountProject: Record<number, Record<string, number>> = {}
 
       if (lines) {
-        lines.forEach((l: any) => {
+        // Filter by date range in JS
+        const filtered = lines.filter((l: any) => {
+          const d = l.journal_entries?.date
+          if (!d) return false
+          return d >= startDate && d <= endDate
+        })
+
+        filtered.forEach((l: any) => {
           const net = (l.credit || 0) - (l.debit || 0)
           accountTotals[l.account_id] = (accountTotals[l.account_id] || 0) + net
           if (!accountProject[l.account_id]) accountProject[l.account_id] = {}
@@ -160,7 +163,7 @@ export default function ProfitLossPage() {
     </div>
   )
 
-  // ── helper: per-project subtotals ──────────────────────────────────────────
+  // ── helpers for project subtotals ──
   const projSubtotal = (filter: (r: any) => boolean, pid: string) =>
     compareRows.filter(filter).reduce((s, r) => s + (r.projectAmounts[pid] || 0), 0)
 
