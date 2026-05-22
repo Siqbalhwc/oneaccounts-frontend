@@ -60,7 +60,6 @@ export default function NewPaymentPage() {
         .order("name")
       if (data) {
         setSuppliers(data)
-        // Update selected supplier balance if still selected
         if (selectedSupplier) {
           const updated = data.find((s: any) => s.id === selectedSupplier.id)
           if (updated) setSelectedSupplier(updated)
@@ -199,7 +198,6 @@ export default function NewPaymentPage() {
       setSelectedBankId(null); setSelectedExpenseAccountId(null); setIsDonation(false)
       setBills([]); setAllocations({}); setPaymentAmount(""); setNotes(""); setReference("")
       setLoading(false)
-      // Refresh suppliers after a moment to reflect new balance
       setTimeout(() => loadSuppliers(), 500)
       setTimeout(() => setFlash(null), 4000)
     } catch {
@@ -226,6 +224,7 @@ export default function NewPaymentPage() {
           outline: none; box-sizing: border-box;
         }
         .pay-input:focus, .pay-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+        input[type="date"] { color-scheme: dark; }   /* fix dark calendar */
         .pay-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .pay-btn {
           display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px;
