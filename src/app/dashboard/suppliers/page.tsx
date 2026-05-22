@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
 import { useRole } from "@/contexts/RoleContext"
-import { Plus, Search, Edit, Trash2, X, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { Plus, Search, Edit, Trash2, X, Eye, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import RecordHistory from "@/components/RecordHistory"
 
 const COUNTRY_CODES = [
@@ -37,6 +37,8 @@ interface Supplier {
   default_location_id: number | null
   default_activity_id: number | null
   payment_terms?: string | null
+  created_by?: string | null
+  updated_by?: string | null
 }
 
 type SortField = "code" | "name" | "phone" | "balance"
@@ -266,7 +268,7 @@ export default function SuppliersPage() {
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
         .header-row {
           display: grid;
-          grid-template-columns: 100px 1fr 140px 120px 55px 55px;
+          grid-template-columns: 100px 1fr 140px 130px 120px 55px 55px 50px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
@@ -274,7 +276,7 @@ export default function SuppliersPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: 100px 1fr 140px 120px 55px 55px;
+          grid-template-columns: 100px 1fr 140px 130px 120px 55px 55px 50px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
@@ -309,6 +311,14 @@ export default function SuppliersPage() {
         .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
+        .creator-editor-cell {
+          display: flex;
+          flex-direction: column;
+          font-size: 11px;
+          color: var(--text-muted);
+          line-height: 1.3;
+          word-wrap: break-word;
+        }
         .pr-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
         .pr-modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; color: var(--text); }
         .form-error { background: var(--card); border: 1px solid #EF4444; color: #FCA5A5; padding: 8px 12px; border-radius: 6px; }
@@ -320,7 +330,7 @@ export default function SuppliersPage() {
         .input:focus, .select:focus { border-color: var(--primary); outline: none; }
         label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; display: block; }
         @media (max-width: 640px) {
-          .header-row, .data-row { grid-template-columns: 70px 1fr 80px 80px 40px 40px; padding: 10px 12px; }
+          .header-row, .data-row { grid-template-columns: 70px 1fr 80px 80px 80px 40px 40px 40px; padding: 10px 12px; }
           .search-input { width: 100%; }
         }
       `}</style>
@@ -378,7 +388,9 @@ export default function SuppliersPage() {
             <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
             <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
             <button className="sort-btn" onClick={() => handleSort("phone")}>Phone {getSortIcon("phone")}</button>
+            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Created / Edited By</span>
             <button className="sort-btn" onClick={() => handleSort("balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("balance")}</button>
+            <span></span>
             <span></span>
             <span></span>
           </div>
@@ -387,7 +399,14 @@ export default function SuppliersPage() {
               <span style={{ fontWeight: 600, color: "var(--primary)" }}>{s.code}</span>
               <span style={{ color: "var(--text)" }}>{s.name}</span>
               <span style={{ color: "var(--text-muted)" }}>{s.phone || "—"}</span>
+              <div className="creator-editor-cell">
+                <span>Created: {s.created_by || "—"}</span>
+                <span>Edited: {s.updated_by || "—"}</span>
+              </div>
               <span style={{ textAlign: "right", fontWeight: 600, color: s.balance >= 0 ? "#10B981" : "#EF4444" }}>PKR {s.balance?.toLocaleString()}</span>
+              <button className="btn-icon" onClick={() => router.push(`/dashboard/reports/supplier-ledger?supplierId=${s.id}`)} title="View Ledger">
+                <Eye size={14} />
+              </button>
               <button className="btn-icon" onClick={() => openEdit(s)}><Edit size={14} /></button>
               <button className="btn-icon" onClick={() => handleDelete(s.id)} style={{ color: "#EF4444" }}><Trash2 size={14} /></button>
             </div>

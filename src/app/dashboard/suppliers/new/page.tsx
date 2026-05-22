@@ -48,6 +48,11 @@ export default function NewSupplierPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
+  // For summary on the right
+  const [totalSuppliers, setTotalSuppliers] = useState(0)
+  const [totalPayables, setTotalPayables] = useState(0)
+
+  // Optional default assignments
   const [projects, setProjects] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
   const [activities, setActivities] = useState<any[]>([])
@@ -55,64 +60,62 @@ export default function NewSupplierPage() {
   const [defaultLocationId, setDefaultLocationId] = useState<number | null>(null)
   const [defaultActivityId, setDefaultActivityId] = useState<number | null>(null)
 
-  // Summary state
-  const [totalSuppliers, setTotalSuppliers] = useState(0)
-  const [totalPayables, setTotalPayables] = useState(0)
-
+  // Initialize company, generate code, load master data and summary
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    const init = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
       const cid = (user?.app_metadata as any)?.company_id
-      if (cid) {
-        setCompanyId(cid)
+      if (!cid) return
+      setCompanyId(cid)
 
-        // Generate next SUP-xxx code
-        supabase
-          .from("suppliers")
-          .select("code")
-          .eq("company_id", cid)
-          .ilike("code", "SUP-%")
-          .order("code", { ascending: false })
-          .limit(1)
-          .then(({ data }) => {
-            let nextNum = 1
-            if (data && data.length > 0) {
-              const match = data[0].code?.match(/SUP-(\d+)/)
-              if (match) {
-                nextNum = parseInt(match[1], 10) + 1
-              }
-            }
-            const code = `SUP-${String(nextNum).padStart(3, "0")}`
-            setSupplierCode(code)
-          })
+      // Generate next SUP-xxx code
+      supabase
+        .from("suppliers")
+        .select("code")
+        .eq("company_id", cid)
+        .ilike("code", "SUP-%")
+        .order("code", { ascending: false })
+        .limit(1)
+        .then(({ data }) => {
+          let nextNum = 1
+          if (data && data.length > 0) {
+            const match = data[0].code?.match(/SUP-(\d+)/)
+            if (match) nextNum = parseInt(match[1], 10) + 1
+          }
+          setSupplierCode(`SUP-${String(nextNum).padStart(3, "0")}`)
+        })
 
-        // Load master data
-        supabase.from("projects").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
-          .then(r => r.data && setProjects(r.data))
-        supabase.from("locations").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
-          .then(r => r.data && setLocations(r.data))
-        supabase.from("activities").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
-          .then(r => r.data && setActivities(r.data))
+      // Summary
+      supabase
+        .from("suppliers")
+        .select("id, balance")
+        .eq("company_id", cid)
+        .is("deleted_at", null)
+        .then(({ data }) => {
+          if (data) {
+            setTotalSuppliers(data.length)
+            setTotalPayables(data.reduce((sum, s) => sum + (s.balance || 0), 0))
+          }
+        })
 
-        // Fetch summary
-        supabase
-          .from("suppliers")
-          .select("id, balance")
-          .eq("company_id", cid)
-          .is("deleted_at", null)
-          .then(({ data }) => {
-            if (data) {
-              setTotalSuppliers(data.length)
-              const total = data.reduce((sum, s) => sum + (s.balance || 0), 0)
-              setTotalPayables(total)
-            }
-          })
-      }
-    })
+      // Master data (optional)
+      supabase.from("projects").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
+        .then(r => r.data && setProjects(r.data))
+      supabase.from("locations").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
+        .then(r => r.data && setLocations(r.data))
+      supabase.from("activities").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
+        .then(r => r.data && setActivities(r.data))
+    }
+    init()
   }, [])
 
   const handleSubmit = async () => {
     if (!companyId) { setError("Company not loaded"); return }
     if (!supplierName.trim()) { setError("Supplier name is required"); return }
+
+    // Get current user email
+    const { data: { user } } = await supabase.auth.getUser()
+    const userEmail = user?.email || "system"
 
     setLoading(true)
     setError("")
@@ -120,22 +123,26 @@ export default function NewSupplierPage() {
     const balance = parseFloat(openingBalance || "0")
     const fullPhone = countryCode + (phoneNumber.trim().replace(/\D/g, ""))
 
+    const payload = {
+      company_id: companyId,
+      code: supplierCode,
+      name: supplierName.trim(),
+      phone: fullPhone || null,
+      email: email.trim() || null,
+      address: address.trim() || null,
+      opening_balance: isNaN(balance) ? 0 : balance,
+      balance: isNaN(balance) ? 0 : balance,
+      payment_terms: paymentTerms,
+      default_project_id: defaultProjectId,
+      default_location_id: defaultLocationId,
+      default_activity_id: defaultActivityId,
+      created_by: userEmail,      // ← new
+      updated_by: userEmail,      // ← new
+    }
+
     const { data, error: insertErr } = await supabase
       .from("suppliers")
-      .insert({
-        company_id: companyId,
-        code: supplierCode,
-        name: supplierName.trim(),
-        phone: fullPhone || null,
-        email: email.trim() || null,
-        address: address.trim() || null,
-        opening_balance: isNaN(balance) ? 0 : balance,
-        balance: isNaN(balance) ? 0 : balance,
-        payment_terms: paymentTerms,
-        default_project_id: defaultProjectId,
-        default_location_id: defaultLocationId,
-        default_activity_id: defaultActivityId,
-      })
+      .insert(payload)
       .select("id, code, name")
       .single()
 
@@ -238,13 +245,14 @@ export default function NewSupplierPage() {
                 <input className="input" value={supplierName} onChange={e => setSupplierName(e.target.value)} placeholder="e.g. Tech Distributors" />
               </div>
 
+              {/* Phone with country code */}
               <div style={{ marginBottom: 16 }}>
                 <label className="label">Phone</label>
                 <div className="phone-row">
                   <select className="select" value={countryCode} onChange={e => setCountryCode(e.target.value)}>
                     {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
                   </select>
-                  <input className="input" type="tel" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} placeholder="300 1234567" />
+                  <input className="input" type="tel" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} placeholder="3001234567" />
                 </div>
                 <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Combined for WhatsApp messaging</div>
               </div>
@@ -272,6 +280,7 @@ export default function NewSupplierPage() {
                 </div>
               </div>
 
+              {/* Optional default project / location / activity */}
               <div className="inline-group" style={{ marginBottom: 16 }}>
                 <div>
                   <label className="label">Default Project</label>
@@ -298,7 +307,7 @@ export default function NewSupplierPage() {
             </div>
           </div>
 
-          {/* Right side summary + button */}
+          {/* Right side summary */}
           <div className="summary-side">
             <div className="summary-card">
               <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 16 }}>📊 Suppliers Summary</h2>
