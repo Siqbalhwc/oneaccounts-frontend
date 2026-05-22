@@ -47,8 +47,6 @@ export default function ProductLedgerPage() {
       .select(`
         id,
         qty,
-        unit_price,
-        total,
         invoices!inner(
           invoice_no,
           date,
@@ -65,7 +63,7 @@ export default function ProductLedgerPage() {
     if (items) {
       items.forEach((item: any) => {
         const inv = item.invoices
-        if (!inv || !inv.date) return   // skip invalid entries
+        if (!inv || !inv.date) return
         const isPurchase = inv.type === "purchase"
         const isSale = inv.type === "sale"
 
@@ -84,7 +82,7 @@ export default function ProductLedgerPage() {
     const runningLines: any[] = []
     let runningQty = opening
 
-    // Opening balance before start date
+    // Net movement before start date
     for (const line of allLines) {
       if (line.date < startDate) {
         runningQty = runningQty + line.qty_in - line.qty_out
@@ -92,22 +90,20 @@ export default function ProductLedgerPage() {
     }
     const openingBalanceQty = runningQty
 
-    // Opening balance row
+    // Opening balance row – shown as a debit (inflow)
     runningLines.push({
       id: "opening",
       date: startDate,
       type: "Opening",
       invoice_no: "",
-      qty_in: 0,
+      qty_in: openingBalanceQty,   // displayed as debit
       qty_out: 0,
       balance: openingBalanceQty,
       isOpening: true,
     })
 
-    // Reset running for period display
-    runningQty = openingBalanceQty
-
-    // Period lines
+    // Period lines with running balance
+    runningQty = openingBalanceQty   // reset for period
     for (const line of allLines) {
       if (line.date >= startDate && line.date <= endDate) {
         runningQty = runningQty + line.qty_in - line.qty_out
@@ -125,7 +121,7 @@ export default function ProductLedgerPage() {
 
   useEffect(() => { if (productId) fetchLedger() }, [productId, startDate, endDate])
 
-  // Sorting
+  // Sorting – opening row always first
   const sortedLines = [...ledgerLines].sort((a, b) => {
     if (a.isOpening && !b.isOpening) return -1
     if (!a.isOpening && b.isOpening) return 1
@@ -150,6 +146,7 @@ export default function ProductLedgerPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
+  // Summary totals (exclude opening row)
   const totalInflow = ledgerLines.filter(l => !l.isOpening).reduce((s, l) => s + l.qty_in, 0)
   const totalOutflow = ledgerLines.filter(l => !l.isOpening).reduce((s, l) => s + l.qty_out, 0)
   const closingBalance = ledgerLines.length > 0 ? ledgerLines[ledgerLines.length - 1].balance : 0
