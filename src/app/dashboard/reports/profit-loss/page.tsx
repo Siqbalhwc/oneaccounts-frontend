@@ -29,16 +29,13 @@ export default function ProfitLossPage() {
   const [startDate, setStartDate] = useState(`${now.getFullYear()}-01-01`)
   const [endDate, setEndDate] = useState(now.toISOString().split("T")[0])
 
-  // Project filter
   const [projects, setProjects] = useState<any[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [compareMode, setCompareMode] = useState(false)
 
-  // Compare data – account rows with per‑project amounts
   const [compareRows, setCompareRows] = useState<any[]>([])
   const [compareLoading, setCompareLoading] = useState(false)
 
-  // Standard P&L from account balances (used when compare mode is off)
   const revenueAccounts = accounts.filter(a => a.type === "Revenue")
   const expenseAccounts = accounts.filter(a => a.type === "Expense")
   const directExpenses = expenseAccounts.filter(a => getCategory(a) === "Direct Expenses")
@@ -63,7 +60,6 @@ export default function ProfitLossPage() {
       .then(r => r.data && setProjects(r.data))
   }, [])
 
-  // Fetch per‑account, per‑project amounts when compareMode is on
   useEffect(() => {
     if (!compareMode || accounts.length === 0) {
       setCompareRows([])
@@ -153,6 +149,16 @@ export default function ProfitLossPage() {
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
+
+  // ── helper: per-project subtotals ──────────────────────────────────────────
+  const projSubtotal = (filter: (r: any) => boolean, pid: string) =>
+    compareRows.filter(filter).reduce((s, r) => s + (r.projectAmounts[pid] || 0), 0)
+
+  const projUnallocatedSubtotal = (filter: (r: any) => boolean) =>
+    compareRows.filter(filter).reduce((s, r) => s + r.unallocated, 0)
+
+  const projTotal = (filter: (r: any) => boolean) =>
+    compareRows.filter(filter).reduce((s, r) => s + r.total, 0)
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -305,38 +311,95 @@ export default function ProfitLossPage() {
 
         .zero-state { padding: 16px 11px; font-size: 12px; color: var(--text-soft); font-style: italic; }
 
-        /* Compare table */
+        /* ── Compare table ── */
+        .compare-wrap {
+          padding: 32px;
+          overflow-x: auto;
+        }
+
         .compare-table {
           width: 100%;
           border-collapse: collapse;
-          margin-bottom: 24px;
+          table-layout: fixed;
         }
+
+        /* Column widths: account name gets the remaining space; numeric cols are fixed */
+        .compare-table col.col-account { width: 260px; }
+        .compare-table col.col-num     { width: 110px; }
+
         .compare-table th {
           background: var(--card-hover);
           padding: 10px 12px;
-          font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
-          border-bottom: 1px solid var(--border);
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          color: var(--text-muted);
+          border-bottom: 2px solid var(--border);
           text-align: right;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
-        .compare-table th:first-child { text-align: left; }
+        .compare-table th.col-head-account { text-align: left; }
+
         .compare-table td {
           padding: 8px 12px;
           border-bottom: 1px solid var(--border);
           font-size: 13px;
           text-align: right;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          vertical-align: middle;
         }
-        .compare-table td:first-child { text-align: left; font-weight: 500; color: var(--text); }
-        .compare-table .section-header td {
-          font-weight: 700; color: var(--text-muted); font-size: 11px; text-transform: uppercase;
-          padding-top: 16px; background: var(--bg-soft);
+        .compare-table td.td-account {
+          text-align: left;
+          font-weight: 500;
+          color: var(--text);
+          white-space: normal;
+          word-break: break-word;
         }
-        .compare-table .subtotal-row td { font-weight: 700; border-top: 1px solid var(--border); }
-        .compare-table .bold-row td { font-weight: 700; border-top: 2px solid var(--border-strong); }
+
+        /* Section header rows */
+        .compare-table tr.tr-section-head td {
+          font-weight: 700;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          padding-top: 18px;
+          padding-bottom: 6px;
+          border-bottom: 1px solid var(--border);
+          background: var(--bg);
+        }
+
+        /* Subtotal rows */
+        .compare-table tr.tr-subtotal td {
+          font-weight: 700;
+          font-size: 13px;
+          border-top: 1px solid var(--border);
+          border-bottom: 1px solid var(--border);
+          background: var(--card);
+          padding-top: 10px;
+          padding-bottom: 10px;
+        }
+
+        /* Bold separator rows (Gross Profit, Net Profit) */
+        .compare-table tr.tr-bold td {
+          font-weight: 700;
+          font-size: 13px;
+          border-top: 2px solid var(--border-strong);
+          border-bottom: 2px solid var(--border-strong);
+          background: var(--card-hover);
+          padding-top: 12px;
+          padding-bottom: 12px;
+        }
 
         @media (max-width: 900px) {
           .kpi-strip { grid-template-columns: repeat(2, 1fr); }
           .pl-header { padding: 0 16px; }
-          .date-bar, .report-body { padding: 16px; }
+          .date-bar, .report-body, .compare-wrap { padding: 16px; }
+          .compare-table col.col-account { width: 180px; }
+          .compare-table col.col-num     { width: 90px; }
         }
         @media print {
           .pl-header, .date-bar { display: none; }
@@ -344,7 +407,7 @@ export default function ProfitLossPage() {
         }
       `}</style>
 
-      {/* Sticky Header */}
+      {/* ── Sticky Header ── */}
       <div className="pl-header">
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <button className="back-btn" onClick={() => router.push("/dashboard/reports")}>
@@ -362,7 +425,7 @@ export default function ProfitLossPage() {
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* ── KPI Cards ── */}
       <div className="kpi-strip">
         <div className="kpi-card">
           <div className="kpi-label">Total Revenue</div>
@@ -390,7 +453,7 @@ export default function ProfitLossPage() {
         </div>
       </div>
 
-      {/* Filters Bar */}
+      {/* ── Filters Bar ── */}
       <div className="date-bar">
         <Calendar size={13} color="var(--text-muted)" />
         <span className="date-label">Period</span>
@@ -412,7 +475,7 @@ export default function ProfitLossPage() {
         </div>
       </div>
 
-      {/* Report Body – single column OR compare table */}
+      {/* ── Report Body ── */}
       {!compareMode ? (
         <div className="report-body">
           {/* Revenue */}
@@ -428,9 +491,7 @@ export default function ProfitLossPage() {
                 <div key={a.id} className="account-row" onClick={() => openTrialForAccount(a)}>
                   <span className="acc-code">{a.code}</span>
                   <span className="acc-name">{a.name}</span>
-                  <span className="acc-amount" style={{ color: "#10B981" }}>
-                    PKR {fmt(a.balance || 0)}
-                  </span>
+                  <span className="acc-amount" style={{ color: "#10B981" }}>PKR {fmt(a.balance || 0)}</span>
                 </div>
               ))
             )}
@@ -451,9 +512,7 @@ export default function ProfitLossPage() {
                 <div key={a.id} className="account-row" onClick={() => openTrialForAccount(a)}>
                   <span className="acc-code">{a.code}</span>
                   <span className="acc-name">{a.name}</span>
-                  <span className="acc-amount" style={{ color: "#F87171" }}>
-                    PKR {fmt(a.balance || 0)}
-                  </span>
+                  <span className="acc-amount" style={{ color: "#F87171" }}>PKR {fmt(a.balance || 0)}</span>
                 </div>
               ))}
               <div className="subtotal-row">
@@ -482,9 +541,7 @@ export default function ProfitLossPage() {
                 <div key={a.id} className="account-row" onClick={() => openTrialForAccount(a)}>
                   <span className="acc-code">{a.code}</span>
                   <span className="acc-name">{a.name}</span>
-                  <span className="acc-amount" style={{ color: "#FCD34D" }}>
-                    PKR {fmt(a.balance || 0)}
-                  </span>
+                  <span className="acc-amount" style={{ color: "#FCD34D" }}>PKR {fmt(a.balance || 0)}</span>
                 </div>
               ))}
               <div className="subtotal-row">
@@ -505,9 +562,7 @@ export default function ProfitLossPage() {
                 <div key={a.id} className="account-row" onClick={() => openTrialForAccount(a)}>
                   <span className="acc-code">{a.code}</span>
                   <span className="acc-name">{a.name}</span>
-                  <span className="acc-amount" style={{ color: "#C4B5FD" }}>
-                    PKR {fmt(a.balance || 0)}
-                  </span>
+                  <span className="acc-amount" style={{ color: "#C4B5FD" }}>PKR {fmt(a.balance || 0)}</span>
                 </div>
               ))}
               <div className="subtotal-row">
@@ -530,32 +585,54 @@ export default function ProfitLossPage() {
             </div>
           </div>
         </div>
+
       ) : (
-        <div style={{ padding: 32, overflowX: "auto" }}>
+        /* ── Compare Table ── */
+        <div className="compare-wrap">
           {compareLoading ? (
             <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading project comparison…</div>
           ) : compareRows.length === 0 ? (
             <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>No transactions found for this period.</div>
           ) : (
             <>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 16 }}>Project‑wise Profit &amp; Loss</h3>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 16 }}>
+                Project‑wise Profit &amp; Loss
+              </h3>
+
               <table className="compare-table">
+                {/* Fixed column widths — this is the key fix */}
+                <colgroup>
+                  <col className="col-account" />
+                  {projects.map(p => <col key={p.id} className="col-num" />)}
+                  <col className="col-num" /> {/* Unallocated */}
+                  <col className="col-num" /> {/* Total */}
+                </colgroup>
+
                 <thead>
                   <tr>
-                    <th>Account</th>
+                    <th className="col-head-account">Account</th>
                     {projects.map(p => (
-                      <th key={p.id}>{p.name}<br /><span style={{fontSize:9, fontWeight:400}}>(PKR)</span></th>
+                      <th key={p.id}>
+                        {p.name}<br />
+                        <span style={{ fontSize: 9, fontWeight: 400 }}>(PKR)</span>
+                      </th>
                     ))}
-                    <th>Unallocated<br /><span style={{fontSize:9, fontWeight:400}}>(PKR)</span></th>
-                    <th>Total<br /><span style={{fontSize:9, fontWeight:400}}>(PKR)</span></th>
+                    <th>Unallocated<br /><span style={{ fontSize: 9, fontWeight: 400 }}>(PKR)</span></th>
+                    <th>Total<br /><span style={{ fontSize: 9, fontWeight: 400 }}>(PKR)</span></th>
                   </tr>
                 </thead>
+
                 <tbody>
-                  {/* Revenue section */}
-                  <tr className="section-header"><td colSpan={projects.length + 3} style={{ color: "#10B981" }}>Income / Revenue</td></tr>
+
+                  {/* ── REVENUE ── */}
+                  <tr className="tr-section-head">
+                    <td className="td-account" style={{ color: "#10B981" }}>Income / Revenue</td>
+                    {projects.map(p => <td key={p.id} />)}
+                    <td /><td />
+                  </tr>
                   {compareRows.filter(r => r.type === "Revenue").map(row => (
                     <tr key={row.id}>
-                      <td>{row.code} – {row.name}</td>
+                      <td className="td-account">{row.code} – {row.name}</td>
                       {projects.map(p => (
                         <td key={p.id} style={{ color: "#10B981" }}>{fmt(row.projectAmounts[p.id] || 0)}</td>
                       ))}
@@ -563,23 +640,30 @@ export default function ProfitLossPage() {
                       <td style={{ fontWeight: 600, color: "#10B981" }}>{fmt(row.total)}</td>
                     </tr>
                   ))}
-                  <tr className="subtotal-row">
-                    <td style={{ fontWeight: 700 }}>Total Revenue</td>
-                    {projects.map(p => {
-                      const total = compareRows.filter(r => r.type === "Revenue").reduce((s, r) => s + (r.projectAmounts[p.id] || 0), 0)
-                      return <td key={p.id} style={{ color: "#10B981", fontWeight: 700 }}>{fmt(total)}</td>
-                    })}
-                    <td style={{ fontWeight: 700, color: "#10B981" }}>
-                      {fmt(compareRows.filter(r => r.type === "Revenue").reduce((s, r) => s + r.unallocated, 0))}
+                  <tr className="tr-subtotal">
+                    <td className="td-account" style={{ color: "#10B981" }}>Total Revenue</td>
+                    {projects.map(p => (
+                      <td key={p.id} style={{ color: "#10B981" }}>
+                        {fmt(projSubtotal(r => r.type === "Revenue", p.id))}
+                      </td>
+                    ))}
+                    <td style={{ color: "#10B981" }}>
+                      {fmt(projUnallocatedSubtotal(r => r.type === "Revenue"))}
                     </td>
-                    <td style={{ fontWeight: 700, color: "#10B981" }}>{fmt(totalRevenue)}</td>
+                    <td style={{ color: "#10B981" }}>
+                      {fmt(projTotal(r => r.type === "Revenue"))}
+                    </td>
                   </tr>
 
-                  {/* Direct Expenses */}
-                  <tr className="section-header"><td colSpan={projects.length + 3} style={{ color: "#EF4444" }}>Cost of Goods Sold / Direct Expenses</td></tr>
+                  {/* ── DIRECT EXPENSES ── */}
+                  <tr className="tr-section-head">
+                    <td className="td-account" style={{ color: "#EF4444" }}>Cost of Goods Sold / Direct Expenses</td>
+                    {projects.map(p => <td key={p.id} />)}
+                    <td /><td />
+                  </tr>
                   {compareRows.filter(r => r.category === "Direct Expenses").map(row => (
                     <tr key={row.id}>
-                      <td>{row.code} – {row.name}</td>
+                      <td className="td-account">{row.code} – {row.name}</td>
                       {projects.map(p => (
                         <td key={p.id} style={{ color: "#EF4444" }}>{fmt(row.projectAmounts[p.id] || 0)}</td>
                       ))}
@@ -587,40 +671,49 @@ export default function ProfitLossPage() {
                       <td style={{ fontWeight: 600, color: "#EF4444" }}>{fmt(row.total)}</td>
                     </tr>
                   ))}
-                  <tr className="subtotal-row">
-                    <td style={{ fontWeight: 700 }}>Total Direct Expenses</td>
-                    {projects.map(p => {
-                      const total = compareRows.filter(r => r.category === "Direct Expenses").reduce((s, r) => s + (r.projectAmounts[p.id] || 0), 0)
-                      return <td key={p.id} style={{ color: "#EF4444", fontWeight: 700 }}>{fmt(total)}</td>
-                    })}
-                    <td style={{ fontWeight: 700, color: "#EF4444" }}>
-                      {fmt(compareRows.filter(r => r.category === "Direct Expenses").reduce((s, r) => s + r.unallocated, 0))}
-                    </td>
-                    <td style={{ fontWeight: 700, color: "#EF4444" }}>{fmt(totalDirect)}</td>
-                  </tr>
-
-                  {/* Gross Profit */}
-                  <tr className="bold-row">
-                    <td style={{ fontWeight: 700 }}>Gross Profit</td>
-                    {projects.map(p => {
-                      const rev = compareRows.filter(r => r.type === "Revenue").reduce((s, r) => s + (r.projectAmounts[p.id] || 0), 0)
-                      const dir = compareRows.filter(r => r.category === "Direct Expenses").reduce((s, r) => s + (r.projectAmounts[p.id] || 0), 0)
-                      const gp = rev - dir
-                      return <td key={p.id} style={{ color: gp >= 0 ? "#10B981" : "#EF4444", fontWeight: 700 }}>
-                        {gp >= 0 ? "" : "-"}{fmt(gp)}
+                  <tr className="tr-subtotal">
+                    <td className="td-account" style={{ color: "#EF4444" }}>Total Direct Expenses</td>
+                    {projects.map(p => (
+                      <td key={p.id} style={{ color: "#EF4444" }}>
+                        {fmt(projSubtotal(r => r.category === "Direct Expenses", p.id))}
                       </td>
-                    })}
-                    <td style={{ fontWeight: 700 }}></td>
-                    <td style={{ fontWeight: 700, color: grossProfit >= 0 ? "#10B981" : "#EF4444" }}>
-                      {grossProfit >= 0 ? "" : "-"}{fmt(grossProfit)}
+                    ))}
+                    <td style={{ color: "#EF4444" }}>
+                      {fmt(projUnallocatedSubtotal(r => r.category === "Direct Expenses"))}
+                    </td>
+                    <td style={{ color: "#EF4444" }}>
+                      {fmt(projTotal(r => r.category === "Direct Expenses"))}
                     </td>
                   </tr>
 
-                  {/* Operating Expenses */}
-                  <tr className="section-header"><td colSpan={projects.length + 3} style={{ color: "#F59E0B" }}>Operating Expenses</td></tr>
+                  {/* ── GROSS PROFIT ── */}
+                  <tr className="tr-bold">
+                    <td className="td-account">Gross Profit</td>
+                    {projects.map(p => {
+                      const rev = projSubtotal(r => r.type === "Revenue", p.id)
+                      const dir = projSubtotal(r => r.category === "Direct Expenses", p.id)
+                      const gp = rev - dir
+                      return (
+                        <td key={p.id} style={{ color: gp >= 0 ? "#10B981" : "#EF4444" }}>
+                          {gp < 0 ? "-" : ""}{fmt(gp)}
+                        </td>
+                      )
+                    })}
+                    <td />
+                    <td style={{ color: grossProfit >= 0 ? "#10B981" : "#EF4444" }}>
+                      {grossProfit < 0 ? "-" : ""}{fmt(grossProfit)}
+                    </td>
+                  </tr>
+
+                  {/* ── OPERATING EXPENSES ── */}
+                  <tr className="tr-section-head">
+                    <td className="td-account" style={{ color: "#F59E0B" }}>Operating Expenses</td>
+                    {projects.map(p => <td key={p.id} />)}
+                    <td /><td />
+                  </tr>
                   {compareRows.filter(r => r.category === "Operating Expenses").map(row => (
                     <tr key={row.id}>
-                      <td>{row.code} – {row.name}</td>
+                      <td className="td-account">{row.code} – {row.name}</td>
                       {projects.map(p => (
                         <td key={p.id} style={{ color: "#F59E0B" }}>{fmt(row.projectAmounts[p.id] || 0)}</td>
                       ))}
@@ -628,23 +721,30 @@ export default function ProfitLossPage() {
                       <td style={{ fontWeight: 600, color: "#F59E0B" }}>{fmt(row.total)}</td>
                     </tr>
                   ))}
-                  <tr className="subtotal-row">
-                    <td style={{ fontWeight: 700 }}>Total Operating Expenses</td>
-                    {projects.map(p => {
-                      const total = compareRows.filter(r => r.category === "Operating Expenses").reduce((s, r) => s + (r.projectAmounts[p.id] || 0), 0)
-                      return <td key={p.id} style={{ color: "#F59E0B", fontWeight: 700 }}>{fmt(total)}</td>
-                    })}
-                    <td style={{ fontWeight: 700, color: "#F59E0B" }}>
-                      {fmt(compareRows.filter(r => r.category === "Operating Expenses").reduce((s, r) => s + r.unallocated, 0))}
+                  <tr className="tr-subtotal">
+                    <td className="td-account" style={{ color: "#F59E0B" }}>Total Operating Expenses</td>
+                    {projects.map(p => (
+                      <td key={p.id} style={{ color: "#F59E0B" }}>
+                        {fmt(projSubtotal(r => r.category === "Operating Expenses", p.id))}
+                      </td>
+                    ))}
+                    <td style={{ color: "#F59E0B" }}>
+                      {fmt(projUnallocatedSubtotal(r => r.category === "Operating Expenses"))}
                     </td>
-                    <td style={{ fontWeight: 700, color: "#F59E0B" }}>{fmt(totalOpEx)}</td>
+                    <td style={{ color: "#F59E0B" }}>
+                      {fmt(projTotal(r => r.category === "Operating Expenses"))}
+                    </td>
                   </tr>
 
-                  {/* Other Expenses */}
-                  <tr className="section-header"><td colSpan={projects.length + 3} style={{ color: "#8B5CF6" }}>Other Expenses</td></tr>
+                  {/* ── OTHER EXPENSES ── */}
+                  <tr className="tr-section-head">
+                    <td className="td-account" style={{ color: "#8B5CF6" }}>Other Expenses</td>
+                    {projects.map(p => <td key={p.id} />)}
+                    <td /><td />
+                  </tr>
                   {compareRows.filter(r => r.category === "Other" && r.type === "Expense").map(row => (
                     <tr key={row.id}>
-                      <td>{row.code} – {row.name}</td>
+                      <td className="td-account">{row.code} – {row.name}</td>
                       {projects.map(p => (
                         <td key={p.id} style={{ color: "#8B5CF6" }}>{fmt(row.projectAmounts[p.id] || 0)}</td>
                       ))}
@@ -652,34 +752,40 @@ export default function ProfitLossPage() {
                       <td style={{ fontWeight: 600, color: "#8B5CF6" }}>{fmt(row.total)}</td>
                     </tr>
                   ))}
-                  <tr className="subtotal-row">
-                    <td style={{ fontWeight: 700 }}>Total Other Expenses</td>
-                    {projects.map(p => {
-                      const total = compareRows.filter(r => r.category === "Other" && r.type === "Expense").reduce((s, r) => s + (r.projectAmounts[p.id] || 0), 0)
-                      return <td key={p.id} style={{ color: "#8B5CF6", fontWeight: 700 }}>{fmt(total)}</td>
-                    })}
-                    <td style={{ fontWeight: 700, color: "#8B5CF6" }}>
-                      {fmt(compareRows.filter(r => r.category === "Other" && r.type === "Expense").reduce((s, r) => s + r.unallocated, 0))}
+                  <tr className="tr-subtotal">
+                    <td className="td-account" style={{ color: "#8B5CF6" }}>Total Other Expenses</td>
+                    {projects.map(p => (
+                      <td key={p.id} style={{ color: "#8B5CF6" }}>
+                        {fmt(projSubtotal(r => r.category === "Other" && r.type === "Expense", p.id))}
+                      </td>
+                    ))}
+                    <td style={{ color: "#8B5CF6" }}>
+                      {fmt(projUnallocatedSubtotal(r => r.category === "Other" && r.type === "Expense"))}
                     </td>
-                    <td style={{ fontWeight: 700, color: "#8B5CF6" }}>{fmt(totalOther)}</td>
+                    <td style={{ color: "#8B5CF6" }}>
+                      {fmt(projTotal(r => r.category === "Other" && r.type === "Expense"))}
+                    </td>
                   </tr>
 
-                  {/* Net Profit */}
-                  <tr className="bold-row">
-                    <td style={{ fontWeight: 700 }}>Net Profit / Loss</td>
+                  {/* ── NET PROFIT ── */}
+                  <tr className="tr-bold">
+                    <td className="td-account">Net Profit / Loss</td>
                     {projects.map(p => {
-                      const rev = compareRows.filter(r => r.type === "Revenue").reduce((s, r) => s + (r.projectAmounts[p.id] || 0), 0)
-                      const allExp = compareRows.filter(r => r.type === "Expense").reduce((s, r) => s + (r.projectAmounts[p.id] || 0), 0)
-                      const net = rev - allExp
-                      return <td key={p.id} style={{ color: net >= 0 ? "#10B981" : "#EF4444", fontWeight: 700 }}>
-                        {net >= 0 ? "" : "-"}{fmt(net)}
-                      </td>
+                      const rev = projSubtotal(r => r.type === "Revenue", p.id)
+                      const exp = projSubtotal(r => r.type === "Expense", p.id)
+                      const net = rev - exp
+                      return (
+                        <td key={p.id} style={{ color: net >= 0 ? "#10B981" : "#EF4444" }}>
+                          {net < 0 ? "-" : ""}{fmt(net)}
+                        </td>
+                      )
                     })}
-                    <td style={{ fontWeight: 700 }}></td>
-                    <td style={{ fontWeight: 700, color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
-                      {netProfit >= 0 ? "" : "-"}{fmt(netProfit)}
+                    <td />
+                    <td style={{ color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
+                      {netProfit < 0 ? "-" : ""}{fmt(netProfit)}
                     </td>
                   </tr>
+
                 </tbody>
               </table>
             </>
