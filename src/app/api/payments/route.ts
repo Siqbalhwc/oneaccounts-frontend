@@ -75,6 +75,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Amount is required' }, { status: 400 })
   }
 
+  // Determine payment type
+  const isExpense = !!expense_account_id
+  const paymentType = isExpense ? 'expense' : 'supplier_payment'
+  const partyType = isExpense ? 'expense' : 'supplier'   // ✅ fixed – always non‑null
+  const targetPartyId = isExpense ? null : party_id       // no supplier for expenses
+
   // ── Generate unique payment number with retry ────────────────────────
   let payNo = ''
   let payment: any = null
@@ -86,9 +92,9 @@ export async function POST(request: NextRequest) {
     const result = await supabaseAdmin.from("payments").insert({
       company_id: companyId,
       payment_no: payNo,
-      payment_type: expense_account_id ? 'expense' : 'supplier_payment',
-      party_type: expense_account_id ? null : 'supplier',
-      party_id: expense_account_id ? null : party_id,
+      payment_type: paymentType,
+      party_type: partyType,          // ✅ always a value
+      party_id: targetPartyId,
       payment_date: date || new Date().toISOString().split('T')[0],
       amount,
       payment_method,
@@ -117,7 +123,7 @@ export async function POST(request: NextRequest) {
 
   // ── Allocations to purchase bills (only for supplier payments) ───────
   let totalAllocated = 0
-  if (!expense_account_id && allocations && Array.isArray(allocations) && allocations.length > 0) {
+  if (!isExpense && allocations && Array.isArray(allocations) && allocations.length > 0) {
     for (const alloc of allocations) {
       const billId = alloc.bill_id
       const allocAmount = parseFloat(alloc.amount) || 0
@@ -151,13 +157,13 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Update supplier balance ─────────────────────────────────────────
-  if (party_id) {
+  if (targetPartyId) {
     const { data: supp } = await supabaseAdmin.from('suppliers')
-      .select('balance').eq('id', party_id).eq('company_id', companyId).single()
+      .select('balance').eq('id', targetPartyId).eq('company_id', companyId).single()
     if (supp) {
       await supabaseAdmin.from('suppliers')
         .update({ balance: (supp.balance || 0) - amount })
-        .eq('id', party_id).eq('company_id', companyId)
+        .eq('id', targetPartyId).eq('company_id', companyId)
     }
   }
 
@@ -183,19 +189,18 @@ export async function POST(request: NextRequest) {
   const jeLines: any[] = []
   let description = `Payment - ${payNo}`
 
-  if (expense_account_id) {
-    // Donation / Other Expense: Debit expense, Credit bank
+  if (isExpense) {
+    // Expense payment: Debit expense account, Credit bank
     jeLines.push({ account_id: expense_account_id, debit: amount, credit: 0 })
     jeLines.push({ account_id: bankGlAccountId, debit: 0, credit: amount })
     description = `Expense Payment - ${payNo}`
   } else {
-    // Normal supplier payment: Debit AP (2000), Credit bank
+    // Supplier payment: Debit AP (2000), Credit bank
     const apAcc = await getAccount(supabaseAdmin, '2000', companyId)
     if (apAcc) {
       jeLines.push({ account_id: apAcc.id, debit: amount, credit: 0 })
       jeLines.push({ account_id: bankGlAccountId, debit: 0, credit: amount })
     } else {
-      // Fallback: just credit bank and let the debit be handled manually? We'll just error for safety.
       return NextResponse.json({ error: 'Accounts Payable (2000) not found' }, { status: 500 })
     }
   }
