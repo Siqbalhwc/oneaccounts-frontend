@@ -34,8 +34,25 @@ export default function ProfitLossPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [compareMode, setCompareMode] = useState(false)
 
-  // Comparative data (per project, per category)
+  // Comparative data (per project)
   const [comparativeData, setComparativeData] = useState<any[]>([])
+  const [compareLoading, setCompareLoading] = useState(false)
+
+  // Standard P&L from account balances (used when compare mode is off)
+  const revenueAccounts = accounts.filter(a => a.type === "Revenue")
+  const expenseAccounts = accounts.filter(a => a.type === "Expense")
+  const directExpenses = expenseAccounts.filter(a => getCategory(a) === "Direct Expenses")
+  const operatingExpenses = expenseAccounts.filter(a => getCategory(a) === "Operating Expenses")
+  const otherExpenses = expenseAccounts.filter(a => !["Direct Expenses", "Operating Expenses"].includes(getCategory(a)))
+
+  const totalRevenue = revenueAccounts.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
+  const totalDirect = directExpenses.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
+  const totalOpEx = operatingExpenses.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
+  const totalOther = otherExpenses.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
+  const totalExpenses = totalDirect + totalOpEx + totalOther
+  const grossProfit = totalRevenue - totalDirect
+  const netProfit = grossProfit - totalOpEx - totalOther
+  const margin = totalRevenue !== 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : "0.0"
 
   useEffect(() => {
     supabase.from("accounts").select("*").order("code").then(r => {
@@ -52,6 +69,8 @@ export default function ProfitLossPage() {
       setComparativeData([])
       return
     }
+
+    setCompareLoading(true)
 
     const fetchComparative = async () => {
       const revenueIds = accounts.filter(a => a.type === "Revenue").map(a => a.id)
@@ -81,32 +100,63 @@ export default function ProfitLossPage() {
           projectId: proj.id,
           projectName: proj.name,
           revenue: Math.abs(rev),
-          expenses,
+          directExp: expenses["Direct Expenses"] || 0,
+          opEx: expenses["Operating Expenses"] || 0,
+          otherExp: expenses["Other"] || 0,
         }
       })
 
       const results = await Promise.all(promises)
       setComparativeData(results)
+      setCompareLoading(false)
     }
 
     fetchComparative()
   }, [compareMode, projects, startDate, endDate, accounts])
 
-  // Standard P&L values (from account balances)
-  const revenueAccounts = accounts.filter(a => a.type === "Revenue")
-  const expenseAccounts = accounts.filter(a => a.type === "Expense")
-  const directExpenses = expenseAccounts.filter(a => getCategory(a) === "Direct Expenses")
-  const operatingExpenses = expenseAccounts.filter(a => getCategory(a) === "Operating Expenses")
-  const otherExpenses = expenseAccounts.filter(a => !["Direct Expenses", "Operating Expenses"].includes(getCategory(a)))
-
-  const totalRevenue = revenueAccounts.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
-  const totalDirect = directExpenses.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
-  const totalOpEx = operatingExpenses.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
-  const totalOther = otherExpenses.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
-  const totalExpenses = totalDirect + totalOpEx + totalOther
-  const grossProfit = totalRevenue - totalDirect
-  const netProfit = grossProfit - totalOpEx - totalOther
-  const margin = totalRevenue !== 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : "0.0"
+  // Compute totals for the matrix
+  const matrixRows = compareMode && comparativeData.length > 0
+    ? [
+        {
+          label: "Revenue",
+          values: comparativeData.map(d => d.revenue),
+          total: comparativeData.reduce((s, d) => s + d.revenue, 0),
+          color: "#10B981",
+        },
+        {
+          label: "Direct Expenses",
+          values: comparativeData.map(d => d.directExp),
+          total: comparativeData.reduce((s, d) => s + d.directExp, 0),
+          color: "#EF4444",
+        },
+        {
+          label: "Gross Profit",
+          values: comparativeData.map(d => d.revenue - d.directExp),
+          total: comparativeData.reduce((s, d) => s + d.revenue - d.directExp, 0),
+          color: "#10B981",
+          bold: true,
+        },
+        {
+          label: "Operating Expenses",
+          values: comparativeData.map(d => d.opEx),
+          total: comparativeData.reduce((s, d) => s + d.opEx, 0),
+          color: "#F59E0B",
+        },
+        {
+          label: "Other Expenses",
+          values: comparativeData.map(d => d.otherExp),
+          total: comparativeData.reduce((s, d) => s + d.otherExp, 0),
+          color: "#8B5CF6",
+        },
+        {
+          label: "Net Profit",
+          values: comparativeData.map(d => d.revenue - d.directExp - d.opEx - d.otherExp),
+          total: comparativeData.reduce((s, d) => s + d.revenue - d.directExp - d.opEx - d.otherExp, 0),
+          color: "#10B981",
+          bold: true,
+        },
+      ]
+    : []
 
   const navigateToTrialBalance = (type: string, category?: string) => {
     const params = new URLSearchParams()
@@ -221,6 +271,7 @@ export default function ProfitLossPage() {
         .date-sep { color: var(--text-muted); font-size: 12px; }
         .date-actions { margin-left: auto; display: flex; gap: 8px; }
 
+        /* Single‑column P&L */
         .report-body {
           padding: 32px;
           max-width: 900px;
@@ -245,15 +296,9 @@ export default function ProfitLossPage() {
         }
 
         .account-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 9px 0 9px 11px;
-          border-bottom: 1px solid var(--border);
-          cursor: pointer;
-          transition: background 0.1s;
-          border-radius: 4px;
-          margin: 1px 0;
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 9px 0 9px 11px; border-bottom: 1px solid var(--border);
+          cursor: pointer; transition: background 0.1s; border-radius: 4px; margin: 1px 0;
         }
         .account-row:hover { background: var(--card-hover); }
         .acc-code { font-size: 10px; color: var(--text-muted); min-width: 42px; }
@@ -287,14 +332,28 @@ export default function ProfitLossPage() {
 
         .zero-state { padding: 16px 11px; font-size: 12px; color: var(--text-soft); font-style: italic; }
 
-        .project-breakdown {
-          margin: 4px 0 8px 20px;
-          padding: 6px 0;
-          font-size: 11px;
-          color: var(--text-muted);
-          border-bottom: 1px dashed var(--border);
+        /* Matrix table */
+        .matrix-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 8px;
         }
-        .project-breakdown span { margin-right: 12px; }
+        .matrix-table th {
+          background: var(--card-hover);
+          padding: 10px 12px;
+          font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
+          border-bottom: 1px solid var(--border);
+          text-align: right;
+        }
+        .matrix-table th:first-child { text-align: left; }
+        .matrix-table td {
+          padding: 10px 12px;
+          border-bottom: 1px solid var(--border);
+          font-size: 13px;
+          text-align: right;
+        }
+        .matrix-table td:first-child { text-align: left; font-weight: 600; color: var(--text); }
+        .bold-row td { font-weight: 700; border-top: 2px solid var(--border-strong); }
 
         @media (max-width: 900px) {
           .kpi-strip { grid-template-columns: repeat(2, 1fr); }
@@ -375,151 +434,163 @@ export default function ProfitLossPage() {
         </div>
       </div>
 
-      {/* Single Column P&L – ALWAYS visible */}
-      <div className="report-body">
-        {/* Revenue */}
-        <div className="section">
-          <div className="section-head" onClick={() => navigateToTrialBalance("Revenue")}>
-            <div className="section-badge" style={{ background: "#10B981" }} />
-            <span className="section-title-text">Income / Revenue</span>
+      {/* Report Body – single column OR matrix */}
+      {!compareMode ? (
+        <div className="report-body">
+          {/* Revenue */}
+          <div className="section">
+            <div className="section-head" onClick={() => navigateToTrialBalance("Revenue")}>
+              <div className="section-badge" style={{ background: "#10B981" }} />
+              <span className="section-title-text">Income / Revenue</span>
+            </div>
+            {revenueAccounts.length === 0 ? (
+              <div className="zero-state">No revenue accounts found</div>
+            ) : (
+              revenueAccounts.map(a => (
+                <div key={a.id} className="account-row" onClick={() => openTrialForAccount(a)}>
+                  <span className="acc-code">{a.code}</span>
+                  <span className="acc-name">{a.name}</span>
+                  <span className="acc-amount" style={{ color: "#10B981" }}>
+                    PKR {fmt(a.balance || 0)}
+                  </span>
+                </div>
+              ))
+            )}
+            <div className="subtotal-row">
+              <span className="subtotal-label">Total Revenue</span>
+              <span className="subtotal-amount" style={{ color: "#10B981" }}>PKR {fmt(totalRevenue)}</span>
+            </div>
           </div>
-          {compareMode && comparativeData.length > 0 && (
-            <div className="project-breakdown">
-              {comparativeData.map((d: any) => (
-                <span key={d.projectId}>🔹 {d.projectName}: PKR {fmt(d.revenue)}</span>
+
+          {/* Direct Expenses */}
+          {directExpenses.length > 0 && (
+            <div className="section">
+              <div className="section-head" onClick={() => navigateToTrialBalance("Expense", "Direct Expenses")}>
+                <div className="section-badge" style={{ background: "#EF4444" }} />
+                <span className="section-title-text">Cost of Goods Sold / Direct Expenses</span>
+              </div>
+              {directExpenses.map(a => (
+                <div key={a.id} className="account-row" onClick={() => openTrialForAccount(a)}>
+                  <span className="acc-code">{a.code}</span>
+                  <span className="acc-name">{a.name}</span>
+                  <span className="acc-amount" style={{ color: "#F87171" }}>
+                    PKR {fmt(a.balance || 0)}
+                  </span>
+                </div>
               ))}
+              <div className="subtotal-row">
+                <span className="subtotal-label">Total Direct Expenses</span>
+                <span className="subtotal-amount" style={{ color: "#EF4444" }}>PKR {fmt(totalDirect)}</span>
+              </div>
             </div>
           )}
-          {revenueAccounts.length === 0 ? (
-            <div className="zero-state">No revenue accounts found</div>
+
+          {/* Gross Profit */}
+          <div className="divider-row">
+            <span className="divider-label">Gross Profit</span>
+            <span className="divider-amount" style={{ color: grossProfit >= 0 ? "#10B981" : "#EF4444" }}>
+              {grossProfit < 0 ? "-" : ""}PKR {fmt(grossProfit)}
+            </span>
+          </div>
+
+          {/* Operating Expenses */}
+          {operatingExpenses.length > 0 && (
+            <div className="section">
+              <div className="section-head" onClick={() => navigateToTrialBalance("Expense", "Operating Expenses")}>
+                <div className="section-badge" style={{ background: "#F59E0B" }} />
+                <span className="section-title-text">Operating Expenses</span>
+              </div>
+              {operatingExpenses.map(a => (
+                <div key={a.id} className="account-row" onClick={() => openTrialForAccount(a)}>
+                  <span className="acc-code">{a.code}</span>
+                  <span className="acc-name">{a.name}</span>
+                  <span className="acc-amount" style={{ color: "#FCD34D" }}>
+                    PKR {fmt(a.balance || 0)}
+                  </span>
+                </div>
+              ))}
+              <div className="subtotal-row">
+                <span className="subtotal-label">Total Operating Expenses</span>
+                <span className="subtotal-amount" style={{ color: "#F59E0B" }}>PKR {fmt(totalOpEx)}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Other Expenses */}
+          {otherExpenses.length > 0 && (
+            <div className="section">
+              <div className="section-head" onClick={() => navigateToTrialBalance("Expense")}>
+                <div className="section-badge" style={{ background: "#8B5CF6" }} />
+                <span className="section-title-text">Other Expenses</span>
+              </div>
+              {otherExpenses.map(a => (
+                <div key={a.id} className="account-row" onClick={() => openTrialForAccount(a)}>
+                  <span className="acc-code">{a.code}</span>
+                  <span className="acc-name">{a.name}</span>
+                  <span className="acc-amount" style={{ color: "#C4B5FD" }}>
+                    PKR {fmt(a.balance || 0)}
+                  </span>
+                </div>
+              ))}
+              <div className="subtotal-row">
+                <span className="subtotal-label">Total Other Expenses</span>
+                <span className="subtotal-amount" style={{ color: "#8B5CF6" }}>PKR {fmt(totalOther)}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Net Profit */}
+          <div className="net-row">
+            <div>
+              <div className="net-label" style={{ color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
+                {netProfit >= 0 ? "✦ Net Profit" : "▼ Net Loss"}
+              </div>
+              <div style={{ fontSize: 11, color: "var(--text-soft)", marginTop: 3 }}>Profit margin: {margin}%</div>
+            </div>
+            <div className="net-amount" style={{ color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
+              {netProfit < 0 ? "-" : ""}PKR {fmt(netProfit)}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={{ padding: 32 }}>
+          {compareLoading ? (
+            <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading project comparison…</div>
+          ) : comparativeData.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>No projects found.</div>
           ) : (
-            revenueAccounts.map(a => (
-              <div key={a.id} className="account-row" onClick={() => openTrialForAccount(a)}>
-                <span className="acc-code">{a.code}</span>
-                <span className="acc-name">{a.name}</span>
-                <span className="acc-amount" style={{ color: "#10B981" }}>
-                  PKR {fmt(a.balance || 0)}
-                </span>
-              </div>
-            ))
+            <div style={{ overflowX: "auto" }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 16 }}>Project‑wise Profit &amp; Loss</h3>
+              <table className="matrix-table">
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    {comparativeData.map((d: any) => (
+                      <th key={d.projectId}>{d.projectName}</th>
+                    ))}
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {matrixRows.map((row, idx) => (
+                    <tr key={idx} className={row.bold ? "bold-row" : ""}>
+                      <td style={{ color: row.color }}>{row.label}</td>
+                      {row.values.map((val, vIdx) => (
+                        <td key={vIdx} style={{ color: row.color }}>
+                          {val >= 0 ? "" : "-"}PKR {fmt(val)}
+                        </td>
+                      ))}
+                      <td style={{ color: row.color, fontWeight: 700 }}>
+                        {row.total >= 0 ? "" : "-"}PKR {fmt(row.total)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
-          <div className="subtotal-row">
-            <span className="subtotal-label">Total Revenue</span>
-            <span className="subtotal-amount" style={{ color: "#10B981" }}>PKR {fmt(totalRevenue)}</span>
-          </div>
         </div>
-
-        {/* Direct Expenses */}
-        {directExpenses.length > 0 && (
-          <div className="section">
-            <div className="section-head" onClick={() => navigateToTrialBalance("Expense", "Direct Expenses")}>
-              <div className="section-badge" style={{ background: "#EF4444" }} />
-              <span className="section-title-text">Cost of Goods Sold / Direct Expenses</span>
-            </div>
-            {compareMode && comparativeData.length > 0 && (
-              <div className="project-breakdown">
-                {comparativeData.map((d: any) => (
-                  <span key={d.projectId}>🔹 {d.projectName}: PKR {fmt(d.expenses["Direct Expenses"] || 0)}</span>
-                ))}
-              </div>
-            )}
-            {directExpenses.map(a => (
-              <div key={a.id} className="account-row" onClick={() => openTrialForAccount(a)}>
-                <span className="acc-code">{a.code}</span>
-                <span className="acc-name">{a.name}</span>
-                <span className="acc-amount" style={{ color: "#F87171" }}>
-                  PKR {fmt(a.balance || 0)}
-                </span>
-              </div>
-            ))}
-            <div className="subtotal-row">
-              <span className="subtotal-label">Total Direct Expenses</span>
-              <span className="subtotal-amount" style={{ color: "#EF4444" }}>PKR {fmt(totalDirect)}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Gross Profit */}
-        <div className="divider-row">
-          <span className="divider-label">Gross Profit</span>
-          <span className="divider-amount" style={{ color: grossProfit >= 0 ? "#10B981" : "#EF4444" }}>
-            {grossProfit < 0 ? "-" : ""}PKR {fmt(grossProfit)}
-          </span>
-        </div>
-
-        {/* Operating Expenses */}
-        {operatingExpenses.length > 0 && (
-          <div className="section">
-            <div className="section-head" onClick={() => navigateToTrialBalance("Expense", "Operating Expenses")}>
-              <div className="section-badge" style={{ background: "#F59E0B" }} />
-              <span className="section-title-text">Operating Expenses</span>
-            </div>
-            {compareMode && comparativeData.length > 0 && (
-              <div className="project-breakdown">
-                {comparativeData.map((d: any) => (
-                  <span key={d.projectId}>🔹 {d.projectName}: PKR {fmt(d.expenses["Operating Expenses"] || 0)}</span>
-                ))}
-              </div>
-            )}
-            {operatingExpenses.map(a => (
-              <div key={a.id} className="account-row" onClick={() => openTrialForAccount(a)}>
-                <span className="acc-code">{a.code}</span>
-                <span className="acc-name">{a.name}</span>
-                <span className="acc-amount" style={{ color: "#FCD34D" }}>
-                  PKR {fmt(a.balance || 0)}
-                </span>
-              </div>
-            ))}
-            <div className="subtotal-row">
-              <span className="subtotal-label">Total Operating Expenses</span>
-              <span className="subtotal-amount" style={{ color: "#F59E0B" }}>PKR {fmt(totalOpEx)}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Other Expenses */}
-        {otherExpenses.length > 0 && (
-          <div className="section">
-            <div className="section-head" onClick={() => navigateToTrialBalance("Expense")}>
-              <div className="section-badge" style={{ background: "#8B5CF6" }} />
-              <span className="section-title-text">Other Expenses</span>
-            </div>
-            {compareMode && comparativeData.length > 0 && (
-              <div className="project-breakdown">
-                {comparativeData.map((d: any) => (
-                  <span key={d.projectId}>🔹 {d.projectName}: PKR {fmt(d.expenses["Other"] || 0)}</span>
-                ))}
-              </div>
-            )}
-            {otherExpenses.map(a => (
-              <div key={a.id} className="account-row" onClick={() => openTrialForAccount(a)}>
-                <span className="acc-code">{a.code}</span>
-                <span className="acc-name">{a.name}</span>
-                <span className="acc-amount" style={{ color: "#C4B5FD" }}>
-                  PKR {fmt(a.balance || 0)}
-                </span>
-              </div>
-            ))}
-            <div className="subtotal-row">
-              <span className="subtotal-label">Total Other Expenses</span>
-              <span className="subtotal-amount" style={{ color: "#8B5CF6" }}>PKR {fmt(totalOther)}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Net Profit */}
-        <div className="net-row">
-          <div>
-            <div className="net-label" style={{ color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
-              {netProfit >= 0 ? "✦ Net Profit" : "▼ Net Loss"}
-            </div>
-            <div style={{ fontSize: 11, color: "var(--text-soft)", marginTop: 3 }}>Profit margin: {margin}%</div>
-          </div>
-          <div className="net-amount" style={{ color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
-            {netProfit < 0 ? "-" : ""}PKR {fmt(netProfit)}
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   )
 }
