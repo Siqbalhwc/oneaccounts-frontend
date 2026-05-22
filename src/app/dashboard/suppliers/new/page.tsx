@@ -20,6 +20,22 @@ const COUNTRY_CODES = [
   { code: "+27", label: "🇿🇦 +27" },
 ]
 
+// ── Digits required per country code for WhatsApp ──
+const PHONE_LENGTHS: Record<string, number> = {
+  "+92": 10,   // Pakistan
+  "+1":  10,   // USA
+  "+44": 10,   // UK
+  "+971": 9,   // UAE
+  "+966": 9,   // Saudi
+  "+91": 10,   // India
+  "+86": 11,   // China
+  "+81": 10,   // Japan
+  "+49": 10,   // Germany
+  "+33": 9,    // France
+  "+61": 9,    // Australia
+  "+27": 9,    // South Africa
+}
+
 const PAYMENT_TERMS = [
   "Due on Receipt",
   "Net 7",
@@ -113,6 +129,17 @@ export default function NewSupplierPage() {
     if (!companyId) { setError("Company not loaded"); return }
     if (!supplierName.trim()) { setError("Supplier name is required"); return }
 
+    // ── Phone validation ──
+    if (phoneNumber.trim()) {
+      const digitsOnly = phoneNumber.trim().replace(/\D/g, "")
+      const expectedLength = PHONE_LENGTHS[countryCode]
+      if (expectedLength && digitsOnly.length !== expectedLength) {
+        setError(`Phone number must be ${expectedLength} digits for ${countryCode}. Current: ${digitsOnly.length} digits.`)
+        setLoading(false)
+        return
+      }
+    }
+
     // Get current user email
     const { data: { user } } = await supabase.auth.getUser()
     const userEmail = user?.email || "system"
@@ -136,8 +163,8 @@ export default function NewSupplierPage() {
       default_project_id: defaultProjectId,
       default_location_id: defaultLocationId,
       default_activity_id: defaultActivityId,
-      created_by: userEmail,      // ← new
-      updated_by: userEmail,      // ← new
+      created_by: userEmail,
+      updated_by: userEmail,
     }
 
     const { data, error: insertErr } = await supabase
