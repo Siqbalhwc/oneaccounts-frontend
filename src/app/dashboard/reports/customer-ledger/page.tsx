@@ -34,7 +34,6 @@ export default function CustomerLedgerPage() {
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
-  // Fetch company ID
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
@@ -42,7 +41,6 @@ export default function CustomerLedgerPage() {
     })
   }, [])
 
-  // Fetch customer details
   useEffect(() => {
     if (!customerId || !companyId) return
     supabase
@@ -54,31 +52,12 @@ export default function CustomerLedgerPage() {
       .then(({ data }) => data && setCustomer(data))
   }, [customerId, companyId])
 
-  // Fetch ledger lines with opening balance
   const fetchLedger = async () => {
     if (!customerId || !companyId) return
     setLoading(true)
     setErrorMsg("")
     try {
-      // Get all journal lines related to this customer via AR account (1100) – adjust as needed
-      // We'll fetch all transactions where source_type is 'sale_invoice' or 'receipt' with party_id = customerId
-      // Opening balance before start date
-      let openingBalance = 0
-
-      // Fetch all relevant transactions: invoices (debit AR) and receipts (credit AR)
-      const { data: allLines } = await supabase
-        .from("journal_lines")
-        .select("debit, credit, journal_entries!inner(date, deleted_at, company_id)")
-        .eq("company_id", companyId)
-        .is("journal_entries.deleted_at", null)
-        .eq("journal_entries.company_id", companyId)
-        .or(`source_type.eq.sale_invoice,source_type.eq.receipt`)
-        .or(`party_id.eq.${customerId}`) // We need to get lines that are tied to this customer; journal_lines doesn't have party_id directly, so we'll join via invoices/receipts. Better: get lines where the source_id matches invoices/receipts of this customer.
-
-      // Simpler approach: fetch all invoices/receipts for this customer, then their journal lines
-      // We'll do it step by step:
-      
-      // 1. All invoices for this customer
+      // 1. All sale invoices for this customer
       const { data: invoices } = await supabase
         .from("invoices")
         .select("id")
@@ -97,7 +76,7 @@ export default function CustomerLedgerPage() {
       const sourceIds = [...invoiceIds, ...receiptIds].filter(Boolean)
       if (sourceIds.length === 0) { setLedgerLines([]); setLoading(false); return }
 
-      // 3. Fetch journal lines with these source_ids
+      // 3. Fetch journal lines
       let query = supabase
         .from("journal_lines")
         .select("id, debit, credit, journal_entries!inner(entry_no, date, description, deleted_at, company_id)")
@@ -133,17 +112,17 @@ export default function CustomerLedgerPage() {
         }
       })
 
-      const openingBalance = running - periodLines.reduce((s, pl) => s + pl.debit - pl.credit, 0)
-      // Build final array with opening row first
+      // Opening balance = running total before period lines
+      const openingBal = running - periodLines.reduce((s, pl) => s + pl.debit - pl.credit, 0)
       const finalLines = [
         {
           id: "opening",
           entry_no: "",
           date: startDate,
           description: "Opening Balance",
-          debit: openingBalance > 0 ? openingBalance : 0,
-          credit: openingBalance < 0 ? -openingBalance : 0,
-          running_balance: openingBalance,
+          debit: openingBal > 0 ? openingBal : 0,
+          credit: openingBal < 0 ? -openingBal : 0,
+          running_balance: openingBal,
           isOpening: true,
         },
         ...periodLines,
@@ -160,7 +139,6 @@ export default function CustomerLedgerPage() {
     if (customerId && companyId) fetchLedger()
   }, [customerId, companyId, startDate, endDate])
 
-  // Sorting
   const sortedLines = useMemo(() => {
     const list = [...ledgerLines]
     list.sort((a, b) => {
