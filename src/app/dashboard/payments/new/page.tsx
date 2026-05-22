@@ -49,12 +49,28 @@ export default function NewPaymentPage() {
     })
   }, [])
 
-  const loadSuppliers = () => {
+  const loadSuppliers = async () => {
     if (!companyId) return
     setRefreshingSuppliers(true)
-    supabase.from("suppliers").select("id, code, name, phone, balance")
-      .eq("company_id", companyId).order("name")
-      .then(r => { if (r.data) setSuppliers(r.data); setRefreshingSuppliers(false) })
+    try {
+      const { data, error } = await supabase
+        .from("suppliers")
+        .select("id, code, name, phone, balance")
+        .eq("company_id", companyId)
+        .order("name")
+      if (data) {
+        setSuppliers(data)
+        // Update selected supplier balance if still selected
+        if (selectedSupplier) {
+          const updated = data.find((s: any) => s.id === selectedSupplier.id)
+          if (updated) setSelectedSupplier(updated)
+        }
+      }
+    } catch (err) {
+      console.error("Refresh failed", err)
+    } finally {
+      setRefreshingSuppliers(false)
+    }
   }
 
   useEffect(() => {
@@ -183,6 +199,8 @@ export default function NewPaymentPage() {
       setSelectedBankId(null); setSelectedExpenseAccountId(null); setIsDonation(false)
       setBills([]); setAllocations({}); setPaymentAmount(""); setNotes(""); setReference("")
       setLoading(false)
+      // Refresh suppliers after a moment to reflect new balance
+      setTimeout(() => loadSuppliers(), 500)
       setTimeout(() => setFlash(null), 4000)
     } catch {
       setError("Network error")
@@ -281,7 +299,14 @@ export default function NewPaymentPage() {
                         <span>🚚</span><span style={{ flex: 1 }}>{selectedSupplier.code} — {selectedSupplier.name}</span>
                         <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Bal: PKR {(selectedSupplier.balance || 0).toLocaleString()}</span>
                         <button style={{ marginLeft: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); clearSupplier(); }}><X size={14} /></button>
-                        <button style={{ marginLeft: 2, background: "none", border: "none", color: "var(--primary)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); loadSuppliers(); }} title="Refresh"><RefreshCw size={13} /></button>
+                        <button
+                          style={{ marginLeft: 2, background: "none", border: "none", color: "var(--primary)", cursor: "pointer", opacity: refreshingSuppliers ? 0.5 : 1 }}
+                          onClick={(e) => { e.stopPropagation(); loadSuppliers(); }}
+                          disabled={refreshingSuppliers}
+                          title="Refresh supplier list"
+                        >
+                          <RefreshCw size={13} style={{ animation: refreshingSuppliers ? 'spin 1s linear infinite' : 'none' }} />
+                        </button>
                       </div>
                     ) : (
                       <>
