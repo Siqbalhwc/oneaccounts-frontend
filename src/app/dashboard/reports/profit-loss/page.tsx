@@ -14,9 +14,7 @@ function getCategory(account: any): string {
   return "Other"
 }
 
-function fmt(n: number) {
-  return Math.abs(n).toLocaleString("en-PK")
-}
+function fmt(n: number) { return Math.abs(n).toLocaleString("en-PK") }
 
 export default function ProfitLossPage() {
   const router = useRouter()
@@ -31,42 +29,157 @@ export default function ProfitLossPage() {
   const [startDate, setStartDate] = useState(`${now.getFullYear()}-01-01`)
   const [endDate, setEndDate] = useState(now.toISOString().split("T")[0])
 
+  // Project filter
+  const [projects, setProjects] = useState<any[]>([])
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("")
+  const [compareMode, setCompareMode] = useState(false) // toggle for project comparison
+
+  // Dynamic data for a specific project
+  const [dynamicRevenue, setDynamicRevenue] = useState<number | null>(null)
+  const [dynamicExpenses, setDynamicExpenses] = useState<number | null>(null)
+  const [dynamicExpenseBreakdown, setDynamicExpenseBreakdown] = useState<Record<string, number>>({})
+
+  // Comparative data (all projects)
+  const [comparativeData, setComparativeData] = useState<any[]>([])
+
   useEffect(() => {
     supabase.from("accounts").select("*").order("code").then(r => {
       if (r.data) setAccounts(r.data)
       setLoading(false)
     })
+    supabase.from("projects").select("id, name").is("deleted_at", null).order("name")
+      .then(r => r.data && setProjects(r.data))
   }, [])
 
+  // Fetch dynamic project‑wise data when a project is selected
+  useEffect(() => {
+    if (!selectedProjectId || compareMode) {
+      setDynamicRevenue(null)
+      setDynamicExpenses(null)
+      setDynamicExpenseBreakdown({})
+      return
+    }
+
+    const fetchProjectPL = async () => {
+      const revenueIds = accounts.filter(a => a.type === "Revenue").map(a => a.id)
+      const expenseIds = accounts.filter(a => a.type === "Expense").map(a => a.id)
+
+      const { data: lines } = await supabase
+        .from("journal_lines")
+        .select("account_id, debit, credit, journal_entries!inner(date)")
+        .eq("project_id", selectedProjectId)
+        .gte("journal_entries.date", startDate)
+        .lte("journal_entries.date", endDate)
+
+      if (!lines) return
+
+      let rev = 0
+      const expenseByAccount: Record<string, number> = {}
+      lines.forEach((l: any) => {
+        const net = (l.credit || 0) - (l.debit || 0)
+        if (revenueIds.includes(l.account_id)) {
+          rev += net
+        } else if (expenseIds.includes(l.account_id)) {
+          const cat = getCategory(accounts.find(a => a.id === l.account_id) || {})
+          expenseByAccount[cat] = (expenseByAccount[cat] || 0) + (l.debit || 0) - (l.credit || 0)
+        }
+      })
+      const totalExp = Object.values(expenseByAccount).reduce((s, v) => s + v, 0)
+      setDynamicRevenue(rev)
+      setDynamicExpenses(totalExp)
+      setDynamicExpenseBreakdown(expenseByAccount)
+    }
+    fetchProjectPL()
+  }, [selectedProjectId, startDate, endDate, accounts, compareMode])
+
+  // Fetch comparative data for all projects (when compare mode is on)
+  useEffect(() => {
+    if (!compareMode || projects.length === 0) {
+      setComparativeData([])
+      return
+    }
+
+    const fetchComparative = async () => {
+      const revenueIds = accounts.filter(a => a.type === "Revenue").map(a => a.id)
+      const expenseIds = accounts.filter(a => a.type === "Expense").map(a => a.id)
+
+      // For each project, fetch aggregated revenue and expenses
+      const promises = projects.map(async (proj: any) => {
+        const { data: lines } = await supabase
+          .from("journal_lines")
+          .select("account_id, debit, credit, journal_entries!inner(date)")
+          .eq("project_id", proj.id)
+          .gte("journal_entries.date", startDate)
+          .lte("journal_entries.date", endDate)
+
+        let rev = 0
+        const expenses: Record<string, number> = {}
+        if (lines) {
+          lines.forEach((l: any) => {
+            if (revenueIds.includes(l.account_id)) {
+              rev += (l.credit || 0) - (l.debit || 0)
+            } else if (expenseIds.includes(l.account_id)) {
+              const cat = getCategory(accounts.find(a => a.id === l.account_id) || {})
+              expenses[cat] = (expenses[cat] || 0) + (l.debit || 0) - (l.credit || 0)
+            }
+          })
+        }
+        return {
+          projectId: proj.id,
+          projectName: proj.name,
+          revenue: Math.abs(rev),
+          expenses,
+        }
+      })
+
+      const results = await Promise.all(promises)
+      setComparativeData(results)
+    }
+
+    fetchComparative()
+  }, [compareMode, projects, startDate, endDate, accounts])
+
+  // Use dynamic values if project selected, else use account balances
   const revenueAccounts = accounts.filter(a => a.type === "Revenue")
   const expenseAccounts = accounts.filter(a => a.type === "Expense")
   const directExpenses = expenseAccounts.filter(a => getCategory(a) === "Direct Expenses")
   const operatingExpenses = expenseAccounts.filter(a => getCategory(a) === "Operating Expenses")
   const otherExpenses = expenseAccounts.filter(a => !["Direct Expenses", "Operating Expenses"].includes(getCategory(a)))
 
-  const totalRevenue = revenueAccounts.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
-  const totalDirect = directExpenses.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
-  const totalOpEx = operatingExpenses.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
-  const totalOther = otherExpenses.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
+  const totalRevenue = dynamicRevenue !== null
+    ? Math.abs(dynamicRevenue)
+    : revenueAccounts.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
 
+  const totalDirect = dynamicExpenses !== null
+    ? (dynamicExpenseBreakdown["Direct Expenses"] || 0)
+    : directExpenses.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
+
+  const totalOpEx = dynamicExpenses !== null
+    ? (dynamicExpenseBreakdown["Operating Expenses"] || 0)
+    : operatingExpenses.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
+
+  const totalOther = dynamicExpenses !== null
+    ? (dynamicExpenseBreakdown["Other"] || 0)
+    : otherExpenses.reduce((s, a) => s + Math.abs(a.balance || 0), 0)
+
+  const totalExpenses = totalDirect + totalOpEx + totalOther
   const grossProfit = totalRevenue - totalDirect
   const netProfit = grossProfit - totalOpEx - totalOther
   const margin = totalRevenue !== 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : "0.0"
-  const totalExpenses = totalDirect + totalOpEx + totalOther
 
   const navigateToTrialBalance = (type: string, category?: string) => {
     const params = new URLSearchParams()
     params.set("type", type)
     if (category) params.set("category", category)
+    if (selectedProjectId) params.set("project", selectedProjectId)
+    if (startDate) params.set("startDate", startDate)
+    if (endDate) params.set("endDate", endDate)
     router.push(`/dashboard/reports/trial-balance?${params.toString()}`)
   }
 
   const openTrialForAccount = (account: any) => {
-    if (account.type === "Revenue") {
-      navigateToTrialBalance("Revenue")
-    } else {
-      navigateToTrialBalance("Expense", getCategory(account))
-    }
+    if (account.type === "Revenue") navigateToTrialBalance("Revenue")
+    else navigateToTrialBalance("Expense", getCategory(account))
   }
 
   if (loading) return (
@@ -128,15 +241,17 @@ export default function ProfitLossPage() {
         .kpi-strip {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
-          gap: 0;
+          gap: 12px;
+          padding: 24px 32px;
           border-bottom: 1px solid var(--border);
+        }
+        .kpi-card {
           background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 20px;
+          box-shadow: var(--shadow-sm);
         }
-        .kpi-cell {
-          padding: 20px 32px;
-          border-right: 1px solid var(--border);
-        }
-        .kpi-cell:last-child { border-right: none; }
         .kpi-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 6px; }
         .kpi-value { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; font-family: 'Inter', sans-serif; }
         .kpi-sub { font-size: 11px; color: var(--text-soft); margin-top: 4px; }
@@ -151,7 +266,7 @@ export default function ProfitLossPage() {
           flex-wrap: wrap;
         }
         .date-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
-        .date-input {
+        .date-input, .project-select, .compare-toggle {
           background: var(--bg);
           border: 1px solid var(--border);
           border-radius: 6px;
@@ -161,26 +276,16 @@ export default function ProfitLossPage() {
           font-family: inherit;
           outline: none;
         }
-        .date-input:focus { border-color: var(--primary); }
+        .date-input:focus, .project-select:focus { border-color: var(--primary); }
         .date-sep { color: var(--text-muted); font-size: 12px; }
         .date-actions { margin-left: auto; display: flex; gap: 8px; }
 
         .report-body {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 0;
-          max-width: 100%;
-        }
-
-        .report-col {
           padding: 32px;
-          border-right: 1px solid var(--border);
+          max-width: 900px;
         }
-        .report-col:last-child { border-right: none; }
 
-        .section {
-          margin-bottom: 28px;
-        }
+        .section { margin-bottom: 28px; }
 
         .section-head {
           display: flex;
@@ -192,19 +297,10 @@ export default function ProfitLossPage() {
           cursor: pointer;
         }
         .section-head:hover .section-title-text { color: var(--primary); }
-        .section-badge {
-          width: 3px;
-          height: 16px;
-          border-radius: 2px;
-          flex-shrink: 0;
-        }
+        .section-badge { width: 3px; height: 16px; border-radius: 2px; flex-shrink: 0; }
         .section-title-text {
-          font-size: 11px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.1em;
-          color: var(--text-muted);
-          transition: color 0.15s;
+          font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+          color: var(--text-muted); transition: color 0.15s;
         }
 
         .account-row {
@@ -224,62 +320,45 @@ export default function ProfitLossPage() {
         .acc-amount { font-size: 13px; font-weight: 500; }
 
         .subtotal-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 10px 0;
-          margin-top: 2px;
-          font-size: 13px;
-          font-weight: 600;
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 10px 0; margin-top: 2px; font-size: 13px; font-weight: 600;
           border-top: 1px solid var(--border);
         }
         .subtotal-label { color: var(--text); padding-left: 11px; }
         .subtotal-amount { font-weight: 600; }
 
         .divider-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 12px 0;
-          font-size: 14px;
-          font-weight: 700;
-          border-top: 2px solid var(--border-strong);
-          border-bottom: 2px solid var(--border-strong);
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 12px 0; font-size: 14px; font-weight: 700;
+          border-top: 2px solid var(--border-strong); border-bottom: 2px solid var(--border-strong);
           margin: 8px 0;
         }
         .divider-label { color: var(--text); padding-left: 11px; }
         .divider-amount { font-weight: 700; }
 
         .net-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 16px 20px;
-          background: var(--card-hover);
-          border: 1px solid var(--primary);
-          border-radius: 10px;
-          margin-top: 20px;
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 16px 20px; background: var(--card-hover); border: 1px solid var(--primary);
+          border-radius: 10px; margin-top: 20px;
         }
         .net-label { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
         .net-amount { font-size: 20px; font-weight: 700; }
 
-        .zero-state {
-          padding: 16px 11px;
-          font-size: 12px;
-          color: var(--text-soft);
-          font-style: italic;
-        }
+        .zero-state { padding: 16px 11px; font-size: 12px; color: var(--text-soft); font-style: italic; }
+
+        .compare-table { width: 100%; border-collapse: collapse; margin-top: 24px; }
+        .compare-table th { background: var(--card-hover); padding: 10px 12px; font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border); text-align: right; }
+        .compare-table th:first-child { text-align: left; }
+        .compare-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; text-align: right; }
+        .compare-table td:first-child { text-align: left; font-weight: 600; color: var(--text); }
 
         @media (max-width: 900px) {
           .kpi-strip { grid-template-columns: repeat(2, 1fr); }
-          .report-body { grid-template-columns: 1fr; }
-          .report-col { border-right: none; padding: 20px; }
           .pl-header { padding: 0 16px; }
+          .date-bar, .report-body { padding: 16px; }
         }
-
         @media print {
           .pl-header, .date-bar { display: none; }
-          .report-body { grid-template-columns: 1fr; }
           .kpi-strip { grid-template-columns: repeat(4, 1fr); }
         }
       `}</style>
@@ -302,23 +381,19 @@ export default function ProfitLossPage() {
         </div>
       </div>
 
-      {/* KPI Strip – 4 Summary Cards */}
+      {/* KPI Cards */}
       <div className="kpi-strip">
-        <div className="kpi-cell">
+        <div className="kpi-card">
           <div className="kpi-label">Total Revenue</div>
-          <div className="kpi-value" style={{ color: "#10B981" }}>
-            PKR {fmt(totalRevenue)}
-          </div>
-          <div className="kpi-sub">All income accounts</div>
+          <div className="kpi-value" style={{ color: "#10B981" }}>PKR {fmt(totalRevenue)}</div>
         </div>
-        <div className="kpi-cell">
+        <div className="kpi-card">
           <div className="kpi-label">Gross Profit</div>
           <div className="kpi-value" style={{ color: grossProfit >= 0 ? "#10B981" : "#EF4444" }}>
             {grossProfit < 0 ? "-" : ""}PKR {fmt(grossProfit)}
           </div>
-          <div className="kpi-sub">After cost of goods</div>
         </div>
-        <div className="kpi-cell">
+        <div className="kpi-card">
           <div className="kpi-label">Net Profit / Loss</div>
           <div className="kpi-value" style={{ color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
             {netProfit < 0 ? "-" : ""}PKR {fmt(netProfit)}
@@ -328,36 +403,38 @@ export default function ProfitLossPage() {
             Margin: {margin}%
           </div>
         </div>
-        <div className="kpi-cell">
+        <div className="kpi-card">
           <div className="kpi-label">Total Expenses</div>
-          <div className="kpi-value" style={{ color: "#F59E0B" }}>
-            PKR {fmt(totalExpenses)}
-          </div>
-          <div className="kpi-sub">All expense accounts</div>
+          <div className="kpi-value" style={{ color: "#F59E0B" }}>PKR {fmt(totalExpenses)}</div>
         </div>
       </div>
 
-      {/* Date Range + Actions – all in one row */}
+      {/* Filters Bar */}
       <div className="date-bar">
         <Calendar size={13} color="var(--text-muted)" />
         <span className="date-label">Period</span>
         <input className="date-input" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
         <span className="date-sep">—</span>
         <input className="date-input" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+        <span className="date-label" style={{ marginLeft: 16 }}>Project</span>
+        <select className="project-select" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
+          <option value="">All Projects</option>
+          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 12, fontSize: 12, color: "var(--text-muted)", cursor: "pointer" }}>
+          <input type="checkbox" checked={compareMode} onChange={e => setCompareMode(e.target.checked)} />
+          Compare Projects
+        </label>
         <div className="date-actions">
-          <button className="action-btn" onClick={() => window.print()}>
-            <Printer size={13} /> Print
-          </button>
-          <button className="action-btn">
-            <Download size={13} /> Export
-          </button>
+          <button className="action-btn" onClick={() => window.print()}><Printer size={13} /> Print</button>
+          <button className="action-btn"><Download size={13} /> Export</button>
         </div>
       </div>
 
-      {/* Two-column Report Body */}
-      <div className="report-body">
-        {/* LEFT COL: Revenue + Gross Profit */}
-        <div className="report-col">
+      {/* Single Column P&L (always shown) */}
+      {!compareMode && (
+        <div className="report-body">
+          {/* Revenue */}
           <div className="section">
             <div className="section-head" onClick={() => navigateToTrialBalance("Revenue")}>
               <div className="section-badge" style={{ background: "#10B981" }} />
@@ -365,23 +442,24 @@ export default function ProfitLossPage() {
             </div>
             {revenueAccounts.length === 0 ? (
               <div className="zero-state">No revenue accounts found</div>
-            ) : revenueAccounts.map(a => (
-              <div key={a.id} className="account-row" onClick={() => openTrialForAccount(a)}>
-                <span className="acc-code">{a.code}</span>
-                <span className="acc-name">{a.name}</span>
-                <span className="acc-amount" style={{ color: "#10B981" }}>
-                  PKR {fmt(a.balance || 0)}
-                </span>
-              </div>
-            ))}
+            ) : (
+              revenueAccounts.map(a => (
+                <div key={a.id} className="account-row" onClick={() => openTrialForAccount(a)}>
+                  <span className="acc-code">{a.code}</span>
+                  <span className="acc-name">{a.name}</span>
+                  <span className="acc-amount" style={{ color: "#10B981" }}>
+                    PKR {fmt(a.balance || 0)}
+                  </span>
+                </div>
+              ))
+            )}
             <div className="subtotal-row">
               <span className="subtotal-label">Total Revenue</span>
-              <span className="subtotal-amount" style={{ color: "#10B981" }}>
-                PKR {fmt(totalRevenue)}
-              </span>
+              <span className="subtotal-amount" style={{ color: "#10B981" }}>PKR {fmt(totalRevenue)}</span>
             </div>
           </div>
 
+          {/* Direct Expenses */}
           {directExpenses.length > 0 && (
             <div className="section">
               <div className="section-head" onClick={() => navigateToTrialBalance("Expense", "Direct Expenses")}>
@@ -404,16 +482,15 @@ export default function ProfitLossPage() {
             </div>
           )}
 
+          {/* Gross Profit */}
           <div className="divider-row">
             <span className="divider-label">Gross Profit</span>
             <span className="divider-amount" style={{ color: grossProfit >= 0 ? "#10B981" : "#EF4444" }}>
               {grossProfit < 0 ? "-" : ""}PKR {fmt(grossProfit)}
             </span>
           </div>
-        </div>
 
-        {/* RIGHT COL: OpEx + Net Profit */}
-        <div className="report-col">
+          {/* Operating Expenses */}
           {operatingExpenses.length > 0 && (
             <div className="section">
               <div className="section-head" onClick={() => navigateToTrialBalance("Expense", "Operating Expenses")}>
@@ -436,6 +513,7 @@ export default function ProfitLossPage() {
             </div>
           )}
 
+          {/* Other Expenses */}
           {otherExpenses.length > 0 && (
             <div className="section">
               <div className="section-head" onClick={() => navigateToTrialBalance("Expense")}>
@@ -458,19 +536,7 @@ export default function ProfitLossPage() {
             </div>
           )}
 
-          {operatingExpenses.length === 0 && otherExpenses.length === 0 && (
-            <div className="zero-state">No operating expense accounts found</div>
-          )}
-
-          {operatingExpenses.length > 0 && (
-            <div className="divider-row" style={{ marginTop: 0 }}>
-              <span className="divider-label">Operating Profit</span>
-              <span className="divider-amount" style={{ color: (grossProfit - totalOpEx) >= 0 ? "#10B981" : "#EF4444" }}>
-                {(grossProfit - totalOpEx) < 0 ? "-" : ""}PKR {fmt(grossProfit - totalOpEx)}
-              </span>
-            </div>
-          )}
-
+          {/* Net Profit */}
           <div className="net-row">
             <div>
               <div className="net-label" style={{ color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
@@ -482,13 +548,57 @@ export default function ProfitLossPage() {
               {netProfit < 0 ? "-" : ""}PKR {fmt(netProfit)}
             </div>
           </div>
+        </div>
+      )}
 
-          <div style={{ marginTop: 24, padding: "12px 0", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-soft)" }}>
-            <span>Generated {new Date().toLocaleString("en-PK")}</span>
-            <span>OneAccounts · Shahid Iqbal &amp; Co</span>
+      {/* Compare Projects Table */}
+      {compareMode && comparativeData.length > 0 && (
+        <div style={{ padding: 24 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 16 }}>Project‑wise Comparison</h3>
+          <div style={{ overflowX: "auto" }}>
+            <table className="compare-table">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  {comparativeData.map((d: any) => (
+                    <th key={d.projectId}>{d.projectName}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Revenue</td>
+                  {comparativeData.map((d: any) => (
+                    <td key={d.projectId} style={{ color: "#10B981" }}>PKR {fmt(d.revenue)}</td>
+                  ))}
+                </tr>
+                {["Direct Expenses", "Operating Expenses", "Other"].map(cat => (
+                  <tr key={cat}>
+                    <td>{cat}</td>
+                    {comparativeData.map((d: any) => (
+                      <td key={d.projectId} style={{ color: "#EF4444" }}>
+                        PKR {fmt(d.expenses[cat] || 0)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+                <tr style={{ fontWeight: 700, borderTop: "2px solid var(--border)" }}>
+                  <td>Net Profit</td>
+                  {comparativeData.map((d: any) => {
+                    const totalExp = Object.values(d.expenses).reduce((s: number, v: any) => s + v, 0)
+                    const net = d.revenue - totalExp
+                    return (
+                      <td key={d.projectId} style={{ color: net >= 0 ? "#10B981" : "#EF4444" }}>
+                        {net < 0 ? "-" : ""}PKR {fmt(net)}
+                      </td>
+                    )
+                  })}
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
