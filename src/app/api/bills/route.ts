@@ -29,14 +29,12 @@ async function getDefaultExpenseAccount(supabase: any, companyId: string, type: 
   return null
 }
 
-// ── Apply stock changes for a set of items (positive = inflow, negative = outflow) ─
 async function applyStockChanges(supabase: any, companyId: string, items: any[], direction: 'add' | 'remove') {
   for (const item of items) {
     if (!item.product_id) continue
     const qty = Number(item.qty || 0)
     if (qty <= 0) continue
 
-    // Read current stock
     const { data: product } = await supabase
       .from('products')
       .select('qty_on_hand, total_inflow')
@@ -52,16 +50,12 @@ async function applyStockChanges(supabase: any, companyId: string, items: any[],
 
     await supabase
       .from('products')
-      .update({
-        qty_on_hand: newQtyOnHand,
-        total_inflow: newTotalInflow,
-      })
+      .update({ qty_on_hand: newQtyOnHand, total_inflow: newTotalInflow })
       .eq('id', item.product_id)
       .eq('company_id', companyId)
   }
 }
 
-// ── Create journal entry for a bill (with product stock update) ───────
 async function createBillJournalEntry(
   supabase: any,
   bill: any,
@@ -133,7 +127,6 @@ async function createBillJournalEntry(
     donor_id: null,
   })
 
-  // Insert journal entry
   const { data: entry, error: entryErr } = await supabase.from('journal_entries').insert({
     company_id: companyId,
     entry_no: `JE-BILL-${bill.invoice_no}`,
@@ -143,7 +136,6 @@ async function createBillJournalEntry(
 
   if (entryErr || !entry) throw new Error(entryErr?.message || 'JE insert failed')
 
-  // Insert journal lines
   const lineRows = debitLines.map(l => ({
     company_id: companyId,
     entry_id: entry.id,
@@ -160,7 +152,6 @@ async function createBillJournalEntry(
 
   await supabase.from('journal_lines').insert(lineRows)
 
-  // Update account balances
   for (const l of debitLines) {
     const { data: acc } = await supabase.from('accounts').select('balance').eq('id', l.account_id).eq('company_id', companyId).single()
     if (acc) {
@@ -169,10 +160,29 @@ async function createBillJournalEntry(
     }
   }
 
-  // ── Product stock: increase inflow and qty_on_hand ──
   await applyStockChanges(supabase, companyId, items, 'add')
 
   return entry.id
+}
+
+// ── Generate sequential bill number: PB/YYYYMM/0001 ────────────────────
+async function generateBillNo(supabase: any, companyId: string): Promise<string> {
+  const now = new Date()
+  const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`
+  const prefix = `PB/${ym}/`
+  const { data: last } = await supabase
+    .from("invoices")
+    .select("invoice_no")
+    .like("invoice_no", `${prefix}%`)
+    .eq("type", "purchase")
+    .order("invoice_no", { ascending: false })
+    .limit(1)
+  let nextNum = 1
+  if (last && last.length > 0) {
+    const match = last[0].invoice_no.match(/\/(\d+)$/)
+    if (match) nextNum = parseInt(match[1], 10) + 1
+  }
+  return `${prefix}${String(nextNum).padStart(4, "0")}`
 }
 
 // ═══════════════════ POST – Create Bill ═══════════════════
@@ -197,42 +207,57 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
-  const { invoice_no, party_id, invoice_date, due_date, items, reference, notes } = body
-  if (!invoice_no || !party_id || !items || items.length === 0) {
+  const { party_id, invoice_date, due_date, items, reference, notes } = body
+  if (!party_id || !items || items.length === 0) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
   const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
+  const userEmail = user.email || 'system'
 
   const { data: company } = await supabase.from('companies')
     .select('business_type').eq('id', companyId).single()
   const businessType = company?.business_type || ''
 
-  // Insert the bill header
-  const { data: bill, error: headerError } = await supabase
-    .from('invoices')
-    .insert({
-      invoice_no,
-      type: 'purchase',
-      party_id,
-      date: invoice_date,
-      due_date,
-      total: 0,
-      paid: 0,
-      status: 'Unpaid',
-      reference,
-      notes,
-      company_id: companyId,
-    })
-    .select('*')
-    .single()
+  // ── Generate unique bill number with retry ──
+  let billNo = ''
+  let bill: any = null
+  let total = 0
 
-  if (headerError || !bill) {
-    return NextResponse.json({ error: headerError?.message || 'Failed to create bill' }, { status: 500 })
+  for (let attempt = 0; attempt < 3; attempt++) {
+    billNo = await generateBillNo(supabase, companyId)
+
+    const { data: inv, error: headerError } = await supabase
+      .from('invoices')
+      .insert({
+        invoice_no: billNo,
+        type: 'purchase',
+        party_id,
+        date: invoice_date,
+        due_date,
+        total: 0,
+        paid: 0,
+        status: 'Unpaid',
+        reference,
+        notes,
+        company_id: companyId,
+        created_by: userEmail,
+        updated_by: userEmail,
+      })
+      .select('*')
+      .single()
+
+    if (!headerError) {
+      bill = inv
+      break
+    }
+    if (headerError.code === '23505' || headerError.message?.includes('duplicate key')) continue
+    return NextResponse.json({ error: headerError.message }, { status: 500 })
   }
 
-  // Insert items
-  let total = 0
+  if (!bill) return NextResponse.json({ error: 'Could not generate unique bill number' }, { status: 500 })
+
+  // Insert items and calculate total
   const itemRowsForDb = items.map((item: any) => {
     const qty = Number(item.qty || 0)
     const unit_price = Number(item.unit_price || 0)
@@ -251,11 +276,11 @@ export async function POST(request: NextRequest) {
   if (itemRowsForDb.length > 0) {
     const { error: itemsError } = await supabase.from('invoice_items').insert(itemRowsForDb)
     if (itemsError) {
+      await supabase.from('invoices').delete().eq('id', bill.id)
       return NextResponse.json({ error: itemsError.message }, { status: 500 })
     }
   }
 
-  // Update header total
   const { data: updatedBill, error: updateError } = await supabase
     .from('invoices')
     .update({ total })
@@ -264,10 +289,10 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (updateError || !updatedBill) {
+    await supabase.from('invoices').delete().eq('id', bill.id)
     return NextResponse.json({ error: updateError?.message || 'Failed to update total' }, { status: 500 })
   }
 
-  // ── Create journal entry (includes stock inflow) ──
   try {
     await createBillJournalEntry(supabase, updatedBill, items, companyId, businessType)
   } catch (e: any) {
@@ -290,7 +315,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ success: true, bill: updatedBill })
 }
 
-// ═══════════════════ PUT – Update Bill ═══════════════════
+// ── PUT (Update) ─────────────────────────────────────────────────────
 export async function PUT(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -312,10 +337,11 @@ export async function PUT(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
-  const { id, invoice_no, party_id, invoice_date, due_date, items, reference, notes } = body
+  const { id, party_id, invoice_date, due_date, items, reference, notes } = body
   if (!id) return NextResponse.json({ error: 'Bill ID required' }, { status: 400 })
 
   const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
+  const userEmail = user.email || 'system'
 
   const { data: company } = await supabase.from('companies')
     .select('business_type').eq('id', companyId).single()
@@ -326,8 +352,7 @@ export async function PUT(request: NextRequest) {
   if (!oldBill) return NextResponse.json({ error: 'Bill not found' }, { status: 404 })
 
   // Fetch old items for reversal
-  const { data: oldItems } = await supabase.from('invoice_items')
-    .select('*').eq('invoice_id', id)
+  const { data: oldItems } = await supabase.from('invoice_items').select('*').eq('invoice_id', id)
 
   // ── Reverse old stock changes (remove inflow) ──
   if (oldItems) {
@@ -393,7 +418,13 @@ export async function PUT(request: NextRequest) {
   const { data: updatedBill, error: updateError } = await supabase
     .from('invoices')
     .update({
-      invoice_no, party_id, date: invoice_date, due_date, total, reference, notes,
+      party_id,
+      date: invoice_date,
+      due_date,
+      total,
+      reference,
+      notes,
+      updated_by: userEmail,
     })
     .eq('id', id)
     .select('*')
@@ -403,7 +434,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: updateError?.message || 'Update failed' }, { status: 500 })
   }
 
-  // ── Create new journal entry (adds new inflow) ──
+  // ── Create new journal entry ──
   try {
     await createBillJournalEntry(supabase, updatedBill, items, companyId, businessType)
   } catch (e: any) {
@@ -421,9 +452,7 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  if (oldBill) {
-    await logDataChange('invoices', String(id), 'UPDATE', oldBill, updatedBill)
-  }
+  await logDataChange('invoices', String(id), 'UPDATE', oldBill, updatedBill)
 
   return NextResponse.json({ success: true, bill: updatedBill })
 }
@@ -454,10 +483,8 @@ export async function DELETE(request: NextRequest) {
 
   const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
 
-  // Fetch old items for stock reversal
-  const { data: oldItems } = await supabase.from('invoice_items')
-    .select('*').eq('invoice_id', id)
-
+  // Reverse stock
+  const { data: oldItems } = await supabase.from('invoice_items').select('*').eq('invoice_id', id)
   if (oldItems) {
     await applyStockChanges(supabase, companyId, oldItems, 'remove')
   }

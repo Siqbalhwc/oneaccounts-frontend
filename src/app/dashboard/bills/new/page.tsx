@@ -272,23 +272,6 @@ export default function NewBillPage() {
 
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
 
-  const getNextBillNo = async (suppCode: string): Promise<string> => {
-    const { data } = await supabase
-      .from("invoices")
-      .select("invoice_no")
-      .like("invoice_no", `${suppCode}-%`)
-      .eq("type", "purchase")
-      .order("invoice_no", { ascending: false })
-      .limit(1)
-    let nextNum = 1
-    if (data && data.length > 0) {
-      const last = data[0].invoice_no
-      const match = last.match(/(\d+)$/)
-      if (match) nextNum = parseInt(match[1]) + 1
-    }
-    return `${suppCode}-${String(nextNum).padStart(2, "0")}`
-  }
-
   const handleSubmit = async () => {
     if (!supplierId) { setError("Please select a supplier"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
@@ -308,8 +291,6 @@ export default function NewBillPage() {
     }
 
     setSaving(true); setError("")
-    const suppCode = selectedSupplier?.code || "BILL"
-    const billNo = editId ? selectedSupplier?.code + "-EDIT" : await getNextBillNo(suppCode)
 
     const payloadItems = items.map(i => ({
       product_id: i.product_id || null,
@@ -330,7 +311,6 @@ export default function NewBillPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: editId || undefined,
-          invoice_no: billNo,
           party_id: supplierId,
           invoice_date: billDate,
           due_date: dueDate,
@@ -350,8 +330,13 @@ export default function NewBillPage() {
       if (editId) {
         router.push(`/dashboard/bills/${editId}`)
       } else {
+        // ✅ Reset form for a new bill instead of navigating away
         setItems([])
         clearSupplier()
+        setBillDate(new Date().toISOString().split("T")[0])
+        setDueDate(new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0])
+        setReference("")
+        setNotes("")
       }
       setSaving(false)
       setTimeout(() => setFlash(null), 4000)
@@ -364,21 +349,12 @@ export default function NewBillPage() {
   const handleBeforeSavePdf = async () => {
     if (!selectedSupplier) return
     const billNo = editId ? selectedSupplier.code + "-EDIT" : "PREVIEW"
-    // Complete PDF data with all required fields
     const pdfData = {
       companyName: "OneAccounts",
-      companyAddress: "",
-      companyPhone: "",
-      companyEmail: "",
-      companyTagline: "",
-      logoUrl: null,
       invoiceNo: billNo,
       date: billDate,
       dueDate: dueDate,
       customerName: selectedSupplier.name,
-      customerAddress: selectedSupplier.address || "",
-      customerPhone: selectedSupplier.phone || "",
-      customerEmail: selectedSupplier.email || "",
       items: items.map(i => ({
         description: i.description || "",
         qty: i.qty || 0,
@@ -387,9 +363,17 @@ export default function NewBillPage() {
       })),
       subtotal: totalAmount,
       total: totalAmount,
+      status: "Unpaid",
       paid: 0,
       balanceDue: totalAmount,
-      status: "Unpaid",
+      companyAddress: "",
+      companyPhone: "",
+      companyEmail: "",
+      companyTagline: "",
+      logoUrl: null,
+      customerAddress: "",
+      customerPhone: "",
+      customerEmail: "",
     }
     const doc = await generateInvoicePDF(pdfData)
     doc.save(`bill-preview-${billNo}.pdf`)
@@ -517,11 +501,11 @@ export default function NewBillPage() {
               <label className="inv-label">Supplier *</label>
               <div className="cust-wrap" ref={supplierRef}>
                 {selectedSupplier ? (
-                  <div className="cust-selected-badge" onClick={clearSupplier} style={{ position: "relative", paddingRight: 40 }}>
+                  <div className="cust-selected-badge" onClick={clearSupplier}>
                     <span>🚚</span><span style={{ flex: 1 }}>{selectedSupplier.code} — {selectedSupplier.name}</span>
                     <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Bal: PKR {(selectedSupplier.balance || 0).toLocaleString()}</span>
-                    <button style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); clearSupplier(); }}><X size={14} /></button>
-                    <button style={{ position: "absolute", right: 22, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--primary)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); refreshSuppliers(); }} title="Refresh"><RefreshCw size={13} /></button>
+                    <button style={{ marginLeft: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); clearSupplier(); }}><X size={14} /></button>
+                    <button style={{ marginLeft: 2, background: "none", border: "none", color: "var(--primary)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); refreshSuppliers(); }} title="Refresh"><RefreshCw size={13} /></button>
                   </div>
                 ) : (
                   <>
