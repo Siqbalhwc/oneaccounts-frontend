@@ -15,6 +15,7 @@ function getCategory(account: any): string {
 }
 
 function fmt(n: number) { return Math.abs(n).toLocaleString("en-PK") }
+function fmtOrDash(n: number) { return n === 0 ? "–" : fmt(n) }
 
 export default function ProfitLossPage() {
   const router = useRouter()
@@ -60,13 +61,8 @@ export default function ProfitLossPage() {
       .then(r => r.data && setProjects(r.data))
   }, [])
 
-  // Fetch per‑account, per‑project amounts – fixed with explicit join and JS date filter
   useEffect(() => {
-    if (!compareMode || accounts.length === 0) {
-      setCompareRows([])
-      return
-    }
-
+    if (!compareMode || accounts.length === 0) { setCompareRows([]); return }
     setCompareLoading(true)
 
     const fetchCompare = async () => {
@@ -74,28 +70,20 @@ export default function ProfitLossPage() {
       const expenseIds = accounts.filter(a => a.type === "Expense").map(a => a.id)
       const allRelIds = [...revenueIds, ...expenseIds]
 
-      // ✅ Use journal_entries!inner(date) and filter dates in JavaScript
       const { data: lines, error } = await supabase
         .from("journal_lines")
         .select("account_id, debit, credit, project_id, journal_entries!inner(date)")
         .in("account_id", allRelIds)
 
-      if (error) {
-        console.error("Failed to load project comparison:", error)
-        setCompareRows([])
-        setCompareLoading(false)
-        return
-      }
+      if (error) { setCompareRows([]); setCompareLoading(false); return }
 
       const accountTotals: Record<number, number> = {}
       const accountProject: Record<number, Record<string, number>> = {}
 
       if (lines) {
-        // Filter by date range in JS
         const filtered = lines.filter((l: any) => {
           const d = l.journal_entries?.date
-          if (!d) return false
-          return d >= startDate && d <= endDate
+          return d && d >= startDate && d <= endDate
         })
 
         filtered.forEach((l: any) => {
@@ -163,7 +151,6 @@ export default function ProfitLossPage() {
     </div>
   )
 
-  // ── helpers for project subtotals ──
   const projSubtotal = (filter: (r: any) => boolean, pid: string) =>
     compareRows.filter(filter).reduce((s, r) => s + (r.projectAmounts[pid] || 0), 0)
 
@@ -263,22 +250,13 @@ export default function ProfitLossPage() {
         .date-sep { color: var(--text-muted); font-size: 12px; }
         .date-actions { margin-left: auto; display: flex; gap: 8px; }
 
-        /* Single‑column P&L */
-        .report-body {
-          padding: 32px;
-          max-width: 900px;
-        }
-
+        .report-body { padding: 32px; max-width: 900px; }
         .section { margin-bottom: 28px; }
 
         .section-head {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          margin-bottom: 2px;
-          padding-bottom: 8px;
-          border-bottom: 1px solid var(--border);
-          cursor: pointer;
+          display: flex; align-items: center; gap: 8px;
+          margin-bottom: 2px; padding-bottom: 8px;
+          border-bottom: 1px solid var(--border); cursor: pointer;
         }
         .section-head:hover .section-title-text { color: var(--primary); }
         .section-badge { width: 3px; height: 16px; border-radius: 2px; flex-shrink: 0; }
@@ -324,83 +302,45 @@ export default function ProfitLossPage() {
 
         .zero-state { padding: 16px 11px; font-size: 12px; color: var(--text-soft); font-style: italic; }
 
-        /* ── Compare table ── */
-        .compare-wrap {
-          padding: 32px;
-          overflow-x: auto;
-        }
-
-        .compare-table {
-          width: 100%;
-          border-collapse: collapse;
-          table-layout: fixed;
-        }
-
+        .compare-wrap { padding: 32px; overflow-x: auto; }
+        .compare-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         .compare-table col.col-account { width: 260px; }
-        .compare-table col.col-num     { width: 110px; }
+        .compare-table col.col-num { width: 110px; }
 
         .compare-table th {
-          background: var(--card-hover);
-          padding: 10px 12px;
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-          color: var(--text-muted);
-          border-bottom: 2px solid var(--border);
-          text-align: right;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          background: var(--card-hover); padding: 10px 12px; font-size: 10px;
+          font-weight: 700; text-transform: uppercase; color: var(--text-muted);
+          border-bottom: 2px solid var(--border); text-align: right;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         .compare-table th.col-head-account { text-align: left; }
 
         .compare-table td {
-          padding: 8px 12px;
-          border-bottom: 1px solid var(--border);
-          font-size: 13px;
-          text-align: right;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px;
+          text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
           vertical-align: middle;
         }
         .compare-table td.td-account {
-          text-align: left;
-          font-weight: 500;
-          color: var(--text);
-          white-space: normal;
-          word-break: break-word;
+          text-align: left; font-weight: 500; color: var(--text);
+          white-space: normal; word-break: break-word;
         }
 
         .compare-table tr.tr-section-head td {
-          font-weight: 700;
-          font-size: 10px;
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-          padding-top: 18px;
-          padding-bottom: 6px;
-          border-bottom: 1px solid var(--border);
-          background: var(--bg);
+          font-weight: 700; font-size: 10px; text-transform: uppercase;
+          letter-spacing: 0.08em; padding-top: 18px; padding-bottom: 6px;
+          border-bottom: 1px solid var(--border); background: var(--bg);
         }
 
         .compare-table tr.tr-subtotal td {
-          font-weight: 700;
-          font-size: 13px;
-          border-top: 1px solid var(--border);
-          border-bottom: 1px solid var(--border);
-          background: var(--card);
-          padding-top: 10px;
-          padding-bottom: 10px;
+          font-weight: 700; font-size: 13px; border-top: 1px solid var(--border);
+          border-bottom: 1px solid var(--border); background: var(--card);
+          padding-top: 10px; padding-bottom: 10px;
         }
 
         .compare-table tr.tr-bold td {
-          font-weight: 700;
-          font-size: 13px;
-          border-top: 2px solid var(--border-strong);
-          border-bottom: 2px solid var(--border-strong);
-          background: var(--card-hover);
-          padding-top: 12px;
-          padding-bottom: 12px;
+          font-weight: 700; font-size: 13px; border-top: 2px solid var(--border-strong);
+          border-bottom: 2px solid var(--border-strong); background: var(--card-hover);
+          padding-top: 12px; padding-bottom: 12px;
         }
 
         @media (max-width: 900px) {
@@ -408,7 +348,7 @@ export default function ProfitLossPage() {
           .pl-header { padding: 0 16px; }
           .date-bar, .report-body, .compare-wrap { padding: 16px; }
           .compare-table col.col-account { width: 180px; }
-          .compare-table col.col-num     { width: 90px; }
+          .compare-table col.col-num { width: 90px; }
         }
         @media print {
           .pl-header, .date-bar { display: none; }
@@ -416,7 +356,7 @@ export default function ProfitLossPage() {
         }
       `}</style>
 
-      {/* ── Sticky Header ── */}
+      {/* Sticky Header */}
       <div className="pl-header">
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <button className="back-btn" onClick={() => router.push("/dashboard/reports")}>
@@ -434,7 +374,7 @@ export default function ProfitLossPage() {
         </div>
       </div>
 
-      {/* ── KPI Cards ── */}
+      {/* KPI Cards */}
       <div className="kpi-strip">
         <div className="kpi-card">
           <div className="kpi-label">Total Revenue</div>
@@ -462,7 +402,7 @@ export default function ProfitLossPage() {
         </div>
       </div>
 
-      {/* ── Filters Bar ── */}
+      {/* Filters Bar */}
       <div className="date-bar">
         <Calendar size={13} color="var(--text-muted)" />
         <span className="date-label">Period</span>
@@ -484,10 +424,9 @@ export default function ProfitLossPage() {
         </div>
       </div>
 
-      {/* ── Report Body ── */}
+      {/* Report Body */}
       {!compareMode ? (
         <div className="report-body">
-          {/* Revenue */}
           <div className="section">
             <div className="section-head" onClick={() => navigateToTrialBalance("Revenue")}>
               <div className="section-badge" style={{ background: "#10B981" }} />
@@ -510,7 +449,6 @@ export default function ProfitLossPage() {
             </div>
           </div>
 
-          {/* Direct Expenses */}
           {directExpenses.length > 0 && (
             <div className="section">
               <div className="section-head" onClick={() => navigateToTrialBalance("Expense", "Direct Expenses")}>
@@ -531,7 +469,6 @@ export default function ProfitLossPage() {
             </div>
           )}
 
-          {/* Gross Profit */}
           <div className="divider-row">
             <span className="divider-label">Gross Profit</span>
             <span className="divider-amount" style={{ color: grossProfit >= 0 ? "#10B981" : "#EF4444" }}>
@@ -539,7 +476,6 @@ export default function ProfitLossPage() {
             </span>
           </div>
 
-          {/* Operating Expenses */}
           {operatingExpenses.length > 0 && (
             <div className="section">
               <div className="section-head" onClick={() => navigateToTrialBalance("Expense", "Operating Expenses")}>
@@ -560,7 +496,6 @@ export default function ProfitLossPage() {
             </div>
           )}
 
-          {/* Other Expenses */}
           {otherExpenses.length > 0 && (
             <div className="section">
               <div className="section-head" onClick={() => navigateToTrialBalance("Expense")}>
@@ -581,7 +516,6 @@ export default function ProfitLossPage() {
             </div>
           )}
 
-          {/* Net Profit */}
           <div className="net-row">
             <div>
               <div className="net-label" style={{ color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
@@ -594,19 +528,14 @@ export default function ProfitLossPage() {
             </div>
           </div>
         </div>
-
       ) : (
-        /* ── Compare Table ── */
         <div className="compare-wrap">
           {compareLoading ? (
             <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading project comparison…</div>
           ) : compareRows.length === 0 ? (
             <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>
-              No transactions found for this period.
-              <br />
-              <span style={{ fontSize: 12 }}>
-                💡 To see project‑wise data, tag invoices, bills, or journal entries with a project.
-              </span>
+              No transactions found for this period.<br />
+              <span style={{ fontSize: 12 }}>💡 Tag invoices, bills, or journal entries with a project to see data here.</span>
             </div>
           ) : (
             <>
@@ -626,10 +555,7 @@ export default function ProfitLossPage() {
                   <tr>
                     <th className="col-head-account">Account</th>
                     {projects.map(p => (
-                      <th key={p.id}>
-                        {p.name}<br />
-                        <span style={{ fontSize: 9, fontWeight: 400 }}>(PKR)</span>
-                      </th>
+                      <th key={p.id}>{p.name}<br /><span style={{ fontSize: 9, fontWeight: 400 }}>(PKR)</span></th>
                     ))}
                     <th>Unallocated<br /><span style={{ fontSize: 9, fontWeight: 400 }}>(PKR)</span></th>
                     <th>Total<br /><span style={{ fontSize: 9, fontWeight: 400 }}>(PKR)</span></th>
@@ -637,8 +563,7 @@ export default function ProfitLossPage() {
                 </thead>
 
                 <tbody>
-
-                  {/* ── REVENUE ── */}
+                  {/* Revenue */}
                   <tr className="tr-section-head">
                     <td className="td-account" style={{ color: "#10B981" }}>Income / Revenue</td>
                     {projects.map(p => <td key={p.id} />)}
@@ -648,28 +573,22 @@ export default function ProfitLossPage() {
                     <tr key={row.id}>
                       <td className="td-account">{row.code} – {row.name}</td>
                       {projects.map(p => (
-                        <td key={p.id} style={{ color: "#10B981" }}>{fmt(row.projectAmounts[p.id] || 0)}</td>
+                        <td key={p.id} style={{ color: "#10B981" }}>{fmtOrDash(row.projectAmounts[p.id] || 0)}</td>
                       ))}
-                      <td style={{ color: "#10B981" }}>{fmt(row.unallocated)}</td>
-                      <td style={{ fontWeight: 600, color: "#10B981" }}>{fmt(row.total)}</td>
+                      <td style={{ color: "#10B981" }}>{fmtOrDash(row.unallocated)}</td>
+                      <td style={{ fontWeight: 600, color: "#10B981" }}>{fmtOrDash(row.total)}</td>
                     </tr>
                   ))}
                   <tr className="tr-subtotal">
                     <td className="td-account" style={{ color: "#10B981" }}>Total Revenue</td>
                     {projects.map(p => (
-                      <td key={p.id} style={{ color: "#10B981" }}>
-                        {fmt(projSubtotal(r => r.type === "Revenue", p.id))}
-                      </td>
+                      <td key={p.id} style={{ color: "#10B981" }}>{fmt(projSubtotal(r => r.type === "Revenue", p.id))}</td>
                     ))}
-                    <td style={{ color: "#10B981" }}>
-                      {fmt(projUnallocatedSubtotal(r => r.type === "Revenue"))}
-                    </td>
-                    <td style={{ color: "#10B981" }}>
-                      {fmt(projTotal(r => r.type === "Revenue"))}
-                    </td>
+                    <td style={{ color: "#10B981" }}>{fmt(projUnallocatedSubtotal(r => r.type === "Revenue"))}</td>
+                    <td style={{ color: "#10B981" }}>{fmt(projTotal(r => r.type === "Revenue"))}</td>
                   </tr>
 
-                  {/* ── DIRECT EXPENSES ── */}
+                  {/* Direct Expenses */}
                   <tr className="tr-section-head">
                     <td className="td-account" style={{ color: "#EF4444" }}>Cost of Goods Sold / Direct Expenses</td>
                     {projects.map(p => <td key={p.id} />)}
@@ -679,28 +598,22 @@ export default function ProfitLossPage() {
                     <tr key={row.id}>
                       <td className="td-account">{row.code} – {row.name}</td>
                       {projects.map(p => (
-                        <td key={p.id} style={{ color: "#EF4444" }}>{fmt(row.projectAmounts[p.id] || 0)}</td>
+                        <td key={p.id} style={{ color: "#EF4444" }}>{fmtOrDash(row.projectAmounts[p.id] || 0)}</td>
                       ))}
-                      <td style={{ color: "#EF4444" }}>{fmt(row.unallocated)}</td>
-                      <td style={{ fontWeight: 600, color: "#EF4444" }}>{fmt(row.total)}</td>
+                      <td style={{ color: "#EF4444" }}>{fmtOrDash(row.unallocated)}</td>
+                      <td style={{ fontWeight: 600, color: "#EF4444" }}>{fmtOrDash(row.total)}</td>
                     </tr>
                   ))}
                   <tr className="tr-subtotal">
                     <td className="td-account" style={{ color: "#EF4444" }}>Total Direct Expenses</td>
                     {projects.map(p => (
-                      <td key={p.id} style={{ color: "#EF4444" }}>
-                        {fmt(projSubtotal(r => r.category === "Direct Expenses", p.id))}
-                      </td>
+                      <td key={p.id} style={{ color: "#EF4444" }}>{fmt(projSubtotal(r => r.category === "Direct Expenses", p.id))}</td>
                     ))}
-                    <td style={{ color: "#EF4444" }}>
-                      {fmt(projUnallocatedSubtotal(r => r.category === "Direct Expenses"))}
-                    </td>
-                    <td style={{ color: "#EF4444" }}>
-                      {fmt(projTotal(r => r.category === "Direct Expenses"))}
-                    </td>
+                    <td style={{ color: "#EF4444" }}>{fmt(projUnallocatedSubtotal(r => r.category === "Direct Expenses"))}</td>
+                    <td style={{ color: "#EF4444" }}>{fmt(projTotal(r => r.category === "Direct Expenses"))}</td>
                   </tr>
 
-                  {/* ── GROSS PROFIT ── */}
+                  {/* Gross Profit */}
                   <tr className="tr-bold">
                     <td className="td-account">Gross Profit</td>
                     {projects.map(p => {
@@ -709,17 +622,24 @@ export default function ProfitLossPage() {
                       const gp = rev - dir
                       return (
                         <td key={p.id} style={{ color: gp >= 0 ? "#10B981" : "#EF4444" }}>
-                          {gp < 0 ? "-" : ""}{fmt(gp)}
+                          {gp < 0 ? "-" : ""}{fmt(Math.abs(gp))}
                         </td>
                       )
                     })}
-                    <td />
+                    <td style={{ fontWeight: 700 }}>
+                      {(() => {
+                        const uRev = projUnallocatedSubtotal(r => r.type === "Revenue")
+                        const uDir = projUnallocatedSubtotal(r => r.category === "Direct Expenses")
+                        const uGP = uRev - uDir
+                        return <span style={{ color: uGP >= 0 ? "#10B981" : "#EF4444" }}>{uGP < 0 ? "-" : ""}{fmt(Math.abs(uGP))}</span>
+                      })()}
+                    </td>
                     <td style={{ color: grossProfit >= 0 ? "#10B981" : "#EF4444" }}>
-                      {grossProfit < 0 ? "-" : ""}{fmt(grossProfit)}
+                      {grossProfit < 0 ? "-" : ""}{fmt(Math.abs(grossProfit))}
                     </td>
                   </tr>
 
-                  {/* ── OPERATING EXPENSES ── */}
+                  {/* Operating Expenses */}
                   <tr className="tr-section-head">
                     <td className="td-account" style={{ color: "#F59E0B" }}>Operating Expenses</td>
                     {projects.map(p => <td key={p.id} />)}
@@ -729,28 +649,22 @@ export default function ProfitLossPage() {
                     <tr key={row.id}>
                       <td className="td-account">{row.code} – {row.name}</td>
                       {projects.map(p => (
-                        <td key={p.id} style={{ color: "#F59E0B" }}>{fmt(row.projectAmounts[p.id] || 0)}</td>
+                        <td key={p.id} style={{ color: "#F59E0B" }}>{fmtOrDash(row.projectAmounts[p.id] || 0)}</td>
                       ))}
-                      <td style={{ color: "#F59E0B" }}>{fmt(row.unallocated)}</td>
-                      <td style={{ fontWeight: 600, color: "#F59E0B" }}>{fmt(row.total)}</td>
+                      <td style={{ color: "#F59E0B" }}>{fmtOrDash(row.unallocated)}</td>
+                      <td style={{ fontWeight: 600, color: "#F59E0B" }}>{fmtOrDash(row.total)}</td>
                     </tr>
                   ))}
                   <tr className="tr-subtotal">
                     <td className="td-account" style={{ color: "#F59E0B" }}>Total Operating Expenses</td>
                     {projects.map(p => (
-                      <td key={p.id} style={{ color: "#F59E0B" }}>
-                        {fmt(projSubtotal(r => r.category === "Operating Expenses", p.id))}
-                      </td>
+                      <td key={p.id} style={{ color: "#F59E0B" }}>{fmt(projSubtotal(r => r.category === "Operating Expenses", p.id))}</td>
                     ))}
-                    <td style={{ color: "#F59E0B" }}>
-                      {fmt(projUnallocatedSubtotal(r => r.category === "Operating Expenses"))}
-                    </td>
-                    <td style={{ color: "#F59E0B" }}>
-                      {fmt(projTotal(r => r.category === "Operating Expenses"))}
-                    </td>
+                    <td style={{ color: "#F59E0B" }}>{fmt(projUnallocatedSubtotal(r => r.category === "Operating Expenses"))}</td>
+                    <td style={{ color: "#F59E0B" }}>{fmt(projTotal(r => r.category === "Operating Expenses"))}</td>
                   </tr>
 
-                  {/* ── OTHER EXPENSES ── */}
+                  {/* Other Expenses */}
                   <tr className="tr-section-head">
                     <td className="td-account" style={{ color: "#8B5CF6" }}>Other Expenses</td>
                     {projects.map(p => <td key={p.id} />)}
@@ -760,28 +674,22 @@ export default function ProfitLossPage() {
                     <tr key={row.id}>
                       <td className="td-account">{row.code} – {row.name}</td>
                       {projects.map(p => (
-                        <td key={p.id} style={{ color: "#8B5CF6" }}>{fmt(row.projectAmounts[p.id] || 0)}</td>
+                        <td key={p.id} style={{ color: "#8B5CF6" }}>{fmtOrDash(row.projectAmounts[p.id] || 0)}</td>
                       ))}
-                      <td style={{ color: "#8B5CF6" }}>{fmt(row.unallocated)}</td>
-                      <td style={{ fontWeight: 600, color: "#8B5CF6" }}>{fmt(row.total)}</td>
+                      <td style={{ color: "#8B5CF6" }}>{fmtOrDash(row.unallocated)}</td>
+                      <td style={{ fontWeight: 600, color: "#8B5CF6" }}>{fmtOrDash(row.total)}</td>
                     </tr>
                   ))}
                   <tr className="tr-subtotal">
                     <td className="td-account" style={{ color: "#8B5CF6" }}>Total Other Expenses</td>
                     {projects.map(p => (
-                      <td key={p.id} style={{ color: "#8B5CF6" }}>
-                        {fmt(projSubtotal(r => r.category === "Other" && r.type === "Expense", p.id))}
-                      </td>
+                      <td key={p.id} style={{ color: "#8B5CF6" }}>{fmt(projSubtotal(r => r.category === "Other" && r.type === "Expense", p.id))}</td>
                     ))}
-                    <td style={{ color: "#8B5CF6" }}>
-                      {fmt(projUnallocatedSubtotal(r => r.category === "Other" && r.type === "Expense"))}
-                    </td>
-                    <td style={{ color: "#8B5CF6" }}>
-                      {fmt(projTotal(r => r.category === "Other" && r.type === "Expense"))}
-                    </td>
+                    <td style={{ color: "#8B5CF6" }}>{fmt(projUnallocatedSubtotal(r => r.category === "Other" && r.type === "Expense"))}</td>
+                    <td style={{ color: "#8B5CF6" }}>{fmt(projTotal(r => r.category === "Other" && r.type === "Expense"))}</td>
                   </tr>
 
-                  {/* ── NET PROFIT ── */}
+                  {/* Net Profit */}
                   <tr className="tr-bold">
                     <td className="td-account">Net Profit / Loss</td>
                     {projects.map(p => {
@@ -790,16 +698,22 @@ export default function ProfitLossPage() {
                       const net = rev - exp
                       return (
                         <td key={p.id} style={{ color: net >= 0 ? "#10B981" : "#EF4444" }}>
-                          {net < 0 ? "-" : ""}{fmt(net)}
+                          {net < 0 ? "-" : ""}{fmt(Math.abs(net))}
                         </td>
                       )
                     })}
-                    <td />
+                    <td style={{ fontWeight: 700 }}>
+                      {(() => {
+                        const uRev = projUnallocatedSubtotal(r => r.type === "Revenue")
+                        const uExp = projUnallocatedSubtotal(r => r.type === "Expense")
+                        const uNet = uRev - uExp
+                        return <span style={{ color: uNet >= 0 ? "#10B981" : "#EF4444" }}>{uNet < 0 ? "-" : ""}{fmt(Math.abs(uNet))}</span>
+                      })()}
+                    </td>
                     <td style={{ color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
-                      {netProfit < 0 ? "-" : ""}{fmt(netProfit)}
+                      {netProfit < 0 ? "-" : ""}{fmt(Math.abs(netProfit))}
                     </td>
                   </tr>
-
                 </tbody>
               </table>
             </>
