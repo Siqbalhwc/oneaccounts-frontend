@@ -24,6 +24,11 @@ export default function NewPaymentPage() {
   const [banks, setBanks] = useState<any[]>([])
   const [selectedBankId, setSelectedBankId] = useState<number | null>(null)
 
+  // Donation / Other Expense mode
+  const [isDonation, setIsDonation] = useState(false)
+  const [expenseAccounts, setExpenseAccounts] = useState<any[]>([])
+  const [selectedExpenseAccountId, setSelectedExpenseAccountId] = useState<number | null>(null)
+
   // Purchase bills
   const [bills, setBills] = useState<any[]>([])
   const [allocations, setAllocations] = useState<Record<number, number>>({})
@@ -58,10 +63,17 @@ export default function NewPaymentPage() {
       .eq("company_id", companyId).order("bank_name")
       .then(r => r.data && setBanks(r.data.map((b: any) => ({ id: b.id, name: b.bank_name, glCode: b.accounts?.code }))))
     loadSuppliers()
+    supabase.from("accounts").select("id, code, name")
+      .in("type", ["Expense","Asset"]).eq("company_id", companyId).order("code")
+      .then(r => r.data && setExpenseAccounts(r.data))
   }, [companyId])
 
   useEffect(() => {
-    if (!companyId || !supplierId) return
+    if (!companyId || !supplierId || isDonation) {
+      setBills([])
+      setAllocations({})
+      return
+    }
     supabase.from("invoices")
       .select("id, invoice_no, date, due_date, total, paid")
       .eq("company_id", companyId).eq("party_id", supplierId)
@@ -75,7 +87,7 @@ export default function NewPaymentPage() {
         invs.forEach(inv => { initAlloc[inv.id] = 0 })
         setAllocations(initAlloc)
       })
-  }, [companyId, supplierId])
+  }, [companyId, supplierId, isDonation])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -130,7 +142,14 @@ export default function NewPaymentPage() {
     if (!companyId) { setError("Company not loaded"); return }
     if (!selectedBankId) { setError("Please select a bank account"); return }
     if (totalAmount <= 0) { setError("Enter a valid payment amount"); return }
-    if (!supplierId) { setError("Please select a supplier"); return }
+    if (!supplierId && !isDonation) {
+      setError("Please select a supplier or enable Donation / Other Expense.")
+      return
+    }
+    if (isDonation && !selectedExpenseAccountId) {
+      setError("Please select an expense account for the donation / other expense.")
+      return
+    }
 
     setLoading(true); setError("")
 
@@ -143,6 +162,7 @@ export default function NewPaymentPage() {
           amount: totalAmount,
           payment_method: "Bank Transfer",
           bank_account_id: selectedBankId,
+          expense_account_id: isDonation ? selectedExpenseAccountId : null,
           date: paymentDate,
           reference,
           notes,
@@ -160,7 +180,7 @@ export default function NewPaymentPage() {
 
       setFlash(`✅ Payment ${result.payment_no} saved!`)
       setSupplierId(null); setSelectedSupplier(null); setSupplierSearch("")
-      setSelectedBankId(null)
+      setSelectedBankId(null); setSelectedExpenseAccountId(null); setIsDonation(false)
       setBills([]); setAllocations({}); setPaymentAmount(""); setNotes(""); setReference("")
       setLoading(false)
       setTimeout(() => setFlash(null), 4000)
@@ -228,10 +248,6 @@ export default function NewPaymentPage() {
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
         th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
         td { padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-
-        input[type="number"]::-webkit-inner-spin-button,
-        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        input[type="number"] { -moz-appearance: textfield; }
       `}</style>
 
       <div className="pay-shell">
@@ -239,7 +255,7 @@ export default function NewPaymentPage() {
           <button className="pay-btn" onClick={() => router.push("/dashboard/payments")}><ArrowLeft size={16} /></button>
           <div style={{ flex: 1 }}>
             <div className="pay-title">💳 New Payment</div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>Pay a supplier and allocate to outstanding bills</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>Pay a supplier or record other expense</div>
           </div>
         </div>
 
@@ -249,44 +265,61 @@ export default function NewPaymentPage() {
         <div className="header-grid">
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="pay-card">
-              <div>
-                <label className="pay-label">Supplier *</label>
-                <div className="sup-wrap" ref={supplierRef}>
-                  {selectedSupplier ? (
-                    <div className="sup-selected-badge" onClick={clearSupplier} style={{ position: "relative", paddingRight: 40 }}>
-                      <span>🚚</span><span style={{ flex: 1 }}>{selectedSupplier.code} — {selectedSupplier.name}</span>
-                      <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Bal: PKR {(selectedSupplier.balance || 0).toLocaleString()}</span>
-                      <button style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); clearSupplier(); }}><X size={14} /></button>
-                      <button style={{ position: "absolute", right: 22, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--primary)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); loadSuppliers(); }} title="Refresh"><RefreshCw size={13} /></button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="sup-input-row">
-                        <Search size={14} style={{ position: "absolute", left: 10, color: "var(--text-muted)" }} />
-                        <input className="pay-input" style={{ paddingLeft: 32, paddingRight: 32 }} placeholder="Search by name, code or phone..." value={supplierSearch}
-                          onChange={e => { setSupplierSearch(e.target.value); setShowSupplierList(true) }}
-                          onFocus={() => setShowSupplierList(true)} autoComplete="off"
-                        />
-                        {supplierSearch && <button onClick={() => setSupplierSearch("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}><X size={13} /></button>}
-                      </div>
-                      {showSupplierList && (
-                        <div className="sup-dropdown">
-                          {filteredSuppliers.length === 0 ? (
-                            <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: 13 }}>No suppliers found</div>
-                          ) : (
-                            filteredSuppliers.map(s => (
-                              <div key={s.id} className="sup-option" onMouseDown={() => selectSupplier(s)}>
-                                <div><div className="sup-option-name">{s.name}</div><div className="sup-option-meta">{s.code}{s.phone ? ` · ${s.phone}` : ""}</div></div>
-                                <div className="sup-option-bal">PKR {(s.balance || 0).toLocaleString()}</div>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
+              <div style={{ marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer", color: "var(--text)" }}>
+                  <input type="checkbox" checked={isDonation} onChange={e => { setIsDonation(e.target.checked); clearSupplier(); }} />
+                  Donation / Other Expense
+                </label>
               </div>
+
+              {!isDonation ? (
+                <>
+                  <label className="pay-label">Supplier *</label>
+                  <div className="sup-wrap" ref={supplierRef}>
+                    {selectedSupplier ? (
+                      <div className="sup-selected-badge" onClick={clearSupplier}>
+                        <span>🚚</span><span style={{ flex: 1 }}>{selectedSupplier.code} — {selectedSupplier.name}</span>
+                        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Bal: PKR {(selectedSupplier.balance || 0).toLocaleString()}</span>
+                        <button style={{ marginLeft: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); clearSupplier(); }}><X size={14} /></button>
+                        <button style={{ marginLeft: 2, background: "none", border: "none", color: "var(--primary)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); loadSuppliers(); }} title="Refresh"><RefreshCw size={13} /></button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="sup-input-row">
+                          <Search size={14} style={{ position: "absolute", left: 10, color: "var(--text-muted)" }} />
+                          <input className="pay-input" style={{ paddingLeft: 32, paddingRight: 32 }} placeholder="Search by name, code or phone..." value={supplierSearch}
+                            onChange={e => { setSupplierSearch(e.target.value); setShowSupplierList(true) }}
+                            onFocus={() => setShowSupplierList(true)} autoComplete="off"
+                          />
+                          {supplierSearch && <button onClick={() => setSupplierSearch("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}><X size={13} /></button>}
+                        </div>
+                        {showSupplierList && (
+                          <div className="sup-dropdown">
+                            {filteredSuppliers.length === 0 ? (
+                              <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: 13 }}>No suppliers found</div>
+                            ) : (
+                              filteredSuppliers.map(s => (
+                                <div key={s.id} className="sup-option" onMouseDown={() => selectSupplier(s)}>
+                                  <div><div className="sup-option-name">{s.name}</div><div className="sup-option-meta">{s.code}{s.phone ? ` · ${s.phone}` : ""}</div></div>
+                                  <div className="sup-option-bal">PKR {(s.balance || 0).toLocaleString()}</div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <label className="pay-label">Expense Account <span style={{ color: "#EF4444" }}>*</span></label>
+                  <select className="pay-select" value={selectedExpenseAccountId ?? ""} onChange={e => setSelectedExpenseAccountId(e.target.value ? Number(e.target.value) : null)}>
+                    <option value="">— Select Expense Account —</option>
+                    {expenseAccounts.map(a => <option key={a.id} value={a.id}>{a.code} – {a.name}</option>)}
+                  </select>
+                </div>
+              )}
 
               <div style={{ marginTop: 10 }}>
                 <label className="pay-label">Bank Account *</label>
@@ -306,7 +339,7 @@ export default function NewPaymentPage() {
               </div>
             </div>
 
-            {supplierId && bills.length > 0 && (
+            {supplierId && !isDonation && bills.length > 0 && (
               <div className="pay-card">
                 <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 12px 0" }}>Allocate to Purchase Bills</h3>
                 <table>
@@ -353,7 +386,7 @@ export default function NewPaymentPage() {
                 </table>
               </div>
             )}
-            {supplierId && bills.length === 0 && (
+            {supplierId && !isDonation && bills.length === 0 && (
               <div className="pay-card" style={{ textAlign: "center", color: "var(--text-muted)" }}>
                 No unpaid purchase bills for this supplier. The full amount will be recorded as unallocated.
               </div>
@@ -366,12 +399,16 @@ export default function NewPaymentPage() {
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
                 <span>Amount</span><span>PKR {totalAmount.toLocaleString()}</span>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginTop: 4 }}>
-                <span>Allocated</span><span>PKR {totalAllocated.toLocaleString()}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: unallocated > 0 ? "#EF4444" : "var(--text-muted)" }}>
-                <span>Unallocated</span><span>PKR {unallocated.toLocaleString()}</span>
-              </div>
+              {!isDonation && (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginTop: 4 }}>
+                    <span>Allocated</span><span>PKR {totalAllocated.toLocaleString()}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: unallocated > 0 ? "#EF4444" : "var(--text-muted)" }}>
+                    <span>Unallocated</span><span>PKR {unallocated.toLocaleString()}</span>
+                  </div>
+                </>
+              )}
             </div>
             <div className="pay-card">
               <button className="pay-btn pay-btn-primary" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading}>

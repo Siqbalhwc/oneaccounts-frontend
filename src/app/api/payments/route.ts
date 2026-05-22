@@ -10,6 +10,34 @@ const supabaseAdmin = createSupabaseClient(
   { auth: { persistSession: false, autoRefreshToken: false } }
 )
 
+// ── Helpers ───────────────────────────────────────────────────────────
+async function getAccount(supabase: any, code: string, companyId: string) {
+  const { data } = await supabase.from('accounts')
+    .select('id,balance').eq('code', code).eq('company_id', companyId).maybeSingle()
+  return data
+}
+
+// ── Generate sequential payment number: PAY/YYYYMM/0001 ───────────────
+async function generatePaymentNo(companyId: string): Promise<string> {
+  const now = new Date()
+  const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`
+  const prefix = `PAY/${ym}/`
+  const { data } = await supabaseAdmin
+    .from('payments')
+    .select('payment_no')
+    .eq('company_id', companyId)
+    .like('payment_no', `${prefix}%`)
+    .order('payment_no', { ascending: false })
+    .limit(1)
+  let nextNum = 1
+  if (data && data.length > 0) {
+    const match = data[0].payment_no.match(/\/(\d+)$/)
+    if (match) nextNum = parseInt(match[1], 10) + 1
+  }
+  return `${prefix}${String(nextNum).padStart(4, "0")}`
+}
+
+// ═══════════════════ POST – Create Payment ═══════════════════
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -38,47 +66,58 @@ export async function POST(request: NextRequest) {
   if (!roleData?.company_id) return NextResponse.json({ error: 'No company found' }, { status: 400 })
   const companyId = roleData.company_id
 
-  const { party_id, amount, payment_method, bank_account_id, date, reference, notes, allocations } = await request.json()
-  if (!party_id || !amount || amount <= 0) {
-    return NextResponse.json({ error: 'Supplier and amount are required' }, { status: 400 })
+  const {
+    party_id, amount, payment_method, bank_account_id,
+    expense_account_id, date, reference, notes, allocations
+  } = await request.json()
+
+  if (!amount || amount <= 0) {
+    return NextResponse.json({ error: 'Amount is required' }, { status: 400 })
   }
 
-  // Generate payment number (unchanged)
-  const { data: existing } = await supabaseAdmin
-    .from('payments')
-    .select('payment_no')
-    .eq('company_id', companyId)
-    .order('payment_no', { ascending: false })
-    .limit(1)
-  let nextNum = 1
-  if (existing && existing.length > 0) {
-    const parts = existing[0].payment_no.split('-')
-    const num = parseInt(parts[parts.length - 1])
-    if (!isNaN(num)) nextNum = num + 1
-  }
-  const payNo = `PAY-${String(nextNum).padStart(4, "0")}`
+  // ── Generate unique payment number with retry ────────────────────────
+  let payNo = ''
+  let payment: any = null
+  let insertErr: any = null
 
-  // Insert payment
-  const { data: payment, error: insertErr } = await supabaseAdmin.from("payments").insert({
-    company_id: companyId,
-    payment_no: payNo,
-    payment_type: 'supplier_payment',
-    party_type: 'supplier',
-    party_id,
-    payment_date: date || new Date().toISOString().split('T')[0],
-    amount,
-    payment_method,
-    bank_account_id: bank_account_id || null,
-    reference,
-    notes,
-  }).select('*').single()
+  for (let attempt = 0; attempt < 3; attempt++) {
+    payNo = await generatePaymentNo(companyId)
 
-  if (insertErr || !payment) {
+    const result = await supabaseAdmin.from("payments").insert({
+      company_id: companyId,
+      payment_no: payNo,
+      payment_type: expense_account_id ? 'expense' : 'supplier_payment',
+      party_type: expense_account_id ? null : 'supplier',
+      party_id: expense_account_id ? null : party_id,
+      payment_date: date || new Date().toISOString().split('T')[0],
+      amount,
+      payment_method,
+      bank_account_id: bank_account_id || null,
+      expense_account_id: expense_account_id || null,
+      reference,
+      notes,
+      created_by: user?.email || null,
+      updated_by: user?.email || null,
+    }).select('*').single()
+
+    insertErr = result.error
+    payment = result.data
+
+    if (!insertErr) break
+
+    if (insertErr.message?.includes('duplicate key') && attempt < 2) {
+      continue
+    }
     return NextResponse.json({ error: insertErr?.message || 'Insert failed' }, { status: 500 })
   }
 
-  // Allocations to purchase bills
-  if (allocations && Array.isArray(allocations) && allocations.length > 0) {
+  if (!payment) {
+    return NextResponse.json({ error: 'Failed to create payment after multiple attempts.' }, { status: 500 })
+  }
+
+  // ── Allocations to purchase bills (only for supplier payments) ───────
+  let totalAllocated = 0
+  if (!expense_account_id && allocations && Array.isArray(allocations) && allocations.length > 0) {
     for (const alloc of allocations) {
       const billId = alloc.bill_id
       const allocAmount = parseFloat(alloc.amount) || 0
@@ -107,23 +146,22 @@ export async function POST(request: NextRequest) {
         amount: allocAmount,
         company_id: companyId,
       })
+      totalAllocated += allocAmount
     }
   }
 
-  // Update supplier balance
-  const { data: supp } = await supabaseAdmin.from('suppliers')
-    .select('balance').eq('id', party_id).eq('company_id', companyId).single()
-  if (supp) {
-    await supabaseAdmin.from('suppliers')
-      .update({ balance: (supp.balance || 0) - amount })
-      .eq('id', party_id).eq('company_id', companyId)
+  // ── Update supplier balance ─────────────────────────────────────────
+  if (party_id) {
+    const { data: supp } = await supabaseAdmin.from('suppliers')
+      .select('balance').eq('id', party_id).eq('company_id', companyId).single()
+    if (supp) {
+      await supabaseAdmin.from('suppliers')
+        .update({ balance: (supp.balance || 0) - amount })
+        .eq('id', party_id).eq('company_id', companyId)
+    }
   }
 
-  // ── Journal Entry: Dr AP (2000), Cr Bank (selected bank or fallback 1000) ──
-  const apAcc = await supabaseAdmin.from('accounts')
-    .select('id,balance').eq('code', '2000').eq('company_id', companyId).single()
-
-  // Determine the correct bank GL account
+  // ── Determine the bank's GL account ────────────────────────────────
   let bankGlAccountId: number | null = null
   if (bank_account_id) {
     const { data: bank } = await supabaseAdmin.from('bank_accounts')
@@ -133,58 +171,77 @@ export async function POST(request: NextRequest) {
       .single()
     if (bank) bankGlAccountId = bank.account_id
   }
-  // Fallback to generic cash if no bank selected or bank not found
   if (!bankGlAccountId) {
-    const { data: cashFallback } = await supabaseAdmin.from('accounts')
-      .select('id').eq('code', '1000').eq('company_id', companyId).single()
+    const cashFallback = await getAccount(supabaseAdmin, '1000', companyId)
     if (cashFallback) bankGlAccountId = cashFallback.id
   }
+  if (!bankGlAccountId) {
+    return NextResponse.json({ error: 'No bank GL account found.' }, { status: 500 })
+  }
 
-  if (apAcc.data && bankGlAccountId) {
-    const { data: entry } = await supabaseAdmin.from('journal_entries').insert({
-      company_id: companyId,
-      entry_no: `JE-PAY-${payNo}`,
-      date: date || new Date().toISOString().split('T')[0],
-      description: `Payment - ${payNo}`,
-    }).select('id').single()
+  // ── Journal Entry ──────────────────────────────────────────────────
+  const jeLines: any[] = []
+  let description = `Payment - ${payNo}`
 
-    if (entry) {
-      await supabaseAdmin.from('journal_lines').insert([
-        {
-          company_id: companyId,
-          entry_id: entry.id,
-          account_id: apAcc.data.id,
-          debit: amount,
-          credit: 0,
-          source_type: 'payment',
-          source_id: payment.id,
-        },
-        {
-          company_id: companyId,
-          entry_id: entry.id,
-          account_id: bankGlAccountId,           // ✅ now uses the selected bank's GL account
-          debit: 0,
-          credit: amount,
-          source_type: 'payment',
-          source_id: payment.id,
-        },
-      ])
-
-      // Update account balances
-      const newAp = (apAcc.data.balance || 0) - amount
-      await supabaseAdmin.from('accounts').update({ balance: newAp }).eq('id', apAcc.data.id)
-
-      const { data: bankAcc } = await supabaseAdmin.from('accounts')
-        .select('balance').eq('id', bankGlAccountId).single()
-      if (bankAcc) {
-        const newBankBal = (bankAcc.balance || 0) - amount
-        await supabaseAdmin.from('accounts').update({ balance: newBankBal }).eq('id', bankGlAccountId)
-      }
+  if (expense_account_id) {
+    // Donation / Other Expense: Debit expense, Credit bank
+    jeLines.push({ account_id: expense_account_id, debit: amount, credit: 0 })
+    jeLines.push({ account_id: bankGlAccountId, debit: 0, credit: amount })
+    description = `Expense Payment - ${payNo}`
+  } else {
+    // Normal supplier payment: Debit AP (2000), Credit bank
+    const apAcc = await getAccount(supabaseAdmin, '2000', companyId)
+    if (apAcc) {
+      jeLines.push({ account_id: apAcc.id, debit: amount, credit: 0 })
+      jeLines.push({ account_id: bankGlAccountId, debit: 0, credit: amount })
+    } else {
+      // Fallback: just credit bank and let the debit be handled manually? We'll just error for safety.
+      return NextResponse.json({ error: 'Accounts Payable (2000) not found' }, { status: 500 })
     }
   }
 
-  // Audit log
-  await logDataChange('payments', String(payment.id), 'INSERT', undefined, payment)
+  // Insert journal entry and lines
+  const { data: entry, error: entryErr } = await supabaseAdmin.from('journal_entries').insert({
+    company_id: companyId,
+    entry_no: `JE-PAY-${payNo}`,
+    date: date || new Date().toISOString().split('T')[0],
+    description,
+  }).select('id').single()
+
+  if (entryErr || !entry) {
+    return NextResponse.json({ error: entryErr?.message || 'JE insert failed' }, { status: 500 })
+  }
+
+  const lineRows = jeLines.map(l => ({
+    ...l,
+    entry_id: entry.id,
+    company_id: companyId,
+    source_type: 'payment',
+    source_id: payment.id,
+  }))
+  await supabaseAdmin.from('journal_lines').insert(lineRows)
+
+  // Update account balances
+  for (const l of jeLines) {
+    const { data: acc } = await supabaseAdmin.from('accounts')
+      .select('balance').eq('id', l.account_id).eq('company_id', companyId).single()
+    if (acc) {
+      const newBal = acc.balance + (l.debit || 0) - (l.credit || 0)
+      await supabaseAdmin.from('accounts').update({ balance: newBal }).eq('id', l.account_id).eq('company_id', companyId)
+    }
+  }
+
+  // Audit log with user email
+  const { data: { user: auditUser } } = await supabase.auth.getUser()
+  await supabaseAdmin.from("data_change_logs").insert({
+    table_name: "payments",
+    record_id: String(payment.id),
+    action: "INSERT",
+    old_data: null,
+    new_data: payment,
+    changed_by: auditUser?.email || auditUser?.id || null,
+    changed_at: new Date().toISOString(),
+  })
 
   return NextResponse.json({ success: true, payment_no: payNo, payment })
 }
