@@ -47,12 +47,28 @@ export default function NewReceiptPage() {
     })
   }, [])
 
-  const loadCustomers = () => {
+  const loadCustomers = async () => {
     if (!companyId) return
     setRefreshingCustomers(true)
-    supabase.from("customers").select("id, code, name, phone, balance, country_code")
-      .eq("company_id", companyId).order("name")
-      .then(r => { if (r.data) setCustomers(r.data); setRefreshingCustomers(false) })
+    try {
+      const { data, error } = await supabase
+        .from("customers")
+        .select("id, code, name, phone, balance, country_code")
+        .eq("company_id", companyId)
+        .order("name")
+      if (data) {
+        setCustomers(data)
+        // Update selected customer balance if still selected
+        if (selectedCustomer) {
+          const updated = data.find((c: any) => c.id === selectedCustomer.id)
+          if (updated) setSelectedCustomer(updated)
+        }
+      }
+    } catch (err) {
+      console.error("Refresh failed", err)
+    } finally {
+      setRefreshingCustomers(false)
+    }
   }
 
   useEffect(() => {
@@ -181,6 +197,8 @@ export default function NewReceiptPage() {
       setSelectedBankId(null); setSelectedIncomeAccountId(null); setIsDonation(false)
       setInvoices([]); setAllocations({}); setReceiptAmount(""); setNotes(""); setReference("")
       setLoading(false)
+      // Refresh customer list after a moment to reflect new balance
+      setTimeout(() => loadCustomers(), 500)
       setTimeout(() => setFlash(null), 4000)
     } catch {
       setError("Network error")
@@ -277,7 +295,14 @@ export default function NewReceiptPage() {
                         <span>👤</span><span style={{ flex: 1 }}>{selectedCustomer.code} — {selectedCustomer.name}</span>
                         <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
                         <button style={{ marginLeft: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); clearCustomer(); }}><X size={14} /></button>
-                        <button style={{ marginLeft: 2, background: "none", border: "none", color: "var(--primary)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); loadCustomers(); }} title="Refresh"><RefreshCw size={13} /></button>
+                        <button
+                          style={{ marginLeft: 2, background: "none", border: "none", color: "var(--primary)", cursor: "pointer", opacity: refreshingCustomers ? 0.5 : 1 }}
+                          onClick={(e) => { e.stopPropagation(); loadCustomers(); }}
+                          disabled={refreshingCustomers}
+                          title="Refresh customer list"
+                        >
+                          <RefreshCw size={13} style={{ animation: refreshingCustomers ? 'spin 1s linear infinite' : 'none' }} />
+                        </button>
                       </div>
                     ) : (
                       <>
