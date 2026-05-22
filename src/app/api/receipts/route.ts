@@ -16,25 +16,27 @@ async function getAccount(supabase: any, code: string, companyId: string) {
   return data
 }
 
-// ── Robust receipt number generation ───────────────────────────────────
+// ── Generate sequential receipt number: SR/YYYYMM/0001 ──────────────────
 async function generateReceiptNo(companyId: string): Promise<string> {
+  const now = new Date()
+  const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`
+  const prefix = `SR/${ym}/`
+
   const { data } = await supabaseAdmin
     .from('receipts')
     .select('receipt_no')
     .eq('company_id', companyId)
-    .ilike('receipt_no', 'RCPT-%')
+    .like('receipt_no', `${prefix}%`)
+    .order('receipt_no', { ascending: false })
+    .limit(1)
 
-  let maxNum = 0
-  if (data) {
-    for (const row of data) {
-      const match = row.receipt_no?.match(/^RCPT-(\d+)$/)
-      if (match) {
-        const num = parseInt(match[1], 10)
-        if (!isNaN(num) && num > maxNum) maxNum = num
-      }
-    }
+  let nextNum = 1
+  if (data && data.length > 0) {
+    const last = data[0].receipt_no
+    const match = last.match(/\/(\d+)$/)
+    if (match) nextNum = parseInt(match[1], 10) + 1
   }
-  return `RCPT-${String(maxNum + 1).padStart(4, '0')}`
+  return `${prefix}${String(nextNum).padStart(4, "0")}`
 }
 
 export async function POST(request: NextRequest) {
@@ -74,7 +76,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Amount is required' }, { status: 400 })
   }
 
-  // ── New server‑side validation ────────────────────────────────────────
   if (!party_id && !income_account_id) {
     return NextResponse.json({
       error: 'Customer is required when not a donation. Please select a customer or enable donation mode.'
@@ -100,6 +101,8 @@ export async function POST(request: NextRequest) {
       income_account_id: income_account_id || null,
       reference,
       notes,
+      created_by: user?.email || null,      // ← added
+      updated_by: user?.email || null,      // ← added
     }).select('*').single()
 
     insertErr = result.error
@@ -176,7 +179,6 @@ export async function POST(request: NextRequest) {
       .single()
     if (bank) bankGlAccountId = bank.account_id
   }
-  // Fallback to generic cash
   if (!bankGlAccountId) {
     const cashFallback = await getAccount(supabaseAdmin, '1000', companyId)
     if (cashFallback) bankGlAccountId = cashFallback.id
@@ -187,7 +189,7 @@ export async function POST(request: NextRequest) {
 
   // ── Journal Entry ──────────────────────────────────────────────────────
   const jeLines: any[] = [
-    { account_id: bankGlAccountId, debit: amount, credit: 0 }   // Debit the selected bank account
+    { account_id: bankGlAccountId, debit: amount, credit: 0 }
   ]
 
   let description = `Receipt - ${recNo}`
