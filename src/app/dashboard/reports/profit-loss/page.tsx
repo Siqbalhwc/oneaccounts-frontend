@@ -34,8 +34,14 @@ export default function ProfitLossPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [compareMode, setCompareMode] = useState(false)
 
-  // Comparative data (per project)
-  const [comparativeData, setComparativeData] = useState<any[]>([])
+  // Comparative data – now account‑level
+  const [comparativeData, setComparativeData] = useState<{
+    projects: any[]
+    revenueAccounts: any[]
+    directExpenseAccounts: any[]
+    operatingExpenseAccounts: any[]
+    otherExpenseAccounts: any[]
+  } | null>(null)
   const [compareLoading, setCompareLoading] = useState(false)
 
   // Standard P&L from account balances (used when compare mode is off)
@@ -63,98 +69,72 @@ export default function ProfitLossPage() {
       .then(r => r.data && setProjects(r.data))
   }, [])
 
-  // Fetch comparative data when compareMode is on
+  // Fetch account‑level comparative data when compareMode is on
   useEffect(() => {
-    if (!compareMode || projects.length === 0) {
-      setComparativeData([])
+    if (!compareMode || projects.length === 0 || accounts.length === 0) {
+      setComparativeData(null)
       return
     }
 
     setCompareLoading(true)
 
     const fetchComparative = async () => {
+      // Identify which accounts are revenue / expense
       const revenueIds = accounts.filter(a => a.type === "Revenue").map(a => a.id)
       const expenseIds = accounts.filter(a => a.type === "Expense").map(a => a.id)
 
-      const promises = projects.map(async (proj: any) => {
-        const { data: lines } = await supabase
-          .from("journal_lines")
-          .select("account_id, debit, credit, journal_entries!inner(date)")
-          .eq("project_id", proj.id)
-          .gte("journal_entries.date", startDate)
-          .lte("journal_entries.date", endDate)
+      // For each project, fetch all journal lines for revenue and expense accounts
+      const projectResults = await Promise.all(
+        projects.map(async (proj: any) => {
+          const { data: lines } = await supabase
+            .from("journal_lines")
+            .select("account_id, debit, credit, journal_entries!inner(date)")
+            .eq("project_id", proj.id)
+            .gte("journal_entries.date", startDate)
+            .lte("journal_entries.date", endDate)
 
-        let rev = 0
-        const expenses: Record<string, number> = {}
-        if (lines) {
-          lines.forEach((l: any) => {
-            if (revenueIds.includes(l.account_id)) {
-              rev += (l.credit || 0) - (l.debit || 0)
-            } else if (expenseIds.includes(l.account_id)) {
-              const cat = getCategory(accounts.find(a => a.id === l.account_id) || {})
-              expenses[cat] = (expenses[cat] || 0) + (l.debit || 0) - (l.credit || 0)
-            }
-          })
-        }
-        return {
-          projectId: proj.id,
-          projectName: proj.name,
-          revenue: Math.abs(rev),
-          directExp: expenses["Direct Expenses"] || 0,
-          opEx: expenses["Operating Expenses"] || 0,
-          otherExp: expenses["Other"] || 0,
-        }
+          // Aggregate by account_id
+          const accountAmounts: Record<number, number> = {}
+          if (lines) {
+            lines.forEach((l: any) => {
+              const net = (l.credit || 0) - (l.debit || 0)
+              accountAmounts[l.account_id] = (accountAmounts[l.account_id] || 0) + net
+            })
+          }
+          return {
+            projectId: proj.id,
+            projectName: proj.name,
+            accountAmounts,  // account_id → net amount
+          }
+        })
+      )
+
+      // Build the final data structure with all accounts listed (even if zero)
+      const revenueAccts = accounts.filter(a => a.type === "Revenue")
+      const directExpAccts = accounts.filter(a => a.type === "Expense" && getCategory(a) === "Direct Expenses")
+      const opExAccts = accounts.filter(a => a.type === "Expense" && getCategory(a) === "Operating Expenses")
+      const otherExpAccts = accounts.filter(a => a.type === "Expense" && !["Direct Expenses", "Operating Expenses"].includes(getCategory(a)))
+
+      setComparativeData({
+        projects: projectResults,
+        revenueAccounts: revenueAccts,
+        directExpenseAccounts: directExpAccts,
+        operatingExpenseAccounts: opExAccts,
+        otherExpenseAccounts: otherExpAccts,
       })
-
-      const results = await Promise.all(promises)
-      setComparativeData(results)
       setCompareLoading(false)
     }
 
     fetchComparative()
   }, [compareMode, projects, startDate, endDate, accounts])
 
-  // Compute totals for the matrix
-  const matrixRows = compareMode && comparativeData.length > 0
+  // Build matrix rows from comparative data
+  const matrixSections: { title: string; color: string; accounts: any[]; isExpense: boolean }[] = comparativeData
     ? [
-        {
-          label: "Revenue",
-          values: comparativeData.map(d => d.revenue),
-          total: comparativeData.reduce((s, d) => s + d.revenue, 0),
-          color: "#10B981",
-        },
-        {
-          label: "Direct Expenses",
-          values: comparativeData.map(d => d.directExp),
-          total: comparativeData.reduce((s, d) => s + d.directExp, 0),
-          color: "#EF4444",
-        },
-        {
-          label: "Gross Profit",
-          values: comparativeData.map(d => d.revenue - d.directExp),
-          total: comparativeData.reduce((s, d) => s + d.revenue - d.directExp, 0),
-          color: "#10B981",
-          bold: true,
-        },
-        {
-          label: "Operating Expenses",
-          values: comparativeData.map(d => d.opEx),
-          total: comparativeData.reduce((s, d) => s + d.opEx, 0),
-          color: "#F59E0B",
-        },
-        {
-          label: "Other Expenses",
-          values: comparativeData.map(d => d.otherExp),
-          total: comparativeData.reduce((s, d) => s + d.otherExp, 0),
-          color: "#8B5CF6",
-        },
-        {
-          label: "Net Profit",
-          values: comparativeData.map(d => d.revenue - d.directExp - d.opEx - d.otherExp),
-          total: comparativeData.reduce((s, d) => s + d.revenue - d.directExp - d.opEx - d.otherExp, 0),
-          color: "#10B981",
-          bold: true,
-        },
+        { title: "Income / Revenue", color: "#10B981", accounts: comparativeData.revenueAccounts, isExpense: false },
+        { title: "Direct Expenses", color: "#EF4444", accounts: comparativeData.directExpenseAccounts, isExpense: true },
+        { title: "Operating Expenses", color: "#F59E0B", accounts: comparativeData.operatingExpenseAccounts, isExpense: true },
+        { title: "Other Expenses", color: "#8B5CF6", accounts: comparativeData.otherExpenseAccounts, isExpense: true },
       ]
     : []
 
@@ -336,7 +316,7 @@ export default function ProfitLossPage() {
         .matrix-table {
           width: 100%;
           border-collapse: collapse;
-          margin-top: 8px;
+          margin-bottom: 24px;
         }
         .matrix-table th {
           background: var(--card-hover);
@@ -347,13 +327,18 @@ export default function ProfitLossPage() {
         }
         .matrix-table th:first-child { text-align: left; }
         .matrix-table td {
-          padding: 10px 12px;
+          padding: 8px 12px;
           border-bottom: 1px solid var(--border);
           font-size: 13px;
           text-align: right;
         }
-        .matrix-table td:first-child { text-align: left; font-weight: 600; color: var(--text); }
-        .bold-row td { font-weight: 700; border-top: 2px solid var(--border-strong); }
+        .matrix-table td:first-child { text-align: left; font-weight: 500; color: var(--text); }
+        .matrix-table .section-header td {
+          font-weight: 700; color: var(--text-muted); font-size: 11px; text-transform: uppercase;
+          padding-top: 16px;
+        }
+        .matrix-table .subtotal-row td { font-weight: 700; border-top: 1px solid var(--border); }
+        .matrix-table .bold-row td { font-weight: 700; border-top: 2px solid var(--border-strong); }
 
         @media (max-width: 900px) {
           .kpi-strip { grid-template-columns: repeat(2, 1fr); }
@@ -553,41 +538,114 @@ export default function ProfitLossPage() {
           </div>
         </div>
       ) : (
-        <div style={{ padding: 32 }}>
+        <div style={{ padding: 32, overflowX: "auto" }}>
           {compareLoading ? (
             <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading project comparison…</div>
-          ) : comparativeData.length === 0 ? (
+          ) : !comparativeData || comparativeData.projects.length === 0 ? (
             <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>No projects found.</div>
           ) : (
-            <div style={{ overflowX: "auto" }}>
+            <>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 16 }}>Project‑wise Profit &amp; Loss</h3>
-              <table className="matrix-table">
-                <thead>
-                  <tr>
-                    <th>Category</th>
-                    {comparativeData.map((d: any) => (
-                      <th key={d.projectId}>{d.projectName}</th>
-                    ))}
-                    <th>Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {matrixRows.map((row, idx) => (
-                    <tr key={idx} className={row.bold ? "bold-row" : ""}>
-                      <td style={{ color: row.color }}>{row.label}</td>
-                      {row.values.map((val, vIdx) => (
-                        <td key={vIdx} style={{ color: row.color }}>
-                          {val >= 0 ? "" : "-"}PKR {fmt(val)}
+              {matrixSections.map((section, secIdx) => (
+                <div key={section.title} style={{ marginBottom: 24 }}>
+                  <table className="matrix-table">
+                    <thead>
+                      <tr>
+                        <th style={{ color: section.color }}>{section.title}</th>
+                        {comparativeData.projects.map((proj: any) => (
+                          <th key={proj.projectId}>{proj.projectName}</th>
+                        ))}
+                        <th>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {/* Account rows */}
+                      {section.accounts.map((acc: any) => {
+                        const values = comparativeData.projects.map((proj: any) => {
+                          const amt = proj.accountAmounts[acc.id]
+                          // For revenue, we show credit amounts as positive; for expenses, debit amounts as positive
+                          return section.isExpense ? Math.abs(amt || 0) : Math.abs(amt || 0)
+                        })
+                        const total = values.reduce((s: number, v: number) => s + v, 0)
+                        return (
+                          <tr key={acc.id}>
+                            <td style={{ color: "var(--text)", fontSize: 12 }}>
+                              {acc.code} – {acc.name}
+                            </td>
+                            {values.map((val, idx) => (
+                              <td key={idx} style={{ color: section.color }}>
+                                PKR {fmt(val)}
+                              </td>
+                            ))}
+                            <td style={{ fontWeight: 600, color: section.color }}>PKR {fmt(total)}</td>
+                          </tr>
+                        )
+                      })}
+                      {/* Category subtotal */}
+                      <tr className="subtotal-row">
+                        <td style={{ fontWeight: 700, color: section.color }}>
+                          Total {section.title}
                         </td>
-                      ))}
-                      <td style={{ color: row.color, fontWeight: 700 }}>
-                        {row.total >= 0 ? "" : "-"}PKR {fmt(row.total)}
-                      </td>
-                    </tr>
-                  ))}
+                        {comparativeData.projects.map((proj: any, idx: number) => {
+                          const total = section.accounts.reduce((sum: number, acc: any) => {
+                            const amt = proj.accountAmounts[acc.id] || 0
+                            return sum + (section.isExpense ? Math.abs(amt) : Math.abs(amt))
+                          }, 0)
+                          return (
+                            <td key={idx} style={{ fontWeight: 700, color: section.color }}>
+                              PKR {fmt(total)}
+                            </td>
+                          )
+                        })}
+                        <td style={{ fontWeight: 700, color: section.color }}>
+                          PKR {fmt(section.accounts.reduce((sum: number, acc: any) => {
+                            return sum + comparativeData.projects.reduce((s: number, proj: any) => {
+                              const amt = proj.accountAmounts[acc.id] || 0
+                              return s + (section.isExpense ? Math.abs(amt) : Math.abs(amt))
+                            }, 0)
+                          }, 0))}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+
+              {/* Gross Profit + Net Profit summary rows */}
+              <table className="matrix-table">
+                <tbody>
+                  {/* Gross Profit */}
+                  <tr className="bold-row">
+                    <td style={{ color: "#10B981", fontWeight: 700 }}>Gross Profit</td>
+                    {comparativeData.projects.map((proj: any) => {
+                      const rev = matrixSections[0]?.accounts.reduce((sum: number, acc: any) => sum + Math.abs(proj.accountAmounts[acc.id] || 0), 0) || 0
+                      const dirExp = matrixSections[1]?.accounts.reduce((sum: number, acc: any) => sum + Math.abs(proj.accountAmounts[acc.id] || 0), 0) || 0
+                      const gp = rev - dirExp
+                      return <td key={proj.projectId} style={{ fontWeight: 700, color: gp >= 0 ? "#10B981" : "#EF4444" }}>{gp >= 0 ? "" : "-"}PKR {fmt(gp)}</td>
+                    })}
+                    <td style={{ fontWeight: 700, color: grossProfit >= 0 ? "#10B981" : "#EF4444" }}>
+                      {grossProfit >= 0 ? "" : "-"}PKR {fmt(grossProfit)}
+                    </td>
+                  </tr>
+
+                  {/* Net Profit */}
+                  <tr className="bold-row">
+                    <td style={{ color: "#10B981", fontWeight: 700 }}>Net Profit / Loss</td>
+                    {comparativeData.projects.map((proj: any) => {
+                      const rev = matrixSections[0]?.accounts.reduce((sum: number, acc: any) => sum + Math.abs(proj.accountAmounts[acc.id] || 0), 0) || 0
+                      const allExp = matrixSections.slice(1).reduce((sum: number, sec: any) => {
+                        return sum + sec.accounts.reduce((s: number, acc: any) => s + Math.abs(proj.accountAmounts[acc.id] || 0), 0)
+                      }, 0)
+                      const net = rev - allExp
+                      return <td key={proj.projectId} style={{ fontWeight: 700, color: net >= 0 ? "#10B981" : "#EF4444" }}>{net >= 0 ? "" : "-"}PKR {fmt(net)}</td>
+                    })}
+                    <td style={{ fontWeight: 700, color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
+                      {netProfit >= 0 ? "" : "-"}PKR {fmt(netProfit)}
+                    </td>
+                  </tr>
                 </tbody>
               </table>
-            </div>
+            </>
           )}
         </div>
       )}
