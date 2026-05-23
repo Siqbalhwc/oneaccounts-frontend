@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { Plus, Edit, Trash2, X, Search } from "lucide-react"
+import { Plus, Edit, Trash2, X, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useRole } from "@/contexts/RoleContext"
 
@@ -21,6 +21,9 @@ interface BankAccount {
   updated_by?: string | null
 }
 
+type SortField = "account" | "bank_name" | "account_number" | "branch" | "balance" | "created_by"
+type SortDir = "asc" | "desc"
+
 export default function BankAccountsPage() {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -38,7 +41,11 @@ export default function BankAccountsPage() {
   const [search, setSearch] = useState("")
   const [flash, setFlash] = useState("")
 
-  // Edit modal state (kept inline)
+  // Sorting state
+  const [sortField, setSortField] = useState<SortField>("account")
+  const [sortDir, setSortDir] = useState<SortDir>("asc")
+
+  // Edit modal state
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<BankAccount | null>(null)
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null)
@@ -124,7 +131,58 @@ export default function BankAccountsPage() {
       )
     : bankAccounts
 
-  const totalBalance = filtered.reduce((sum, b) => sum + (b.balance || 0), 0)
+  // ── Sort handler ─────────────────────────────────────────────────────────
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === "asc" ? "desc" : "asc")
+    } else {
+      setSortField(field)
+      setSortDir("asc")
+    }
+  }
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown size={12} style={{ opacity: 0.5 }} />
+    return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+  }
+
+  // ── Client‑side sorting ──────────────────────────────────────────────────
+  const sortedFiltered = [...filtered].sort((a, b) => {
+    let valA: any, valB: any
+    switch (sortField) {
+      case "account":
+        valA = (a.code || "").toLowerCase()
+        valB = (b.code || "").toLowerCase()
+        break
+      case "bank_name":
+        valA = (a.bank_name || "").toLowerCase()
+        valB = (b.bank_name || "").toLowerCase()
+        break
+      case "account_number":
+        valA = (a.account_number || "").toLowerCase()
+        valB = (b.account_number || "").toLowerCase()
+        break
+      case "branch":
+        valA = (a.branch || "").toLowerCase()
+        valB = (b.branch || "").toLowerCase()
+        break
+      case "balance":
+        valA = a.balance || 0
+        valB = b.balance || 0
+        break
+      case "created_by":
+        valA = (a.created_by || "").toLowerCase()
+        valB = (b.created_by || "").toLowerCase()
+        break
+      default:
+        return 0
+    }
+    if (valA < valB) return sortDir === "asc" ? -1 : 1
+    if (valA > valB) return sortDir === "asc" ? 1 : -1
+    return 0
+  })
+
+  const totalBalance = sortedFiltered.reduce((sum, b) => sum + (b.balance || 0), 0)
 
   // ── Modal helpers ────────────────────────────────────────────────────────
   const openEdit = (b: BankAccount) => {
@@ -212,6 +270,7 @@ export default function BankAccountsPage() {
         .header-row {
           display: grid;
           grid-template-columns: 1fr 120px 100px 100px 100px 130px 55px 55px;
+          column-gap: 8px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
@@ -220,6 +279,7 @@ export default function BankAccountsPage() {
         .data-row {
           display: grid;
           grid-template-columns: 1fr 120px 100px 100px 100px 130px 55px 55px;
+          column-gap: 8px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
@@ -253,6 +313,12 @@ export default function BankAccountsPage() {
           display: flex; flex-direction: column; font-size: 11px; color: var(--text-muted);
           line-height: 1.3; word-wrap: break-word;
         }
+        .sort-btn {
+          background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
+          display: inline-flex; align-items: center; gap: 4px; padding: 0;
+          font-weight: 700; text-transform: uppercase; font-size: 10px;
+        }
+        .sort-btn:hover { color: var(--primary); }
         .pr-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
         .pr-modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; color: var(--text); }
         .pr-modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
@@ -295,7 +361,7 @@ export default function BankAccountsPage() {
       <div className="summary-grid">
         <div className="summary-item">
           <div className="summary-label">Total Accounts</div>
-          <div className="summary-value">{filtered.length}</div>
+          <div className="summary-value">{sortedFiltered.length}</div>
         </div>
         <div className="summary-item">
           <div className="summary-label">Total Balance</div>
@@ -316,23 +382,23 @@ export default function BankAccountsPage() {
       <div className="card">
         {loading ? (
           <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading...</div>
-        ) : filtered.length === 0 ? (
+        ) : sortedFiltered.length === 0 ? (
           <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
             No bank accounts found. {canEdit && 'Use "Add Bank Account" to link a cash/bank account, or create a new GL account first.'}
           </div>
         ) : (
           <>
             <div className="header-row">
-              <span>Account</span>
-              <span>Bank Name</span>
-              <span>Account #</span>
-              <span>Branch</span>
-              <span>Balance</span>
-              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Created / Edited By</span>
+              <button className="sort-btn" onClick={() => handleSort("account")}>Account {getSortIcon("account")}</button>
+              <button className="sort-btn" onClick={() => handleSort("bank_name")}>Bank Name {getSortIcon("bank_name")}</button>
+              <button className="sort-btn" onClick={() => handleSort("account_number")}>Account # {getSortIcon("account_number")}</button>
+              <button className="sort-btn" onClick={() => handleSort("branch")}>Branch {getSortIcon("branch")}</button>
+              <button className="sort-btn" onClick={() => handleSort("balance")}>Balance {getSortIcon("balance")}</button>
+              <button className="sort-btn" onClick={() => handleSort("created_by")}>Created / Edited By {getSortIcon("created_by")}</button>
               <span></span>
               <span></span>
             </div>
-            {filtered.map((b) => (
+            {sortedFiltered.map((b) => (
               <div key={b.id} className="data-row">
                 <span style={{ fontWeight: 600, color: "var(--primary)" }}>{b.code} - {b.name}</span>
                 <span>{b.bank_name}</span>
