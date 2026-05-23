@@ -84,7 +84,7 @@ async function validateStock(supabase: any, companyId: string, items: any[]) {
   return null
 }
 
-// ── POST ──────────────────────────────────────────────────────────────
+// ═══════════════════ POST ══════════════════════════════════════════════
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -129,12 +129,33 @@ export async function POST(request: NextRequest) {
     .select('invoice_automation_config')
     .eq('company_id', companyId).maybeSingle()
   const automationConfig = settings?.invoice_automation_config || {}
-  const expenseEnabled = automationConfig.expenseEnabled ?? false
-  const profitEnabled = automationConfig.profitEnabled ?? false
-  const expenseRules = automationConfig.expenseRules || []
-  const partners = automationConfig.partners || []
 
-  // Generate unique invoice number (with retry on duplicate key)
+  // ── Check if the invoice_automation feature is enabled ──
+  const { data: featureRow } = await supabase
+    .from("features")
+    .select("id")
+    .eq("code", "invoice_automation")
+    .single()
+
+  let automationAllowed = false
+  if (featureRow) {
+    const { data: companyFeature } = await supabase
+      .from("company_features")
+      .select("enabled")
+      .eq("company_id", companyId)
+      .eq("feature_id", featureRow.id)
+      .maybeSingle()
+
+    automationAllowed = companyFeature?.enabled || false
+  }
+
+  // Force disable automation if feature is off
+  const effectiveExpenseEnabled = automationAllowed && (automationConfig.expenseEnabled ?? false)
+  const effectiveProfitEnabled = automationAllowed && (automationConfig.profitEnabled ?? false)
+  const expenseRules = effectiveExpenseEnabled ? (automationConfig.expenseRules || []) : []
+  const partners = effectiveProfitEnabled ? (automationConfig.partners || []) : []
+
+  // ── Generate unique invoice number with retry ──
   let invoice: any = null
   let invoiceNo = ''
   const MAX_RETRIES = 3
@@ -217,7 +238,7 @@ export async function POST(request: NextRequest) {
       jeLines.push({ account_id: revenueAccount.id, debit: 0, credit: lineTotal })
     }
 
-    // COGS for trading companies (if product and cost_price present)
+    // COGS for trading companies
     if (businessType === 'trading') {
       for (const item of items) {
         if (item.product_id && Number(item.qty || 0) > 0 && (item.cost_price || 0) > 0) {
@@ -233,9 +254,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Automation expenses
+    // Automation expenses – only if feature is enabled
     let totalAutomationExpense = 0
-    if (expenseEnabled && expenseRules.length > 0) {
+    if (effectiveExpenseEnabled && expenseRules.length > 0) {
       for (const rule of expenseRules) {
         const amount = (totalSalesAmount * rule.rate) / 100
         if (amount <= 0 || !rule.account_id) continue
@@ -248,10 +269,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Profit allocation
-    if (profitEnabled && partners.length > 0) {
+    // Profit allocation – only if feature is enabled
+    if (effectiveProfitEnabled && partners.length > 0) {
       let netProfit = totalSalesAmount - totalAutomationExpense
-      // For trading, also deduct COGS from net profit for allocation
       if (businessType === 'trading') {
         const totalCogs = items.reduce((s: number, i: any) => s + (Number(i.qty || 0) * (i.cost_price || 0)), 0)
         netProfit -= totalCogs

@@ -2,356 +2,421 @@
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { Save, Plus, Trash2, ToggleLeft, ToggleRight } from "lucide-react"
-import RoleGuard from "@/components/RoleGuard"
-import { useRole } from "@/contexts/RoleContext"
+import { useRouter } from "next/navigation"
+import { ArrowLeft, Plus, Trash2, Save, CheckCircle } from "lucide-react"
+import PremiumGuard from "@/components/PremiumGuard"
 
-interface ExpenseRule {
-  name: string
-  rate: number
-  account_id: number | null
-}
+function InvoiceAutomationContent() {
+  const router = useRouter()
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
 
-interface Partner {
-  account_id: number | null
-  percentage: number
-}
-
-const DEFAULT_EXPENSE_RULES: ExpenseRule[] = [
-  { name: "Salaries",       rate: 4,   account_id: null },
-  { name: "Advertising",    rate: 0.5, account_id: null },
-  { name: "Fuel",           rate: 0.5, account_id: null },
-]
-
-const DEFAULT_PARTNERS: Partner[] = [
-  { account_id: null, percentage: 5 },
-  { account_id: null, percentage: 5 },
-  { account_id: null, percentage: 5 },
-  { account_id: null, percentage: 5 },
-  { account_id: null, percentage: 80 },
-]
-
-export default function InvoiceAutomationPage() {
-  const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
-  const { role, loading: roleLoading } = useRole()
-  const canView = role === "admin" || role === "accountant"
-  const canEdit = role === "admin" || role === "accountant"
-
-  const [companyId, setCompanyId] = useState<string | null>(null)
+  const [companyId, setCompanyId] = useState("")
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState("")
 
-  // Feature toggles
+  // Automation config
   const [expenseEnabled, setExpenseEnabled] = useState(false)
   const [profitEnabled, setProfitEnabled] = useState(false)
+  const [expenseRules, setExpenseRules] = useState<any[]>([])
+  const [partners, setPartners] = useState<any[]>([])
 
-  // Dynamic rules
-  const [expenseRules, setExpenseRules] = useState<ExpenseRule[]>(DEFAULT_EXPENSE_RULES)
-  const [partners, setPartners] = useState<Partner[]>(DEFAULT_PARTNERS)
+  // Account list for dropdowns
+  const [accounts, setAccounts] = useState<any[]>([])
 
-  // Available accounts
-  const [expenseAccounts, setExpenseAccounts] = useState<any[]>([])
-  const [equityLiabilityAccounts, setEquityLiabilityAccounts] = useState<any[]>([])
-  const [saving, setSaving] = useState(false)
-
-  // Feature UUIDs (for toggling in company_features)
-  const [featureIdMap, setFeatureIdMap] = useState<Record<string, string>>({})
-  // Store the existing settings row id for upsert
-  const [settingsId, setSettingsId] = useState<number | null>(null)
-
-  // Preview
-  const [previewAmount, setPreviewAmount] = useState(100000)
-
-  // ── Initialise ──
   useEffect(() => {
-    if (!role) return
-    if (!canView) { setLoading(false); return }
-    init()
-  }, [role, canView])
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id
+      if (cid) {
+        setCompanyId(cid)
+        // Load accounts
+        supabase
+          .from("accounts")
+          .select("id, code, name, type")
+          .eq("company_id", cid)
+          .order("code")
+          .then(r => r.data && setAccounts(r.data))
 
-  const init = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const cid = (user.app_metadata as any)?.company_id
-    if (!cid) { setLoading(false); return }
-    setCompanyId(cid)
-
-    // Feature UUIDs
-    const { data: featureRows } = await supabase.from("features")
-      .select("id, code")
-      .in("code", ["invoice_automation", "profit_allocation"])
-    const idMap: Record<string, string> = {}
-    if (featureRows) featureRows.forEach((f: any) => { idMap[f.code] = f.id })
-    setFeatureIdMap(idMap)
-
-    // Accounts
-    const [{ data: expAccs }, { data: eqAccs }] = await Promise.all([
-      supabase.from("accounts").select("id, code, name").in("type", ["Expense","Asset"]).eq("company_id", cid).order("code"),
-      supabase.from("accounts").select("id, code, name").in("type", ["Equity","Liability"]).eq("company_id", cid).order("code"),
-    ])
-    if (expAccs) setExpenseAccounts(expAccs)
-    if (eqAccs) setEquityLiabilityAccounts(eqAccs)
-
-    // Load saved config
-    const { data: settings } = await supabase.from("company_settings")
-      .select("id, invoice_automation_config")
-      .eq("company_id", cid)
-      .maybeSingle()
-
-    if (settings) {
-      setSettingsId(settings.id)
-      if (settings.invoice_automation_config) {
-        const config = settings.invoice_automation_config as any
-        if (config.expenseEnabled !== undefined) setExpenseEnabled(config.expenseEnabled)
-        if (config.profitEnabled !== undefined) setProfitEnabled(config.profitEnabled)
-        if (config.expenseRules) setExpenseRules(config.expenseRules)
-        if (config.partners) setPartners(config.partners)
+        // Load existing automation config
+        supabase
+          .from("company_settings")
+          .select("invoice_automation_config")
+          .eq("company_id", cid)
+          .maybeSingle()
+          .then(({ data }) => {
+            const config = data?.invoice_automation_config || {}
+            setExpenseEnabled(config.expenseEnabled || false)
+            setProfitEnabled(config.profitEnabled || false)
+            setExpenseRules(config.expenseRules || [])
+            setPartners(config.partners || [])
+            setLoading(false)
+          })
       }
-    } else {
-      setSettingsId(null)
-    }
+    })
+  }, [])
 
-    setLoading(false)
+  // Expense rule helpers
+  const addExpenseRule = () => {
+    setExpenseRules([...expenseRules, { account_id: "", rate: 0 }])
   }
 
-  // ── Toggle feature on/off (NOW WITH SAFE UPSERT) ──────────────────────
-  const toggleFeature = async (code: string, enabled: boolean) => {
-    const featureId = featureIdMap[code]
-    if (!featureId || !companyId || !canEdit) return
-
-    // Optimistic UI update
-    if (code === "invoice_automation") setExpenseEnabled(enabled)
-    if (code === "profit_allocation") setProfitEnabled(enabled)
-
-    const { error } = await supabase
-      .from("company_features")
-      .upsert(
-        {
-          company_id: companyId,
-          feature_id: featureId,
-          enabled,
-        },
-        { onConflict: "company_id, feature_id" }   // ← THE FIX
-      )
-
-    if (error) {
-      setMessage("Error: " + error.message)
-      // revert optimistic update
-      if (code === "invoice_automation") setExpenseEnabled(!enabled)
-      if (code === "profit_allocation") setProfitEnabled(!enabled)
-    } else {
-      setMessage("Feature toggled!")
-      setTimeout(() => setMessage(""), 3000)
-    }
-  }
-
-  // ── Expense rule helpers ──────────────────────────────────────────────
   const updateExpenseRule = (idx: number, field: string, value: any) => {
     const updated = [...expenseRules]
     updated[idx] = { ...updated[idx], [field]: value }
     setExpenseRules(updated)
   }
-  const addExpenseRule = () => setExpenseRules([...expenseRules, { name: "", rate: 0, account_id: null }])
-  const removeExpenseRule = (idx: number) => setExpenseRules(expenseRules.filter((_, i) => i !== idx))
 
-  // ── Partner helpers ────────────────────────────────────────────────────
+  const removeExpenseRule = (idx: number) => {
+    setExpenseRules(expenseRules.filter((_, i) => i !== idx))
+  }
+
+  // Partner helpers
+  const addPartner = () => {
+    setPartners([...partners, { account_id: "", percentage: 0 }])
+  }
+
   const updatePartner = (idx: number, field: string, value: any) => {
     const updated = [...partners]
     updated[idx] = { ...updated[idx], [field]: value }
+    // Ensure percentages sum to 100
+    if (field === "percentage") {
+      const total = updated.reduce((s, p, i) => s + (i === idx ? Number(value) : (p.percentage || 0)), 0)
+      if (total > 100) {
+        updated[idx].percentage = Number(value) - (total - 100)
+      }
+    }
     setPartners(updated)
   }
-  const addPartner = () => setPartners([...partners, { account_id: null, percentage: 0 }])
-  const removePartner = (idx: number) => setPartners(partners.filter((_, i) => i !== idx))
 
-  const totalPartnerPercentage = partners.reduce((sum, p) => sum + (p.percentage || 0), 0)
+  const removePartner = (idx: number) => {
+    setPartners(partners.filter((_, i) => i !== idx))
+  }
 
-  // ── Save settings (safe, no ON CONFLICT) ────────────────────────────
   const handleSave = async () => {
-    if (!companyId || !canEdit) return
-    if (profitEnabled && totalPartnerPercentage !== 100) {
-      setMessage("Profit allocation percentages must total 100%")
-      return
-    }
+    if (!companyId) return
     setSaving(true)
-    const config = { expenseEnabled, profitEnabled, expenseRules, partners }
+    setMessage("")
 
-    let error = null
-    if (settingsId) {
-      // update existing row
-      const { error: updateErr } = await supabase
-        .from("company_settings")
-        .update({ invoice_automation_config: config })
-        .eq("id", settingsId)
-      error = updateErr
-    } else {
-      // insert new row
-      const { data: inserted, error: insertErr } = await supabase
-        .from("company_settings")
-        .insert({ company_id: companyId, invoice_automation_config: config })
-        .select("id")
-        .single()
-      if (inserted) setSettingsId(inserted.id)
-      error = insertErr
+    const config = {
+      expenseEnabled,
+      profitEnabled,
+      expenseRules: expenseRules.filter(r => r.account_id),
+      partners: partners.filter(p => p.account_id && p.percentage > 0),
     }
+
+    const { error } = await supabase
+      .from("company_settings")
+      .upsert({
+        company_id: companyId,
+        invoice_automation_config: config,
+      })
 
     if (error) {
-      setMessage("Error: " + error.message)
+      setMessage("Error saving: " + error.message)
     } else {
-      setMessage("Settings saved!")
+      setMessage("✅ Automation settings saved!")
     }
     setSaving(false)
     setTimeout(() => setMessage(""), 3000)
   }
 
-  // ── Preview ─────────────────────────────────────────────────────────
-  const expenseTotal = expenseEnabled
-    ? expenseRules.reduce((sum, r) => sum + (previewAmount * r.rate) / 100, 0)
-    : 0
-  const profitDistribution = profitEnabled
-    ? partners.map(p => ({ ...p, amount: (previewAmount * p.percentage) / 100 }))
-    : []
-
-  if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" }}>Loading...</div>
-  if (!canView) return <div style={{ padding: 40 }}><h2>Access Denied</h2></div>
+  if (loading) {
+    return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
+  }
 
   return (
-    <RoleGuard allowedRoles={["admin", "accountant"]}>
-      <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter',sans-serif", color: "#E2E8F0" }}>
-        <style>{`
-          .card { background: #111827; border-radius: 12px; border: 1px solid #1E293B; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-          .label { font-size: 10px; font-weight: 600; color: #94A3B8; text-transform: uppercase; margin-bottom: 4px; }
-          .input, .select { width: 100%; height: 38px; border: 1px solid #334155; border-radius: 8px; padding: 0 12px; font-size: 13px; background: #1E293B; color: #F1F5F9; }
-          .btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-          .btn-primary { background: #1E3A8A; color: white; }
-          .btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
-          .toggle-btn { background: none; border: none; cursor: pointer; padding: 4px; border-radius: 6px; }
-          .toggle-btn:hover { background: #1E293B; }
-        `}</style>
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+      <style>{`
+        .card {
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 24px;
+          margin-bottom: 16px;
+          box-shadow: var(--shadow-sm);
+        }
+        .section-title {
+          font-size: 15px;
+          font-weight: 700;
+          color: var(--text);
+          margin: 0 0 16px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .toggle-row {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 16px;
+        }
+        .toggle-label {
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--text);
+          cursor: pointer;
+        }
+        .toggle-switch {
+          position: relative;
+          width: 44px;
+          height: 24px;
+          background: var(--border);
+          border-radius: 12px;
+          cursor: pointer;
+          transition: background 0.2s;
+        }
+        .toggle-switch.active {
+          background: #10B981;
+        }
+        .toggle-switch::after {
+          content: '';
+          position: absolute;
+          top: 2px;
+          left: 2px;
+          width: 20px;
+          height: 20px;
+          background: white;
+          border-radius: 50%;
+          transition: transform 0.2s;
+        }
+        .toggle-switch.active::after {
+          transform: translateX(20px);
+        }
+        .rule-row {
+          display: grid;
+          grid-template-columns: 1fr 100px 40px;
+          gap: 10px;
+          align-items: center;
+          margin-bottom: 8px;
+        }
+        .input, .select {
+          height: 38px;
+          border: 1.5px solid var(--border);
+          border-radius: 8px;
+          padding: 0 12px;
+          font-size: 13px;
+          background: var(--bg);
+          color: var(--text);
+          outline: none;
+          box-sizing: border-box;
+          width: 100%;
+          font-family: inherit;
+        }
+        .input:focus, .select:focus {
+          border-color: var(--primary);
+        }
+        .btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 14px;
+          border-radius: 8px;
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          border: 1.5px solid var(--border);
+          background: transparent;
+          color: var(--text-muted);
+          font-family: inherit;
+          transition: all 0.15s;
+        }
+        .btn:hover { background: var(--card-hover); }
+        .btn-primary {
+          background: var(--primary);
+          color: var(--primary-text);
+          border-color: var(--primary);
+        }
+        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-danger {
+          color: #EF4444;
+          border-color: #FECACA;
+        }
+        .btn-danger:hover {
+          background: #FEF2F2;
+        }
+        .message-bar {
+          padding: 10px 16px;
+          border-radius: 8px;
+          margin-bottom: 16px;
+          font-size: 13px;
+        }
+        .message-bar.success {
+          background: var(--card);
+          border: 1px solid #065F46;
+          color: #6EE7B7;
+        }
+        .message-bar.error {
+          background: var(--card);
+          border: 1px solid #FECACA;
+          color: #FCA5A5;
+        }
+        .back-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 14px;
+          border-radius: 8px;
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          border: 1.5px solid var(--border);
+          background: transparent;
+          color: var(--text-muted);
+          font-family: inherit;
+          transition: all 0.15s;
+          margin-bottom: 20px;
+        }
+        .back-btn:hover { background: var(--card-hover); }
+      `}</style>
 
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", marginBottom: 4 }}>⚙️ Invoice Automation</h1>
-        <p style={{ fontSize: 13, color: "#94A3B8", marginBottom: 20 }}>Configure automated expenses and profit allocation</p>
+      <button className="back-btn" onClick={() => router.push("/dashboard/settings")}>
+        <ArrowLeft size={16} /> Back to Settings
+      </button>
 
-        {message && (
-          <div style={{ background: "#064E3B", color: "#6EE7B7", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
-            {message}
-          </div>
-        )}
+      <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: "0 0 4px" }}>⚙️ Invoice Automation</h1>
+      <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 24px" }}>
+        Automatically apply expenses and profit allocation to every sales invoice
+      </p>
 
-        {loading ? (
-          <div style={{ textAlign: "center", padding: 40 }}>Loading...</div>
-        ) : (
+      {message && (
+        <div className={`message-bar ${message.startsWith("✅") ? "success" : "error"}`}>
+          <CheckCircle size={14} /> {message}
+        </div>
+      )}
+
+      {/* Expense Automation */}
+      <div className="card">
+        <div className="section-title">
+          💸 Expense Automation
+        </div>
+        <div className="toggle-row">
+          <div
+            className={`toggle-switch ${expenseEnabled ? "active" : ""}`}
+            onClick={() => setExpenseEnabled(!expenseEnabled)}
+          />
+          <span className="toggle-label">Enable automatic expense allocation</span>
+        </div>
+
+        {expenseEnabled && (
           <>
-            {/* ── Expense Automation ── */}
-            <div className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <h2 style={{ fontSize: 16, fontWeight: 700, color: "#F1F5F9", margin: 0 }}>Expense Automation</h2>
-                  <p style={{ color: "#94A3B8", fontSize: 12, marginTop: 2 }}>Auto‑calculate custom expenses on invoices</p>
-                </div>
-                <button className="toggle-btn" onClick={() => toggleFeature("invoice_automation", !expenseEnabled)}>
-                  {expenseEnabled ? <ToggleRight size={24} color="#10B981" /> : <ToggleLeft size={24} color="#CBD5E1" />}
-                </button>
-              </div>
-
-              {expenseEnabled && (
-                <div style={{ marginTop: 16 }}>
-                  {expenseRules.map((rule, idx) => (
-                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 1fr 40px', gap: 10, alignItems: 'center', marginBottom: 10 }}>
-                      <input className="input" value={rule.name} placeholder="Expense name" onChange={e => updateExpenseRule(idx, "name", e.target.value)} />
-                      <div>
-                        <label className="label">Rate (%)</label>
-                        <input className="input" type="number" step="0.1" value={rule.rate} onChange={e => updateExpenseRule(idx, "rate", Number(e.target.value))} />
-                      </div>
-                      <select className="select" value={rule.account_id ?? ""} onChange={e => updateExpenseRule(idx, "account_id", e.target.value ? Number(e.target.value) : null)}>
-                        <option value="">— Select Account —</option>
-                        {expenseAccounts.map(a => <option key={a.id} value={a.id}>{a.code} - {a.name}</option>)}
-                      </select>
-                      <button className="btn btn-outline" style={{ padding: 6 }} onClick={() => removeExpenseRule(idx)}><Trash2 size={14} /></button>
-                    </div>
-                  ))}
-                  <button className="btn btn-outline" onClick={addExpenseRule}><Plus size={14} /> Add Expense Rule</button>
-                </div>
-              )}
-            </div>
-
-            {/* ── Profit Allocation ── */}
-            <div className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <h2 style={{ fontSize: 16, fontWeight: 700, color: "#F1F5F9", margin: 0 }}>Profit Allocation</h2>
-                  <p style={{ color: "#94A3B8", fontSize: 12, marginTop: 2 }}>Distribute net profit to partner accounts</p>
-                </div>
-                <button className="toggle-btn" onClick={() => toggleFeature("profit_allocation", !profitEnabled)}>
-                  {profitEnabled ? <ToggleRight size={24} color="#10B981" /> : <ToggleLeft size={24} color="#CBD5E1" />}
-                </button>
-              </div>
-
-              {profitEnabled && (
-                <div style={{ marginTop: 16 }}>
-                  {partners.map((p, idx) => (
-                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 40px', gap: 10, alignItems: 'center', marginBottom: 8 }}>
-                      <select className="select" value={p.account_id ?? ""} onChange={e => updatePartner(idx, "account_id", e.target.value ? Number(e.target.value) : null)}>
-                        <option value="">— Select Account —</option>
-                        {equityLiabilityAccounts.map(a => <option key={a.id} value={a.id}>{a.code} - {a.name}</option>)}
-                      </select>
-                      <div>
-                        <label className="label">% Share</label>
-                        <input className="input" type="number" min="0" max="100" value={p.percentage} onChange={e => updatePartner(idx, "percentage", Number(e.target.value))} />
-                      </div>
-                      <button className="btn btn-outline" style={{ padding: 6 }} onClick={() => removePartner(idx)}><Trash2 size={14} /></button>
-                    </div>
-                  ))}
-                  <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between' }}>
-                    <button className="btn btn-outline" onClick={addPartner}><Plus size={14} /> Add Partner</button>
-                    <span style={{ fontWeight: 600, color: totalPartnerPercentage === 100 ? '#10B981' : '#EF4444' }}>Total: {totalPartnerPercentage}%</span>
+            <div style={{ marginBottom: 12 }}>
+              {expenseRules.map((rule, idx) => (
+                <div key={idx} className="rule-row">
+                  <select
+                    className="select"
+                    value={rule.account_id || ""}
+                    onChange={e => updateExpenseRule(idx, "account_id", e.target.value)}
+                  >
+                    <option value="">Select expense account</option>
+                    {accounts.filter(a => a.type === "Expense").map(a => (
+                      <option key={a.id} value={a.id}>{a.code} – {a.name}</option>
+                    ))}
+                  </select>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <input
+                      className="input"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={rule.rate || 0}
+                      onChange={e => updateExpenseRule(idx, "rate", Number(e.target.value))}
+                      style={{ textAlign: "right" }}
+                    />
+                    <span style={{ fontSize: 12, color: "var(--text-muted)" }}>%</span>
                   </div>
+                  <button className="btn btn-danger" onClick={() => removeExpenseRule(idx)}>
+                    <Trash2 size={14} />
+                  </button>
                 </div>
-              )}
+              ))}
             </div>
-
-            {/* ── Preview ── */}
-            <div className="card">
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: "#F1F5F9", margin: '0 0 10px' }}>📊 Preview</h2>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
-                <span style={{ fontWeight: 600 }}>Sample Invoice Amount:</span>
-                <input className="input" style={{ width: 150 }} type="number" value={previewAmount} onChange={e => setPreviewAmount(Number(e.target.value))} />
-              </div>
-              <div style={{ background: '#1E293B', padding: 16, borderRadius: 8 }}>
-                {expenseEnabled && (
-                  <>
-                    <p style={{ fontWeight: 600, marginBottom: 8 }}>Expense Charges:</p>
-                    {expenseRules.map((r, idx) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                        <span>{r.name || '(unnamed)'} ({r.rate}%)</span>
-                        <span>PKR {((previewAmount * r.rate) / 100).toLocaleString()}</span>
-                      </div>
-                    ))}
-                    <div style={{ borderTop: '1px solid #334155', marginTop: 6, paddingTop: 6, fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Total Expenses</span>
-                      <span>PKR {expenseTotal.toLocaleString()}</span>
-                    </div>
-                  </>
-                )}
-                {profitEnabled && (
-                  <>
-                    <p style={{ fontWeight: 600, marginTop: 12, marginBottom: 8 }}>Profit Allocation:</p>
-                    {profitDistribution.map((p, idx) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                        <span>Partner {idx+1} ({p.percentage}%)</span>
-                        <span>PKR {p.amount.toLocaleString()}</span>
-                      </div>
-                    ))}
-                  </>
-                )}
-              </div>
-            </div>
-
-            <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-              <Save size={16} /> {saving ? 'Saving...' : 'Save Settings'}
+            <button className="btn" onClick={addExpenseRule}>
+              <Plus size={14} /> Add Expense Rule
             </button>
           </>
         )}
       </div>
-    </RoleGuard>
+
+      {/* Profit Allocation */}
+      <div className="card">
+        <div className="section-title">
+          💰 Profit Allocation
+        </div>
+        <div className="toggle-row">
+          <div
+            className={`toggle-switch ${profitEnabled ? "active" : ""}`}
+            onClick={() => setProfitEnabled(!profitEnabled)}
+          />
+          <span className="toggle-label">Enable automatic profit allocation</span>
+        </div>
+
+        {profitEnabled && (
+          <>
+            <div style={{ marginBottom: 12 }}>
+              {partners.map((partner, idx) => (
+                <div key={idx} className="rule-row">
+                  <select
+                    className="select"
+                    value={partner.account_id || ""}
+                    onChange={e => updatePartner(idx, "account_id", e.target.value)}
+                  >
+                    <option value="">Select partner account</option>
+                    {accounts.filter(a => a.type === "Equity" || a.type === "Liability").map(a => (
+                      <option key={a.id} value={a.id}>{a.code} – {a.name}</option>
+                    ))}
+                  </select>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <input
+                      className="input"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={partner.percentage || 0}
+                      onChange={e => updatePartner(idx, "percentage", Number(e.target.value))}
+                      style={{ textAlign: "right" }}
+                    />
+                    <span style={{ fontSize: 12, color: "var(--text-muted)" }}>%</span>
+                  </div>
+                  <button className="btn btn-danger" onClick={() => removePartner(idx)}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
+                Total: {partners.reduce((s, p) => s + (p.percentage || 0), 0)}% (must equal 100%)
+              </div>
+            </div>
+            <button className="btn" onClick={addPartner}>
+              <Plus size={14} /> Add Partner
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Save Button */}
+      <button
+        className="btn btn-primary"
+        style={{ width: "100%", justifyContent: "center", padding: 12 }}
+        onClick={handleSave}
+        disabled={saving}
+      >
+        {saving ? "Saving..." : <><Save size={16} /> Save Automation Settings</>}
+      </button>
+    </div>
+  )
+}
+
+export default function InvoiceAutomationPage() {
+  return (
+    <PremiumGuard
+      featureCode="invoice_automation"
+      featureName="Invoice Automation"
+      featureDesc="Automate expenses and profit allocation on invoices"
+    >
+      <InvoiceAutomationContent />
+    </PremiumGuard>
   )
 }
