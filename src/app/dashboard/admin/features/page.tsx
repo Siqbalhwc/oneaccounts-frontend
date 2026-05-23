@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { ToggleLeft, ToggleRight, Zap, ZapOff } from "lucide-react"
+import { ToggleLeft, ToggleRight, Zap, ZapOff, Shield, CheckCircle } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 
 const FEATURE_CODES = [
@@ -18,17 +18,17 @@ const FEATURE_CODES = [
   "purchase_orders",
 ]
 
-const FEATURE_LABELS: Record<string, string> = {
-  inventory:            "Inventory & Adjustments",
-  investors:            "Investors",
-  balance_sheet:        "Balance Sheet",
-  invoice_automation:   "Invoice Automation",
-  profit_allocation:    "Profit Allocation",
-  whatsapp_invoice:     "WhatsApp Invoice Sending",
-  payment_reminders:    "Payment Reminders",
-  csv_import_export:    "CSV Import / Export",
-  email_reports:        "Email Reports",
-  purchase_orders:      "Purchase Orders",
+const FEATURE_INFO: Record<string, { label: string; desc: string; icon: string }> = {
+  inventory:            { label: "Inventory & Adjustments",  desc: "Stock management, inflow/outflow tracking, and inventory adjustments",       icon: "📦" },
+  investors:            { label: "Investors",                 desc: "Track investor capital, investment amounts, and investor details",            icon: "💼" },
+  balance_sheet:        { label: "Balance Sheet",             desc: "View assets, liabilities, and equity with drill‑down to trial balance",      icon: "📊" },
+  invoice_automation:   { label: "Invoice Automation",        desc: "Auto‑calculate expenses and profit allocation on invoices",                  icon: "⚙️" },
+  profit_allocation:    { label: "Profit Allocation",         desc: "Distribute net profit among partners based on predefined percentages",        icon: "💰" },
+  whatsapp_invoice:     { label: "WhatsApp Invoice Sending",  desc: "Send invoices directly to customers via WhatsApp with PDF attachment",         icon: "💬" },
+  payment_reminders:    { label: "Payment Reminders",         desc: "Automated reminders for overdue invoices and upcoming due dates",              icon: "🔔" },
+  csv_import_export:    { label: "CSV Import / Export",       desc: "Bulk import customers, products, and chart of accounts via CSV files",         icon: "📥" },
+  email_reports:        { label: "Email Reports",             desc: "Schedule and send financial reports via email to stakeholders",               icon: "📧" },
+  purchase_orders:      { label: "Purchase Orders",           desc: "Create and manage purchase orders with approval workflow",                     icon: "📋" },
 }
 
 export default function FeatureManagerPage() {
@@ -45,12 +45,10 @@ export default function FeatureManagerPage() {
   const [featureIdMap, setFeatureIdMap] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState("")
+  const [savingAll, setSavingAll] = useState(false)
 
   useEffect(() => {
-    if (!canView) {
-      setLoading(false)
-      return
-    }
+    if (!canView) { setLoading(false); return }
 
     const loadFeatures = async () => {
       try {
@@ -104,7 +102,7 @@ export default function FeatureManagerPage() {
     }
 
     loadFeatures()
-  }, [canView])   // ✅ added canView
+  }, [canView])
 
   const toggleFeature = async (code: string, enabled: boolean) => {
     if (!canEdit || !companyId) return
@@ -122,7 +120,7 @@ export default function FeatureManagerPage() {
       .from("company_features")
       .upsert(
         { company_id: companyId, feature_id: featureId, enabled },
-        { onConflict: "company_id,feature_id" }    // ✅ added conflict target
+        { onConflict: "company_id,feature_id" }
       )
 
     if (error) {
@@ -134,27 +132,33 @@ export default function FeatureManagerPage() {
     setTimeout(() => setMessage(""), 3000)
   }
 
-  // Bulk enable / disable all
   const setAllFeatures = async (enable: boolean) => {
     if (!canEdit || !companyId) return
-    setLoading(true)
+    setSavingAll(true)
+    let errorOccurred = false
+
     for (const code of FEATURE_CODES) {
       const featureId = featureIdMap[code]
       if (!featureId) continue
-      await supabase
+      const { error } = await supabase
         .from("company_features")
         .upsert(
           { company_id: companyId, feature_id: featureId, enabled: enable },
-          { onConflict: "company_id,feature_id" }  // ✅ added conflict target
+          { onConflict: "company_id,feature_id" }
         )
+      if (error) errorOccurred = true
     }
+
     const newStates: Record<string, boolean> = {}
     FEATURE_CODES.forEach(code => { newStates[code] = enable })
     setFeatureStates(newStates)
-    setLoading(false)
+    setSavingAll(false)
     setMessage(enable ? "✅ All features enabled!" : "✅ All features disabled!")
     setTimeout(() => setMessage(""), 3000)
   }
+
+  const enabledCount = Object.values(featureStates).filter(Boolean).length
+  const totalCount = FEATURE_CODES.length
 
   if (role === null) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
 
@@ -170,83 +174,319 @@ export default function FeatureManagerPage() {
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .fm-card {
+        .page-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 24px;
+          flex-wrap: wrap;
+          gap: 16px;
+        }
+        .page-title {
+          font-size: 22px;
+          font-weight: 800;
+          color: var(--text);
+          margin: 0 0 4px;
+        }
+        .page-subtitle {
+          font-size: 13px;
+          color: var(--text-muted);
+          margin: 0;
+        }
+
+        .summary-row {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: 12px;
+          margin-bottom: 24px;
+        }
+        .summary-card {
           background: var(--card);
           border: 1px solid var(--border);
           border-radius: 12px;
-          padding: 16px 20px;
-          margin-bottom: 10px;
+          padding: 18px 20px;
           display: flex;
-          justify-content: space-between;
           align-items: center;
+          gap: 14px;
           box-shadow: var(--shadow-sm);
         }
-        .fm-feature-name { font-size: 15px; font-weight: 700; color: var(--text); }
-        .fm-toggle-btn { background: none; border: none; cursor: pointer; padding: 4px; border-radius: 6px; }
-        .fm-toggle-btn:hover { background: var(--card-hover); }
-        .btn {
-          display: inline-flex; align-items: center; gap: 6px;
-          padding: 8px 14px; border-radius: 8px; border: 1.5px solid var(--border);
-          font-weight: 600; font-size: 13px; cursor: pointer;
-          background: transparent; color: var(--text-muted); font-family: inherit;
+        .summary-icon {
+          width: 42px;
+          height: 42px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 20px;
+          flex-shrink: 0;
+        }
+        .summary-label {
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          color: var(--text-muted);
+          margin-bottom: 2px;
+        }
+        .summary-value {
+          font-size: 24px;
+          font-weight: 800;
+          color: var(--text);
+          line-height: 1;
+        }
+
+        .feature-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+          gap: 14px;
+        }
+
+        .feature-card {
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 14px;
+          padding: 20px 22px;
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          transition: all 0.2s;
+          box-shadow: var(--shadow-sm);
+          position: relative;
+          overflow: hidden;
+        }
+        .feature-card:hover {
+          border-color: var(--border-strong);
+          box-shadow: var(--shadow);
+        }
+        .feature-card.enabled {
+          border-left: 4px solid #10B981;
+        }
+        .feature-card.disabled {
+          border-left: 4px solid var(--border);
+        }
+
+        .feature-icon {
+          width: 48px;
+          height: 48px;
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 22px;
+          flex-shrink: 0;
+        }
+
+        .feature-content {
+          flex: 1;
+          min-width: 0;
+        }
+        .feature-name {
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--text);
+          margin-bottom: 3px;
+        }
+        .feature-desc {
+          font-size: 12px;
+          color: var(--text-muted);
+          line-height: 1.4;
+        }
+
+        .toggle-btn {
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 6px;
+          border-radius: 8px;
           transition: all 0.15s;
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .toggle-btn:hover {
+          background: var(--card-hover);
+        }
+        .toggle-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .status-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 2px 8px;
+          border-radius: 20px;
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+        .status-badge.enabled {
+          background: #065F46;
+          color: #6EE7B7;
+        }
+        .status-badge.disabled {
+          background: var(--card-hover);
+          color: var(--text-muted);
+        }
+
+        .btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 14px;
+          border-radius: 8px;
+          border: 1.5px solid var(--border);
+          font-weight: 600;
+          font-size: 13px;
+          cursor: pointer;
+          background: transparent;
+          color: var(--text-muted);
+          font-family: inherit;
+          transition: all 0.15s;
+          white-space: nowrap;
         }
         .btn:hover { background: var(--card-hover); }
-        .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+        .btn-primary {
+          background: var(--primary);
+          color: var(--primary-text);
+          border-color: var(--primary);
+        }
         .btn-primary:hover { background: var(--primary-hover); }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .message-bar {
+          padding: 10px 16px;
+          border-radius: 8px;
+          margin-bottom: 16px;
+          font-size: 13px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .message-bar.success {
+          background: var(--card);
+          border: 1px solid #065F46;
+          color: #6EE7B7;
+        }
+        .message-bar.error {
+          background: var(--card);
+          border: 1px solid #FECACA;
+          color: #FCA5A5;
+        }
+
+        @media (max-width: 500px) {
+          .feature-grid { grid-template-columns: 1fr; }
+          .feature-card { flex-direction: column; align-items: flex-start; }
+        }
       `}</style>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+      {/* Header */}
+      <div className="page-header">
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>⚙️ Feature Manager</h1>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
-            {companyId ? "Toggle premium features for your company" : "No active company"}
+          <h1 className="page-title">⚙️ Feature Manager</h1>
+          <p className="page-subtitle">
+            {companyId
+              ? "Enable or disable premium features for your company"
+              : "No active company"}
           </p>
         </div>
         {canEdit && companyId && (
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-primary" onClick={() => setAllFeatures(true)} disabled={loading}>
+            <button
+              className="btn btn-primary"
+              onClick={() => setAllFeatures(true)}
+              disabled={savingAll || enabledCount === totalCount}
+            >
               <Zap size={14} /> Enable All
             </button>
-            <button className="btn" onClick={() => setAllFeatures(false)} disabled={loading}>
+            <button
+              className="btn"
+              onClick={() => setAllFeatures(false)}
+              disabled={savingAll || enabledCount === 0}
+            >
               <ZapOff size={14} /> Disable All
             </button>
           </div>
         )}
       </div>
 
+      {/* Message bar */}
       {message && (
-        <div style={{
-          background: "var(--card)",
-          border: message.startsWith("✅") ? "1px solid #065F46" : "1px solid #FECACA",
-          color: message.startsWith("✅") ? "#6EE7B7" : "#FCA5A5",
-          padding: "10px 14px", borderRadius: 8, fontSize: 13, marginBottom: 12,
-        }}>
+        <div className={`message-bar ${message.startsWith("✅") ? "success" : "error"}`}>
+          <CheckCircle size={14} />
           {message}
         </div>
       )}
 
-      {loading ? (
-        <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading features…</div>
-      ) : (
-        FEATURE_CODES.map(code => (
-          <div key={code} className="fm-card">
-            <div>
-              <div className="fm-feature-name">{FEATURE_LABELS[code] || code}</div>
-            </div>
-            <button
-              className="fm-toggle-btn"
-              onClick={() => toggleFeature(code, !featureStates[code])}
-              disabled={!canEdit}
-            >
-              {featureStates[code] ? (
-                <ToggleRight size={24} color="#10B981" />
-              ) : (
-                <ToggleLeft size={24} color="var(--text-muted)" />
-              )}
-            </button>
+      {/* Summary */}
+      <div className="summary-row">
+        <div className="summary-card">
+          <div className="summary-icon" style={{ background: "#1E3A5F" }}>
+            <Shield size={20} color="#93C5FD" />
           </div>
-        ))
+          <div>
+            <div className="summary-label">Features Enabled</div>
+            <div className="summary-value" style={{ color: "#10B981" }}>
+              {enabledCount} <span style={{ fontSize: 14, color: "var(--text-muted)" }}>/ {totalCount}</span>
+            </div>
+          </div>
+        </div>
+        <div className="summary-card">
+          <div className="summary-icon" style={{ background: "#1E293B" }}>
+            <Zap size={20} color="#F59E0B" />
+          </div>
+          <div>
+            <div className="summary-label">Status</div>
+            <div className="summary-value" style={{ fontSize: 18, color: enabledCount === totalCount ? "#10B981" : enabledCount === 0 ? "#EF4444" : "#F59E0B" }}>
+              {enabledCount === totalCount ? "All Active" : enabledCount === 0 ? "All Disabled" : "Partial"}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Feature Grid */}
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 60, color: "var(--text-muted)", fontSize: 14 }}>
+          Loading features…
+        </div>
+      ) : (
+        <div className="feature-grid">
+          {FEATURE_CODES.map(code => {
+            const info = FEATURE_INFO[code] || { label: code, desc: "", icon: "🔧" }
+            const isEnabled = featureStates[code] || false
+            return (
+              <div key={code} className={`feature-card ${isEnabled ? "enabled" : "disabled"}`}>
+                <div className="feature-icon" style={{ background: isEnabled ? "#065F46" : "var(--card-hover)" }}>
+                  {info.icon}
+                </div>
+                <div className="feature-content">
+                  <div className="feature-name">{info.label}</div>
+                  <div className="feature-desc">{info.desc}</div>
+                  <div style={{ marginTop: 6 }}>
+                    <span className={`status-badge ${isEnabled ? "enabled" : "disabled"}`}>
+                      {isEnabled ? "● Enabled" : "○ Disabled"}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  className="toggle-btn"
+                  onClick={() => toggleFeature(code, !isEnabled)}
+                  disabled={!canEdit}
+                  title={isEnabled ? "Click to disable" : "Click to enable"}
+                >
+                  {isEnabled ? (
+                    <ToggleRight size={28} color="#10B981" />
+                  ) : (
+                    <ToggleLeft size={28} color="var(--text-muted)" />
+                  )}
+                </button>
+              </div>
+            )
+          })}
+        </div>
       )}
     </div>
   )
