@@ -6,10 +6,10 @@ import { ToggleLeft, ToggleRight, Zap, ZapOff, Shield, CheckCircle } from "lucid
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 
+// Balance Sheet removed – it is always available by default
 const FEATURE_CODES = [
   "inventory",
   "investors",
-  "balance_sheet",
   "invoice_automation",
   "profit_allocation",
   "whatsapp_invoice",
@@ -22,7 +22,6 @@ const FEATURE_CODES = [
 const FEATURE_INFO: Record<string, { label: string; desc: string; icon: string }> = {
   inventory:            { label: "Inventory & Adjustments",  desc: "Stock management, inflow/outflow tracking, and inventory adjustments",       icon: "📦" },
   investors:            { label: "Investors",                 desc: "Track investor capital, investment amounts, and investor details",            icon: "💼" },
-  balance_sheet:        { label: "Balance Sheet",             desc: "View assets, liabilities, and equity with drill‑down to trial balance",      icon: "📊" },
   invoice_automation:   { label: "Invoice Automation",        desc: "Auto‑calculate expenses and profit allocation on invoices",                  icon: "⚙️" },
   profit_allocation:    { label: "Profit Allocation",         desc: "Distribute net profit among partners based on predefined percentages",        icon: "💰" },
   whatsapp_invoice:     { label: "WhatsApp Invoice Sending",  desc: "Send invoices directly to customers via WhatsApp with PDF attachment",         icon: "💬" },
@@ -112,9 +111,7 @@ export default function FeatureManagerPage() {
       return
     }
 
-    // Optimistic UI update on the feature manager page
     setFeatureStates(prev => ({ ...prev, [code]: enabled }))
-    // Instantly update the global PlanContext so all pages reflect the change
     setFeatureState(code, enabled)
     setMessage("")
     setTimeout(() => setMessage(""), 3000)
@@ -123,11 +120,9 @@ export default function FeatureManagerPage() {
   const setAllFeatures = async (enable: boolean) => {
     if (!canEdit || !companyId) return
     setSavingAll(true)
-    let errorOccurred = false
 
-    // Update each feature using the global setter
     for (const code of FEATURE_CODES) {
-      setFeatureState(code, enable)  // instant update, DB in background
+      setFeatureState(code, enable)
     }
 
     const newStates: Record<string, boolean> = {}

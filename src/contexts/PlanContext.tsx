@@ -3,10 +3,10 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 
+// balance_sheet removed from the toggleable list – it is always enabled
 const FEATURE_CODES = [
   "inventory",
   "investors",
-  "balance_sheet",
   "invoice_automation",
   "profit_allocation",
   "whatsapp_invoice",
@@ -88,7 +88,9 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   }, [loadFeatures])
 
   const hasFeature = (code: string) => {
-    if (loading) return true
+    // Balance Sheet is always available
+    if (code === "balance_sheet") return true
+    if (loading) return true   // avoid flash while loading
     return features.includes(code)
   }
 
@@ -97,6 +99,9 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   }
 
   const setFeatureState = async (code: string, enabled: boolean) => {
+    // balance_sheet can't be toggled, ignore
+    if (code === "balance_sheet") return
+
     setFeatures(prev => {
       if (enabled) {
         return prev.includes(code) ? prev : [...prev, code]
