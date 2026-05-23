@@ -117,7 +117,6 @@ export default function InvoiceDetailPage() {
           .select("*")
           .eq("invoice_id", inv.id)
 
-        // Enrich with product data
         if (items && items.length > 0) {
           const productIds = items
             .map((i: any) => i.product_id)
