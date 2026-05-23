@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowRightLeft, Search } from "lucide-react"
+import { ArrowRightLeft, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useRole } from "@/contexts/RoleContext"
 
@@ -23,6 +23,9 @@ interface Transfer {
   updated_by?: string | null
 }
 
+type SortField = "transfer_date" | "from_code" | "to_code" | "amount" | "reference"
+type SortDir = "asc" | "desc"
+
 export default function BankTransfersPage() {
   const router = useRouter()
   const supabase = createBrowserClient(
@@ -38,6 +41,9 @@ export default function BankTransfersPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [flash, setFlash] = useState("")
+
+  const [sortField, setSortField] = useState<SortField>("transfer_date")
+  const [sortDir, setSortDir] = useState<SortDir>("desc")
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -93,6 +99,7 @@ export default function BankTransfersPage() {
     )
   }
 
+  // Filter by search
   const filtered = search.trim()
     ? transfers.filter(t =>
         (t.from_code || "").toLowerCase().includes(search.toLowerCase()) ||
@@ -103,7 +110,42 @@ export default function BankTransfersPage() {
       )
     : transfers
 
-  const totalAmount = filtered.reduce((sum, t) => sum + (t.amount || 0), 0)
+  // Client-side sort
+  const sortedFiltered = [...filtered].sort((a, b) => {
+    let valA: any, valB: any
+    if (sortField === "from_code") {
+      valA = (a.from_code || "").toLowerCase()
+      valB = (b.from_code || "").toLowerCase()
+    } else if (sortField === "to_code") {
+      valA = (a.to_code || "").toLowerCase()
+      valB = (b.to_code || "").toLowerCase()
+    } else if (sortField === "amount") {
+      valA = Number(a.amount) || 0
+      valB = Number(b.amount) || 0
+    } else {
+      valA = (a[sortField] || "").toString().toLowerCase()
+      valB = (b[sortField] || "").toString().toLowerCase()
+    }
+    if (valA < valB) return sortDir === "asc" ? -1 : 1
+    if (valA > valB) return sortDir === "asc" ? 1 : -1
+    return 0
+  })
+
+  const totalAmount = sortedFiltered.reduce((sum, t) => sum + (t.amount || 0), 0)
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === "asc" ? "desc" : "asc")
+    } else {
+      setSortField(field)
+      setSortDir("asc")
+    }
+  }
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown size={12} style={{ opacity: 0.5 }} />
+    return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+  }
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -111,7 +153,7 @@ export default function BankTransfersPage() {
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
         .header-row {
           display: grid;
-          grid-template-columns: 1fr 1fr 100px 100px 120px 130px;
+          grid-template-columns: 100px 1fr 1fr 100px 120px 130px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
@@ -119,7 +161,7 @@ export default function BankTransfersPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: 1fr 1fr 100px 100px 120px 130px;
+          grid-template-columns: 100px 1fr 1fr 100px 120px 130px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
@@ -127,6 +169,12 @@ export default function BankTransfersPage() {
         }
         .data-row:hover { background: var(--card-hover); }
         .data-row:last-child { border-bottom: none; }
+        .sort-btn {
+          background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
+          display: inline-flex; align-items: center; gap: 4px; padding: 0;
+          font-weight: 700; text-transform: uppercase; font-size: 10px;
+        }
+        .sort-btn:hover { color: var(--primary); }
         .btn {
           padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border);
           font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
@@ -149,7 +197,7 @@ export default function BankTransfersPage() {
           line-height: 1.3; word-wrap: break-word;
         }
         @media (max-width: 768px) {
-          .header-row, .data-row { grid-template-columns: 1fr 1fr 80px 80px 80px 80px; }
+          .header-row, .data-row { grid-template-columns: 80px 1fr 1fr 80px 80px 80px; }
         }
       `}</style>
 
@@ -195,26 +243,26 @@ export default function BankTransfersPage() {
       <div className="card">
         {loading ? (
           <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading transfers...</div>
-        ) : filtered.length === 0 ? (
+        ) : sortedFiltered.length === 0 ? (
           <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
             No transfers recorded yet. {canEdit && 'Click "New Transfer" to record one.'}
           </div>
         ) : (
           <>
             <div className="header-row">
-              <span>From Account</span>
-              <span>To Account</span>
-              <span style={{ textAlign: "right" }}>Amount</span>
-              <span>Date</span>
-              <span>Reference</span>
+              <button className="sort-btn" onClick={() => handleSort("transfer_date")}>Date {getSortIcon("transfer_date")}</button>
+              <button className="sort-btn" onClick={() => handleSort("from_code")}>From Account {getSortIcon("from_code")}</button>
+              <button className="sort-btn" onClick={() => handleSort("to_code")}>To Account {getSortIcon("to_code")}</button>
+              <button className="sort-btn" onClick={() => handleSort("amount")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Amount {getSortIcon("amount")}</button>
+              <button className="sort-btn" onClick={() => handleSort("reference")}>Reference {getSortIcon("reference")}</button>
               <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Created / Edited By</span>
             </div>
-            {filtered.map(t => (
+            {sortedFiltered.map(t => (
               <div key={t.id} className="data-row">
+                <span>{new Date(t.transfer_date).toLocaleDateString()}</span>
                 <span>{t.from_code} - {t.from_name}</span>
                 <span>{t.to_code} - {t.to_name}</span>
                 <span style={{ fontWeight: 600, textAlign: "right" }}>PKR {t.amount.toLocaleString()}</span>
-                <span>{new Date(t.transfer_date).toLocaleDateString()}</span>
                 <span style={{ color: "var(--text-muted)" }}>{t.reference || "—"}</span>
                 <div className="creator-editor-cell">
                   <span>Created: {t.created_by || "—"}</span>
