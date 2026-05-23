@@ -1,10 +1,11 @@
 ﻿"use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
 import { useRole } from "@/contexts/RoleContext"
-import { Plus, Search, Edit, Trash2, X, Eye, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { usePlan } from "@/contexts/PlanContext"
+import { Plus, Search, Edit, Trash2, X, Eye, ArrowUpDown, ArrowUp, ArrowDown, FileText, Download, Upload } from "lucide-react"
 import RecordHistory from "@/components/RecordHistory"
 
 const COUNTRY_CODES = [
@@ -51,6 +52,10 @@ export default function SuppliersPage() {
   )
   const router = useRouter()
   const { role, loading: roleLoading } = useRole()
+  const { hasFeature } = usePlan()
+  const showImportExport = hasFeature("csv_import_export")
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   const canEdit = role === "admin" || role === "accountant"
   const canView = role === "admin" || role === "accountant"
 
@@ -82,6 +87,10 @@ export default function SuppliersPage() {
   const [saving, setSaving] = useState(false)
   const [flash, setFlash] = useState("")
   const [formError, setFormError] = useState("")
+
+  // Import states
+  const [importMessage, setImportMessage] = useState("")
+  const [importing, setImporting] = useState(false)
 
   const [projects, setProjects] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
@@ -247,6 +256,67 @@ export default function SuppliersPage() {
     fetchSuppliers()
   }
 
+  // CSV Export
+  const handleExport = () => {
+    if (suppliers.length === 0) { alert("No data to export"); return }
+    const headers = ["code", "name", "phone", "email", "address", "opening_balance", "balance", "payment_terms"]
+    const csvRows = [headers.join(",")]
+    suppliers.forEach(s => {
+      csvRows.push(headers.map(h => (s[h] ?? "").toString().replace(/,/g, " ")).join(","))
+    })
+    const blob = new Blob([csvRows.join("\n")], { type: "text/csv" })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "suppliers.csv"
+    a.click()
+    window.URL.revokeObjectURL(url)
+  }
+
+  // Download Template
+  const downloadTemplate = () => {
+    const headers = ["code", "name", "phone", "email", "address", "opening_balance", "balance", "payment_terms"]
+    const sample = ["SUP-001", "Acme Corp", "+923001234567", "acme@example.com", "123 Street", "0", "0", "Net 15"]
+    const csvRows = [headers.join(","), sample.join(",")]
+    const blob = new Blob([csvRows.join("\n")], { type: "text/csv" })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "supplier_template.csv"
+    a.click()
+    window.URL.revokeObjectURL(url)
+  }
+
+  // Handle file import
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setImporting(true)
+    setImportMessage("")
+
+    const formData = new FormData()
+    formData.append("file", file)
+    formData.append("table", "suppliers")
+    formData.append("company_id", companyId)
+
+    try {
+      const res = await fetch("/api/import", { method: "POST", body: formData })
+      const result = await res.json()
+      if (result.success) {
+        setImportMessage(`✅ Imported ${result.count} suppliers successfully`)
+        fetchSuppliers()
+      } else {
+        setImportMessage(`❌ Error: ${result.error}`)
+      }
+    } catch (err: any) {
+      setImportMessage(`❌ Network error: ${err.message}`)
+    } finally {
+      setImporting(false)
+      if (fileInputRef.current) fileInputRef.current.value = ""
+    }
+  }
+
   const totalPayables = suppliers.reduce((s, c) => s + (c.balance || 0), 0)
 
   if (roleLoading || !role) {
@@ -268,7 +338,8 @@ export default function SuppliersPage() {
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
         .header-row {
           display: grid;
-          grid-template-columns: 100px 1fr 140px 130px 120px 55px 55px 50px;
+          grid-template-columns: 100px 250px 130px 100px 130px 55px 55px 50px;
+          column-gap: 8px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
@@ -276,7 +347,8 @@ export default function SuppliersPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: 100px 1fr 140px 130px 120px 55px 55px 50px;
+          grid-template-columns: 100px 250px 130px 100px 130px 55px 55px 50px;
+          column-gap: 8px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
@@ -329,8 +401,9 @@ export default function SuppliersPage() {
         }
         .input:focus, .select:focus { border-color: var(--primary); outline: none; }
         label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; display: block; }
+        .message { padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
         @media (max-width: 640px) {
-          .header-row, .data-row { grid-template-columns: 70px 1fr 80px 80px 80px 40px 40px 40px; padding: 10px 12px; }
+          .header-row, .data-row { grid-template-columns: 70px 150px 80px 70px 100px 40px 40px 40px; column-gap: 4px; padding: 10px 12px; }
           .search-input { width: 100%; }
         }
       `}</style>
@@ -340,12 +413,35 @@ export default function SuppliersPage() {
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>🚚 Suppliers</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Manage your supplier accounts</p>
         </div>
-        {canEdit && (
-          <button className="btn btn-outline" onClick={openNew}>
-            <Plus size={16} /> Add Supplier
-          </button>
-        )}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {showImportExport && (
+            <>
+              <button className="btn btn-outline" onClick={downloadTemplate} title="Download CSV template">
+                <FileText size={14} /> Template
+              </button>
+              <label className="btn btn-outline" style={{ cursor: "pointer" }}>
+                <Upload size={14} /> Import
+                <input type="file" accept=".csv" onChange={handleImport} ref={fileInputRef} style={{ display: "none" }} />
+              </label>
+              <button className="btn btn-outline" onClick={handleExport} title="Export to CSV">
+                <Download size={14} /> Export
+              </button>
+            </>
+          )}
+          {canEdit && (
+            <button className="btn btn-outline" onClick={openNew}>
+              <Plus size={16} /> Add Supplier
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Import/export message */}
+      {importMessage && (
+        <div className="message" style={{ background: importMessage.startsWith("✅") ? "#065F46" : "#7C2D12", color: "white" }}>
+          {importMessage}
+        </div>
+      )}
 
       <div className="summary-grid">
         <div className="summary-item">
@@ -388,8 +484,10 @@ export default function SuppliersPage() {
             <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
             <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
             <button className="sort-btn" onClick={() => handleSort("phone")}>Phone {getSortIcon("phone")}</button>
-            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Created / Edited By</span>
             <button className="sort-btn" onClick={() => handleSort("balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("balance")}</button>
+            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
+              Created / Edited By
+            </span>
             <span></span>
             <span></span>
             <span></span>
@@ -399,11 +497,11 @@ export default function SuppliersPage() {
               <span style={{ fontWeight: 600, color: "var(--primary)" }}>{s.code}</span>
               <span style={{ color: "var(--text)" }}>{s.name}</span>
               <span style={{ color: "var(--text-muted)" }}>{s.phone || "—"}</span>
+              <span style={{ textAlign: "right", fontWeight: 600, color: s.balance >= 0 ? "#10B981" : "#EF4444" }}>PKR {s.balance?.toLocaleString()}</span>
               <div className="creator-editor-cell">
                 <span>Created: {s.created_by || "—"}</span>
                 <span>Edited: {s.updated_by || "—"}</span>
               </div>
-              <span style={{ textAlign: "right", fontWeight: 600, color: s.balance >= 0 ? "#10B981" : "#EF4444" }}>PKR {s.balance?.toLocaleString()}</span>
               <button className="btn-icon" onClick={() => router.push(`/dashboard/reports/supplier-ledger?supplierId=${s.id}`)} title="View Ledger">
                 <Eye size={14} />
               </button>
@@ -413,6 +511,8 @@ export default function SuppliersPage() {
           ))}
         </div>
       )}
+
+      {importing && <div style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>Importing...</div>}
 
       {total > pageSize && (
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16, fontSize: 13, color: "var(--text-muted)" }}>
