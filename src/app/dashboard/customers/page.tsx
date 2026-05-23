@@ -1,11 +1,12 @@
 ﻿"use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { Plus, Eye, Edit, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { Plus, Eye, Edit, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown, FileText, Download, Upload } from "lucide-react"
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
+import { usePlan } from "@/contexts/PlanContext"
 
 type SortField = "code" | "name" | "phone" | "balance"
 type SortDir = "asc" | "desc"
@@ -17,6 +18,10 @@ export default function CustomersPage() {
   )
   const router = useRouter()
   const { role } = useRole()
+  const { hasFeature } = usePlan()
+  const showImportExport = hasFeature("csv_import_export")
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   const canView = role === "admin" || role === "accountant"
   const canEdit = role === "admin" || role === "accountant"
 
@@ -25,6 +30,16 @@ export default function CustomersPage() {
   const [search, setSearch] = useState("")
   const [sortField, setSortField] = useState<SortField>("name")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
+  const [companyId, setCompanyId] = useState("")
+  const [importing, setImporting] = useState(false)
+  const [importMessage, setImportMessage] = useState("")
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id
+      if (cid) setCompanyId(cid)
+    })
+  }, [])
 
   useEffect(() => {
     if (!role) return
@@ -96,6 +111,69 @@ export default function CustomersPage() {
   const totalBalance = filteredCustomers.reduce((s, c) => s + (c.balance || 0), 0)
   const activeCustomers = filteredCustomers.filter(c => (c.balance || 0) > 0).length
 
+  // CSV Export
+  const handleExport = () => {
+    if (filteredCustomers.length === 0) { alert("No data to export"); return }
+    const headers = ["code", "name", "phone", "email", "address", "country_code", "payment_terms", "opening_balance", "balance"]
+    const csvRows = [headers.join(",")]
+    filteredCustomers.forEach(c => {
+      csvRows.push(headers.map(h => (c[h] ?? "").toString().replace(/,/g, " ")).join(","))
+    })
+    const blob = new Blob([csvRows.join("\n")], { type: "text/csv" })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "customers.csv"
+    a.click()
+    window.URL.revokeObjectURL(url)
+  }
+
+  // Download Template
+  const downloadTemplate = () => {
+    const headers = ["code", "name", "phone", "email", "address", "country_code", "payment_terms", "opening_balance", "balance"]
+    const sample = ["C001", "John Doe", "+923001234567", "john@example.com", "123 Street", "+92", "Net 30", "0", "0"]
+    const csvRows = [headers.join(","), sample.join(",")]
+    const blob = new Blob([csvRows.join("\n")], { type: "text/csv" })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "customer_template.csv"
+    a.click()
+    window.URL.revokeObjectURL(url)
+  }
+
+  // Handle file import
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setImporting(true)
+    setImportMessage("")
+
+    const formData = new FormData()
+    formData.append("file", file)
+    formData.append("table", "customers")
+    formData.append("company_id", companyId)
+
+    try {
+      const res = await fetch("/api/import", { method: "POST", body: formData })
+      const result = await res.json()
+      if (result.success) {
+        setImportMessage(`✅ Imported ${result.count} customers successfully`)
+        // Refresh list
+        const { data } = await supabase.from("customers").select("*").is("deleted_at", null).order("name")
+        setCustomers(data || [])
+      } else {
+        setImportMessage(`❌ Error: ${result.error}`)
+      }
+    } catch (err: any) {
+      setImportMessage(`❌ Network error: ${err.message}`)
+    } finally {
+      setImporting(false)
+      if (fileInputRef.current) fileInputRef.current.value = ""
+    }
+  }
+
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
@@ -158,6 +236,7 @@ export default function CustomersPage() {
             line-height: 1.3;
             word-wrap: break-word;
           }
+          .message { padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
           @media (max-width: 640px) {
             .header-row, .data-row { grid-template-columns: 60px 150px 80px 70px 100px 45px 45px 45px; column-gap: 4px; }
             .search-input { width: 100%; }
@@ -169,12 +248,35 @@ export default function CustomersPage() {
             <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>👥 Customers</h1>
             <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Manage your customer accounts</p>
           </div>
-          {canEdit && (
-            <button className="btn btn-outline" onClick={() => router.push("/dashboard/customers/new")}>
-              <Plus size={16} /> Add Customer
-            </button>
-          )}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {showImportExport && (
+              <>
+                <button className="btn btn-outline" onClick={downloadTemplate} title="Download CSV template">
+                  <FileText size={14} /> Template
+                </button>
+                <label className="btn btn-outline" style={{ cursor: "pointer" }}>
+                  <Upload size={14} /> Import
+                  <input type="file" accept=".csv" onChange={handleImport} ref={fileInputRef} style={{ display: "none" }} />
+                </label>
+                <button className="btn btn-outline" onClick={handleExport} title="Export to CSV">
+                  <Download size={14} /> Export
+                </button>
+              </>
+            )}
+            {canEdit && (
+              <button className="btn btn-outline" onClick={() => router.push("/dashboard/customers/new")}>
+                <Plus size={16} /> Add Customer
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Import/export message */}
+        {importMessage && (
+          <div className="message" style={{ background: importMessage.startsWith("✅") ? "#065F46" : "#7C2D12", color: "white" }}>
+            {importMessage}
+          </div>
+        )}
 
         {/* Summary Cards */}
         <div className="summary-grid">
@@ -251,6 +353,7 @@ export default function CustomersPage() {
             ))}
           </div>
         )}
+        {importing && <div style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>Importing...</div>}
       </div>
     </RoleGuard>
   )
