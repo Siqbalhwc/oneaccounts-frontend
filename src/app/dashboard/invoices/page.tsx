@@ -155,7 +155,7 @@ export default function InvoicesPage() {
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
         .header-row {
           display: grid;
-          grid-template-columns: 120px 90px 0.8fr 100px 70px 120px 100px;
+          grid-template-columns: 120px 90px 250px 100px 80px 130px 130px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
@@ -163,7 +163,7 @@ export default function InvoicesPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: 120px 90px 0.8fr 100px 70px 120px 100px;
+          grid-template-columns: 120px 90px 250px 100px 80px 130px 130px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
