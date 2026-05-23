@@ -42,7 +42,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [activityHealth, setActivityHealth] = useState<Record<string, { lowCount: number; threshold: number; message: string }>>({})
   const [lastUpdated, setLastUpdated] = useState("")
 
-  // --- NEW: Overdue invoices count ---
+  // ── NEW: Overdue invoices count ──
   const [overdueInvoicesCount, setOverdueInvoicesCount] = useState(0)
 
   useEffect(() => {
@@ -469,13 +469,21 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
         .clickable { color: #93C5FD; text-decoration: underline; cursor: pointer; }
 
+        /* Compact overdue banner */
         .overdue-banner {
-          background: var(--card); border: 1px solid var(--border); border-left: 6px solid #EF4444;
-          border-radius: 12px; padding: 0.8rem 1.2rem; margin-bottom: 1rem;
-          display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
-          font-size: 0.9rem; color: var(--text); font-weight: 500;
+          background: var(--card); border: 1px solid var(--border); border-left: 4px solid #EF4444;
+          border-radius: 8px; padding: 0.5rem 1rem; margin-bottom: 1rem;
+          display: flex; align-items: center; justify-content: space-between;
+          gap: 10px; font-size: 0.85rem; color: var(--text); font-weight: 500;
+          flex-wrap: nowrap;
         }
-        .overdue-banner strong { color: #EF4444; }
+        .overdue-banner strong { color: #EF4444; white-space: nowrap; }
+        .overdue-btn {
+          background: #EF4444; color: white; border: none;
+          border-radius: 6px; padding: 5px 12px;
+          font-weight: 600; cursor: pointer; font-size: 0.78rem;
+          white-space: nowrap; font-family: inherit;
+        }
 
         @media (max-width: 1100px) {
           .dashboard-grid { grid-template-columns: repeat(3, 1fr); }
@@ -530,15 +538,15 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </div>
         </motion.div>
 
-        {/* Overdue invoices banner (always visible, no feature toggle) */}
+        {/* Overdue invoices banner – compact, always visible */}
         {overdueInvoicesCount > 0 && (
           <motion.div
             className="overdue-banner"
             initial={{ opacity: 0, y: -5 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <span>⚠️ <strong>{overdueInvoicesCount} overdue {overdueInvoicesCount === 1 ? "invoice" : "invoices"}</strong> – due date passed and still unpaid.</span>
-            <button className="warning-btn" onClick={() => router.push("/dashboard/invoices?status=Unpaid&overdue=true")}>
+            <span>⚠️ <strong>{overdueInvoicesCount} overdue {overdueInvoicesCount === 1 ? "invoice" : "invoices"}</strong></span>
+            <button className="overdue-btn" onClick={() => router.push("/dashboard/invoices?status=Unpaid&overdue=true")}>
               View overdue invoices →
             </button>
           </motion.div>

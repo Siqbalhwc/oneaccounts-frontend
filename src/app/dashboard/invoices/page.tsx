@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Plus, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
@@ -16,6 +16,7 @@ export default function InvoicesPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { role } = useRole()
   const { hasFeature } = usePlan()
   const canView = role === "admin" || role === "accountant"
@@ -27,8 +28,18 @@ export default function InvoicesPage() {
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
 
+  // Filter states from URL
+  const [statusFilter, setStatusFilter] = useState(searchParams.get("status") || "")
+  const [overdueFilter, setOverdueFilter] = useState(searchParams.get("overdue") === "true")
+
   // Customers map for name & phone lookup
   const [customerMap, setCustomerMap] = useState<Record<number, { name: string; phone: string }>>({})
+
+  // Update filters when URL changes
+  useEffect(() => {
+    setStatusFilter(searchParams.get("status") || "")
+    setOverdueFilter(searchParams.get("overdue") === "true")
+  }, [searchParams])
 
   useEffect(() => {
     if (!role) return
@@ -66,16 +77,30 @@ export default function InvoicesPage() {
       })
   }, [role, canView, sortField, sortDir])
 
-  const filtered = search.trim()
-    ? invoices.filter((inv) => {
-        const cust = customerMap[inv.party_id]
-        const custName = cust?.name || ""
-        return (
-          inv.invoice_no?.toLowerCase().includes(search.toLowerCase()) ||
-          custName.toLowerCase().includes(search.toLowerCase())
-        )
-      })
-    : invoices
+  // Filter by search + status + overdue
+  const todayISO = new Date().toISOString().split("T")[0]
+
+  const filtered = invoices.filter((inv) => {
+    // Search filter
+    if (search.trim()) {
+      const cust = customerMap[inv.party_id]
+      const custName = cust?.name || ""
+      const matchesSearch =
+        inv.invoice_no?.toLowerCase().includes(search.toLowerCase()) ||
+        custName.toLowerCase().includes(search.toLowerCase())
+      if (!matchesSearch) return false
+    }
+
+    // Status filter
+    if (statusFilter && inv.status !== statusFilter) return false
+
+    // Overdue filter (only show unpaid and past due date)
+    if (overdueFilter) {
+      if (inv.status === "Paid" || inv.due_date >= todayISO) return false
+    }
+
+    return true
+  })
 
   const sortedFiltered = [...filtered].sort((a, b) => {
     let valA: any, valB: any
@@ -116,7 +141,12 @@ export default function InvoicesPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  // WhatsApp helper (for normal send)
+  // Clear filters
+  const clearFilters = () => {
+    router.push("/dashboard/invoices")
+  }
+
+  // WhatsApp helper
   const sendWhatsApp = (inv: any) => {
     const cust = customerMap[inv.party_id]
     if (!cust?.phone) {
@@ -128,7 +158,7 @@ export default function InvoicesPage() {
     window.open(url, "_blank")
   }
 
-  // Reminder helper (only for overdue/unpaid)
+  // Reminder helper
   const sendReminder = (inv: any) => {
     const cust = customerMap[inv.party_id]
     if (!cust?.phone) {
@@ -200,6 +230,19 @@ export default function InvoicesPage() {
           line-height: 1.3;
           word-wrap: break-word;
         }
+        .filter-bar {
+          display: flex; align-items: center; gap: 0.8rem; margin-bottom: 0.8rem;
+          flex-wrap: wrap;
+        }
+        .filter-badge {
+          background: var(--card); border: 1px solid var(--border); border-radius: 20px;
+          padding: 0.3rem 0.8rem; font-size: 0.75rem; font-weight: 600;
+          display: flex; align-items: center; gap: 0.4rem;
+          color: var(--text);
+        }
+        .filter-badge button {
+          background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 0; font-size: 0.8rem;
+        }
         @media (max-width: 640px) {
           .header-row, .data-row { grid-template-columns: 90px 70px 1fr 70px 60px 80px 45px 45px 45px; padding: 10px 12px; }
         }
@@ -208,14 +251,23 @@ export default function InvoicesPage() {
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>🧾 Sales Invoices</h1>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>{canEdit ? "Create and manage invoices" : "View invoices"}</p>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>
+            {overdueFilter ? "⚠️ Overdue Invoices" : "🧾 Sales Invoices"}
+          </h1>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
+            {overdueFilter ? "Showing only unpaid invoices past due date" : canEdit ? "Create and manage invoices" : "View invoices"}
+          </p>
         </div>
-        {canEdit && (
-          <button className="btn" onClick={() => router.push("/dashboard/invoices/new")}>
-            <Plus size={16} /> New Invoice
-          </button>
-        )}
+        <div style={{ display: "flex", gap: 8 }}>
+          {(statusFilter || overdueFilter) && (
+            <button className="btn" onClick={clearFilters}>✕ Clear filters</button>
+          )}
+          {canEdit && (
+            <button className="btn" onClick={() => router.push("/dashboard/invoices/new")}>
+              <Plus size={16} /> New Invoice
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -237,6 +289,24 @@ export default function InvoicesPage() {
           <div className="summary-value" style={{ color: "#EF4444" }}>PKR {unpaidAmount.toLocaleString()}</div>
         </div>
       </div>
+
+      {/* Active Filters */}
+      {(statusFilter || overdueFilter) && (
+        <div className="filter-bar">
+          {statusFilter && (
+            <span className="filter-badge">
+              Status: {statusFilter}
+              <button onClick={() => router.push("/dashboard/invoices" + (overdueFilter ? "?overdue=true" : ""))}>✕</button>
+            </span>
+          )}
+          {overdueFilter && (
+            <span className="filter-badge">
+              Overdue only
+              <button onClick={() => router.push("/dashboard/invoices" + (statusFilter ? `?status=${statusFilter}` : ""))}>✕</button>
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Search */}
       <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
