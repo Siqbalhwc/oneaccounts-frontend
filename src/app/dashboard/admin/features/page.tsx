@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { ToggleLeft, ToggleRight, Zap, ZapOff, Shield, CheckCircle } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
+import { usePlan } from "@/contexts/PlanContext"
 
 const FEATURE_CODES = [
   "inventory",
@@ -37,6 +38,7 @@ export default function FeatureManagerPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
   const { role } = useRole()
+  const { refreshFeatures } = usePlan()
   const canView = role === "admin"
   const canEdit = role === "admin"
 
@@ -61,7 +63,6 @@ export default function FeatureManagerPage() {
         }
         setCompanyId(cid)
 
-        // Get all feature UUIDs
         const { data: featureRows, error: featureErr } = await supabase
           .from("features")
           .select("id, code")
@@ -75,7 +76,6 @@ export default function FeatureManagerPage() {
         }
         setFeatureIdMap(map)
 
-        // Fetch which features are enabled for this company
         const { data: overrides, error: overridesErr } = await supabase
           .from("company_features")
           .select("feature_id, enabled")
@@ -112,7 +112,6 @@ export default function FeatureManagerPage() {
       return
     }
 
-    // Optimistic update
     setFeatureStates(prev => ({ ...prev, [code]: enabled }))
     setMessage("")
 
@@ -128,6 +127,8 @@ export default function FeatureManagerPage() {
       setFeatureStates(prev => ({ ...prev, [code]: !enabled }))
     } else {
       setMessage("✅ Feature updated!")
+      // Refresh the PlanContext so all pages see the change immediately
+      refreshFeatures()
     }
     setTimeout(() => setMessage(""), 3000)
   }
@@ -154,6 +155,8 @@ export default function FeatureManagerPage() {
     setFeatureStates(newStates)
     setSavingAll(false)
     setMessage(enable ? "✅ All features enabled!" : "✅ All features disabled!")
+    // Refresh the PlanContext
+    refreshFeatures()
     setTimeout(() => setMessage(""), 3000)
   }
 
