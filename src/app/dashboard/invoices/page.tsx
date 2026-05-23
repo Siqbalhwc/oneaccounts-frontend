@@ -155,7 +155,7 @@ export default function InvoicesPage() {
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
         .header-row {
           display: grid;
-          grid-template-columns: 140px 100px 1fr 120px 80px 130px 40px 60px;
+          grid-template-columns: 120px 90px 1fr 100px 70px 120px 36px 70px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
@@ -163,7 +163,7 @@ export default function InvoicesPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: 140px 100px 1fr 120px 80px 130px 40px 60px;
+          grid-template-columns: 120px 90px 1fr 100px 70px 120px 36px 70px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
@@ -208,7 +208,7 @@ export default function InvoicesPage() {
           word-wrap: break-word;
         }
         @media (max-width: 640px) {
-          .header-row, .data-row { grid-template-columns: 90px 70px 1fr 70px 60px 80px 35px 50px; padding: 10px 12px; }
+          .header-row, .data-row { grid-template-columns: 80px 70px 1fr 70px 60px 80px 30px 60px; padding: 10px 12px; }
         }
       `}</style>
 
