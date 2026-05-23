@@ -76,7 +76,6 @@ export default function NewInvoicePage() {
         .order("name")
         .then(r => { if (r.data) setCustomers(r.data) })
 
-      // Only load products if inventory feature is enabled
       if (showProducts) {
         supabase.from("products")
           .select("id,code,name,sale_price,cost_price,qty_on_hand,image_path")
@@ -626,7 +625,6 @@ export default function NewInvoicePage() {
                 <div><label className="inv-label">Notes</label><input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" /></div>
               </div>
 
-              {/* ── Product search (only when inventory feature ON) ── */}
               {showProducts ? (
                 <div style={{ marginTop: 14 }}>
                   <label className="inv-label">Add Product</label>
@@ -671,7 +669,6 @@ export default function NewInvoicePage() {
                 </div>
               )}
 
-              {/* Price History Panel */}
               {showHistory && lastSelectedProduct && (
                 <div className="price-history">
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
@@ -721,7 +718,7 @@ export default function NewInvoicePage() {
               <button className="inv-btn" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleBeforeSavePdf}>
                 <Download size={14} /> PDF Preview
               </button>
-              {selectedCustomer && (
+              {selectedCustomer && hasFeature("whatsapp_invoice") && (
                 <button className="inv-btn inv-btn-success" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleWhatsAppWithPDF}>
                   <Send size={14} /> WhatsApp (PDF)
                 </button>

@@ -6,6 +6,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Printer, Send } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
+import { usePlan } from "@/contexts/PlanContext"
 
 interface InvoiceItem {
   id: number
@@ -57,6 +58,8 @@ export default function InvoiceDetailPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
+
+  const { hasFeature } = usePlan()
 
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [loading, setLoading] = useState(true)
@@ -303,7 +306,7 @@ export default function InvoiceDetailPage() {
           <button className="btn" onClick={() => router.push(`/dashboard/invoices/new?id=${invoice.id}`)}>
             ✏️ Edit
           </button>
-          {waLink && (
+          {waLink && hasFeature("whatsapp_invoice") && (
             <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success">
               <Send size={14} /> WhatsApp
             </a>

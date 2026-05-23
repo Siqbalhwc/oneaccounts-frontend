@@ -6,6 +6,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Printer, Send } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
+import { usePlan } from "@/contexts/PlanContext"
 
 interface Payment {
   id: number
@@ -47,6 +48,8 @@ export default function PaymentDetailPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
+
+  const { hasFeature } = usePlan()
 
   const [payment, setPayment] = useState<Payment | null>(null)
   const [loading, setLoading] = useState(true)
@@ -243,7 +246,7 @@ export default function PaymentDetailPage() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          {waLink && (
+          {waLink && hasFeature("whatsapp_invoice") && (
             <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success">
               <Send size={16} /> WhatsApp
             </a>

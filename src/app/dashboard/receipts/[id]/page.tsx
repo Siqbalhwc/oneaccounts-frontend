@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Printer, Send } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
+import { usePlan } from "@/contexts/PlanContext"
 import RecordHistory from "@/components/RecordHistory"
 
 interface Receipt {
@@ -51,6 +52,7 @@ export default function ReceiptDetailPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
   const { role } = useRole()
+  const { hasFeature } = usePlan()
 
   const [receipt, setReceipt] = useState<Receipt | null>(null)
   const [customer, setCustomer] = useState<Customer | null>(null)
@@ -167,7 +169,7 @@ export default function ReceiptDetailPage() {
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn" onClick={handlePrint}><Printer size={14} /> Print</button>
-          {getWhatsAppLink() && (
+          {getWhatsAppLink() && hasFeature("whatsapp_invoice") && (
             <a href={getWhatsAppLink()} target="_blank" rel="noopener noreferrer" className="btn btn-success">
               <Send size={14} /> WhatsApp
             </a>
