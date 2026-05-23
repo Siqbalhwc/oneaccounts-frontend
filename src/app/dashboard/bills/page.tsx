@@ -152,7 +152,7 @@ export default function BillsPage() {
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
         .header-row {
           display: grid;
-          grid-template-columns: 150px 100px 200px 120px 80px 130px 55px 55px 55px;
+          grid-template-columns: 140px 100px 200px 120px 70px 130px 50px 50px 50px;
           column-gap: 8px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
@@ -161,7 +161,7 @@ export default function BillsPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: 150px 100px 200px 120px 80px 130px 55px 55px 55px;
+          grid-template-columns: 140px 100px 200px 120px 70px 130px 50px 50px 50px;
           column-gap: 8px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
