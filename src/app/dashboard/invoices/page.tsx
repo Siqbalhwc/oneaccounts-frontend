@@ -271,7 +271,12 @@ export default function InvoicesPage() {
             <button className="sort-btn" onClick={() => handleSort("customer")}>Customer {getSortIcon("customer")}</button>
             <button className="sort-btn" onClick={() => handleSort("total")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Total {getSortIcon("total")}</button>
             <button className="sort-btn" onClick={() => handleSort("status")}>Status {getSortIcon("status")}</button>
-            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Created / Edited By</span>
+            {/* Updated header to match sort-btn styling without clickability */}
+            <span style={{
+              fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)",
+              display: "inline-flex", alignItems: "center", gap: 4,
+              background: "none", border: "none", padding: 0
+            }}>Created / Edited By</span>
             <span></span>
           </div>
           {sortedFiltered.map((inv) => {
