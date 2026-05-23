@@ -256,12 +256,12 @@ export default function SuppliersPage() {
     fetchSuppliers()
   }
 
-  // CSV Export
+  // CSV Export (fixed type error by casting s to any)
   const handleExport = () => {
     if (suppliers.length === 0) { alert("No data to export"); return }
     const headers = ["code", "name", "phone", "email", "address", "opening_balance", "balance", "payment_terms"]
     const csvRows = [headers.join(",")]
-    suppliers.forEach(s => {
+    suppliers.forEach((s: any) => {
       csvRows.push(headers.map(h => (s[h] ?? "").toString().replace(/,/g, " ")).join(","))
     })
     const blob = new Blob([csvRows.join("\n")], { type: "text/csv" })
