@@ -9,8 +9,8 @@ import {
 } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
+import { usePlan } from "@/contexts/PlanContext"
 
-// ── Helper: convert payment terms to days ──────────────────────────────
 function getCreditDays(term?: string | null): number {
   if (!term) return 30
   const s = term.toLowerCase()
@@ -31,6 +31,9 @@ export default function NewInvoicePage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
+
+  const { hasFeature } = usePlan()
+  const showProducts = hasFeature("inventory")
 
   const [companyId, setCompanyId] = useState("")
   const [loading, setLoading] = useState(true)
@@ -60,10 +63,8 @@ export default function NewInvoicePage() {
   const [lastSelectedProduct, setLastSelectedProduct] = useState<any>(null)
   const [refreshingCustomers, setRefreshingCustomers] = useState(false)
 
-  // For "View Invoice" after save
   const [savedInvoiceId, setSavedInvoiceId] = useState<number | null>(null)
 
-  // ── Load master data ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -75,11 +76,14 @@ export default function NewInvoicePage() {
         .order("name")
         .then(r => { if (r.data) setCustomers(r.data) })
 
-      supabase.from("products")
-        .select("id,code,name,sale_price,cost_price,qty_on_hand,image_path")
-        .is("deleted_at", null)
-        .order("name")
-        .then(r => r.data && setProducts(r.data))
+      // Only load products if inventory feature is enabled
+      if (showProducts) {
+        supabase.from("products")
+          .select("id,code,name,sale_price,cost_price,qty_on_hand,image_path")
+          .is("deleted_at", null)
+          .order("name")
+          .then(r => r.data && setProducts(r.data))
+      }
 
       supabase.from("company_settings")
         .select("*").eq("company_id", cid).single()
@@ -95,9 +99,8 @@ export default function NewInvoicePage() {
 
       setLoading(false)
     })
-  }, [])
+  }, [showProducts])
 
-  // ── If editing, load existing invoice ──
   useEffect(() => {
     if (!editId || !companyId) return
     supabase.from("invoices")
@@ -137,7 +140,6 @@ export default function NewInvoicePage() {
       })
   }, [editId, companyId, customers])
 
-  // ── Auto‑due date ──
   useEffect(() => {
     if (!invoiceDate || !selectedCustomer) return
     const days = getCreditDays(selectedCustomer.payment_terms)
@@ -146,7 +148,6 @@ export default function NewInvoicePage() {
     setDueDate(dt.toISOString().split("T")[0])
   }, [invoiceDate, selectedCustomer])
 
-  // ── Refresh price history when customer changes AND a product is selected ──
   useEffect(() => {
     if (customerId && lastSelectedProduct) {
       fetchPriceHistory(lastSelectedProduct.id, customerId)
@@ -268,102 +269,9 @@ export default function NewInvoicePage() {
 
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
 
-  // ── Stock validation ──
-  const validateStock = () => {
-    for (const item of items) {
-      if (item.product_id) {
-        const product = products.find(p => p.id === item.product_id)
-        if (product && item.qty > (product.qty_on_hand || 0)) {
-          return `Insufficient stock for "${product.name}". Available: ${product.qty_on_hand}, requested: ${item.qty}.`
-        }
-      }
-    }
-    return null
-  }
-
-  const waLink = () => {
-    if (!selectedCustomer) return ""
-    const code = (selectedCustomer.country_code || "+92").replace(/\D/g, "")
-    const phone = (selectedCustomer.phone || "").replace(/\D/g, "")
-    if (!phone) return ""
-    const msg = `Dear ${selectedCustomer.name},\n\nYour invoice of PKR ${totalAmount.toLocaleString()} is ready.\nDate: ${invoiceDate}\nDue: ${dueDate}\n\nThank you.\n— OneAccounts`
-    return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
-  }
-
-  // ── WhatsApp with PDF ──
-  const handleWhatsAppWithPDF = async () => {
-    if (!selectedCustomer) return
-    const phone = (selectedCustomer.phone || "").replace(/\D/g, "")
-    if (!phone) {
-      alert("No phone number for this customer.")
-      return
-    }
-    // Generate PDF
-    const pdfData = {
-      companyName: company?.name || company?.company_name || "OneAccounts",
-      companyAddress: company?.address || "",
-      companyPhone: company?.phone || "",
-      companyEmail: company?.email || "",
-      companyTagline: company?.tagline || "",
-      logoUrl: company?.logo_url || null,
-      businessType: company?.business_type || "",
-      invoiceNo: "PREVIEW",
-      date: invoiceDate,
-      dueDate: dueDate,
-      customerName: selectedCustomer.name || "Customer",
-      customerPhone: selectedCustomer.phone || "",
-      customerAddress: selectedCustomer.address || "",
-      customerEmail: selectedCustomer.email || "",
-      items: items.map(i => ({
-        description: i.description || "",
-        qty: i.qty || 0,
-        unit_price: i.unit_price || 0,
-        total: i.total || 0,
-        image_path: i.product_image || null,
-        product_id: i.product_id || null,
-        product_name: i.product_name || "",
-      })),
-      subtotal: totalAmount,
-      total: totalAmount,
-      status: "Unpaid",      // ← Added
-      paid: 0,               // ← Added
-      balanceDue: totalAmount, // ← Added
-    }
-    const doc = await generateInvoicePDF(pdfData)
-    const blob = doc.output("blob")
-    // Upload to Supabase storage (public bucket "invoice-pdfs")
-    const filePath = `invoices/${Date.now()}-${Math.random().toString(36).substr(2,5)}.pdf`
-    try {
-      const { data: uploadData, error: uploadErr } = await supabase.storage
-        .from("invoice-pdfs")
-        .upload(filePath, blob, { contentType: "application/pdf", upsert: false })
-      if (!uploadErr) {
-        const { data: publicUrlData } = supabase.storage
-          .from("invoice-pdfs")
-          .getPublicUrl(filePath)
-        const pdfLink = publicUrlData.publicUrl
-        const msg = `Dear ${selectedCustomer.name},\n\nYour invoice PDF is ready.\nDownload: ${pdfLink}\n\nDate: ${invoiceDate}\nDue: ${dueDate}\n\nThank you.\n— OneAccounts`
-        const waURL = `https://wa.me/${(selectedCustomer.country_code || "+92").replace(/\D/g, "")}${phone}?text=${encodeURIComponent(msg)}`
-        window.open(waURL, "_blank")
-        return
-      }
-    } catch (e) {
-      console.warn("Upload failed, fallback to text only")
-    }
-    // Fallback: text only
-    window.open(waLink(), "_blank")
-  }
-
   const handleSubmit = async () => {
     if (!customerId) { setError("Please select a customer"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
-
-    // ── Stock check ──
-    const stockError = validateStock()
-    if (stockError) {
-      setError(stockError)
-      return
-    }
 
     setSaving(true); setError("")
 
@@ -412,6 +320,70 @@ export default function NewInvoicePage() {
     }
   }
 
+  const waLink = () => {
+    if (!selectedCustomer) return ""
+    const code = (selectedCustomer.country_code || "+92").replace(/\D/g, "")
+    const phone = (selectedCustomer.phone || "").replace(/\D/g, "")
+    if (!phone) return ""
+    const msg = `Dear ${selectedCustomer.name},\n\nYour invoice of PKR ${totalAmount.toLocaleString()} is ready.\nDate: ${invoiceDate}\nDue: ${dueDate}\n\nThank you.\n— OneAccounts`
+    return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
+  }
+
+  const handleWhatsAppWithPDF = async () => {
+    if (!selectedCustomer) return
+    const phone = (selectedCustomer.phone || "").replace(/\D/g, "")
+    if (!phone) { alert("No phone number for this customer."); return }
+    const pdfData = {
+      companyName: company?.name || company?.company_name || "OneAccounts",
+      companyAddress: company?.address || "",
+      companyPhone: company?.phone || "",
+      companyEmail: company?.email || "",
+      companyTagline: company?.tagline || "",
+      logoUrl: company?.logo_url || null,
+      businessType: company?.business_type || "",
+      invoiceNo: "PREVIEW",
+      date: invoiceDate,
+      dueDate: dueDate,
+      customerName: selectedCustomer.name || "Customer",
+      customerPhone: selectedCustomer.phone || "",
+      customerAddress: selectedCustomer.address || "",
+      customerEmail: selectedCustomer.email || "",
+      items: items.map(i => ({
+        description: i.description || "",
+        qty: i.qty || 0,
+        unit_price: i.unit_price || 0,
+        total: i.total || 0,
+        image_path: i.product_image || null,
+        product_id: i.product_id || null,
+        product_name: i.product_name || "",
+      })),
+      subtotal: totalAmount,
+      total: totalAmount,
+      status: "Unpaid",
+      paid: 0,
+      balanceDue: totalAmount,
+    }
+    const doc = await generateInvoicePDF(pdfData)
+    const blob = doc.output("blob")
+    const filePath = `invoices/${Date.now()}-${Math.random().toString(36).substr(2,5)}.pdf`
+    try {
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from("invoice-pdfs")
+        .upload(filePath, blob, { contentType: "application/pdf", upsert: false })
+      if (!uploadErr) {
+        const { data: publicUrlData } = supabase.storage
+          .from("invoice-pdfs")
+          .getPublicUrl(filePath)
+        const pdfLink = publicUrlData.publicUrl
+        const msg = `Dear ${selectedCustomer.name},\n\nYour invoice PDF is ready.\nDownload: ${pdfLink}\n\nDate: ${invoiceDate}\nDue: ${dueDate}\n\nThank you.\n— OneAccounts`
+        const waURL = `https://wa.me/${(selectedCustomer.country_code || "+92").replace(/\D/g, "")}${phone}?text=${encodeURIComponent(msg)}`
+        window.open(waURL, "_blank")
+        return
+      }
+    } catch (e) { console.warn("Upload failed, fallback to text only") }
+    window.open(waLink(), "_blank")
+  }
+
   const handleBeforeSavePdf = async () => {
     if (!selectedCustomer) return
     const pdfData = {
@@ -440,9 +412,9 @@ export default function NewInvoicePage() {
       })),
       subtotal: totalAmount,
       total: totalAmount,
-      status: "Unpaid",      // ← Added
-      paid: 0,               // ← Added
-      balanceDue: totalAmount, // ← Added
+      status: "Unpaid",
+      paid: 0,
+      balanceDue: totalAmount,
     }
     const doc = await generateInvoicePDF(pdfData)
     doc.save(`invoice-preview.pdf`)
@@ -481,10 +453,7 @@ export default function NewInvoicePage() {
           border-radius: 8px; padding: 0 12px; font-size: 13px;
           font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box;
         }
-        /* Fix dark calendar */
-        input[type="date"] {
-          color-scheme: dark;
-        }
+        input[type="date"] { color-scheme: dark; }
         .inv-input:focus, .inv-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
         .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .inv-btn {
@@ -589,7 +558,6 @@ export default function NewInvoicePage() {
         )}
 
         <div className="header-grid">
-          {/* LEFT: Customer + Dates + Reference + Notes */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="inv-card">
               <label className="inv-label">Customer *</label>
@@ -658,43 +626,50 @@ export default function NewInvoicePage() {
                 <div><label className="inv-label">Notes</label><input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" /></div>
               </div>
 
-              {/* Product search + manual */}
-              <div style={{ marginTop: 14 }}>
-                <label className="inv-label">Add Product</label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <div style={{ position: "relative", flex: 1 }}>
-                    <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "var(--text-muted)" }} />
-                    <input
-                      className="inv-input"
-                      style={{ paddingLeft: 36 }}
-                      placeholder="Search product..."
-                      value={productSearch}
-                      onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
-                      onFocus={() => setShowProductList(true)}
-                      onBlur={() => setTimeout(() => setShowProductList(false), 200)}
-                    />
-                    {showProductList && (
-                      <div className="cust-dropdown" style={{ marginTop: 4 }}>
-                        {filteredProducts.map((p: any) => (
-                          <div key={p.id} className="cust-option" onMouseDown={() => addProductItem(p)}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              {p.image_path && <img src={p.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />}
-                              <div>
-                                <div className="cust-option-name">{p.code} - {p.name}</div>
-                                <div className="cust-option-meta">PKR {p.sale_price} | Stock: {p.qty_on_hand}</div>
+              {/* ── Product search (only when inventory feature ON) ── */}
+              {showProducts ? (
+                <div style={{ marginTop: 14 }}>
+                  <label className="inv-label">Add Product</label>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ position: "relative", flex: 1 }}>
+                      <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "var(--text-muted)" }} />
+                      <input
+                        className="inv-input"
+                        style={{ paddingLeft: 36 }}
+                        placeholder="Search product..."
+                        value={productSearch}
+                        onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
+                        onFocus={() => setShowProductList(true)}
+                        onBlur={() => setTimeout(() => setShowProductList(false), 200)}
+                      />
+                      {showProductList && (
+                        <div className="cust-dropdown" style={{ marginTop: 4 }}>
+                          {filteredProducts.map((p: any) => (
+                            <div key={p.id} className="cust-option" onMouseDown={() => addProductItem(p)}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                {p.image_path && <img src={p.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />}
+                                <div>
+                                  <div className="cust-option-name">{p.code} - {p.name}</div>
+                                  <div className="cust-option-meta">PKR {p.sale_price} | Stock: {p.qty_on_hand}</div>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
-                        {filteredProducts.length === 0 && (
-                          <div style={{ padding: 12, color: "var(--text-muted)", fontSize: 12 }}>No products found</div>
-                        )}
-                      </div>
-                    )}
+                          ))}
+                          {filteredProducts.length === 0 && (
+                            <div style={{ padding: 12, color: "var(--text-muted)", fontSize: 12 }}>No products found</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
                   </div>
+                </div>
+              ) : (
+                <div style={{ marginTop: 14 }}>
+                  <label className="inv-label">Add Item</label>
                   <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
                 </div>
-              </div>
+              )}
 
               {/* Price History Panel */}
               {showHistory && lastSelectedProduct && (
@@ -724,7 +699,6 @@ export default function NewInvoicePage() {
               )}
             </div>
 
-            {/* Change History when editing */}
             {editId && (
               <div className="inv-card" style={{ marginTop: 12 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
@@ -733,7 +707,6 @@ export default function NewInvoicePage() {
             )}
           </div>
 
-          {/* RIGHT: Summary & Actions */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="inv-card">
               <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>

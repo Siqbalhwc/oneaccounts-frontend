@@ -9,6 +9,7 @@ import {
 } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
+import { usePlan } from "@/contexts/PlanContext"
 
 export default function NewBillPage() {
   const router = useRouter()
@@ -20,11 +21,13 @@ export default function NewBillPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
+  const { hasFeature } = usePlan()
+  const showProducts = hasFeature("inventory")
+
   const [companyId, setCompanyId] = useState("")
   const [businessType, setBusinessType] = useState("")
   const [loading, setLoading] = useState(true)
 
-  // Suppliers
   const [suppliers, setSuppliers] = useState<any[]>([])
   const [supplierId, setSupplierId] = useState<number | null>(null)
   const [supplierSearch, setSupplierSearch] = useState("")
@@ -33,7 +36,6 @@ export default function NewBillPage() {
   const supplierRef = useRef<HTMLDivElement>(null)
   const [refreshingSuppliers, setRefreshingSuppliers] = useState(false)
 
-  // Products
   const [products, setProducts] = useState<any[]>([])
   const [productSearch, setProductSearch] = useState("")
   const [showProductList, setShowProductList] = useState(false)
@@ -47,18 +49,14 @@ export default function NewBillPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  // Master data
   const [locations, setLocations] = useState<any[]>([])
   const [activities, setActivities] = useState<any[]>([])
   const [allAccounts, setAllAccounts] = useState<any[]>([])
-
-  // Budget info per activity+account
   const [budgetInfo, setBudgetInfo] = useState<Record<string, { budget: number; spent: number; available: number; hasBudget: boolean }>>({})
   const [budgetError, setBudgetError] = useState("")
 
   const fiscalYear = new Date().getFullYear()
 
-  // ── Load master data ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -68,7 +66,13 @@ export default function NewBillPage() {
         .then(r => r.data && setBusinessType(r.data.business_type || ""))
 
       loadSuppliers(cid)
-      loadProducts(cid)
+
+      // Only load products if inventory feature is enabled
+      if (showProducts) {
+        loadProducts(cid)
+      } else {
+        setProducts([])
+      }
 
       supabase.from("accounts")
         .select("id,code,name,type")
@@ -87,7 +91,7 @@ export default function NewBillPage() {
 
       setLoading(false)
     })
-  }, [])
+  }, [showProducts])
 
   const loadSuppliers = (cid?: string) => {
     const targetId = cid || companyId
@@ -330,7 +334,6 @@ export default function NewBillPage() {
       if (editId) {
         router.push(`/dashboard/bills/${editId}`)
       } else {
-        // ✅ Reset form for a new bill instead of navigating away
         setItems([])
         clearSupplier()
         setBillDate(new Date().toISOString().split("T")[0])
@@ -351,10 +354,18 @@ export default function NewBillPage() {
     const billNo = editId ? selectedSupplier.code + "-EDIT" : "PREVIEW"
     const pdfData = {
       companyName: "OneAccounts",
+      companyAddress: "",
+      companyPhone: "",
+      companyEmail: "",
+      companyTagline: "",
+      logoUrl: null,
       invoiceNo: billNo,
       date: billDate,
       dueDate: dueDate,
       customerName: selectedSupplier.name,
+      customerAddress: "",
+      customerPhone: "",
+      customerEmail: "",
       items: items.map(i => ({
         description: i.description || "",
         qty: i.qty || 0,
@@ -366,14 +377,6 @@ export default function NewBillPage() {
       status: "Unpaid",
       paid: 0,
       balanceDue: totalAmount,
-      companyAddress: "",
-      companyPhone: "",
-      companyEmail: "",
-      companyTagline: "",
-      logoUrl: null,
-      customerAddress: "",
-      customerPhone: "",
-      customerEmail: "",
     }
     const doc = await generateInvoicePDF(pdfData)
     doc.save(`bill-preview-${billNo}.pdf`)
@@ -495,7 +498,6 @@ export default function NewBillPage() {
         )}
 
         <div className="header-grid">
-          {/* LEFT: Supplier + Dates + Product search + Items */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="inv-card">
               <label className="inv-label">Supplier *</label>
@@ -553,46 +555,52 @@ export default function NewBillPage() {
                 <div><label className="inv-label">Notes</label><input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" /></div>
               </div>
 
-              {/* Product search + manual */}
-              <div style={{ marginTop: 14 }}>
-                <label className="inv-label">Add Item</label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <div style={{ position: "relative", flex: 1 }}>
-                    <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "var(--text-muted)" }} />
-                    <input
-                      className="inv-input"
-                      style={{ paddingLeft: 36 }}
-                      placeholder="Search product..."
-                      value={productSearch}
-                      onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
-                      onFocus={() => setShowProductList(true)}
-                      onBlur={() => setTimeout(() => setShowProductList(false), 200)}
-                    />
-                    {showProductList && (
-                      <div className="cust-dropdown" style={{ marginTop: 4 }}>
-                        {filteredProducts.map((p: any) => (
-                          <div key={p.id} className="cust-option" onMouseDown={() => addProductItem(p)}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              {p.image_path && <img src={p.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />}
-                              <div>
-                                <div className="cust-option-name">{p.code} - {p.name}</div>
-                                <div className="cust-option-meta">Cost: PKR {p.cost_price} | Stock: {p.qty_on_hand}</div>
+              {/* ── Product search (only when inventory feature ON) ── */}
+              {showProducts ? (
+                <div style={{ marginTop: 14 }}>
+                  <label className="inv-label">Add Item</label>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ position: "relative", flex: 1 }}>
+                      <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "var(--text-muted)" }} />
+                      <input
+                        className="inv-input"
+                        style={{ paddingLeft: 36 }}
+                        placeholder="Search product..."
+                        value={productSearch}
+                        onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
+                        onFocus={() => setShowProductList(true)}
+                        onBlur={() => setTimeout(() => setShowProductList(false), 200)}
+                      />
+                      {showProductList && (
+                        <div className="cust-dropdown" style={{ marginTop: 4 }}>
+                          {filteredProducts.map((p: any) => (
+                            <div key={p.id} className="cust-option" onMouseDown={() => addProductItem(p)}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                {p.image_path && <img src={p.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />}
+                                <div>
+                                  <div className="cust-option-name">{p.code} - {p.name}</div>
+                                  <div className="cust-option-meta">Cost: PKR {p.cost_price} | Stock: {p.qty_on_hand}</div>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
-                        {filteredProducts.length === 0 && (
-                          <div style={{ padding: 12, color: "var(--text-muted)", fontSize: 12 }}>No products found</div>
-                        )}
-                      </div>
-                    )}
+                          ))}
+                          {filteredProducts.length === 0 && (
+                            <div style={{ padding: 12, color: "var(--text-muted)", fontSize: 12 }}>No products found</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
                   </div>
+                </div>
+              ) : (
+                <div style={{ marginTop: 14 }}>
+                  <label className="inv-label">Add Item</label>
                   <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
                 </div>
-              </div>
+              )}
             </div>
 
-            {/* Change History when editing */}
             {editId && (
               <div className="inv-card" style={{ marginTop: 12 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
@@ -601,7 +609,6 @@ export default function NewBillPage() {
             )}
           </div>
 
-          {/* RIGHT: Summary & Post */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="inv-card">
               <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px 0" }}>Summary</h3>
