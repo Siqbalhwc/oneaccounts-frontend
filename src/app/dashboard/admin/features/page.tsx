@@ -127,7 +127,6 @@ export default function FeatureManagerPage() {
       setFeatureStates(prev => ({ ...prev, [code]: !enabled }))
     } else {
       setMessage("✅ Feature updated!")
-      // Refresh the PlanContext so all pages see the change immediately
       refreshFeatures()
     }
     setTimeout(() => setMessage(""), 3000)
@@ -155,7 +154,6 @@ export default function FeatureManagerPage() {
     setFeatureStates(newStates)
     setSavingAll(false)
     setMessage(enable ? "✅ All features enabled!" : "✅ All features disabled!")
-    // Refresh the PlanContext
     refreshFeatures()
     setTimeout(() => setMessage(""), 3000)
   }
