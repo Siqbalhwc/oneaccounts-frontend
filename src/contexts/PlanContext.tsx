@@ -21,6 +21,7 @@ interface PlanContextType {
   features: string[]
   loading: boolean
   refreshFeatures: () => void
+  setFeatureState: (code: string, enabled: boolean) => void
 }
 
 const PlanContext = createContext<PlanContextType>({
@@ -28,6 +29,7 @@ const PlanContext = createContext<PlanContextType>({
   features: [],
   loading: true,
   refreshFeatures: () => {},
+  setFeatureState: () => {},
 })
 
 export function PlanProvider({ children }: { children: ReactNode }) {
@@ -74,7 +76,6 @@ export function PlanProvider({ children }: { children: ReactNode }) {
       }
 
       setFeatures(active)
-      console.log("✅ Features loaded from DB:", active)
     } catch (err) {
       console.error("Failed to load features:", err)
     } finally {
@@ -87,8 +88,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   }, [loadFeatures])
 
   const hasFeature = (code: string) => {
-    if (loading) return true   // avoid flash while loading
-    console.log("🔍 hasFeature called – code:", code, "features:", features, "result:", features.includes(code))
+    if (loading) return true
     return features.includes(code)
   }
 
@@ -96,8 +96,42 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     loadFeatures()
   }
 
+  const setFeatureState = async (code: string, enabled: boolean) => {
+    setFeatures(prev => {
+      if (enabled) {
+        return prev.includes(code) ? prev : [...prev, code]
+      } else {
+        return prev.filter(c => c !== code)
+      }
+    })
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const cid = (user?.app_metadata as any)?.company_id
+      if (!cid) return
+
+      const { data: featureRow } = await supabase
+        .from("features")
+        .select("id")
+        .eq("code", code)
+        .single()
+
+      if (featureRow) {
+        await supabase
+          .from("company_features")
+          .upsert(
+            { company_id: cid, feature_id: featureRow.id, enabled },
+            { onConflict: "company_id,feature_id" }
+          )
+      }
+    } catch (err) {
+      console.error("Failed to save feature state:", err)
+      loadFeatures()
+    }
+  }
+
   return (
-    <PlanContext.Provider value={{ hasFeature, features, loading, refreshFeatures }}>
+    <PlanContext.Provider value={{ hasFeature, features, loading, refreshFeatures, setFeatureState }}>
       {children}
     </PlanContext.Provider>
   )
