@@ -1,4 +1,3 @@
-// src/lib/get-user-company.ts
 import { createClient } from '@/lib/supabase/server'
 
 export async function getUserCompany() {
@@ -21,7 +20,7 @@ export async function getUserCompany() {
 
   if (membershipError || !membership) return null
 
-  // 2. Fetch company details (it’s OK if this doesn’t exist)
+  // 2. Fetch company details separately (allow missing row)
   const { data: company } = await supabase
     .from('companies')
     .select('business_name, logo_url, tagline')
