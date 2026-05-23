@@ -136,6 +136,7 @@ export default function PaymentsPage() {
         .header-row {
           display: grid;
           grid-template-columns: 140px 100px 1fr 120px 130px 130px 55px 55px;
+          column-gap: 8px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
@@ -144,6 +145,7 @@ export default function PaymentsPage() {
         .data-row {
           display: grid;
           grid-template-columns: 140px 100px 1fr 120px 130px 130px 55px 55px;
+          column-gap: 8px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
@@ -187,7 +189,7 @@ export default function PaymentsPage() {
           word-wrap: break-word;
         }
         @media (max-width: 640px) {
-          .header-row, .data-row { grid-template-columns: 90px 70px 1fr 70px 80px 80px 45px 45px; padding: 10px 12px; }
+          .header-row, .data-row { grid-template-columns: 90px 70px 1fr 70px 80px 80px 45px 45px; column-gap: 4px; padding: 10px 12px; }
         }
       `}</style>
 
@@ -241,8 +243,12 @@ export default function PaymentsPage() {
             <button className="sort-btn" onClick={() => handleSort("payment_date")}>Date {getSortIcon("payment_date")}</button>
             <button className="sort-btn" onClick={() => handleSort("supplier")}>Supplier {getSortIcon("supplier")}</button>
             <button className="sort-btn" onClick={() => handleSort("amount")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Amount {getSortIcon("amount")}</button>
-            <button className="sort-btn" onClick={() => handleSort("payment_method")}>Method {getSortIcon("payment_method")}</button>
-            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Created / Edited By</span>
+            {/* Method header centered */}
+            <button className="sort-btn" onClick={() => handleSort("payment_method")} style={{ textAlign: "center", justifyContent: "center" }}>Method {getSortIcon("payment_method")}</button>
+            {/* Created/Edited header styled like sort-btn */}
+            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
+              Created / Edited By
+            </span>
             <span></span>
             <span></span>
           </div>
@@ -255,7 +261,8 @@ export default function PaymentsPage() {
                 <span>{pay.payment_date}</span>
                 <span>{suppName}</span>
                 <span style={{ fontWeight: 600, textAlign: "right" }}>PKR {pay.amount?.toLocaleString()}</span>
-                <span style={{ whiteSpace: "nowrap" }}>{pay.payment_method || "—"}</span>
+                {/* Method data centered */}
+                <span style={{ whiteSpace: "nowrap", textAlign: "center" }}>{pay.payment_method || "—"}</span>
                 <div className="creator-editor-cell">
                   <span>Created: {pay.created_by || "—"}</span>
                   <span>Edited: {pay.updated_by || "—"}</span>
