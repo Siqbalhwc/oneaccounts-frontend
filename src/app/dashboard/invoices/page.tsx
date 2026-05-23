@@ -285,7 +285,8 @@ export default function InvoicesPage() {
                 <span style={{ fontWeight: 600, textAlign: "right" }}>PKR {inv.total?.toLocaleString()}</span>
                 <span style={{
                   color: inv.status === "Paid" ? "#10B981" : inv.status === "Unpaid" ? "#EF4444" : "#F59E0B",
-                  fontWeight: 600
+                  fontWeight: 600,
+                  textAlign: "center"
                 }}>{inv.status}</span>
                 <div className="creator-editor-cell">
                   <span>Created: {inv.created_by || "—"}</span>
