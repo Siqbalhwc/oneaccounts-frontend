@@ -38,7 +38,7 @@ export default function FeatureManagerPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
   const { role } = useRole()
-  const { refreshFeatures } = usePlan()
+  const { setFeatureState } = usePlan()
   const canView = role === "admin"
   const canEdit = role === "admin"
 
@@ -112,23 +112,11 @@ export default function FeatureManagerPage() {
       return
     }
 
+    // Optimistic UI update on the feature manager page
     setFeatureStates(prev => ({ ...prev, [code]: enabled }))
+    // Instantly update the global PlanContext so all pages reflect the change
+    setFeatureState(code, enabled)
     setMessage("")
-
-    const { error } = await supabase
-      .from("company_features")
-      .upsert(
-        { company_id: companyId, feature_id: featureId, enabled },
-        { onConflict: "company_id,feature_id" }
-      )
-
-    if (error) {
-      setMessage("Error: " + error.message)
-      setFeatureStates(prev => ({ ...prev, [code]: !enabled }))
-    } else {
-      setMessage("✅ Feature updated!")
-      refreshFeatures()
-    }
     setTimeout(() => setMessage(""), 3000)
   }
 
@@ -137,16 +125,9 @@ export default function FeatureManagerPage() {
     setSavingAll(true)
     let errorOccurred = false
 
+    // Update each feature using the global setter
     for (const code of FEATURE_CODES) {
-      const featureId = featureIdMap[code]
-      if (!featureId) continue
-      const { error } = await supabase
-        .from("company_features")
-        .upsert(
-          { company_id: companyId, feature_id: featureId, enabled: enable },
-          { onConflict: "company_id,feature_id" }
-        )
-      if (error) errorOccurred = true
+      setFeatureState(code, enable)  // instant update, DB in background
     }
 
     const newStates: Record<string, boolean> = {}
@@ -154,7 +135,6 @@ export default function FeatureManagerPage() {
     setFeatureStates(newStates)
     setSavingAll(false)
     setMessage(enable ? "✅ All features enabled!" : "✅ All features disabled!")
-    refreshFeatures()
     setTimeout(() => setMessage(""), 3000)
   }
 
