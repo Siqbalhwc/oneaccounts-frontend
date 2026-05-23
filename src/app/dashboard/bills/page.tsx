@@ -152,7 +152,7 @@ export default function BillsPage() {
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
         .header-row {
           display: grid;
-          grid-template-columns: 150px 100px 250px 120px 80px 140px 55px 55px 55px;
+          grid-template-columns: 150px 100px 220px 120px 80px 140px 55px 55px 55px;
           column-gap: 8px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
@@ -161,7 +161,7 @@ export default function BillsPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: 150px 100px 250px 120px 80px 140px 55px 55px 55px;
+          grid-template-columns: 150px 100px 220px 120px 80px 140px 55px 55px 55px;
           column-gap: 8px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
@@ -268,7 +268,6 @@ export default function BillsPage() {
             <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
             <button className="sort-btn" onClick={() => handleSort("supplier")}>Supplier {getSortIcon("supplier")}</button>
             <button className="sort-btn" onClick={() => handleSort("total")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Total {getSortIcon("total")}</button>
-            {/* Status header centered */}
             <button className="sort-btn" onClick={() => handleSort("status")} style={{ textAlign: "center", justifyContent: "center" }}>Status {getSortIcon("status")}</button>
             <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
               Created / Edited
@@ -286,7 +285,6 @@ export default function BillsPage() {
                 <span>{bill.date}</span>
                 <span>{suppName}</span>
                 <span style={{ fontWeight: 600, textAlign: "right" }}>PKR {bill.total?.toLocaleString()}</span>
-                {/* Status data centered */}
                 <span style={{
                   color: bill.status === "Paid" ? "#10B981" : bill.status === "Unpaid" ? "#EF4444" : "#F59E0B",
                   fontWeight: 600,
