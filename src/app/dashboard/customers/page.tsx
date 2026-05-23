@@ -106,7 +106,7 @@ export default function CustomersPage() {
           .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
           .header-row {
             display: grid;
-            grid-template-columns: 80px 1fr 120px 100px 130px 40px 40px 40px;
+            grid-template-columns: 80px 1fr 120px 100px 130px 55px 55px 55px;
             padding: 14px 24px;
             background: var(--card-hover);
             font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
@@ -114,7 +114,7 @@ export default function CustomersPage() {
           }
           .data-row {
             display: grid;
-            grid-template-columns: 80px 1fr 120px 100px 130px 40px 40px 40px;
+            grid-template-columns: 80px 1fr 120px 100px 130px 55px 55px 55px;
             padding: 12px 24px;
             border-bottom: 1px solid var(--border);
             font-size: 13px; align-items: center;
@@ -140,7 +140,7 @@ export default function CustomersPage() {
           .btn-outline:hover { background: var(--card-hover); }
           .btn-icon {
             background: transparent; border: 1.5px solid var(--border); color: var(--text-muted);
-            padding: 4px; border-radius: 6px; cursor: pointer;
+            padding: 6px; border-radius: 8px; cursor: pointer;
             display: inline-flex; align-items: center; justify-content: center;
           }
           .btn-icon:hover { background: var(--card-hover); }
@@ -157,7 +157,7 @@ export default function CustomersPage() {
             word-wrap: break-word;
           }
           @media (max-width: 640px) {
-            .header-row, .data-row { grid-template-columns: 60px 1fr 80px 70px 100px 30px 30px 30px; }
+            .header-row, .data-row { grid-template-columns: 60px 1fr 80px 70px 100px 45px 45px 45px; }
             .search-input { width: 100%; }
           }
         `}</style>
@@ -217,7 +217,6 @@ export default function CustomersPage() {
               <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
               <button className="sort-btn" onClick={() => handleSort("phone")}>Phone {getSortIcon("phone")}</button>
               <button className="sort-btn" onClick={() => handleSort("balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("balance")}</button>
-              {/* Created/Edited header matching sort-btn style */}
               <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
                 Created / Edited By
               </span>
@@ -237,15 +236,14 @@ export default function CustomersPage() {
                   <span>Created: {cust.created_by || "—"}</span>
                   <span>Edited: {cust.updated_by || "—"}</span>
                 </div>
-                {/* View Ledger button */}
                 <button className="btn-icon" onClick={() => router.push(`/dashboard/reports/customer-ledger?customerId=${cust.id}`)} title="View Ledger">
-                  <Eye size={12} />
+                  <Eye size={14} />
                 </button>
                 <button className="btn-icon" onClick={() => router.push(`/dashboard/customers/new?id=${cust.id}`)} title="Edit">
-                  <Edit size={12} />
+                  <Edit size={14} />
                 </button>
                 <button className="btn-icon" onClick={() => handleDelete(cust.id)} style={{ color: "#EF4444" }} title="Delete">
-                  <Trash2 size={12} />
+                  <Trash2 size={14} />
                 </button>
               </div>
             ))}
