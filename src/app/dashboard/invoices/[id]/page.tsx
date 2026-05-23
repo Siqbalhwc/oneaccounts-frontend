@@ -208,6 +208,15 @@ export default function InvoiceDetailPage() {
     return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
   }
 
+  const getReminderLink = () => {
+    if (!invoice || !invoice.customer) return ""
+    const code = (invoice.customer.country_code || "+92").replace(/\D/g, "")
+    const phone = (invoice.customer.phone || "").replace(/\D/g, "")
+    if (!phone) return ""
+    const msg = `Reminder: Your invoice ${invoice.invoice_no} for PKR ${invoice.total?.toLocaleString()} is overdue. Please pay at your earliest convenience.`
+    return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
+  }
+
   const handlePrintPDF = async () => {
     if (!invoice) return
     const customer = invoice.customer
@@ -253,6 +262,8 @@ export default function InvoiceDetailPage() {
 
   const balanceDue = invoice.total - (invoice.paid || 0)
   const waLink = getWhatsAppLink()
+  const reminderLink = getReminderLink()
+  const isOverdue = invoice.status !== "Paid" && new Date(invoice.due_date) < new Date()
 
   const totalDebit = journalLines.reduce((s, l) => s + l.debit, 0)
   const totalCredit = journalLines.reduce((s, l) => s + l.credit, 0)
@@ -274,6 +285,8 @@ export default function InvoiceDetailPage() {
         .btn-primary:hover { background: var(--primary-hover); }
         .btn-success { background: #25D366; color: white; border-color: #25D366; }
         .btn-success:hover { background: #22C55E; }
+        .btn-warning { background: #F97316; color: white; border-color: #F97316; }
+        .btn-warning:hover { background: #EA580C; }
         .badge {
           display: inline-block;
           padding: 2px 10px;
@@ -308,6 +321,11 @@ export default function InvoiceDetailPage() {
           {waLink && hasFeature("whatsapp_invoice") && (
             <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success">
               <Send size={14} /> WhatsApp
+            </a>
+          )}
+          {reminderLink && hasFeature("payment_reminders") && isOverdue && (
+            <a href={reminderLink} target="_blank" rel="noopener noreferrer" className="btn btn-warning">
+              <Send size={14} /> Remind
             </a>
           )}
           <button className="btn btn-primary" onClick={handlePrintPDF}>

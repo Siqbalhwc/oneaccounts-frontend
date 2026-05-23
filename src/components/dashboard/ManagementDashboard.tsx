@@ -5,7 +5,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
 import { TrendingUp, TrendingDown, Minus, CheckCircle, AlertTriangle } from "lucide-react"
 import { motion } from "framer-motion"
-import { useTheme } from "@/contexts/ThemeContext"   // ← global theme
+import { useTheme } from "@/contexts/ThemeContext"
 
 export default function ManagementDashboard({ role }: { role: string }) {
   const supabase = createBrowserClient(
@@ -14,25 +14,20 @@ export default function ManagementDashboard({ role }: { role: string }) {
   )
   const router = useRouter()
 
-  // ── Global theme (light / dark) ──
   const { theme: themeMode } = useTheme()
-  const isDark = themeMode === "dark"   // we only need the boolean
+  const isDark = themeMode === "dark"
 
-  // Company
   const [companyId, setCompanyId] = useState<string | null>(null)
   const [companyError, setCompanyError] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  // Filters
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [selectedDonorId, setSelectedDonorId] = useState<string>("")
 
-  // Master data
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
 
-  // Dashboard data
   const [donorBalances, setDonorBalances] = useState<any[]>([])
   const [projectRows, setProjectRows] = useState<any[]>([])
   const [totalBudget, setTotalBudget] = useState(0)
@@ -47,7 +42,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [activityHealth, setActivityHealth] = useState<Record<string, { lowCount: number; threshold: number; message: string }>>({})
   const [lastUpdated, setLastUpdated] = useState("")
 
-  // ── Step 1: Fetch company ID ──
+  // --- NEW: Overdue invoices count ---
+  const [overdueInvoicesCount, setOverdueInvoicesCount] = useState(0)
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user }, error }) => {
       if (error || !user) {
@@ -65,7 +62,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
     })
   }, [])
 
-  // ── Step 2: Fetch master lists ──
   useEffect(() => {
     if (!companyId) return
     supabase.from("projects").select("id, name").eq("company_id", companyId).order("name")
@@ -74,7 +70,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
       .then(r => r.data && setDonors(r.data))
   }, [companyId])
 
-  // ── Step 3: Fetch dashboard data ──
   useEffect(() => {
     if (!companyId) return
 
@@ -289,6 +284,16 @@ export default function ManagementDashboard({ role }: { role: string }) {
           setActivityHealth(healthData)
         }
 
+        // ── Overdue invoices count ──
+        const { data: overdueInvoices } = await supabase
+          .from("invoices")
+          .select("id")
+          .eq("company_id", companyId)
+          .eq("type", "sale")
+          .eq("status", "Unpaid")
+          .lt("due_date", todayISO)
+        setOverdueInvoicesCount(overdueInvoices?.length || 0)
+
         setLastUpdated(new Date().toLocaleTimeString())
       } catch (err) {
         console.error("Dashboard fetch error:", err)
@@ -310,7 +315,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const spentPct = filteredTotalBudget ? Math.round((filteredTotalSpent / filteredTotalBudget) * 100) : 0
   const projectsAbove70 = filteredProjectRows.filter(p => p.pct > 70).map(p => p.name)
 
-  // ── Greeting ──
   const getGreeting = () => {
     const hour = new Date().getHours()
     if (hour < 12) return "Good morning"
@@ -365,7 +369,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
     )
   }
 
-  // animation variants
   const cardVariant = {
     hidden: { opacity: 0, y: 20 },
     visible: (i: number) => ({
@@ -466,7 +469,14 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
         .clickable { color: #93C5FD; text-decoration: underline; cursor: pointer; }
 
-        /* Responsive */
+        .overdue-banner {
+          background: var(--card); border: 1px solid var(--border); border-left: 6px solid #EF4444;
+          border-radius: 12px; padding: 0.8rem 1.2rem; margin-bottom: 1rem;
+          display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+          font-size: 0.9rem; color: var(--text); font-weight: 500;
+        }
+        .overdue-banner strong { color: #EF4444; }
+
         @media (max-width: 1100px) {
           .dashboard-grid { grid-template-columns: repeat(3, 1fr); }
         }
@@ -492,7 +502,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
       `}</style>
 
       <div className="mgmt" style={{ padding: "0.8rem 1.2rem" }}>
-        {/* Hero bar */}
         <motion.div
           className="hero"
           initial={{ opacity: 0, y: -10 }}
@@ -518,11 +527,24 @@ export default function ManagementDashboard({ role }: { role: string }) {
               <option value="">All Donors</option>
               {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
-            {/* ⚠️ Removed the separate theme toggle button – use the sidebar one */}
           </div>
         </motion.div>
 
-        {/* Warning banner */}
+        {/* Overdue invoices banner (always visible, no feature toggle) */}
+        {overdueInvoicesCount > 0 && (
+          <motion.div
+            className="overdue-banner"
+            initial={{ opacity: 0, y: -5 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <span>⚠️ <strong>{overdueInvoicesCount} overdue {overdueInvoicesCount === 1 ? "invoice" : "invoices"}</strong> – due date passed and still unpaid.</span>
+            <button className="warning-btn" onClick={() => router.push("/dashboard/invoices?status=Unpaid&overdue=true")}>
+              View overdue invoices →
+            </button>
+          </motion.div>
+        )}
+
+        {/* Overspent warning banner */}
         {filteredOverspentCount > 0 && (
           <motion.div
             className="warning-banner"
