@@ -10,12 +10,14 @@ import RecordHistory from "@/components/RecordHistory"
 interface Payment {
   id: number
   payment_no: string
-  date: string
+  payment_date: string
   amount: number
   payment_method: string
+  payment_type: string
+  party_type: string
   reference?: string
   notes?: string
-  party_id: number
+  party_id: number | null
   supplier?: {
     name: string
     code: string
@@ -27,6 +29,14 @@ interface Payment {
     invoice_no: string
     amount: number
   }[]
+}
+
+interface JournalLine {
+  account_id: number
+  account_code?: string
+  account_name?: string
+  debit: number
+  credit: number
 }
 
 export default function PaymentDetailPage() {
@@ -41,9 +51,8 @@ export default function PaymentDetailPage() {
   const [payment, setPayment] = useState<Payment | null>(null)
   const [loading, setLoading] = useState(true)
   const [companyId, setCompanyId] = useState<string>("")
-
-  // Company settings for PDF
   const [companySettings, setCompanySettings] = useState<any>({})
+  const [journalLines, setJournalLines] = useState<JournalLine[]>([])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -57,6 +66,7 @@ export default function PaymentDetailPage() {
     if (!companyId || !paymentId) return
     setLoading(true)
 
+    // 1. Fetch payment
     supabase
       .from("payments")
       .select("*")
@@ -68,8 +78,8 @@ export default function PaymentDetailPage() {
 
         const pmt: Payment = data
 
-        // Fetch supplier
-        if (pmt.party_id) {
+        // 2. Fetch supplier if party_id exists
+        if (pmt.party_id && pmt.party_type === "supplier") {
           supabase
             .from("suppliers")
             .select("name, code, phone, email")
@@ -79,7 +89,7 @@ export default function PaymentDetailPage() {
               pmt.supplier = supp || undefined
             })
             .then(() => {
-              // Fetch allocations
+              // 3. Fetch allocations
               supabase
                 .from("payment_allocations")
                 .select("amount, invoice_id, invoices(invoice_no)")
@@ -95,12 +105,44 @@ export default function PaymentDetailPage() {
                 })
             })
         } else {
-          setPayment(pmt)
-          setLoading(false)
+          // No supplier – fetch allocations (may be empty)
+          supabase
+            .from("payment_allocations")
+            .select("amount, invoice_id, invoices(invoice_no)")
+            .eq("payment_id", pmt.id)
+            .then(({ data: allocs }) => {
+              pmt.allocations = (allocs || []).map((a: any) => ({
+                invoice_id: a.invoice_id,
+                invoice_no: a.invoices?.invoice_no || "—",
+                amount: a.amount,
+              }))
+              setPayment(pmt)
+              setLoading(false)
+            })
         }
       })
 
-    // Fetch company settings for PDF
+    // 4. Fetch journal lines
+    supabase
+      .from("journal_lines")
+      .select("account_id, debit, credit, accounts(code, name)")
+      .eq("company_id", companyId)
+      .eq("source_type", "payment")
+      .eq("source_id", paymentId)
+      .then(({ data: lines }) => {
+        if (lines && lines.length > 0) {
+          const formatted = lines.map((l: any) => ({
+            account_id: l.account_id,
+            account_code: l.accounts?.code || "",
+            account_name: l.accounts?.name || "",
+            debit: l.debit || 0,
+            credit: l.credit || 0,
+          }))
+          setJournalLines(formatted)
+        }
+      })
+
+    // 5. Company settings
     supabase
       .from("company_settings")
       .select("company_name, address, phone, email, tagline, logo_url")
@@ -115,13 +157,12 @@ export default function PaymentDetailPage() {
     if (!payment || !payment.supplier) return ""
     const phone = (payment.supplier.phone || "").replace(/\D/g, "")
     if (!phone) return ""
-    const msg = `Dear ${payment.supplier.name},\n\nYour payment ${payment.payment_no} for PKR ${payment.amount?.toLocaleString()} has been processed.\nDate: ${payment.date}\nMethod: ${payment.payment_method}\n${payment.notes ? "Notes: " + payment.notes : ""}\n\nThank you.\n— OneAccounts`
+    const msg = `Dear ${payment.supplier.name},\n\nYour payment ${payment.payment_no} for PKR ${payment.amount?.toLocaleString()} has been processed.\nDate: ${payment.payment_date}\nMethod: ${payment.payment_method}\n${payment.notes ? "Notes: " + payment.notes : ""}\n\nThank you.\n— OneAccounts`
     return `https://wa.me/92${phone}?text=${encodeURIComponent(msg)}`
   }
 
   const handlePrintPDF = async () => {
     if (!payment) return
-    const supplier = payment.supplier
 
     const pdfData = {
       companyName:    companySettings.company_name || "OneAccounts",
@@ -131,12 +172,12 @@ export default function PaymentDetailPage() {
       companyTagline: companySettings.tagline || "",
       logoUrl:        companySettings.logo_url || null,
       invoiceNo:      payment.payment_no,
-      date:           payment.date,
+      date:           payment.payment_date,
       dueDate:        "",
-      customerName:    supplier?.name || "Supplier",
+      customerName:   payment.supplier?.name || (payment.payment_type === "expense" ? "Expense Payment" : "Supplier"),
       customerAddress: "",
-      customerPhone:   supplier?.phone || "",
-      customerEmail:   supplier?.email || "",
+      customerPhone:  payment.supplier?.phone || "",
+      customerEmail:  payment.supplier?.email || "",
       items:          (payment.allocations || []).map(a => ({
         description: `Bill: ${a.invoice_no}`,
         qty:          1,
@@ -159,6 +200,9 @@ export default function PaymentDetailPage() {
 
   const waLink = getWhatsAppLink()
 
+  const totalDebit = journalLines.reduce((s, l) => s + l.debit, 0)
+  const totalCredit = journalLines.reduce((s, l) => s + l.credit, 0)
+
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
@@ -172,12 +216,14 @@ export default function PaymentDetailPage() {
         table { width: 100%; border-collapse: collapse; margin-top: 12px; }
         th { text-align: left; padding: 10px 12px; background: var(--card-hover); font-weight: 700; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); }
         td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); }
+        tr:hover td { background: var(--card-hover); }
         .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; text-decoration: none; }
         .btn:hover { background: var(--card-hover); }
         .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
         .btn-primary:hover { background: var(--primary-hover); }
         .btn-success { background: #25D366; color: white; border-color: #25D366; }
         .btn-success:hover { background: #22C55E; }
+        .record-history { background: var(--bg-soft); border-radius: 8px; padding: 8px; }
         @media (max-width: 640px) {
           .row { flex-direction: column; align-items: flex-start; }
           .label { margin-bottom: 2px; }
@@ -191,7 +237,9 @@ export default function PaymentDetailPage() {
           </button>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>Payment #{payment.payment_no}</h1>
-            <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>{payment.supplier?.name || "Unknown Supplier"}</p>
+            <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
+              {payment.payment_type === "expense" ? "Expense Payment" : payment.supplier?.name || "Unknown Supplier"}
+            </p>
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -209,12 +257,15 @@ export default function PaymentDetailPage() {
       <div className="card">
         <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>Payment Details</h3>
         <div className="row"><span className="label">Payment No.</span><span className="value">{payment.payment_no}</span></div>
-        <div className="row"><span className="label">Date</span><span className="value">{payment.date}</span></div>
-        <div className="row"><span className="label">Supplier</span><span className="value">{payment.supplier?.code} – {payment.supplier?.name}</span></div>
+        <div className="row"><span className="label">Date</span><span className="value">{payment.payment_date}</span></div>
+        <div className="row"><span className="label">Type</span><span className="value">{payment.payment_type === "expense" ? "Expense Payment" : "Supplier Payment"}</span></div>
+        {payment.supplier && (
+          <div className="row"><span className="label">Supplier</span><span className="value">{payment.supplier.code} – {payment.supplier.name}</span></div>
+        )}
         <div className="row"><span className="label">Amount</span><span className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B" }}>PKR {payment.amount?.toLocaleString()}</span></div>
         <div className="row"><span className="label">Method</span><span className="value">{payment.payment_method}</span></div>
-        <div className="row"><span className="label">Reference</span><span className="value">{payment.reference || "—"}</span></div>
-        <div className="row"><span className="label">Notes</span><span className="value">{payment.notes || "—"}</span></div>
+        {payment.reference && <div className="row"><span className="label">Reference</span><span className="value">{payment.reference}</span></div>}
+        {payment.notes && <div className="row"><span className="label">Notes</span><span className="value">{payment.notes}</span></div>}
       </div>
 
       {payment.allocations && payment.allocations.length > 0 && (
@@ -236,6 +287,52 @@ export default function PaymentDetailPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {journalLines.length > 0 && (
+        <div className="card">
+          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📒 Journal Entry</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Account</th>
+                <th style={{ textAlign: "right" }}>Debit (PKR)</th>
+                <th style={{ textAlign: "right" }}>Credit (PKR)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {journalLines.map((line, idx) => (
+                <tr key={idx}>
+                  <td>{line.account_code} – {line.account_name}</td>
+                  <td style={{ textAlign: "right", color: line.debit > 0 ? "#F87171" : "var(--text-muted)" }}>
+                    {line.debit > 0 ? line.debit.toLocaleString() : "–"}
+                  </td>
+                  <td style={{ textAlign: "right", color: line.credit > 0 ? "#2DD4BF" : "var(--text-muted)" }}>
+                    {line.credit > 0 ? line.credit.toLocaleString() : "–"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
+                <td>Total</td>
+                <td style={{ textAlign: "right", color: "#F87171" }}>{totalDebit.toLocaleString()}</td>
+                <td style={{ textAlign: "right", color: "#2DD4BF" }}>{totalCredit.toLocaleString()}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+
+      {payment && (
+        <div className="card">
+          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>
+            📝 Change History
+          </h3>
+          <div className="record-history">
+            <RecordHistory tableName="payments" recordId={String(payment.id)} />
+          </div>
         </div>
       )}
     </div>
