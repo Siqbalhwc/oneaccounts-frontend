@@ -106,7 +106,14 @@ export default function DashboardSidebar({
   useEffect(() => { const raw = localStorage.getItem("visitedFeatures"); if (raw) try { setVisitedFeatures(JSON.parse(raw)) } catch {} }, [])
 
   const markVisited = (code: string) => { const u = { ...visitedFeatures, [code]: true }; setVisitedFeatures(u); localStorage.setItem("visitedFeatures", JSON.stringify(u)) }
-  const isNew = (item: NavItem) => item.feature && hasFeature(item.feature) && !visitedFeatures[item.feature]
+
+  // ── FIX: ensure isNew always returns boolean ──
+  const isNew = (item: NavItem): boolean => {
+    if (!item.feature) return false
+    if (!hasFeature(item.feature)) return false
+    return !visitedFeatures[item.feature]
+  }
+
   const isVisible = (item: NavItem) => !(item.adminOnly && role !== "admin") && (!item.feature || hasFeature(item.feature))
 
   // ── Theme‑adaptive colours ──
