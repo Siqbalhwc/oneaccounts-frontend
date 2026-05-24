@@ -20,11 +20,11 @@ export async function getUserCompany() {
 
   if (membershipError || !membership) return null
 
-  // 2. Fetch company details separately (allow missing row)
-  const { data: company } = await supabase
-    .from('companies')
-    .select('business_name, logo_url, tagline')
-    .eq('id', membership.company_id)
+  // 2. Fetch company details from company_settings (NOT companies table)
+  const { data: settings } = await supabase
+    .from('company_settings')
+    .select('company_name, logo_url, tagline')
+    .eq('company_id', membership.company_id)
     .maybeSingle()
 
   return {
@@ -32,8 +32,8 @@ export async function getUserCompany() {
     email: user.email!,
     companyId: membership.company_id,
     role: membership.role,
-    companyName: company?.business_name || 'OneAccounts',
-    companyLogo: company?.logo_url || '/logo.png',
-    companyTagline: company?.tagline || 'by Siqbal',
+    companyName: settings?.company_name || 'OneAccounts',
+    companyLogo: settings?.logo_url || '/logo.png',
+    companyTagline: settings?.tagline || 'by Siqbal',
   }
 }

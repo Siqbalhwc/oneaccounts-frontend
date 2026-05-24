@@ -178,11 +178,11 @@ export default function InvoiceDetailPage() {
         }
       })
 
-    // 5. Company settings
+    // 5. Company settings – now filters by company_id
     supabase
       .from("company_settings")
       .select("company_name, address, phone, email, tagline, logo_url, business_type")
-      .limit(1)
+      .eq("company_id", companyId)
       .maybeSingle()
       .then(({ data }) => {
         if (data) {
