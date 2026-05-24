@@ -656,7 +656,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
               <div className="kpi-label">{kpi.label}</div>
               <div className="kpi-value" style={{ color: kpi.color }}>
                 {kpi.raw != null ? (
-                  <CountUp end={kpi.raw} duration={2} formatter={(value) => formatPKR(value)} />
+                  <CountUp end={kpi.raw} duration={2} formattingFn={(value: number) => formatPKR(value)} />
                 ) : (
                   kpi.value
                 )}
