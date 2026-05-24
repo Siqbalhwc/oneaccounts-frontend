@@ -111,15 +111,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: journalError?.message || "Failed to create journal entry" }, { status: 500 })
     }
 
-    // 8. Journal lines
+    // 8. Journal lines – use entry_id (not journal_entry_id) and include company_id
     const lines = qtyNum > 0
       ? [
-          { company_id: companyId, journal_entry_id: journalEntry.id, account_id: inventoryAccount.id, debit: amount, credit: 0, source_type: "inventory_adjustment", source_id: moveData.id },
-          { company_id: companyId, journal_entry_id: journalEntry.id, account_id: equityAccount.id, debit: 0, credit: amount, source_type: "inventory_adjustment", source_id: moveData.id },
+          { company_id: companyId, entry_id: journalEntry.id, account_id: inventoryAccount.id, debit: amount, credit: 0, source_type: "inventory_adjustment", source_id: moveData.id },
+          { company_id: companyId, entry_id: journalEntry.id, account_id: equityAccount.id, debit: 0, credit: amount, source_type: "inventory_adjustment", source_id: moveData.id },
         ]
       : [
-          { company_id: companyId, journal_entry_id: journalEntry.id, account_id: equityAccount.id, debit: amount, credit: 0, source_type: "inventory_adjustment", source_id: moveData.id },
-          { company_id: companyId, journal_entry_id: journalEntry.id, account_id: inventoryAccount.id, debit: 0, credit: amount, source_type: "inventory_adjustment", source_id: moveData.id },
+          { company_id: companyId, entry_id: journalEntry.id, account_id: equityAccount.id, debit: amount, credit: 0, source_type: "inventory_adjustment", source_id: moveData.id },
+          { company_id: companyId, entry_id: journalEntry.id, account_id: inventoryAccount.id, debit: 0, credit: amount, source_type: "inventory_adjustment", source_id: moveData.id },
         ]
 
     const { error: linesError } = await supabase
