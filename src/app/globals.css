@@ -138,7 +138,7 @@ body {
   transition: background 0.3s, color 0.3s;
 }
 
-/* ── OneAccounts overrides for white text & branding ── */
+/* ── OneAccounts overrides ── */
 /* Sidebar – white text */
 [data-theme="oneaccounts"] .dl-sidebar,
 [data-theme="oneaccounts"] .dl-sidebar a,
@@ -173,8 +173,13 @@ body {
   border: none;
 }
 
-[data-theme="oneaccounts"] .mgmt .hero .dl-topbar-title,
-[data-theme="oneaccounts"] .mgmt .hero .dl-topbar-subtitle,
+/* Hero greeting text (Good afternoon, siqbalhwc) */
+[data-theme="oneaccounts"] .mgmt .hero-greeting h2,
+[data-theme="oneaccounts"] .mgmt .hero-greeting p {
+  color: white !important;
+}
+
+/* Hero filter labels / buttons */
 [data-theme="oneaccounts"] .mgmt .hero .filter-label,
 [data-theme="oneaccounts"] .mgmt .hero .filter-pill {
   color: rgba(255,255,255,0.9) !important;
