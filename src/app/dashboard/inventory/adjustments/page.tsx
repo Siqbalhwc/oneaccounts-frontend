@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { Plus, Pencil, Trash2 } from "lucide-react"
+import { Plus, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
 
@@ -15,6 +15,9 @@ interface Adjustment {
   reason: string
   product?: { code: string; name: string }
 }
+
+type SortField = "product_code" | "product_name" | "qty" | "date" | "reason"
+type SortDir = "asc" | "desc"
 
 export default function InventoryAdjustmentsPage() {
   const supabase = createBrowserClient(
@@ -28,6 +31,10 @@ export default function InventoryAdjustmentsPage() {
 
   const [adjustments, setAdjustments] = useState<Adjustment[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Sorting state
+  const [sortField, setSortField] = useState<SortField>("date")
+  const [sortDir, setSortDir] = useState<SortDir>("desc")
 
   useEffect(() => {
     if (!role) return
@@ -44,6 +51,53 @@ export default function InventoryAdjustmentsPage() {
         setLoading(false)
       })
   }, [role, canView])
+
+  // Sort handlers
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === "asc" ? "desc" : "asc")
+    } else {
+      setSortField(field)
+      setSortDir("asc")
+    }
+  }
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown size={12} style={{ opacity: 0.5 }} />
+    return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+  }
+
+  // Client‑side sorting
+  const sortedAdjustments = [...adjustments].sort((a, b) => {
+    let valA: any, valB: any
+    switch (sortField) {
+      case "product_code":
+        valA = (a.product?.code || "").toLowerCase()
+        valB = (b.product?.code || "").toLowerCase()
+        break
+      case "product_name":
+        valA = (a.product?.name || "").toLowerCase()
+        valB = (b.product?.name || "").toLowerCase()
+        break
+      case "qty":
+        valA = a.qty || 0
+        valB = b.qty || 0
+        break
+      case "date":
+        valA = a.date || ""
+        valB = b.date || ""
+        break
+      case "reason":
+        valA = (a.reason || "").toLowerCase()
+        valB = (b.reason || "").toLowerCase()
+        break
+      default:
+        return 0
+    }
+    if (valA < valB) return sortDir === "asc" ? -1 : 1
+    if (valA > valB) return sortDir === "asc" ? 1 : -1
+    return 0
+  })
 
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
   if (!canView) {
@@ -80,6 +134,13 @@ export default function InventoryAdjustmentsPage() {
           }
           .adj-data-row:hover { background: var(--card-hover); }
           .adj-data-row:last-child { border-bottom: none; }
+          .sort-btn {
+            background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
+            display: inline-flex; align-items: center; gap: 4px; padding: 0;
+            font-weight: 700; text-transform: uppercase; font-size: 10px;
+            text-align: left;
+          }
+          .sort-btn:hover { color: var(--primary); }
           .btn {
             padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border);
             font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
@@ -94,12 +155,6 @@ export default function InventoryAdjustmentsPage() {
             display: inline-flex; align-items: center; justify-content: center;
           }
           .btn-icon:hover { background: var(--card-hover); }
-          .input {
-            height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px 0 36px;
-            font-size: 13px; width: 260px; box-sizing: border-box; outline: none;
-            font-family: inherit; background: var(--card); color: var(--text);
-          }
-          .input:focus { border-color: var(--primary); }
           .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
           .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
           .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
@@ -112,7 +167,9 @@ export default function InventoryAdjustmentsPage() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>⚖️ Inventory Adjustments</h1>
-            <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>{canEdit ? "Adjust stock quantities – surplus (+) or shortage (−)" : "View adjustments"}</p>
+            <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
+              {canEdit ? "Adjust stock quantities – surplus (+) or shortage (−)" : "View adjustments"}
+            </p>
           </div>
           {canEdit && (
             <button className="btn btn-primary" onClick={() => router.push("/dashboard/inventory/adjustments/new")}>
@@ -144,14 +201,14 @@ export default function InventoryAdjustmentsPage() {
         ) : (
           <div className="adj-card">
             <div className="adj-header-row">
-              <span>Product Code</span>
-              <span>Product Name</span>
-              <span>Quantity</span>
-              <span>Date</span>
-              <span>Reason</span>
+              <button className="sort-btn" onClick={() => handleSort("product_code")}>Product Code {getSortIcon("product_code")}</button>
+              <button className="sort-btn" onClick={() => handleSort("product_name")}>Product Name {getSortIcon("product_name")}</button>
+              <button className="sort-btn" onClick={() => handleSort("qty")}>Quantity {getSortIcon("qty")}</button>
+              <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
+              <button className="sort-btn" onClick={() => handleSort("reason")}>Reason {getSortIcon("reason")}</button>
               <span></span>
             </div>
-            {adjustments.map((adj) => (
+            {sortedAdjustments.map((adj) => (
               <div key={adj.id} className="adj-data-row">
                 <span style={{ fontWeight: 600, color: "var(--primary)" }}>{adj.product?.code || "—"}</span>
                 <span>{adj.product?.name || "—"}</span>
@@ -163,15 +220,24 @@ export default function InventoryAdjustmentsPage() {
                 <div style={{ display: "flex", gap: 4 }}>
                   {canEdit && (
                     <>
-                      <button className="btn-icon" onClick={() => router.push(`/dashboard/inventory/adjustments/${adj.id}`)} title="Edit">
+                      <button
+                        className="btn-icon"
+                        onClick={() => router.push(`/dashboard/inventory/adjustments/new?id=${adj.id}`)}
+                        title="Edit"
+                      >
                         <Pencil size={14} />
                       </button>
-                      <button className="btn-icon" style={{ color: "#EF4444" }} onClick={async () => {
-                        if (confirm("Delete this adjustment?")) {
-                          await supabase.from("stock_moves").delete().eq("id", adj.id)
-                          setAdjustments(prev => prev.filter(a => a.id !== adj.id))
-                        }
-                      }} title="Delete">
+                      <button
+                        className="btn-icon"
+                        style={{ color: "#EF4444" }}
+                        onClick={async () => {
+                          if (confirm("Delete this adjustment?")) {
+                            await supabase.from("stock_moves").delete().eq("id", adj.id)
+                            setAdjustments(prev => prev.filter(a => a.id !== adj.id))
+                          }
+                        }}
+                        title="Delete"
+                      >
                         <Trash2 size={14} />
                       </button>
                     </>
