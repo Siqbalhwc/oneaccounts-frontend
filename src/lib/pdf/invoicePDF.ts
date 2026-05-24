@@ -16,6 +16,7 @@
  *  8. Bullet character changed from ▪ (Unicode, renders as %ª in jsPDF) to "-"
  *  9. Description de-duplicated: product_id row shows only once
  * 10. Header area height tightened to match sample compactness
+ * 11. Table header now rounded navy, same as total row – custom drawn
  */
 
 import jsPDF from "jspdf"
@@ -29,7 +30,7 @@ const DARK            = [17,  24,  39]  as [number,number,number]  // body text
 const MUTED           = [107,114, 128]  as [number,number,number]  // grey labels
 const BORDER          = [229,231, 235]  as [number,number,number]  // table border
 const WHITE           = [255,255, 255]  as [number,number,number]
-const TABLE_HEADER_BG = [30,  58, 138]  as [number,number,number]  // #1E3A8A
+const TABLE_HEADER_BG = [30,  58, 138]  as [number,number,number]  // #1E3A8A – NOT used for headers now
 const ROW_ALT         = [248,249, 252]  as [number,number,number]
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -125,46 +126,37 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   const CW = PW - ML - MR
 
   // ── SECTION 1: HEADER ───────────────────────────────────────────────────────
-  // Tight compact header — white background, navy text only.
-  // Logo circle is navy; "INVOICE" title is navy. No coloured stripe.
-
   const LOGO_SIZE = 18
   const LOGO_X    = ML
   const LOGO_Y    = 6
 
-  // Load logo
   let logoData: string | null = null
   if (data.logoUrl) {
     logoData = await loadImage(data.logoUrl)
   }
 
   if (logoData) {
-    // Navy circle behind logo
     doc.setFillColor(...NAVY)
     doc.circle(LOGO_X + LOGO_SIZE / 2, LOGO_Y + LOGO_SIZE / 2, LOGO_SIZE / 2 + 1, "F")
     doc.addImage(logoData, "PNG", LOGO_X, LOGO_Y, LOGO_SIZE, LOGO_SIZE)
   }
 
-  // Company name — navy bold, vertically centered in logo area
   const textX = logoData ? LOGO_X + LOGO_SIZE + 4 : ML
   doc.setTextColor(...NAVY)
   doc.setFont("helvetica", "bold")
   doc.setFontSize(13)
   doc.text(data.companyName || "Your Company", textX, LOGO_Y + 7)
 
-  // Tagline — muted, small
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8.5)
   doc.setTextColor(...MUTED)
   doc.text(data.companyTagline || "", textX, LOGO_Y + 13)
 
-  // "INVOICE" — right side, navy, large bold  (FIX 6)
   doc.setFont("helvetica", "bold")
   doc.setFontSize(26)
   doc.setTextColor(...NAVY)
   doc.text("INVOICE", PW - MR, LOGO_Y + 9, { align: "right" })
 
-  // Invoice No & Date — right, below INVOICE
   const metaY = LOGO_Y + 15
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8)
@@ -176,10 +168,8 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.text(data.invoiceNo, PW - MR, metaY,     { align: "right" })
   doc.text(data.date,      PW - MR, metaY + 5, { align: "right" })
 
-  // Compact header ends at ~30mm
-  const HEADER_H = LOGO_Y + LOGO_SIZE + 4   // ~28mm total
+  const HEADER_H = LOGO_Y + LOGO_SIZE + 4
 
-  // Grey hairline separator (FIX 2 — no blue line)
   doc.setDrawColor(...BORDER)
   doc.setLineWidth(0.4)
   doc.line(ML, HEADER_H, PW - MR, HEADER_H)
@@ -187,7 +177,6 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   // ── SECTION 2: BILL TO / AMOUNT DUE ────────────────────────────────────────
   let Y = HEADER_H + 7
 
-  // Labels row
   doc.setFont("helvetica", "bold")
   doc.setFontSize(7.5)
   doc.setTextColor(...MUTED)
@@ -196,7 +185,6 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
 
   Y += 5
 
-  // Customer name + Amount Due on the same Y baseline  (FIX 5)
   doc.setFont("helvetica", "bold")
   doc.setFontSize(13)
   doc.setTextColor(...DARK)
@@ -209,7 +197,6 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
 
   Y += 5
 
-  // Phone  (FIX 4 null-safe; FIX 8 use "-" not ▪ to avoid jsPDF encoding bug)
   const phone = (data.customerPhone ?? "").trim()
   if (phone) {
     doc.setFont("helvetica", "normal")
@@ -219,7 +206,6 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     Y += 4.5
   }
 
-  // Address  (FIX 4 + FIX 8)
   const address = (data.customerAddress ?? "").trim()
   if (address) {
     doc.setFont("helvetica", "normal")
@@ -230,7 +216,6 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     Y += addrLines.length * 4.5
   }
 
-  // Email  (FIX 4 + FIX 8)
   const email = (data.customerEmail ?? "").trim()
   if (email) {
     doc.setFont("helvetica", "normal")
@@ -240,14 +225,13 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     Y += 4.5
   }
 
-  // STATUS badge — right side, below Amount Due
   const statusText = (data.status || "Unpaid").toUpperCase()
   const isUnpaid   = ["UNPAID", "OVERDUE"].includes(statusText)
   const isPaid     = statusText === "PAID"
   const badgeColor: [number,number,number] = isPaid
     ? [5, 150, 105] : isUnpaid ? RED : AMBER
 
-  const statusLabelY = HEADER_H + 7 + 5 + 5   // same as name row + 5
+  const statusLabelY = HEADER_H + 7 + 5 + 5
   doc.setFont("helvetica", "bold")
   doc.setFontSize(7.5)
   doc.setTextColor(...MUTED)
@@ -263,25 +247,56 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setTextColor(...WHITE)
   doc.text(statusText, badgeX + badgeW / 2, badgeY + 4, { align: "center" })
 
-  // Divider before table
   const divY = Math.max(Y, badgeY + badgeH) + 5
   doc.setDrawColor(...BORDER)
   doc.setLineWidth(0.3)
   doc.line(ML, divY, PW - MR, divY)
 
-  // ── SECTION 3: ITEMS TABLE ──────────────────────────────────────────────────
+  // ── SECTION 3: CUSTOM ROUNDED TABLE HEADER ─────────────────────────────────
   const tableY = divY + 4
+  const HEADER_ROW_H = 10
+  const HEADER_RADIUS = 4
 
-  const tableColumns = [
-    { header: "",            dataKey: "img"         },
-    { header: "#",           dataKey: "num"         },
-    { header: "Description", dataKey: "description" },
-    { header: "Qty",         dataKey: "qty"         },
-    { header: "Unit Price",  dataKey: "unit_price"  },
-    { header: "Amount",      dataKey: "amount"      },
+  // Draw rounded navy bar for header
+  filledRect(doc, ML, tableY, CW, HEADER_ROW_H, NAVY, HEADER_RADIUS)
+
+  // Column widths (matching autoTable column widths)
+  const colWidths = [14, 8, 0, 16, 32, 34]   // img, num, description(auto), qty, unit_price, amount
+  // We'll write headers manually; description column is flexible
+  const descColX = ML + 14 + 8 + 2   // after img and num
+  const descColW = CW - (14 + 8 + 2) - (16 + 32 + 34 + 4)   // remaining space
+  const headers = [
+    { text: "",         x: ML,                               w: 14, align: "center" },
+    { text: "#",        x: ML + 14,                          w: 8,  align: "center" },
+    { text: "Description", x: descColX,                      w: descColW, align: "left" },
+    { text: "Qty",      x: descColX + descColW,              w: 16, align: "center" },
+    { text: "Unit Price", x: descColX + descColW + 16,       w: 32, align: "right" },
+    { text: "Amount",   x: descColX + descColW + 16 + 32,    w: 34, align: "right" },
   ]
 
-  // Pre-load product images
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(9)
+  doc.setTextColor(...WHITE)
+  for (const h of headers) {
+    if (h.text) {
+      // Adjust y: text vertically centered in the header bar
+      const textY = tableY + HEADER_ROW_H / 2 + doc.getFontSize() * 0.35
+      doc.text(h.text, h.x + h.w / 2, textY, { align: h.align === "center" ? "center" : h.align, maxWidth: h.w })
+    }
+  }
+
+  // ── SECTION 4: ITEMS TABLE (body only, no head) ───────────────────────────
+  const bodyStartY = tableY + HEADER_ROW_H
+
+  const tableColumns = [
+    { header: "",           dataKey: "img"         },
+    { header: "#",          dataKey: "num"         },
+    { header: "Description",dataKey: "description" },
+    { header: "Qty",        dataKey: "qty"         },
+    { header: "Unit Price", dataKey: "unit_price"  },
+    { header: "Amount",     dataKey: "amount"      },
+  ]
+
   const imageCache: Record<number, string> = {}
   await Promise.all(
     data.items.map(async (item, i) => {
@@ -293,14 +308,10 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   )
 
   const tableRows = data.items.map((item, i) => {
-    // FIX 9: Build description without duplicating product name.
-    // If product_id is set, show "PROD-004 - Ball Point" once.
-    // item.description often equals product_name — skip it if identical.
     let desc = ""
     if (item.product_id) {
       const namepart = item.product_name ? ` - ${item.product_name}` : ""
       desc = `${item.product_id}${namepart}`
-      // Only append item.description if it adds new info (not a repeat)
       const extra = (item.description ?? "").trim()
       const isDuplicate =
         extra === "" ||
@@ -323,10 +334,11 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   })
 
   autoTable(doc, {
-    startY:       tableY,
+    startY:       bodyStartY,
     margin:       { left: ML, right: MR },
     columns:      tableColumns,
     body:         tableRows,
+    showHead:     false,            // we already drew the header
     rowPageBreak: "avoid",
     styles: {
       fontSize:      9,
@@ -335,13 +347,6 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
       lineColor:     BORDER,
       lineWidth:     0.2,
       minCellHeight: 14,
-    },
-    headStyles: {
-      fillColor:  TABLE_HEADER_BG,
-      textColor:  WHITE,
-      fontStyle:  "bold",
-      fontSize:   9,
-      halign:     "left",
     },
     alternateRowStyles: { fillColor: ROW_ALT },
     columnStyles: {
@@ -370,7 +375,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     },
   })
 
-  // ── SECTION 4: SUBTOTAL / TAX / TOTAL ──────────────────────────────────────
+  // ── SECTION 5: SUBTOTAL / TAX / TOTAL ──────────────────────────────────────
   const afterTable = (doc as any).lastAutoTable.finalY as number
   let SY = afterTable + 6
 
@@ -392,8 +397,9 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.text(pkr(0), valX, SY, { align: "right" })
   SY += 5.5
 
-  // Total pill — navy rounded rect, same style as sample
-  filledRect(doc, sumX - 2, SY - 4, valX - sumX + 4, 9, NAVY, 2)
+  // Total pill – navy rounded rect, increased radius to match header
+  const TOTAL_RADIUS = 4
+  filledRect(doc, sumX - 2, SY - 4, valX - sumX + 4, 9, NAVY, TOTAL_RADIUS)
   doc.setFont("helvetica", "bold")
   doc.setFontSize(10)
   doc.setTextColor(...WHITE)
@@ -418,7 +424,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     SY += 5
   }
 
-  // ── SECTION 5: NOTES & TERMS  (FIX 7) ──────────────────────────────────────
+  // ── SECTION 6: NOTES & TERMS ───────────────────────────────────────────────
   SY += 6
 
   const termsLines: string[] = []
@@ -445,7 +451,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   const noteLines = doc.splitTextToSize(termsLines.join("\n"), CW)
   doc.text(noteLines, ML, SY)
 
-  // ── SECTION 6: FOOTER ───────────────────────────────────────────────────────
+  // ── SECTION 7: FOOTER ───────────────────────────────────────────────────────
   doc.setDrawColor(...BORDER)
   doc.setLineWidth(0.3)
   doc.line(ML, PH - 16, PW - MR, PH - 16)
@@ -458,53 +464,3 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
 
   return doc
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CALL-SITE EXAMPLE
-// ─────────────────────────────────────────────────────────────────────────────
-//
-// async function printInvoice(invoiceId: string, companyId: string) {
-//   // Always fetch company_settings fresh — never use React state (FIX 3)
-//   const { data: company } = await supabase
-//     .from("company_settings")
-//     .select("name, address, phone, email, tagline, logo_url, business_type")
-//     .eq("company_id", companyId)
-//     .single()
-//
-//   const { data: invoice } = await supabase
-//     .from("invoices")
-//     .select(`*, customer:parties!party_id (name, phone, address, email, payment_terms)`)
-//     .eq("id", invoiceId)
-//     .single()
-//
-//   const pdfData: InvoicePDFData = {
-//     companyName:    company.name    ?? "",
-//     companyAddress: company.address ?? "",
-//     companyPhone:   company.phone   ?? "",
-//     companyEmail:   company.email   ?? "",
-//     companyTagline: company.tagline ?? "",
-//     logoUrl:        company.logo_url ?? null,
-//
-//     invoiceNo: invoice.invoice_number,
-//     date:      invoice.date,
-//     dueDate:   invoice.due_date,
-//
-//     customerName:    invoice.customer?.name    ?? "",
-//     customerPhone:   invoice.customer?.phone   ?? "",   // FIX 4
-//     customerAddress: invoice.customer?.address ?? "",   // FIX 4
-//     customerEmail:   invoice.customer?.email   ?? "",
-//
-//     paymentTerms: invoice.payment_terms ?? invoice.customer?.payment_terms ?? null,  // FIX 7
-//     notes:        invoice.notes ?? null,
-//
-//     status:     invoice.status,
-//     items:      invoice.items,
-//     subtotal:   invoice.subtotal,
-//     total:      invoice.total,
-//     paid:       invoice.amount_paid ?? 0,
-//     balanceDue: invoice.balance_due,
-//   }
-//
-//   const pdf = await generateInvoicePDF(pdfData)
-//   pdf.save(`Invoice-${invoice.invoice_number}.pdf`)
-// }
