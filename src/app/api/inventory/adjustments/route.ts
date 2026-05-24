@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
     const supabase = createClient(supabaseUrl, serviceRoleKey)
 
-    // Get product details
+    // 1. Get product details
     const { data: product } = await supabase
       .from("products")
       .select("id, code, cost_price, qty_on_hand, company_id")
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Insufficient stock" }, { status: 400 })
     }
 
-    // Insert stock movement (no created_by/updated_by)
+    // 2. Insert stock movement
     const { data: moveData, error: moveError } = await supabase
       .from("stock_moves")
       .insert({
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: moveError?.message || "Failed to record movement" }, { status: 500 })
     }
 
-    // Update product quantity
+    // 3. Update product quantity
     const { error: updateError } = await supabase
       .from("products")
       .update({ qty_on_hand: newQty })
@@ -66,30 +66,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: updateError.message }, { status: 500 })
     }
 
-    // Find Inventory and Owner Equity accounts
-    const { data: inventoryAccount } = await supabase
-      .from("accounts")
-      .select("id, code, name")
-      .eq("company_id", companyId)
-      .eq("type", "Asset")
-      .ilike("name", "%inventory%")
-      .single()
-
-    const { data: equityAccount } = await supabase
-      .from("accounts")
-      .select("id, code, name")
-      .eq("company_id", companyId)
-      .eq("type", "Equity")
-      .ilike("name", "%owner%")
-      .single()
+    // 4. Ensure Inventory account (1200) exists
+    let inventoryAccount = await getOrCreateAccount(supabase, companyId, "1200", "Inventory", "Asset")
+    // 5. Ensure Owner Equity account (3000) exists
+    let equityAccount = await getOrCreateAccount(supabase, companyId, "3000", "Owner Equity", "Equity")
 
     if (!inventoryAccount || !equityAccount) {
-      return NextResponse.json({ success: false, error: "Required accounts (Inventory, Owner Equity) not found" }, { status: 500 })
+      return NextResponse.json({ success: false, error: "Could not find or create required accounts" }, { status: 500 })
     }
 
     const amount = Math.abs(qtyNum) * costPrice
 
-    // Create journal entry
+    // 6. Create journal entry
     const { data: journalEntry, error: journalError } = await supabase
       .from("journal_entries")
       .insert({
@@ -105,7 +93,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: journalError?.message || "Failed to create journal entry" }, { status: 500 })
     }
 
-    // Journal lines based on surplus/shortage
+    // 7. Journal lines
     const lines = qtyNum > 0
       ? [
           { company_id: companyId, journal_entry_id: journalEntry.id, account_id: inventoryAccount.id, debit: amount, credit: 0, source_type: "inventory_adjustment", source_id: moveData.id },
@@ -124,20 +112,52 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: linesError.message }, { status: 500 })
     }
 
-    // Update account balances (optional, skip if RPC not available)
+    // 8. Update account balances (optional)
     const inventoryDelta = qtyNum > 0 ? amount : -amount
     const equityDelta = qtyNum > 0 ? -amount : amount
-
-    // If the RPC function exists, use it; otherwise ignore (you can create it separately)
     try {
       await supabase.rpc("increment_account_balance", { acc_id: inventoryAccount.id, delta: inventoryDelta })
       await supabase.rpc("increment_account_balance", { acc_id: equityAccount.id, delta: equityDelta })
     } catch {
-      // RPC may not exist – that's fine, journal lines are enough
+      // RPC may not exist – ignore
     }
 
     return NextResponse.json({ success: true, new_qty_on_hand: newQty, adjustment_id: moveData.id })
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message || "Internal server error" }, { status: 500 })
   }
+}
+
+// Helper: get account by code, or create if missing
+async function getOrCreateAccount(
+  supabase: any,
+  companyId: string,
+  code: string,
+  name: string,
+  type: string
+) {
+  // Try to find existing account by code
+  const { data: existing } = await supabase
+    .from("accounts")
+    .select("id, code, name")
+    .eq("company_id", companyId)
+    .eq("code", code)
+    .maybeSingle()
+
+  if (existing) return existing
+
+  // If not found, create it
+  const { data: newAcc } = await supabase
+    .from("accounts")
+    .insert({
+      company_id: companyId,
+      code,
+      name,
+      type,
+      balance: 0,
+    })
+    .select()
+    .single()
+
+  return newAcc
 }
