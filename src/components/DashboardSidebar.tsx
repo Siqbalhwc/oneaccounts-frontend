@@ -92,19 +92,19 @@ export default function DashboardSidebar({
   const pathname = usePathname()
   const { hasFeature } = usePlan()
   const { role } = useRole()
-  const { theme } = useTheme()   // ← for theme‑adaptive colours
+  const { theme } = useTheme()
 
-  // ── Collapse state ──
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window !== "undefined") return localStorage.getItem("sidebarCollapsed") === "true"
     return false
   })
 
-  // ── Set CSS variable for total sidebar width (incl. margins) so the main area follows smoothly
+  // ── Gap between sidebar and main content = KPI card gap (1rem = 16px) ──
+  const GAP = 16
   useEffect(() => {
     const sidebarWidth = collapsed ? 68 : 240
-    const margin = 12
-    const totalWidth = sidebarWidth + margin * 2   // left + right margin
+    // Total space occupied by sidebar = width + gap on right side (no left margin, sidebar sits at left=GAP)
+    const totalWidth = sidebarWidth + GAP * 2   // left margin + right gap
     document.documentElement.style.setProperty('--sidebar-width-total', `${totalWidth}px`)
     localStorage.setItem("sidebarCollapsed", String(collapsed))
     if (collapsed) {
@@ -112,9 +112,8 @@ export default function DashboardSidebar({
     } else {
       document.documentElement.removeAttribute("data-sidebar-collapsed")
     }
-  }, [collapsed])
+  }, [collapsed, GAP])
 
-  // ── Accordion state ──
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
 
   const getSectionForPath = useCallback((path: string) => {
@@ -139,16 +138,12 @@ export default function DashboardSidebar({
   const toggleSection = (section: string) => {
     setOpenSections(prev => {
       const next = new Set(prev)
-      if (next.has(section)) {
-        next.delete(section)
-      } else {
-        next.add(section)
-      }
+      if (next.has(section)) next.delete(section)
+      else next.add(section)
       return next
     })
   }
 
-  // ── New‑feature dot ──
   const [visitedFeatures, setVisitedFeatures] = useState<Record<string, boolean>>({})
   useEffect(() => {
     const raw = localStorage.getItem("visitedFeatures")
@@ -175,7 +170,7 @@ export default function DashboardSidebar({
     return true
   }
 
-  // ── Theme‑adaptive gradient & text colours ──
+  // ── Theme‑adaptive colours ──
   const gradientMap: Record<string, string> = {
     light: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
     dark: "linear-gradient(180deg, rgba(7,18,40,0.98) 0%, rgba(10,24,48,0.98) 100%)",
@@ -185,8 +180,8 @@ export default function DashboardSidebar({
       : "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
   }
 
-  const textColor = theme === "light" ? "rgba(0,0,0,0.7)" : "rgba(255,255,255,0.7)"
-  const mutedTextColor = theme === "light" ? "rgba(0,0,0,0.45)" : "rgba(255,255,255,0.45)"
+  const textColor = theme === "light" ? "rgba(0,0,0,0.75)" : "rgba(255,255,255,0.85)"
+  const mutedTextColor = theme === "light" ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.5)"
   const borderColor = theme === "light" ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.08)"
 
   return (
@@ -197,15 +192,18 @@ export default function DashboardSidebar({
         width: collapsed ? 68 : 240,
         minWidth: collapsed ? 68 : 240,
         overflowX: "hidden",
-        margin: 12,
+        margin: GAP,
+        marginRight: 0,                 // right gap is handled by main content margin
         borderRadius: 24,
         background: gradientMap[theme] || gradientMap.dark,
-        boxShadow: theme === "light" ? "0 25px 50px -12px rgba(0,0,0,0.15)" : "0 25px 50px -12px rgba(0,0,0,0.5)",
+        boxShadow: theme === "light"
+          ? "0 25px 50px -12px rgba(0,0,0,0.15)"
+          : "0 25px 50px -12px rgba(0,0,0,0.5)",
         border: `1px solid ${borderColor}`,
         position: "fixed",
         top: 0,
         left: 0,
-        bottom: 12,
+        bottom: GAP,
         zIndex: 40,
         display: "flex",
         flexDirection: "column",
@@ -215,7 +213,7 @@ export default function DashboardSidebar({
       animate={{ width: collapsed ? 68 : 240 }}
       transition={{ duration: 0.35, ease: [0.25, 0.8, 0.25, 1] }}
     >
-      {/* ── Header with logo & collapse toggle ── */}
+      {/* ── Header ── */}
       <div style={{
         display: "flex",
         alignItems: "center",
@@ -224,12 +222,22 @@ export default function DashboardSidebar({
         borderBottom: `1px solid ${borderColor}`,
         transition: "padding 0.3s",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, overflow: "hidden", flex: 1, minWidth: 0 }}>
           <img src={logoUrl} alt={companyName} className="dl-sidebar-logo-img" />
           {!collapsed && (
-            <div style={{ whiteSpace: "nowrap" }}>
-              <div className="dl-sidebar-logo-name" style={{ color: textColor, fontSize: 13, fontWeight: 700 }}>{companyName}</div>
-              <div className="dl-sidebar-logo-sub" style={{ color: mutedTextColor, fontSize: 9 }}>{companyTagline}</div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="dl-sidebar-logo-name" style={{ color: textColor, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {companyName}
+              </div>
+              <div className="dl-sidebar-logo-sub" style={{
+                color: mutedTextColor,
+                fontSize: 9,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}>
+                {companyTagline}
+              </div>
             </div>
           )}
         </div>
@@ -258,12 +266,10 @@ export default function DashboardSidebar({
       <nav className="dl-sidebar-nav" style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "8px 8px" }}>
         {navSections.map((sec) => {
           if (sec.feature && !hasFeature(sec.feature)) return null
-
           const isOpen = openSections.has(sec.section)
 
           return (
             <div key={sec.section} style={{ marginBottom: 4 }}>
-              {/* Section header */}
               {!collapsed && (
                 <motion.div
                   className="dl-section-label"
@@ -278,7 +284,6 @@ export default function DashboardSidebar({
                 </motion.div>
               )}
 
-              {/* Animated items container */}
               <AnimatePresence initial={false}>
                 {(collapsed || isOpen) && (
                   <motion.div
@@ -335,14 +340,13 @@ export default function DashboardSidebar({
 
       {/* ── User footer ── */}
       <div
-        className="dl-sidebar-user"
         style={{
-          justifyContent: collapsed ? "center" : "flex-start",
-          padding: collapsed ? "14px 0" : "14px 16px",
           borderTop: `1px solid ${borderColor}`,
           display: "flex",
           alignItems: "center",
           gap: 10,
+          padding: collapsed ? "12px 0" : "14px 16px",
+          justifyContent: collapsed ? "center" : "flex-start",
           flexShrink: 0,
           transition: "padding 0.3s",
         }}
@@ -350,9 +354,9 @@ export default function DashboardSidebar({
         <div className="dl-sidebar-avatar" style={{ background: "rgba(255,255,255,0.1)", color: textColor, width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700 }}>{initial}</div>
         {!collapsed && (
           <div style={{ overflow: "hidden", flex: 1, minWidth: 0 }}>
-            <div className="dl-sidebar-email" style={{ color: textColor, fontSize: 11 }}>{email}</div>
+            <div className="dl-sidebar-email" style={{ color: textColor, fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{email}</div>
             <form action="/auth/signout" method="post">
-              <button type="submit" className="dl-sidebar-signout" style={{ color: mutedTextColor, fontSize: 10, background: "none", border: "none", cursor: "pointer" }}>Sign out</button>
+              <button type="submit" className="dl-sidebar-signout" style={{ color: mutedTextColor, fontSize: 10, background: "none", border: "none", cursor: "pointer", padding: 0 }}>Sign out</button>
             </form>
           </div>
         )}
@@ -362,7 +366,7 @@ export default function DashboardSidebar({
   )
 }
 
-// ── Animated Nav Link component ──
+// ── Animated Nav Link (height increased to 44px) ──
 function NavLink({
   item,
   collapsed,
@@ -386,7 +390,8 @@ function NavLink({
       className="dl-nav-item"
       style={{
         justifyContent: collapsed ? "center" : "flex-start",
-        padding: collapsed ? "10px 0" : "10px 14px",
+        padding: collapsed ? "0" : "0 14px",
+        height: collapsed ? 44 : 44,
         borderRadius: 10,
         position: "relative",
         color: isActive ? textColor : mutedTextColor,
@@ -409,7 +414,6 @@ function NavLink({
       onClick={() => { if (item.feature) markVisited(item.feature) }}
       title={collapsed ? item.label : undefined}
     >
-      {/* Active indicator bar */}
       {isActive && (
         <motion.div
           layoutId="activeSidebar"
