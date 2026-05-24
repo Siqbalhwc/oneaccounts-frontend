@@ -88,10 +88,10 @@
   --bg: #F8FAFC;
   --bg-soft: #F1F5F9;
   --card: #FFFFFF;
-  --card-hover: #F3F6FC;          /* subtle blue tint on hover */
+  --card-hover: #F3F6FC;
   --card-alt: #F8FAFC;
 
-  /* Text – dark for readability */
+  /* Text – dark for main content */
   --text: #0F172A;
   --text-muted: #475569;
   --text-soft: #94A3B8;
@@ -100,7 +100,7 @@
   --border: #D7E0F0;
   --border-strong: #B0C4DE;
 
-  /* Brand – the vivid blue from login */
+  /* Brand – vivid blue */
   --primary: #1740C8;
   --primary-hover: #0F2A8F;
   --primary-text: #FFFFFF;
@@ -110,15 +110,15 @@
   --warning: #F59E0B;
   --danger: #EF4444;
 
-  /* Shell – sidebar uses gradient, topbar solid blue */
+  /* Shell – sidebar and topbar share the same gradient */
   --shell-bg: #F8FAFC;
   --sidebar-bg: linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%);
   --sidebar-border: rgba(255,255,255,0.12);
-  --topbar-bg: #1740C8;
-  --topbar-border: #1740C8;
+  --topbar-bg: linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%);
+  --topbar-border: transparent;
   --main-bg: #FFFFFF;
 
-  /* Shadows – lighter blue */
+  /* Shadows – blue tint */
   --shadow-sm: 0 1px 2px rgba(23,64,200,0.06);
   --shadow: 0 1px 3px rgba(23,64,200,0.08);
   --shadow-lg: 0 4px 12px rgba(23,64,200,0.12);
@@ -138,26 +138,67 @@ body {
   transition: background 0.3s, color 0.3s;
 }
 
-/* ── OneAccounts overrides for dashboard hero and headings ── */
-[data-theme="oneaccounts"] .dl-main-content h1,
-[data-theme="oneaccounts"] .dl-main-content h2,
-[data-theme="oneaccounts"] .dl-main-content h3 {
-  color: #1740C8;
+/* ── OneAccounts overrides for white text & branding ── */
+/* Sidebar – white text */
+[data-theme="oneaccounts"] .dl-sidebar,
+[data-theme="oneaccounts"] .dl-sidebar a,
+[data-theme="oneaccounts"] .dl-sidebar .dl-section-label,
+[data-theme="oneaccounts"] .dl-sidebar .dl-nav-group-label,
+[data-theme="oneaccounts"] .dl-sidebar .dl-nav-item,
+[data-theme="oneaccounts"] .dl-sidebar .dl-nav-item span,
+[data-theme="oneaccounts"] .dl-sidebar .dl-sidebar-logo-name,
+[data-theme="oneaccounts"] .dl-sidebar .dl-sidebar-logo-sub,
+[data-theme="oneaccounts"] .dl-sidebar .dl-sidebar-email,
+[data-theme="oneaccounts"] .dl-sidebar .dl-sidebar-signout {
+  color: rgba(255,255,255,0.85) !important;
 }
 
-[data-theme="oneaccounts"] .mgmt .hero {
-  background: #1740C8 !important;
+[data-theme="oneaccounts"] .dl-sidebar .dl-nav-item:hover {
+  background: rgba(255,255,255,0.1) !important;
+  color: #fff !important;
+}
+
+/* Top bar – white text */
+[data-theme="oneaccounts"] .dl-topbar,
+[data-theme="oneaccounts"] .dl-topbar .dl-topbar-title,
+[data-theme="oneaccounts"] .dl-topbar .dl-topbar-subtitle {
   color: white !important;
+}
+
+/* Dashboard Hero – gradient blue, white text */
+[data-theme="oneaccounts"] .mgmt .hero {
+  background: linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%) !important;
+  color: white !important;
+  border-radius: 16px;
+  border: none;
 }
 
 [data-theme="oneaccounts"] .mgmt .hero .dl-topbar-title,
 [data-theme="oneaccounts"] .mgmt .hero .dl-topbar-subtitle,
 [data-theme="oneaccounts"] .mgmt .hero .filter-label,
 [data-theme="oneaccounts"] .mgmt .hero .filter-pill {
-  color: rgba(255,255,255,0.85) !important;
+  color: rgba(255,255,255,0.9) !important;
 }
 
+[data-theme="oneaccounts"] .mgmt .hero .filter-pill {
+  background: rgba(255,255,255,0.15) !important;
+  border: 1px solid rgba(255,255,255,0.3) !important;
+  color: white !important;
+}
+
+[data-theme="oneaccounts"] .mgmt .hero .filter-pill:focus {
+  border-color: white !important;
+}
+
+/* Dashboard KPI cards – subtle blue border */
 [data-theme="oneaccounts"] .mgmt .kpi-card {
   border-color: #C7D2FE;
   box-shadow: 0 1px 3px rgba(23,64,200,0.08);
+}
+
+/* Page headings – blue text */
+[data-theme="oneaccounts"] .dl-main-content h1,
+[data-theme="oneaccounts"] .dl-main-content h2,
+[data-theme="oneaccounts"] .dl-main-content h3 {
+  color: #1740C8;
 }
