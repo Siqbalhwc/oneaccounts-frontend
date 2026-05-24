@@ -14,10 +14,27 @@ interface JournalEntry {
   lines?: any[]
   total_debit?: number
   total_credit?: number
+  source?: string
 }
 
-type SortField = "entry_no" | "date" | "description" | "total_debit" | "total_credit"
+type SortField = "entry_no" | "date" | "description" | "source" | "total_debit" | "total_credit"
 type SortDir = "asc" | "desc"
+
+// Map a reference prefix to a friendly source name
+function getSourceFromReference(ref?: string | null): string {
+  if (!ref) return "Manual"
+  const parts = ref.split("-")
+  const prefix = parts[0]?.toUpperCase() || ""
+  switch (prefix) {
+    case "INV": return "Sales Invoice"
+    case "BILL": return "Purchase Bill"
+    case "REC": return "Receipt"
+    case "PAY": return "Payment"
+    case "INV-ADJ": return "Inventory Adjustment"
+    case "INV": return "Sales Invoice"
+    default: return ref
+  }
+}
 
 export default function JournalPage() {
   const supabase = createBrowserClient(
@@ -40,7 +57,7 @@ export default function JournalPage() {
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
 
-  // Fetch journal entries (exclude soft-deleted)
+  // Fetch journal entries (exclude soft-deleted) and their lines
   useEffect(() => {
     if (!role) return
     if (!canView) {
@@ -49,25 +66,42 @@ export default function JournalPage() {
     }
     supabase
       .from("journal_entries")
-      .select("id, entry_no, date, description")
+      .select("id, entry_no, date, description, reference")
       .is("deleted_at", null)
       .order("date", { ascending: false })
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (data) {
-          Promise.all(
+          const enriched = await Promise.all(
             data.map(async (je) => {
               const { data: lines } = await supabase
                 .from("journal_lines")
-                .select("debit, credit")
+                .select("debit, credit, source_type, source_id")
                 .eq("entry_id", je.id)
               const total_debit = lines?.reduce((s, l) => s + (l.debit || 0), 0) || 0
               const total_credit = lines?.reduce((s, l) => s + (l.credit || 0), 0) || 0
-              return { ...je, total_debit, total_credit }
+              // Determine source from reference or lines
+              let source = getSourceFromReference(je.reference)
+              // Fallback: if reference doesn't give a clear source, use the first line's source_type
+              if (source === je.reference || !je.reference) {
+                const firstLine = lines?.find(l => l.source_type)
+                if (firstLine) {
+                  switch (firstLine.source_type) {
+                    case "sale_invoice": source = "Sales Invoice"; break
+                    case "purchase_bill": source = "Purchase Bill"; break
+                    case "receipt": source = "Receipt"; break
+                    case "payment": source = "Payment"; break
+                    case "inventory_adjustment": source = "Inventory Adjustment"; break
+                    default: source = firstLine.source_type
+                  }
+                } else {
+                  source = "Manual"
+                }
+              }
+              return { ...je, total_debit, total_credit, source }
             })
-          ).then((enriched) => {
-            setEntries(enriched)
-            setLoading(false)
-          })
+          )
+          setEntries(enriched)
+          setLoading(false)
         } else {
           setEntries([])
           setLoading(false)
@@ -98,7 +132,8 @@ export default function JournalPage() {
     ? entries.filter(
         (e) =>
           e.entry_no.toLowerCase().includes(search.toLowerCase()) ||
-          e.description?.toLowerCase().includes(search.toLowerCase())
+          e.description?.toLowerCase().includes(search.toLowerCase()) ||
+          e.source?.toLowerCase().includes(search.toLowerCase())
       )
     : entries
 
@@ -164,7 +199,8 @@ export default function JournalPage() {
 
         .journal-header {
           display: grid;
-          grid-template-columns: 32px 1fr 1.5fr 120px 120px 50px;
+          grid-template-columns: 32px 100px 100px 1fr 130px 100px 100px 40px;
+          column-gap: 8px;
           padding: 14px 24px;
           background: var(--card);
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
@@ -172,7 +208,8 @@ export default function JournalPage() {
         }
         .journal-row {
           display: grid;
-          grid-template-columns: 32px 1fr 1.5fr 120px 120px 50px;
+          grid-template-columns: 32px 100px 100px 1fr 130px 100px 100px 40px;
+          column-gap: 8px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
@@ -215,11 +252,11 @@ export default function JournalPage() {
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
 
         @media (max-width: 768px) {
-          .journal-header, .journal-row { grid-template-columns: 30px 1fr 1fr 80px 80px 40px; }
+          .journal-header, .journal-row { grid-template-columns: 30px 80px 80px 1fr 100px 80px 80px 40px; column-gap: 4px; }
           .desc-cell { max-width: 140px; }
         }
         @media (max-width: 480px) {
-          .journal-header, .journal-row { grid-template-columns: 24px 1fr 70px 70px 32px; }
+          .journal-header, .journal-row { grid-template-columns: 24px 60px 60px 1fr 80px 60px 60px 32px; column-gap: 2px; }
           .desc-cell { max-width: 100px; }
           .hide-mobile { display: none; }
         }
@@ -260,7 +297,7 @@ export default function JournalPage() {
         <input
           className="input"
           style={{ width: "100%" }}
-          placeholder="Search by entry number or description..."
+          placeholder="Search by entry number, description, or source..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -277,8 +314,10 @@ export default function JournalPage() {
         <div className="card" style={{ padding: 0, overflowX: "auto" }}>
           <div className="journal-header">
             <span></span>
-            <button className="sort-btn" onClick={() => handleSort("entry_no")}>Entry No {getSortIcon("entry_no")}</button>
+            <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
+            <button className="sort-btn" onClick={() => handleSort("entry_no")}>Entry # {getSortIcon("entry_no")}</button>
             <button className="sort-btn" onClick={() => handleSort("description")}>Description {getSortIcon("description")}</button>
+            <button className="sort-btn" onClick={() => handleSort("source")}>Source {getSortIcon("source")}</button>
             <button className="sort-btn" onClick={() => handleSort("total_debit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("total_debit")}</button>
             <button className="sort-btn" onClick={() => handleSort("total_credit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("total_credit")}</button>
             <span></span>
@@ -290,8 +329,10 @@ export default function JournalPage() {
                 <span style={{ color: "var(--text-muted)" }}>
                   {expandedId === je.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </span>
+                <span style={{ fontWeight: 500, color: "var(--text)" }}>{je.date}</span>
                 <span style={{ fontWeight: 600, color: "var(--primary)" }}>{je.entry_no}</span>
                 <span className="desc-cell" title={je.description || ""} style={{ color: "var(--text)" }}>{je.description || "—"}</span>
+                <span style={{ color: "var(--text-muted)" }}>{je.source || "—"}</span>
                 <span style={{ textAlign: "right", fontWeight: 600, color: "#EF4444" }}>
                   {(je.total_debit ?? 0) > 0 ? `PKR ${(je.total_debit ?? 0).toLocaleString()}` : "—"}
                 </span>
