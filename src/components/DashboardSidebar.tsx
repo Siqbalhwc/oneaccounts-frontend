@@ -14,6 +14,7 @@ const navSections = [
     { label: 'Receipts',       icon: '💰', href: '/dashboard/receipts'  },
     { label: 'Suppliers',      icon: '🚚', href: '/dashboard/suppliers' },
     { label: 'Purchase Bills', icon: '📦', href: '/dashboard/bills'     },
+    { label: 'Purchase Orders',icon: '📋', href: '/dashboard/purchase-orders', feature: 'purchase_orders' },
     { label: 'Payments',       icon: '💳', href: '/dashboard/payments'  },
   ]},
   { section: 'BANKING', items: [
