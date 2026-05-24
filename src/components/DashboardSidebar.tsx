@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { usePathname } from "next/navigation"
 import { usePlan } from "@/contexts/PlanContext"
 import { useRole } from "@/contexts/RoleContext"
 import ThemeToggleButton from "@/components/ThemeToggleButton"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react"
 
-// ── Type definitions ──
+// ── Types ──
 interface NavItem {
   label: string
   icon: string
@@ -27,7 +28,7 @@ interface NavSection {
   groups?: NavGroup[]
 }
 
-// ── Navigation data ──
+// ── Data ──
 const navSections: NavSection[] = [
   { section: 'MAIN', items: [
     { label: 'Dashboard', icon: '📊', href: '/dashboard' },
@@ -86,18 +87,16 @@ export default function DashboardSidebar({
   companyName: string
   companyTagline: string
 }) {
+  const pathname = usePathname()
   const { hasFeature } = usePlan()
   const { role } = useRole()
 
-  // ── Collapse state (persisted in localStorage) ──
+  // ── Collapse state ──
   const [collapsed, setCollapsed] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("sidebarCollapsed") === "true"
-    }
+    if (typeof window !== "undefined") return localStorage.getItem("sidebarCollapsed") === "true"
     return false
   })
 
-  // Sync collapse state to a data attribute on <html> so the main area adjusts
   useEffect(() => {
     localStorage.setItem("sidebarCollapsed", String(collapsed))
     if (collapsed) {
@@ -107,14 +106,50 @@ export default function DashboardSidebar({
     }
   }, [collapsed])
 
-  // ── New‑feature dot (visited features stored in localStorage) ──
+  // ── Accordion: which sections are open ──
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set())
+
+  // Determine which section contains the current path
+  const getSectionForPath = useCallback((path: string) => {
+    for (const sec of navSections) {
+      if (sec.items) {
+        if (sec.items.some(item => path.startsWith(item.href))) return sec.section
+      }
+      if (sec.groups) {
+        for (const grp of sec.groups) {
+          if (grp.items.some(item => path.startsWith(item.href))) return sec.section
+        }
+      }
+    }
+    return "MAIN" // default open
+  }, [])
+
+  // Initialize open section based on current route
+  useEffect(() => {
+    const activeSection = getSectionForPath(pathname)
+    setOpenSections(new Set([activeSection]))
+  }, [pathname, getSectionForPath])
+
+  const toggleSection = (section: string) => {
+    setOpenSections(prev => {
+      const next = new Set(prev)
+      if (next.has(section)) {
+        next.delete(section)
+      } else {
+        // Optional: close all others when opening a new one? Uncomment the next line to enable that behavior.
+        // next.clear()
+        next.add(section)
+      }
+      return next
+    })
+  }
+
+  // ── New‑feature dot ──
   const [visitedFeatures, setVisitedFeatures] = useState<Record<string, boolean>>({})
   useEffect(() => {
     const raw = localStorage.getItem("visitedFeatures")
     if (raw) {
-      try {
-        setVisitedFeatures(JSON.parse(raw))
-      } catch {}
+      try { setVisitedFeatures(JSON.parse(raw)) } catch {}
     }
   }, [])
 
@@ -147,7 +182,7 @@ export default function DashboardSidebar({
         overflowX: "hidden",
       }}
     >
-      {/* ── Header with collapse toggle ── */}
+      {/* Header with collapse toggle */}
       <div
         style={{
           display: "flex",
@@ -186,20 +221,66 @@ export default function DashboardSidebar({
         </button>
       </div>
 
-      {/* ── Navigation ── */}
+      {/* Navigation */}
       <nav className="dl-sidebar-nav">
         {navSections.map((sec) => {
           if (sec.feature && !hasFeature(sec.feature)) return null
 
+          const isOpen = openSections.has(sec.section)
+
           return (
             <div key={sec.section}>
-              {!collapsed && <div className="dl-section-label">{sec.section}</div>}
+              {/* Section header (clickable) – only when not collapsed */}
+              {!collapsed && (
+                <div
+                  className="dl-section-label"
+                  style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 4, userSelect: "none" }}
+                  onClick={() => toggleSection(sec.section)}
+                >
+                  <span style={{ flex: 1 }}>{sec.section}</span>
+                  <ChevronDown
+                    size={12}
+                    style={{
+                      transform: isOpen ? "rotate(0deg)" : "rotate(-90deg)",
+                      transition: "transform 0.2s",
+                    }}
+                  />
+                </div>
+              )}
 
-              {/* Grouped items */}
-              {sec.groups && sec.groups.map(group => (
-                <div key={group.groupLabel}>
-                  {!collapsed && <div className="dl-nav-group-label">{group.groupLabel}</div>}
-                  {group.items.map(item => {
+              {/* If collapsed or section open, show items */}
+              {(collapsed || isOpen) && (
+                <>
+                  {sec.groups && sec.groups.map(group => (
+                    <div key={group.groupLabel}>
+                      {!collapsed && <div className="dl-nav-group-label">{group.groupLabel}</div>}
+                      {group.items.map(item => {
+                        if (!isVisible(item)) return null
+                        return (
+                          <a
+                            key={item.href}
+                            href={item.href}
+                            className="dl-nav-item"
+                            style={{ justifyContent: collapsed ? "center" : "flex-start", padding: collapsed ? "10px 0" : "8px 14px", position: "relative" }}
+                            onClick={() => { if (item.feature) markVisited(item.feature) }}
+                            title={collapsed ? item.label : undefined}
+                          >
+                            <span className="dl-nav-icon">{item.icon}</span>
+                            {!collapsed && (
+                              <span style={{ display: "flex", alignItems: "center", gap: 4, opacity: 1, transition: "opacity 0.2s", whiteSpace: "nowrap" }}>
+                                {item.label}
+                                {isNew(item) && (
+                                  <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#F97316", marginLeft: 2 }} />
+                                )}
+                              </span>
+                            )}
+                          </a>
+                        )
+                      })}
+                    </div>
+                  ))}
+
+                  {sec.items && sec.items.map(item => {
                     if (!isVisible(item)) return null
                     return (
                       <a
@@ -208,69 +289,28 @@ export default function DashboardSidebar({
                         className="dl-nav-item"
                         style={{ justifyContent: collapsed ? "center" : "flex-start", padding: collapsed ? "10px 0" : "8px 14px", position: "relative" }}
                         onClick={() => { if (item.feature) markVisited(item.feature) }}
-                        title={collapsed ? item.label : undefined}  // show label on hover when collapsed
+                        title={collapsed ? item.label : undefined}
                       >
                         <span className="dl-nav-icon">{item.icon}</span>
                         {!collapsed && (
                           <span style={{ display: "flex", alignItems: "center", gap: 4, opacity: 1, transition: "opacity 0.2s", whiteSpace: "nowrap" }}>
                             {item.label}
                             {isNew(item) && (
-                              <span
-                                style={{
-                                  width: 8,
-                                  height: 8,
-                                  borderRadius: "50%",
-                                  backgroundColor: "#F97316",
-                                  marginLeft: 2,
-                                }}
-                              />
+                              <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#F97316", marginLeft: 2 }} />
                             )}
                           </span>
                         )}
                       </a>
                     )
                   })}
-                </div>
-              ))}
-
-              {/* Flat items */}
-              {sec.items && sec.items.map(item => {
-                if (!isVisible(item)) return null
-                return (
-                  <a
-                    key={item.href}
-                    href={item.href}
-                    className="dl-nav-item"
-                    style={{ justifyContent: collapsed ? "center" : "flex-start", padding: collapsed ? "10px 0" : "8px 14px", position: "relative" }}
-                    onClick={() => { if (item.feature) markVisited(item.feature) }}
-                    title={collapsed ? item.label : undefined}
-                  >
-                    <span className="dl-nav-icon">{item.icon}</span>
-                    {!collapsed && (
-                      <span style={{ display: "flex", alignItems: "center", gap: 4, opacity: 1, transition: "opacity 0.2s", whiteSpace: "nowrap" }}>
-                        {item.label}
-                        {isNew(item) && (
-                          <span
-                            style={{
-                              width: 8,
-                              height: 8,
-                              borderRadius: "50%",
-                              backgroundColor: "#F97316",
-                              marginLeft: 2,
-                            }}
-                          />
-                        )}
-                      </span>
-                    )}
-                  </a>
-                )
-              })}
+                </>
+              )}
             </div>
           )
         })}
       </nav>
 
-      {/* ── User footer ── */}
+      {/* User footer */}
       <div
         className="dl-sidebar-user"
         style={{
