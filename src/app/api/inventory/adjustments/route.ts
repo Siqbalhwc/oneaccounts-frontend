@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     // 1. Get product details
     const { data: product } = await supabase
       .from("products")
-      .select("id, code, cost_price, qty_on_hand, company_id")
+      .select("id, code, cost_price, qty_on_hand, total_inflow, total_outflow, company_id")
       .eq("id", product_id)
       .single()
 
@@ -34,6 +34,8 @@ export async function POST(request: NextRequest) {
     const costPrice = product.cost_price || 0
     const oldQty = product.qty_on_hand || 0
     const newQty = oldQty + qtyNum
+    const totalInflow = (product.total_inflow || 0) + (qtyNum > 0 ? qtyNum : 0)
+    const totalOutflow = (product.total_outflow || 0) + (qtyNum < 0 ? Math.abs(qtyNum) : 0)
 
     if (newQty < 0) {
       return NextResponse.json({ success: false, error: "Insufficient stock" }, { status: 400 })
@@ -56,10 +58,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: moveError?.message || "Failed to record movement" }, { status: 500 })
     }
 
-    // 3. Update product quantity
+    // 3. Update product quantity AND summary fields
     const { error: updateError } = await supabase
       .from("products")
-      .update({ qty_on_hand: newQty })
+      .update({
+        qty_on_hand: newQty,
+        total_inflow: totalInflow,
+        total_outflow: totalOutflow,
+      })
       .eq("id", product_id)
 
     if (updateError) {
@@ -67,9 +73,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Ensure Inventory account (1200) exists
-    let inventoryAccount = await getOrCreateAccount(supabase, companyId, "1200", "Inventory", "Asset")
+    const inventoryAccount = await getOrCreateAccount(supabase, companyId, "1200", "Inventory", "Asset")
     // 5. Ensure Owner Equity account (3000) exists
-    let equityAccount = await getOrCreateAccount(supabase, companyId, "3000", "Owner Equity", "Equity")
+    const equityAccount = await getOrCreateAccount(supabase, companyId, "3000", "Owner Equity", "Equity")
 
     if (!inventoryAccount || !equityAccount) {
       return NextResponse.json({ success: false, error: "Could not find or create required accounts" }, { status: 500 })
@@ -128,7 +134,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Helper: get account by code, or create if missing
 async function getOrCreateAccount(
   supabase: any,
   companyId: string,
@@ -136,7 +141,6 @@ async function getOrCreateAccount(
   name: string,
   type: string
 ) {
-  // Try to find existing account by code
   const { data: existing } = await supabase
     .from("accounts")
     .select("id, code, name")
@@ -146,7 +150,6 @@ async function getOrCreateAccount(
 
   if (existing) return existing
 
-  // If not found, create it
   const { data: newAcc } = await supabase
     .from("accounts")
     .insert({
