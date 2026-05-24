@@ -23,6 +23,7 @@ export default function NewBillPage() {
 
   const { hasFeature } = usePlan()
   const showProducts = hasFeature("inventory")
+  const showPO = hasFeature("purchase_orders")
 
   const [companyId, setCompanyId] = useState("")
   const [businessType, setBusinessType] = useState("")
@@ -35,6 +36,10 @@ export default function NewBillPage() {
   const [selectedSupplier, setSelectedSupplier] = useState<any>(null)
   const supplierRef = useRef<HTMLDivElement>(null)
   const [refreshingSuppliers, setRefreshingSuppliers] = useState(false)
+
+  // PO related state
+  const [openPOs, setOpenPOs] = useState<any[]>([])
+  const [poId, setPoId] = useState<number | null>(null)
 
   const [products, setProducts] = useState<any[]>([])
   const [productSearch, setProductSearch] = useState("")
@@ -67,7 +72,6 @@ export default function NewBillPage() {
 
       loadSuppliers(cid)
 
-      // Only load products if inventory feature is enabled
       if (showProducts) {
         loadProducts(cid)
       } else {
@@ -114,6 +118,26 @@ export default function NewBillPage() {
       .then(r => r.data && setProducts(r.data))
   }
 
+  // Fetch open POs for the selected supplier
+  useEffect(() => {
+    if (!companyId || !supplierId || !showPO) {
+      setOpenPOs([])
+      setPoId(null)
+      return
+    }
+    supabase
+      .from("purchase_orders")
+      .select("id, po_no, expected_delivery, items:purchase_order_items(id,product_id,description,qty,unit_price,total)")
+      .eq("company_id", companyId)
+      .eq("supplier_id", supplierId)
+      .eq("status", "Approved")
+      .order("po_no")
+      .then(({ data }) => {
+        setOpenPOs(data || [])
+      })
+  }, [companyId, supplierId, showPO])
+
+  // Load existing bill data for editing
   useEffect(() => {
     if (!editId || !companyId) return
     supabase.from("invoices")
@@ -130,6 +154,7 @@ export default function NewBillPage() {
         setDueDate(bill.due_date)
         setReference(bill.reference || "")
         setNotes(bill.notes || "")
+        setPoId(bill.po_id || null)
         supabase.from("invoice_items")
           .select("*")
           .eq("invoice_id", bill.id)
@@ -163,6 +188,7 @@ export default function NewBillPage() {
     setSelectedSupplier(s)
     setSupplierSearch(s.name)
     setShowSupplierList(false)
+    setPoId(null) // reset PO when supplier changes
   }
 
   const clearSupplier = () => {
@@ -170,6 +196,7 @@ export default function NewBillPage() {
     setSelectedSupplier(null)
     setSupplierSearch("")
     setShowSupplierList(true)
+    setPoId(null)
   }
 
   const refreshSuppliers = () => {
@@ -187,6 +214,24 @@ export default function NewBillPage() {
           if (updated) setSelectedSupplier(updated)
         }
       })
+  }
+
+  // Handle PO selection – auto‑fill items
+  const handleSelectPO = (selectedPOId: number) => {
+    setPoId(selectedPOId)
+    const selectedPO = openPOs.find(p => p.id === selectedPOId)
+    if (!selectedPO) return
+    const poItems = (selectedPO.items || []).map((item: any) => ({
+      product_id: item.product_id || null,
+      description: item.description || "",
+      qty: item.qty,
+      unit_price: item.unit_price,
+      total: item.total,
+      location_id: "",
+      activity_id: "",
+      account_id: null,
+    }))
+    setItems(poItems)
   }
 
   const filteredProducts = products.filter(p =>
@@ -320,6 +365,7 @@ export default function NewBillPage() {
           due_date: dueDate,
           items: payloadItems,
           reference, notes,
+          po_id: poId || null,          // ← link to PO
         }),
       })
       const result = await res.json()
@@ -546,6 +592,25 @@ export default function NewBillPage() {
                 )}
               </div>
 
+              {/* PO linking dropdown (only when purchase_orders feature is ON) */}
+              {showPO && selectedSupplier && openPOs.length > 0 && (
+                <div style={{ marginTop: 14 }}>
+                  <label className="inv-label">Link to Purchase Order (optional)</label>
+                  <select
+                    className="inv-select"
+                    value={poId ?? ""}
+                    onChange={(e) => handleSelectPO(Number(e.target.value) || null)}
+                  >
+                    <option value="">— None —</option>
+                    {openPOs.map(po => (
+                      <option key={po.id} value={po.id}>
+                        {po.po_no} {po.expected_delivery ? `· delivery ${po.expected_delivery}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="inv-row" style={{ marginTop: 14 }}>
                 <div><label className="inv-label">Bill Date *</label><input className="inv-input" type="date" value={billDate} onChange={e => setBillDate(e.target.value)} /></div>
                 <div><label className="inv-label">Due Date</label><input className="inv-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} /></div>
@@ -555,7 +620,7 @@ export default function NewBillPage() {
                 <div><label className="inv-label">Notes</label><input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" /></div>
               </div>
 
-              {/* ── Product search (only when inventory feature ON) ── */}
+              {/* Product search */}
               {showProducts ? (
                 <div style={{ marginTop: 14 }}>
                   <label className="inv-label">Add Item</label>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { logDataChange } from "@/lib/audit"
 
 export async function POST(request: NextRequest) {
   try {
@@ -95,6 +96,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Audit log
+    await logDataChange({
+      tableName: "purchase_orders",
+      recordId: String(newPO.id),
+      action: "INSERT",
+      newData: { po_no: poNo, supplier_id, date, status: "Draft" },
+      changedBy: "system",
+    })
+
     return NextResponse.json({ success: true, id: newPO.id, po_no: poNo })
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message || "Internal server error" }, { status: 500 })
@@ -116,7 +126,6 @@ export async function PUT(request: NextRequest) {
     }
 
     const { company_id, supplier_id, date, expected_delivery, notes, items } = JSON.parse(dataStr)
-
     if (!company_id) {
       return NextResponse.json({ success: false, error: "Missing company_id" }, { status: 400 })
     }
@@ -185,6 +194,15 @@ export async function PUT(request: NextRequest) {
         })
       }
     }
+
+    // Audit log
+    await logDataChange({
+      tableName: "purchase_orders",
+      recordId: id,
+      action: "UPDATE",
+      newData: { supplier_id, date, notes },
+      changedBy: "system",
+    })
 
     return NextResponse.json({ success: true })
   } catch (err: any) {
