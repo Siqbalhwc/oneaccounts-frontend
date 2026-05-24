@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { usePathname } from "next/navigation"
+import { motion } from "framer-motion"
 import { usePlan } from "@/contexts/PlanContext"
 import { useRole } from "@/contexts/RoleContext"
 import ThemeToggleButton from "@/components/ThemeToggleButton"
@@ -28,7 +29,7 @@ interface NavSection {
   groups?: NavGroup[]
 }
 
-// ── Data ──
+// ── Navigation data (unchanged) ──
 const navSections: NavSection[] = [
   { section: 'MAIN', items: [
     { label: 'Dashboard', icon: '📊', href: '/dashboard' },
@@ -109,7 +110,6 @@ export default function DashboardSidebar({
   // ── Accordion: which sections are open ──
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
 
-  // Determine which section contains the current path
   const getSectionForPath = useCallback((path: string) => {
     for (const sec of navSections) {
       if (sec.items) {
@@ -121,10 +121,9 @@ export default function DashboardSidebar({
         }
       }
     }
-    return "MAIN" // default open
+    return "MAIN"
   }, [])
 
-  // Initialize open section based on current route
   useEffect(() => {
     const activeSection = getSectionForPath(pathname)
     setOpenSections(new Set([activeSection]))
@@ -136,8 +135,6 @@ export default function DashboardSidebar({
       if (next.has(section)) {
         next.delete(section)
       } else {
-        // Optional: close all others when opening a new one? Uncomment the next line to enable that behavior.
-        // next.clear()
         next.add(section)
       }
       return next
@@ -172,42 +169,56 @@ export default function DashboardSidebar({
   }
 
   return (
-    <aside
+    <motion.aside
       className="dl-sidebar"
       id="dl-sidebar"
       style={{
-        width: collapsed ? 62 : 220,
-        minWidth: collapsed ? 62 : 220,
-        transition: "width 0.28s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
+        width: collapsed ? 68 : 240,
+        minWidth: collapsed ? 68 : 240,
+        transition: "none", // we handle via framer-motion
         overflowX: "hidden",
+        margin: 12,
+        borderRadius: 24,
+        background: "linear-gradient(180deg, rgba(7,18,40,0.95) 0%, rgba(10,24,48,0.95) 100%)",
+        boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)",
+        border: "1px solid rgba(255,255,255,0.08)",
+        position: "fixed",
+        top: 0,
+        left: 0,
+        bottom: 12,
+        zIndex: 40,
+        display: "flex",
+        flexDirection: "column",
+        backdropFilter: "blur(24px)",
+        WebkitBackdropFilter: "blur(24px)",
       }}
+      animate={{ width: collapsed ? 68 : 240 }}
+      transition={{ duration: 0.35, ease: [0.25, 0.8, 0.25, 1] }}
     >
-      {/* Header with collapse toggle */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: collapsed ? "center" : "space-between",
-          padding: collapsed ? "10px 0" : "10px 16px",
-          borderBottom: "1px solid var(--sidebar-border)",
-          transition: "padding 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
-        }}
-      >
+      {/* ── Header with logo & collapse toggle ── */}
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: collapsed ? "center" : "space-between",
+        padding: collapsed ? "14px 0" : "14px 16px",
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
+        transition: "padding 0.3s",
+      }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, overflow: "hidden" }}>
           <img src={logoUrl} alt={companyName} className="dl-sidebar-logo-img" />
           {!collapsed && (
-            <div style={{ whiteSpace: "nowrap", opacity: collapsed ? 0 : 1, transition: "opacity 0.2s" }}>
-              <div className="dl-sidebar-logo-name">{companyName}</div>
-              <div className="dl-sidebar-logo-sub">{companyTagline}</div>
+            <div style={{ whiteSpace: "nowrap" }}>
+              <div className="dl-sidebar-logo-name" style={{ color: "white", fontSize: 13, fontWeight: 700 }}>{companyName}</div>
+              <div className="dl-sidebar-logo-sub" style={{ color: "rgba(255,255,255,0.45)", fontSize: 9 }}>{companyTagline}</div>
             </div>
           )}
         </div>
-        <button
+        <motion.button
           onClick={() => setCollapsed(!collapsed)}
           style={{
             background: "none",
             border: "none",
-            color: "var(--text-muted)",
+            color: "rgba(255,255,255,0.5)",
             cursor: "pointer",
             padding: 4,
             borderRadius: 4,
@@ -215,66 +226,55 @@ export default function DashboardSidebar({
             alignItems: "center",
             flexShrink: 0,
           }}
+          whileHover={{ scale: 1.1, color: "rgba(255,255,255,0.9)" }}
+          whileTap={{ scale: 0.9 }}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-        </button>
+        </motion.button>
       </div>
 
-      {/* Navigation */}
-      <nav className="dl-sidebar-nav">
+      {/* ── Navigation ── */}
+      <nav className="dl-sidebar-nav" style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "8px 8px" }}>
         {navSections.map((sec) => {
           if (sec.feature && !hasFeature(sec.feature)) return null
 
           const isOpen = openSections.has(sec.section)
 
           return (
-            <div key={sec.section}>
-              {/* Section header (clickable) – only when not collapsed */}
+            <div key={sec.section} style={{ marginBottom: 4 }}>
+              {/* Section header */}
               {!collapsed && (
-                <div
+                <motion.div
                   className="dl-section-label"
-                  style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 4, userSelect: "none" }}
+                  style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 4, userSelect: "none", padding: "10px 14px 4px", color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}
                   onClick={() => toggleSection(sec.section)}
+                  whileHover={{ color: "rgba(255,255,255,0.7)" }}
                 >
                   <span style={{ flex: 1 }}>{sec.section}</span>
-                  <ChevronDown
-                    size={12}
-                    style={{
-                      transform: isOpen ? "rotate(0deg)" : "rotate(-90deg)",
-                      transition: "transform 0.2s",
-                    }}
-                  />
-                </div>
+                  <motion.span animate={{ rotate: isOpen ? 0 : -90 }} transition={{ duration: 0.2 }} style={{ display: "inline-flex" }}>
+                    <ChevronDown size={12} />
+                  </motion.span>
+                </motion.div>
               )}
 
-              {/* If collapsed or section open, show items */}
+              {/* Items */}
               {(collapsed || isOpen) && (
                 <>
                   {sec.groups && sec.groups.map(group => (
                     <div key={group.groupLabel}>
-                      {!collapsed && <div className="dl-nav-group-label">{group.groupLabel}</div>}
+                      {!collapsed && <div className="dl-nav-group-label" style={{ padding: "6px 14px 2px", color: "rgba(255,255,255,0.35)", fontSize: 8, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{group.groupLabel}</div>}
                       {group.items.map(item => {
                         if (!isVisible(item)) return null
                         return (
-                          <a
+                          <NavLink
                             key={item.href}
-                            href={item.href}
-                            className="dl-nav-item"
-                            style={{ justifyContent: collapsed ? "center" : "flex-start", padding: collapsed ? "10px 0" : "8px 14px", position: "relative" }}
-                            onClick={() => { if (item.feature) markVisited(item.feature) }}
-                            title={collapsed ? item.label : undefined}
-                          >
-                            <span className="dl-nav-icon">{item.icon}</span>
-                            {!collapsed && (
-                              <span style={{ display: "flex", alignItems: "center", gap: 4, opacity: 1, transition: "opacity 0.2s", whiteSpace: "nowrap" }}>
-                                {item.label}
-                                {isNew(item) && (
-                                  <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#F97316", marginLeft: 2 }} />
-                                )}
-                              </span>
-                            )}
-                          </a>
+                            item={item}
+                            collapsed={collapsed}
+                            isNew={isNew(item)}
+                            markVisited={markVisited}
+                            isActive={pathname.startsWith(item.href)}
+                          />
                         )
                       })}
                     </div>
@@ -283,24 +283,14 @@ export default function DashboardSidebar({
                   {sec.items && sec.items.map(item => {
                     if (!isVisible(item)) return null
                     return (
-                      <a
+                      <NavLink
                         key={item.href}
-                        href={item.href}
-                        className="dl-nav-item"
-                        style={{ justifyContent: collapsed ? "center" : "flex-start", padding: collapsed ? "10px 0" : "8px 14px", position: "relative" }}
-                        onClick={() => { if (item.feature) markVisited(item.feature) }}
-                        title={collapsed ? item.label : undefined}
-                      >
-                        <span className="dl-nav-icon">{item.icon}</span>
-                        {!collapsed && (
-                          <span style={{ display: "flex", alignItems: "center", gap: 4, opacity: 1, transition: "opacity 0.2s", whiteSpace: "nowrap" }}>
-                            {item.label}
-                            {isNew(item) && (
-                              <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#F97316", marginLeft: 2 }} />
-                            )}
-                          </span>
-                        )}
-                      </a>
+                        item={item}
+                        collapsed={collapsed}
+                        isNew={isNew(item)}
+                        markVisited={markVisited}
+                        isActive={pathname.startsWith(item.href)}
+                      />
                     )
                   })}
                 </>
@@ -310,26 +300,107 @@ export default function DashboardSidebar({
         })}
       </nav>
 
-      {/* User footer */}
+      {/* ── User footer ── */}
       <div
         className="dl-sidebar-user"
         style={{
           justifyContent: collapsed ? "center" : "flex-start",
           padding: collapsed ? "14px 0" : "14px 16px",
-          transition: "padding 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
+          borderTop: "1px solid rgba(255,255,255,0.06)",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          flexShrink: 0,
+          transition: "padding 0.3s",
         }}
       >
-        <div className="dl-sidebar-avatar">{initial}</div>
+        <div className="dl-sidebar-avatar" style={{ background: "rgba(255,255,255,0.1)", color: "white", width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700 }}>{initial}</div>
         {!collapsed && (
           <div style={{ overflow: "hidden", flex: 1, minWidth: 0 }}>
-            <div className="dl-sidebar-email">{email}</div>
+            <div className="dl-sidebar-email" style={{ color: "rgba(255,255,255,0.7)", fontSize: 11 }}>{email}</div>
             <form action="/auth/signout" method="post">
-              <button type="submit" className="dl-sidebar-signout">Sign out</button>
+              <button type="submit" className="dl-sidebar-signout" style={{ color: "rgba(255,255,255,0.4)", fontSize: 10, background: "none", border: "none", cursor: "pointer" }}>Sign out</button>
             </form>
           </div>
         )}
         {!collapsed && <ThemeToggleButton />}
       </div>
-    </aside>
+    </motion.aside>
+  )
+}
+
+// ── Animated Nav Link component ──
+function NavLink({
+  item,
+  collapsed,
+  isNew,
+  markVisited,
+  isActive,
+}: {
+  item: NavItem
+  collapsed: boolean
+  isNew: boolean
+  markVisited: (code: string) => void
+  isActive: boolean
+}) {
+  return (
+    <motion.a
+      href={item.href}
+      className="dl-nav-item"
+      style={{
+        justifyContent: collapsed ? "center" : "flex-start",
+        padding: collapsed ? "10px 0" : "10px 14px",
+        borderRadius: 10,
+        position: "relative",
+        color: isActive ? "#fff" : "rgba(255,255,255,0.55)",
+        background: isActive ? "rgba(255,255,255,0.08)" : "transparent",
+        textDecoration: "none",
+        display: "flex",
+        alignItems: "center",
+        gap: 9,
+        marginBottom: 2,
+        overflow: "hidden",
+        fontWeight: isActive ? 600 : 400,
+      }}
+      whileHover={{
+        x: 4,
+        backgroundColor: isActive ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.05)",
+        color: "#fff",
+        transition: { duration: 0.2 },
+      }}
+      whileTap={{ scale: 0.97 }}
+      onClick={() => { if (item.feature) markVisited(item.feature) }}
+      title={collapsed ? item.label : undefined}
+    >
+      {/* Active indicator bar */}
+      {isActive && (
+        <motion.div
+          layoutId="activeSidebar"
+          style={{
+            position: "absolute",
+            left: 0,
+            top: "50%",
+            transform: "translateY(-50%)",
+            width: 3,
+            height: 24,
+            borderRadius: "0 3px 3px 0",
+            background: "#3B82F6",
+            boxShadow: "0 0 8px rgba(59,130,246,0.6)",
+          }}
+          transition={{ duration: 0.3 }}
+        />
+      )}
+
+      <span className="dl-nav-icon" style={{ width: 18, textAlign: "center", flexShrink: 0, fontSize: 14 }}>{item.icon}</span>
+
+      {!collapsed && (
+        <span style={{ display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap", fontSize: 13 }}>
+          {item.label}
+          {isNew && (
+            <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "#F97316", marginLeft: 4 }} />
+          )}
+        </span>
+      )}
+    </motion.a>
   )
 }
