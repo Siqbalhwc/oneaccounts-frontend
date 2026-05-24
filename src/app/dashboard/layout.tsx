@@ -2,7 +2,6 @@
 import { redirect } from 'next/navigation'
 import { getUserCompany } from '@/lib/get-user-company'
 import SidebarClient from './sidebar-client'
-import DashboardTopBar from "@/components/DashboardTopBar"
 import BottomNav from "@/components/BottomNav"
 import DashboardSidebar from "@/components/DashboardSidebar"
 
@@ -109,31 +108,6 @@ const styles = `
 
   .dl-main-content { flex: 1; display: flex; flex-direction: column; }
 
-  /* Topbar */
-  .dl-topbar {
-    background: var(--topbar-bg); border-bottom: 1px solid var(--topbar-border);
-    padding: 0 24px; display: flex; align-items: center;
-    min-height: 60px; gap: 14px;
-    position: sticky; top: 0; z-index: 30;
-  }
-  .dl-topbar-greeting { flex: 1; min-width: 0; }
-  .dl-topbar-title    { font-size: 14px; font-weight: 700; color: var(--text); line-height: 1.2; }
-  .dl-topbar-subtitle { font-size: 11px; color: var(--text-muted); }
-  .dl-topbar-actions  { display: flex; gap: 8px; flex-shrink: 0; }
-
-  .dl-action-btn {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 6px 12px; border-radius: 9px;
-    font-size: 11px; font-weight: 600;
-    text-decoration: none; cursor: pointer; border: 1px solid var(--border);
-    font-family: inherit; transition: all 0.15s; white-space: nowrap; height: 34px;
-    background: var(--card); color: var(--text-muted);
-  }
-  .dl-btn-invoice:hover { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
-  .dl-btn-bill:hover    { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
-  .dl-btn-receipt:hover { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
-  .dl-btn-payment:hover { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
-
   /* Hamburger */
   .dl-hamburger {
     display: none; background: none; border: none;
@@ -199,9 +173,6 @@ const styles = `
     .dl-sidebar.mobile-open .dl-sidebar-user  { justify-content: flex-start; padding: 14px 16px; }
 
     .dl-main        { margin-left: 0; padding-bottom: 64px; }
-    .dl-topbar      { padding: 0 14px; min-height: 54px; }
-    .dl-topbar-actions { display: none; }
-
     .mobile-bottom-nav { display: block; position: fixed; bottom: 0; left: 0; right: 0; z-index: 50; }
   }
 
@@ -324,13 +295,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const email   = tenant.email
   const initial = email.charAt(0).toUpperCase()
 
-  const getGreeting = () => {
-    const h = new Date().getHours()
-    if (h < 12) return 'Good morning'
-    if (h < 17) return 'Good afternoon'
-    return 'Good evening'
-  }
-
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
@@ -350,7 +314,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
         {/* ── Main ── */}
         <div className="dl-main">
-          <DashboardTopBar email={email} greeting={getGreeting()} />
           <div className="dl-main-content">{children}</div>
           <div className="mobile-bottom-nav"><BottomNav /></div>
         </div>
