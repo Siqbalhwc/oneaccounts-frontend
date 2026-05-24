@@ -153,7 +153,8 @@ export default function BankTransfersPage() {
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
         .header-row {
           display: grid;
-          grid-template-columns: 100px 1fr 1fr 100px 120px 130px;
+          grid-template-columns: 100px 220px 220px 100px 120px 130px;
+          column-gap: 8px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
@@ -161,7 +162,8 @@ export default function BankTransfersPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: 100px 1fr 1fr 100px 120px 130px;
+          grid-template-columns: 100px 220px 220px 100px 120px 130px;
+          column-gap: 8px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
@@ -197,7 +199,7 @@ export default function BankTransfersPage() {
           line-height: 1.3; word-wrap: break-word;
         }
         @media (max-width: 768px) {
-          .header-row, .data-row { grid-template-columns: 80px 1fr 1fr 80px 80px 80px; }
+          .header-row, .data-row { grid-template-columns: 80px 150px 150px 80px 80px 80px; column-gap: 4px; }
         }
       `}</style>
 
@@ -255,7 +257,10 @@ export default function BankTransfersPage() {
               <button className="sort-btn" onClick={() => handleSort("to_code")}>To Account {getSortIcon("to_code")}</button>
               <button className="sort-btn" onClick={() => handleSort("amount")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Amount {getSortIcon("amount")}</button>
               <button className="sort-btn" onClick={() => handleSort("reference")}>Reference {getSortIcon("reference")}</button>
-              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Created / Edited By</span>
+              {/* Created / Edited By heading styled like sort-btn */}
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
+                Created / Edited By
+              </span>
             </div>
             {sortedFiltered.map(t => (
               <div key={t.id} className="data-row">
