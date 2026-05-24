@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Download, Printer } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -41,7 +41,7 @@ function PlaceholderRow() {
   )
 }
 
-// ── Account row component (extracted from original) ──
+// ── Account row component ──
 function AccountRow({ account, showAbsolute, getBalance, onClick }: {
   account: any
   showAbsolute: boolean
@@ -225,10 +225,9 @@ function BalanceSheetContent() {
   }
 
   // ── Build synchronized rows for the report ──
-  // We'll create arrays of row elements for the Asset side and L&E side
   const buildRows = () => {
-    const assetRows: JSX.Element[] = []
-    const liabilityRows: JSX.Element[] = []
+    const assetRows: React.ReactElement[] = []
+    const liabilityRows: React.ReactElement[] = []
 
     // ---- Current Assets ----
     assetRows.push(
@@ -236,7 +235,6 @@ function BalanceSheetContent() {
         Current Assets
       </h3>
     )
-    // current asset categories
     for (const cat of CURRENT_ASSET_CATS) {
       const items = grouped[cat] || []
       if (items.length === 0) continue
@@ -405,7 +403,7 @@ function BalanceSheetContent() {
       />
     )
 
-    // Now synchronize row counts by inserting placeholders where needed
+    // Synchronize row counts by inserting placeholders
     const maxRows = Math.max(assetRows.length, liabilityRows.length)
     while (assetRows.length < maxRows) {
       assetRows.push(<PlaceholderRow key={`placeholder-a-${assetRows.length}`} />)
@@ -415,7 +413,7 @@ function BalanceSheetContent() {
     }
 
     // Build pairs
-    const pairs: JSX.Element[] = []
+    const pairs: React.ReactElement[] = []
     for (let i = 0; i < maxRows; i++) {
       pairs.push(
         <div key={`row-${i}`} style={{ display: "contents" }}>
