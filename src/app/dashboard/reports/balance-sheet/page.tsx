@@ -150,51 +150,46 @@ function buildSection(
   return rows
 }
 
-// ── Align two rows arrays so that a specific element (by key) appears at the same index.
-//    Both arrays are modified (by inserting placeholders before the target) and returned.
+// ── Align two row arrays so that a specific CategoryHeader appears at the same index.
+//    Uses a safe (el as any) to access props.
 function alignCategories(
   leftRows: React.ReactElement[],
   rightRows: React.ReactElement[],
   leftKey: string,
   rightKey: string
 ): [React.ReactElement[], React.ReactElement[]] {
-  // Find index of the CategoryHeader with the given cat name
   const leftIdx = leftRows.findIndex(el => {
-    if (el.type === CategoryHeader && el.props.cat === leftKey) return true
-    // Also check if it's a Fragment? We'll only look for direct CategoryHeader.
-    // Since we built them as direct children, this should work.
-    return false
+    const props = (el as any).props
+    return el.type === CategoryHeader && props?.cat === leftKey
   })
   const rightIdx = rightRows.findIndex(el => {
-    if (el.type === CategoryHeader && el.props.cat === rightKey) return true
-    return false
+    const props = (el as any).props
+    return el.type === CategoryHeader && props?.cat === rightKey
   })
 
-  if (leftIdx === -1 || rightIdx === -1) return [leftRows, rightRows] // one missing, do nothing
+  if (leftIdx === -1 || rightIdx === -1) return [leftRows, rightRows]
 
   const targetIdx = Math.max(leftIdx, rightIdx)
 
   const newLeft = [...leftRows]
   const newRight = [...rightRows]
 
-  while (newLeft.length < targetIdx || newLeft[targetIdx]?.type !== CategoryHeader || newLeft[targetIdx]?.props.cat !== leftKey) {
-    // Insert placeholder before target index if needed
+  while (newLeft.length < targetIdx || newLeft[targetIdx]?.type !== CategoryHeader || (newLeft[targetIdx] as any).props?.cat !== leftKey) {
     if (newLeft.length <= targetIdx) {
       newLeft.splice(newLeft.length, 0, <PlaceholderRow key={`al-${newLeft.length}`} />)
-    } else if (newLeft[targetIdx].type !== CategoryHeader || newLeft[targetIdx].props.cat !== leftKey) {
+    } else {
       newLeft.splice(targetIdx, 0, <PlaceholderRow key={`al-${targetIdx}`} />)
-    } else break
+    }
   }
 
-  while (newRight.length < targetIdx || newRight[targetIdx]?.type !== CategoryHeader || newRight[targetIdx]?.props.cat !== rightKey) {
+  while (newRight.length < targetIdx || newRight[targetIdx]?.type !== CategoryHeader || (newRight[targetIdx] as any).props?.cat !== rightKey) {
     if (newRight.length <= targetIdx) {
       newRight.splice(newRight.length, 0, <PlaceholderRow key={`ar-${newRight.length}`} />)
-    } else if (newRight[targetIdx].type !== CategoryHeader || newRight[targetIdx].props.cat !== rightKey) {
+    } else {
       newRight.splice(targetIdx, 0, <PlaceholderRow key={`ar-${targetIdx}`} />)
-    } else break
+    }
   }
 
-  // Now make sure both arrays are at least targetIdx+1 long (they should be)
   return [newLeft, newRight]
 }
 
