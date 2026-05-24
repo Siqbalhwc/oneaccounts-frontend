@@ -138,25 +138,23 @@ body {
   border-color: #C7D2FE; box-shadow: 0 1px 3px rgba(23,64,200,0.08);
 }
 
-/* ── All page headers – gradient background, white text ── */
-/* Targets the first child div of the main content area, which is the page header on all list/detail views */
-[data-theme="oneaccounts"] .dl-main-content > div:first-child {
-  background: linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%);
+/* ── All other page headers (list views, forms, etc.) – gradient background, white text ──
+   Targets direct children of .dl-main-content that use flex with space-between,
+   which is exactly the layout of your page headers (title + button).
+   This excludes the dashboard hero because it is nested deeper inside .mgmt. */
+[data-theme="oneaccounts"] .dl-main-content > div[style*="justify-content: space-between"] {
+  background: linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%) !important;
   border-radius: 12px;
   padding: 20px 24px;
   margin-bottom: 20px;
-  color: white;
 }
-[data-theme="oneaccounts"] .dl-main-content > div:first-child h1,
-[data-theme="oneaccounts"] .dl-main-content > div:first-child p {
-  color: white !important;
-}
-/* Reset heading color inside page header (they were overridden to blue earlier) */
-[data-theme="oneaccounts"] .dl-main-content > div:first-child h1 {
+[data-theme="oneaccounts"] .dl-main-content > div[style*="justify-content: space-between"] h1,
+[data-theme="oneaccounts"] .dl-main-content > div[style*="justify-content: space-between"] p {
   color: white !important;
 }
 
-/* Other headings inside pages (not the header) can remain blue */
+/* Global headings (outside the gradient header) – blue */
+[data-theme="oneaccounts"] .dl-main-content h1,
 [data-theme="oneaccounts"] .dl-main-content h2,
 [data-theme="oneaccounts"] .dl-main-content h3 {
   color: #1740C8;
