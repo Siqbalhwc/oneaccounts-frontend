@@ -14,96 +14,32 @@ const styles = `
   /* Shell */
   .dl-shell { display: flex; min-height: 100vh; background: var(--shell-bg); }
 
-  /* Sidebar */
+  /* Sidebar base – width/position controlled by the component */
   .dl-sidebar {
-    width: 220px; min-width: 220px;
-    background: var(--sidebar-bg);
     display: flex; flex-direction: column;
     position: fixed; top: 0; left: 0; bottom: 0; z-index: 40;
-    border-right: 1px solid var(--sidebar-border);
-    transition: transform 0.28s cubic-bezier(.4,0,.2,1), width 0.25s ease;
     overflow: hidden;
+    transition: none;
   }
 
   /* Logo */
-  .dl-sidebar-logo {
-    display: flex; align-items: center; gap: 10px;
-    padding: 18px 16px; border-bottom: 1px solid var(--sidebar-border);
-    min-height: 64px; flex-shrink: 0;
-  }
   .dl-sidebar-logo-img { width: 34px; height: 34px; border-radius: 9px; object-fit: contain; flex-shrink: 0; }
-  .dl-sidebar-logo-name { color: var(--text); font-size: 13px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
-  .dl-sidebar-logo-sub  { color: var(--text-muted); font-size: 9px; white-space: nowrap; }
 
   /* Nav */
-  .dl-sidebar-nav { flex: 1; padding: 10px 8px; overflow-y: auto; overflow-x: hidden; }
+  .dl-sidebar-nav { flex: 1; overflow-y: auto; overflow-x: hidden; }
   .dl-sidebar-nav::-webkit-scrollbar { width: 4px; }
   .dl-sidebar-nav::-webkit-scrollbar-track { background: transparent; }
-  .dl-sidebar-nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  .dl-sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
 
-  .dl-section-label {
-    padding: 10px 14px 4px;
-    color: var(--text-muted); font-size: 9px; font-weight: 700;
-    text-transform: uppercase; letter-spacing: 0.08em;
-    white-space: nowrap;
-  }
-  .dl-nav-group-label {
-    padding: 6px 14px 2px; color: var(--text-muted);
-    font-size: 8px; font-weight: 700;
-    text-transform: uppercase; letter-spacing: 0.06em;
-    white-space: nowrap;
-  }
-  .dl-nav-item {
-    display: flex; align-items: center; gap: 9px;
-    padding: 8px 14px; border-radius: 8px;
-    color: var(--text-muted); font-size: 13px; font-weight: 500;
-    text-decoration: none; transition: all 0.15s;
-    margin-bottom: 1px; white-space: nowrap;
-    position: relative;
-  }
-  .dl-nav-item:hover { background: var(--card-hover); color: var(--text); }
-  .dl-nav-item.active {
-    background: var(--card-hover);
-    color: var(--text); font-weight: 600;
-  }
-  .dl-nav-item.active::before {
-    content: ''; position: absolute; left: 0; top: 6px; bottom: 6px;
-    width: 3px; border-radius: 0 3px 3px 0;
-    background: var(--primary);
-  }
   .dl-nav-icon { width: 18px; text-align: center; flex-shrink: 0; font-size: 14px; }
 
-  /* User footer */
-  .dl-sidebar-user {
-    padding: 14px 16px; border-top: 1px solid var(--sidebar-border);
-    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
-  }
-  .dl-sidebar-avatar {
-    width: 32px; height: 32px; border-radius: 50%;
-    background: var(--card); color: var(--text);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 13px; font-weight: 700; flex-shrink: 0;
-  }
-  .dl-sidebar-email { color: var(--text-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dl-sidebar-signout {
-    color: var(--text-muted); font-size: 10px; cursor: pointer;
-    background: none; border: none; font-family: inherit; padding: 0; margin-top: 2px;
-    transition: color 0.15s;
-  }
-  .dl-sidebar-signout:hover { color: var(--danger); }
-
-  /* Main area */
+  /* Main area – margin follows the floating sidebar via CSS variable */
   .dl-main {
-    flex: 1; margin-left: 220px;
+    flex: 1; margin-left: var(--sidebar-width-total, 220px);
     display: flex; flex-direction: column;
     min-height: 100vh; min-width: 0;
     overflow-x: hidden; background: var(--main-bg);
-    transition: margin-left 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  /* Collapsible sidebar – main area resizes smoothly */
-  html[data-sidebar-collapsed="true"] .dl-main {
-    margin-left: 62px !important;
+    transition: margin-left 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
   }
 
   .dl-main-content { flex: 1; display: flex; flex-direction: column; }
@@ -134,9 +70,7 @@ const styles = `
   ════════════════════════════════ */
 
   @media (max-width: 960px) {
-    .dl-sidebar {
-      width: 62px; min-width: 62px;
-    }
+    .dl-sidebar { width: 68px !important; min-width: 68px !important; }
     .dl-sidebar-logo-name,
     .dl-sidebar-logo-sub,
     .dl-section-label,
@@ -144,17 +78,17 @@ const styles = `
     .dl-nav-item span:not(.dl-nav-icon),
     .dl-sidebar-email,
     .dl-sidebar-signout { display: none !important; }
-    .dl-sidebar-logo    { justify-content: center; padding: 14px 0; }
-    .dl-nav-item        { justify-content: center; padding: 10px 0; }
-    .dl-sidebar-user    { justify-content: center; padding: 14px 0; }
-    .dl-main            { margin-left: 62px; }
+    .dl-sidebar-logo { justify-content: center; padding: 14px 0; }
+    .dl-nav-item { justify-content: center; padding: 10px 0; }
+    .dl-sidebar-user { justify-content: center; padding: 14px 0; }
+    .dl-main { margin-left: 68px; }
   }
 
   @media (max-width: 640px) {
     .dl-hamburger { display: block; }
 
     .dl-sidebar {
-      width: 240px; min-width: 240px;
+      width: 240px !important; min-width: 240px !important;
       transform: translateX(-100%);
     }
     .dl-sidebar.mobile-open {
@@ -169,10 +103,10 @@ const styles = `
     .dl-sidebar.mobile-open .dl-sidebar-email,
     .dl-sidebar.mobile-open .dl-sidebar-signout { display: block !important; }
     .dl-sidebar.mobile-open .dl-sidebar-logo { justify-content: flex-start; padding: 18px 16px; }
-    .dl-sidebar.mobile-open .dl-nav-item      { justify-content: flex-start; padding: 8px 14px; }
-    .dl-sidebar.mobile-open .dl-sidebar-user  { justify-content: flex-start; padding: 14px 16px; }
+    .dl-sidebar.mobile-open .dl-nav-item { justify-content: flex-start; padding: 8px 14px; }
+    .dl-sidebar.mobile-open .dl-sidebar-user { justify-content: flex-start; padding: 14px 16px; }
 
-    .dl-main        { margin-left: 0; padding-bottom: 64px; }
+    .dl-main { margin-left: 0; padding-bottom: 64px; }
     .mobile-bottom-nav { display: block; position: fixed; bottom: 0; left: 0; right: 0; z-index: 50; }
   }
 
