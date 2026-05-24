@@ -24,9 +24,10 @@ function getCategory(account: any): string {
   return "Other"
 }
 
-function fmt(n: number) { return Math.abs(n).toLocaleString("en-PK") }
+// Round and format – no decimals
+function fmt(n: number) { return Math.round(Math.abs(n)).toLocaleString("en-PK") }
 function sign(n: number) { return n < 0 ? "-" : "" }
-function fmtPos(n: number) { return Math.abs(n).toLocaleString("en-PK") }
+function fmtPos(n: number) { return Math.round(Math.abs(n)).toLocaleString("en-PK") }
 
 const CURRENT_ASSET_CATS = ["Cash & Bank", "Accounts Receivable", "Inventory", "Other Current Assets"]
 const FIXED_ASSET_CATS = ["Fixed Assets", "Vehicles"]
@@ -49,12 +50,13 @@ function AccountRow({ account, showAbsolute, getBalance, onClick }: {
   onClick: (id: number) => void
 }) {
   const bal = getBalance(account)
+  const rounded = Math.round(bal)
   return (
     <div className="acc-row" onClick={() => onClick(account.id)}>
       <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 50 }}>{account.code}</span>
       <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 8 }}>{account.name}</span>
       <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-        {showAbsolute ? `PKR ${fmtPos(bal)}` : `${sign(bal)}PKR ${fmt(bal)}`}
+        {showAbsolute ? `PKR ${fmtPos(rounded)}` : `${sign(rounded)}PKR ${fmt(rounded)}`}
       </span>
     </div>
   )
@@ -67,11 +69,12 @@ function CategoryHeader({ cat, total, showAbsolute, onClick }: {
   showAbsolute: boolean
   onClick: () => void
 }) {
+  const rounded = Math.round(total)
   return (
     <div className="cat-header" onClick={onClick}>
       <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", flex: 1 }}>{cat}</span>
       <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>
-        {showAbsolute ? `PKR ${fmtPos(total)}` : `${sign(total)}PKR ${fmt(total)}`}
+        {showAbsolute ? `PKR ${fmtPos(rounded)}` : `${sign(rounded)}PKR ${fmt(rounded)}`}
       </span>
     </div>
   )
@@ -79,20 +82,22 @@ function CategoryHeader({ cat, total, showAbsolute, onClick }: {
 
 // ── Subtotal band ──
 function SubtotalBand({ label, value, showAbsolute }: { label: string; value: number; showAbsolute: boolean }) {
+  const rounded = Math.round(value)
   return (
     <div className="subtotal-band">
       <span>{label}</span>
-      <span>{showAbsolute ? `PKR ${fmtPos(value)}` : `${sign(value)}PKR ${fmt(value)}`}</span>
+      <span>{showAbsolute ? `PKR ${fmtPos(rounded)}` : `${sign(rounded)}PKR ${fmt(rounded)}`}</span>
     </div>
   )
 }
 
 // ── Total band ──
 function TotalBand({ label, value, showAbsolute }: { label: string; value: number; showAbsolute: boolean }) {
+  const rounded = Math.round(value)
   return (
     <div className="total-band">
       <span>{label}</span>
-      <span>{showAbsolute ? `PKR ${fmtPos(value)}` : `${sign(value)}PKR ${fmt(value)}`}</span>
+      <span>{showAbsolute ? `PKR ${fmtPos(rounded)}` : `${sign(rounded)}PKR ${fmt(rounded)}`}</span>
     </div>
   )
 }
@@ -143,6 +148,54 @@ function buildSection(
   )
 
   return rows
+}
+
+// ── Align two rows arrays so that a specific element (by key) appears at the same index.
+//    Both arrays are modified (by inserting placeholders before the target) and returned.
+function alignCategories(
+  leftRows: React.ReactElement[],
+  rightRows: React.ReactElement[],
+  leftKey: string,
+  rightKey: string
+): [React.ReactElement[], React.ReactElement[]] {
+  // Find index of the CategoryHeader with the given cat name
+  const leftIdx = leftRows.findIndex(el => {
+    if (el.type === CategoryHeader && el.props.cat === leftKey) return true
+    // Also check if it's a Fragment? We'll only look for direct CategoryHeader.
+    // Since we built them as direct children, this should work.
+    return false
+  })
+  const rightIdx = rightRows.findIndex(el => {
+    if (el.type === CategoryHeader && el.props.cat === rightKey) return true
+    return false
+  })
+
+  if (leftIdx === -1 || rightIdx === -1) return [leftRows, rightRows] // one missing, do nothing
+
+  const targetIdx = Math.max(leftIdx, rightIdx)
+
+  const newLeft = [...leftRows]
+  const newRight = [...rightRows]
+
+  while (newLeft.length < targetIdx || newLeft[targetIdx]?.type !== CategoryHeader || newLeft[targetIdx]?.props.cat !== leftKey) {
+    // Insert placeholder before target index if needed
+    if (newLeft.length <= targetIdx) {
+      newLeft.splice(newLeft.length, 0, <PlaceholderRow key={`al-${newLeft.length}`} />)
+    } else if (newLeft[targetIdx].type !== CategoryHeader || newLeft[targetIdx].props.cat !== leftKey) {
+      newLeft.splice(targetIdx, 0, <PlaceholderRow key={`al-${targetIdx}`} />)
+    } else break
+  }
+
+  while (newRight.length < targetIdx || newRight[targetIdx]?.type !== CategoryHeader || newRight[targetIdx]?.props.cat !== rightKey) {
+    if (newRight.length <= targetIdx) {
+      newRight.splice(newRight.length, 0, <PlaceholderRow key={`ar-${newRight.length}`} />)
+    } else if (newRight[targetIdx].type !== CategoryHeader || newRight[targetIdx].props.cat !== rightKey) {
+      newRight.splice(targetIdx, 0, <PlaceholderRow key={`ar-${targetIdx}`} />)
+    } else break
+  }
+
+  // Now make sure both arrays are at least targetIdx+1 long (they should be)
+  return [newLeft, newRight]
 }
 
 function BalanceSheetContent() {
@@ -308,9 +361,17 @@ function BalanceSheetContent() {
     })
   })
 
-  const currentSection = buildSection(
+  // Align "Other Current Assets" with "Other Current Liabilities"
+  const [alignedCA, alignedCL] = alignCategories(
     currentAssetRows,
     currentLiabilityRows,
+    "Other Current Assets",
+    "Other Current Liabilities"
+  )
+
+  const currentSection = buildSection(
+    alignedCA,
+    alignedCL,
     <SubtotalBand label="Total Current Assets" value={totalCurrentAssets} showAbsolute={false} />,
     <SubtotalBand label="Total Current Liabilities" value={totalCurrentLiabilities} showAbsolute={true} />
   )
