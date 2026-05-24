@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: moveError?.message || "Failed to record movement" }, { status: 500 })
     }
 
-    // 3. Update product quantity AND summary fields
+    // 3. Update product quantity and summary fields
     const { error: updateError } = await supabase
       .from("products")
       .update({
@@ -83,14 +83,14 @@ export async function POST(request: NextRequest) {
 
     const amount = Math.abs(qtyNum) * costPrice
 
-    // 6. Create journal entry
+    // 6. Create journal entry (use 'description' instead of 'notes')
     const { data: journalEntry, error: journalError } = await supabase
       .from("journal_entries")
       .insert({
         company_id: companyId,
         date,
         reference: `INV-ADJ-${moveData.id}`,
-        notes: reason,
+        description: reason,                // ← fixed column name
       })
       .select()
       .single()
@@ -118,14 +118,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: linesError.message }, { status: 500 })
     }
 
-    // 8. Update account balances (optional)
+    // 8. Update account balances (optional – skip if RPC missing)
     const inventoryDelta = qtyNum > 0 ? amount : -amount
     const equityDelta = qtyNum > 0 ? -amount : amount
     try {
       await supabase.rpc("increment_account_balance", { acc_id: inventoryAccount.id, delta: inventoryDelta })
       await supabase.rpc("increment_account_balance", { acc_id: equityAccount.id, delta: equityDelta })
     } catch {
-      // RPC may not exist – ignore
+      // RPC may not exist – that's fine
     }
 
     return NextResponse.json({ success: true, new_qty_on_hand: newQty, adjustment_id: moveData.id })
