@@ -3,41 +3,28 @@
 
 /* ── DESIGN TOKENS ── */
 :root {
-  /* ── Backgrounds ── */
   --bg: #F8FAFC;
   --bg-soft: #F1F5F9;
   --card: #FFFFFF;
   --card-hover: #F9FAFB;
   --card-alt: #F8FAFC;
-
-  /* ── Text ── */
   --text: #0F172A;
   --text-muted: #475569;
   --text-soft: #94A3B8;
-
-  /* ── Borders ── */
   --border: #E2E8F0;
   --border-strong: #CBD5E1;
-
-  /* ── Brand ── */
   --primary: #2563EB;
   --primary-hover: #1D4ED8;
   --primary-text: #FFFFFF;
-
-  /* ── Status ── */
   --success: #16A34A;
   --warning: #F59E0B;
   --danger: #EF4444;
-
-  /* ── Shell ── */
   --shell-bg: #F1F5F9;
   --sidebar-bg: #FFFFFF;
   --sidebar-border: #E2E8F0;
   --topbar-bg: #FFFFFF;
   --topbar-border: #E2E8F0;
   --main-bg: #F8FAFC;
-
-  /* ── Effects ── */
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
   --shadow: 0 1px 3px rgba(0,0,0,0.06);
   --shadow-lg: 0 4px 12px rgba(0,0,0,0.08);
@@ -46,91 +33,61 @@
 }
 
 [data-theme="dark"] {
-  /* Backgrounds */
   --bg: #0B1120;
   --bg-soft: #0F172A;
   --card: #111827;
   --card-hover: #1E293B;
-
-  /* Text */
   --text: #E2E8F0;
   --text-muted: #94A3B8;
   --text-soft: #64748B;
-
-  /* Borders */
   --border: #1E293B;
   --border-strong: #334155;
-
-  /* Brand */
   --primary: #3B82F6;
   --primary-hover: #60A5FA;
   --primary-text: #FFFFFF;
-
-  /* Status */
   --success: #34D399;
   --warning: #FBBF24;
   --danger: #F87171;
-
-  /* Shell */
   --shell-bg: #0B1120;
   --sidebar-bg: #0B1120;
   --sidebar-border: #1E293B;
   --topbar-bg: #0F172A;
   --topbar-border: #1E293B;
   --main-bg: #0B1120;
-
   --shadow: 0 1px 3px rgba(0,0,0,0.4);
 }
 
 /* ── OneAccounts Brand Theme ── */
 [data-theme="oneaccounts"] {
-  /* Main area – white */
   --bg: #F8FAFC;
   --bg-soft: #F1F5F9;
   --card: #FFFFFF;
   --card-hover: #F3F6FC;
   --card-alt: #F8FAFC;
-
-  /* Text – dark for main content */
   --text: #0F172A;
   --text-muted: #475569;
   --text-soft: #94A3B8;
-
-  /* Borders – slightly blue */
   --border: #D7E0F0;
   --border-strong: #B0C4DE;
-
-  /* Brand – vivid blue */
   --primary: #1740C8;
   --primary-hover: #0F2A8F;
   --primary-text: #FFFFFF;
-
-  /* Status */
   --success: #16A34A;
   --warning: #F59E0B;
   --danger: #EF4444;
-
-  /* Shell – sidebar and topbar share the same gradient */
   --shell-bg: #F8FAFC;
   --sidebar-bg: linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%);
   --sidebar-border: rgba(255,255,255,0.12);
   --topbar-bg: linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%);
   --topbar-border: transparent;
   --main-bg: #FFFFFF;
-
-  /* Shadows – blue tint */
   --shadow-sm: 0 1px 2px rgba(23,64,200,0.06);
   --shadow: 0 1px 3px rgba(23,64,200,0.08);
   --shadow-lg: 0 4px 12px rgba(23,64,200,0.12);
 }
 
 /* ── GLOBAL RESET ── */
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   font-family: var(--font-family);
   background: var(--bg);
@@ -152,57 +109,54 @@ body {
 [data-theme="oneaccounts"] .dl-sidebar .dl-sidebar-signout {
   color: rgba(255,255,255,0.85) !important;
 }
-
 [data-theme="oneaccounts"] .dl-sidebar .dl-nav-item:hover {
-  background: rgba(255,255,255,0.1) !important;
-  color: #fff !important;
+  background: rgba(255,255,255,0.1) !important; color: #fff !important;
 }
 
 /* Top bar – white text */
 [data-theme="oneaccounts"] .dl-topbar,
 [data-theme="oneaccounts"] .dl-topbar .dl-topbar-title,
-[data-theme="oneaccounts"] .dl-topbar .dl-topbar-subtitle {
-  color: white !important;
-}
+[data-theme="oneaccounts"] .dl-topbar .dl-topbar-subtitle { color: white !important; }
 
 /* Dashboard Hero – gradient blue, white text */
 [data-theme="oneaccounts"] .mgmt .hero {
   background: linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%) !important;
-  color: white !important;
-  border-radius: 16px;
-  border: none;
+  color: white !important; border-radius: 16px; border: none;
 }
-
-/* Hero greeting text (Good afternoon, siqbalhwc) */
 [data-theme="oneaccounts"] .mgmt .hero-greeting h2,
-[data-theme="oneaccounts"] .mgmt .hero-greeting p {
-  color: white !important;
-}
-
-/* Hero filter labels / buttons */
+[data-theme="oneaccounts"] .mgmt .hero-greeting p { color: white !important; }
 [data-theme="oneaccounts"] .mgmt .hero .filter-label,
-[data-theme="oneaccounts"] .mgmt .hero .filter-pill {
-  color: rgba(255,255,255,0.9) !important;
-}
-
+[data-theme="oneaccounts"] .mgmt .hero .filter-pill { color: rgba(255,255,255,0.9) !important; }
 [data-theme="oneaccounts"] .mgmt .hero .filter-pill {
   background: rgba(255,255,255,0.15) !important;
-  border: 1px solid rgba(255,255,255,0.3) !important;
-  color: white !important;
+  border: 1px solid rgba(255,255,255,0.3) !important; color: white !important;
 }
-
-[data-theme="oneaccounts"] .mgmt .hero .filter-pill:focus {
-  border-color: white !important;
-}
+[data-theme="oneaccounts"] .mgmt .hero .filter-pill:focus { border-color: white !important; }
 
 /* Dashboard KPI cards – subtle blue border */
 [data-theme="oneaccounts"] .mgmt .kpi-card {
-  border-color: #C7D2FE;
-  box-shadow: 0 1px 3px rgba(23,64,200,0.08);
+  border-color: #C7D2FE; box-shadow: 0 1px 3px rgba(23,64,200,0.08);
 }
 
-/* Page headings – blue text */
-[data-theme="oneaccounts"] .dl-main-content h1,
+/* ── All page headers – gradient background, white text ── */
+/* Targets the first child div of the main content area, which is the page header on all list/detail views */
+[data-theme="oneaccounts"] .dl-main-content > div:first-child {
+  background: linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%);
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+  color: white;
+}
+[data-theme="oneaccounts"] .dl-main-content > div:first-child h1,
+[data-theme="oneaccounts"] .dl-main-content > div:first-child p {
+  color: white !important;
+}
+/* Reset heading color inside page header (they were overridden to blue earlier) */
+[data-theme="oneaccounts"] .dl-main-content > div:first-child h1 {
+  color: white !important;
+}
+
+/* Other headings inside pages (not the header) can remain blue */
 [data-theme="oneaccounts"] .dl-main-content h2,
 [data-theme="oneaccounts"] .dl-main-content h3 {
   color: #1740C8;
