@@ -1,8 +1,10 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { usePlan } from "@/contexts/PlanContext"
 import { useRole } from "@/contexts/RoleContext"
 import ThemeToggleButton from "@/components/ThemeToggleButton"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 
 const navSections = [
   { section: 'MAIN', items: [
@@ -65,9 +67,43 @@ export default function DashboardSidebar({
   const { hasFeature } = usePlan()
   const { role } = useRole()
 
-  // Show an item if:
-  // - it's not gated by feature, OR the feature is enabled
-  // - AND if it's adminOnly, the user must be admin
+  // ── Collapse state (saved in localStorage) ──
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("sidebarCollapsed") === "true"
+    }
+    return false
+  })
+
+  useEffect(() => {
+    localStorage.setItem("sidebarCollapsed", String(collapsed))
+  }, [collapsed])
+
+  // ── New‑feature dot (visited features stored in localStorage) ──
+  const [visitedFeatures, setVisitedFeatures] = useState<Record<string, boolean>>({})
+  useEffect(() => {
+    const raw = localStorage.getItem("visitedFeatures")
+    if (raw) {
+      try {
+        setVisitedFeatures(JSON.parse(raw))
+      } catch {}
+    }
+  }, [])
+
+  const markVisited = (featureCode: string) => {
+    const updated = { ...visitedFeatures, [featureCode]: true }
+    setVisitedFeatures(updated)
+    localStorage.setItem("visitedFeatures", JSON.stringify(updated))
+  }
+
+  // Check if an item is new (has feature code, feature is enabled, but not visited)
+  const isNew = (item: any) => {
+    if (!item.feature) return false
+    if (!hasFeature(item.feature)) return false
+    return !visitedFeatures[item.feature]
+  }
+
+  // ── Visibility helper ──
   const isVisible = (item: any) => {
     if (item.adminOnly && role !== "admin") return false
     if (item.feature && !hasFeature(item.feature)) return false
@@ -75,34 +111,86 @@ export default function DashboardSidebar({
   }
 
   return (
-    <aside className="dl-sidebar" id="dl-sidebar">
-      <div className="dl-sidebar-logo">
-        <img src={logoUrl} alt={companyName} className="dl-sidebar-logo-img" />
-        <div>
-          <div className="dl-sidebar-logo-name">{companyName}</div>
-          <div className="dl-sidebar-logo-sub">{companyTagline}</div>
-        </div>
+    <aside
+      className="dl-sidebar"
+      id="dl-sidebar"
+      style={{
+        width: collapsed ? 62 : 220,
+        minWidth: collapsed ? 62 : 220,
+        transition: "width 0.25s ease, min-width 0.25s ease",
+        overflowX: "hidden",
+      }}
+    >
+      {/* Collapse toggle (top left) */}
+      <div style={{ display: "flex", justifyContent: "flex-end", padding: "4px 8px" }}>
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          style={{
+            background: "none",
+            border: "none",
+            color: "var(--text-muted)",
+            cursor: "pointer",
+            padding: 4,
+            borderRadius: 4,
+            display: "flex",
+            alignItems: "center",
+          }}
+        >
+          {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+        </button>
       </div>
 
+      {/* Logo */}
+      <div className="dl-sidebar-logo" style={{ justifyContent: collapsed ? "center" : "flex-start" }}>
+        <img src={logoUrl} alt={companyName} className="dl-sidebar-logo-img" />
+        {!collapsed && (
+          <div>
+            <div className="dl-sidebar-logo-name">{companyName}</div>
+            <div className="dl-sidebar-logo-sub">{companyTagline}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Nav */}
       <nav className="dl-sidebar-nav">
         {navSections.map((sec) => {
-          // If the whole section is feature‑gated, check the feature
           if (sec.feature && !hasFeature(sec.feature)) return null
 
           return (
             <div key={sec.section}>
-              <div className="dl-section-label">{sec.section}</div>
+              {!collapsed && <div className="dl-section-label">{sec.section}</div>}
 
-              {/* Grouped items (e.g. ACCOUNTING) */}
+              {/* Grouped items */}
               {sec.groups && sec.groups.map(group => (
                 <div key={group.groupLabel}>
-                  <div className="dl-nav-group-label">{group.groupLabel}</div>
+                  {!collapsed && <div className="dl-nav-group-label">{group.groupLabel}</div>}
                   {group.items.map(item => {
                     if (!isVisible(item)) return null
                     return (
-                      <a key={item.href} href={item.href} className="dl-nav-item">
+                      <a
+                        key={item.href}
+                        href={item.href}
+                        className="dl-nav-item"
+                        style={{ justifyContent: collapsed ? "center" : "flex-start", padding: collapsed ? "10px 0" : "8px 14px" }}
+                        onClick={() => { if (item.feature) markVisited(item.feature) }}
+                      >
                         <span className="dl-nav-icon">{item.icon}</span>
-                        <span>{item.label}</span>
+                        {!collapsed && (
+                          <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            {item.label}
+                            {isNew(item) && (
+                              <span
+                                style={{
+                                  width: 8,
+                                  height: 8,
+                                  borderRadius: "50%",
+                                  backgroundColor: "#F97316",
+                                  marginLeft: 2,
+                                }}
+                              />
+                            )}
+                          </span>
+                        )}
                       </a>
                     )
                   })}
@@ -113,9 +201,30 @@ export default function DashboardSidebar({
               {sec.items && sec.items.map(item => {
                 if (!isVisible(item)) return null
                 return (
-                  <a key={item.href} href={item.href} className="dl-nav-item">
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    className="dl-nav-item"
+                    style={{ justifyContent: collapsed ? "center" : "flex-start", padding: collapsed ? "10px 0" : "8px 14px" }}
+                    onClick={() => { if (item.feature) markVisited(item.feature) }}
+                  >
                     <span className="dl-nav-icon">{item.icon}</span>
-                    <span>{item.label}</span>
+                    {!collapsed && (
+                      <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        {item.label}
+                        {isNew(item) && (
+                          <span
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: "50%",
+                              backgroundColor: "#F97316",
+                              marginLeft: 2,
+                            }}
+                          />
+                        )}
+                      </span>
+                    )}
                   </a>
                 )
               })}
@@ -124,15 +233,18 @@ export default function DashboardSidebar({
         })}
       </nav>
 
-      <div className="dl-sidebar-user">
+      {/* User footer */}
+      <div className="dl-sidebar-user" style={{ justifyContent: collapsed ? "center" : "flex-start", padding: collapsed ? "14px 0" : "14px 16px" }}>
         <div className="dl-sidebar-avatar">{initial}</div>
-        <div style={{ overflow: 'hidden', flex: 1, minWidth: 0 }}>
-          <div className="dl-sidebar-email">{email}</div>
-          <form action="/auth/signout" method="post">
-            <button type="submit" className="dl-sidebar-signout">Sign out</button>
-          </form>
-        </div>
-        <ThemeToggleButton />
+        {!collapsed && (
+          <div style={{ overflow: "hidden", flex: 1, minWidth: 0 }}>
+            <div className="dl-sidebar-email">{email}</div>
+            <form action="/auth/signout" method="post">
+              <button type="submit" className="dl-sidebar-signout">Sign out</button>
+            </form>
+          </div>
+        )}
+        {!collapsed && <ThemeToggleButton />}
       </div>
     </aside>
   )
