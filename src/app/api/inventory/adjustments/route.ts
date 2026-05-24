@@ -83,14 +83,26 @@ export async function POST(request: NextRequest) {
 
     const amount = Math.abs(qtyNum) * costPrice
 
-    // 6. Create journal entry (use 'description' instead of 'notes')
+    // 6. Determine the next entry_no for this company
+    const { data: lastEntry } = await supabase
+      .from("journal_entries")
+      .select("entry_no")
+      .eq("company_id", companyId)
+      .order("entry_no", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const nextEntryNo = (lastEntry?.entry_no ?? 0) + 1
+
+    // 7. Create journal entry
     const { data: journalEntry, error: journalError } = await supabase
       .from("journal_entries")
       .insert({
         company_id: companyId,
+        entry_no: nextEntryNo,
         date,
         reference: `INV-ADJ-${moveData.id}`,
-        description: reason,                // ← fixed column name
+        description: reason,
       })
       .select()
       .single()
@@ -99,7 +111,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: journalError?.message || "Failed to create journal entry" }, { status: 500 })
     }
 
-    // 7. Journal lines
+    // 8. Journal lines
     const lines = qtyNum > 0
       ? [
           { company_id: companyId, journal_entry_id: journalEntry.id, account_id: inventoryAccount.id, debit: amount, credit: 0, source_type: "inventory_adjustment", source_id: moveData.id },
@@ -118,14 +130,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: linesError.message }, { status: 500 })
     }
 
-    // 8. Update account balances (optional – skip if RPC missing)
+    // 9. Update account balances (optional)
     const inventoryDelta = qtyNum > 0 ? amount : -amount
     const equityDelta = qtyNum > 0 ? -amount : amount
     try {
       await supabase.rpc("increment_account_balance", { acc_id: inventoryAccount.id, delta: inventoryDelta })
       await supabase.rpc("increment_account_balance", { acc_id: equityAccount.id, delta: equityDelta })
     } catch {
-      // RPC may not exist – that's fine
+      // RPC may not exist – ignore
     }
 
     return NextResponse.json({ success: true, new_qty_on_hand: newQty, adjustment_id: moveData.id })
