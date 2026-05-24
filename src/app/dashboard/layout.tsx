@@ -14,37 +14,41 @@ const styles = `
   /* Shell */
   .dl-shell { display: flex; min-height: 100vh; background: var(--shell-bg); }
 
-  /* Sidebar base – width/position controlled by the component */
+  /* ── Sidebar base – only structural rules, no visual overrides ── */
   .dl-sidebar {
     display: flex; flex-direction: column;
     position: fixed; top: 0; left: 0; bottom: 0; z-index: 40;
     overflow: hidden;
-    transition: none;
+    /* NO width, NO background, NO border-right here – component owns those */
   }
 
-  /* Logo */
   .dl-sidebar-logo-img { width: 34px; height: 34px; border-radius: 9px; object-fit: contain; flex-shrink: 0; }
-
-  /* Nav */
   .dl-sidebar-nav { flex: 1; overflow-y: auto; overflow-x: hidden; }
   .dl-sidebar-nav::-webkit-scrollbar { width: 4px; }
   .dl-sidebar-nav::-webkit-scrollbar-track { background: transparent; }
   .dl-sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
-
   .dl-nav-icon { width: 18px; text-align: center; flex-shrink: 0; font-size: 14px; }
 
-  /* Main area – margin follows the floating sidebar via CSS variable */
+  /* ── Main area ── */
   .dl-main {
-    flex: 1; margin-left: var(--sidebar-width-total, 220px);
+    flex: 1;
     display: flex; flex-direction: column;
     min-height: 100vh; min-width: 0;
-    overflow-x: hidden; background: var(--main-bg);
+    overflow-x: hidden;
+    background: var(--main-bg);
+    /* Default gap (expanded): 240px sidebar + 16px margin + 16px gap = 272px */
+    margin-left: 272px;
     transition: margin-left 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
+  }
+
+  /* When sidebar is collapsed: 68px + 16px margin + 16px gap = 100px */
+  html[data-sidebar-collapsed="true"] .dl-main {
+    margin-left: 100px !important;
   }
 
   .dl-main-content { flex: 1; display: flex; flex-direction: column; }
 
-  /* Hamburger */
+  /* ── Hamburger ── */
   .dl-hamburger {
     display: none; background: none; border: none;
     cursor: pointer; padding: 6px; flex-shrink: 0; z-index: 100;
@@ -54,15 +58,8 @@ const styles = `
     background: var(--text-muted); margin: 4px 0; border-radius: 2px;
     transition: all 0.25s;
   }
-
-  /* Overlay */
-  .dl-overlay {
-    display: none; position: fixed; inset: 0;
-    background: rgba(0,0,0,0.65); z-index: 35;
-  }
+  .dl-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 35; }
   .dl-overlay.open { display: block; }
-
-  /* Mobile bottom nav */
   .mobile-bottom-nav { display: none; }
 
   /* ════════════════════════════════
@@ -71,6 +68,7 @@ const styles = `
 
   @media (max-width: 960px) {
     .dl-sidebar { width: 68px !important; min-width: 68px !important; }
+    .dl-main { margin-left: 100px; }
     .dl-sidebar-logo-name,
     .dl-sidebar-logo-sub,
     .dl-section-label,
@@ -78,23 +76,16 @@ const styles = `
     .dl-nav-item span:not(.dl-nav-icon),
     .dl-sidebar-email,
     .dl-sidebar-signout { display: none !important; }
-    .dl-sidebar-logo { justify-content: center; padding: 14px 0; }
-    .dl-nav-item { justify-content: center; padding: 10px 0; }
-    .dl-sidebar-user { justify-content: center; padding: 14px 0; }
-    .dl-main { margin-left: 68px; }
+    .dl-nav-item { justify-content: center; padding: 0; height: 44px; }
   }
 
   @media (max-width: 640px) {
     .dl-hamburger { display: block; }
-
     .dl-sidebar {
       width: 240px !important; min-width: 240px !important;
       transform: translateX(-100%);
     }
-    .dl-sidebar.mobile-open {
-      transform: translateX(0);
-      box-shadow: 4px 0 24px rgba(0,0,0,0.5);
-    }
+    .dl-sidebar.mobile-open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.5); }
     .dl-sidebar.mobile-open .dl-sidebar-logo-name,
     .dl-sidebar.mobile-open .dl-sidebar-logo-sub,
     .dl-sidebar.mobile-open .dl-section-label,
@@ -102,10 +93,6 @@ const styles = `
     .dl-sidebar.mobile-open .dl-nav-item span:not(.dl-nav-icon),
     .dl-sidebar.mobile-open .dl-sidebar-email,
     .dl-sidebar.mobile-open .dl-sidebar-signout { display: block !important; }
-    .dl-sidebar.mobile-open .dl-sidebar-logo { justify-content: flex-start; padding: 18px 16px; }
-    .dl-sidebar.mobile-open .dl-nav-item { justify-content: flex-start; padding: 8px 14px; }
-    .dl-sidebar.mobile-open .dl-sidebar-user { justify-content: flex-start; padding: 14px 16px; }
-
     .dl-main { margin-left: 0; padding-bottom: 64px; }
     .mobile-bottom-nav { display: block; position: fixed; bottom: 0; left: 0; right: 0; z-index: 50; }
   }
@@ -234,10 +221,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       <div className="dl-shell">
 
-        {/* SidebarClient: hamburger wiring + active link highlighting */}
         <SidebarClient />
 
-        {/* ── Feature‑aware Sidebar ── */}
         <DashboardSidebar
           email={email}
           initial={initial}
@@ -246,7 +231,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
           companyTagline={tenant.companyTagline}
         />
 
-        {/* ── Main ── */}
         <div className="dl-main">
           <div className="dl-main-content">{children}</div>
           <div className="mobile-bottom-nav"><BottomNav /></div>
