@@ -27,6 +27,7 @@ const ALL_MODULES = [
   "Investors",
   "Settings",
   "Admin Panel",
+  "Can Approve Purchase Orders",
 ]
 
 interface User {
