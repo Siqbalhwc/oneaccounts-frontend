@@ -667,11 +667,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
                 {kpi.label === "📆 Monthly Spending" && monthlySpending > 0 && <Trend value={spendingTrend} positive={spendingTrend < 0} negative={spendingTrend > 0} />}
               </div>
               {kpi.extra && <div style={{ fontSize: "0.65rem", color: "#93C5FD", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200 }}>{kpi.extra}</div>}
-              {kpi.sparkline && monthlySeries.length > 0 && (
-                <div style={{ marginTop: 8, height: 40 }}>
-                  <Sparkline data={monthlySeries} color="#F97316" />
-                </div>
-              )}
+              
             </motion.div>
           ))}
         </div>
