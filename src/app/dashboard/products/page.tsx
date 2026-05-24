@@ -102,7 +102,7 @@ export default function StockRegisterPage() {
   }
 
   const getSortIcon = (col: SortField) => {
-    if (sortField !== col) return <ArrowUpDown size={12} />
+    if (sortField !== col) return <ArrowUpDown size={12} style={{ opacity: 0.5 }} />
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
@@ -115,7 +115,7 @@ export default function StockRegisterPage() {
     setTimeout(() => setFlash(""), 3000)
   }
 
-  // ── Summary: (Opening + Inflow - Outflow) * Cost ──
+  // ── Summary: sum of (closing qty × cost price) ──
   const totalStockValue = products.reduce((sum, p) => {
     const qty = (p.opening_qty || 0) + (p.total_inflow || 0) - (p.total_outflow || 0)
     return sum + (qty * (p.cost_price || 0))
@@ -139,6 +139,7 @@ export default function StockRegisterPage() {
         .header-row {
           display: grid;
           grid-template-columns: 90px 1fr 90px 90px 70px 70px 70px 80px 50px 45px 45px 50px;
+          column-gap: 8px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
@@ -147,6 +148,7 @@ export default function StockRegisterPage() {
         .data-row {
           display: grid;
           grid-template-columns: 90px 1fr 90px 90px 70px 70px 70px 80px 50px 45px 45px 50px;
+          column-gap: 8px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
@@ -161,6 +163,10 @@ export default function StockRegisterPage() {
           text-align: left;
         }
         .sort-btn:hover { color: var(--primary); }
+        .header-span {
+          display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+          font-weight: 700; text-transform: uppercase; font-size: 10px; color: var(--text-muted);
+        }
         .search-input {
           height: 38px; border: 1.5px solid var(--border); border-radius: 8px;
           padding: 0 12px 0 36px; font-size: 13px; width: 260px; box-sizing: border-box;
@@ -189,11 +195,13 @@ export default function StockRegisterPage() {
         @media (max-width: 1100px) {
           .header-row, .data-row {
             grid-template-columns: 70px 1fr 70px 70px 50px 50px 50px 60px 40px 35px 35px 40px;
+            column-gap: 4px;
           }
         }
         @media (max-width: 800px) {
           .header-row, .data-row {
             grid-template-columns: 60px 1fr 60px 60px 0px 0px 0px 0px 0px 30px 30px 30px;
+            column-gap: 2px;
           }
           .header-row > :nth-child(5),
           .header-row > :nth-child(6),
@@ -227,7 +235,7 @@ export default function StockRegisterPage() {
           <div className="summary-value">{totalProducts}</div>
         </div>
         <div className="summary-item">
-          <div className="summary-label">Total Stock Value</div>
+          <div className="summary-label">Closing Stock Value</div>
           <div className="summary-value" style={{ color: "#10B981" }}>
             PKR {totalStockValue.toLocaleString()}
           </div>
@@ -265,11 +273,15 @@ export default function StockRegisterPage() {
             <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
             <button className="sort-btn" onClick={() => handleSort("cost_price")}>Cost {getSortIcon("cost_price")}</button>
             <button className="sort-btn" onClick={() => handleSort("sale_price")}>Sale {getSortIcon("sale_price")}</button>
-            <span style={{ textAlign: "center", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", fontSize: 10 }}>Opening</span>
-            <span style={{ textAlign: "center", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", fontSize: 10 }}>Inflow</span>
-            <span style={{ textAlign: "center", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", fontSize: 10 }}>Outflow</span>
+            {/* Opening – now sortable */}
+            <button className="sort-btn" onClick={() => handleSort("opening_qty")} style={{ justifyContent: "center" }}>Opening {getSortIcon("opening_qty")}</button>
+            {/* Inflow – now sortable */}
+            <button className="sort-btn" onClick={() => handleSort("total_inflow")} style={{ justifyContent: "center" }}>Inflow {getSortIcon("total_inflow")}</button>
+            {/* Outflow – now sortable */}
+            <button className="sort-btn" onClick={() => handleSort("total_outflow")} style={{ justifyContent: "center" }}>Outflow {getSortIcon("total_outflow")}</button>
             <button className="sort-btn" onClick={() => handleSort("qty_on_hand")} style={{ justifyContent: "center" }}>Closing {getSortIcon("qty_on_hand")}</button>
-            <span style={{ textAlign: "center", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", fontSize: 10 }}>Img</span>
+            {/* Img – non‑sortable, styled like other headers */}
+            <span className="header-span">Img</span>
             <span></span>
             <span></span>
             <span></span>
