@@ -71,7 +71,7 @@ export default function DashboardSidebar({
     return false
   })
 
-  const GAP = 16   // same as KPI card gap
+  const GAP = 6   // same as KPI card gap
 
   useEffect(() => {
     localStorage.setItem("sidebarCollapsed", String(collapsed))
@@ -119,7 +119,7 @@ export default function DashboardSidebar({
   // ── Theme‑adaptive colours ──
   const gradientMap: Record<string, string> = {
     light:       "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
-    dark:        "linear-gradient(180deg, rgba(7,18,40,0.98) 0%, rgba(10,24,48,0.98) 100%)",
+    dark:        "linear-gradient(180deg, rgba(15,15,20,0.98) 0%, rgba(10,10,15,0.98) 100%)",
     oneaccounts: "linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%)",
     system:      typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches
                    ? "linear-gradient(180deg, rgba(7,18,40,0.98) 0%, rgba(10,24,48,0.98) 100%)"

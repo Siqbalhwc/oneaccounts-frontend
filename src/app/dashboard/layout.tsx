@@ -37,13 +37,13 @@ const styles = `
     overflow-x: hidden;
     background: var(--main-bg);
     /* Default gap (expanded): 240px sidebar + 16px margin + 16px gap = 272px */
-    margin-left: 272px;
+    margin-left: 256px;
     transition: margin-left 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
   }
 
   /* When sidebar is collapsed: 68px + 16px margin + 16px gap = 100px */
   html[data-sidebar-collapsed="true"] .dl-main {
-    margin-left: 100px !important;
+    margin-left: 84px !important;
   }
 
   .dl-main-content { flex: 1; display: flex; flex-direction: column; }
@@ -68,7 +68,7 @@ const styles = `
 
   @media (max-width: 960px) {
     .dl-sidebar { width: 68px !important; min-width: 68px !important; }
-    .dl-main { margin-left: 100px; }
+    .dl-main { margin-left: 84px; }
     .dl-sidebar-logo-name,
     .dl-sidebar-logo-sub,
     .dl-section-label,
