@@ -4,7 +4,7 @@ import { getUserCompany } from '@/lib/get-user-company'
 import SidebarClient from './sidebar-client'
 import DashboardTopBar from "@/components/DashboardTopBar"
 import BottomNav from "@/components/BottomNav"
-import DashboardSidebar from "@/components/DashboardSidebar"  // ← new feature‑aware sidebar
+import DashboardSidebar from "@/components/DashboardSidebar"
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -99,8 +99,14 @@ const styles = `
     display: flex; flex-direction: column;
     min-height: 100vh; min-width: 0;
     overflow-x: hidden; background: var(--main-bg);
-    transition: margin-left 0.25s ease, background 0.3s;
+    transition: margin-left 0.28s cubic-bezier(0.4, 0, 0.2, 1);
   }
+
+  /* Collapsible sidebar – main area resizes smoothly */
+  html[data-sidebar-collapsed="true"] .dl-main {
+    margin-left: 62px !important;
+  }
+
   .dl-main-content { flex: 1; display: flex; flex-direction: column; }
 
   /* Topbar */

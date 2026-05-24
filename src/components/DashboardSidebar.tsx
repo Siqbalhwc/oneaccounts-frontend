@@ -6,7 +6,7 @@ import { useRole } from "@/contexts/RoleContext"
 import ThemeToggleButton from "@/components/ThemeToggleButton"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 
-// Define a type that allows optional feature
+// ── Type definitions ──
 interface NavItem {
   label: string
   icon: string
@@ -27,6 +27,7 @@ interface NavSection {
   groups?: NavGroup[]
 }
 
+// ── Navigation data ──
 const navSections: NavSection[] = [
   { section: 'MAIN', items: [
     { label: 'Dashboard', icon: '📊', href: '/dashboard' },
@@ -88,7 +89,7 @@ export default function DashboardSidebar({
   const { hasFeature } = usePlan()
   const { role } = useRole()
 
-  // ── Collapse state (saved in localStorage) ──
+  // ── Collapse state (persisted in localStorage) ──
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("sidebarCollapsed") === "true"
@@ -96,8 +97,14 @@ export default function DashboardSidebar({
     return false
   })
 
+  // Sync collapse state to a data attribute on <html> so the main area adjusts
   useEffect(() => {
     localStorage.setItem("sidebarCollapsed", String(collapsed))
+    if (collapsed) {
+      document.documentElement.setAttribute("data-sidebar-collapsed", "true")
+    } else {
+      document.documentElement.removeAttribute("data-sidebar-collapsed")
+    }
   }, [collapsed])
 
   // ── New‑feature dot (visited features stored in localStorage) ──
@@ -117,14 +124,12 @@ export default function DashboardSidebar({
     localStorage.setItem("visitedFeatures", JSON.stringify(updated))
   }
 
-  // Check if an item is new (has feature code, feature is enabled, but not visited)
   const isNew = (item: NavItem) => {
     if (!item.feature) return false
     if (!hasFeature(item.feature)) return false
     return !visitedFeatures[item.feature]
   }
 
-  // ── Visibility helper ──
   const isVisible = (item: NavItem) => {
     if (item.adminOnly && role !== "admin") return false
     if (item.feature && !hasFeature(item.feature)) return false
@@ -138,12 +143,30 @@ export default function DashboardSidebar({
       style={{
         width: collapsed ? 62 : 220,
         minWidth: collapsed ? 62 : 220,
-        transition: "width 0.25s ease, min-width 0.25s ease",
+        transition: "width 0.28s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
         overflowX: "hidden",
       }}
     >
-      {/* Collapse toggle (top left) */}
-      <div style={{ display: "flex", justifyContent: "flex-end", padding: "4px 8px" }}>
+      {/* ── Header with collapse toggle ── */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: collapsed ? "center" : "space-between",
+          padding: collapsed ? "10px 0" : "10px 16px",
+          borderBottom: "1px solid var(--sidebar-border)",
+          transition: "padding 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10, overflow: "hidden" }}>
+          <img src={logoUrl} alt={companyName} className="dl-sidebar-logo-img" />
+          {!collapsed && (
+            <div style={{ whiteSpace: "nowrap", opacity: collapsed ? 0 : 1, transition: "opacity 0.2s" }}>
+              <div className="dl-sidebar-logo-name">{companyName}</div>
+              <div className="dl-sidebar-logo-sub">{companyTagline}</div>
+            </div>
+          )}
+        </div>
         <button
           onClick={() => setCollapsed(!collapsed)}
           style={{
@@ -155,24 +178,15 @@ export default function DashboardSidebar({
             borderRadius: 4,
             display: "flex",
             alignItems: "center",
+            flexShrink: 0,
           }}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
         </button>
       </div>
 
-      {/* Logo */}
-      <div className="dl-sidebar-logo" style={{ justifyContent: collapsed ? "center" : "flex-start" }}>
-        <img src={logoUrl} alt={companyName} className="dl-sidebar-logo-img" />
-        {!collapsed && (
-          <div>
-            <div className="dl-sidebar-logo-name">{companyName}</div>
-            <div className="dl-sidebar-logo-sub">{companyTagline}</div>
-          </div>
-        )}
-      </div>
-
-      {/* Nav */}
+      {/* ── Navigation ── */}
       <nav className="dl-sidebar-nav">
         {navSections.map((sec) => {
           if (sec.feature && !hasFeature(sec.feature)) return null
@@ -192,12 +206,13 @@ export default function DashboardSidebar({
                         key={item.href}
                         href={item.href}
                         className="dl-nav-item"
-                        style={{ justifyContent: collapsed ? "center" : "flex-start", padding: collapsed ? "10px 0" : "8px 14px" }}
+                        style={{ justifyContent: collapsed ? "center" : "flex-start", padding: collapsed ? "10px 0" : "8px 14px", position: "relative" }}
                         onClick={() => { if (item.feature) markVisited(item.feature) }}
+                        title={collapsed ? item.label : undefined}  // show label on hover when collapsed
                       >
                         <span className="dl-nav-icon">{item.icon}</span>
                         {!collapsed && (
-                          <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <span style={{ display: "flex", alignItems: "center", gap: 4, opacity: 1, transition: "opacity 0.2s", whiteSpace: "nowrap" }}>
                             {item.label}
                             {isNew(item) && (
                               <span
@@ -226,12 +241,13 @@ export default function DashboardSidebar({
                     key={item.href}
                     href={item.href}
                     className="dl-nav-item"
-                    style={{ justifyContent: collapsed ? "center" : "flex-start", padding: collapsed ? "10px 0" : "8px 14px" }}
+                    style={{ justifyContent: collapsed ? "center" : "flex-start", padding: collapsed ? "10px 0" : "8px 14px", position: "relative" }}
                     onClick={() => { if (item.feature) markVisited(item.feature) }}
+                    title={collapsed ? item.label : undefined}
                   >
                     <span className="dl-nav-icon">{item.icon}</span>
                     {!collapsed && (
-                      <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: 4, opacity: 1, transition: "opacity 0.2s", whiteSpace: "nowrap" }}>
                         {item.label}
                         {isNew(item) && (
                           <span
@@ -254,8 +270,15 @@ export default function DashboardSidebar({
         })}
       </nav>
 
-      {/* User footer */}
-      <div className="dl-sidebar-user" style={{ justifyContent: collapsed ? "center" : "flex-start", padding: collapsed ? "14px 0" : "14px 16px" }}>
+      {/* ── User footer ── */}
+      <div
+        className="dl-sidebar-user"
+        style={{
+          justifyContent: collapsed ? "center" : "flex-start",
+          padding: collapsed ? "14px 0" : "14px 16px",
+          transition: "padding 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
+        }}
+      >
         <div className="dl-sidebar-avatar">{initial}</div>
         {!collapsed && (
           <div style={{ overflow: "hidden", flex: 1, minWidth: 0 }}>
