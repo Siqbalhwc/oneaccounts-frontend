@@ -64,8 +64,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [lastUpdated, setLastUpdated] = useState("")
 
   const [overdueInvoicesCount, setOverdueInvoicesCount] = useState(0)
-
-  // Sparkline data for the "Monthly Spending" KPI
   const [monthlySeries, setMonthlySeries] = useState<number[]>([])
 
   useEffect(() => {
@@ -208,7 +206,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
             setSpendingTrend(0)
           }
 
-          // ── Monthly spending for the last 6 months (sparkline) ──
+          // Monthly spending for the last 6 months (sparkline)
           const sixMonthsAgo = new Date(Date.UTC(currentYear, currentMonth - 6, 1))
           const { data: historicLines } = await supabase
             .from("journal_lines")
@@ -220,7 +218,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
           const byMonth: Record<string, number> = {}
           historicLines?.forEach((l: any) => {
-            const dt = l.journal_entries?.date?.substring(0, 7)   // YYYY-MM
+            const dt = l.journal_entries?.date?.substring(0, 7)
             if (dt) {
               byMonth[dt] = (byMonth[dt] || 0) + (l.debit || 0) - (l.credit || 0)
             }
@@ -522,7 +520,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         }
 
         .kpi-label { text-transform: uppercase; font-size: 0.7rem; font-weight: 700; color: var(--text-muted); letter-spacing: 0.04em; }
-        .kpi-value { font-size: 1.9rem; font-weight: 800; color: var(--text); line-height: 1.1; }
+        .kpi-value { font-size: 1.7rem; font-weight: 700; color: var(--text); line-height: 1.2; }
         .kpi-meta { font-size: 0.8rem; color: var(--text-soft); display: flex; align-items: center; gap: 0.3rem; }
 
         .underspend-row {
@@ -658,7 +656,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
               <div className="kpi-label">{kpi.label}</div>
               <div className="kpi-value" style={{ color: kpi.color }}>
                 {kpi.raw != null ? (
-                  <CountUp end={kpi.raw} duration={2} separator="," prefix="PKR " />
+                  <CountUp end={kpi.raw} duration={2} formatter={(value) => formatPKR(value)} />
                 ) : (
                   kpi.value
                 )}
