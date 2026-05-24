@@ -20,10 +20,10 @@ export async function getUserCompany() {
 
   if (membershipError || !membership) return null
 
-  // 2. Fetch company details from company_settings (NOT companies table)
+  // 2. Fetch company details from company_settings (use business_name, not company_name)
   const { data: settings } = await supabase
     .from('company_settings')
-    .select('company_name, logo_url, tagline')
+    .select('business_name, logo_url, tagline')
     .eq('company_id', membership.company_id)
     .maybeSingle()
 
@@ -32,7 +32,7 @@ export async function getUserCompany() {
     email: user.email!,
     companyId: membership.company_id,
     role: membership.role,
-    companyName: settings?.company_name || 'OneAccounts',
+    companyName: settings?.business_name || 'OneAccounts',
     companyLogo: settings?.logo_url || '/logo.png',
     companyTagline: settings?.tagline || 'by Siqbal',
   }

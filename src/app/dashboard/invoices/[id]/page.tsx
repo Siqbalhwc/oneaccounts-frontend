@@ -178,16 +178,16 @@ export default function InvoiceDetailPage() {
         }
       })
 
-    // 5. Company settings – now filters by company_id
+    // 5. Company settings – now uses business_name
     supabase
       .from("company_settings")
-      .select("company_name, address, phone, email, tagline, logo_url, business_type")
+      .select("business_name, address, phone, email, tagline, logo_url, business_type")
       .eq("company_id", companyId)
       .maybeSingle()
       .then(({ data }) => {
         if (data) {
           setCompanySettings({
-            name: data.company_name || "",
+            name: data.business_name || "",         // ← fixed column
             address: data.address || "",
             phone: data.phone || "",
             email: data.email || "",
