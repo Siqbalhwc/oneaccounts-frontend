@@ -32,7 +32,7 @@ const CURRENT_ASSET_CATS = ["Cash & Bank", "Accounts Receivable", "Inventory", "
 const FIXED_ASSET_CATS = ["Fixed Assets", "Vehicles"]
 const LIABILITY_CATS = ["Accounts Payable", "Other Current Liabilities"]
 
-// ── Helper to create a blank placeholder row ──
+// ── Placeholder row (invisible, takes same height) ──
 function PlaceholderRow() {
   return (
     <div style={{ height: 40, opacity: 0, pointerEvents: "none" }}>
@@ -50,10 +50,7 @@ function AccountRow({ account, showAbsolute, getBalance, onClick }: {
 }) {
   const bal = getBalance(account)
   return (
-    <div
-      className="acc-row"
-      onClick={() => onClick(account.id)}
-    >
+    <div className="acc-row" onClick={() => onClick(account.id)}>
       <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 50 }}>{account.code}</span>
       <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 8 }}>{account.name}</span>
       <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
@@ -100,6 +97,34 @@ function TotalBand({ label, value, showAbsolute }: { label: string; value: numbe
   )
 }
 
+// ── Section synchronizer ──
+function syncSection(
+  leftRows: React.ReactElement[],
+  rightRows: React.ReactElement[]
+) {
+  const max = Math.max(leftRows.length, rightRows.length)
+  const left = [...leftRows]
+  const right = [...rightRows]
+
+  while (left.length < max) {
+    left.push(<PlaceholderRow key={`l-${left.length}`} />)
+  }
+  while (right.length < max) {
+    right.push(<PlaceholderRow key={`r-${right.length}`} />)
+  }
+
+  return left.map((_, i) => (
+    <React.Fragment key={i}>
+      <div style={{ borderRight: "1px solid var(--border)", padding: "0 24px" }}>
+        {left[i]}
+      </div>
+      <div style={{ padding: "0 24px" }}>
+        {right[i]}
+      </div>
+    </React.Fragment>
+  ))
+}
+
 function BalanceSheetContent() {
   const router = useRouter()
   const supabase = createBrowserClient(
@@ -117,7 +142,6 @@ function BalanceSheetContent() {
       if (!accts) { setLoading(false); return }
 
       const { data: lines } = await supabase.from("journal_lines").select("account_id, debit, credit")
-
       const balances: Record<number, number> = {}
       if (lines) {
         lines.forEach((l: any) => {
@@ -131,7 +155,6 @@ function BalanceSheetContent() {
     fetchData()
   }, [])
 
-  // use computed balance if available, else stored balance
   const getBalance = (account: any) =>
     computedBalances[account.id] !== undefined ? computedBalances[account.id] : (account.balance || 0)
 
@@ -149,15 +172,12 @@ function BalanceSheetContent() {
   const totalAssets = totalCurrentAssets + totalFixedAssets
 
   const totalCurrentLiabilities = Math.abs(LIABILITY_CATS.reduce((s, c) => s + catTotal(c), 0))
-
   const totalEquityAccounts = Math.abs(
     accounts.filter(a => a.type === "Equity").reduce((s, a) => s + getBalance(a), 0)
   )
-
   const revenue = accounts.filter(a => a.type === "Revenue").reduce((s, a) => s + Math.abs(getBalance(a)), 0)
   const expenses = accounts.filter(a => a.type === "Expense").reduce((s, a) => s + Math.abs(getBalance(a)), 0)
   const netProfit = revenue - expenses
-
   const totalEquity = totalEquityAccounts + Math.abs(netProfit)
   const totalLiabEquity = totalCurrentLiabilities + totalEquity
   const isBalanced = Math.abs(totalAssets - totalLiabEquity) < 1
@@ -173,7 +193,7 @@ function BalanceSheetContent() {
     router.push(`/dashboard/reports/ledger?accountId=${id}&startDate=${now.getFullYear()}-01-01&endDate=${now.toISOString().split("T")[0]}`)
   }
 
-  // ── Excel export ──
+  // ── Excel export (unchanged) ──
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new()
     const sheetData: any[][] = [
@@ -224,210 +244,122 @@ function BalanceSheetContent() {
     XLSX.writeFile(wb, `Balance_Sheet_${now.toISOString().split("T")[0]}.xlsx`)
   }
 
-  // ── Build synchronized rows for the report ──
-  const buildRows = () => {
-    const assetRows: React.ReactElement[] = []
-    const liabilityRows: React.ReactElement[] = []
-
-    // ---- Current Assets ----
-    assetRows.push(
-      <h3 key="h3ca" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
-        Current Assets
-      </h3>
+  // ── Build rows for each section ──
+  const currentAssetRows: React.ReactElement[] = [
+    <h3 key="h3ca" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
+      Current Assets
+    </h3>
+  ]
+  CURRENT_ASSET_CATS.forEach(cat => {
+    const items = grouped[cat] || []
+    if (items.length === 0) return
+    const total = catTotal(cat)
+    currentAssetRows.push(
+      <CategoryHeader key={`ca-${cat}`} cat={cat} total={total} showAbsolute={false}
+        onClick={() => navigateToTrialBalance("Asset", cat)} />
     )
-    for (const cat of CURRENT_ASSET_CATS) {
-      const items = grouped[cat] || []
-      if (items.length === 0) continue
-      const total = catTotal(cat)
-      assetRows.push(
-        <CategoryHeader
-          key={`ca-${cat}`}
-          cat={cat}
-          total={total}
-          showAbsolute={false}
-          onClick={() => navigateToTrialBalance("Asset", cat)}
-        />
-      )
-      items.forEach(a => {
-        assetRows.push(
-          <AccountRow
-            key={a.id}
-            account={a}
-            showAbsolute={false}
-            getBalance={getBalance}
-            onClick={openLedger}
-          />
-        )
-      })
-    }
-    assetRows.push(
-      <SubtotalBand
-        key="sub-ca"
-        label="Total Current Assets"
-        value={totalCurrentAssets}
-        showAbsolute={false}
-      />
-    )
-
-    // ---- Current Liabilities ----
-    liabilityRows.push(
-      <h3 key="h3cl" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
-        Current Liabilities
-      </h3>
-    )
-    for (const cat of LIABILITY_CATS) {
-      const items = grouped[cat] || []
-      if (items.length === 0) continue
-      const total = catTotal(cat)
-      liabilityRows.push(
-        <CategoryHeader
-          key={`cl-${cat}`}
-          cat={cat}
-          total={total}
-          showAbsolute={true}
-          onClick={() => navigateToTrialBalance("Liability", cat)}
-        />
-      )
-      items.forEach(a => {
-        liabilityRows.push(
-          <AccountRow
-            key={a.id}
-            account={a}
-            showAbsolute={true}
-            getBalance={getBalance}
-            onClick={openLedger}
-          />
-        )
-      })
-    }
-    liabilityRows.push(
-      <SubtotalBand
-        key="sub-cl"
-        label="Total Current Liabilities"
-        value={totalCurrentLiabilities}
-        showAbsolute={true}
-      />
-    )
-
-    // ---- Fixed Assets ----
-    assetRows.push(
-      <h3 key="h3fa" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
-        Fixed Assets
-      </h3>
-    )
-    for (const cat of FIXED_ASSET_CATS) {
-      const items = grouped[cat] || []
-      if (items.length === 0) continue
-      const total = catTotal(cat)
-      assetRows.push(
-        <CategoryHeader
-          key={`fa-${cat}`}
-          cat={cat}
-          total={total}
-          showAbsolute={false}
-          onClick={() => navigateToTrialBalance("Asset", cat)}
-        />
-      )
-      items.forEach(a => {
-        assetRows.push(
-          <AccountRow
-            key={a.id}
-            account={a}
-            showAbsolute={false}
-            getBalance={getBalance}
-            onClick={openLedger}
-          />
-        )
-      })
-    }
-    assetRows.push(
-      <SubtotalBand
-        key="sub-fa"
-        label="Total Fixed Assets"
-        value={totalFixedAssets}
-        showAbsolute={false}
-      />
-    )
-
-    // ---- Equity ----
-    liabilityRows.push(
-      <h3 key="h3eq" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
-        Equity
-      </h3>
-    )
-    ;(grouped["Equity"] || []).forEach(a => {
-      liabilityRows.push(
-        <AccountRow
-          key={a.id}
-          account={a}
-          showAbsolute={true}
-          getBalance={getBalance}
-          onClick={openLedger}
-        />
+    items.forEach(a => {
+      currentAssetRows.push(
+        <AccountRow key={a.id} account={a} showAbsolute={false} getBalance={getBalance} onClick={openLedger} />
       )
     })
-    // Retained earnings row
-    liabilityRows.push(
-      <div key="re" className="acc-row" style={{ cursor: "default" }}>
-        <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 50 }}>R/E</span>
-        <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 8 }}>Retained Earnings (Net P&amp;L)</span>
-        <span style={{ fontSize: 12, color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
-          PKR {fmtPos(netProfit)}
-        </span>
-      </div>
-    )
-    liabilityRows.push(
-      <SubtotalBand
-        key="sub-eq"
-        label="Total Equity"
-        value={totalEquity}
-        showAbsolute={true}
-      />
-    )
+  })
+  currentAssetRows.push(
+    <SubtotalBand key="sub-ca" label="Total Current Assets" value={totalCurrentAssets} showAbsolute={false} />
+  )
 
-    // ---- Grand Totals ----
-    assetRows.push(
-      <TotalBand
-        key="tot-a"
-        label="TOTAL ASSETS"
-        value={totalAssets}
-        showAbsolute={false}
-      />
+  const currentLiabilityRows: React.ReactElement[] = [
+    <h3 key="h3cl" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
+      Current Liabilities
+    </h3>
+  ]
+  LIABILITY_CATS.forEach(cat => {
+    const items = grouped[cat] || []
+    if (items.length === 0) return
+    const total = catTotal(cat)
+    currentLiabilityRows.push(
+      <CategoryHeader key={`cl-${cat}`} cat={cat} total={total} showAbsolute={true}
+        onClick={() => navigateToTrialBalance("Liability", cat)} />
     )
-    liabilityRows.push(
-      <TotalBand
-        key="tot-le"
-        label="TOTAL LIABILITIES + EQUITY"
-        value={totalLiabEquity}
-        showAbsolute={true}
-      />
-    )
-
-    // Synchronize row counts by inserting placeholders
-    const maxRows = Math.max(assetRows.length, liabilityRows.length)
-    while (assetRows.length < maxRows) {
-      assetRows.push(<PlaceholderRow key={`placeholder-a-${assetRows.length}`} />)
-    }
-    while (liabilityRows.length < maxRows) {
-      liabilityRows.push(<PlaceholderRow key={`placeholder-l-${liabilityRows.length}`} />)
-    }
-
-    // Build pairs
-    const pairs: React.ReactElement[] = []
-    for (let i = 0; i < maxRows; i++) {
-      pairs.push(
-        <div key={`row-${i}`} style={{ display: "contents" }}>
-          <div style={{ borderRight: "1px solid var(--border)", padding: "0 24px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-            {assetRows[i]}
-          </div>
-          <div style={{ padding: "0 24px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-            {liabilityRows[i]}
-          </div>
-        </div>
+    items.forEach(a => {
+      currentLiabilityRows.push(
+        <AccountRow key={a.id} account={a} showAbsolute={true} getBalance={getBalance} onClick={openLedger} />
       )
-    }
-    return pairs
-  }
+    })
+  })
+  currentLiabilityRows.push(
+    <SubtotalBand key="sub-cl" label="Total Current Liabilities" value={totalCurrentLiabilities} showAbsolute={true} />
+  )
+
+  const currentSection = syncSection(currentAssetRows, currentLiabilityRows)
+
+  // ── Fixed Assets ↔ Equity ──
+  const fixedAssetRows: React.ReactElement[] = [
+    <h3 key="h3fa" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
+      Fixed Assets
+    </h3>
+  ]
+  FIXED_ASSET_CATS.forEach(cat => {
+    const items = grouped[cat] || []
+    if (items.length === 0) return
+    const total = catTotal(cat)
+    fixedAssetRows.push(
+      <CategoryHeader key={`fa-${cat}`} cat={cat} total={total} showAbsolute={false}
+        onClick={() => navigateToTrialBalance("Asset", cat)} />
+    )
+    items.forEach(a => {
+      fixedAssetRows.push(
+        <AccountRow key={a.id} account={a} showAbsolute={false} getBalance={getBalance} onClick={openLedger} />
+      )
+    })
+  })
+  fixedAssetRows.push(
+    <SubtotalBand key="sub-fa" label="Total Fixed Assets" value={totalFixedAssets} showAbsolute={false} />
+  )
+
+  const equityRows: React.ReactElement[] = [
+    <h3 key="h3eq" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
+      Equity
+    </h3>
+  ]
+  ;(grouped["Equity"] || []).forEach(a => {
+    equityRows.push(
+      <AccountRow key={a.id} account={a} showAbsolute={true} getBalance={getBalance} onClick={openLedger} />
+    )
+  })
+  equityRows.push(
+    <div key="re" className="acc-row" style={{ cursor: "default" }}>
+      <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 50 }}>R/E</span>
+      <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 8 }}>Retained Earnings (Net P&amp;L)</span>
+      <span style={{ fontSize: 12, color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
+        PKR {fmtPos(netProfit)}
+      </span>
+    </div>
+  )
+  equityRows.push(
+    <SubtotalBand key="sub-eq" label="Total Equity" value={totalEquity} showAbsolute={true} />
+  )
+
+  const fixedVsEquitySection = syncSection(fixedAssetRows, equityRows)
+
+  // ── Grand Totals (single row) ──
+  const grandTotals = (
+    <React.Fragment key="gt">
+      <div style={{ borderRight: "1px solid var(--border)", padding: "0 24px" }}>
+        <TotalBand label="TOTAL ASSETS" value={totalAssets} showAbsolute={false} />
+      </div>
+      <div style={{ padding: "0 24px" }}>
+        <TotalBand label="TOTAL LIABILITIES + EQUITY" value={totalLiabEquity} showAbsolute={true} />
+      </div>
+    </React.Fragment>
+  )
+
+  // ── Combined synchronized sections ──
+  const syncedRows: React.ReactElement[] = [
+    ...currentSection,
+    ...fixedVsEquitySection,
+    grandTotals
+  ]
 
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "var(--bg)", color: "var(--text-muted)", fontFamily: "'Inter', sans-serif", gap: 12 }}>
@@ -436,8 +368,6 @@ function BalanceSheetContent() {
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
-
-  const syncedRows = buildRows()
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -570,7 +500,6 @@ function BalanceSheetContent() {
           .bs-header, .back-btn, .action-btn { display: none !important; }
           .kpi-strip { grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 16px; }
           .bs-grid { padding: 0 16px; }
-          .bs-cell { padding: 16px; }
           body { background: white !important; color: black !important; }
           .kpi-card, .subtotal-band, .total-band {
             box-shadow: none !important;
