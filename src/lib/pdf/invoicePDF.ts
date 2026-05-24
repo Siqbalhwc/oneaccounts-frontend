@@ -18,6 +18,9 @@
  * 10. Header area height tightened to match sample compactness
  * 11. Table header now rounded navy, same as total row – custom drawn
  * 12. Fixed TypeScript align type error
+ * 13. Vertically centered header text
+ * 14. Rounded border around data table rows
+ * 15. Always use actual payment terms when available, fallback to generic only if missing
  */
 
 import jsPDF from "jspdf"
@@ -255,7 +258,6 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   const descColX = ML + 14 + 8 + 2
   const descColW = CW - (14 + 8 + 2) - (16 + 32 + 34 + 4)
 
-  // Header definitions with typed align values
   type HeaderDef = {
     text: string
     x: number
@@ -277,8 +279,8 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setTextColor(...WHITE)
   for (const h of headers) {
     if (h.text) {
-      const textY = tableY + HEADER_ROW_H / 2 + doc.getFontSize() * 0.35
-      // Now h.align is one of the allowed string literals
+      // Vertical centering: startY + height/2 + fontSize*0.32 (empirically centered)
+      const textY = tableY + HEADER_ROW_H / 2 + doc.getFontSize() * 0.32
       doc.text(h.text, h.x + h.w / 2, textY, { align: h.align, maxWidth: h.w })
     }
   }
@@ -373,8 +375,15 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     },
   })
 
-  // ── SECTION 5: SUBTOTAL / TAX / TOTAL ──────────────────────────────────────
   const afterTable = (doc as any).lastAutoTable.finalY as number
+
+  // ── Rounded border around data rows ──
+  const TABLE_RADIUS = 4
+  doc.setDrawColor(...BORDER)
+  doc.setLineWidth(0.3)
+  doc.roundedRect(ML, bodyStartY, CW, afterTable - bodyStartY, TABLE_RADIUS, TABLE_RADIUS, "S")
+
+  // ── SECTION 5: SUBTOTAL / TAX / TOTAL ──────────────────────────────────────
   let SY = afterTable + 6
 
   const sumX = PW - MR - 70
@@ -426,10 +435,15 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   SY += 6
 
   const termsLines: string[] = []
-  const terms = (data.paymentTerms ?? "").trim()
-  if (terms) termsLines.push(terms)
-  const notes = (data.notes ?? "").trim()
-  if (notes) termsLines.push(notes)
+  // Always use the provided payment terms if available
+  if (data.paymentTerms) {
+    termsLines.push(data.paymentTerms)
+  }
+  // Add any additional notes
+  if (data.notes) {
+    termsLines.push(data.notes)
+  }
+  // Fallback only if no terms and no notes are provided
   if (termsLines.length === 0) {
     termsLines.push(
       "Payment is due within 30 days of invoice date.",
