@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, FileText, Download, CheckCircle, Shield } from "lucide-react"
+import { ArrowLeft, FileText, Download, CheckCircle } from "lucide-react"
 import RecordHistory from "@/components/RecordHistory"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
@@ -17,7 +17,7 @@ export default function PurchaseOrderDetailPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const { role } = useRole()
+  const { role } = useRole()         // ← correct role source
   const { hasFeature } = usePlan()
 
   const [po, setPo] = useState<any>(null)
@@ -34,10 +34,16 @@ export default function PurchaseOrderDetailPage() {
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
-      const cid = (user?.app_metadata as any)?.company_id
-      if (cid) setCompanyId(cid)
+      const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
+      setCompanyId(cid)
 
-      // Check if user has "Can Approve Purchase Orders" permission
+      // Admin always has approval rights
+      if (role === "admin") {
+        setCanApprove(true)
+        return
+      }
+
+      // For non‑admin, check the custom permission
       supabase
         .from("user_roles")
         .select("permissions")
@@ -46,12 +52,10 @@ export default function PurchaseOrderDetailPage() {
         .maybeSingle()
         .then(({ data: userRole }) => {
           const perms = userRole?.permissions || {}
-          // Admin always has all permissions
-          const isAdmin = (user?.app_metadata as any)?.role === "admin"
-          setCanApprove(isAdmin || perms["Can Approve Purchase Orders"] === true)
+          setCanApprove(perms["Can Approve Purchase Orders"] === true)
         })
     })
-  }, [])
+  }, [role])
 
   // ── Fetch PO data ──
   useEffect(() => {
@@ -148,9 +152,8 @@ export default function PurchaseOrderDetailPage() {
         .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; text-decoration: none; }
         .btn:hover { background: var(--card-hover); }
         .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
-        .btn-success { background: #065F46; color: #6EE7B7; border-color: #065F46; }
-        .btn-success:hover { background: #064E3B; }
         .btn-warning { background: #F97316; color: white; border-color: #F97316; }
+        .btn-warning:hover { background: #EA580C; }
         .badge {
           display: inline-block;
           padding: 2px 10px;
