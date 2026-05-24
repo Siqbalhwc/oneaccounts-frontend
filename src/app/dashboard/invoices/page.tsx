@@ -155,7 +155,7 @@ export default function InvoicesPage() {
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
         .header-row {
           display: grid;
-          grid-template-columns: 120px 90px 250px 100px 80px 140px 150px;
+          grid-template-columns: 120px 90px 220px 100px 80px 140px 150px;
           column-gap: 8px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
@@ -164,7 +164,7 @@ export default function InvoicesPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: 120px 90px 250px 100px 80px 140px 150px;
+          grid-template-columns: 120px 90px 220px 100px 80px 140px 150px;
           column-gap: 8px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
