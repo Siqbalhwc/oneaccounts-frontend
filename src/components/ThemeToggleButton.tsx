@@ -1,14 +1,30 @@
 "use client"
 import { useTheme } from "@/contexts/ThemeContext"
 
+const icons: Record<string, string> = {
+  light: "☀️",
+  dark: "🌙",
+  oneaccounts: "🔷",
+}
+
+const nextTheme: Record<string, string> = {
+  light: "dark",
+  dark: "oneaccounts",
+  oneaccounts: "light",
+}
+
 export default function ThemeToggleButton() {
   const { theme, setTheme } = useTheme()
+  const currentIcon = icons[theme] || icons.light
 
-  const nextTheme = theme === "dark" ? "light" : "dark"
+  const handleToggle = () => {
+    const next = nextTheme[theme] || "light"
+    setTheme(next)
+  }
 
   return (
     <button
-      onClick={() => setTheme(nextTheme)}
+      onClick={handleToggle}
       style={{
         background: "none",
         border: "none",
@@ -20,10 +36,10 @@ export default function ThemeToggleButton() {
         color: "var(--text-muted)",
         transition: "color 0.2s",
       }}
-      title={`Switch to ${nextTheme} mode`}
+      title={`Switch theme (current: ${theme})`}
       aria-label="Toggle theme"
     >
-      {theme === "dark" ? "☀️" : "🌙"}
+      {currentIcon}
     </button>
   )
 }
