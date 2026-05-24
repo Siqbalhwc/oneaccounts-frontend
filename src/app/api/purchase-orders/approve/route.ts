@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { logDataChange } from "@/lib/audit"
 
 export async function PATCH(request: NextRequest) {
   try {
@@ -14,9 +15,6 @@ export async function PATCH(request: NextRequest) {
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
     const supabase = createClient(supabaseUrl, serviceRoleKey)
 
-    // Optional: verify the user has approval permission (the page already checks, but double-check here)
-    // We'll skip to keep it simple, but you can add JWT check later.
-
     const { error } = await supabase
       .from("purchase_orders")
       .update({
@@ -26,11 +24,20 @@ export async function PATCH(request: NextRequest) {
       })
       .eq("id", id)
       .eq("company_id", company_id)
-      .eq("status", "Draft")   // only approve drafts
+      .eq("status", "Draft")
 
     if (error) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
+
+    // Audit log
+    await logDataChange(
+      "purchase_orders",
+      String(id),
+      "UPDATE",
+      { status: "Approved" },
+      "system"
+    )
 
     return NextResponse.json({ success: true })
   } catch (err: any) {

@@ -96,14 +96,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Audit log
-    await logDataChange({
-      tableName: "purchase_orders",
-      recordId: String(newPO.id),
-      action: "INSERT",
-      newData: { po_no: poNo, supplier_id, date, status: "Draft" },
-      changedBy: "system",
-    })
+    // Audit log – correct signature: (tableName, recordId, action, newData?, changedBy?)
+    await logDataChange(
+      "purchase_orders",
+      String(newPO.id),
+      "INSERT",
+      { po_no: poNo, supplier_id, date, status: "Draft" },
+      "system"
+    )
 
     return NextResponse.json({ success: true, id: newPO.id, po_no: poNo })
   } catch (err: any) {
@@ -196,13 +196,13 @@ export async function PUT(request: NextRequest) {
     }
 
     // Audit log
-    await logDataChange({
-      tableName: "purchase_orders",
-      recordId: id,
-      action: "UPDATE",
-      newData: { supplier_id, date, notes },
-      changedBy: "system",
-    })
+    await logDataChange(
+      "purchase_orders",
+      id,
+      "UPDATE",
+      { supplier_id, date, notes },
+      "system"
+    )
 
     return NextResponse.json({ success: true })
   } catch (err: any) {
