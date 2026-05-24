@@ -17,6 +17,7 @@
  *  9. Description de-duplicated: product_id row shows only once
  * 10. Header area height tightened to match sample compactness
  * 11. Table header now rounded navy, same as total row – custom drawn
+ * 12. Fixed TypeScript align type error
  */
 
 import jsPDF from "jspdf"
@@ -30,7 +31,6 @@ const DARK            = [17,  24,  39]  as [number,number,number]  // body text
 const MUTED           = [107,114, 128]  as [number,number,number]  // grey labels
 const BORDER          = [229,231, 235]  as [number,number,number]  // table border
 const WHITE           = [255,255, 255]  as [number,number,number]
-const TABLE_HEADER_BG = [30,  58, 138]  as [number,number,number]  // #1E3A8A – NOT used for headers now
 const ROW_ALT         = [248,249, 252]  as [number,number,number]
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -45,33 +45,27 @@ export interface InvoiceItem {
 }
 
 export interface InvoicePDFData {
-  // Company — always pass fresh from company_settings
   companyName:    string
   companyAddress: string
   companyPhone:   string
   companyEmail:   string
   companyTagline: string
-  logoUrl?:       string | null   // absolute URL or Supabase storage URL
+  logoUrl?:       string | null
   businessType?:  string
 
-  // Invoice header
   invoiceNo:  string
   date:       string
   dueDate:    string
 
-  // Customer
   customerName:    string
   customerAddress: string
   customerPhone:   string
   customerEmail?:  string
 
-  // Terms — pass invoice.payment_terms ?? customer.payment_terms ?? null
   paymentTerms?: string | null
-  // Free-text notes on the invoice
   notes?: string | null
 
-  // Status & amounts
-  status:     string   // "Paid" | "Unpaid" | "Overdue" | "Partial"
+  status:     string
   items:      InvoiceItem[]
   subtotal:   number
   total:      number
@@ -82,7 +76,6 @@ export interface InvoicePDFData {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
 async function loadImage(url: string): Promise<string | null> {
   try {
     const res = await fetch(url)
@@ -115,7 +108,6 @@ function filledRect(
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
-
 export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
 
@@ -257,21 +249,27 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   const HEADER_ROW_H = 10
   const HEADER_RADIUS = 4
 
-  // Draw rounded navy bar for header
   filledRect(doc, ML, tableY, CW, HEADER_ROW_H, NAVY, HEADER_RADIUS)
 
-  // Column widths (matching autoTable column widths)
-  const colWidths = [14, 8, 0, 16, 32, 34]   // img, num, description(auto), qty, unit_price, amount
-  // We'll write headers manually; description column is flexible
-  const descColX = ML + 14 + 8 + 2   // after img and num
-  const descColW = CW - (14 + 8 + 2) - (16 + 32 + 34 + 4)   // remaining space
-  const headers = [
-    { text: "",         x: ML,                               w: 14, align: "center" },
-    { text: "#",        x: ML + 14,                          w: 8,  align: "center" },
-    { text: "Description", x: descColX,                      w: descColW, align: "left" },
-    { text: "Qty",      x: descColX + descColW,              w: 16, align: "center" },
-    { text: "Unit Price", x: descColX + descColW + 16,       w: 32, align: "right" },
-    { text: "Amount",   x: descColX + descColW + 16 + 32,    w: 34, align: "right" },
+  const colWidths = [14, 8, 0, 16, 32, 34]
+  const descColX = ML + 14 + 8 + 2
+  const descColW = CW - (14 + 8 + 2) - (16 + 32 + 34 + 4)
+
+  // Header definitions with typed align values
+  type HeaderDef = {
+    text: string
+    x: number
+    w: number
+    align: "left" | "center" | "right"
+  }
+
+  const headers: HeaderDef[] = [
+    { text: "",            x: ML,                    w: 14,       align: "center" },
+    { text: "#",           x: ML + 14,               w: 8,        align: "center" },
+    { text: "Description", x: descColX,              w: descColW, align: "left" },
+    { text: "Qty",         x: descColX + descColW,   w: 16,       align: "center" },
+    { text: "Unit Price",  x: descColX + descColW + 16, w: 32,    align: "right" },
+    { text: "Amount",      x: descColX + descColW + 16 + 32, w: 34, align: "right" },
   ]
 
   doc.setFont("helvetica", "bold")
@@ -279,9 +277,9 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setTextColor(...WHITE)
   for (const h of headers) {
     if (h.text) {
-      // Adjust y: text vertically centered in the header bar
       const textY = tableY + HEADER_ROW_H / 2 + doc.getFontSize() * 0.35
-      doc.text(h.text, h.x + h.w / 2, textY, { align: h.align === "center" ? "center" : h.align, maxWidth: h.w })
+      // Now h.align is one of the allowed string literals
+      doc.text(h.text, h.x + h.w / 2, textY, { align: h.align, maxWidth: h.w })
     }
   }
 
@@ -289,12 +287,12 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   const bodyStartY = tableY + HEADER_ROW_H
 
   const tableColumns = [
-    { header: "",           dataKey: "img"         },
-    { header: "#",          dataKey: "num"         },
-    { header: "Description",dataKey: "description" },
-    { header: "Qty",        dataKey: "qty"         },
-    { header: "Unit Price", dataKey: "unit_price"  },
-    { header: "Amount",     dataKey: "amount"      },
+    { header: "",            dataKey: "img"         },
+    { header: "#",           dataKey: "num"         },
+    { header: "Description", dataKey: "description" },
+    { header: "Qty",         dataKey: "qty"         },
+    { header: "Unit Price",  dataKey: "unit_price"  },
+    { header: "Amount",      dataKey: "amount"      },
   ]
 
   const imageCache: Record<number, string> = {}
@@ -338,7 +336,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     margin:       { left: ML, right: MR },
     columns:      tableColumns,
     body:         tableRows,
-    showHead:     false,            // we already drew the header
+    showHead:     false,
     rowPageBreak: "avoid",
     styles: {
       fontSize:      9,
@@ -397,7 +395,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.text(pkr(0), valX, SY, { align: "right" })
   SY += 5.5
 
-  // Total pill – navy rounded rect, increased radius to match header
+  // Total pill – navy rounded rect, same radius as header
   const TOTAL_RADIUS = 4
   filledRect(doc, sumX - 2, SY - 4, valX - sumX + 4, 9, NAVY, TOTAL_RADIUS)
   doc.setFont("helvetica", "bold")
