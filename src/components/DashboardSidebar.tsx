@@ -6,7 +6,28 @@ import { useRole } from "@/contexts/RoleContext"
 import ThemeToggleButton from "@/components/ThemeToggleButton"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 
-const navSections = [
+// Define a type that allows optional feature
+interface NavItem {
+  label: string
+  icon: string
+  href: string
+  feature?: string
+  adminOnly?: boolean
+}
+
+interface NavGroup {
+  groupLabel: string
+  items: NavItem[]
+}
+
+interface NavSection {
+  section: string
+  feature?: string
+  items?: NavItem[]
+  groups?: NavGroup[]
+}
+
+const navSections: NavSection[] = [
   { section: 'MAIN', items: [
     { label: 'Dashboard', icon: '📊', href: '/dashboard' },
   ]},
@@ -97,14 +118,14 @@ export default function DashboardSidebar({
   }
 
   // Check if an item is new (has feature code, feature is enabled, but not visited)
-  const isNew = (item: any) => {
+  const isNew = (item: NavItem) => {
     if (!item.feature) return false
     if (!hasFeature(item.feature)) return false
     return !visitedFeatures[item.feature]
   }
 
   // ── Visibility helper ──
-  const isVisible = (item: any) => {
+  const isVisible = (item: NavItem) => {
     if (item.adminOnly && role !== "admin") return false
     if (item.feature && !hasFeature(item.feature)) return false
     return true
