@@ -32,6 +32,74 @@ const CURRENT_ASSET_CATS = ["Cash & Bank", "Accounts Receivable", "Inventory", "
 const FIXED_ASSET_CATS = ["Fixed Assets", "Vehicles"]
 const LIABILITY_CATS = ["Accounts Payable", "Other Current Liabilities"]
 
+// ── Helper to create a blank placeholder row ──
+function PlaceholderRow() {
+  return (
+    <div style={{ height: 40, opacity: 0, pointerEvents: "none" }}>
+      &nbsp;
+    </div>
+  )
+}
+
+// ── Account row component (extracted from original) ──
+function AccountRow({ account, showAbsolute, getBalance, onClick }: {
+  account: any
+  showAbsolute: boolean
+  getBalance: (a: any) => number
+  onClick: (id: number) => void
+}) {
+  const bal = getBalance(account)
+  return (
+    <div
+      className="acc-row"
+      onClick={() => onClick(account.id)}
+    >
+      <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 50 }}>{account.code}</span>
+      <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 8 }}>{account.name}</span>
+      <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+        {showAbsolute ? `PKR ${fmtPos(bal)}` : `${sign(bal)}PKR ${fmt(bal)}`}
+      </span>
+    </div>
+  )
+}
+
+// ── Category header component ──
+function CategoryHeader({ cat, total, showAbsolute, onClick }: {
+  cat: string
+  total: number
+  showAbsolute: boolean
+  onClick: () => void
+}) {
+  return (
+    <div className="cat-header" onClick={onClick}>
+      <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", flex: 1 }}>{cat}</span>
+      <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>
+        {showAbsolute ? `PKR ${fmtPos(total)}` : `${sign(total)}PKR ${fmt(total)}`}
+      </span>
+    </div>
+  )
+}
+
+// ── Subtotal band ──
+function SubtotalBand({ label, value, showAbsolute }: { label: string; value: number; showAbsolute: boolean }) {
+  return (
+    <div className="subtotal-band">
+      <span>{label}</span>
+      <span>{showAbsolute ? `PKR ${fmtPos(value)}` : `${sign(value)}PKR ${fmt(value)}`}</span>
+    </div>
+  )
+}
+
+// ── Total band ──
+function TotalBand({ label, value, showAbsolute }: { label: string; value: number; showAbsolute: boolean }) {
+  return (
+    <div className="total-band">
+      <span>{label}</span>
+      <span>{showAbsolute ? `PKR ${fmtPos(value)}` : `${sign(value)}PKR ${fmt(value)}`}</span>
+    </div>
+  )
+}
+
 function BalanceSheetContent() {
   const router = useRouter()
   const supabase = createBrowserClient(
@@ -108,8 +176,6 @@ function BalanceSheetContent() {
   // ── Excel export ──
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new()
-
-    // sheet 1: detailed accounts
     const sheetData: any[][] = [
       ["Balance Sheet", "", ""],
       ["As at", now.toLocaleDateString("en-PK"), ""],
@@ -158,6 +224,213 @@ function BalanceSheetContent() {
     XLSX.writeFile(wb, `Balance_Sheet_${now.toISOString().split("T")[0]}.xlsx`)
   }
 
+  // ── Build synchronized rows for the report ──
+  // We'll create arrays of row elements for the Asset side and L&E side
+  const buildRows = () => {
+    const assetRows: JSX.Element[] = []
+    const liabilityRows: JSX.Element[] = []
+
+    // ---- Current Assets ----
+    assetRows.push(
+      <h3 key="h3ca" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
+        Current Assets
+      </h3>
+    )
+    // current asset categories
+    for (const cat of CURRENT_ASSET_CATS) {
+      const items = grouped[cat] || []
+      if (items.length === 0) continue
+      const total = catTotal(cat)
+      assetRows.push(
+        <CategoryHeader
+          key={`ca-${cat}`}
+          cat={cat}
+          total={total}
+          showAbsolute={false}
+          onClick={() => navigateToTrialBalance("Asset", cat)}
+        />
+      )
+      items.forEach(a => {
+        assetRows.push(
+          <AccountRow
+            key={a.id}
+            account={a}
+            showAbsolute={false}
+            getBalance={getBalance}
+            onClick={openLedger}
+          />
+        )
+      })
+    }
+    assetRows.push(
+      <SubtotalBand
+        key="sub-ca"
+        label="Total Current Assets"
+        value={totalCurrentAssets}
+        showAbsolute={false}
+      />
+    )
+
+    // ---- Current Liabilities ----
+    liabilityRows.push(
+      <h3 key="h3cl" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
+        Current Liabilities
+      </h3>
+    )
+    for (const cat of LIABILITY_CATS) {
+      const items = grouped[cat] || []
+      if (items.length === 0) continue
+      const total = catTotal(cat)
+      liabilityRows.push(
+        <CategoryHeader
+          key={`cl-${cat}`}
+          cat={cat}
+          total={total}
+          showAbsolute={true}
+          onClick={() => navigateToTrialBalance("Liability", cat)}
+        />
+      )
+      items.forEach(a => {
+        liabilityRows.push(
+          <AccountRow
+            key={a.id}
+            account={a}
+            showAbsolute={true}
+            getBalance={getBalance}
+            onClick={openLedger}
+          />
+        )
+      })
+    }
+    liabilityRows.push(
+      <SubtotalBand
+        key="sub-cl"
+        label="Total Current Liabilities"
+        value={totalCurrentLiabilities}
+        showAbsolute={true}
+      />
+    )
+
+    // ---- Fixed Assets ----
+    assetRows.push(
+      <h3 key="h3fa" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
+        Fixed Assets
+      </h3>
+    )
+    for (const cat of FIXED_ASSET_CATS) {
+      const items = grouped[cat] || []
+      if (items.length === 0) continue
+      const total = catTotal(cat)
+      assetRows.push(
+        <CategoryHeader
+          key={`fa-${cat}`}
+          cat={cat}
+          total={total}
+          showAbsolute={false}
+          onClick={() => navigateToTrialBalance("Asset", cat)}
+        />
+      )
+      items.forEach(a => {
+        assetRows.push(
+          <AccountRow
+            key={a.id}
+            account={a}
+            showAbsolute={false}
+            getBalance={getBalance}
+            onClick={openLedger}
+          />
+        )
+      })
+    }
+    assetRows.push(
+      <SubtotalBand
+        key="sub-fa"
+        label="Total Fixed Assets"
+        value={totalFixedAssets}
+        showAbsolute={false}
+      />
+    )
+
+    // ---- Equity ----
+    liabilityRows.push(
+      <h3 key="h3eq" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
+        Equity
+      </h3>
+    )
+    ;(grouped["Equity"] || []).forEach(a => {
+      liabilityRows.push(
+        <AccountRow
+          key={a.id}
+          account={a}
+          showAbsolute={true}
+          getBalance={getBalance}
+          onClick={openLedger}
+        />
+      )
+    })
+    // Retained earnings row
+    liabilityRows.push(
+      <div key="re" className="acc-row" style={{ cursor: "default" }}>
+        <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 50 }}>R/E</span>
+        <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 8 }}>Retained Earnings (Net P&amp;L)</span>
+        <span style={{ fontSize: 12, color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
+          PKR {fmtPos(netProfit)}
+        </span>
+      </div>
+    )
+    liabilityRows.push(
+      <SubtotalBand
+        key="sub-eq"
+        label="Total Equity"
+        value={totalEquity}
+        showAbsolute={true}
+      />
+    )
+
+    // ---- Grand Totals ----
+    assetRows.push(
+      <TotalBand
+        key="tot-a"
+        label="TOTAL ASSETS"
+        value={totalAssets}
+        showAbsolute={false}
+      />
+    )
+    liabilityRows.push(
+      <TotalBand
+        key="tot-le"
+        label="TOTAL LIABILITIES + EQUITY"
+        value={totalLiabEquity}
+        showAbsolute={true}
+      />
+    )
+
+    // Now synchronize row counts by inserting placeholders where needed
+    const maxRows = Math.max(assetRows.length, liabilityRows.length)
+    while (assetRows.length < maxRows) {
+      assetRows.push(<PlaceholderRow key={`placeholder-a-${assetRows.length}`} />)
+    }
+    while (liabilityRows.length < maxRows) {
+      liabilityRows.push(<PlaceholderRow key={`placeholder-l-${liabilityRows.length}`} />)
+    }
+
+    // Build pairs
+    const pairs: JSX.Element[] = []
+    for (let i = 0; i < maxRows; i++) {
+      pairs.push(
+        <div key={`row-${i}`} style={{ display: "contents" }}>
+          <div style={{ borderRight: "1px solid var(--border)", padding: "0 24px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+            {assetRows[i]}
+          </div>
+          <div style={{ padding: "0 24px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+            {liabilityRows[i]}
+          </div>
+        </div>
+      )
+    }
+    return pairs
+  }
+
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "var(--bg)", color: "var(--text-muted)", fontFamily: "'Inter', sans-serif", gap: 12 }}>
       <div style={{ width: 20, height: 20, border: "2px solid var(--primary)", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
@@ -166,36 +439,7 @@ function BalanceSheetContent() {
     </div>
   )
 
-  const CategorySection = ({ cat, type, showAbsolute }: { cat: string; type: string; showAbsolute: boolean }) => {
-    const items = grouped[cat] || []
-    if (items.length === 0) return null
-    const total = catTotal(cat)
-    return (
-      <div style={{ marginBottom: 8 }}>
-        <div
-          className="cat-header"
-          onClick={() => navigateToTrialBalance(type, cat)}
-        >
-          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", flex: 1 }}>{cat}</span>
-          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>
-            {showAbsolute ? `PKR ${fmtPos(total)}` : `${sign(total)}PKR ${fmt(total)}`}
-          </span>
-        </div>
-        {items.map((a: any) => {
-          const bal = getBalance(a)
-          return (
-            <div key={a.id} className="acc-row" onClick={() => openLedger(a.id)}>
-              <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 50 }}>{a.code}</span>
-              <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 8 }}>{a.name}</span>
-              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                {showAbsolute ? `PKR ${fmtPos(bal)}` : `${sign(bal)}PKR ${fmt(bal)}`}
-              </span>
-            </div>
-          )
-        })}
-      </div>
-    )
-  }
+  const syncedRows = buildRows()
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -243,7 +487,6 @@ function BalanceSheetContent() {
         }
         .action-btn:hover { border-color: var(--border-strong); color: var(--text); background: var(--card-hover); }
 
-        /* summary cards – rounded, spaced */
         .kpi-strip {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
@@ -278,16 +521,6 @@ function BalanceSheetContent() {
           grid-template-columns: 1fr 1fr;
           gap: 0;
           padding: 0 32px;
-        }
-        .bs-row {
-          display: contents;
-        }
-        .bs-cell {
-          padding: 24px;
-          border-bottom: 1px solid var(--border);
-        }
-        .bs-cell:first-child {
-          border-right: 1px solid var(--border);
         }
 
         .cat-header {
@@ -349,7 +582,6 @@ function BalanceSheetContent() {
         @media (max-width: 900px) {
           .kpi-strip { grid-template-columns: repeat(2, 1fr); padding: 16px; }
           .bs-grid { grid-template-columns: 1fr; padding: 0 16px; }
-          .bs-cell { border-right: none; }
           .bs-header { padding: 0 16px; }
         }
       `}</style>
@@ -404,85 +636,9 @@ function BalanceSheetContent() {
         </div>
       </div>
 
-      {/* Report Body */}
+      {/* Synchronized Report Body */}
       <div className="bs-grid">
-        {/* Row 1: Current Assets ↔ Current Liabilities */}
-        <div className="bs-row">
-          <div className="bs-cell">
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>Current Assets</h3>
-            {CURRENT_ASSET_CATS.map(cat => (
-              <CategorySection key={cat} cat={cat} type="Asset" showAbsolute={false} />
-            ))}
-            <div className="subtotal-band">
-              <span>Total Current Assets</span>
-              <span>{sign(totalCurrentAssets)}PKR {fmt(totalCurrentAssets)}</span>
-            </div>
-          </div>
-          <div className="bs-cell">
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>Current Liabilities</h3>
-            {LIABILITY_CATS.map(cat => (
-              <CategorySection key={cat} cat={cat} type="Liability" showAbsolute={true} />
-            ))}
-            <div className="subtotal-band">
-              <span>Total Current Liabilities</span>
-              <span>PKR {fmtPos(totalCurrentLiabilities)}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Row 2: Fixed Assets ↔ Equity */}
-        <div className="bs-row">
-          <div className="bs-cell">
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>Fixed Assets</h3>
-            {FIXED_ASSET_CATS.map(cat => (
-              <CategorySection key={cat} cat={cat} type="Asset" showAbsolute={false} />
-            ))}
-            <div className="subtotal-band">
-              <span>Total Fixed Assets</span>
-              <span>{sign(totalFixedAssets)}PKR {fmt(totalFixedAssets)}</span>
-            </div>
-          </div>
-          <div className="bs-cell">
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>Equity</h3>
-            {(grouped["Equity"] || []).map((a: any) => {
-              const bal = getBalance(a)
-              return (
-                <div key={a.id} className="acc-row" onClick={() => openLedger(a.id)}>
-                  <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 50 }}>{a.code}</span>
-                  <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 8 }}>{a.name}</span>
-                  <span style={{ fontSize: 12, color: "var(--text-muted)" }}>PKR {fmtPos(bal)}</span>
-                </div>
-              )
-            })}
-            <div className="acc-row" style={{ cursor: "default" }}>
-              <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 50 }}>R/E</span>
-              <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 8 }}>Retained Earnings (Net P&amp;L)</span>
-              <span style={{ fontSize: 12, color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
-                PKR {fmtPos(netProfit)}
-              </span>
-            </div>
-            <div className="subtotal-band">
-              <span>Total Equity</span>
-              <span>PKR {fmtPos(totalEquity)}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Row 3: Grand Totals */}
-        <div className="bs-row">
-          <div className="bs-cell" style={{ borderBottom: "none" }}>
-            <div className="total-band">
-              <span>TOTAL ASSETS</span>
-              <span>{sign(totalAssets)}PKR {fmt(totalAssets)}</span>
-            </div>
-          </div>
-          <div className="bs-cell" style={{ borderBottom: "none" }}>
-            <div className="total-band">
-              <span>TOTAL LIABILITIES + EQUITY</span>
-              <span>PKR {fmtPos(totalLiabEquity)}</span>
-            </div>
-          </div>
-        </div>
+        {syncedRows}
       </div>
 
       <div style={{ padding: "12px 32px", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-soft)" }}>
