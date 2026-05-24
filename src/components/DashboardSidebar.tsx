@@ -71,7 +71,7 @@ export default function DashboardSidebar({
     return false
   })
 
-  const GAP = 6   // same as KPI card gap
+  const GAP = 6   // uniform margin on all sides
 
   useEffect(() => {
     localStorage.setItem("sidebarCollapsed", String(collapsed))
@@ -107,7 +107,6 @@ export default function DashboardSidebar({
 
   const markVisited = (code: string) => { const u = { ...visitedFeatures, [code]: true }; setVisitedFeatures(u); localStorage.setItem("visitedFeatures", JSON.stringify(u)) }
 
-  // ── FIX: ensure isNew always returns boolean ──
   const isNew = (item: NavItem): boolean => {
     if (!item.feature) return false
     if (!hasFeature(item.feature)) return false
@@ -116,16 +115,7 @@ export default function DashboardSidebar({
 
   const isVisible = (item: NavItem) => !(item.adminOnly && role !== "admin") && (!item.feature || hasFeature(item.feature))
 
-  // ── Theme‑adaptive colours ──
-  const gradientMap: Record<string, string> = {
-    light:       "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
-    dark:        "linear-gradient(180deg, rgba(15,15,20,0.98) 0%, rgba(10,10,15,0.98) 100%)",
-    oneaccounts: "linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%)",
-    system:      typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches
-                   ? "linear-gradient(180deg, rgba(7,18,40,0.98) 0%, rgba(10,24,48,0.98) 100%)"
-                   : "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
-  }
-
+  // Theme‑adaptive text colours
   const isLight = theme === "light" || (theme === "system" && typeof window !== "undefined" && !window.matchMedia("(prefers-color-scheme: dark)").matches)
   const textColor      = isLight ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.85)"
   const mutedTextColor  = isLight ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.5)"
@@ -142,7 +132,7 @@ export default function DashboardSidebar({
         margin: GAP,
         marginRight: 0,
         borderRadius: 24,
-        background: gradientMap[theme] || gradientMap.dark,
+        background: "var(--main-bg)",                     // match dashboard background
         boxShadow: isLight ? "0 25px 50px -12px rgba(0,0,0,0.15)" : "0 25px 50px -12px rgba(0,0,0,0.5)",
         border: `1px solid ${borderColor}`,
         position: "fixed",
