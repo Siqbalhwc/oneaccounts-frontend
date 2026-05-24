@@ -216,8 +216,12 @@ export default function NewBillPage() {
       })
   }
 
-  // Handle PO selection – auto‑fill items
-  const handleSelectPO = (selectedPOId: number) => {
+  // Handle PO selection – auto‑fill items. Now accepts number | null.
+  const handleSelectPO = (selectedPOId: number | null) => {
+    if (selectedPOId === null) {
+      setPoId(null)
+      return
+    }
     setPoId(selectedPOId)
     const selectedPO = openPOs.find(p => p.id === selectedPOId)
     if (!selectedPO) return
@@ -365,7 +369,7 @@ export default function NewBillPage() {
           due_date: dueDate,
           items: payloadItems,
           reference, notes,
-          po_id: poId || null,          // ← link to PO
+          po_id: poId || null,
         }),
       })
       const result = await res.json()
@@ -599,7 +603,7 @@ export default function NewBillPage() {
                   <select
                     className="inv-select"
                     value={poId ?? ""}
-                    onChange={(e) => handleSelectPO(Number(e.target.value) || null)}
+                    onChange={(e) => handleSelectPO(e.target.value ? Number(e.target.value) : null)}
                   >
                     <option value="">— None —</option>
                     {openPOs.map(po => (
