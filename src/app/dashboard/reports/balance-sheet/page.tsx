@@ -150,49 +150,6 @@ function buildSection(
   return rows
 }
 
-// ── Align two row arrays so that a specific CategoryHeader appears at the same index.
-//    Uses a safe (el as any) to access props.
-function alignCategories(
-  leftRows: React.ReactElement[],
-  rightRows: React.ReactElement[],
-  leftKey: string,
-  rightKey: string
-): [React.ReactElement[], React.ReactElement[]] {
-  const leftIdx = leftRows.findIndex(el => {
-    const props = (el as any).props
-    return el.type === CategoryHeader && props?.cat === leftKey
-  })
-  const rightIdx = rightRows.findIndex(el => {
-    const props = (el as any).props
-    return el.type === CategoryHeader && props?.cat === rightKey
-  })
-
-  if (leftIdx === -1 || rightIdx === -1) return [leftRows, rightRows]
-
-  const targetIdx = Math.max(leftIdx, rightIdx)
-
-  const newLeft = [...leftRows]
-  const newRight = [...rightRows]
-
-  while (newLeft.length < targetIdx || newLeft[targetIdx]?.type !== CategoryHeader || (newLeft[targetIdx] as any).props?.cat !== leftKey) {
-    if (newLeft.length <= targetIdx) {
-      newLeft.splice(newLeft.length, 0, <PlaceholderRow key={`al-${newLeft.length}`} />)
-    } else {
-      newLeft.splice(targetIdx, 0, <PlaceholderRow key={`al-${targetIdx}`} />)
-    }
-  }
-
-  while (newRight.length < targetIdx || newRight[targetIdx]?.type !== CategoryHeader || (newRight[targetIdx] as any).props?.cat !== rightKey) {
-    if (newRight.length <= targetIdx) {
-      newRight.splice(newRight.length, 0, <PlaceholderRow key={`ar-${newRight.length}`} />)
-    } else {
-      newRight.splice(targetIdx, 0, <PlaceholderRow key={`ar-${targetIdx}`} />)
-    }
-  }
-
-  return [newLeft, newRight]
-}
-
 function BalanceSheetContent() {
   const router = useRouter()
   const supabase = createBrowserClient(
@@ -356,17 +313,41 @@ function BalanceSheetContent() {
     })
   })
 
-  // Align "Other Current Assets" with "Other Current Liabilities"
-  const [alignedCA, alignedCL] = alignCategories(
-    currentAssetRows,
-    currentLiabilityRows,
-    "Other Current Assets",
-    "Other Current Liabilities"
-  )
+  // ── Simple alignment: make sure "Other Current Assets" and "Other Current Liabilities"
+  //     appear at the same row index by inserting a placeholder before the shorter side's
+  //     "Other" category if needed. Safe – no loops.
+
+  // Find the index of "Other Current Assets" header (if any)
+  const otherAssetIdx = currentAssetRows.findIndex(el => {
+    return el.type === CategoryHeader && (el.props as any)?.cat === "Other Current Assets"
+  })
+  // Find the index of "Other Current Liabilities" header (if any)
+  const otherLiabilityIdx = currentLiabilityRows.findIndex(el => {
+    return el.type === CategoryHeader && (el.props as any)?.cat === "Other Current Liabilities"
+  })
+
+  if (otherAssetIdx !== -1 && otherLiabilityIdx !== -1) {
+    // Insert placeholders to align those two headers at the same index
+    const maxIdx = Math.max(otherAssetIdx, otherLiabilityIdx)
+    // Pad the asset side if its "Other" is before the liability's "Other"
+    if (otherAssetIdx < maxIdx) {
+      const diff = maxIdx - otherAssetIdx
+      for (let i = 0; i < diff; i++) {
+        currentAssetRows.splice(otherAssetIdx, 0, <PlaceholderRow key={`oca-pad-${i}`} />)
+      }
+    }
+    // Pad the liability side if its "Other" is before the asset's "Other"
+    if (otherLiabilityIdx < maxIdx) {
+      const diff = maxIdx - otherLiabilityIdx
+      for (let i = 0; i < diff; i++) {
+        currentLiabilityRows.splice(otherLiabilityIdx, 0, <PlaceholderRow key={`ocl-pad-${i}`} />)
+      }
+    }
+  }
 
   const currentSection = buildSection(
-    alignedCA,
-    alignedCL,
+    currentAssetRows,
+    currentLiabilityRows,
     <SubtotalBand label="Total Current Assets" value={totalCurrentAssets} showAbsolute={false} />,
     <SubtotalBand label="Total Current Liabilities" value={totalCurrentLiabilities} showAbsolute={true} />
   )
