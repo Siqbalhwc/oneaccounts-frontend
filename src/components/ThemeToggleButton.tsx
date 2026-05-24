@@ -1,24 +1,28 @@
 "use client"
 import { useTheme } from "@/contexts/ThemeContext"
 
-const icons: Record<string, string> = {
+type Theme = "light" | "dark" | "oneaccounts" | "system"
+
+const icons: Record<Theme, string> = {
   light: "☀️",
   dark: "🌙",
   oneaccounts: "🔷",
+  system: "💻",
 }
 
-const nextTheme: Record<string, string> = {
+const nextTheme: Record<Theme, Theme> = {
   light: "dark",
   dark: "oneaccounts",
   oneaccounts: "light",
+  system: "light",
 }
 
 export default function ThemeToggleButton() {
   const { theme, setTheme } = useTheme()
-  const currentIcon = icons[theme] || icons.light
+  const currentIcon = icons[theme as Theme] || icons.light
 
   const handleToggle = () => {
-    const next = nextTheme[theme] || "light"
+    const next = nextTheme[theme as Theme] || "light"
     setTheme(next)
   }
 
