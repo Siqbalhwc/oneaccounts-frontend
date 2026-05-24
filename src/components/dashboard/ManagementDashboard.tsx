@@ -6,6 +6,27 @@ import { useRouter } from "next/navigation"
 import { TrendingUp, TrendingDown, Minus, CheckCircle, AlertTriangle } from "lucide-react"
 import { motion } from "framer-motion"
 import { useTheme } from "@/contexts/ThemeContext"
+import CountUp from "react-countup"
+import { LineChart, Line, ResponsiveContainer } from "recharts"
+
+// ── Tiny sparkline component ──
+function Sparkline({ data, color = "#60A5FA" }: { data: number[]; color?: string }) {
+  const chartData = data.map((val, i) => ({ x: i, value: val }))
+  return (
+    <ResponsiveContainer width="100%" height={40}>
+      <LineChart data={chartData} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+        <Line
+          type="monotone"
+          dataKey="value"
+          stroke={color}
+          strokeWidth={2}
+          dot={false}
+          activeDot={false}
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  )
+}
 
 export default function ManagementDashboard({ role }: { role: string }) {
   const supabase = createBrowserClient(
@@ -42,8 +63,10 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [activityHealth, setActivityHealth] = useState<Record<string, { lowCount: number; threshold: number; message: string }>>({})
   const [lastUpdated, setLastUpdated] = useState("")
 
-  // ── NEW: Overdue invoices count ──
   const [overdueInvoicesCount, setOverdueInvoicesCount] = useState(0)
+
+  // Sparkline data for the "Monthly Spending" KPI
+  const [monthlySeries, setMonthlySeries] = useState<number[]>([])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user }, error }) => {
@@ -184,6 +207,31 @@ export default function ManagementDashboard({ role }: { role: string }) {
           } else {
             setSpendingTrend(0)
           }
+
+          // ── Monthly spending for the last 6 months (sparkline) ──
+          const sixMonthsAgo = new Date(Date.UTC(currentYear, currentMonth - 6, 1))
+          const { data: historicLines } = await supabase
+            .from("journal_lines")
+            .select("debit, credit, journal_entries!inner(date)")
+            .eq("company_id", companyId)
+            .in("account_id", accountIds)
+            .gte("journal_entries.date", sixMonthsAgo.toISOString().split("T")[0])
+            .lte("journal_entries.date", todayISO)
+
+          const byMonth: Record<string, number> = {}
+          historicLines?.forEach((l: any) => {
+            const dt = l.journal_entries?.date?.substring(0, 7)   // YYYY-MM
+            if (dt) {
+              byMonth[dt] = (byMonth[dt] || 0) + (l.debit || 0) - (l.credit || 0)
+            }
+          })
+          const series: number[] = []
+          for (let i = 5; i >= 0; i--) {
+            const d = new Date(Date.UTC(currentYear, currentMonth - i, 1))
+            const key = d.toISOString().substring(0, 7)
+            series.push(byMonth[key] || 0)
+          }
+          setMonthlySeries(series)
         }
 
         // ── Top 5 underspent activities ──
@@ -378,7 +426,14 @@ export default function ManagementDashboard({ role }: { role: string }) {
     }),
   }
 
-  const hoverScale = { whileHover: { scale: 1.02, y: -4 } }
+  const hoverScale = {
+    whileHover: {
+      scale: 1.03,
+      y: -6,
+      boxShadow: isDark ? "0 12px 40px rgba(0,0,0,0.6)" : "0 12px 40px rgba(0,0,0,0.12)",
+      transition: { duration: 0.25 },
+    },
+  }
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100%", flex: 1, fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: "var(--text)", transition: "background 0.3s, color 0.3s" }}>
@@ -386,21 +441,33 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .mgmt * { box-sizing: border-box; margin: 0; padding: 0; }
 
         .mgmt .card {
-          background: var(--card); border: 1px solid var(--border);
+          background: ${isDark ? "rgba(17,24,39,0.7)" : "rgba(255,255,255,0.7)"};
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border: 1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"};
           border-radius: 18px; padding: 1.2rem 1.3rem;
-          box-shadow: var(--shadow);
-          transition: all 0.2s; cursor: pointer;
+          box-shadow: ${isDark ? "0 4px 20px rgba(0,0,0,0.4)" : "0 4px 20px rgba(0,0,0,0.06)"};
+          transition: all 0.3s ease;
+          cursor: pointer;
+          overflow: hidden;
+          position: relative;
         }
-        .mgmt .card:hover { background: var(--card-hover); border-color: var(--border-strong); }
+        .mgmt .card:hover {
+          background: ${isDark ? "rgba(30,41,59,0.8)" : "rgba(255,255,255,0.9)"};
+          border-color: ${isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)"};
+        }
 
         .mgmt .hero {
-          background: var(--card);
+          background: ${isDark ? "rgba(17,24,39,0.7)" : "rgba(255,255,255,0.7)"};
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
           border: 1px solid var(--border);
           border-radius: 16px; padding: 1rem 1.5rem;
           margin-bottom: 1rem; display: flex;
           align-items: center; justify-content: space-between;
           flex-wrap: wrap; gap: 0.8rem;
         }
+
         .mgmt .hero-greeting h2 {
           font-size: 1.3rem; font-weight: 700; color: var(--text); margin-bottom: 0.15rem; white-space: nowrap;
         }
@@ -455,7 +522,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         }
 
         .kpi-label { text-transform: uppercase; font-size: 0.7rem; font-weight: 700; color: var(--text-muted); letter-spacing: 0.04em; }
-        .kpi-value { font-size: 1.7rem; font-weight: 700; color: var(--text); line-height: 1.2; }
+        .kpi-value { font-size: 1.9rem; font-weight: 800; color: var(--text); line-height: 1.1; }
         .kpi-meta { font-size: 0.8rem; color: var(--text-soft); display: flex; align-items: center; gap: 0.3rem; }
 
         .underspend-row {
@@ -538,12 +605,13 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </div>
         </motion.div>
 
-        {/* Overdue invoices banner – compact, always visible */}
+        {/* Overdue invoices banner – with pulse animation */}
         {overdueInvoicesCount > 0 && (
           <motion.div
             className="overdue-banner"
             initial={{ opacity: 0, y: -5 }}
-            animate={{ opacity: 1, y: 0 }}
+            animate={{ opacity: 1, y: 0, boxShadow: ["0 0 0 rgba(239,68,68,0)", "0 0 20px rgba(239,68,68,0.3)", "0 0 0 rgba(239,68,68,0)"] }}
+            transition={{ boxShadow: { repeat: Infinity, duration: 2.5 } }}
           >
             <span>⚠️ <strong>{overdueInvoicesCount} overdue {overdueInvoicesCount === 1 ? "invoice" : "invoices"}</strong></span>
             <button className="overdue-btn" onClick={() => router.push("/dashboard/invoices?status=Unpaid&overdue=true")}>
@@ -571,11 +639,11 @@ export default function ManagementDashboard({ role }: { role: string }) {
         {/* KPI cards */}
         <div className="dashboard-grid">
           {[
-            { label: "Total Budget", value: formatPKR(filteredTotalBudget), meta: `${filteredProjectRows.length} projects`, color: "#A78BFA", link: "/dashboard/reports/budget-summary" },
-            { label: "Total Spent", value: formatPKR(filteredTotalSpent), meta: `${spentPct}% of budget`, color: "#F97316", link: "/dashboard/reports/spending-detail", extra: projectsAbove70.length > 0 ? `Projects > 70%: ${projectsAbove70.join(", ")}` : null },
-            { label: remainingFunds < 0 ? "Overspent" : "Remaining", value: formatPKR(remainingFunds), meta: `${Math.abs(Math.round((remainingFunds / filteredTotalBudget) * 100))}% ${remainingFunds < 0 ? "over" : "left"}`, color: remainingFunds >= 0 ? "#2DD4BF" : "#F87171", link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null },
-            { label: "Portfolio Health", value: filteredOverspentCount > 0 ? "⚠️ Needs Attention" : "Healthy", meta: `${Math.round((1 - filteredOverspentCount / Math.max(filteredProjectRows.length, 1)) * 100)}% health score`, color: filteredOverspentCount > 0 ? "#F97316" : "#2DD4BF", link: "/dashboard/reports/overspent" },
-            { label: "📆 Monthly Spending", value: monthlySpending > 0 ? formatPKR(monthlySpending) : "—", meta: monthlySpending === 0 ? "No transactions this month" : `vs. ${formatPKR(lastMonthSpending)} last month`, color: monthlySpending > 0 ? "#F97316" : "#94A3B8", link: "/dashboard/reports/spending-detail" },
+            { label: "Total Budget", value: formatPKR(filteredTotalBudget), raw: filteredTotalBudget, meta: `${filteredProjectRows.length} projects`, color: "#A78BFA", link: "/dashboard/reports/budget-summary" },
+            { label: "Total Spent", value: formatPKR(filteredTotalSpent), raw: filteredTotalSpent, meta: `${spentPct}% of budget`, color: "#F97316", link: "/dashboard/reports/spending-detail", extra: projectsAbove70.length > 0 ? `Projects > 70%: ${projectsAbove70.join(", ")}` : null },
+            { label: remainingFunds < 0 ? "Overspent" : "Remaining", value: formatPKR(remainingFunds), raw: Math.abs(remainingFunds), meta: `${Math.abs(Math.round((remainingFunds / filteredTotalBudget) * 100))}% ${remainingFunds < 0 ? "over" : "left"}`, color: remainingFunds >= 0 ? "#2DD4BF" : "#F87171", link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null },
+            { label: "Portfolio Health", value: filteredOverspentCount > 0 ? "⚠️ Needs Attention" : "Healthy", raw: null, meta: `${Math.round((1 - filteredOverspentCount / Math.max(filteredProjectRows.length, 1)) * 100)}% health score`, color: filteredOverspentCount > 0 ? "#F97316" : "#2DD4BF", link: "/dashboard/reports/overspent" },
+            { label: "📆 Monthly Spending", value: monthlySpending > 0 ? formatPKR(monthlySpending) : "—", raw: monthlySpending, meta: monthlySpending === 0 ? "No transactions this month" : `vs. ${formatPKR(lastMonthSpending)} last month`, color: monthlySpending > 0 ? "#F97316" : "#94A3B8", link: "/dashboard/reports/spending-detail", sparkline: true },
           ].map((kpi, i) => (
             <motion.div
               key={kpi.label}
@@ -588,13 +656,24 @@ export default function ManagementDashboard({ role }: { role: string }) {
               onClick={() => kpi.link && router.push(kpi.link + detailQuery())}
             >
               <div className="kpi-label">{kpi.label}</div>
-              <div className="kpi-value" style={{ color: kpi.color }}>{kpi.value}</div>
+              <div className="kpi-value" style={{ color: kpi.color }}>
+                {kpi.raw != null ? (
+                  <CountUp end={kpi.raw} duration={2} separator="," prefix="PKR " />
+                ) : (
+                  kpi.value
+                )}
+              </div>
               <div className="kpi-meta">
                 {kpi.meta}
                 {kpi.label === "Total Spent" && <Trend value={spentPct > 80 ? 5 : -2} positive={false} negative={spentPct > 80} />}
                 {kpi.label === "📆 Monthly Spending" && monthlySpending > 0 && <Trend value={spendingTrend} positive={spendingTrend < 0} negative={spendingTrend > 0} />}
               </div>
               {kpi.extra && <div style={{ fontSize: "0.65rem", color: "#93C5FD", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200 }}>{kpi.extra}</div>}
+              {kpi.sparkline && monthlySeries.length > 0 && (
+                <div style={{ marginTop: 8, height: 40 }}>
+                  <Sparkline data={monthlySeries} color="#F97316" />
+                </div>
+              )}
             </motion.div>
           ))}
         </div>
