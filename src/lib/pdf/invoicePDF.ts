@@ -6,21 +6,8 @@
  * Deps:      npm install jspdf jspdf-autotable
  *
  * FIXES in this version:
- *  1. Header — plain white background, no navy stripe
- *  2. Grey hairline separator (not blue line)
- *  3. Company logo/name/tagline always fetched fresh at call-site
- *  4. Bill-to phone & address null-safe, no runtime errors
- *  5. Amount Due vertically parallel to customer name
- *  6. All headings use correct NAVY #07085B (not bright blue)
- *  7. Notes/Terms uses real invoice.payment_terms / customer.payment_terms
- *  8. Bullet character changed from ▪ (Unicode, renders as %ª in jsPDF) to "-"
- *  9. Description de-duplicated: product_id row shows only once
- * 10. Header area height tightened to match sample compactness
- * 11. Table header now rounded navy, same as total row – custom drawn
- * 12. Fixed TypeScript align type error
- * 13. Vertically centered header text
- * 14. Rounded border around data table rows
- * 15. Always use actual payment terms when available, fallback to generic only if missing
+ *  … (all previous fixes retained)
+ *  15. Table rounded border now thicker so no sharp corners peek through
  */
 
 import jsPDF from "jspdf"
@@ -279,7 +266,6 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setTextColor(...WHITE)
   for (const h of headers) {
     if (h.text) {
-      // Vertical centering: startY + height/2 + fontSize*0.32 (empirically centered)
       const textY = tableY + HEADER_ROW_H / 2 + doc.getFontSize() * 0.32
       doc.text(h.text, h.x + h.w / 2, textY, { align: h.align, maxWidth: h.w })
     }
@@ -377,10 +363,10 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
 
   const afterTable = (doc as any).lastAutoTable.finalY as number
 
-  // ── Rounded border around data rows ──
+  // ── Rounded border around data rows (thicker line to hide inner corners) ──
   const TABLE_RADIUS = 4
   doc.setDrawColor(...BORDER)
-  doc.setLineWidth(0.3)
+  doc.setLineWidth(0.8)                       // thicker stroke to cover sharp corners
   doc.roundedRect(ML, bodyStartY, CW, afterTable - bodyStartY, TABLE_RADIUS, TABLE_RADIUS, "S")
 
   // ── SECTION 5: SUBTOTAL / TAX / TOTAL ──────────────────────────────────────
@@ -435,15 +421,12 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   SY += 6
 
   const termsLines: string[] = []
-  // Always use the provided payment terms if available
   if (data.paymentTerms) {
     termsLines.push(data.paymentTerms)
   }
-  // Add any additional notes
   if (data.notes) {
     termsLines.push(data.notes)
   }
-  // Fallback only if no terms and no notes are provided
   if (termsLines.length === 0) {
     termsLines.push(
       "Payment is due within 30 days of invoice date.",
