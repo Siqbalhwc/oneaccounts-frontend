@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Save, CheckCircle } from "lucide-react"
@@ -22,24 +22,62 @@ export default function NewAdjustmentPage() {
   const [flash, setFlash] = useState<string | null>(null)
 
   useEffect(() => {
-    supabase.from("products").select("id, code, name, qty_on_hand").order("code").then(({ data }) => { if (data) setProducts(data) })
+    supabase
+      .from("products")
+      .select("id, code, name, qty_on_hand, cost_price")
+      .order("code")
+      .then(({ data }) => {
+        if (data) setProducts(data)
+      })
   }, [])
+
+  // Selected product details
+  const selectedProduct = useMemo(
+    () => products.find((p) => p.id === productId) || null,
+    [products, productId]
+  )
+
+  const qtyNum = parseFloat(qty)
+  const adjustmentQty = isNaN(qtyNum) ? 0 : qtyNum
+  const currentStock = selectedProduct?.qty_on_hand ?? 0
+  const newStock = currentStock + adjustmentQty
+  const costPrice = selectedProduct?.cost_price ?? 0
+  const valueChange = adjustmentQty * costPrice
+  const absValueChange = Math.abs(valueChange)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
-    if (!productId || !qty.trim() || !reason.trim()) { setError("Product, quantity, and reason are required."); return }
-    const qtyNum = parseFloat(qty)
-    if (isNaN(qtyNum) || qtyNum === 0) { setError("Quantity must be a non‑zero number."); return }
+    if (!productId || !qty.trim() || !reason.trim()) {
+      setError("Product, quantity, and reason are required.")
+      return
+    }
+    if (isNaN(adjustmentQty) || adjustmentQty === 0) {
+      setError("Quantity must be a non‑zero number.")
+      return
+    }
+    if (newStock < 0) {
+      setError("Insufficient stock for this adjustment.")
+      return
+    }
     setLoading(true)
 
     const res = await fetch("/api/inventory/adjustments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ product_id: productId, qty: qtyNum, reason: reason.trim(), date }),
+      body: JSON.stringify({
+        product_id: productId,
+        qty: adjustmentQty,
+        reason: reason.trim(),
+        date,
+      }),
     })
     const data = await res.json()
-    if (!data.success) { setError(data.error || "Failed to record adjustment"); setLoading(false); return }
+    if (!data.success) {
+      setError(data.error || "Failed to record adjustment")
+      setLoading(false)
+      return
+    }
 
     setFlash(`✅ Adjustment recorded! New stock: ${data.new_qty_on_hand}`)
     setProductId(null)
@@ -55,7 +93,7 @@ export default function NewAdjustmentPage() {
         .inv-shell { max-width: 600px; margin: 0 auto; }
         .inv-card {
           background: var(--card); border-radius: 12px; border: 1px solid var(--border);
-          padding: 16px 20px; box-shadow: var(--shadow-sm);
+          padding: 16px 20px; box-shadow: var(--shadow-sm); margin-bottom: 16px;
         }
         .inv-title { font-size: 18px; font-weight: 700; color: var(--text); }
         .inv-label {
@@ -80,11 +118,17 @@ export default function NewAdjustmentPage() {
         .inv-btn:disabled { opacity: 0.6; cursor: not-allowed; }
         .error-box { background: var(--card); border: 1px solid #EF4444; color: #FCA5A5; padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; }
         .flash-box { background: var(--card); border: 1px solid #065F46; color: #6EE7B7; padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+        .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+        .summary-label { font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 2px; }
+        .summary-value { font-size: 16px; font-weight: 700; color: var(--text); }
       `}</style>
 
       <div className="inv-shell">
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-          <button className="inv-btn" onClick={() => router.push("/dashboard/inventory/adjustments")}><ArrowLeft size={16} /></button>
+          <button className="inv-btn" onClick={() => router.push("/dashboard/inventory/adjustments")}>
+            <ArrowLeft size={16} />
+          </button>
           <div className="inv-title">⚖️ New Inventory Adjustment</div>
         </div>
 
@@ -95,26 +139,86 @@ export default function NewAdjustmentPage() {
           <div className="inv-card">
             <div style={{ marginBottom: 14 }}>
               <label className="inv-label">Product *</label>
-              <select className="inv-select" value={productId ?? ""} onChange={e => setProductId(Number(e.target.value) || null)} required>
+              <select
+                className="inv-select"
+                value={productId ?? ""}
+                onChange={(e) => setProductId(Number(e.target.value) || null)}
+                required
+              >
                 <option value="">Select product</option>
-                {products.map(p => <option key={p.id} value={p.id}>{p.code} – {p.name} (Stock: {p.qty_on_hand || 0})</option>)}
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.code} – {p.name} (Stock: {p.qty_on_hand ?? 0})
+                  </option>
+                ))}
               </select>
             </div>
             <div className="inv-row" style={{ marginBottom: 14 }}>
               <div>
                 <label className="inv-label">Quantity (+/−) *</label>
-                <input className="inv-input" type="number" step="any" value={qty} onChange={e => setQty(e.target.value)} placeholder="e.g. 10 or -5" required />
+                <input
+                  className="inv-input"
+                  type="number"
+                  step="any"
+                  value={qty}
+                  onChange={(e) => setQty(e.target.value)}
+                  placeholder="e.g. 10 or -5"
+                  required
+                />
               </div>
               <div>
                 <label className="inv-label">Date</label>
-                <input className="inv-input" type="date" value={date} onChange={e => setDate(e.target.value)} />
+                <input
+                  className="inv-input"
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                />
               </div>
             </div>
             <div style={{ marginBottom: 20 }}>
               <label className="inv-label">Reason *</label>
-              <input className="inv-input" value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. Stock count correction" required />
+              <input
+                className="inv-input"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="e.g. Stock count correction"
+                required
+              />
             </div>
-            <button className="inv-btn inv-btn-primary" type="submit" disabled={loading} style={{ width: "100%", justifyContent: "center", padding: 10 }}>
+
+            {/* Summary section (visible only when product selected) */}
+            {selectedProduct && (
+              <div className="summary-grid" style={{ marginBottom: 16 }}>
+                <div className="summary-item">
+                  <div className="summary-label">Current Stock</div>
+                  <div className="summary-value">{currentStock}</div>
+                </div>
+                <div className="summary-item">
+                  <div className="summary-label">Cost Price</div>
+                  <div className="summary-value">PKR {costPrice.toLocaleString()}</div>
+                </div>
+                <div className="summary-item">
+                  <div className="summary-label">New Stock</div>
+                  <div className="summary-value" style={{ color: newStock >= 0 ? "#10B981" : "#EF4444" }}>
+                    {newStock}
+                  </div>
+                </div>
+                <div className="summary-item">
+                  <div className="summary-label">Value Change</div>
+                  <div className="summary-value" style={{ color: valueChange >= 0 ? "#10B981" : "#EF4444" }}>
+                    PKR {absValueChange.toLocaleString()} {valueChange >= 0 ? "↑" : "↓"}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <button
+              className="inv-btn inv-btn-primary"
+              type="submit"
+              disabled={loading}
+              style={{ width: "100%", justifyContent: "center", padding: 10 }}
+            >
               <Save size={16} /> {loading ? "Saving..." : "Record Adjustment"}
             </button>
           </div>
