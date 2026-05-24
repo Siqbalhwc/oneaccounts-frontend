@@ -26,8 +26,10 @@ export default function NewBillPage() {
   const showPO = hasFeature("purchase_orders")
 
   const [companyId, setCompanyId] = useState("")
-  const [businessType, setBusinessType] = useState("")
+  const [businessType, setBusinessType] = useState("")   // "ngo" | "trading" | "service" etc.
   const [loading, setLoading] = useState(true)
+
+  const isNGO = businessType === "ngo"
 
   const [suppliers, setSuppliers] = useState<any[]>([])
   const [supplierId, setSupplierId] = useState<number | null>(null)
@@ -67,8 +69,11 @@ export default function NewBillPage() {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
 
+      // Fetch business type
       supabase.from("companies").select("business_type").eq("id", cid).single()
-        .then(r => r.data && setBusinessType(r.data.business_type || ""))
+        .then(r => {
+          if (r.data) setBusinessType(r.data.business_type || "")
+        })
 
       loadSuppliers(cid)
 
@@ -85,17 +90,20 @@ export default function NewBillPage() {
         .order("code")
         .then(r => r.data && setAllAccounts(r.data))
 
-      supabase.from("locations").select("id,name")
-        .eq("company_id", cid).order("name")
-        .then(r => r.data && setLocations(r.data))
+      // Load locations and activities only if NGO
+      if (isNGO) {
+        supabase.from("locations").select("id,name")
+          .eq("company_id", cid).order("name")
+          .then(r => r.data && setLocations(r.data))
 
-      supabase.from("activities").select("id,name")
-        .eq("company_id", cid).order("name")
-        .then(r => r.data && setActivities(r.data))
+        supabase.from("activities").select("id,name")
+          .eq("company_id", cid).order("name")
+          .then(r => r.data && setActivities(r.data))
+      }
 
       setLoading(false)
     })
-  }, [showProducts])
+  }, [showProducts, isNGO])
 
   const loadSuppliers = (cid?: string) => {
     const targetId = cid || companyId
@@ -188,7 +196,7 @@ export default function NewBillPage() {
     setSelectedSupplier(s)
     setSupplierSearch(s.name)
     setShowSupplierList(false)
-    setPoId(null) // reset PO when supplier changes
+    setPoId(null)
   }
 
   const clearSupplier = () => {
@@ -216,7 +224,6 @@ export default function NewBillPage() {
       })
   }
 
-  // Handle PO selection – auto‑fill items. Now accepts number | null.
   const handleSelectPO = (selectedPOId: number | null) => {
     if (selectedPOId === null) {
       setPoId(null)
@@ -331,9 +338,17 @@ export default function NewBillPage() {
 
     for (const item of items) {
       if (!item.product_id) {
-        if (!item.location_id || !item.activity_id || !item.account_id) {
-          setError("Each manual line must have Location, Activity, and GL Account selected")
-          return
+        // Manual item – validation depends on business type
+        if (isNGO) {
+          if (!item.location_id || !item.activity_id || !item.account_id) {
+            setError("Each manual line must have Location, Activity, and GL Account selected")
+            return
+          }
+        } else {
+          if (!item.account_id) {
+            setError("Each manual line must have a GL Account selected")
+            return
+          }
         }
       }
     }
@@ -478,13 +493,13 @@ export default function NewBillPage() {
 
         .inv-item-row {
           display: grid;
-          grid-template-columns: 2fr 70px 90px 110px 110px 80px 90px 30px;
+          grid-template-columns: ${isNGO ? "2fr 70px 90px 110px 110px 80px 90px 30px" : "2fr 70px 90px 120px 90px 30px"};
           gap: 6px; align-items: center; padding: 6px 0;
           border-bottom: 1px solid var(--border);
         }
         .inv-item-header {
           display: grid;
-          grid-template-columns: 2fr 70px 90px 110px 110px 80px 90px 30px;
+          grid-template-columns: ${isNGO ? "2fr 70px 90px 110px 110px 80px 90px 30px" : "2fr 70px 90px 120px 90px 30px"};
           gap: 6px; font-size: 9px; font-weight: 700;
           text-transform: uppercase; color: var(--text-muted); padding-bottom: 6px;
         }
@@ -596,7 +611,7 @@ export default function NewBillPage() {
                 )}
               </div>
 
-              {/* PO linking dropdown (only when purchase_orders feature is ON) */}
+              {/* PO linking dropdown */}
               {showPO && selectedSupplier && openPOs.length > 0 && (
                 <div style={{ marginTop: 14 }}>
                   <label className="inv-label">Link to Purchase Order (optional)</label>
@@ -624,7 +639,7 @@ export default function NewBillPage() {
                 <div><label className="inv-label">Notes</label><input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" /></div>
               </div>
 
-              {/* Product search */}
+              {/* Add Item area */}
               {showProducts ? (
                 <div style={{ marginTop: 14 }}>
                   <label className="inv-label">Add Item</label>
@@ -722,8 +737,8 @@ export default function NewBillPage() {
                 <span>Description</span>
                 <span>Qty</span>
                 <span>Price</span>
-                <span>Location</span>
-                <span>Activity</span>
+                {isNGO && <span>Location</span>}
+                {isNGO && <span>Activity</span>}
                 <span>GL Acc</span>
                 <span style={{ textAlign: "right" }}>Total</span>
                 <span></span>
@@ -745,20 +760,24 @@ export default function NewBillPage() {
                       <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
                       {item.product_id ? (
                         <>
-                          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>—</span>
-                          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>—</span>
+                          {isNGO && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>—</span>}
+                          {isNGO && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>—</span>}
                           <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Inventory</span>
                         </>
                       ) : (
                         <>
-                          <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.location_id} onChange={e => updateItem(idx, "location_id", e.target.value)}>
-                            <option value="">—</option>
-                            {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                          </select>
-                          <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.activity_id} onChange={e => updateItem(idx, "activity_id", e.target.value)}>
-                            <option value="">—</option>
-                            {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                          </select>
+                          {isNGO && (
+                            <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.location_id} onChange={e => updateItem(idx, "location_id", e.target.value)}>
+                              <option value="">—</option>
+                              {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                            </select>
+                          )}
+                          {isNGO && (
+                            <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.activity_id} onChange={e => updateItem(idx, "activity_id", e.target.value)}>
+                              <option value="">—</option>
+                              {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                            </select>
+                          )}
                           <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.account_id ?? ""} onChange={e => updateItem(idx, "account_id", e.target.value ? Number(e.target.value) : null)}>
                             <option value="">—</option>
                             {allAccounts.map(a => <option key={a.id} value={a.id}>{a.code}</option>)}
