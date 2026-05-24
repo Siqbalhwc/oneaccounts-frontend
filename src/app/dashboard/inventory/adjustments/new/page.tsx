@@ -50,34 +50,52 @@ export default function NewAdjustmentPage() {
   }
 
   return (
-    <div style={{ padding: "16px", background: "#F4F6FB", minHeight: "100%", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .inv-shell { max-width: 600px; margin: 0 auto; }
-        .inv-card { background: white; border-radius: 12px; border: 1px solid #E5EAF2; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-        .inv-title { font-size: 18px; font-weight: 700; color: #1E293B; }
-        .inv-label { font-size: 10px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block; }
-        .inv-input { width: 100%; height: 38px; border: 1.5px solid #E5EAF2; border-radius: 8px; padding: 0 12px; font-size: 13px; font-family: inherit; background: #FAFBFF; outline: none; box-sizing: border-box; }
-        .inv-input:focus { border-color: #1740C8; background: white; }
+        .inv-card {
+          background: var(--card); border-radius: 12px; border: 1px solid var(--border);
+          padding: 16px 20px; box-shadow: var(--shadow-sm);
+        }
+        .inv-title { font-size: 18px; font-weight: 700; color: var(--text); }
+        .inv-label {
+          font-size: 10px; font-weight: 600; color: var(--text-muted);
+          text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block;
+        }
+        .inv-input, .inv-select {
+          width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px;
+          padding: 0 12px; font-size: 13px; font-family: inherit; background: var(--bg); color: var(--text);
+          outline: none; box-sizing: border-box;
+        }
+        .inv-input:focus, .inv-select:focus { border-color: var(--primary); }
         .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .inv-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all 0.15s; white-space: nowrap; }
-        .inv-btn-primary { background: linear-gradient(135deg, #1740C8, #071352); color: white; }
-        .inv-btn-outline { background: white; border: 1.5px solid #E5EAF2; color: #475569; }
+        .inv-btn {
+          display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px;
+          font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border);
+          background: transparent; color: var(--text-muted); font-family: inherit; transition: all 0.15s; white-space: nowrap;
+        }
+        .inv-btn:hover { background: var(--card-hover); }
+        .inv-btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+        .inv-btn-primary:hover { background: var(--primary-hover); }
+        .inv-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .error-box { background: var(--card); border: 1px solid #EF4444; color: #FCA5A5; padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; }
+        .flash-box { background: var(--card); border: 1px solid #065F46; color: #6EE7B7; padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
       `}</style>
 
       <div className="inv-shell">
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-          <button className="inv-btn inv-btn-outline" onClick={() => router.push("/dashboard/inventory/adjustments")}><ArrowLeft size={16} /></button>
+          <button className="inv-btn" onClick={() => router.push("/dashboard/inventory/adjustments")}><ArrowLeft size={16} /></button>
           <div className="inv-title">⚖️ New Inventory Adjustment</div>
         </div>
 
-        {error && <div style={{ background: "#FEF2F2", color: "#B91C1C", padding: "10px 14px", borderRadius: 8, marginBottom: 12 }}>{error}</div>}
-        {flash && <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#15803D", padding: "10px 14px", borderRadius: 8, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
+        {error && <div className="error-box">{error}</div>}
+        {flash && <div className="flash-box"><CheckCircle size={16} /> {flash}</div>}
 
         <form onSubmit={handleSubmit}>
           <div className="inv-card">
             <div style={{ marginBottom: 14 }}>
               <label className="inv-label">Product *</label>
-              <select className="inv-input" value={productId ?? ""} onChange={e => setProductId(Number(e.target.value) || null)} required>
+              <select className="inv-select" value={productId ?? ""} onChange={e => setProductId(Number(e.target.value) || null)} required>
                 <option value="">Select product</option>
                 {products.map(p => <option key={p.id} value={p.id}>{p.code} – {p.name} (Stock: {p.qty_on_hand || 0})</option>)}
               </select>
