@@ -32,7 +32,7 @@ const CURRENT_ASSET_CATS = ["Cash & Bank", "Accounts Receivable", "Inventory", "
 const FIXED_ASSET_CATS = ["Fixed Assets", "Vehicles"]
 const LIABILITY_CATS = ["Accounts Payable", "Other Current Liabilities"]
 
-// ── Placeholder row (invisible, takes same height) ──
+// ── Placeholder row (invisible, same height) ──
 function PlaceholderRow() {
   return (
     <div style={{ height: 40, opacity: 0, pointerEvents: "none" }}>
@@ -97,32 +97,52 @@ function TotalBand({ label, value, showAbsolute }: { label: string; value: numbe
   )
 }
 
-// ── Section synchronizer ──
-function syncSection(
-  leftRows: React.ReactElement[],
-  rightRows: React.ReactElement[]
-) {
-  const max = Math.max(leftRows.length, rightRows.length)
-  const left = [...leftRows]
-  const right = [...rightRows]
+// ── Section builder (aligns account rows, then puts subtotals on the same row) ──
+function buildSection(
+  leftMainRows: React.ReactElement[],
+  rightMainRows: React.ReactElement[],
+  leftTotal: React.ReactElement,
+  rightTotal: React.ReactElement
+): React.ReactElement[] {
+  const max = Math.max(leftMainRows.length, rightMainRows.length)
+  const paddedLeft = [...leftMainRows]
+  const paddedRight = [...rightMainRows]
 
-  while (left.length < max) {
-    left.push(<PlaceholderRow key={`l-${left.length}`} />)
+  while (paddedLeft.length < max) {
+    paddedLeft.push(<PlaceholderRow key={`pl-${paddedLeft.length}`} />)
   }
-  while (right.length < max) {
-    right.push(<PlaceholderRow key={`r-${right.length}`} />)
+  while (paddedRight.length < max) {
+    paddedRight.push(<PlaceholderRow key={`pr-${paddedRight.length}`} />)
   }
 
-  return left.map((_, i) => (
-    <React.Fragment key={i}>
+  const rows: React.ReactElement[] = []
+
+  for (let i = 0; i < max; i++) {
+    rows.push(
+      <React.Fragment key={`row-${i}`}>
+        <div style={{ borderRight: "1px solid var(--border)", padding: "0 24px" }}>
+          {paddedLeft[i]}
+        </div>
+        <div style={{ padding: "0 24px" }}>
+          {paddedRight[i]}
+        </div>
+      </React.Fragment>
+    )
+  }
+
+  // add subtotal row (both totals in one grid row)
+  rows.push(
+    <React.Fragment key="subtotal-row">
       <div style={{ borderRight: "1px solid var(--border)", padding: "0 24px" }}>
-        {left[i]}
+        {leftTotal}
       </div>
       <div style={{ padding: "0 24px" }}>
-        {right[i]}
+        {rightTotal}
       </div>
     </React.Fragment>
-  ))
+  )
+
+  return rows
 }
 
 function BalanceSheetContent() {
@@ -244,7 +264,9 @@ function BalanceSheetContent() {
     XLSX.writeFile(wb, `Balance_Sheet_${now.toISOString().split("T")[0]}.xlsx`)
   }
 
-  // ── Build rows for each section ──
+  // ── Build rows for each section (without subtotals) ──
+
+  // Current Assets (without total)
   const currentAssetRows: React.ReactElement[] = [
     <h3 key="h3ca" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
       Current Assets
@@ -264,10 +286,8 @@ function BalanceSheetContent() {
       )
     })
   })
-  currentAssetRows.push(
-    <SubtotalBand key="sub-ca" label="Total Current Assets" value={totalCurrentAssets} showAbsolute={false} />
-  )
 
+  // Current Liabilities (without total)
   const currentLiabilityRows: React.ReactElement[] = [
     <h3 key="h3cl" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
       Current Liabilities
@@ -287,13 +307,15 @@ function BalanceSheetContent() {
       )
     })
   })
-  currentLiabilityRows.push(
-    <SubtotalBand key="sub-cl" label="Total Current Liabilities" value={totalCurrentLiabilities} showAbsolute={true} />
+
+  const currentSection = buildSection(
+    currentAssetRows,
+    currentLiabilityRows,
+    <SubtotalBand label="Total Current Assets" value={totalCurrentAssets} showAbsolute={false} />,
+    <SubtotalBand label="Total Current Liabilities" value={totalCurrentLiabilities} showAbsolute={true} />
   )
 
-  const currentSection = syncSection(currentAssetRows, currentLiabilityRows)
-
-  // ── Fixed Assets ↔ Equity ──
+  // Fixed Assets (without total)
   const fixedAssetRows: React.ReactElement[] = [
     <h3 key="h3fa" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
       Fixed Assets
@@ -313,10 +335,8 @@ function BalanceSheetContent() {
       )
     })
   })
-  fixedAssetRows.push(
-    <SubtotalBand key="sub-fa" label="Total Fixed Assets" value={totalFixedAssets} showAbsolute={false} />
-  )
 
+  // Equity (without total)
   const equityRows: React.ReactElement[] = [
     <h3 key="h3eq" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
       Equity
@@ -336,13 +356,15 @@ function BalanceSheetContent() {
       </span>
     </div>
   )
-  equityRows.push(
-    <SubtotalBand key="sub-eq" label="Total Equity" value={totalEquity} showAbsolute={true} />
+
+  const fixedVsEquitySection = buildSection(
+    fixedAssetRows,
+    equityRows,
+    <SubtotalBand label="Total Fixed Assets" value={totalFixedAssets} showAbsolute={false} />,
+    <SubtotalBand label="Total Equity" value={totalEquity} showAbsolute={true} />
   )
 
-  const fixedVsEquitySection = syncSection(fixedAssetRows, equityRows)
-
-  // ── Grand Totals (single row) ──
+  // Grand Totals (single row)
   const grandTotals = (
     <React.Fragment key="gt">
       <div style={{ borderRight: "1px solid var(--border)", padding: "0 24px" }}>
@@ -354,7 +376,6 @@ function BalanceSheetContent() {
     </React.Fragment>
   )
 
-  // ── Combined synchronized sections ──
   const syncedRows: React.ReactElement[] = [
     ...currentSection,
     ...fixedVsEquitySection,
