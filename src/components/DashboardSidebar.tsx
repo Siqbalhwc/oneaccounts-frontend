@@ -121,11 +121,20 @@ export default function DashboardSidebar({
 
   const isVisible = (item: NavItem) => !(item.adminOnly && role !== "admin") && (!item.feature || hasFeature(item.feature))
 
-  // ── Theme‑adaptive text colours (OneAccounts now treated as light) ──
-  const isLight = theme === "light" || theme === "oneaccounts" || (theme === "system" && typeof window !== "undefined" && !window.matchMedia("(prefers-color-scheme: dark)").matches)
-  const textColor      = isLight ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.85)"
-  const mutedTextColor  = isLight ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.5)"
-  const borderColor     = isLight ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.08)"
+  // ── Background for each theme ──
+  const bg = theme === "oneaccounts"
+    ? "linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%)"
+    : "var(--main-bg)"
+
+  // ── Text colours: OneAccounts always white (dark gradient), light/dark follow system ──
+  const isDarkText = theme === "light" || (theme === "system" && typeof window !== "undefined" && !window.matchMedia("(prefers-color-scheme: dark)").matches)
+  // OneAccounts → white text; dark → white; light → dark
+  const textColor      = theme === "oneaccounts" ? "rgba(255,255,255,0.9)" : (isDarkText ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.85)")
+  const mutedTextColor  = theme === "oneaccounts" ? "rgba(255,255,255,0.6)" : (isDarkText ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.5)")
+  const borderColor     = theme === "oneaccounts" ? "rgba(255,255,255,0.15)" : (isDarkText ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.08)")
+  const shadow = theme === "oneaccounts"
+    ? "0 25px 50px -12px rgba(0,0,0,0.6)"
+    : (isDarkText ? "0 25px 50px -12px rgba(0,0,0,0.15)" : "0 25px 50px -12px rgba(0,0,0,0.5)")
 
   return (
     <motion.aside
@@ -138,8 +147,8 @@ export default function DashboardSidebar({
         margin: GAP,
         marginRight: 0,
         borderRadius: 24,
-        background: "var(--main-bg)",
-        boxShadow: isLight ? "0 25px 50px -12px rgba(0,0,0,0.15)" : "0 25px 50px -12px rgba(0,0,0,0.5)",
+        background: bg,
+        boxShadow: shadow,
         border: `1px solid ${borderColor}`,
         position: "fixed",
         top: 0, left: 0, bottom: GAP,
