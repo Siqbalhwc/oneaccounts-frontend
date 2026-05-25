@@ -175,8 +175,8 @@ export async function generateReceiptPDF(data: ReceiptPDFData): Promise<jsPDF> {
     didDrawCell(hookData) {
       if (hookData.section === "body" && hookData.column.dataKey === "img") {
         const imgData = imageCache[hookData.row.index]; if (imgData) {
-          const { x, y, w, h } = hookData.cell; const pad = 2; const size = Math.min(w, h) - pad * 2
-          doc.addImage(imgData, "JPEG", x + (w - size)/2, y + (h - size)/2, size, size)
+          const { x, y, width, height } = hookData.cell; const pad = 2; const size = Math.min(width, height) - pad * 2
+          doc.addImage(imgData, "JPEG", x + (width - size)/2, y + (height - size)/2, size, size)
         }
       }
     },
