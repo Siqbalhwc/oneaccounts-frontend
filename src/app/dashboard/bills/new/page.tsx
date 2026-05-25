@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import {
   ArrowLeft, Plus, Trash2, Search, X, Download, CheckCircle,
-  Image as ImageIcon, RefreshCw,
+  RefreshCw,
 } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
@@ -26,7 +26,7 @@ export default function NewBillPage() {
   const showPO = hasFeature("purchase_orders")
 
   const [companyId, setCompanyId] = useState("")
-  const [businessType, setBusinessType] = useState("")   // "ngo" | "trading" | "service" etc.
+  const [businessType, setBusinessType] = useState("")
   const [loading, setLoading] = useState(true)
 
   const isNGO = businessType === "ngo"
@@ -42,7 +42,7 @@ export default function NewBillPage() {
   // PO related state
   const [openPOs, setOpenPOs] = useState<any[]>([])
   const [poId, setPoId] = useState<number | null>(null)
-  const [poRemaining, setPoRemaining] = useState<number>(0) // remaining balance of selected PO
+  const [poRemaining, setPoRemaining] = useState<number>(0)
 
   const [products, setProducts] = useState<any[]>([])
   const [productSearch, setProductSearch] = useState("")
@@ -70,7 +70,6 @@ export default function NewBillPage() {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
 
-      // Fetch business type
       supabase.from("companies").select("business_type").eq("id", cid).single()
         .then(r => {
           if (r.data) setBusinessType(r.data.business_type || "")
@@ -91,7 +90,6 @@ export default function NewBillPage() {
         .order("code")
         .then(r => r.data && setAllAccounts(r.data))
 
-      // Load locations and activities only if NGO
       if (isNGO) {
         supabase.from("locations").select("id,name")
           .eq("company_id", cid).order("name")
@@ -135,45 +133,56 @@ export default function NewBillPage() {
       return
     }
 
-    // 1. Fetch approved POs with items
+    // 1. Fetch approved POs with their items (separate query to avoid nested select issues)
     supabase
       .from("purchase_orders")
-      .select("id, po_no, expected_delivery, items:purchase_order_items(id,product_id,description,qty,unit_price,total)")
+      .select("id, po_no, expected_delivery")
       .eq("company_id", companyId)
       .eq("supplier_id", supplierId)
       .eq("status", "Approved")
       .order("po_no")
-      .then(({ data: pos }) => {
-        if (!pos) return
+      .then(async ({ data: pos }) => {
+        if (!pos || pos.length === 0) {
+          setOpenPOs([])
+          return
+        }
 
-        // 2. Fetch all bills linked to any of these POs
-        const poIds = pos.map(p => p.id)
-        supabase
-          .from("invoices")
-          .select("id, total, po_id")
-          .in("po_id", poIds)
-          .eq("type", "purchase")
-          .eq("company_id", companyId)
-          .is("deleted_at", null)       // only active bills
-          .then(({ data: linkedBills }) => {
-            // Compute billed total per PO
-            const billedMap: Record<number, number> = {}
-            ;(linkedBills || []).forEach(b => {
-              const po = b.po_id
-              if (po) billedMap[po] = (billedMap[po] || 0) + (b.total || 0)
-            })
+        // 2. For each PO, fetch its items and total
+        const enriched = []
+        for (const po of pos) {
+          const { data: items } = await supabase
+            .from("purchase_order_items")
+            .select("id,product_id,description,qty,unit_price,total")
+            .eq("purchase_order_id", po.id)
 
-            // Attach remaining balance to each PO
-            const enriched = pos.map(po => {
-              const totalPO = (po.items || []).reduce((sum: number, i: any) => sum + (i.total || 0), 0)
-              const billed = billedMap[po.id] || 0
-              const remaining = totalPO - billed
-              return { ...po, totalPO, billed, remaining }
-            })
-            .filter(po => po.remaining > 0)   // only show POs with remaining balance
+          const totalPO = (items || []).reduce((sum: number, i: any) => sum + (i.total || 0), 0)
 
-            setOpenPOs(enriched)
+          // 3. Fetch already billed amount for this PO
+          const { data: linkedBills } = await supabase
+            .from("invoices")
+            .select("id, total")
+            .eq("type", "purchase")
+            .eq("company_id", companyId)
+            .eq("po_id", po.id)
+            .is("deleted_at", null)
+
+          const billed = (linkedBills || []).reduce((s: number, b: any) => s + (b.total || 0), 0)
+          const remaining = totalPO - billed
+
+          console.log(`PO ${po.po_no}: totalPO=${totalPO}, billed=${billed}, remaining=${remaining}`)
+
+          enriched.push({
+            ...po,
+            items: items || [],
+            totalPO,
+            billed,
+            remaining,
           })
+        }
+
+        // Only keep POs with remaining > 0
+        const filtered = enriched.filter(po => po.remaining > 0)
+        setOpenPOs(filtered)
       })
   }, [companyId, supplierId, showPO])
 
@@ -376,7 +385,6 @@ export default function NewBillPage() {
 
     for (const item of items) {
       if (!item.product_id) {
-        // Manual item – validation depends on business type
         if (isNGO) {
           if (!item.location_id || !item.activity_id || !item.account_id) {
             setError("Each manual line must have Location, Activity, and GL Account selected")
@@ -396,7 +404,6 @@ export default function NewBillPage() {
       return
     }
 
-    // PO balance check
     if (poId && poRemaining > 0) {
       if (totalAmount > poRemaining) {
         setError(`Bill total (PKR ${totalAmount.toLocaleString()}) exceeds the remaining PO balance (PKR ${poRemaining.toLocaleString()}).`)
@@ -657,7 +664,7 @@ export default function NewBillPage() {
                 )}
               </div>
 
-              {/* PO linking dropdown – now shows remaining balance */}
+              {/* PO linking dropdown */}
               {showPO && selectedSupplier && openPOs.length > 0 && (
                 <div style={{ marginTop: 14 }}>
                   <label className="inv-label">Link to Purchase Order (optional)</label>
