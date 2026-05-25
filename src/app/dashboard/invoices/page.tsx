@@ -140,21 +140,31 @@ export default function InvoicesPage() {
       <style>{`
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; width: 100%; }
         .header-row {
-          display: grid; grid-template-columns: 120px 90px 220px 100px 80px 140px 150px; column-gap: 8px;
-          padding: 14px 24px; font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border); background: var(--card);
+          display: grid;
+          grid-template-columns: 120px 90px 220px 100px 80px 130px 170px;
+          column-gap: 8px;
+          padding: 14px 24px;
+          font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
+          border-bottom: 1px solid var(--border);
+          background: var(--card);
           width: 100%;
         }
         .data-row {
-          display: grid; grid-template-columns: 120px 90px 220px 100px 80px 140px 150px; column-gap: 8px;
-          padding: 12px 24px; border-bottom: 1px solid var(--border); font-size: 13px; align-items: center; transition: background 0.15s;
+          display: grid;
+          grid-template-columns: 120px 90px 220px 100px 80px 130px 170px;
+          column-gap: 8px;
+          padding: 12px 24px;
+          border-bottom: 1px solid var(--border);
+          font-size: 13px; align-items: center;
+          transition: background 0.15s;
           width: 100%;
         }
         .data-row:hover { background: var(--card-hover); }
         .btn {
-          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+          display: inline-flex; align-items: center; gap: 6px;
           background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
-          color: white;
-          border: none;
+          color: white; border: none;
           transition: all 0.2s;
         }
         .btn:hover {
@@ -162,7 +172,11 @@ export default function InvoicesPage() {
           transform: translateY(-1px);
           box-shadow: 0 6px 20px rgba(7,19,82,0.45);
         }
-        .btn-icon { background: transparent; border: 1.5px solid var(--border); color: var(--text-muted); padding: 4px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+        .btn-icon {
+          background: transparent; border: 1.5px solid var(--border); color: var(--text-muted);
+          padding: 4px; border-radius: 6px; cursor: pointer;
+          display: inline-flex; align-items: center; justify-content: center;
+        }
         .btn-icon:hover { background: var(--card-hover); }
         .input { width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px; background: var(--card); color: var(--text); outline: none; box-sizing: border-box; }
         .input:focus { border-color: var(--primary); }
@@ -174,7 +188,7 @@ export default function InvoicesPage() {
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
         .creator-editor-cell { display: flex; flex-direction: column; font-size: 11px; color: var(--text-muted); line-height: 1.3; word-wrap: break-word; }
         @media (max-width: 640px) {
-          .header-row, .data-row { grid-template-columns: 80px 70px 0.8fr 70px 60px 80px 90px; padding: 10px 12px; }
+          .header-row, .data-row { grid-template-columns: 80px 70px 0.8fr 70px 60px 80px 120px; padding: 10px 12px; }
         }
       `}</style>
 
