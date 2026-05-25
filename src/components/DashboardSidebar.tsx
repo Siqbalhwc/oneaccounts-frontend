@@ -71,7 +71,7 @@ export default function DashboardSidebar({
     return false
   })
 
-  const GAP = 6   // uniform margin on all sides
+  const GAP = 6
 
   useEffect(() => {
     localStorage.setItem("sidebarCollapsed", String(collapsed))
@@ -82,7 +82,8 @@ export default function DashboardSidebar({
     }
   }, [collapsed])
 
-  const [openSections, setOpenSections] = useState<Set<string>>(new Set())
+  // ── Only one section open at a time ──
+  const [openSection, setOpenSection] = useState<string>("MAIN")
 
   const getSectionForPath = useCallback((path: string) => {
     for (const sec of navSections) {
@@ -96,10 +97,14 @@ export default function DashboardSidebar({
     return "MAIN"
   }, [])
 
-  useEffect(() => { setOpenSections(new Set([getSectionForPath(pathname)])) }, [pathname, getSectionForPath])
+  // Keep active section open when route changes
+  useEffect(() => {
+    setOpenSection(getSectionForPath(pathname))
+  }, [pathname, getSectionForPath])
 
-  const toggleSection = (section: string) => {
-    setOpenSections(prev => { const next = new Set(prev); next.has(section) ? next.delete(section) : next.add(section); return next })
+  // Clicking a section header opens that one and closes others
+  const handleSectionClick = (section: string) => {
+    setOpenSection(prev => prev === section ? prev : section)
   }
 
   const [visitedFeatures, setVisitedFeatures] = useState<Record<string, boolean>>({})
@@ -115,7 +120,6 @@ export default function DashboardSidebar({
 
   const isVisible = (item: NavItem) => !(item.adminOnly && role !== "admin") && (!item.feature || hasFeature(item.feature))
 
-  // Theme‑adaptive text colours
   const isLight = theme === "light" || (theme === "system" && typeof window !== "undefined" && !window.matchMedia("(prefers-color-scheme: dark)").matches)
   const textColor      = isLight ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.85)"
   const mutedTextColor  = isLight ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.5)"
@@ -132,7 +136,7 @@ export default function DashboardSidebar({
         margin: GAP,
         marginRight: 0,
         borderRadius: 24,
-        background: "var(--main-bg)",                     // match dashboard background
+        background: "var(--main-bg)",
         boxShadow: isLight ? "0 25px 50px -12px rgba(0,0,0,0.15)" : "0 25px 50px -12px rgba(0,0,0,0.5)",
         border: `1px solid ${borderColor}`,
         position: "fixed",
@@ -174,13 +178,13 @@ export default function DashboardSidebar({
       <nav className="dl-sidebar-nav" style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "8px 8px" }}>
         {navSections.map(sec => {
           if (sec.feature && !hasFeature(sec.feature)) return null
-          const isOpen = openSections.has(sec.section)
+          const isOpen = openSection === sec.section
           return (
             <div key={sec.section} style={{ marginBottom: 4 }}>
               {!collapsed && (
                 <motion.div
                   style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 4, userSelect: "none", padding: "10px 14px 4px", color: mutedTextColor, fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}
-                  onClick={() => toggleSection(sec.section)}
+                  onClick={() => handleSectionClick(sec.section)}
                   whileHover={{ color: textColor }}
                 >
                   <span style={{ flex: 1 }}>{sec.section}</span>
