@@ -256,7 +256,7 @@ export default function SuppliersPage() {
     fetchSuppliers()
   }
 
-  // CSV Export (fixed type error by casting s to any)
+  // CSV Export
   const handleExport = () => {
     if (suppliers.length === 0) { alert("No data to export"); return }
     const headers = ["code", "name", "phone", "email", "address", "opening_balance", "balance", "payment_terms"]
@@ -335,7 +335,7 @@ export default function SuppliersPage() {
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; width: 100%; }
         .header-row {
           display: grid;
           grid-template-columns: 100px 250px 130px 100px 130px 55px 55px 50px;
@@ -344,6 +344,7 @@ export default function SuppliersPage() {
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
           background: var(--card);
+          width: 100%;
         }
         .data-row {
           display: grid;
@@ -353,6 +354,7 @@ export default function SuppliersPage() {
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
           transition: background 0.15s;
+          width: 100%;
         }
         .data-row:hover { background: var(--card-hover); }
         .data-row:last-child { border-bottom: none; }
