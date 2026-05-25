@@ -8,6 +8,12 @@
  * FIXES in this version:
  *  … (all previous fixes retained)
  *  15. Table rounded border now thicker so no sharp corners peek through
+ *  16. Column header text alignment fixed:
+ *        - Description: left-aligned (matching data)
+ *        - Qty: center-aligned (matching data)
+ *        - Unit Price: center-aligned header (data stays right)
+ *        - Amount: center-aligned header (data stays right)
+ *  17. Header text vertical centering corrected using font-size-aware baseline offset
  */
 
 import jsPDF from "jspdf"
@@ -241,35 +247,33 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
 
   filledRect(doc, ML, tableY, CW, HEADER_ROW_H, NAVY, HEADER_RADIUS)
 
-  const colWidths = [14, 8, 0, 16, 32, 34]
   const descColX = ML + 14 + 8 + 2
   const descColW = CW - (14 + 8 + 2) - (16 + 32 + 34 + 4)
 
-  type HeaderDef = {
-    text: string
-    x: number
-    w: number
-    align: "left" | "center" | "right"
-  }
-
-  const headers: HeaderDef[] = [
-    { text: "",            x: ML,                    w: 14,       align: "center" },
-    { text: "#",           x: ML + 14,               w: 8,        align: "center" },
-    { text: "Description", x: descColX,              w: descColW, align: "left" },
-    { text: "Qty",         x: descColX + descColW,   w: 16,       align: "center" },
-    { text: "Unit Price",  x: descColX + descColW + 16, w: 32,    align: "right" },
-    { text: "Amount",      x: descColX + descColW + 16 + 32, w: 34, align: "right" },
-  ]
+  // FIX: vertical center baseline — font size 9pt, baseline offset = fontSize * 0.35
+  const FONT_SIZE_HEADER = 9
+  const textY = tableY + HEADER_ROW_H / 2 + FONT_SIZE_HEADER * 0.35
 
   doc.setFont("helvetica", "bold")
-  doc.setFontSize(9)
+  doc.setFontSize(FONT_SIZE_HEADER)
   doc.setTextColor(...WHITE)
-  for (const h of headers) {
-    if (h.text) {
-      const textY = tableY + HEADER_ROW_H / 2 + doc.getFontSize() * 0.32
-      doc.text(h.text, h.x + h.w / 2, textY, { align: h.align, maxWidth: h.w })
-    }
-  }
+
+  // FIX: each header drawn with alignment matching its data column
+  // Column 1: image placeholder — skip
+  // Column 2: # — center
+  doc.text("#", ML + 14 + 8 / 2, textY, { align: "center" })
+
+  // Column 3: Description — left, with 3mm cell padding to match autoTable cellPadding
+  doc.text("Description", descColX + 3, textY, { align: "left" })
+
+  // Column 4: Qty — center of its column
+  doc.text("Qty", descColX + descColW + 16 / 2, textY, { align: "center" })
+
+  // Column 5: Unit Price — center of its column
+  doc.text("Unit Price", descColX + descColW + 16 + 32 / 2, textY, { align: "center" })
+
+  // Column 6: Amount — center of its column
+  doc.text("Amount", descColX + descColW + 16 + 32 + 34 / 2, textY, { align: "center" })
 
   // ── SECTION 4: ITEMS TABLE (body only, no head) ───────────────────────────
   const bodyStartY = tableY + HEADER_ROW_H
@@ -310,12 +314,12 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     }
 
     return {
-      img:        i,
-      num:        i + 1,
+      img:         i,
+      num:         i + 1,
       description: desc,
-      qty:        item.qty,
-      unit_price: pkr(item.unit_price),
-      amount:     pkr(item.total),
+      qty:         item.qty,
+      unit_price:  pkr(item.unit_price),
+      amount:      pkr(item.total),
     }
   })
 
@@ -338,7 +342,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     columnStyles: {
       img:         { cellWidth: 14, halign: "center" },
       num:         { cellWidth: 8,  halign: "center" },
-      description: { cellWidth: "auto" },
+      description: { cellWidth: "auto", halign: "left" },
       qty:         { cellWidth: 16, halign: "center" },
       unit_price:  { cellWidth: 32, halign: "right"  },
       amount:      { cellWidth: 34, halign: "right", fontStyle: "bold" },
@@ -366,7 +370,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   // ── Rounded border around data rows (thicker line to hide inner corners) ──
   const TABLE_RADIUS = 4
   doc.setDrawColor(...BORDER)
-  doc.setLineWidth(0.8)                       // thicker stroke to cover sharp corners
+  doc.setLineWidth(0.8)
   doc.roundedRect(ML, bodyStartY, CW, afterTable - bodyStartY, TABLE_RADIUS, TABLE_RADIUS, "S")
 
   // ── SECTION 5: SUBTOTAL / TAX / TOTAL ──────────────────────────────────────
@@ -390,7 +394,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.text(pkr(0), valX, SY, { align: "right" })
   SY += 5.5
 
-  // Total pill – navy rounded rect, same radius as header
+  // Total pill – navy rounded rect
   const TOTAL_RADIUS = 4
   filledRect(doc, sumX - 2, SY - 4, valX - sumX + 4, 9, NAVY, TOTAL_RADIUS)
   doc.setFont("helvetica", "bold")
