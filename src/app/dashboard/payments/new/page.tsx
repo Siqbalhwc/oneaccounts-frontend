@@ -211,7 +211,7 @@ export default function NewPaymentPage() {
   return (
     <div style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .pay-shell { max-width: 1100px; margin: 0 auto; }
+        .pay-shell { width: 100%; } /* full width – no max-width limitation */
         .pay-title { font-size: 18px; font-weight: 700; color: var(--text); }
         .pay-card {
           background: var(--card); border-radius: 12px; border: 1px solid var(--border);
@@ -224,7 +224,7 @@ export default function NewPaymentPage() {
           outline: none; box-sizing: border-box;
         }
         .pay-input:focus, .pay-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
-        input[type="date"] { color-scheme: dark; }   /* fix dark calendar */
+        input[type="date"] { color-scheme: dark; }
         .pay-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .pay-btn {
           display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px;
@@ -258,8 +258,17 @@ export default function NewPaymentPage() {
           border-radius: 8px; padding: 6px 12px; font-size: 13px;
           font-weight: 600; color: var(--text); width: 100%; cursor: pointer;
         }
-        .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
-        @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
+        .header-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 300px;
+          gap: 16px;
+          align-items: start;
+        }
+        @media (max-width: 900px) {
+          .header-grid {
+            grid-template-columns: 1fr;
+          }
+        }
         .chk-box { width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary); }
         .alloc-input { width: 80px; height: 28px; border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; text-align: right; background: var(--bg); color: var(--text); }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
