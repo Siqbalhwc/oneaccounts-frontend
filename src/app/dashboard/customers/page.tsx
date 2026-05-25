@@ -181,7 +181,7 @@ export default function CustomersPage() {
     <RoleGuard allowedRoles={["admin", "accountant"]}>
       <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
         <style>{`
-          .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
+          .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; width: 100%; }
           .header-row {
             display: grid;
             grid-template-columns: 80px 250px 120px 100px 130px 55px 55px 55px;
@@ -190,6 +190,7 @@ export default function CustomersPage() {
             background: var(--card-hover);
             font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
             border-bottom: 1px solid var(--border);
+            width: 100%;
           }
           .data-row {
             display: grid;
@@ -199,6 +200,7 @@ export default function CustomersPage() {
             border-bottom: 1px solid var(--border);
             font-size: 13px; align-items: center;
             transition: background 0.15s;
+            width: 100%;
           }
           .data-row:hover { background: var(--card-hover); }
           .data-row:last-child { border-bottom: none; }
@@ -215,8 +217,21 @@ export default function CustomersPage() {
             background: var(--card); color: var(--text);
           }
           .search-input:focus { border-color: var(--primary); }
-          .btn { padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-          .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
+          .btn {
+            padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px;
+            cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+            background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
+            color: white;
+            transition: all 0.2s;
+          }
+          .btn:hover {
+            background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(7,19,82,0.45);
+          }
+          .btn-outline {
+            background: transparent; color: var(--text-muted); border: 1.5px solid var(--border);
+          }
           .btn-outline:hover { background: var(--card-hover); }
           .btn-icon {
             background: transparent; border: 1.5px solid var(--border); color: var(--text-muted);
@@ -251,20 +266,20 @@ export default function CustomersPage() {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {showImportExport && (
               <>
-                <button className="btn btn-outline" onClick={downloadTemplate} title="Download CSV template">
+                <button className="btn" onClick={downloadTemplate} title="Download CSV template">
                   <FileText size={14} /> Template
                 </button>
-                <label className="btn btn-outline" style={{ cursor: "pointer" }}>
+                <label className="btn" style={{ cursor: "pointer" }}>
                   <Upload size={14} /> Import
                   <input type="file" accept=".csv" onChange={handleImport} ref={fileInputRef} style={{ display: "none" }} />
                 </label>
-                <button className="btn btn-outline" onClick={handleExport} title="Export to CSV">
+                <button className="btn" onClick={handleExport} title="Export to CSV">
                   <Download size={14} /> Export
                 </button>
               </>
             )}
             {canEdit && (
-              <button className="btn btn-outline" onClick={() => router.push("/dashboard/customers/new")}>
+              <button className="btn" onClick={() => router.push("/dashboard/customers/new")}>
                 <Plus size={16} /> Add Customer
               </button>
             )}
