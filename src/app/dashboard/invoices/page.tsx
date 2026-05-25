@@ -138,18 +138,30 @@ export default function InvoicesPage() {
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; width: 100%; }
         .header-row {
           display: grid; grid-template-columns: 120px 90px 220px 100px 80px 140px 150px; column-gap: 8px;
           padding: 14px 24px; font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border); background: var(--card);
+          width: 100%;
         }
         .data-row {
           display: grid; grid-template-columns: 120px 90px 220px 100px 80px 140px 150px; column-gap: 8px;
           padding: 12px 24px; border-bottom: 1px solid var(--border); font-size: 13px; align-items: center; transition: background 0.15s;
+          width: 100%;
         }
         .data-row:hover { background: var(--card-hover); }
-        .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); }
-        .btn:hover { background: var(--card-hover); }
+        .btn {
+          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
+          color: white;
+          border: none;
+          transition: all 0.2s;
+        }
+        .btn:hover {
+          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
+          transform: translateY(-1px);
+          box-shadow: 0 6px 20px rgba(7,19,82,0.45);
+        }
         .btn-icon { background: transparent; border: 1.5px solid var(--border); color: var(--text-muted); padding: 4px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
         .btn-icon:hover { background: var(--card-hover); }
         .input { width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px; background: var(--card); color: var(--text); outline: none; box-sizing: border-box; }
