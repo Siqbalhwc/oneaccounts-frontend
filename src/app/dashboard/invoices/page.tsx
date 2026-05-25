@@ -69,16 +69,13 @@ export default function InvoicesPage() {
   const todayISO = new Date().toISOString().split("T")[0]
 
   const filtered = invoices.filter((inv) => {
-    // Search
     if (search.trim()) {
       const cust = customerMap[inv.party_id]
       const custName = cust?.name || ""
       if (!inv.invoice_no?.toLowerCase().includes(search.toLowerCase()) &&
           !custName.toLowerCase().includes(search.toLowerCase())) return false
     }
-    // Status filter
     if (statusFilter && inv.status !== statusFilter) return false
-    // Overdue filter
     if (overdueFilter) {
       if (inv.status === "Paid" || inv.due_date >= todayISO) return false
     }
@@ -141,7 +138,7 @@ export default function InvoicesPage() {
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; width: 100%; }
         .header-row {
           display: grid;
-          grid-template-columns: 120px 90px 220px 100px 80px 130px 170px;
+          grid-template-columns: 120px 90px 1fr 100px 80px 120px 180px;
           column-gap: 8px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
@@ -151,7 +148,7 @@ export default function InvoicesPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: 120px 90px 220px 100px 80px 130px 170px;
+          grid-template-columns: 120px 90px 1fr 100px 80px 120px 180px;
           column-gap: 8px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
@@ -188,7 +185,7 @@ export default function InvoicesPage() {
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
         .creator-editor-cell { display: flex; flex-direction: column; font-size: 11px; color: var(--text-muted); line-height: 1.3; word-wrap: break-word; }
         @media (max-width: 640px) {
-          .header-row, .data-row { grid-template-columns: 80px 70px 0.8fr 70px 60px 80px 120px; padding: 10px 12px; }
+          .header-row, .data-row { grid-template-columns: 80px 70px 1fr 70px 60px 80px 130px; padding: 10px 12px; }
         }
       `}</style>
 
