@@ -149,24 +149,26 @@ export default function BillsPage() {
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; width: 100%; }
         .header-row {
           display: grid;
-          grid-template-columns: 140px 80px 200px 120px 70px 130px 50px 50px 50px;
+          grid-template-columns: 150px 100px 220px 120px 80px 140px 55px 55px 55px;
           column-gap: 8px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
           background: var(--card);
+          width: 100%;
         }
         .data-row {
           display: grid;
-          grid-template-columns: 140px 80px 200px 120px 70px 130px 50px 50px 50px;
+          grid-template-columns: 150px 100px 220px 120px 80px 140px 55px 55px 55px;
           column-gap: 8px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
           transition: background 0.15s;
+          width: 100%;
         }
         .data-row:hover { background: var(--card-hover); }
         .data-row:last-child { border-bottom: none; }
@@ -285,6 +287,7 @@ export default function BillsPage() {
                 <span>{bill.date}</span>
                 <span>{suppName}</span>
                 <span style={{ fontWeight: 600, textAlign: "right" }}>PKR {bill.total?.toLocaleString()}</span>
+                {/* Status data centered */}
                 <span style={{
                   color: bill.status === "Paid" ? "#10B981" : bill.status === "Unpaid" ? "#EF4444" : "#F59E0B",
                   fontWeight: 600,
