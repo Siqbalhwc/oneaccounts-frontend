@@ -207,7 +207,7 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
-  const { party_id, invoice_date, due_date, items, reference, notes } = body
+  const { party_id, invoice_date, due_date, items, reference, notes, po_id } = body
   if (!party_id || !items || items.length === 0) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
@@ -243,6 +243,7 @@ export async function POST(request: NextRequest) {
         company_id: companyId,
         created_by: userEmail,
         updated_by: userEmail,
+        po_id: po_id || null,          // store PO link
       })
       .select('*')
       .single()
@@ -337,7 +338,7 @@ export async function PUT(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
-  const { id, party_id, invoice_date, due_date, items, reference, notes } = body
+  const { id, party_id, invoice_date, due_date, items, reference, notes, po_id } = body
   if (!id) return NextResponse.json({ error: 'Bill ID required' }, { status: 400 })
 
   const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -425,6 +426,7 @@ export async function PUT(request: NextRequest) {
       reference,
       notes,
       updated_by: userEmail,
+      po_id: po_id || null,          // store updated PO link
     })
     .eq('id', id)
     .select('*')

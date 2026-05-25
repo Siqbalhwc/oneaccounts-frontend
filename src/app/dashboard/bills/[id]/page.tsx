@@ -35,6 +35,10 @@ interface Bill {
     address?: string
     email?: string
   }
+  created_by?: string
+  updated_by?: string
+  created_at?: string
+  updated_at?: string
 }
 
 export default function BillDetailPage() {
@@ -154,7 +158,6 @@ export default function BillDetailPage() {
     const supplier = bill.supplier
     const subTotal = bill.items?.reduce((s, i) => s + i.total, 0) || 0
 
-    // ── Build pdfData with guaranteed string types ──
     const pdfData = {
       companyName:    companySettings.name || "OneAccounts",
       companyAddress: companySettings.address || "",
@@ -254,6 +257,18 @@ export default function BillDetailPage() {
         <div className="row"><span className="label">Status</span><span className="value">{bill.status}</span></div>
         {bill.reference && <div className="row"><span className="label">Reference</span><span className="value">{bill.reference}</span></div>}
         {bill.notes && <div className="row"><span className="label">Notes</span><span className="value">{bill.notes}</span></div>}
+        {bill.created_by && (
+          <div className="row">
+            <span className="label">Created by</span>
+            <span className="value">{bill.created_by}</span>
+          </div>
+        )}
+        {bill.updated_by && (
+          <div className="row">
+            <span className="label">Last updated by</span>
+            <span className="value">{bill.updated_by}</span>
+          </div>
+        )}
       </div>
 
       {bill.items && bill.items.length > 0 && (

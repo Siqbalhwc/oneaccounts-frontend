@@ -42,6 +42,7 @@ export default function NewBillPage() {
   // PO related state
   const [openPOs, setOpenPOs] = useState<any[]>([])
   const [poId, setPoId] = useState<number | null>(null)
+  const [poRemaining, setPoRemaining] = useState<number>(0) // remaining balance of selected PO
 
   const [products, setProducts] = useState<any[]>([])
   const [productSearch, setProductSearch] = useState("")
@@ -126,13 +127,15 @@ export default function NewBillPage() {
       .then(r => r.data && setProducts(r.data))
   }
 
-  // Fetch open POs for the selected supplier
+  // Fetch open POs for the selected supplier, computing already‑billed amount
   useEffect(() => {
     if (!companyId || !supplierId || !showPO) {
       setOpenPOs([])
       setPoId(null)
       return
     }
+
+    // 1. Fetch approved POs with items
     supabase
       .from("purchase_orders")
       .select("id, po_no, expected_delivery, items:purchase_order_items(id,product_id,description,qty,unit_price,total)")
@@ -140,8 +143,37 @@ export default function NewBillPage() {
       .eq("supplier_id", supplierId)
       .eq("status", "Approved")
       .order("po_no")
-      .then(({ data }) => {
-        setOpenPOs(data || [])
+      .then(({ data: pos }) => {
+        if (!pos) return
+
+        // 2. Fetch all bills linked to any of these POs
+        const poIds = pos.map(p => p.id)
+        supabase
+          .from("invoices")
+          .select("id, total, po_id")
+          .in("po_id", poIds)
+          .eq("type", "purchase")
+          .eq("company_id", companyId)
+          .is("deleted_at", null)       // only active bills
+          .then(({ data: linkedBills }) => {
+            // Compute billed total per PO
+            const billedMap: Record<number, number> = {}
+            ;(linkedBills || []).forEach(b => {
+              const po = b.po_id
+              if (po) billedMap[po] = (billedMap[po] || 0) + (b.total || 0)
+            })
+
+            // Attach remaining balance to each PO
+            const enriched = pos.map(po => {
+              const totalPO = (po.items || []).reduce((sum: number, i: any) => sum + (i.total || 0), 0)
+              const billed = billedMap[po.id] || 0
+              const remaining = totalPO - billed
+              return { ...po, totalPO, billed, remaining }
+            })
+            .filter(po => po.remaining > 0)   // only show POs with remaining balance
+
+            setOpenPOs(enriched)
+          })
       })
   }, [companyId, supplierId, showPO])
 
@@ -197,6 +229,7 @@ export default function NewBillPage() {
     setSupplierSearch(s.name)
     setShowSupplierList(false)
     setPoId(null)
+    setPoRemaining(0)
   }
 
   const clearSupplier = () => {
@@ -205,6 +238,7 @@ export default function NewBillPage() {
     setSupplierSearch("")
     setShowSupplierList(true)
     setPoId(null)
+    setPoRemaining(0)
   }
 
   const refreshSuppliers = () => {
@@ -227,11 +261,15 @@ export default function NewBillPage() {
   const handleSelectPO = (selectedPOId: number | null) => {
     if (selectedPOId === null) {
       setPoId(null)
+      setPoRemaining(0)
       return
     }
-    setPoId(selectedPOId)
     const selectedPO = openPOs.find(p => p.id === selectedPOId)
     if (!selectedPO) return
+
+    setPoId(selectedPOId)
+    setPoRemaining(selectedPO.remaining)
+
     const poItems = (selectedPO.items || []).map((item: any) => ({
       product_id: item.product_id || null,
       description: item.description || "",
@@ -356,6 +394,14 @@ export default function NewBillPage() {
     if (budgetError) {
       setError("Cannot save: some lines exceed the available budget.")
       return
+    }
+
+    // PO balance check
+    if (poId && poRemaining > 0) {
+      if (totalAmount > poRemaining) {
+        setError(`Bill total (PKR ${totalAmount.toLocaleString()}) exceeds the remaining PO balance (PKR ${poRemaining.toLocaleString()}).`)
+        return
+      }
     }
 
     setSaving(true); setError("")
@@ -611,7 +657,7 @@ export default function NewBillPage() {
                 )}
               </div>
 
-              {/* PO linking dropdown */}
+              {/* PO linking dropdown – now shows remaining balance */}
               {showPO && selectedSupplier && openPOs.length > 0 && (
                 <div style={{ marginTop: 14 }}>
                   <label className="inv-label">Link to Purchase Order (optional)</label>
@@ -623,10 +669,15 @@ export default function NewBillPage() {
                     <option value="">— None —</option>
                     {openPOs.map(po => (
                       <option key={po.id} value={po.id}>
-                        {po.po_no} {po.expected_delivery ? `· delivery ${po.expected_delivery}` : ""}
+                        {po.po_no} — Remaining: PKR {po.remaining.toLocaleString()}
                       </option>
                     ))}
                   </select>
+                  {poId && poRemaining > 0 && (
+                    <div style={{ fontSize: 12, marginTop: 4, color: "var(--text-muted)" }}>
+                      PO balance remaining: PKR <strong>{poRemaining.toLocaleString()}</strong>
+                    </div>
+                  )}
                 </div>
               )}
 
