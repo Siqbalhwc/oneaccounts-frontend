@@ -121,7 +121,8 @@ export default function DashboardSidebar({
 
   const isVisible = (item: NavItem) => !(item.adminOnly && role !== "admin") && (!item.feature || hasFeature(item.feature))
 
-  const isLight = theme === "light" || (theme === "system" && typeof window !== "undefined" && !window.matchMedia("(prefers-color-scheme: dark)").matches)
+  // ── Theme‑adaptive text colours (OneAccounts now treated as light) ──
+  const isLight = theme === "light" || theme === "oneaccounts" || (theme === "system" && typeof window !== "undefined" && !window.matchMedia("(prefers-color-scheme: dark)").matches)
   const textColor      = isLight ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.85)"
   const mutedTextColor  = isLight ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.5)"
   const borderColor     = isLight ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.08)"
@@ -231,7 +232,7 @@ export default function DashboardSidebar({
   )
 }
 
-// ── NavLink (client‑side navigation, no full reload) ──
+// ── NavLink (client‑side navigation) ──
 function NavLink({ item, collapsed, isNew, markVisited, isActive, textColor, mutedTextColor, router }: {
   item: NavItem; collapsed: boolean; isNew: boolean; markVisited: (c: string) => void; isActive: boolean; textColor: string; mutedTextColor: string; router: ReturnType<typeof useRouter>
 }) {
