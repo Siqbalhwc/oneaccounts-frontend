@@ -6,27 +6,6 @@ import { useRouter } from "next/navigation"
 import { TrendingUp, TrendingDown, Minus, CheckCircle, AlertTriangle } from "lucide-react"
 import { motion } from "framer-motion"
 import { useTheme } from "@/contexts/ThemeContext"
-import CountUp from "react-countup"
-import { LineChart, Line, ResponsiveContainer } from "recharts"
-
-// ── Tiny sparkline component ──
-function Sparkline({ data, color = "#60A5FA" }: { data: number[]; color?: string }) {
-  const chartData = data.map((val, i) => ({ x: i, value: val }))
-  return (
-    <ResponsiveContainer width="100%" height={40}>
-      <LineChart data={chartData} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-        <Line
-          type="monotone"
-          dataKey="value"
-          stroke={color}
-          strokeWidth={2}
-          dot={false}
-          activeDot={false}
-        />
-      </LineChart>
-    </ResponsiveContainer>
-  )
-}
 
 export default function ManagementDashboard({ role }: { role: string }) {
   const supabase = createBrowserClient(
@@ -64,7 +43,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [lastUpdated, setLastUpdated] = useState("")
 
   const [overdueInvoicesCount, setOverdueInvoicesCount] = useState(0)
-  const [monthlySeries, setMonthlySeries] = useState<number[]>([])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user }, error }) => {
@@ -205,31 +183,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
           } else {
             setSpendingTrend(0)
           }
-
-          // Monthly spending for the last 6 months (sparkline)
-          const sixMonthsAgo = new Date(Date.UTC(currentYear, currentMonth - 6, 1))
-          const { data: historicLines } = await supabase
-            .from("journal_lines")
-            .select("debit, credit, journal_entries!inner(date)")
-            .eq("company_id", companyId)
-            .in("account_id", accountIds)
-            .gte("journal_entries.date", sixMonthsAgo.toISOString().split("T")[0])
-            .lte("journal_entries.date", todayISO)
-
-          const byMonth: Record<string, number> = {}
-          historicLines?.forEach((l: any) => {
-            const dt = l.journal_entries?.date?.substring(0, 7)
-            if (dt) {
-              byMonth[dt] = (byMonth[dt] || 0) + (l.debit || 0) - (l.credit || 0)
-            }
-          })
-          const series: number[] = []
-          for (let i = 5; i >= 0; i--) {
-            const d = new Date(Date.UTC(currentYear, currentMonth - i, 1))
-            const key = d.toISOString().substring(0, 7)
-            series.push(byMonth[key] || 0)
-          }
-          setMonthlySeries(series)
         }
 
         // ── Top 5 underspent activities ──
@@ -359,7 +312,11 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const filteredOverspentCount = selectedProjectId ? filteredProjectRows.filter(p => p.actual > p.budget).length : overspentCount
   const remainingFunds = filteredTotalBudget - filteredTotalSpent
   const spentPct = filteredTotalBudget ? Math.round((filteredTotalSpent / filteredTotalBudget) * 100) : 0
-  const projectsAbove70 = filteredProjectRows.filter(p => p.pct > 70).map(p => p.name)
+
+  // Projects for variance display (highest & lowest spending % vs overall)
+  const projectsSorted = [...filteredProjectRows].sort((a, b) => b.pct - a.pct)
+  const highestProject = projectsSorted[0] || null
+  const lowestProject  = projectsSorted[projectsSorted.length - 1] || null
 
   const getGreeting = () => {
     const hour = new Date().getHours()
@@ -603,7 +560,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </div>
         </motion.div>
 
-        {/* Overdue invoices banner – with pulse animation */}
+        {/* Overdue invoices banner */}
         {overdueInvoicesCount > 0 && (
           <motion.div
             className="overdue-banner"
@@ -637,11 +594,11 @@ export default function ManagementDashboard({ role }: { role: string }) {
         {/* KPI cards */}
         <div className="dashboard-grid">
           {[
-            { label: "Total Budget", value: formatPKR(filteredTotalBudget), raw: filteredTotalBudget, meta: `${filteredProjectRows.length} projects`, color: "#A78BFA", link: "/dashboard/reports/budget-summary" },
-            { label: "Total Spent", value: formatPKR(filteredTotalSpent), raw: filteredTotalSpent, meta: `${spentPct}% of budget`, color: "#F97316", link: "/dashboard/reports/spending-detail", extra: projectsAbove70.length > 0 ? `Projects > 70%: ${projectsAbove70.join(", ")}` : null },
-            { label: remainingFunds < 0 ? "Overspent" : "Remaining", value: formatPKR(remainingFunds), raw: Math.abs(remainingFunds), meta: `${Math.abs(Math.round((remainingFunds / filteredTotalBudget) * 100))}% ${remainingFunds < 0 ? "over" : "left"}`, color: remainingFunds >= 0 ? "#2DD4BF" : "#F87171", link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null },
-            { label: "Portfolio Health", value: filteredOverspentCount > 0 ? "⚠️ Needs Attention" : "Healthy", raw: null, meta: `${Math.round((1 - filteredOverspentCount / Math.max(filteredProjectRows.length, 1)) * 100)}% health score`, color: filteredOverspentCount > 0 ? "#F97316" : "#2DD4BF", link: "/dashboard/reports/overspent" },
-            { label: "📆 Monthly Spending", value: monthlySpending > 0 ? formatPKR(monthlySpending) : "—", raw: monthlySpending, meta: monthlySpending === 0 ? "No transactions this month" : `vs. ${formatPKR(lastMonthSpending)} last month`, color: monthlySpending > 0 ? "#F97316" : "#94A3B8", link: "/dashboard/reports/spending-detail", sparkline: true },
+            { label: "Total Budget", value: formatPKR(filteredTotalBudget), meta: `${filteredProjectRows.length} projects`, color: "#A78BFA", link: "/dashboard/reports/budget-summary" },
+            { label: "Total Spent", value: formatPKR(filteredTotalSpent), meta: `${spentPct}% of budget`, color: "#F97316", link: "/dashboard/reports/spending-detail" },
+            { label: remainingFunds < 0 ? "Overspent" : "Remaining", value: formatPKR(remainingFunds), meta: `${Math.abs(Math.round((remainingFunds / filteredTotalBudget) * 100))}% ${remainingFunds < 0 ? "over" : "left"}`, color: remainingFunds >= 0 ? "#2DD4BF" : "#F87171", link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null },
+            { label: "Portfolio Health", value: filteredOverspentCount > 0 ? "⚠️ Needs Attention" : "Healthy", meta: `${Math.round((1 - filteredOverspentCount / Math.max(filteredProjectRows.length, 1)) * 100)}% health score`, color: filteredOverspentCount > 0 ? "#F97316" : "#2DD4BF", link: "/dashboard/reports/overspent" },
+            { label: "📆 Monthly Spending", value: monthlySpending > 0 ? formatPKR(monthlySpending) : "—", meta: monthlySpending === 0 ? "No transactions this month" : `vs. ${formatPKR(lastMonthSpending)} last month`, color: monthlySpending > 0 ? "#F97316" : "#94A3B8", link: "/dashboard/reports/spending-detail" },
           ].map((kpi, i) => (
             <motion.div
               key={kpi.label}
@@ -655,19 +612,19 @@ export default function ManagementDashboard({ role }: { role: string }) {
             >
               <div className="kpi-label">{kpi.label}</div>
               <div className="kpi-value" style={{ color: kpi.color }}>
-                {kpi.raw != null ? (
-                  <CountUp end={kpi.raw} duration={2} formattingFn={(value: number) => formatPKR(value)} />
-                ) : (
-                  kpi.value
-                )}
+                {kpi.value}
               </div>
               <div className="kpi-meta">
                 {kpi.meta}
                 {kpi.label === "Total Spent" && <Trend value={spentPct > 80 ? 5 : -2} positive={false} negative={spentPct > 80} />}
                 {kpi.label === "📆 Monthly Spending" && monthlySpending > 0 && <Trend value={spendingTrend} positive={spendingTrend < 0} negative={spendingTrend > 0} />}
               </div>
-              {kpi.extra && <div style={{ fontSize: "0.65rem", color: "#93C5FD", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200 }}>{kpi.extra}</div>}
-              
+              {/* Variance projects */}
+              {kpi.label === "Total Spent" && highestProject && lowestProject && highestProject.id !== lowestProject.id && (
+                <div style={{ fontSize: "0.65rem", color: "#93C5FD", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  🔺 {highestProject.name} {highestProject.pct}% · 🔻 {lowestProject.name} {lowestProject.pct}%
+                </div>
+              )}
             </motion.div>
           ))}
         </div>
