@@ -250,7 +250,7 @@ export default function NewBillPage() {
     setSupplierId(null)
     setSelectedSupplier(null)
     setSupplierSearch("")
-    setShowSupplierList(true)
+    setShowSupplierList(true)   // intentionally opens search – but redirect avoids this after save
     setPoId(null)
     setPoRemaining(0)
   }
@@ -452,20 +452,23 @@ export default function NewBillPage() {
         return
       }
 
+      // Show success message briefly, then redirect
+      const savedBillId = result.bill?.id || editId
       setFlash(`✅ Bill ${editId ? "updated" : "saved"} successfully!`)
       loadSuppliers()
-      if (editId) {
-        router.push(`/dashboard/bills/${editId}`)
-      } else {
-        setItems([])
-        clearSupplier()
-        setBillDate(new Date().toISOString().split("T")[0])
-        setDueDate(new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0])
-        setReference("")
-        setNotes("")
-      }
       setSaving(false)
-      setTimeout(() => setFlash(null), 4000)
+
+      // Redirect after a short delay – for new bills go to the detail page
+      if (savedBillId) {
+        setTimeout(() => {
+          router.push(`/dashboard/bills/${savedBillId}`)
+        }, 800)
+      } else {
+        // Fallback: go to bill list
+        setTimeout(() => {
+          router.push("/dashboard/bills")
+        }, 800)
+      }
     } catch {
       setError("Network error")
       setSaving(false)
