@@ -133,10 +133,10 @@ export default function NewBillPage() {
       return
     }
 
-    // 1. Fetch approved POs with their items (separate query to avoid nested select issues)
+    // 1. Fetch approved POs with items using nested select (original method)
     supabase
       .from("purchase_orders")
-      .select("id, po_no, expected_delivery")
+      .select("id, po_no, expected_delivery, items:purchase_order_items(id,product_id,description,qty,unit_price,total)")
       .eq("company_id", companyId)
       .eq("supplier_id", supplierId)
       .eq("status", "Approved")
@@ -147,17 +147,22 @@ export default function NewBillPage() {
           return
         }
 
-        // 2. For each PO, fetch its items and total
+        // For each PO, ensure items array exists (fallback if FK missing)
         const enriched = []
         for (const po of pos) {
-          const { data: items } = await supabase
-            .from("purchase_order_items")
-            .select("id,product_id,description,qty,unit_price,total")
-            .eq("purchase_order_id", po.id)
+          let items = po.items || []
+          // If nested select didn't work, fetch items manually
+          if (items.length === 0) {
+            const { data: manualItems } = await supabase
+              .from("purchase_order_items")
+              .select("id,product_id,description,qty,unit_price,total")
+              .eq("po_id", po.id)
+            items = manualItems || []
+          }
 
-          const totalPO = (items || []).reduce((sum: number, i: any) => sum + (i.total || 0), 0)
+          const totalPO = items.reduce((sum: number, i: any) => sum + (i.total || 0), 0)
 
-          // 3. Fetch already billed amount for this PO
+          // 2. Fetch already billed amount for this PO
           const { data: linkedBills } = await supabase
             .from("invoices")
             .select("id, total")
@@ -173,7 +178,7 @@ export default function NewBillPage() {
 
           enriched.push({
             ...po,
-            items: items || [],
+            items,
             totalPO,
             billed,
             remaining,
@@ -664,7 +669,7 @@ export default function NewBillPage() {
                 )}
               </div>
 
-              {/* PO linking dropdown */}
+              {/* PO linking dropdown – only shows POs with remaining balance */}
               {showPO && selectedSupplier && openPOs.length > 0 && (
                 <div style={{ marginTop: 14 }}>
                   <label className="inv-label">Link to Purchase Order (optional)</label>
