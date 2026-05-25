@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { usePlan } from "@/contexts/PlanContext"
 import { useRole } from "@/contexts/RoleContext"
@@ -62,6 +62,7 @@ export default function DashboardSidebar({
   email, initial, logoUrl, companyName, companyTagline,
 }: { email: string; initial: string; logoUrl: string; companyName: string; companyTagline: string }) {
   const pathname = usePathname()
+  const router = useRouter()
   const { hasFeature } = usePlan()
   const { role } = useRole()
   const { theme } = useTheme()
@@ -197,10 +198,10 @@ export default function DashboardSidebar({
                     {sec.groups?.map(group => (
                       <div key={group.groupLabel}>
                         {!collapsed && <div style={{ padding: "6px 14px 2px", color: mutedTextColor, fontSize: 8, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{group.groupLabel}</div>}
-                        {group.items.map(item => isVisible(item) && <NavLink key={item.href} {...{ item, collapsed, isNew: isNew(item), markVisited, isActive: pathname.startsWith(item.href), textColor, mutedTextColor }} />)}
+                        {group.items.map(item => isVisible(item) && <NavLink key={item.href} {...{ item, collapsed, isNew: isNew(item), markVisited, isActive: pathname.startsWith(item.href), textColor, mutedTextColor, router }} />)}
                       </div>
                     ))}
-                    {sec.items?.map(item => isVisible(item) && <NavLink key={item.href} {...{ item, collapsed, isNew: isNew(item), markVisited, isActive: pathname.startsWith(item.href), textColor, mutedTextColor }} />)}
+                    {sec.items?.map(item => isVisible(item) && <NavLink key={item.href} {...{ item, collapsed, isNew: isNew(item), markVisited, isActive: pathname.startsWith(item.href), textColor, mutedTextColor, router }} />)}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -230,13 +231,18 @@ export default function DashboardSidebar({
   )
 }
 
-// ── NavLink (44px height) ──
-function NavLink({ item, collapsed, isNew, markVisited, isActive, textColor, mutedTextColor }: {
-  item: NavItem; collapsed: boolean; isNew: boolean; markVisited: (c: string) => void; isActive: boolean; textColor: string; mutedTextColor: string
+// ── NavLink (client‑side navigation, no full reload) ──
+function NavLink({ item, collapsed, isNew, markVisited, isActive, textColor, mutedTextColor, router }: {
+  item: NavItem; collapsed: boolean; isNew: boolean; markVisited: (c: string) => void; isActive: boolean; textColor: string; mutedTextColor: string; router: ReturnType<typeof useRouter>
 }) {
   return (
     <motion.a
       href={item.href}
+      onClick={(e) => {
+        e.preventDefault()
+        if (item.feature) markVisited(item.feature)
+        router.push(item.href)
+      }}
       style={{
         justifyContent: collapsed ? "center" : "flex-start",
         padding: collapsed ? "0" : "0 14px",
@@ -249,7 +255,6 @@ function NavLink({ item, collapsed, isNew, markVisited, isActive, textColor, mut
       }}
       whileHover={{ x: 4, backgroundColor: isActive ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.05)", color: textColor, transition: { duration: 0.2 } }}
       whileTap={{ scale: 0.97 }}
-      onClick={() => { if (item.feature) markVisited(item.feature) }}
       title={collapsed ? item.label : undefined}
     >
       {isActive && (
