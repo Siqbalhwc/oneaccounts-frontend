@@ -58,7 +58,6 @@ export default function NewReceiptPage() {
         .order("name")
       if (data) {
         setCustomers(data)
-        // Update selected customer balance if still selected
         if (selectedCustomer) {
           const updated = data.find((c: any) => c.id === selectedCustomer.id)
           if (updated) setSelectedCustomer(updated)
@@ -197,7 +196,6 @@ export default function NewReceiptPage() {
       setSelectedBankId(null); setSelectedIncomeAccountId(null); setIsDonation(false)
       setInvoices([]); setAllocations({}); setReceiptAmount(""); setNotes(""); setReference("")
       setLoading(false)
-      // Refresh customer list after a moment to reflect new balance
       setTimeout(() => loadCustomers(), 500)
       setTimeout(() => setFlash(null), 4000)
     } catch {
@@ -211,7 +209,7 @@ export default function NewReceiptPage() {
   return (
     <div style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .inv-shell { max-width: 1100px; margin: 0 auto; }
+        .inv-shell { width: 100%; margin: 0; }
         .inv-title { font-size: 18px; font-weight: 700; color: var(--text); }
         .inv-card {
           background: var(--card); border-radius: 12px; border: 1px solid var(--border);
