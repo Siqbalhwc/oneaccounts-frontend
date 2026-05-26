@@ -105,25 +105,31 @@ export async function generateCustomerLedgerPDF(data: CustomerLedgerPDFData): Pr
 
   filledRect(doc, ML, tableY, CW, HEADER_ROW_H, NAVY, HEADER_RADIUS)
 
-  // Column widths – slightly widened Entry # for better readability
+  // Column widths – precise, no auto width
   const dateW = 28
-  const entryW = 35
+  const entryW = 35   // widened to prevent wrapping of long entry numbers
   const debitW = 30
   const creditW = 30
   const balanceW = 32
-  const descW = CW - dateW - entryW - debitW - creditW - balanceW - 8 // remaining space for Description
+  const descW = CW - dateW - entryW - debitW - creditW - balanceW
 
   const FONT_SIZE_HEADER = 8
   const headerTextY = tableY + HEADER_ROW_H / 2 + FONT_SIZE_HEADER * 0.35
   doc.setFont("helvetica", "bold").setFontSize(FONT_SIZE_HEADER).setTextColor(...WHITE)
 
-  let colX = ML + 2
-  doc.text("Date", colX, headerTextY); colX += dateW
-  doc.text("Entry #", colX, headerTextY); colX += entryW
-  doc.text("Description", colX, headerTextY); colX += descW
-  doc.text("Debit", colX, headerTextY, { align: "right" }); colX += debitW
-  doc.text("Credit", colX, headerTextY, { align: "right" }); colX += creditW
-  doc.text("Balance", colX, headerTextY, { align: "right" })
+  // Place headers exactly where the table columns will be
+  let colX = ML
+  doc.text("Date", colX + 2, headerTextY);        // slight left padding
+  colX += dateW
+  doc.text("Entry #", colX + 2, headerTextY);
+  colX += entryW
+  doc.text("Description", colX + 2, headerTextY);
+  colX += descW
+  doc.text("Debit", colX + debitW, headerTextY, { align: "right" });
+  colX += debitW
+  doc.text("Credit", colX + creditW, headerTextY, { align: "right" });
+  colX += creditW
+  doc.text("Balance", colX + balanceW, headerTextY, { align: "right" });
 
   const bodyStartY = tableY + HEADER_ROW_H
 
