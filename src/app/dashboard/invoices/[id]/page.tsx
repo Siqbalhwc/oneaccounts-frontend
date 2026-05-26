@@ -178,16 +178,13 @@ export default function InvoiceDetailPage() {
         }
       })
 
-    // 5. Company settings
-    supabase
-      .from("company_settings")
-      .select("business_name, address, phone, email, tagline, logo_url, business_type")
-      .eq("company_id", companyId)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) {
+    // 5. Company settings – now fetched from secure API
+    fetch("/api/company-settings")
+      .then(res => res.json())
+      .then(data => {
+        if (data && !data.error) {
           setCompanySettings({
-            name:          data.business_name || "",
+            name:          data.name          || "",
             address:       data.address       || "",
             phone:         data.phone         || "",
             email:         data.email         || "",
@@ -197,6 +194,7 @@ export default function InvoiceDetailPage() {
           })
         }
       })
+      .catch(err => console.error("Failed to fetch company settings", err))
   }, [companyId, invoiceId])
 
   const getWhatsAppLink = () => {
@@ -223,14 +221,8 @@ export default function InvoiceDetailPage() {
     const customer = invoice.customer
     const subTotal = invoice.items?.reduce((s, i) => s + i.total, 0) || 0
 
-    // Fix: handle data: URLs directly, only convert relative paths
+    // Pass logo_url directly – it's already a full URL or data: URL
     let logoUrl = companySettings.logo_url || null
-    if (logoUrl && !logoUrl.startsWith("http") && !logoUrl.startsWith("data:")) {
-      const { data: urlData } = supabase.storage
-        .from("logos")
-        .getPublicUrl(logoUrl)
-      logoUrl = urlData?.publicUrl || null
-    }
 
     const pdfData = {
       companyName:    companySettings.name          || "",
