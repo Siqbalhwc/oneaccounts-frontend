@@ -137,16 +137,16 @@ export default function InvoiceDetailPage() {
               const prod = productMap[item.product_id]
               return {
                 ...item,
-                product_code: prod?.code || "",
-                product_name: prod?.name || "",
+                product_code:  prod?.code       || "",
+                product_name:  prod?.name       || "",
                 product_image: prod?.image_path || null,
               }
             })
           } else {
             inv.items = items.map((item: any) => ({
               ...item,
-              product_code: "",
-              product_name: "",
+              product_code:  "",
+              product_name:  "",
               product_image: null,
             }))
           }
@@ -168,17 +168,17 @@ export default function InvoiceDetailPage() {
       .then(({ data: lines }) => {
         if (lines && lines.length > 0) {
           const formatted = lines.map((l: any) => ({
-            account_id: l.account_id,
+            account_id:   l.account_id,
             account_code: l.accounts?.code || "",
             account_name: l.accounts?.name || "",
-            debit: l.debit || 0,
-            credit: l.credit || 0,
+            debit:        l.debit  || 0,
+            credit:       l.credit || 0,
           }))
           setJournalLines(formatted)
         }
       })
 
-    // 5. Company settings – now uses business_name
+    // 5. Company settings
     supabase
       .from("company_settings")
       .select("business_name, address, phone, email, tagline, logo_url, business_type")
@@ -187,12 +187,12 @@ export default function InvoiceDetailPage() {
       .then(({ data }) => {
         if (data) {
           setCompanySettings({
-            name: data.business_name || "",         // ← fixed column
-            address: data.address || "",
-            phone: data.phone || "",
-            email: data.email || "",
-            tagline: data.tagline || "",
-            logo_url: data.logo_url || null,
+            name:          data.business_name || "",
+            address:       data.address       || "",
+            phone:         data.phone         || "",
+            email:         data.email         || "",
+            tagline:       data.tagline       || "",
+            logo_url:      data.logo_url      || null,
             business_type: data.business_type || "",
           })
         }
@@ -201,7 +201,7 @@ export default function InvoiceDetailPage() {
 
   const getWhatsAppLink = () => {
     if (!invoice || !invoice.customer) return ""
-    const code = (invoice.customer.country_code || "+92").replace(/\D/g, "")
+    const code  = (invoice.customer.country_code || "+92").replace(/\D/g, "")
     const phone = (invoice.customer.phone || "").replace(/\D/g, "")
     if (!phone) return ""
     const msg = `Dear ${invoice.customer.name},\n\nYour invoice ${invoice.invoice_no} for PKR ${invoice.total?.toLocaleString()} is ready.\nDate: ${invoice.date}\nDue: ${invoice.due_date}\n\nThank you for your business.\n— OneAccounts`
@@ -210,46 +210,55 @@ export default function InvoiceDetailPage() {
 
   const getReminderLink = () => {
     if (!invoice || !invoice.customer) return ""
-    const code = (invoice.customer.country_code || "+92").replace(/\D/g, "")
+    const code  = (invoice.customer.country_code || "+92").replace(/\D/g, "")
     const phone = (invoice.customer.phone || "").replace(/\D/g, "")
     if (!phone) return ""
     const msg = `Reminder: Your invoice ${invoice.invoice_no} for PKR ${invoice.total?.toLocaleString()} is overdue. Please pay at your earliest convenience.`
     return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
   }
 
+  // ── Print PDF — re-fetches company settings fresh to guarantee logo/tagline/address ──
   const handlePrintPDF = async () => {
     if (!invoice) return
+
+    const { data: freshSettings } = await supabase
+      .from("company_settings")
+      .select("business_name, address, phone, email, tagline, logo_url, business_type")
+      .eq("company_id", companyId)
+      .maybeSingle()
+
+    const settings = freshSettings || {}
     const customer = invoice.customer
     const subTotal = invoice.items?.reduce((s, i) => s + i.total, 0) || 0
 
     const pdfData = {
-      companyName: companySettings.name || "",
-      companyAddress: companySettings.address || "",
-      companyPhone: companySettings.phone || "",
-      companyEmail: companySettings.email || "",
-      companyTagline: companySettings.tagline || "",
-      logoUrl: companySettings.logo_url || null,
-      businessType: companySettings.business_type || "",
-      invoiceNo: invoice.invoice_no,
-      date: invoice.date,
-      dueDate: invoice.due_date,
-      customerName: customer?.name || "Unknown",
+      companyName:    settings.business_name || "",
+      companyAddress: settings.address       || "",
+      companyPhone:   settings.phone         || "",
+      companyEmail:   settings.email         || "",
+      companyTagline: settings.tagline       || "",
+      logoUrl:        settings.logo_url      || null,
+      businessType:   settings.business_type || "",
+      invoiceNo:      invoice.invoice_no,
+      date:           invoice.date,
+      dueDate:        invoice.due_date,
+      customerName:    customer?.name    || "Unknown",
       customerAddress: customer?.address || "",
-      customerPhone: customer?.phone || "",
-      customerEmail: customer?.email || "",
+      customerPhone:   customer?.phone   || "",
+      customerEmail:   customer?.email   || "",
       status: invoice.status,
       items: (invoice.items || []).map(item => ({
-        description: item.description || "",
-        qty: item.qty || 0,
-        unit_price: item.unit_price || 0,
-        total: item.total || 0,
-        image_path: item.product_image || null,
-        product_id: item.product_code || null,
-        product_name: item.product_name || "",
+        description:  item.description   || "",
+        qty:          item.qty           || 0,
+        unit_price:   item.unit_price    || 0,
+        total:        item.total         || 0,
+        image_path:   item.product_image || null,
+        product_id:   item.product_code  || null,
+        product_name: item.product_name  || "",
       })),
-      subtotal: subTotal,
-      total: invoice.total,
-      paid: invoice.paid || 0,
+      subtotal:   subTotal,
+      total:      invoice.total,
+      paid:       invoice.paid || 0,
       balanceDue: invoice.total - (invoice.paid || 0),
     }
 
@@ -257,15 +266,15 @@ export default function InvoiceDetailPage() {
     doc.save(`Invoice_${invoice.invoice_no}.pdf`)
   }
 
-  if (loading) return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>Loading…</div>
-  if (!invoice) return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>Invoice not found</div>
+  if (loading)   return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>Loading…</div>
+  if (!invoice)  return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>Invoice not found</div>
 
-  const balanceDue = invoice.total - (invoice.paid || 0)
-  const waLink = getWhatsAppLink()
-  const reminderLink = getReminderLink()
-  const isOverdue = invoice.status !== "Paid" && new Date(invoice.due_date) < new Date()
+  const balanceDue    = invoice.total - (invoice.paid || 0)
+  const waLink        = getWhatsAppLink()
+  const reminderLink  = getReminderLink()
+  const isOverdue     = invoice.status !== "Paid" && new Date(invoice.due_date) < new Date()
 
-  const totalDebit = journalLines.reduce((s, l) => s + l.debit, 0)
+  const totalDebit  = journalLines.reduce((s, l) => s + l.debit,  0)
   const totalCredit = journalLines.reduce((s, l) => s + l.credit, 0)
 
   return (
@@ -287,15 +296,9 @@ export default function InvoiceDetailPage() {
         .btn-success:hover { background: #22C55E; }
         .btn-warning { background: #F97316; color: white; border-color: #F97316; }
         .btn-warning:hover { background: #EA580C; }
-        .badge {
-          display: inline-block;
-          padding: 2px 10px;
-          border-radius: 12px;
-          font-size: 12px;
-          font-weight: 700;
-        }
-        .badge-paid { background: #065F46; color: #6EE7B7; }
-        .badge-unpaid { background: #7C2D12; color: #FCA5A5; }
+        .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; }
+        .badge-paid    { background: #065F46; color: #6EE7B7; }
+        .badge-unpaid  { background: #7C2D12; color: #FCA5A5; }
         .badge-overdue { background: #7C2D12; color: #FCA5A5; }
         .record-history { background: var(--bg-soft); border-radius: 8px; padding: 8px; }
         @media (max-width: 640px) {
@@ -350,7 +353,7 @@ export default function InvoiceDetailPage() {
           }`}>{invoice.status}</span>
         </div>
         {invoice.reference && <div className="row"><span className="label">Reference</span><span className="value">{invoice.reference}</span></div>}
-        {invoice.notes && <div className="row"><span className="label">Notes</span><span className="value">{invoice.notes}</span></div>}
+        {invoice.notes     && <div className="row"><span className="label">Notes</span><span className="value">{invoice.notes}</span></div>}
       </div>
 
       {invoice.items && invoice.items.length > 0 && (
@@ -403,8 +406,8 @@ export default function InvoiceDetailPage() {
               {journalLines.map((line, idx) => (
                 <tr key={idx}>
                   <td>{line.account_code} – {line.account_name}</td>
-                  <td style={{ textAlign: "right", color: line.debit > 0 ? "#F87171" : "var(--text-muted)" }}>
-                    {line.debit > 0 ? line.debit.toLocaleString() : "–"}
+                  <td style={{ textAlign: "right", color: line.debit  > 0 ? "#F87171" : "var(--text-muted)" }}>
+                    {line.debit  > 0 ? line.debit.toLocaleString()  : "–"}
                   </td>
                   <td style={{ textAlign: "right", color: line.credit > 0 ? "#2DD4BF" : "var(--text-muted)" }}>
                     {line.credit > 0 ? line.credit.toLocaleString() : "–"}

@@ -4,28 +4,18 @@
  *
  * Place at:  src/lib/pdf/invoicePDF.ts
  * Deps:      npm install jspdf jspdf-autotable
- *
- * FIXES in this version:
- *  … (all previous fixes retained)
- *  15. Table rounded border now thicker so no sharp corners peek through
- *  16. Column header text alignment fixed:
- *        - Description: left-aligned (matching data)
- *        - Qty: center-aligned (matching data)
- *        - Unit Price: center-aligned header (data stays right)
- *        - Amount: center-aligned header (data stays right)
- *  17. Header text vertical centering corrected using font-size-aware baseline offset
  */
 
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
 // ─── Brand colours ────────────────────────────────────────────────────────────
-const NAVY            = [7,   8,  91]  as [number,number,number]  // #07085B
-const RED             = [220, 38,  38]  as [number,number,number]  // #DC2626
-const AMBER           = [245,158,  11]  as [number,number,number]  // amount-due
-const DARK            = [17,  24,  39]  as [number,number,number]  // body text
-const MUTED           = [107,114, 128]  as [number,number,number]  // grey labels
-const BORDER          = [229,231, 235]  as [number,number,number]  // table border
+const NAVY            = [7,   8,  91]  as [number,number,number]
+const RED             = [220, 38,  38]  as [number,number,number]
+const AMBER           = [245,158,  11]  as [number,number,number]
+const DARK            = [17,  24,  39]  as [number,number,number]
+const MUTED           = [107,114, 128]  as [number,number,number]
+const BORDER          = [229,231, 235]  as [number,number,number]
 const WHITE           = [255,255, 255]  as [number,number,number]
 const ROW_ALT         = [248,249, 252]  as [number,number,number]
 
@@ -250,7 +240,6 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   const descColX = ML + 14 + 8 + 2
   const descColW = CW - (14 + 8 + 2) - (16 + 32 + 34 + 4)
 
-  // FIX: vertical center baseline — font size 9pt, baseline offset = fontSize * 0.35
   const FONT_SIZE_HEADER = 9
   const textY = tableY + HEADER_ROW_H / 2 + FONT_SIZE_HEADER * 0.35
 
@@ -258,21 +247,10 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setFontSize(FONT_SIZE_HEADER)
   doc.setTextColor(...WHITE)
 
-  // FIX: each header drawn with alignment matching its data column
-  // Column 1: image placeholder — skip
-  // Column 2: # — center
   doc.text("#", ML + 14 + 8 / 2, textY, { align: "center" })
-
-  // Column 3: Description — left, with 3mm cell padding to match autoTable cellPadding
   doc.text("Description", descColX + 3, textY, { align: "left" })
-
-  // Column 4: Qty — center of its column
   doc.text("Qty", descColX + descColW + 16 / 2, textY, { align: "center" })
-
-  // Column 5: Unit Price — center of its column
   doc.text("Unit Price", descColX + descColW + 16 + 32 / 2, textY, { align: "center" })
-
-  // Column 6: Amount — center of its column
   doc.text("Amount", descColX + descColW + 16 + 32 + 34 / 2, textY, { align: "center" })
 
   // ── SECTION 4: ITEMS TABLE (body only, no head) ───────────────────────────
@@ -367,10 +345,18 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
 
   const afterTable = (doc as any).lastAutoTable.finalY as number
 
-  // ── Rounded border around data rows (thicker line to hide inner corners) ──
+  // ── Rounded border — white corner patches to hide square autoTable edges ──
   const TABLE_RADIUS = 4
+  const cornerSize   = TABLE_RADIUS + 1
+
+  // Paint white squares over the 2 bottom corners to clip square edges
+  doc.setFillColor(...WHITE)
+  doc.rect(ML,                       afterTable - cornerSize, cornerSize, cornerSize, "F")
+  doc.rect(ML + CW - cornerSize,     afterTable - cornerSize, cornerSize, cornerSize, "F")
+
+  // Draw thin rounded border
   doc.setDrawColor(...BORDER)
-  doc.setLineWidth(0.8)
+  doc.setLineWidth(0.3)
   doc.roundedRect(ML, bodyStartY, CW, afterTable - bodyStartY, TABLE_RADIUS, TABLE_RADIUS, "S")
 
   // ── SECTION 5: SUBTOTAL / TAX / TOTAL ──────────────────────────────────────
@@ -394,7 +380,6 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.text(pkr(0), valX, SY, { align: "right" })
   SY += 5.5
 
-  // Total pill – navy rounded rect
   const TOTAL_RADIUS = 4
   filledRect(doc, sumX - 2, SY - 4, valX - sumX + 4, 9, NAVY, TOTAL_RADIUS)
   doc.setFont("helvetica", "bold")
@@ -425,12 +410,8 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   SY += 6
 
   const termsLines: string[] = []
-  if (data.paymentTerms) {
-    termsLines.push(data.paymentTerms)
-  }
-  if (data.notes) {
-    termsLines.push(data.notes)
-  }
+  if (data.paymentTerms) termsLines.push(data.paymentTerms)
+  if (data.notes)        termsLines.push(data.notes)
   if (termsLines.length === 0) {
     termsLines.push(
       "Payment is due within 30 days of invoice date.",
