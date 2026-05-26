@@ -113,9 +113,8 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     logoData = await loadImage(data.logoUrl)
   }
 
+  // Add logo WITHOUT any background or circle
   if (logoData) {
-    doc.setFillColor(...NAVY)
-    doc.circle(LOGO_X + LOGO_SIZE / 2, LOGO_Y + LOGO_SIZE / 2, LOGO_SIZE / 2 + 1, "F")
     doc.addImage(logoData, "PNG", LOGO_X, LOGO_Y, LOGO_SIZE, LOGO_SIZE)
   }
 
@@ -291,7 +290,6 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   )
 
   const tableRows = data.items.map((item, i) => {
-    // Convert product_id to string safely
     const productIdStr = String(item.product_id ?? "")
     let namepart = ""
     if (item.product_name) {
@@ -301,7 +299,6 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     if (productIdStr) {
       desc = `${productIdStr}${namepart}`
       const extra = (item.description ?? "").trim()
-      // Check if extra is already included
       const isDuplicate =
         extra === "" ||
         extra === (item.product_name?.trim() || "") ||
