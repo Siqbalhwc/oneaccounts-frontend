@@ -217,36 +217,29 @@ export default function InvoiceDetailPage() {
     return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
   }
 
-  // ── Print PDF — re-fetches company settings fresh to guarantee logo/tagline/address ──
   const handlePrintPDF = async () => {
     if (!invoice) return
 
-    const { data: freshSettings } = await supabase
-      .from("company_settings")
-      .select("business_name, address, phone, email, tagline, logo_url, business_type")
-      .eq("company_id", companyId)
-      .maybeSingle()
-
-    const settings = (freshSettings || {}) as {
-      business_name?: string
-      address?: string
-      phone?: string
-      email?: string
-      tagline?: string
-      logo_url?: string | null
-      business_type?: string
-    }
     const customer = invoice.customer
     const subTotal = invoice.items?.reduce((s, i) => s + i.total, 0) || 0
 
+    // If logo_url is a relative path, convert to full Supabase storage URL
+    let logoUrl = companySettings.logo_url || null
+    if (logoUrl && !logoUrl.startsWith("http")) {
+      const { data: urlData } = supabase.storage
+        .from("logos")
+        .getPublicUrl(logoUrl)
+      logoUrl = urlData?.publicUrl || null
+    }
+
     const pdfData = {
-      companyName:    settings.business_name || "",
-      companyAddress: settings.address       || "",
-      companyPhone:   settings.phone         || "",
-      companyEmail:   settings.email         || "",
-      companyTagline: settings.tagline       || "",
-      logoUrl:        settings.logo_url      || null,
-      businessType:   settings.business_type || "",
+      companyName:    companySettings.name          || "",
+      companyAddress: companySettings.address       || "",
+      companyPhone:   companySettings.phone         || "",
+      companyEmail:   companySettings.email         || "",
+      companyTagline: companySettings.tagline       || "",
+      logoUrl,
+      businessType:   companySettings.business_type || "",
       invoiceNo:      invoice.invoice_no,
       date:           invoice.date,
       dueDate:        invoice.due_date,
