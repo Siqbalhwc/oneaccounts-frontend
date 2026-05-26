@@ -26,114 +26,155 @@ export async function POST(request: NextRequest) {
   if (!companyId) return NextResponse.json({ error: 'No company' }, { status: 400 })
 
   const userEmail = user.email || 'system'
-  const today = new Date()
-  const currentPeriod = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+  const body = await request.json()
+  const { asset_ids, start_month } = body  // start_month: "YYYY-MM"
 
-  const { data: assets, error: assetErr } = await supabase
+  if (!start_month) {
+    return NextResponse.json({ error: 'Start month is required.' }, { status: 400 })
+  }
+
+  const startDate = new Date(start_month + "-01")
+  if (isNaN(startDate.getTime())) {
+    return NextResponse.json({ error: 'Invalid start month format.' }, { status: 400 })
+  }
+
+  // Current month first day
+  const today = new Date()
+  const currentDate = new Date(today.getFullYear(), today.getMonth(), 1)
+
+  // Fetch assets (all active with remaining life > 0, filtered by asset_ids if provided)
+  let query = supabase
     .from('assets')
     .select('*')
     .eq('company_id', companyId)
     .eq('status', 'Active')
     .gt('remaining_life_months', 0)
 
-  if (assetErr) return NextResponse.json({ error: assetErr.message }, { status: 500 })
+  if (asset_ids && asset_ids.length > 0) {
+    query = query.in('id', asset_ids)
+  }
 
+  const { data: assets, error: assetErr } = await query
+
+  if (assetErr) return NextResponse.json({ error: assetErr.message }, { status: 500 })
   if (!assets || assets.length === 0) {
     return NextResponse.json({ message: 'No active assets to depreciate.' })
   }
 
-  let processed = 0
+  let totalProcessed = 0
   const errors: string[] = []
 
   for (const asset of assets) {
     try {
-      const { data: existing } = await supabase
-        .from('asset_depreciation_schedule')
-        .select('id')
-        .eq('asset_id', asset.id)
-        .eq('period', currentPeriod)
-        .maybeSingle()
+      // Determine months from asset's purchase_date to current, but not before start_month
+      const assetStart = new Date(asset.purchase_date)
+      const effectiveStart = assetStart > startDate ? assetStart : startDate
+      // Align to first of month
+      const start = new Date(effectiveStart.getFullYear(), effectiveStart.getMonth(), 1)
 
-      if (existing) continue
+      let cursor = new Date(start)
+      let monthsProcessedForAsset = 0
 
-      const monthlyDep = asset.depreciation_per_month || 0
-      if (monthlyDep <= 0) continue
+      while (cursor <= currentDate) {
+        const period = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-01`
+        // Check if already posted
+        const { data: existing } = await supabase
+          .from('asset_depreciation_schedule')
+          .select('id')
+          .eq('asset_id', asset.id)
+          .eq('period', period)
+          .maybeSingle()
 
-      const { data: entry, error: entryErr } = await supabase
-        .from('journal_entries')
-        .insert({
-          company_id: companyId,
-          entry_no: `JE-DEP-${asset.asset_no}-${currentPeriod}`,
-          date: today.toISOString().split('T')[0],
-          description: `Monthly depreciation for ${asset.name} (${asset.asset_no})`,
-        })
-        .select('id')
-        .single()
+        if (!existing) {
+          const monthlyDep = asset.depreciation_per_month || 0
+          if (monthlyDep <= 0) { cursor.setMonth(cursor.getMonth() + 1); continue }
 
-      if (entryErr) throw new Error('JE insert failed: ' + entryErr.message)
+          // Create journal entry
+          const { data: entry, error: entryErr } = await supabase
+            .from('journal_entries')
+            .insert({
+              company_id: companyId,
+              entry_no: `JE-DEP-${asset.asset_no}-${period}`,
+              date: `${period}T00:00:00`,
+              description: `Monthly depreciation for ${asset.name} (${asset.asset_no})`,
+            })
+            .select('id')
+            .single()
 
-      const lines = []
-      if (asset.gl_dep_expense_account_id) {
-        lines.push({ account_id: asset.gl_dep_expense_account_id, debit: monthlyDep, credit: 0 })
-      } else {
-        throw new Error('Missing depreciation expense account')
-      }
-      if (asset.gl_accum_dep_account_id) {
-        lines.push({ account_id: asset.gl_accum_dep_account_id, debit: 0, credit: monthlyDep })
-      } else {
-        throw new Error('Missing accumulated depreciation account')
-      }
+          if (entryErr) throw new Error(`JE insert failed for ${period}: ${entryErr.message}`)
 
-      const lineRows = lines.map(l => ({
-        company_id: companyId,
-        entry_id: entry.id,
-        account_id: l.account_id,
-        debit: l.debit,
-        credit: l.credit,
-        source_type: 'depreciation',
-        source_id: asset.id,
-      }))
+          const lines: any[] = []
+          if (asset.gl_dep_expense_account_id) {
+            lines.push({ account_id: asset.gl_dep_expense_account_id, debit: monthlyDep, credit: 0 })
+          } else {
+            throw new Error(`Missing depreciation expense account for ${asset.asset_no}`)
+          }
+          if (asset.gl_accum_dep_account_id) {
+            lines.push({ account_id: asset.gl_accum_dep_account_id, debit: 0, credit: monthlyDep })
+          } else {
+            throw new Error(`Missing accumulated depreciation account for ${asset.asset_no}`)
+          }
 
-      const { error: linesErr } = await supabase.from('journal_lines').insert(lineRows)
-      if (linesErr) throw new Error('Lines insert failed: ' + linesErr.message)
+          const lineRows = lines.map(l => ({
+            company_id: companyId,
+            entry_id: entry.id,
+            account_id: l.account_id,
+            debit: l.debit,
+            credit: l.credit,
+            source_type: 'depreciation',
+            source_id: asset.id,
+          }))
 
-      for (const l of lines) {
-        const { data: acc } = await supabase.from('accounts').select('balance').eq('id', l.account_id).single()
-        if (acc) {
-          const newBal = acc.balance + (l.debit || 0) - (l.credit || 0)
-          await supabase.from('accounts').update({ balance: newBal }).eq('id', l.account_id)
+          const { error: linesErr } = await supabase.from('journal_lines').insert(lineRows)
+          if (linesErr) throw new Error(`Lines insert failed for ${period}: ${linesErr.message}`)
+
+          // Update account balances
+          for (const l of lines) {
+            const { data: acc } = await supabase.from('accounts').select('balance').eq('id', l.account_id).single()
+            if (acc) {
+              const newBal = acc.balance + (l.debit || 0) - (l.credit || 0)
+              await supabase.from('accounts').update({ balance: newBal }).eq('id', l.account_id)
+            }
+          }
+
+          // Insert schedule record
+          await supabase.from('asset_depreciation_schedule').insert({
+            asset_id: asset.id,
+            company_id: companyId,
+            period,
+            depreciation_amount: monthlyDep,
+            journal_entry_id: entry.id,
+            posted: true,
+            note: 'Monthly depreciation',
+          })
+
+          // Decrement remaining life by 1
+          const newRemaining = asset.remaining_life_months - 1
+          await supabase.from('assets').update({
+            remaining_life_months: newRemaining,
+            updated_by: userEmail,
+          }).eq('id', asset.id)
+          asset.remaining_life_months = newRemaining
+
+          if (newRemaining <= 0) {
+            await supabase.from('assets').update({ status: 'Disposed' }).eq('id', asset.id)
+            break // stop processing further months for this asset
+          }
+
+          monthsProcessedForAsset++
+          totalProcessed++
         }
+
+        cursor.setMonth(cursor.getMonth() + 1)
       }
-
-      await supabase.from('asset_depreciation_schedule').insert({
-        asset_id: asset.id,
-        company_id: companyId,
-        period: currentPeriod,
-        depreciation_amount: monthlyDep,
-        journal_entry_id: entry.id,
-        posted: true,
-        note: 'Monthly depreciation',
-      })
-
-      const newRemaining = asset.remaining_life_months - 1
-      await supabase.from('assets').update({
-        remaining_life_months: newRemaining,
-        updated_by: userEmail,
-      }).eq('id', asset.id)
-
-      if (newRemaining <= 0) {
-        await supabase.from('assets').update({ status: 'Disposed' }).eq('id', asset.id)
-      }
-
-      processed++
     } catch (err: any) {
       errors.push(`Asset ${asset.asset_no}: ${err.message}`)
     }
   }
 
   return NextResponse.json({
-    success: true,
-    processed,
+    success: errors.length === 0,
+    processed: totalProcessed,
     errors: errors.length > 0 ? errors : undefined,
   })
 }

@@ -3,7 +3,10 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { Plus, Search, Download, Upload, Eye, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw } from "lucide-react"
+import {
+  Plus, Search, Download, Upload, Eye, ArrowUpDown, ArrowUp, ArrowDown,
+  RefreshCw, X, CheckCircle, Calendar
+} from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import PremiumGuard from "@/components/PremiumGuard"
 import jsPDF from "jspdf"
@@ -27,10 +30,21 @@ function AssetsContent() {
   const [sortDir, setSortDir] = useState<SortDir>("asc")
   const [companyId, setCompanyId] = useState("")
 
+  // Depreciation modal state
+  const [showDepModal, setShowDepModal] = useState(false)
+  const [activeAssetsForDep, setActiveAssetsForDep] = useState<any[]>([])
+  const [selectedAssetIds, setSelectedAssetIds] = useState<number[]>([])
+  const [depStartMonth, setDepStartMonth] = useState("")
+  const [depRunning, setDepRunning] = useState(false)
+  const [depResult, setDepResult] = useState<any>(null)
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
-      if (cid) setCompanyId(cid)
+      if (cid) {
+        setCompanyId(cid)
+        // Initial asset load handled by fetchAssets
+      }
     })
   }, [])
 
@@ -49,6 +63,7 @@ function AssetsContent() {
 
   useEffect(() => { if (companyId) fetchAssets() }, [companyId])
 
+  // ----- Filter & Sort (unchanged) -----
   const filtered = assets.filter(a => {
     if (statusFilter && a.status !== statusFilter) return false
     if (search && !a.name.toLowerCase().includes(search.toLowerCase()) && !a.asset_no.toLowerCase().includes(search.toLowerCase())) return false
@@ -89,18 +104,90 @@ function AssetsContent() {
   const totalCost = filtered.reduce((s, a) => s + (a.cost_price || 0), 0)
   const activeCount = filtered.filter(a => a.status === "Active").length
 
-  const handleRunDepreciation = async () => {
-    if (!confirm("Post depreciation for all active assets for this month?")) return
-    const res = await fetch("/api/assets/depreciation", { method: "POST" })
-    const result = await res.json()
-    if (result.success) {
-      alert(`Depreciation posted for ${result.processed} asset(s).`)
-      fetchAssets()
+  // ----- Run Depreciation (modal trigger) -----
+  const openDepreciationModal = async () => {
+    // Fetch active assets with remaining life > 0
+    const { data } = await supabase
+      .from("assets")
+      .select("id, asset_no, name, purchase_date, depreciation_per_month, remaining_life_months")
+      .eq("company_id", companyId)
+      .eq("status", "Active")
+      .gt("remaining_life_months", 0)
+      .order("asset_no")
+
+    if (!data || data.length === 0) {
+      alert("No active assets with remaining life available to depreciate.")
+      return
+    }
+
+    setActiveAssetsForDep(data)
+    setSelectedAssetIds(data.map(a => a.id)) // all selected by default
+
+    // Determine earliest purchase date among them for default start month
+    const dates = data.map(a => new Date(a.purchase_date)).filter(d => !isNaN(d.getTime()))
+    if (dates.length > 0) {
+      const earliest = new Date(Math.min(...dates.map(d => d.getTime())))
+      setDepStartMonth(earliest.toISOString().slice(0, 7)) // YYYY-MM
     } else {
-      alert("Error: " + (result.error || "Unknown"))
+      setDepStartMonth(new Date().toISOString().slice(0, 7))
+    }
+    setDepResult(null)
+    setShowDepModal(true)
+  }
+
+  const toggleAssetSelection = (id: number) => {
+    setSelectedAssetIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }
+
+  // Calculate months between start month and current month for an asset (but not exceeding remaining life)
+  const getMonthsToProcess = (asset: any) => {
+    const start = new Date(depStartMonth + "-01")
+    if (isNaN(start.getTime())) return 0
+    const now = new Date()
+    // Current month as first day
+    const current = new Date(now.getFullYear(), now.getMonth(), 1)
+    if (start > current) return 0
+    let months = 0
+    let cursor = new Date(start)
+    while (cursor <= current) {
+      months++
+      cursor.setMonth(cursor.getMonth() + 1)
+    }
+    // Cap to asset's remaining life
+    return Math.min(months, asset.remaining_life_months)
+  }
+
+  const executeDepreciation = async () => {
+    if (selectedAssetIds.length === 0) {
+      alert("Please select at least one asset.")
+      return
+    }
+    if (!depStartMonth) {
+      alert("Please choose a start month.")
+      return
+    }
+    setDepRunning(true)
+    setDepResult(null)
+
+    const res = await fetch("/api/assets/depreciation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        asset_ids: selectedAssetIds,
+        start_month: depStartMonth,
+      }),
+    })
+    const json = await res.json()
+    setDepResult(json)
+    setDepRunning(false)
+    if (json.success) {
+      fetchAssets() // refresh list
     }
   }
 
+  // ----- PDF export (unchanged) -----
   const exportPDF = () => {
     const doc = new jsPDF({ orientation: "landscape" })
     doc.setFontSize(14)
@@ -128,6 +215,7 @@ function AssetsContent() {
       <style>{`
         .btn { display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-family:inherit;transition:all 0.15s;white-space:nowrap; }
         .btn:hover { background:var(--card-hover); }
+        .btn-primary { background:var(--primary);color:var(--primary-text);border-color:var(--primary); }
         .btn-icon { background:transparent;border:1.5px solid var(--border);color:var(--text-muted);padding:6px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center; }
         .btn-icon:hover { background:var(--card-hover); }
         .input { height:38px;border:1.5px solid var(--border);border-radius:8px;padding:0 12px 0 36px;font-size:13px;background:var(--card);color:var(--text);outline:none;box-sizing:border-box;width:100%; }
@@ -150,6 +238,23 @@ function AssetsContent() {
         .asset-table .num-cell { text-align:right !important; }
         .asset-table .center-header,
         .asset-table .center-cell { text-align:center !important; }
+
+        /* Modal overlay */
+        .modal-overlay {
+          position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200;
+          display: flex; align-items: center; justify-content: center; padding: 20px;
+        }
+        .modal-card {
+          background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+          width: 100%; max-width: 600px; max-height: 80vh; overflow-y: auto; padding: 24px;
+          color: var(--text);
+        }
+        .modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+        .modal-title { font-size:18px; font-weight:700; }
+        .asset-row { display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:1px solid var(--border); }
+        .asset-row label { display:flex; align-items:center; gap:8px; flex:1; }
+        .month-badge { font-size:11px; color: var(--text-muted); margin-left: auto; }
+        .checkbox { width:16px; height:16px; accent-color: var(--primary); }
       `}</style>
 
       {/* Header */}
@@ -168,7 +273,7 @@ function AssetsContent() {
           <button className="btn" onClick={() => window.open("/api/assets/template", "_blank")}><Download size={14} /> Template</button>
           {canEdit && (
             <>
-              <button className="btn" onClick={handleRunDepreciation}><RefreshCw size={16} /> Run Depreciation</button>
+              <button className="btn" onClick={openDepreciationModal}><RefreshCw size={16} /> Run Depreciation</button>
               <button className="btn" onClick={() => router.push("/dashboard/assets/import")}><Upload size={16} /> Import</button>
               <button className="btn" onClick={() => router.push("/dashboard/assets/new")}><Plus size={16} /> New Asset</button>
             </>
@@ -179,21 +284,12 @@ function AssetsContent() {
 
       {/* Summary Cards */}
       <div className="summary-grid">
-        <div className="summary-item">
-          <div className="summary-label">Total Assets</div>
-          <div className="summary-value">{totalAssets}</div>
-        </div>
-        <div className="summary-item">
-          <div className="summary-label">Total Cost</div>
-          <div className="summary-value" style={{ color:"#F59E0B" }}>PKR {totalCost.toLocaleString()}</div>
-        </div>
-        <div className="summary-item">
-          <div className="summary-label">Active Assets</div>
-          <div className="summary-value" style={{ color:"#10B981" }}>{activeCount}</div>
-        </div>
+        <div className="summary-item"><div className="summary-label">Total Assets</div><div className="summary-value">{totalAssets}</div></div>
+        <div className="summary-item"><div className="summary-label">Total Cost</div><div className="summary-value" style={{ color:"#F59E0B" }}>PKR {totalCost.toLocaleString()}</div></div>
+        <div className="summary-item"><div className="summary-label">Active Assets</div><div className="summary-value" style={{ color:"#10B981" }}>{activeCount}</div></div>
       </div>
 
-      {/* Search Bar */}
+      {/* Search */}
       <div style={{ display:"flex", gap:12, marginBottom:16, alignItems:"center" }}>
         <div style={{ position:"relative", flex:1, maxWidth:320 }}>
           <Search size={16} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--text-muted)" }} />
@@ -238,6 +334,78 @@ function AssetsContent() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Depreciation Modal */}
+      {showDepModal && (
+        <div className="modal-overlay" onClick={() => setShowDepModal(false)}>
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title">🗓️ Run Depreciation</div>
+              <button className="btn-icon" onClick={() => setShowDepModal(false)}><X size={16} /></button>
+            </div>
+
+            {depResult ? (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ background: depResult.success ? "#065F46" : "#7F1D1D", color: "#fff", padding: "12px", borderRadius: 8, fontSize: 13 }}>
+                  {depResult.success
+                    ? `✅ Depreciation posted for ${depResult.processed} entries.`
+                    : `❌ Error: ${depResult.error || "Unknown"}`}
+                </div>
+                {depResult.errors && depResult.errors.length > 0 && (
+                  <ul style={{ marginTop: 8, paddingLeft: 20, color: "#FCA5A5", fontSize: 12 }}>
+                    {depResult.errors.map((e: string, i: number) => <li key={i}>{e}</li>)}
+                  </ul>
+                )}
+                <button className="btn" style={{ marginTop: 12 }} onClick={() => { setShowDepModal(false); fetchAssets(); }}>Close</button>
+              </div>
+            ) : (
+              <>
+                <div style={{ marginBottom: 16 }}>
+                  <label className="label" style={{ color: "var(--text-muted)", fontSize: 10, fontWeight: 600, textTransform: "uppercase" }}>Start Month</label>
+                  <input type="month" className="input" style={{ height: 38 }} value={depStartMonth} onChange={e => setDepStartMonth(e.target.value)} />
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
+                    Depreciation will be posted for every missing month from this date to the current month.
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
+                  <label className="label" style={{ color: "var(--text-muted)", fontSize: 10, fontWeight: 600, textTransform: "uppercase" }}>Select Assets</label>
+                  <div style={{ maxHeight: 200, overflowY: "auto" }}>
+                    {activeAssetsForDep.map(asset => {
+                      const months = getMonthsToProcess(asset)
+                      return (
+                        <div key={asset.id} className="asset-row">
+                          <label style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+                            <input
+                              type="checkbox"
+                              className="checkbox"
+                              checked={selectedAssetIds.includes(asset.id)}
+                              onChange={() => toggleAssetSelection(asset.id)}
+                            />
+                            <span style={{ fontSize: 13 }}>{asset.asset_no} – {asset.name}</span>
+                          </label>
+                          <span className="month-badge">{months > 0 ? `${months} month(s)` : "Up to date"}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                  <button className="btn" onClick={() => setShowDepModal(false)}>Cancel</button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={executeDepreciation}
+                    disabled={depRunning || selectedAssetIds.length === 0}
+                  >
+                    {depRunning ? "Processing..." : <><CheckCircle size={16} /> Confirm & Post</>}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
