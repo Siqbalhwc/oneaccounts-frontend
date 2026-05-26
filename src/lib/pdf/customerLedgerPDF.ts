@@ -162,7 +162,9 @@ export async function generateCustomerLedgerPDF(data: CustomerLedgerPDFData): Pr
       balance:     { cellWidth: balanceW, halign: "right", fontStyle: "bold" },
     },
     didDrawCell(hookData) {
-      if (hookData.section === "body" && hookData.row.raw.isOpening) {
+      // Fix: cast to any to access custom isOpening property
+      const rowData = (hookData.row.raw as any)
+      if (hookData.section === "body" && rowData && rowData.isOpening) {
         doc.setFillColor(245, 245, 245) // light grey for opening balance row
         doc.rect(hookData.cell.x, hookData.cell.y, hookData.cell.width, hookData.cell.height, "F")
       }
