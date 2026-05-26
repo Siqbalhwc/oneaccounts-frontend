@@ -105,7 +105,14 @@ export async function generateCustomerLedgerPDF(data: CustomerLedgerPDFData): Pr
 
   filledRect(doc, ML, tableY, CW, HEADER_ROW_H, NAVY, HEADER_RADIUS)
 
-  const dateW = 28, entryW = 28, descW = "auto", debitW = 30, creditW = 30, balanceW = 32
+  // Column widths – slightly widened Entry # for better readability
+  const dateW = 28
+  const entryW = 35
+  const debitW = 30
+  const creditW = 30
+  const balanceW = 32
+  const descW = CW - dateW - entryW - debitW - creditW - balanceW - 8 // remaining space for Description
+
   const FONT_SIZE_HEADER = 8
   const headerTextY = tableY + HEADER_ROW_H / 2 + FONT_SIZE_HEADER * 0.35
   doc.setFont("helvetica", "bold").setFontSize(FONT_SIZE_HEADER).setTextColor(...WHITE)
@@ -113,7 +120,7 @@ export async function generateCustomerLedgerPDF(data: CustomerLedgerPDFData): Pr
   let colX = ML + 2
   doc.text("Date", colX, headerTextY); colX += dateW
   doc.text("Entry #", colX, headerTextY); colX += entryW
-  doc.text("Description", colX, headerTextY); colX = PW - MR - balanceW - creditW - debitW
+  doc.text("Description", colX, headerTextY); colX += descW
   doc.text("Debit", colX, headerTextY, { align: "right" }); colX += debitW
   doc.text("Credit", colX, headerTextY, { align: "right" }); colX += creditW
   doc.text("Balance", colX, headerTextY, { align: "right" })
@@ -133,9 +140,9 @@ export async function generateCustomerLedgerPDF(data: CustomerLedgerPDFData): Pr
     date:        line.isOpening ? "" : line.date,
     entry_no:    line.entry_no,
     description: line.description,
-    debit:       line.debit  > 0 ? line.debit.toLocaleString()  : "",
-    credit:      line.credit > 0 ? line.credit.toLocaleString() : "",
-    balance:     line.running_balance.toLocaleString(),
+    debit:       line.debit  > 0 ? line.debit.toLocaleString()  : "-",
+    credit:      line.credit > 0 ? line.credit.toLocaleString() : "-",
+    balance:     line.running_balance === 0 ? "-" : line.running_balance.toLocaleString(),
   }))
 
   autoTable(doc, {
@@ -156,16 +163,15 @@ export async function generateCustomerLedgerPDF(data: CustomerLedgerPDFData): Pr
     columnStyles: {
       date:        { cellWidth: dateW, halign: "left" },
       entry_no:    { cellWidth: entryW, halign: "left" },
-      description: { cellWidth: "auto", halign: "left" },
+      description: { cellWidth: descW, halign: "left" },
       debit:       { cellWidth: debitW, halign: "right" },
       credit:      { cellWidth: creditW, halign: "right" },
       balance:     { cellWidth: balanceW, halign: "right", fontStyle: "bold" },
     },
     didDrawCell(hookData) {
-      // Fix: cast to any to access custom isOpening property
       const rowData = (hookData.row.raw as any)
       if (hookData.section === "body" && rowData && rowData.isOpening) {
-        doc.setFillColor(245, 245, 245) // light grey for opening balance row
+        doc.setFillColor(245, 245, 245)
         doc.rect(hookData.cell.x, hookData.cell.y, hookData.cell.width, hookData.cell.height, "F")
       }
     },
