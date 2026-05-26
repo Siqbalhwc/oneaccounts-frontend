@@ -85,6 +85,11 @@ function AssetsContent() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
+  // Summary calculations
+  const totalAssets = filtered.length
+  const totalCost = filtered.reduce((s, a) => s + (a.cost_price || 0), 0)
+  const activeCount = filtered.filter(a => a.status === "Active").length
+
   if (roleLoading || !role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
@@ -100,11 +105,15 @@ function AssetsContent() {
         .filter-select { padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--text); }
         .sort-btn { background:none;border:none;cursor:pointer;font:inherit;color:var(--text-muted);display:inline-flex;align-items:center;gap:4px;padding:0;font-weight:700;text-transform:uppercase;font-size:10px;white-space:nowrap; }
         .sort-btn:hover { color:var(--primary); }
+        .summary-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px; margin-bottom:20px; }
+        .summary-item { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; }
+        .summary-label { font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px; }
+        .summary-value { font-size:22px; font-weight:800; color:var(--text); }
         .table-scroll { overflow-x:auto; }
         table { width:100%; border-collapse:collapse; font-size:13px; }
-        th { padding:10px 12px; text-align:left; border-bottom:1px solid var(--border); }
+        th { padding:10px 2px; text-align:left; border-bottom:1px solid var(--border); }
         th.sortable { cursor:pointer; }
-        td { padding:10px 12px; border-bottom:1px solid var(--border); color:var(--text); }
+        td { padding:10px 2px; border-bottom:1px solid var(--border); color:var(--text); }
         tr:hover td { background:var(--card-hover); }
       `}</style>
 
@@ -114,29 +123,45 @@ function AssetsContent() {
           <h1 style={{ fontSize:22, fontWeight:800, color:"var(--text)", margin:0 }}>📦 Asset Register</h1>
           <p style={{ fontSize:13, color:"var(--text-muted)", margin:0 }}>Manage fixed assets, depreciation, transfers & sales</p>
         </div>
-        <div style={{ display:"flex", gap:8 }}>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+          <select className="filter-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            <option value="">All Status</option>
+            <option value="Active">Active</option>
+            <option value="Sold">Sold</option>
+            <option value="Disposed">Disposed</option>
+          </select>
+          <button className="btn" onClick={() => window.open("/api/assets/template", "_blank")}><Download size={14} /> Template</button>
           {canEdit && (
             <>
-              <button className="btn" onClick={() => router.push("/dashboard/assets/new")}><Plus size={16} /> New Asset</button>
               <button className="btn" onClick={() => router.push("/dashboard/assets/import")}><Upload size={16} /> Import</button>
+              <button className="btn" onClick={() => router.push("/dashboard/assets/new")}><Plus size={16} /> New Asset</button>
             </>
           )}
         </div>
       </div>
 
-      {/* Search & Filter Bar */}
-      <div style={{ display:"flex", gap:12, marginBottom:16, flexWrap:"wrap", alignItems:"center" }}>
+      {/* Summary Cards */}
+      <div className="summary-grid">
+        <div className="summary-item">
+          <div className="summary-label">Total Assets</div>
+          <div className="summary-value">{totalAssets}</div>
+        </div>
+        <div className="summary-item">
+          <div className="summary-label">Total Cost</div>
+          <div className="summary-value" style={{ color:"#F59E0B" }}>PKR {totalCost.toLocaleString()}</div>
+        </div>
+        <div className="summary-item">
+          <div className="summary-label">Active Assets</div>
+          <div className="summary-value" style={{ color:"#10B981" }}>{activeCount}</div>
+        </div>
+      </div>
+
+      {/* Search Bar */}
+      <div style={{ display:"flex", gap:12, marginBottom:16, alignItems:"center" }}>
         <div style={{ position:"relative", flex:1, maxWidth:320 }}>
           <Search size={16} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--text-muted)" }} />
           <input className="input" placeholder="Search assets..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        <select className="filter-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-          <option value="">All Status</option>
-          <option value="Active">Active</option>
-          <option value="Sold">Sold</option>
-          <option value="Disposed">Disposed</option>
-        </select>
-        <button className="btn" onClick={() => window.open("/api/assets/template", "_blank")}><Download size={14} /> Template</button>
       </div>
 
       {/* Table */}
@@ -154,8 +179,8 @@ function AssetsContent() {
                 <th className="sortable"><button className="sort-btn" onClick={() => handleSort("category")}>Category {getSortIcon("category")}</button></th>
                 <th className="sortable"><button className="sort-btn" onClick={() => handleSort("location")}>Location {getSortIcon("location")}</button></th>
                 <th className="sortable"><button className="sort-btn" onClick={() => handleSort("purchase_date")}>Purchase Date {getSortIcon("purchase_date")}</button></th>
-                <th className="sortable"><button className="sort-btn" onClick={() => handleSort("cost_price")}>Cost {getSortIcon("cost_price")}</button></th>
-                <th className="sortable"><button className="sort-btn" onClick={() => handleSort("depreciation_per_month")}>Monthly Dep. {getSortIcon("depreciation_per_month")}</button></th>
+                <th className="sortable"><button className="sort-btn" onClick={() => handleSort("cost_price")}>PKR Cost {getSortIcon("cost_price")}</button></th>
+                <th className="sortable"><button className="sort-btn" onClick={() => handleSort("depreciation_per_month")}>PKR Monthly Dep. {getSortIcon("depreciation_per_month")}</button></th>
                 <th className="sortable"><button className="sort-btn" onClick={() => handleSort("status")}>Status {getSortIcon("status")}</button></th>
                 <th></th>
               </tr>
@@ -168,8 +193,8 @@ function AssetsContent() {
                   <td>{asset.category || "—"}</td>
                   <td>{asset.locations?.name || "—"}</td>
                   <td>{asset.purchase_date}</td>
-                  <td>PKR {asset.cost_price?.toLocaleString()}</td>
-                  <td>PKR {asset.depreciation_per_month?.toLocaleString()}</td>
+                  <td>{asset.cost_price?.toLocaleString()}</td>
+                  <td>{asset.depreciation_per_month?.toLocaleString()}</td>
                   <td style={{ color: asset.status === "Active" ? "#10B981" : asset.status === "Sold" ? "#F59E0B" : "#EF4444", fontWeight:600 }}>{asset.status}</td>
                   <td><button className="btn-icon" onClick={() => router.push(`/dashboard/assets/${asset.id}`)} title="View"><Eye size={14} /></button></td>
                 </tr>
