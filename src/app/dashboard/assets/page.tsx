@@ -107,9 +107,8 @@ function AssetsContent() {
         .summary-label { font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px; }
         .summary-value { font-size:22px; font-weight:800; color:var(--text); }
         .table-scroll { overflow-x:auto; }
-        table { width:100%; border-collapse:collapse; font-size:13px; table-layout:auto; }
-        /* Force columns to shrink to content width */
-        th, td { width:1px; padding:4px 2px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; }
+        table { width:auto; border-collapse:collapse; font-size:13px; }
+        th, td { padding:4px 2px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; }
         tr:hover td { background:var(--card-hover); }
       `}</style>
 
