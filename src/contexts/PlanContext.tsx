@@ -14,6 +14,7 @@ const FEATURE_CODES = [
   "csv_import_export",
   "email_reports",
   "purchase_orders",
+  "asset_management",
 ]
 
 interface PlanContextType {
