@@ -123,6 +123,12 @@ function AssetsContent() {
           padding-right:0 !important;
         }
         .asset-table tr:hover td { background:var(--card-hover); }
+
+        /* Right‑align numeric columns */
+        .asset-table .num-header,
+        .asset-table .num-cell {
+          text-align:right;
+        }
       `}</style>
 
       {/* Header */}
@@ -187,8 +193,8 @@ function AssetsContent() {
                 <th className="sortable"><button className="sort-btn" onClick={() => handleSort("category")}>Category {getSortIcon("category")}</button></th>
                 <th className="sortable"><button className="sort-btn" onClick={() => handleSort("location")}>Location {getSortIcon("location")}</button></th>
                 <th className="sortable"><button className="sort-btn" onClick={() => handleSort("purchase_date")}>Purchase Date {getSortIcon("purchase_date")}</button></th>
-                <th className="sortable"><button className="sort-btn" onClick={() => handleSort("cost_price")}>PKR Cost {getSortIcon("cost_price")}</button></th>
-                <th className="sortable"><button className="sort-btn" onClick={() => handleSort("depreciation_per_month")}>PKR Monthly Dep. {getSortIcon("depreciation_per_month")}</button></th>
+                <th className="sortable num-header"><button className="sort-btn" onClick={() => handleSort("cost_price")}>PKR Cost {getSortIcon("cost_price")}</button></th>
+                <th className="sortable num-header"><button className="sort-btn" onClick={() => handleSort("depreciation_per_month")}>PKR Monthly Dep. {getSortIcon("depreciation_per_month")}</button></th>
                 <th className="sortable"><button className="sort-btn" onClick={() => handleSort("status")}>Status {getSortIcon("status")}</button></th>
                 <th></th>
               </tr>
@@ -201,8 +207,8 @@ function AssetsContent() {
                   <td>{asset.category || "—"}</td>
                   <td>{asset.locations?.name || "—"}</td>
                   <td>{asset.purchase_date}</td>
-                  <td>{asset.cost_price?.toLocaleString()}</td>
-                  <td>{asset.depreciation_per_month?.toLocaleString()}</td>
+                  <td className="num-cell">{asset.cost_price?.toLocaleString()}</td>
+                  <td className="num-cell">{asset.depreciation_per_month?.toLocaleString()}</td>
                   <td style={{ color: asset.status === "Active" ? "#10B981" : asset.status === "Sold" ? "#F59E0B" : "#EF4444", fontWeight:600 }}>{asset.status}</td>
                   <td><button className="btn-icon" onClick={() => router.push(`/dashboard/assets/${asset.id}`)} title="View"><Eye size={14} /></button></td>
                 </tr>
