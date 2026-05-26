@@ -4,6 +4,7 @@ import { getUserCompany } from '@/lib/get-user-company'
 import SidebarClient from './sidebar-client'
 import BottomNav from "@/components/BottomNav"
 import DashboardSidebar from "@/components/DashboardSidebar"
+import { CompanyProvider } from "@/contexts/CompanyContext"
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -231,7 +232,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
         />
 
         <div className="dl-main">
-          <div className="dl-main-content">{children}</div>
+          <CompanyProvider value={{
+            companyName: tenant.companyName,
+            companyTagline: tenant.companyTagline,
+            logoUrl: tenant.companyLogo,
+          }}>
+            <div className="dl-main-content">{children}</div>
+          </CompanyProvider>
           <div className="mobile-bottom-nav"><BottomNav /></div>
         </div>
 

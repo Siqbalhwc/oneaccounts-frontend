@@ -7,6 +7,7 @@ import { ArrowLeft, Printer, Send } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
+import { useCompany } from "@/contexts/CompanyContext"
 
 interface InvoiceItem {
   id: number
@@ -60,20 +61,11 @@ export default function InvoiceDetailPage() {
   )
 
   const { hasFeature } = usePlan()
+  const { companyName, companyTagline, logoUrl } = useCompany()
 
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [loading, setLoading] = useState(true)
   const [companyId, setCompanyId] = useState<string>("")
-
-  const [companySettings, setCompanySettings] = useState<{
-    name?: string
-    address?: string
-    phone?: string
-    email?: string
-    tagline?: string
-    logo_url?: string | null
-    business_type?: string
-  }>({})
 
   const [journalLines, setJournalLines] = useState<JournalLine[]>([])
 
@@ -177,25 +169,6 @@ export default function InvoiceDetailPage() {
           setJournalLines(formatted)
         }
       })
-
-    // 5. Company settings – EXACT same method as the Company Settings page
-    supabase
-      .from("company_settings")
-      .select("business_name, address, phone, email, tagline, logo_url, business_type")
-      .single()
-      .then(({ data }) => {
-        if (data) {
-          setCompanySettings({
-            name:          data.business_name || "",
-            address:       data.address       || "",
-            phone:         data.phone         || "",
-            email:         data.email         || "",
-            tagline:       data.tagline       || "",
-            logo_url:      data.logo_url      || null,
-            business_type: data.business_type || "",
-          })
-        }
-      })
   }, [companyId, invoiceId])
 
   const getWhatsAppLink = () => {
@@ -222,17 +195,14 @@ export default function InvoiceDetailPage() {
     const customer = invoice.customer
     const subTotal = invoice.items?.reduce((s, i) => s + i.total, 0) || 0
 
-    // Logo is already a valid data URL or null – pass directly
-    let logoUrl = companySettings.logo_url || null
-
     const pdfData = {
-      companyName:    companySettings.name          || "",
-      companyAddress: companySettings.address       || "",
-      companyPhone:   companySettings.phone         || "",
-      companyEmail:   companySettings.email         || "",
-      companyTagline: companySettings.tagline       || "",
-      logoUrl,
-      businessType:   companySettings.business_type || "",
+      companyName:    companyName || "",
+      companyAddress: "",        // address not yet in context, can be added later
+      companyPhone:   "",
+      companyEmail:   "",
+      companyTagline: companyTagline || "",
+      logoUrl:        logoUrl,   // directly from context – the base64 data URL
+      businessType:   "",
       invoiceNo:      invoice.invoice_no,
       date:           invoice.date,
       dueDate:        invoice.due_date,
