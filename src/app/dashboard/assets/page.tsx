@@ -127,7 +127,13 @@ function AssetsContent() {
         /* Right‑align numeric columns */
         .asset-table .num-header,
         .asset-table .num-cell {
-          text-align:right;
+          text-align:right !important;
+        }
+
+        /* Center‑align specific columns */
+        .asset-table .center-header,
+        .asset-table .center-cell {
+          text-align:center !important;
         }
       `}</style>
 
@@ -189,13 +195,13 @@ function AssetsContent() {
             <thead>
               <tr>
                 <th className="sortable"><button className="sort-btn" onClick={() => handleSort("asset_no")}>Asset No {getSortIcon("asset_no")}</button></th>
-                <th className="sortable"><button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button></th>
-                <th className="sortable"><button className="sort-btn" onClick={() => handleSort("category")}>Category {getSortIcon("category")}</button></th>
-                <th className="sortable"><button className="sort-btn" onClick={() => handleSort("location")}>Location {getSortIcon("location")}</button></th>
-                <th className="sortable"><button className="sort-btn" onClick={() => handleSort("purchase_date")}>Purchase Date {getSortIcon("purchase_date")}</button></th>
+                <th className="sortable center-header"><button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button></th>
+                <th className="sortable center-header"><button className="sort-btn" onClick={() => handleSort("category")}>Category {getSortIcon("category")}</button></th>
+                <th className="sortable center-header"><button className="sort-btn" onClick={() => handleSort("location")}>Location {getSortIcon("location")}</button></th>
+                <th className="sortable center-header"><button className="sort-btn" onClick={() => handleSort("purchase_date")}>Purchase Date {getSortIcon("purchase_date")}</button></th>
                 <th className="sortable num-header"><button className="sort-btn" onClick={() => handleSort("cost_price")}>PKR Cost {getSortIcon("cost_price")}</button></th>
                 <th className="sortable num-header"><button className="sort-btn" onClick={() => handleSort("depreciation_per_month")}>PKR Monthly Dep. {getSortIcon("depreciation_per_month")}</button></th>
-                <th className="sortable"><button className="sort-btn" onClick={() => handleSort("status")}>Status {getSortIcon("status")}</button></th>
+                <th className="sortable center-header"><button className="sort-btn" onClick={() => handleSort("status")}>Status {getSortIcon("status")}</button></th>
                 <th></th>
               </tr>
             </thead>
@@ -203,13 +209,13 @@ function AssetsContent() {
               {sorted.map(asset => (
                 <tr key={asset.id}>
                   <td style={{ fontWeight:600, color:"var(--primary)" }}>{asset.asset_no}</td>
-                  <td>{asset.name}</td>
-                  <td>{asset.category || "—"}</td>
-                  <td>{asset.locations?.name || "—"}</td>
-                  <td>{asset.purchase_date}</td>
+                  <td className="center-cell">{asset.name}</td>
+                  <td className="center-cell">{asset.category || "—"}</td>
+                  <td className="center-cell">{asset.locations?.name || "—"}</td>
+                  <td className="center-cell">{asset.purchase_date}</td>
                   <td className="num-cell">{asset.cost_price?.toLocaleString()}</td>
                   <td className="num-cell">{asset.depreciation_per_month?.toLocaleString()}</td>
-                  <td style={{ color: asset.status === "Active" ? "#10B981" : asset.status === "Sold" ? "#F59E0B" : "#EF4444", fontWeight:600 }}>{asset.status}</td>
+                  <td className="center-cell" style={{ color: asset.status === "Active" ? "#10B981" : asset.status === "Sold" ? "#F59E0B" : "#EF4444", fontWeight:600 }}>{asset.status}</td>
                   <td><button className="btn-icon" onClick={() => router.push(`/dashboard/assets/${asset.id}`)} title="View"><Eye size={14} /></button></td>
                 </tr>
               ))}
