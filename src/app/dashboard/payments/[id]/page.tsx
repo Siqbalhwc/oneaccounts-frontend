@@ -72,7 +72,6 @@ export default function PaymentDetailPage() {
     if (!companyId || !paymentId) return
     setLoading(true)
 
-    // Fetch payment
     supabase
       .from("payments")
       .select("*")
@@ -83,7 +82,6 @@ export default function PaymentDetailPage() {
         if (!data) { setLoading(false); return }
         const pmt: Payment = data
 
-        // Fetch bank name if bank_account_id exists
         if (pmt.bank_account_id) {
           const { data: bank } = await supabase
             .from("bank_accounts")
@@ -93,7 +91,6 @@ export default function PaymentDetailPage() {
           if (bank) setBankName(bank.bank_name)
         }
 
-        // Fetch supplier if applicable
         if (pmt.party_id && pmt.party_type === "supplier") {
           const { data: supp } = await supabase
             .from("suppliers")
@@ -103,7 +100,6 @@ export default function PaymentDetailPage() {
           pmt.supplier = supp || undefined
         }
 
-        // Fetch allocations
         const { data: allocs } = await supabase
           .from("payment_allocations")
           .select("amount, invoice_id, invoices(invoice_no)")
@@ -119,7 +115,6 @@ export default function PaymentDetailPage() {
         setLoading(false)
       })
 
-    // Fetch journal lines
     supabase
       .from("journal_lines")
       .select("account_id, debit, credit, accounts(code, name)")
@@ -168,11 +163,9 @@ export default function PaymentDetailPage() {
       paymentMethod:   payment.payment_method,
       notes:           payment.notes || null,
       status:          "Processed",
-      items: (payment.allocations || []).map(a => ({
-        description: `Bill: ${a.invoice_no}`,
-        qty: 1,
-        unit_price: a.amount,
-        total: a.amount,
+      bills: (payment.allocations || []).map(a => ({
+        bill_no: a.invoice_no,
+        amount: a.amount,
       })),
       journalLines: journalLines.map(line => ({
         account_code: line.account_code || "",
@@ -180,7 +173,6 @@ export default function PaymentDetailPage() {
         debit: line.debit,
         credit: line.credit,
       })),
-      subtotal:   payment.amount,
       total:      payment.amount,
       paid:       payment.amount,
       balanceDue: 0,
