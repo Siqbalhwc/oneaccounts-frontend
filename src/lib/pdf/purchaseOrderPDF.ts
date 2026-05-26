@@ -1,6 +1,6 @@
 /**
- * paymentPDF.ts
- * Generates a supplier payment PDF using the same premium format as the invoice.
+ * purchaseOrderPDF.ts
+ * Generates a Purchase Order PDF using the same premium format.
  */
 
 import jsPDF from "jspdf"
@@ -15,7 +15,7 @@ const BORDER = [229,231,235] as [number,number,number]
 const WHITE  = [255,255,255] as [number,number,number]
 const ROW_ALT = [248,249,252] as [number,number,number]
 
-export interface PaymentItem {
+export interface POItem {
   description:  string
   qty:          number
   unit_price:   number
@@ -25,7 +25,7 @@ export interface PaymentItem {
   product_name?:string
 }
 
-export interface PaymentPDFData {
+export interface PurchaseOrderPDFData {
   companyName:    string
   companyAddress: string
   companyPhone:   string
@@ -33,23 +33,20 @@ export interface PaymentPDFData {
   companyTagline: string
   logoUrl?:       string | null
 
-  paymentNo:  string
-  date:       string
+  poNo:         string
+  date:         string
+  expectedDelivery?: string
 
   supplierName:    string
   supplierAddress: string
   supplierPhone:   string
   supplierEmail?:  string
 
-  paymentMethod?: string
-  notes?:         string | null
+  notes?:  string | null
+  status:  string
 
-  status:     string
-  items:      PaymentItem[]
-  subtotal:   number
-  total:      number
-  balanceDue: number
-  paid:       number
+  items:    POItem[]
+  total:    number
 }
 
 async function loadImage(url: string): Promise<string | null> {
@@ -72,7 +69,7 @@ function filledRect(doc: jsPDF, x: number, y: number, w: number, h: number, fill
   radius > 0 ? doc.roundedRect(x, y, w, h, radius, radius, "F") : doc.rect(x, y, w, h, "F")
 }
 
-export async function generatePaymentPDF(data: PaymentPDFData): Promise<jsPDF> {
+export async function generatePurchaseOrderPDF(data: PurchaseOrderPDFData): Promise<jsPDF> {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
   const PW = 210, PH = 297, ML = 14, MR = 14, CW = PW - ML - MR
 
@@ -106,23 +103,23 @@ export async function generatePaymentPDF(data: PaymentPDFData): Promise<jsPDF> {
   }
 
   doc.setFont("helvetica", "bold").setFontSize(26).setTextColor(...NAVY)
-  doc.text("PAYMENT", PW - MR, LOGO_Y + 9, { align: "right" })
+  doc.text("PURCHASE ORDER", PW - MR, LOGO_Y + 9, { align: "right" })
 
   const metaY = LOGO_Y + 15
   doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(...MUTED)
-  doc.text("Payment No:", PW - MR - 36, metaY)
-  doc.text("Date:",       PW - MR - 36, metaY + 5)
+  doc.text("PO No:", PW - MR - 36, metaY)
+  doc.text("Date:",  PW - MR - 36, metaY + 5)
   doc.setFont("helvetica", "bold").setTextColor(...DARK)
-  doc.text(data.paymentNo, PW - MR, metaY,     { align: "right" })
-  doc.text(data.date,      PW - MR, metaY + 5, { align: "right" })
+  doc.text(data.poNo, PW - MR, metaY,     { align: "right" })
+  doc.text(data.date, PW - MR, metaY + 5, { align: "right" })
 
   const HEADER_H = LOGO_Y + LOGO_SIZE + 4
   doc.setDrawColor(...BORDER).setLineWidth(0.4).line(ML, HEADER_H, PW - MR, HEADER_H)
 
   let Y = HEADER_H + 7
   doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...MUTED)
-  doc.text("SUPPLIER",  ML,      Y)
-  doc.text("AMOUNT",    PW - MR, Y, { align: "right" })
+  doc.text("SUPPLIER", ML,      Y)
+  doc.text("TOTAL",    PW - MR, Y, { align: "right" })
   Y += 5
   doc.setFont("helvetica", "bold").setFontSize(13).setTextColor(...DARK)
   doc.text(data.supplierName || "", ML, Y)
@@ -137,8 +134,17 @@ export async function generatePaymentPDF(data: PaymentPDFData): Promise<jsPDF> {
   const email = (data.supplierEmail ?? "").trim()
   if (email) { doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...MUTED); doc.text("- " + email, ML, Y); Y += 4.5 }
 
-  const statusText = (data.status || "Processed").toUpperCase()
-  const badgeColor: [number,number,number] = statusText === "PROCESSED" ? [5,150,105] : RED
+  if (data.expectedDelivery) {
+    Y += 2
+    doc.setFont("helvetica", "bold").setFontSize(9).setTextColor(...MUTED)
+    doc.text("Expected Delivery:", ML, Y)
+    doc.setFont("helvetica", "normal").setTextColor(...DARK)
+    doc.text(data.expectedDelivery, ML + 32, Y)
+    Y += 4.5
+  }
+
+  const statusText = (data.status || "Draft").toUpperCase()
+  const badgeColor: [number,number,number] = statusText === "APPROVED" ? [5,150,105] : AMBER
   const statusLabelY = HEADER_H + 7 + 5 + 5
   doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...MUTED)
   doc.text("STATUS", PW - MR, statusLabelY, { align: "right" })
@@ -202,23 +208,16 @@ export async function generatePaymentPDF(data: PaymentPDFData): Promise<jsPDF> {
 
   let SY = afterTable + 6; const sumX = PW - MR - 70, valX = PW - MR
   doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...MUTED)
-  doc.text("Subtotal", sumX, SY); doc.setTextColor(...DARK); doc.text(pkr(data.subtotal), valX, SY, { align:"right" }); SY += 5.5
+  doc.text("Subtotal", sumX, SY); doc.setTextColor(...DARK); doc.text(pkr(data.total), valX, SY, { align:"right" }); SY += 5.5
   doc.setFont("helvetica", "bold").setTextColor(...MUTED); doc.text("Tax (0%)", sumX, SY); doc.setTextColor(...DARK); doc.text(pkr(0), valX, SY, { align:"right" }); SY += 5.5
   const TOTAL_RADIUS = 4; filledRect(doc, sumX - 2, SY - 4, valX - sumX + 4, 9, NAVY, TOTAL_RADIUS)
   doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(...WHITE)
   doc.text("Total", sumX + 2, SY + 1.5); doc.text(pkr(data.total), valX - 2, SY + 1.5, { align:"right" }); SY += 10
-  if (data.paid > 0) {
-    SY += 2; doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...MUTED); doc.text("Amount Paid", sumX, SY)
-    doc.setTextColor(16,185,129); doc.text("- " + pkr(data.paid), valX, SY, { align:"right" }); SY += 5.5
-    doc.setFont("helvetica", "bold").setTextColor(...RED); doc.text("Balance Due", sumX, SY)
-    doc.text(pkr(data.balanceDue), valX, SY, { align:"right" }); SY += 5
-  }
 
   SY += 6
   const termsLines: string[] = []
-  if (data.paymentMethod) termsLines.push(`Payment Method: ${data.paymentMethod}`)
   if (data.notes) termsLines.push(data.notes)
-  if (termsLines.length === 0) termsLines.push("Payment processed.")
+  if (termsLines.length === 0) termsLines.push("Thank you for your business.")
   doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...MUTED); doc.text("NOTES", ML, SY); SY += 4
   doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...DARK)
   const noteLines = doc.splitTextToSize(termsLines.join("\n"), CW); doc.text(noteLines, ML, SY)

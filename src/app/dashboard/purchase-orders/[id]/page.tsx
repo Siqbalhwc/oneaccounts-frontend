@@ -3,10 +3,12 @@
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, FileText, Download, CheckCircle } from "lucide-react"
+import { ArrowLeft, FileText, Download, CheckCircle, Printer } from "lucide-react"
 import RecordHistory from "@/components/RecordHistory"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
+import { useCompany } from "@/contexts/CompanyContext"
+import { generatePurchaseOrderPDF } from "@/lib/pdf/purchaseOrderPDF"
 
 export default function PurchaseOrderDetailPage() {
   const router = useRouter()
@@ -17,8 +19,9 @@ export default function PurchaseOrderDetailPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const { role } = useRole()         // ← correct role source
+  const { role } = useRole()
   const { hasFeature } = usePlan()
+  const { companyName, companyTagline, logoUrl } = useCompany()
 
   const [po, setPo] = useState<any>(null)
   const [items, setItems] = useState<any[]>([])
@@ -26,24 +29,23 @@ export default function PurchaseOrderDetailPage() {
   const [loading, setLoading] = useState(true)
   const [companyId, setCompanyId] = useState("")
   const [supplierName, setSupplierName] = useState("")
+  const [supplierPhone, setSupplierPhone] = useState("")
+  const [supplierAddress, setSupplierAddress] = useState("")
   const [canApprove, setCanApprove] = useState(false)
   const [approving, setApproving] = useState(false)
   const [message, setMessage] = useState("")
 
-  // ── Get company & check approval permission ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
 
-      // Admin always has approval rights
       if (role === "admin") {
         setCanApprove(true)
         return
       }
 
-      // For non‑admin, check the custom permission
       supabase
         .from("user_roles")
         .select("permissions")
@@ -57,7 +59,6 @@ export default function PurchaseOrderDetailPage() {
     })
   }, [role])
 
-  // ── Fetch PO data ──
   useEffect(() => {
     if (!companyId || !poId) return
     setLoading(true)
@@ -76,15 +77,17 @@ export default function PurchaseOrderDetailPage() {
         setPo(data)
         setItems(data.items || [])
 
-        // Fetch supplier name
         const { data: supp } = await supabase
           .from("suppliers")
-          .select("name")
+          .select("name, phone, address")
           .eq("id", data.supplier_id)
           .single()
-        if (supp) setSupplierName(supp.name)
+        if (supp) {
+          setSupplierName(supp.name)
+          setSupplierPhone(supp.phone || "")
+          setSupplierAddress(supp.address || "")
+        }
 
-        // Fetch attachments
         const { data: atts } = await supabase
           .from("attachments")
           .select("*")
@@ -97,7 +100,6 @@ export default function PurchaseOrderDetailPage() {
       })
   }, [companyId, poId])
 
-  // ── Approve handler ──
   const handleApprove = async () => {
     if (!canApprove || !po) return
     setApproving(true)
@@ -119,7 +121,38 @@ export default function PurchaseOrderDetailPage() {
     setTimeout(() => setMessage(""), 4000)
   }
 
-  // ── Feature guard ──
+  const handlePrintPDF = async () => {
+    if (!po) return
+    const total = items.reduce((sum, i) => sum + (i.total || 0), 0)
+
+    const pdfData = {
+      companyName:    companyName || "",
+      companyAddress: "",
+      companyPhone:   "",
+      companyEmail:   "",
+      companyTagline: companyTagline || "",
+      logoUrl:        logoUrl,
+      poNo:           po.po_no,
+      date:           po.date,
+      expectedDelivery: po.expected_delivery || "",
+      supplierName:    supplierName || "Unknown",
+      supplierAddress: supplierAddress,
+      supplierPhone:   supplierPhone,
+      notes:           po.notes || null,
+      status:          po.status,
+      items: items.map((item: any) => ({
+        description: item.description || "",
+        qty:         item.qty || 0,
+        unit_price:  item.unit_price || 0,
+        total:       item.total || 0,
+      })),
+      total: total,
+    }
+
+    const doc = await generatePurchaseOrderPDF(pdfData)
+    doc.save(`PO_${po.po_no}.pdf`)
+  }
+
   if (!hasFeature("purchase_orders")) {
     return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Purchase Orders feature is not enabled.</div>
   }
@@ -154,13 +187,7 @@ export default function PurchaseOrderDetailPage() {
         .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
         .btn-warning { background: #F97316; color: white; border-color: #F97316; }
         .btn-warning:hover { background: #EA580C; }
-        .badge {
-          display: inline-block;
-          padding: 2px 10px;
-          border-radius: 12px;
-          font-size: 12px;
-          font-weight: 700;
-        }
+        .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; }
         .badge-draft { background: #FEF3C7; color: #92400E; }
         .badge-approved { background: #D1FAE5; color: #065F46; }
         .message { padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
@@ -193,6 +220,9 @@ export default function PurchaseOrderDetailPage() {
               <CheckCircle size={14} /> {approving ? "Approving..." : "Approve"}
             </button>
           )}
+          <button className="btn btn-primary" onClick={handlePrintPDF}>
+            <Printer size={14} /> Print
+          </button>
         </div>
       </div>
 

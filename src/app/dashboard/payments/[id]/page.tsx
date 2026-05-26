@@ -7,6 +7,7 @@ import { ArrowLeft, Printer, Send } from "lucide-react"
 import { generatePaymentPDF } from "@/lib/pdf/paymentPDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
+import { useCompany } from "@/contexts/CompanyContext"
 
 interface Payment {
   id: number
@@ -50,11 +51,11 @@ export default function PaymentDetailPage() {
   )
 
   const { hasFeature } = usePlan()
+  const { companyName, companyTagline, logoUrl } = useCompany()
 
   const [payment, setPayment] = useState<Payment | null>(null)
   const [loading, setLoading] = useState(true)
   const [companyId, setCompanyId] = useState<string>("")
-  const [companySettings, setCompanySettings] = useState<any>({})
   const [journalLines, setJournalLines] = useState<JournalLine[]>([])
 
   useEffect(() => {
@@ -136,13 +137,6 @@ export default function PaymentDetailPage() {
           setJournalLines(formatted)
         }
       })
-
-    supabase
-      .from("company_settings")
-      .select("business_name, address, phone, email, tagline, logo_url")
-      .eq("company_id", companyId)
-      .maybeSingle()
-      .then(({ data }) => { if (data) setCompanySettings(data) })
   }, [companyId, paymentId])
 
   const getWhatsAppLink = () => {
@@ -157,12 +151,12 @@ export default function PaymentDetailPage() {
     if (!payment) return
 
     const pdfData = {
-      companyName:    companySettings.business_name || "OneAccounts",
-      companyAddress: companySettings.address || "",
-      companyPhone:   companySettings.phone || "",
-      companyEmail:   companySettings.email || "",
-      companyTagline: companySettings.tagline || "",
-      logoUrl:        companySettings.logo_url || null,
+      companyName:    companyName || "OneAccounts",
+      companyAddress: "",
+      companyPhone:   "",
+      companyEmail:   "",
+      companyTagline: companyTagline || "",
+      logoUrl:        logoUrl,
       paymentNo:      payment.payment_no,
       date:           payment.payment_date,
       supplierName:    payment.supplier?.name || (payment.payment_type === "expense" ? "Expense Payment" : "Supplier"),
