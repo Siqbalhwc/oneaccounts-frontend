@@ -17,6 +17,7 @@ interface Payment {
   payment_method: string
   payment_type: string
   party_type: string
+  bank_account_id: number | null
   reference?: string
   notes?: string
   party_id: number | null
@@ -56,6 +57,7 @@ export default function PaymentDetailPage() {
   const [payment, setPayment] = useState<Payment | null>(null)
   const [loading, setLoading] = useState(true)
   const [companyId, setCompanyId] = useState<string>("")
+  const [bankName, setBankName] = useState<string>("")
   const [journalLines, setJournalLines] = useState<JournalLine[]>([])
 
   useEffect(() => {
@@ -70,55 +72,54 @@ export default function PaymentDetailPage() {
     if (!companyId || !paymentId) return
     setLoading(true)
 
+    // Fetch payment
     supabase
       .from("payments")
       .select("*")
       .eq("id", paymentId)
       .eq("company_id", companyId)
       .single()
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (!data) { setLoading(false); return }
         const pmt: Payment = data
 
+        // Fetch bank name if bank_account_id exists
+        if (pmt.bank_account_id) {
+          const { data: bank } = await supabase
+            .from("bank_accounts")
+            .select("bank_name")
+            .eq("id", pmt.bank_account_id)
+            .single()
+          if (bank) setBankName(bank.bank_name)
+        }
+
+        // Fetch supplier if applicable
         if (pmt.party_id && pmt.party_type === "supplier") {
-          supabase
+          const { data: supp } = await supabase
             .from("suppliers")
             .select("name, code, phone, email")
             .eq("id", pmt.party_id)
             .single()
-            .then(({ data: supp }) => { pmt.supplier = supp || undefined })
-            .then(() => {
-              supabase
-                .from("payment_allocations")
-                .select("amount, invoice_id, invoices(invoice_no)")
-                .eq("payment_id", pmt.id)
-                .then(({ data: allocs }) => {
-                  pmt.allocations = (allocs || []).map((a: any) => ({
-                    invoice_id: a.invoice_id,
-                    invoice_no: a.invoices?.invoice_no || "—",
-                    amount: a.amount,
-                  }))
-                  setPayment(pmt)
-                  setLoading(false)
-                })
-            })
-        } else {
-          supabase
-            .from("payment_allocations")
-            .select("amount, invoice_id, invoices(invoice_no)")
-            .eq("payment_id", pmt.id)
-            .then(({ data: allocs }) => {
-              pmt.allocations = (allocs || []).map((a: any) => ({
-                invoice_id: a.invoice_id,
-                invoice_no: a.invoices?.invoice_no || "—",
-                amount: a.amount,
-              }))
-              setPayment(pmt)
-              setLoading(false)
-            })
+          pmt.supplier = supp || undefined
         }
+
+        // Fetch allocations
+        const { data: allocs } = await supabase
+          .from("payment_allocations")
+          .select("amount, invoice_id, invoices(invoice_no)")
+          .eq("payment_id", pmt.id)
+
+        pmt.allocations = (allocs || []).map((a: any) => ({
+          invoice_id: a.invoice_id,
+          invoice_no: a.invoices?.invoice_no || "—",
+          amount: a.amount,
+        }))
+
+        setPayment(pmt)
+        setLoading(false)
       })
 
+    // Fetch journal lines
     supabase
       .from("journal_lines")
       .select("account_id, debit, credit, accounts(code, name)")
@@ -163,19 +164,26 @@ export default function PaymentDetailPage() {
       supplierAddress: "",
       supplierPhone:   payment.supplier?.phone || "",
       supplierEmail:   payment.supplier?.email || "",
+      bankName:        bankName,
+      paymentMethod:   payment.payment_method,
+      notes:           payment.notes || null,
+      status:          "Processed",
       items: (payment.allocations || []).map(a => ({
         description: `Bill: ${a.invoice_no}`,
         qty: 1,
         unit_price: a.amount,
         total: a.amount,
       })),
+      journalLines: journalLines.map(line => ({
+        account_code: line.account_code || "",
+        account_name: line.account_name || "",
+        debit: line.debit,
+        credit: line.credit,
+      })),
       subtotal:   payment.amount,
       total:      payment.amount,
       paid:       payment.amount,
       balanceDue: 0,
-      status:     "Processed",
-      paymentMethod: payment.payment_method,
-      notes:      payment.notes || null,
     }
 
     const doc = await generatePaymentPDF(pdfData)
@@ -236,6 +244,7 @@ export default function PaymentDetailPage() {
         <div className="row"><span className="label">Type</span><span className="value">{payment.payment_type === "expense" ? "Expense Payment" : "Supplier Payment"}</span></div>
         {payment.supplier && <div className="row"><span className="label">Supplier</span><span className="value">{payment.supplier.code} – {payment.supplier.name}</span></div>}
         <div className="row"><span className="label">Amount</span><span className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B" }}>PKR {payment.amount?.toLocaleString()}</span></div>
+        {bankName && <div className="row"><span className="label">Bank</span><span className="value">{bankName}</span></div>}
         <div className="row"><span className="label">Method</span><span className="value">{payment.payment_method}</span></div>
         {payment.reference && <div className="row"><span className="label">Reference</span><span className="value">{payment.reference}</span></div>}
         {payment.notes && <div className="row"><span className="label">Notes</span><span className="value">{payment.notes}</span></div>}
