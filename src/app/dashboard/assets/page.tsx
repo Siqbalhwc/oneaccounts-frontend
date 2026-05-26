@@ -3,9 +3,11 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { Plus, Search, Download, Upload, Eye, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { Plus, Search, Download, Upload, Eye, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import PremiumGuard from "@/components/PremiumGuard"
+import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
 
 type SortField = "asset_no" | "name" | "category" | "location" | "purchase_date" | "cost_price" | "depreciation_per_month" | "status"
 type SortDir = "asc" | "desc"
@@ -87,13 +89,43 @@ function AssetsContent() {
   const totalCost = filtered.reduce((s, a) => s + (a.cost_price || 0), 0)
   const activeCount = filtered.filter(a => a.status === "Active").length
 
+  const handleRunDepreciation = async () => {
+    if (!confirm("Post depreciation for all active assets for this month?")) return
+    const res = await fetch("/api/assets/depreciation", { method: "POST" })
+    const result = await res.json()
+    if (result.success) {
+      alert(`Depreciation posted for ${result.processed} asset(s).`)
+      fetchAssets()
+    } else {
+      alert("Error: " + (result.error || "Unknown"))
+    }
+  }
+
+  const exportPDF = () => {
+    const doc = new jsPDF({ orientation: "landscape" })
+    doc.setFontSize(14)
+    doc.text("Asset Register", 14, 20)
+    const head = [["Asset No", "Name", "Category", "Location", "Purchase Date", "Cost", "Monthly Dep.", "Status"]]
+    const data = sorted.map(a => [
+      a.asset_no,
+      a.name,
+      a.category || "—",
+      a.locations?.name || "—",
+      a.purchase_date,
+      a.cost_price?.toLocaleString(),
+      a.depreciation_per_month?.toLocaleString(),
+      a.status,
+    ])
+    autoTable(doc, { head, body: data, startY: 30, styles: { fontSize: 8 } })
+    doc.save("asset_register.pdf")
+  }
+
   if (roleLoading || !role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        /* ── local resets & component styles ── */
         .btn { display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-family:inherit;transition:all 0.15s;white-space:nowrap; }
         .btn:hover { background:var(--card-hover); }
         .btn-icon { background:transparent;border:1.5px solid var(--border);color:var(--text-muted);padding:6px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center; }
@@ -108,33 +140,16 @@ function AssetsContent() {
         .summary-label { font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px; }
         .summary-value { font-size:22px; font-weight:800; color:var(--text); }
 
-        /* ── Asset table (override global padding) ── */
         .table-scroll { overflow-x:auto; }
         .asset-table { width:auto; border-collapse:collapse; font-size:13px; }
-        .asset-table th,
-        .asset-table td {
-          padding:4px 2px !important;
-          text-align:left;
-          border-bottom:1px solid var(--border);
-          white-space:nowrap;
-        }
-        .asset-table th:last-child,
-        .asset-table td:last-child {
-          padding-right:0 !important;
-        }
+        .asset-table th, .asset-table td { padding:4px 2px !important; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; }
+        .asset-table th:last-child, .asset-table td:last-child { padding-right:0 !important; }
         .asset-table tr:hover td { background:var(--card-hover); }
 
-        /* Right‑align numeric columns */
         .asset-table .num-header,
-        .asset-table .num-cell {
-          text-align:right !important;
-        }
-
-        /* Center‑align specific columns */
+        .asset-table .num-cell { text-align:right !important; }
         .asset-table .center-header,
-        .asset-table .center-cell {
-          text-align:center !important;
-        }
+        .asset-table .center-cell { text-align:center !important; }
       `}</style>
 
       {/* Header */}
@@ -153,10 +168,12 @@ function AssetsContent() {
           <button className="btn" onClick={() => window.open("/api/assets/template", "_blank")}><Download size={14} /> Template</button>
           {canEdit && (
             <>
+              <button className="btn" onClick={handleRunDepreciation}><RefreshCw size={16} /> Run Depreciation</button>
               <button className="btn" onClick={() => router.push("/dashboard/assets/import")}><Upload size={16} /> Import</button>
               <button className="btn" onClick={() => router.push("/dashboard/assets/new")}><Plus size={16} /> New Asset</button>
             </>
           )}
+          <button className="btn" onClick={exportPDF}><Download size={14} /> PDF</button>
         </div>
       </div>
 

@@ -25,7 +25,6 @@ export default function SellAssetPage() {
   const [notes, setNotes] = useState("")
   const [companyId, setCompanyId] = useState("")
 
-  // Computed values
   const [accumDep, setAccumDep] = useState(0)
 
   useEffect(() => {
@@ -42,7 +41,6 @@ export default function SellAssetPage() {
   useEffect(() => {
     if (!companyId || !assetId) return
     setLoading(true)
-    // Fetch asset with current location/person
     supabase.from("assets")
       .select("*, locations(name), personnel:responsible_person_id(name)")
       .eq("id", assetId)
@@ -56,7 +54,6 @@ export default function SellAssetPage() {
         }
         setAsset(data)
 
-        // Calculate accumulated depreciation from schedule
         const { data: depRows } = await supabase
           .from("asset_depreciation_schedule")
           .select("depreciation_amount")
@@ -84,7 +81,6 @@ export default function SellAssetPage() {
     setFlash("")
 
     try {
-      // 1. Insert asset_sales record
       const { data: saleRecord, error: saleError } = await supabase
         .from("asset_sales")
         .insert({
@@ -101,22 +97,14 @@ export default function SellAssetPage() {
 
       if (saleError) throw new Error("Failed to record sale: " + saleError.message)
 
-      // 2. Create journal entry for sale
       const userEmail = (await supabase.auth.getUser()).data.user?.email || "system"
       const entryNo = `JE-SALE-${asset.asset_no}`
 
-      // Build lines
       const lines: any[] = []
 
-      // Dr Bank/Cash (asset account) with sale amount
       if (bankAccountId) {
-        lines.push({
-          account_id: parseInt(bankAccountId),
-          debit: saleAmountNum,
-          credit: 0,
-        })
+        lines.push({ account_id: parseInt(bankAccountId), debit: saleAmountNum, credit: 0 })
       } else {
-        // Fallback to a default asset account (code 1000 if exists)
         const { data: defaultBank } = await supabase.from("accounts")
           .select("id").eq("company_id", companyId).eq("code", "1000").maybeSingle()
         if (defaultBank) {
@@ -126,51 +114,28 @@ export default function SellAssetPage() {
         }
       }
 
-      // Dr Accumulated Depreciation with total accum dep
       if (asset.gl_accum_dep_account_id) {
-        lines.push({
-          account_id: asset.gl_accum_dep_account_id,
-          debit: accumDep,
-          credit: 0,
-        })
+        lines.push({ account_id: asset.gl_accum_dep_account_id, debit: accumDep, credit: 0 })
       }
 
-      // Cr Asset account (original cost)
       if (asset.gl_asset_account_id) {
-        lines.push({
-          account_id: asset.gl_asset_account_id,
-          debit: 0,
-          credit: asset.cost_price,
-        })
+        lines.push({ account_id: asset.gl_asset_account_id, debit: 0, credit: asset.cost_price })
       } else {
         throw new Error("Asset GL account not set")
       }
 
-      // Gain/Loss line
       if (gainLoss !== 0) {
         if (gainLossAccountId) {
           if (gainLoss > 0) {
-            // Credit gain
-            lines.push({
-              account_id: parseInt(gainLossAccountId),
-              debit: 0,
-              credit: gainLoss,
-            })
+            lines.push({ account_id: parseInt(gainLossAccountId), debit: 0, credit: gainLoss })
           } else {
-            // Debit loss
-            lines.push({
-              account_id: parseInt(gainLossAccountId),
-              debit: Math.abs(gainLoss),
-              credit: 0,
-            })
+            lines.push({ account_id: parseInt(gainLossAccountId), debit: Math.abs(gainLoss), credit: 0 })
           }
         } else {
-          // Auto-pick a gain/loss account? For safety, require selection.
           throw new Error("Please select a Gain/Loss account")
         }
       }
 
-      // Create journal entry
       const { data: entry, error: entryErr } = await supabase
         .from("journal_entries")
         .insert({
@@ -184,7 +149,6 @@ export default function SellAssetPage() {
 
       if (entryErr) throw new Error("Journal entry failed: " + entryErr.message)
 
-      // Insert journal lines
       const lineRows = lines.map(l => ({
         company_id: companyId,
         entry_id: entry.id,
@@ -198,7 +162,6 @@ export default function SellAssetPage() {
       const { error: linesErr } = await supabase.from("journal_lines").insert(lineRows)
       if (linesErr) throw new Error("Journal lines failed: " + linesErr.message)
 
-      // Update account balances
       for (const l of lines) {
         const { data: acc } = await supabase.from("accounts").select("balance").eq("id", l.account_id).single()
         if (acc) {
@@ -207,7 +170,6 @@ export default function SellAssetPage() {
         }
       }
 
-      // 3. Update asset status to Sold
       const { error: updateErr } = await supabase
         .from("assets")
         .update({ status: "Sold", updated_by: userEmail })
@@ -263,7 +225,7 @@ export default function SellAssetPage() {
               <input className="input" type="date" value={saleDate} onChange={e => setSaleDate(e.target.value)} />
             </div>
             <div style={{ marginBottom:12 }}>
-              <label className="label">Sale Amount *</label>
+              <label className="label">Sale Amount (PKR) *</label>
               <input className="input" type="number" min="0" step="100" value={saleAmount} onChange={e => setSaleAmount(e.target.value)} placeholder="0" />
             </div>
             <div style={{ marginBottom:12 }}>
