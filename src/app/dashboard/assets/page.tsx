@@ -47,14 +47,12 @@ function AssetsContent() {
 
   useEffect(() => { if (companyId) fetchAssets() }, [companyId])
 
-  // Filter
   const filtered = assets.filter(a => {
     if (statusFilter && a.status !== statusFilter) return false
     if (search && !a.name.toLowerCase().includes(search.toLowerCase()) && !a.asset_no.toLowerCase().includes(search.toLowerCase())) return false
     return true
   })
 
-  // Sort
   const sorted = [...filtered].sort((a, b) => {
     let valA: any, valB: any
     if (sortField === "location") {
@@ -85,7 +83,6 @@ function AssetsContent() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  // Summary calculations
   const totalAssets = filtered.length
   const totalCost = filtered.reduce((s, a) => s + (a.cost_price || 0), 0)
   const activeCount = filtered.filter(a => a.status === "Active").length
@@ -111,9 +108,8 @@ function AssetsContent() {
         .summary-value { font-size:22px; font-weight:800; color:var(--text); }
         .table-scroll { overflow-x:auto; }
         table { width:100%; border-collapse:collapse; font-size:13px; }
-        th { padding:10px 2px; text-align:left; border-bottom:1px solid var(--border); }
-        th.sortable { cursor:pointer; }
-        td { padding:10px 2px; border-bottom:1px solid var(--border); color:var(--text); }
+        th { padding:4px 2px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; }
+        td { padding:4px 2px; border-bottom:1px solid var(--border); color:var(--text); white-space:nowrap; }
         tr:hover td { background:var(--card-hover); }
       `}</style>
 
