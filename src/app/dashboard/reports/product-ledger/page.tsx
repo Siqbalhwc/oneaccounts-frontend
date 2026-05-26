@@ -3,7 +3,9 @@
 import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, Printer } from "lucide-react"
+import { useCompany } from "@/contexts/CompanyContext"
+import { generateProductLedgerPDF } from "@/lib/pdf/productLedgerPDF"
 
 type SortField = "date" | "type" | "qty_in" | "qty_out" | "balance"
 type SortDir = "asc" | "desc"
@@ -16,6 +18,8 @@ export default function ProductLedgerPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
+
+  const { companyName, companyTagline, logoUrl } = useCompany()
 
   const [product, setProduct] = useState<any>(null)
   const [ledgerLines, setLedgerLines] = useState<any[]>([])
@@ -151,6 +155,30 @@ export default function ProductLedgerPage() {
   const totalOutflow = ledgerLines.filter(l => !l.isOpening).reduce((s, l) => s + l.qty_out, 0)
   const closingBalance = ledgerLines.length > 0 ? ledgerLines[ledgerLines.length - 1].balance : 0
 
+  const handlePrintPDF = async () => {
+    if (!product || sortedLines.length === 0) return
+
+    const pdfData = {
+      companyName:    companyName || "",
+      companyAddress: "",
+      companyPhone:   "",
+      companyEmail:   "",
+      companyTagline: companyTagline || "",
+      logoUrl:        logoUrl,
+      productName:    product.name,
+      productCode:    product.code,
+      startDate:      startDate,
+      endDate:        endDate,
+      totalInflow:    totalInflow,
+      totalOutflow:   totalOutflow,
+      closingBalance: closingBalance,
+      ledgerLines:    sortedLines,
+    }
+
+    const doc = await generateProductLedgerPDF(pdfData)
+    doc.save(`Product_Ledger_${product.code}.pdf`)
+  }
+
   if (!productId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>No product selected.</div>
 
   return (
@@ -215,6 +243,9 @@ export default function ProductLedgerPage() {
           <span style={{ color: "var(--text-muted)", fontSize: 12 }}>to</span>
           <input type="date" className="date-input" value={endDate} onChange={e => setEndDate(e.target.value)} />
           <button className="btn btn-outline" onClick={fetchLedger}>Refresh</button>
+          <button className="btn btn-outline" onClick={handlePrintPDF}>
+            <Printer size={16} /> Print PDF
+          </button>
         </div>
       </div>
 
