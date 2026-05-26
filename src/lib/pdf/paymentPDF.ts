@@ -1,25 +1,28 @@
 /**
  * paymentPDF.ts
- * Generates a supplier payment PDF – clean logo, invoice‑style header & journal entry.
+ * Generates a supplier payment PDF using the same format as the receipt.
  */
 
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
 const NAVY   = [7,8,91] as [number,number,number]
-const RED    = [220,38,38] as [number,number,number]
 const AMBER  = [245,158,11] as [number,number,number]
 const DARK   = [17,24,39] as [number,number,number]
 const MUTED  = [107,114,128] as [number,number,number]
 const BORDER = [229,231,235] as [number,number,number]
 const WHITE  = [255,255,255] as [number,number,number]
 const ROW_ALT = [248,249,252] as [number,number,number]
+const GREEN  = [5,150,105] as [number,number,number]
 
-export interface JournalLinePDF {
-  account_code: string
-  account_name: string
-  debit: number
-  credit: number
+export interface PaymentItem {
+  description:  string
+  qty:          number
+  unit_price:   number
+  total:        number
+  image_path?:  string | null
+  product_id?:  string | null
+  product_name?:string
 }
 
 export interface PaymentPDFData {
@@ -38,16 +41,15 @@ export interface PaymentPDFData {
   supplierPhone:   string
   supplierEmail?:  string
 
-  bankName?:      string
   paymentMethod?: string
   notes?:         string | null
 
   status:     string
-  journalLines: JournalLinePDF[]
-
+  items:      PaymentItem[]
+  subtotal:   number
   total:      number
-  paid:       number
   balanceDue: number
+  paid:       number
 }
 
 async function loadImage(url: string): Promise<string | null> {
@@ -85,6 +87,7 @@ export async function generatePaymentPDF(data: PaymentPDFData): Promise<jsPDF> {
   const textX = logoData ? LOGO_X + LOGO_SIZE + 4 : ML
   doc.setTextColor(...NAVY).setFont("helvetica", "bold").setFontSize(13)
   doc.text(data.companyName || "Your Company", textX, LOGO_Y + 7)
+
   doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...MUTED)
   doc.text(data.companyTagline || "", textX, LOGO_Y + 13)
 
@@ -93,7 +96,7 @@ export async function generatePaymentPDF(data: PaymentPDFData): Promise<jsPDF> {
   if (data.companyPhone)   { doc.text("Phone: " + data.companyPhone, textX, infoY); infoY += 4 }
   if (data.companyEmail)   { doc.text("Email: " + data.companyEmail, textX, infoY) }
 
-  // ── RIGHT SIDE: PAYMENT title & meta ──
+  // ── RIGHT SIDE: PAYMENT title ──
   doc.setFont("helvetica", "bold").setFontSize(26).setTextColor(...NAVY)
   doc.text("PAYMENT", PW - MR, LOGO_Y + 9, { align: "right" })
 
@@ -111,8 +114,8 @@ export async function generatePaymentPDF(data: PaymentPDFData): Promise<jsPDF> {
   // ── SUPPLIER / AMOUNT ──
   let Y = HEADER_H + 7
   doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...MUTED)
-  doc.text("SUPPLIER", ML, Y)
-  doc.text("AMOUNT", PW - MR, Y, { align: "right" })
+  doc.text("SUPPLIER",  ML,      Y)
+  doc.text("AMOUNT",    PW - MR, Y, { align: "right" })
   Y += 5
   doc.setFont("helvetica", "bold").setFontSize(13).setTextColor(...DARK)
   doc.text(data.supplierName || "", ML, Y)
@@ -127,22 +130,9 @@ export async function generatePaymentPDF(data: PaymentPDFData): Promise<jsPDF> {
   const email = (data.supplierEmail ?? "").trim()
   if (email) { doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...MUTED); doc.text("- " + email, ML, Y); Y += 4.5 }
 
-  // Bank & method
-  if (data.bankName) {
-    Y += 2
-    doc.setFont("helvetica", "bold").setFontSize(9).setTextColor(...MUTED)
-    doc.text("Bank:", ML, Y); doc.setFont("helvetica", "normal").setTextColor(...DARK); doc.text(data.bankName, ML + 12, Y)
-    Y += 5
-  }
-  if (data.paymentMethod) {
-    doc.setFont("helvetica", "bold").setFontSize(9).setTextColor(...MUTED)
-    doc.text("Method:", ML, Y); doc.setFont("helvetica", "normal").setTextColor(...DARK); doc.text(data.paymentMethod, ML + 16, Y)
-    Y += 5
-  }
-
   // Status badge
   const statusText = (data.status || "Processed").toUpperCase()
-  const badgeColor: [number,number,number] = statusText === "PROCESSED" ? [5,150,105] : RED
+  const badgeColor: [number,number,number] = statusText === "PROCESSED" ? GREEN : [220,38,38]
   const statusLabelY = HEADER_H + 7 + 5 + 5
   doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...MUTED)
   doc.text("STATUS", PW - MR, statusLabelY, { align: "right" })
@@ -154,124 +144,83 @@ export async function generatePaymentPDF(data: PaymentPDFData): Promise<jsPDF> {
   const divY = Math.max(Y, badgeY + badgeH) + 5
   doc.setDrawColor(...BORDER).setLineWidth(0.3).line(ML, divY, PW - MR, divY)
 
-  // ═══════════  JOURNAL ENTRY TABLE (invoice style) ═══════════
-  const tableY = divY + 4
-  const HEADER_ROW_H = 10
-  const HEADER_RADIUS = 4
-
+  // ── ITEMS TABLE (single line) ──
+  const tableY = divY + 4, HEADER_ROW_H = 10, HEADER_RADIUS = 4
   filledRect(doc, ML, tableY, CW, HEADER_ROW_H, NAVY, HEADER_RADIUS)
-
+  const descColX = ML + 14 + 8 + 2
+  const descColW = CW - (14 + 8 + 2) - (16 + 32 + 34 + 4)
   const FONT_SIZE_HEADER = 9
-  const headerTextY = tableY + HEADER_ROW_H / 2 + FONT_SIZE_HEADER * 0.35
+  const textYHeader = tableY + HEADER_ROW_H / 2 + FONT_SIZE_HEADER * 0.35
   doc.setFont("helvetica", "bold").setFontSize(FONT_SIZE_HEADER).setTextColor(...WHITE)
-
-  const accColW = 100
-  const debitColW = 34
-  const creditColW = 34
-  doc.text("Account", ML + 4, headerTextY)
-  doc.text("Debit", PW - MR - debitColW - creditColW, headerTextY, { align: "right" })
-  doc.text("Credit", PW - MR, headerTextY, { align: "right" })
+  doc.text("#", ML + 14 + 8 / 2, textYHeader, { align: "center" })
+  doc.text("Description", descColX + 3, textYHeader, { align: "left" })
+  doc.text("Qty", descColX + descColW + 16 / 2, textYHeader, { align: "center" })
+  doc.text("Unit Price", descColX + descColW + 16 + 32 / 2, textYHeader, { align: "center" })
+  doc.text("Amount", descColX + descColW + 16 + 32 + 34 / 2, textYHeader, { align: "center" })
 
   const bodyStartY = tableY + HEADER_ROW_H
-
-  const jeRows = data.journalLines.map(line => ({
-    account: `${line.account_code} – ${line.account_name}`,
-    debit:   line.debit  > 0 ? pkr(line.debit)   : "",
-    credit:  line.credit > 0 ? pkr(line.credit)  : "",
-  }))
-
-  const jeColumns = [
-    { header: "Account", dataKey: "account" },
-    { header: "Debit",   dataKey: "debit"   },
-    { header: "Credit",  dataKey: "credit"  },
+  const tableColumns = [
+    { header: "", dataKey:"img" }, { header: "#", dataKey:"num" },
+    { header: "Description", dataKey:"description" },
+    { header: "Qty", dataKey:"qty" }, { header: "Unit Price", dataKey:"unit_price" }, { header: "Amount", dataKey:"amount" }
   ]
 
+  const imageCache: Record<number, string> = {}
+  await Promise.all(data.items.map(async (item, i) => { if (item.image_path) { const img = await loadImage(item.image_path); if (img) imageCache[i] = img } }))
+
+  const tableRows = data.items.map((item, i) => {
+    return { img: i, num: i+1, description: item.description || "", qty: item.qty || 1, unit_price: pkr(item.unit_price || 0), amount: pkr(item.total || 0) }
+  })
+
   autoTable(doc, {
-    startY: bodyStartY,
-    margin: { left: ML, right: MR },
-    columns: jeColumns,
-    body: jeRows,
-    showHead: false,
-    styles: {
-      fontSize: 9,
-      cellPadding: { top: 3, bottom: 3, left: 3, right: 3 },
-      textColor: DARK,
-      lineColor: BORDER,
-      lineWidth: 0.2,
-      minCellHeight: 10,
-    },
+    startY: bodyStartY, margin: { left: ML, right: MR }, columns: tableColumns, body: tableRows, showHead: false,
+    styles: { fontSize:9, cellPadding:{top:3,bottom:3,left:3,right:3}, textColor:DARK, lineColor:BORDER, lineWidth:0.2, minCellHeight:14 },
     alternateRowStyles: { fillColor: ROW_ALT },
     columnStyles: {
-      account: { cellWidth: "auto", halign: "left" },
-      debit:   { cellWidth: 34, halign: "right" },
-      credit:  { cellWidth: 34, halign: "right" },
+      img: { cellWidth:14, halign:"center" }, num: { cellWidth:8, halign:"center" },
+      description: { cellWidth:"auto", halign:"left" },
+      qty: { cellWidth:16, halign:"center" }, unit_price: { cellWidth:32, halign:"right" }, amount: { cellWidth:34, halign:"right", fontStyle:"bold" }
+    },
+    didDrawCell(hookData) {
+      if (hookData.section === "body" && hookData.column.dataKey === "img") {
+        const imgData = imageCache[hookData.row.index]; if (imgData) {
+          const { x, y, width, height } = hookData.cell; const pad = 2; const size = Math.min(width, height) - pad * 2
+          doc.addImage(imgData, "JPEG", x + (width - size)/2, y + (height - size)/2, size, size)
+        }
+      }
     },
   })
 
   const afterTable = (doc as any).lastAutoTable.finalY as number
-
-  // Rounded border around table
   const TABLE_RADIUS = 4
-  const cornerSize = TABLE_RADIUS + 1
-  doc.setFillColor(...WHITE)
-  doc.rect(ML,                       afterTable - cornerSize, cornerSize, cornerSize, "F")
-  doc.rect(ML + CW - cornerSize,     afterTable - cornerSize, cornerSize, cornerSize, "F")
-  doc.setDrawColor(...BORDER).setLineWidth(0.3)
-  doc.roundedRect(ML, bodyStartY, CW, afterTable - bodyStartY, TABLE_RADIUS, TABLE_RADIUS, "S")
+  doc.setDrawColor(...BORDER).setLineWidth(0.8).roundedRect(ML, bodyStartY, CW, afterTable - bodyStartY, TABLE_RADIUS, TABLE_RADIUS, "S")
 
   // ── TOTALS ──
-  let SY = afterTable + 6
-  const sumX = PW - MR - 70
-  const valX = PW - MR
-
-  const totalDebit  = data.journalLines.reduce((s, l) => s + l.debit,  0)
-  const totalCredit = data.journalLines.reduce((s, l) => s + l.credit, 0)
-
+  let SY = afterTable + 6; const sumX = PW - MR - 70, valX = PW - MR
   doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...MUTED)
-  doc.text("Subtotal", sumX, SY)
-  doc.setTextColor(...DARK)
-  doc.text(pkr(data.total), valX, SY, { align: "right" })
-  SY += 5.5
-
-  doc.setFont("helvetica", "bold").setTextColor(...MUTED)
-  doc.text("Tax (0%)", sumX, SY)
-  doc.setTextColor(...DARK)
-  doc.text(pkr(0), valX, SY, { align: "right" })
-  SY += 5.5
-
-  const TOTAL_RADIUS = 4
-  filledRect(doc, sumX - 2, SY - 4, valX - sumX + 4, 9, NAVY, TOTAL_RADIUS)
+  doc.text("Subtotal", sumX, SY); doc.setTextColor(...DARK); doc.text(pkr(data.subtotal), valX, SY, { align:"right" }); SY += 5.5
+  doc.setFont("helvetica", "bold").setTextColor(...MUTED); doc.text("Tax (0%)", sumX, SY); doc.setTextColor(...DARK); doc.text(pkr(0), valX, SY, { align:"right" }); SY += 5.5
+  const TOTAL_RADIUS = 4; filledRect(doc, sumX - 2, SY - 4, valX - sumX + 4, 9, NAVY, TOTAL_RADIUS)
   doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(...WHITE)
-  doc.text("Total", sumX + 2, SY + 1.5)
-  doc.text(pkr(data.total), valX - 2, SY + 1.5, { align: "right" })
-  SY += 10
-
-  if (data.paid > 0 && data.balanceDue >= 0) {
-    SY += 2
-    doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...MUTED)
-    doc.text("Amount Paid", sumX, SY)
-    doc.setTextColor(16, 185, 129)
-    doc.text("- " + pkr(data.paid), valX, SY, { align: "right" })
-    SY += 5.5
+  doc.text("Total", sumX + 2, SY + 1.5); doc.text(pkr(data.total), valX - 2, SY + 1.5, { align:"right" }); SY += 10
+  if (data.paid > 0) {
+    SY += 2; doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...MUTED); doc.text("Amount Paid", sumX, SY)
+    doc.setTextColor(16,185,129); doc.text("- " + pkr(data.paid), valX, SY, { align:"right" }); SY += 5.5
     if (data.balanceDue > 0) {
-      doc.setFont("helvetica", "bold").setTextColor(...RED)
-      doc.text("Balance Due", sumX, SY)
-      doc.text(pkr(data.balanceDue), valX, SY, { align: "right" })
-      SY += 5
+      doc.setFont("helvetica", "bold").setTextColor(...[220,38,38]); doc.text("Balance Due", sumX, SY)
+      doc.text(pkr(data.balanceDue), valX, SY, { align:"right" }); SY += 5
     }
   }
 
   // ── NOTES ──
-  SY += 8
+  SY += 6
   const termsLines: string[] = []
   if (data.paymentMethod) termsLines.push(`Payment Method: ${data.paymentMethod}`)
   if (data.notes) termsLines.push(data.notes)
   if (termsLines.length === 0) termsLines.push("Payment processed.")
-  doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...MUTED)
-  doc.text("NOTES", ML, SY); SY += 4
+  doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...MUTED); doc.text("NOTES", ML, SY); SY += 4
   doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...DARK)
-  const noteLines = doc.splitTextToSize(termsLines.join("\n"), CW)
-  doc.text(noteLines, ML, SY)
+  const noteLines = doc.splitTextToSize(termsLines.join("\n"), CW); doc.text(noteLines, ML, SY)
 
   // ── FOOTER ──
   doc.setDrawColor(...BORDER).setLineWidth(0.3).line(ML, PH - 16, PW - MR, PH - 16)
