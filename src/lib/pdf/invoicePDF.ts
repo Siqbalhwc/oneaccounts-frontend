@@ -125,10 +125,25 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setFontSize(13)
   doc.text(data.companyName || "Your Company", textX, LOGO_Y + 7)
 
+  // Company details under the name
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8.5)
   doc.setTextColor(...MUTED)
   doc.text(data.companyTagline || "", textX, LOGO_Y + 13)
+
+  // Add address, phone, email below tagline
+  let infoY = LOGO_Y + 18
+  if (data.companyAddress) {
+    doc.text(data.companyAddress, textX, infoY)
+    infoY += 4
+  }
+  if (data.companyPhone) {
+    doc.text("Phone: " + data.companyPhone, textX, infoY)
+    infoY += 4
+  }
+  if (data.companyEmail) {
+    doc.text("Email: " + data.companyEmail, textX, infoY)
+  }
 
   doc.setFont("helvetica", "bold")
   doc.setFontSize(26)
@@ -276,16 +291,22 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   )
 
   const tableRows = data.items.map((item, i) => {
+    // Convert product_id to string safely
+    const productIdStr = String(item.product_id ?? "")
+    let namepart = ""
+    if (item.product_name) {
+      namepart = ` - ${item.product_name}`
+    }
     let desc = ""
-    if (item.product_id) {
-      const namepart = item.product_name ? ` - ${item.product_name}` : ""
-      desc = `${item.product_id}${namepart}`
+    if (productIdStr) {
+      desc = `${productIdStr}${namepart}`
       const extra = (item.description ?? "").trim()
+      // Check if extra is already included
       const isDuplicate =
         extra === "" ||
-        extra === item.product_name?.trim() ||
-        extra === item.product_id?.trim() ||
-        extra === `${item.product_id}${namepart}`.trim()
+        extra === (item.product_name?.trim() || "") ||
+        extra === productIdStr.trim() ||
+        extra === `${productIdStr}${namepart}`.trim()
       if (!isDuplicate) desc += "\n" + extra
     } else {
       desc = (item.description ?? "").trim()
@@ -349,12 +370,10 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   const TABLE_RADIUS = 4
   const cornerSize   = TABLE_RADIUS + 1
 
-  // Paint white squares over the 2 bottom corners to clip square edges
   doc.setFillColor(...WHITE)
   doc.rect(ML,                       afterTable - cornerSize, cornerSize, cornerSize, "F")
   doc.rect(ML + CW - cornerSize,     afterTable - cornerSize, cornerSize, cornerSize, "F")
 
-  // Draw thin rounded border
   doc.setDrawColor(...BORDER)
   doc.setLineWidth(0.3)
   doc.roundedRect(ML, bodyStartY, CW, afterTable - bodyStartY, TABLE_RADIUS, TABLE_RADIUS, "S")
