@@ -6,14 +6,14 @@
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
-const NAVY            = [7,   8,  91]  as [number,number,number]
-const RED             = [220, 38,  38]  as [number,number,number]
-const AMBER           = [245,158,  11]  as [number,number,number]
-const DARK            = [17,  24,  39]  as [number,number,number]
-const MUTED           = [107,114, 128]  as [number,number,number]
-const BORDER          = [229,231, 235]  as [number,number,number]
-const WHITE           = [255,255, 255]  as [number,number,number]
-const ROW_ALT         = [248,249, 252]  as [number,number,number]
+const NAVY   = [7,8,91] as [number,number,number]
+const RED    = [220,38,38] as [number,number,number]
+const AMBER  = [245,158,11] as [number,number,number]
+const DARK   = [17,24,39] as [number,number,number]
+const MUTED  = [107,114,128] as [number,number,number]
+const BORDER = [229,231,235] as [number,number,number]
+const WHITE  = [255,255,255] as [number,number,number]
+const ROW_ALT = [248,249,252] as [number,number,number]
 
 export interface BillItem {
   description:  string
@@ -32,34 +32,28 @@ export interface BillPDFData {
   companyEmail:   string
   companyTagline: string
   logoUrl?:       string | null
-  businessType?:  string
 
-  billNo:     string
-  date:       string
-  dueDate:    string
+  billNo:    string
+  date:      string
+  dueDate:   string
 
   supplierName:    string
   supplierAddress: string
   supplierPhone:   string
   supplierEmail?:  string
 
-  paymentTerms?: string | null
-  notes?:        string | null
-
-  status:     string
-  items:      BillItem[]
-  subtotal:   number
-  total:      number
-  paid:       number
-  balanceDue: number
-
-  reference?: string
+  notes?:         string | null
+  status:         string
+  items:          BillItem[]
+  subtotal:       number
+  total:          number
+  paid:           number
+  balanceDue:     number
 }
 
 async function loadImage(url: string): Promise<string | null> {
   try {
-    const res = await fetch(url)
-    if (!res.ok) return null
+    const res = await fetch(url); if (!res.ok) return null
     const blob = await res.blob()
     return await new Promise<string>(resolve => {
       const reader = new FileReader()
@@ -70,8 +64,7 @@ async function loadImage(url: string): Promise<string | null> {
   } catch { return null }
 }
 
-const pkr = (n: number) =>
-  "PKR " + n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const pkr = (n: number) => "PKR " + n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 function filledRect(doc: jsPDF, x: number, y: number, w: number, h: number, fillRgb: [number,number,number], radius = 0) {
   doc.setFillColor(...fillRgb)
@@ -85,22 +78,33 @@ export async function generateBillPDF(data: BillPDFData): Promise<jsPDF> {
   const LOGO_SIZE = 18, LOGO_X = ML, LOGO_Y = 6
   let logoData = null
   if (data.logoUrl) logoData = await loadImage(data.logoUrl)
+
+  // Logo without any background/circle
   if (logoData) {
-    doc.setFillColor(...NAVY)
-    doc.circle(LOGO_X + LOGO_SIZE / 2, LOGO_Y + LOGO_SIZE / 2, LOGO_SIZE / 2 + 1, "F")
     doc.addImage(logoData, "PNG", LOGO_X, LOGO_Y, LOGO_SIZE, LOGO_SIZE)
   }
 
   const textX = logoData ? LOGO_X + LOGO_SIZE + 4 : ML
-  doc.setTextColor(...NAVY)
-  doc.setFont("helvetica", "bold").setFontSize(13)
+  doc.setTextColor(...NAVY).setFont("helvetica", "bold").setFontSize(13)
   doc.text(data.companyName || "Your Company", textX, LOGO_Y + 7)
-  doc.setFont("helvetica", "normal").setFontSize(8.5)
-  doc.setTextColor(...MUTED)
+
+  doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...MUTED)
   doc.text(data.companyTagline || "", textX, LOGO_Y + 13)
 
-  doc.setFont("helvetica", "bold").setFontSize(26)
-  doc.setTextColor(...NAVY)
+  let infoY = LOGO_Y + 18
+  if (data.companyAddress) {
+    doc.text(data.companyAddress, textX, infoY)
+    infoY += 4
+  }
+  if (data.companyPhone) {
+    doc.text("Phone: " + data.companyPhone, textX, infoY)
+    infoY += 4
+  }
+  if (data.companyEmail) {
+    doc.text("Email: " + data.companyEmail, textX, infoY)
+  }
+
+  doc.setFont("helvetica", "bold").setFontSize(26).setTextColor(...NAVY)
   doc.text("BILL", PW - MR, LOGO_Y + 9, { align: "right" })
 
   const metaY = LOGO_Y + 15
@@ -112,15 +116,14 @@ export async function generateBillPDF(data: BillPDFData): Promise<jsPDF> {
   doc.text(data.date,   PW - MR, metaY + 5, { align: "right" })
 
   const HEADER_H = LOGO_Y + LOGO_SIZE + 4
-  doc.setDrawColor(...BORDER).setLineWidth(0.4)
-  doc.line(ML, HEADER_H, PW - MR, HEADER_H)
+  doc.setDrawColor(...BORDER).setLineWidth(0.4).line(ML, HEADER_H, PW - MR, HEADER_H)
 
+  // Supplier info
   let Y = HEADER_H + 7
   doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...MUTED)
   doc.text("SUPPLIER",  ML,      Y)
   doc.text("AMOUNT DUE", PW - MR, Y, { align: "right" })
   Y += 5
-
   doc.setFont("helvetica", "bold").setFontSize(13).setTextColor(...DARK)
   doc.text(data.supplierName || "", ML, Y)
   doc.setFont("helvetica", "bold").setFontSize(18).setTextColor(...AMBER)
@@ -138,6 +141,7 @@ export async function generateBillPDF(data: BillPDFData): Promise<jsPDF> {
   const isUnpaid = ["UNPAID", "OVERDUE"].includes(statusText)
   const isPaid   = statusText === "PAID"
   const badgeColor: [number,number,number] = isPaid ? [5,150,105] : isUnpaid ? RED : AMBER
+
   const statusLabelY = HEADER_H + 7 + 5 + 5
   doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...MUTED)
   doc.text("STATUS", PW - MR, statusLabelY, { align: "right" })
@@ -149,6 +153,7 @@ export async function generateBillPDF(data: BillPDFData): Promise<jsPDF> {
   const divY = Math.max(Y, badgeY + badgeH) + 5
   doc.setDrawColor(...BORDER).setLineWidth(0.3).line(ML, divY, PW - MR, divY)
 
+  // Table header
   const tableY = divY + 4, HEADER_ROW_H = 10, HEADER_RADIUS = 4
   filledRect(doc, ML, tableY, CW, HEADER_ROW_H, NAVY, HEADER_RADIUS)
   const descColX = ML + 14 + 8 + 2
@@ -162,6 +167,7 @@ export async function generateBillPDF(data: BillPDFData): Promise<jsPDF> {
   doc.text("Unit Price", descColX + descColW + 16 + 32 / 2, textYHeader, { align: "center" })
   doc.text("Amount", descColX + descColW + 16 + 32 + 34 / 2, textYHeader, { align: "center" })
 
+  // Table body
   const bodyStartY = tableY + HEADER_ROW_H
   const tableColumns = [
     { header: "", dataKey:"img" }, { header: "#", dataKey:"num" },
@@ -173,15 +179,7 @@ export async function generateBillPDF(data: BillPDFData): Promise<jsPDF> {
   await Promise.all(data.items.map(async (item, i) => { if (item.image_path) { const img = await loadImage(item.image_path); if (img) imageCache[i] = img } }))
 
   const tableRows = data.items.map((item, i) => {
-    let desc = ""
-    if (item.product_id) {
-      const namepart = item.product_name ? ` - ${item.product_name}` : ""
-      desc = `${item.product_id}${namepart}`
-      const extra = (item.description ?? "").trim()
-      const isDuplicate = extra === "" || extra === item.product_name?.trim() || extra === item.product_id?.trim() || extra === `${item.product_id}${namepart}`.trim()
-      if (!isDuplicate) desc += "\n" + extra
-    } else desc = (item.description ?? "").trim()
-    return { img: i, num: i+1, description: desc, qty: item.qty, unit_price: pkr(item.unit_price), amount: pkr(item.total) }
+    return { img: i, num: i+1, description: item.description || "", qty: item.qty || 1, unit_price: pkr(item.unit_price || 0), amount: pkr(item.total || 0) }
   })
 
   autoTable(doc, {
@@ -195,8 +193,7 @@ export async function generateBillPDF(data: BillPDFData): Promise<jsPDF> {
     },
     didDrawCell(hookData) {
       if (hookData.section === "body" && hookData.column.dataKey === "img") {
-        const imgData = imageCache[hookData.row.index]
-        if (imgData) {
+        const imgData = imageCache[hookData.row.index]; if (imgData) {
           const { x, y, width, height } = hookData.cell; const pad = 2; const size = Math.min(width, height) - pad * 2
           doc.addImage(imgData, "JPEG", x + (width - size)/2, y + (height - size)/2, size, size)
         }
@@ -224,10 +221,9 @@ export async function generateBillPDF(data: BillPDFData): Promise<jsPDF> {
 
   SY += 6
   const termsLines: string[] = []
-  if (data.paymentTerms) termsLines.push(data.paymentTerms)
   if (data.notes) termsLines.push(data.notes)
-  if (termsLines.length === 0) termsLines.push("Payment is due within 30 days of bill date.", "Please reference the bill number with your payment.")
-  doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...MUTED); doc.text("NOTES & TERMS", ML, SY); SY += 4
+  if (termsLines.length === 0) termsLines.push("Payment is due within 30 days of bill date.")
+  doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...MUTED); doc.text("NOTES", ML, SY); SY += 4
   doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...DARK)
   const noteLines = doc.splitTextToSize(termsLines.join("\n"), CW); doc.text(noteLines, ML, SY)
 

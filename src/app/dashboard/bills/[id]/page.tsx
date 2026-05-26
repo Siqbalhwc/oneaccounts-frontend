@@ -4,9 +4,10 @@ import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Printer, Send } from "lucide-react"
-import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
+import { generateBillPDF } from "@/lib/pdf/billPDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
+import { useCompany } from "@/contexts/CompanyContext"
 
 interface BillItem {
   id: number
@@ -37,8 +38,6 @@ interface Bill {
   }
   created_by?: string
   updated_by?: string
-  created_at?: string
-  updated_at?: string
 }
 
 export default function BillDetailPage() {
@@ -51,19 +50,11 @@ export default function BillDetailPage() {
   )
 
   const { hasFeature } = usePlan()
+  const { companyName, companyTagline, logoUrl } = useCompany()
 
   const [bill, setBill] = useState<Bill | null>(null)
   const [loading, setLoading] = useState(true)
   const [companyId, setCompanyId] = useState<string>("")
-
-  const [companySettings, setCompanySettings] = useState<{
-    name?: string
-    address?: string
-    phone?: string
-    email?: string
-    tagline?: string
-    logo_url?: string | null
-  }>({})
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -125,24 +116,6 @@ export default function BillDetailPage() {
             })
         }
       })
-
-    supabase
-      .from("company_settings")
-      .select("company_name, address, phone, email, tagline, logo_url")
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) {
-          setCompanySettings({
-            name: data.company_name || "OneAccounts",
-            address: data.address || "",
-            phone: data.phone || "",
-            email: data.email || "",
-            tagline: data.tagline || "",
-            logo_url: data.logo_url || null,
-          })
-        }
-      })
   }, [companyId, billId])
 
   const getWhatsAppLink = () => {
@@ -159,21 +132,21 @@ export default function BillDetailPage() {
     const subTotal = bill.items?.reduce((s, i) => s + i.total, 0) || 0
 
     const pdfData = {
-      companyName:    companySettings.name || "OneAccounts",
-      companyAddress: companySettings.address || "",
-      companyPhone:   companySettings.phone || "",
-      companyEmail:   companySettings.email || "",
-      companyTagline: companySettings.tagline || "",
-      logoUrl:        companySettings.logo_url || null,
-      invoiceNo:      bill.invoice_no,
+      companyName:    companyName || "",
+      companyAddress: "",   // can be extended later
+      companyPhone:   "",
+      companyEmail:   "",
+      companyTagline: companyTagline || "",
+      logoUrl:        logoUrl,
+      billNo:         bill.invoice_no,
       date:           bill.date,
       dueDate:        bill.due_date,
-      reference:      bill.reference || "",
-      notes:          bill.notes || "",
-      customerName:    supplier?.name || "Unknown",
-      customerAddress: supplier?.address || "",
-      customerPhone:   supplier?.phone || "",
-      customerEmail:   supplier?.email || "",
+      supplierName:    supplier?.name || "Unknown",
+      supplierAddress: supplier?.address || "",
+      supplierPhone:   supplier?.phone || "",
+      supplierEmail:   supplier?.email || "",
+      notes:          bill.notes || null,
+      status:         bill.status,
       items: (bill.items || []).map(item => ({
         description: item.description,
         qty:          item.qty,
@@ -184,10 +157,9 @@ export default function BillDetailPage() {
       total:      bill.total,
       paid:       bill.paid || 0,
       balanceDue: bill.total - (bill.paid || 0),
-      status:     bill.status,
     }
 
-    const doc = await generateInvoicePDF(pdfData)
+    const doc = await generateBillPDF(pdfData)
     doc.save(`Bill_${bill.invoice_no}.pdf`)
   }
 
@@ -258,16 +230,10 @@ export default function BillDetailPage() {
         {bill.reference && <div className="row"><span className="label">Reference</span><span className="value">{bill.reference}</span></div>}
         {bill.notes && <div className="row"><span className="label">Notes</span><span className="value">{bill.notes}</span></div>}
         {bill.created_by && (
-          <div className="row">
-            <span className="label">Created by</span>
-            <span className="value">{bill.created_by}</span>
-          </div>
+          <div className="row"><span className="label">Created by</span><span className="value">{bill.created_by}</span></div>
         )}
         {bill.updated_by && (
-          <div className="row">
-            <span className="label">Last updated by</span>
-            <span className="value">{bill.updated_by}</span>
-          </div>
+          <div className="row"><span className="label">Last updated by</span><span className="value">{bill.updated_by}</span></div>
         )}
       </div>
 
