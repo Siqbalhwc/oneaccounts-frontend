@@ -3,8 +3,10 @@
 import { useState, useEffect, useMemo } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter, useSearchParams } from "next/navigation"
-import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, Printer } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
+import { useCompany } from "@/contexts/CompanyContext"
+import { generateCustomerLedgerPDF } from "@/lib/pdf/customerLedgerPDF"
 
 type SortField = "date" | "description" | "debit" | "credit" | "running_balance"
 type SortDir = "asc" | "desc"
@@ -17,6 +19,7 @@ export default function CustomerLedgerPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { role } = useRole()
+  const { companyName, companyTagline, logoUrl } = useCompany()
   const canView = role === "admin" || role === "accountant"
 
   // Customer selection
@@ -208,6 +211,30 @@ export default function CustomerLedgerPage() {
   const totalCredit = sortedLines.filter(l => !l.isOpening).reduce((s, l) => s + l.credit, 0)
   const closingBalance = sortedLines.length > 0 ? sortedLines[sortedLines.length - 1].running_balance : 0
 
+  const handlePrintPDF = async () => {
+    if (!customer || sortedLines.length === 0) return
+
+    const pdfData = {
+      companyName:    companyName || "",
+      companyAddress: "",
+      companyPhone:   "",
+      companyEmail:   "",
+      companyTagline: companyTagline || "",
+      logoUrl:        logoUrl,
+      customerName:   customer.name,
+      customerCode:   customer.code,
+      startDate:      startDate,
+      endDate:        endDate,
+      totalDebit:     totalDebit,
+      totalCredit:    totalCredit,
+      closingBalance: closingBalance,
+      ledgerLines:    sortedLines,
+    }
+
+    const doc = await generateCustomerLedgerPDF(pdfData)
+    doc.save(`Customer_Ledger_${customer.code}.pdf`)
+  }
+
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
@@ -301,6 +328,9 @@ export default function CustomerLedgerPage() {
             onChange={e => setEndDate(e.target.value)}
           />
           <button className="btn btn-outline" onClick={fetchLedger}>Refresh</button>
+          <button className="btn btn-outline" onClick={handlePrintPDF}>
+            <Printer size={16} /> Print PDF
+          </button>
         </div>
       </div>
 
