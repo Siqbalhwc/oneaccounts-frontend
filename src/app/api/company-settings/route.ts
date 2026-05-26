@@ -1,29 +1,31 @@
-import { createServerClient } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
 export async function GET() {
-  const cookieStore = await cookies()
-  const supabase = createServerClient(
+  // Use service‑role key to bypass RLS (server‑side only, never exposed)
+  const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          )
-        },
-      },
-    }
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Get authenticated user from the session cookie
+  const cookieStore = await cookies()
+  const token = cookieStore.get('sb-access-token')?.value
+
+  if (!token) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser(token)
+  if (userError || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   const companyId = user.app_metadata?.company_id
-  if (!companyId) return NextResponse.json({ error: 'No company' }, { status: 400 })
+  if (!companyId) {
+    return NextResponse.json({ error: 'No company' }, { status: 400 })
+  }
 
   const { data, error } = await supabase
     .from('company_settings')
@@ -31,7 +33,9 @@ export async function GET() {
     .eq('company_id', companyId)
     .maybeSingle()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 
   return NextResponse.json({
     name:          data?.business_name || '',
