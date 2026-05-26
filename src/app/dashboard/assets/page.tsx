@@ -93,6 +93,7 @@ function AssetsContent() {
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
+        /* ── local resets & component styles ── */
         .btn { display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-family:inherit;transition:all 0.15s;white-space:nowrap; }
         .btn:hover { background:var(--card-hover); }
         .btn-icon { background:transparent;border:1.5px solid var(--border);color:var(--text-muted);padding:6px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center; }
@@ -106,12 +107,22 @@ function AssetsContent() {
         .summary-item { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; }
         .summary-label { font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px; }
         .summary-value { font-size:22px; font-weight:800; color:var(--text); }
-        .table-wrap { overflow-x:auto; }
-        .asset-table { border-collapse:collapse; font-size:13px; white-space:nowrap; }
-        .asset-table th { padding:8px 24px 8px 0; text-align:left; border-bottom:1px solid var(--border); }
-        .asset-table td { padding:8px 24px 8px 0; text-align:left; border-bottom:1px solid var(--border); }
-        .asset-table th:last-child, .asset-table td:last-child { padding-right:0; }
-        .asset-table tbody tr:hover td { background:var(--card-hover); }
+
+        /* ── Asset table (override global padding) ── */
+        .table-scroll { overflow-x:auto; }
+        .asset-table { width:auto; border-collapse:collapse; font-size:13px; }
+        .asset-table th,
+        .asset-table td {
+          padding:4px 2px !important;
+          text-align:left;
+          border-bottom:1px solid var(--border);
+          white-space:nowrap;
+        }
+        .asset-table th:last-child,
+        .asset-table td:last-child {
+          padding-right:0 !important;
+        }
+        .asset-table tr:hover td { background:var(--card-hover); }
       `}</style>
 
       {/* Header */}
@@ -137,7 +148,7 @@ function AssetsContent() {
         </div>
       </div>
 
-      {/* Summary Cards — original layout restored */}
+      {/* Summary Cards */}
       <div className="summary-grid">
         <div className="summary-item">
           <div className="summary-label">Total Assets</div>
@@ -167,18 +178,18 @@ function AssetsContent() {
       ) : sorted.length === 0 ? (
         <div style={{ textAlign:"center", padding:40, color:"var(--text-muted)" }}>No assets found.</div>
       ) : (
-        <div className="table-wrap">
+        <div className="table-scroll">
           <table className="asset-table">
             <thead>
               <tr>
-                <th><button className="sort-btn" onClick={() => handleSort("asset_no")}>Asset No {getSortIcon("asset_no")}</button></th>
-                <th><button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button></th>
-                <th><button className="sort-btn" onClick={() => handleSort("category")}>Category {getSortIcon("category")}</button></th>
-                <th><button className="sort-btn" onClick={() => handleSort("location")}>Location {getSortIcon("location")}</button></th>
-                <th><button className="sort-btn" onClick={() => handleSort("purchase_date")}>Purchase Date {getSortIcon("purchase_date")}</button></th>
-                <th><button className="sort-btn" onClick={() => handleSort("cost_price")}>PKR Cost {getSortIcon("cost_price")}</button></th>
-                <th><button className="sort-btn" onClick={() => handleSort("depreciation_per_month")}>PKR Monthly Dep. {getSortIcon("depreciation_per_month")}</button></th>
-                <th><button className="sort-btn" onClick={() => handleSort("status")}>Status {getSortIcon("status")}</button></th>
+                <th className="sortable"><button className="sort-btn" onClick={() => handleSort("asset_no")}>Asset No {getSortIcon("asset_no")}</button></th>
+                <th className="sortable"><button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button></th>
+                <th className="sortable"><button className="sort-btn" onClick={() => handleSort("category")}>Category {getSortIcon("category")}</button></th>
+                <th className="sortable"><button className="sort-btn" onClick={() => handleSort("location")}>Location {getSortIcon("location")}</button></th>
+                <th className="sortable"><button className="sort-btn" onClick={() => handleSort("purchase_date")}>Purchase Date {getSortIcon("purchase_date")}</button></th>
+                <th className="sortable"><button className="sort-btn" onClick={() => handleSort("cost_price")}>PKR Cost {getSortIcon("cost_price")}</button></th>
+                <th className="sortable"><button className="sort-btn" onClick={() => handleSort("depreciation_per_month")}>PKR Monthly Dep. {getSortIcon("depreciation_per_month")}</button></th>
+                <th className="sortable"><button className="sort-btn" onClick={() => handleSort("status")}>Status {getSortIcon("status")}</button></th>
                 <th></th>
               </tr>
             </thead>
