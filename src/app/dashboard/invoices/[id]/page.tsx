@@ -221,13 +221,15 @@ export default function InvoiceDetailPage() {
   const handlePrintPDF = async () => {
     if (!invoice) return
 
-    const { data: freshSettings } = await supabase
-      .from("company_settings")
-      .select("business_name, address, phone, email, tagline, logo_url, business_type")
-      .eq("company_id", companyId)
-      .maybeSingle()
+   const settings = (freshSettings || {}) as {
+  business_name?: string
+  address?: string
+  phone?: string
+  email?: string
+  tagline?: string
+  logo_url?: string | null
+  business_type?: string}
 
-    const settings = freshSettings || {}
     const customer = invoice.customer
     const subTotal = invoice.items?.reduce((s, i) => s + i.total, 0) || 0
 
