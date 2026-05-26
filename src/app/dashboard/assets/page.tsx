@@ -102,15 +102,16 @@ function AssetsContent() {
         .filter-select { padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--text); }
         .sort-btn { background:none;border:none;cursor:pointer;font:inherit;color:var(--text-muted);display:inline-flex;align-items:center;gap:4px;padding:0;font-weight:700;text-transform:uppercase;font-size:10px;white-space:nowrap; }
         .sort-btn:hover { color:var(--primary); }
-        .summary-grid { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:20px; }
-        .summary-item { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; min-width:160px; width:200px; }
+        .summary-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px; margin-bottom:20px; }
+        .summary-item { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; }
         .summary-label { font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px; }
         .summary-value { font-size:22px; font-weight:800; color:var(--text); }
-        .table-scroll { overflow-x:auto; }
-        table { width:1px; border-collapse:collapse; font-size:13px; border-spacing:0; }
-        th, td { padding:6px 20px 6px 0; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; }
-        th:last-child, td:last-child { padding-right:0; }
-        tr:hover td { background:var(--card-hover); }
+        .table-wrap { overflow-x:auto; }
+        .asset-table { border-collapse:collapse; font-size:13px; white-space:nowrap; }
+        .asset-table th { padding:8px 24px 8px 0; text-align:left; border-bottom:1px solid var(--border); }
+        .asset-table td { padding:8px 24px 8px 0; text-align:left; border-bottom:1px solid var(--border); }
+        .asset-table th:last-child, .asset-table td:last-child { padding-right:0; }
+        .asset-table tbody tr:hover td { background:var(--card-hover); }
       `}</style>
 
       {/* Header */}
@@ -136,7 +137,7 @@ function AssetsContent() {
         </div>
       </div>
 
-      {/* Summary Cards */}
+      {/* Summary Cards — original layout restored */}
       <div className="summary-grid">
         <div className="summary-item">
           <div className="summary-label">Total Assets</div>
@@ -166,8 +167,8 @@ function AssetsContent() {
       ) : sorted.length === 0 ? (
         <div style={{ textAlign:"center", padding:40, color:"var(--text-muted)" }}>No assets found.</div>
       ) : (
-        <div className="table-scroll">
-          <table>
+        <div className="table-wrap">
+          <table className="asset-table">
             <thead>
               <tr>
                 <th><button className="sort-btn" onClick={() => handleSort("asset_no")}>Asset No {getSortIcon("asset_no")}</button></th>
