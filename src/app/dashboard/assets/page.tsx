@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import {
   Plus, Search, Download, Upload, Eye, ArrowUpDown, ArrowUp, ArrowDown,
-  RefreshCw, X, CheckCircle, Calendar
+  RefreshCw, X, CheckCircle, BookOpen
 } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import PremiumGuard from "@/components/PremiumGuard"
@@ -41,10 +41,7 @@ function AssetsContent() {
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
-      if (cid) {
-        setCompanyId(cid)
-        // Initial asset load handled by fetchAssets
-      }
+      if (cid) setCompanyId(cid)
     })
   }, [])
 
@@ -104,9 +101,8 @@ function AssetsContent() {
   const totalCost = filtered.reduce((s, a) => s + (a.cost_price || 0), 0)
   const activeCount = filtered.filter(a => a.status === "Active").length
 
-  // ----- Run Depreciation (modal trigger) -----
+  // ----- Run Depreciation (modal trigger) – unchanged -----
   const openDepreciationModal = async () => {
-    // Fetch active assets with remaining life > 0
     const { data } = await supabase
       .from("assets")
       .select("id, asset_no, name, purchase_date, depreciation_per_month, remaining_life_months")
@@ -121,13 +117,12 @@ function AssetsContent() {
     }
 
     setActiveAssetsForDep(data)
-    setSelectedAssetIds(data.map(a => a.id)) // all selected by default
+    setSelectedAssetIds(data.map(a => a.id))
 
-    // Determine earliest purchase date among them for default start month
     const dates = data.map(a => new Date(a.purchase_date)).filter(d => !isNaN(d.getTime()))
     if (dates.length > 0) {
       const earliest = new Date(Math.min(...dates.map(d => d.getTime())))
-      setDepStartMonth(earliest.toISOString().slice(0, 7)) // YYYY-MM
+      setDepStartMonth(earliest.toISOString().slice(0, 7))
     } else {
       setDepStartMonth(new Date().toISOString().slice(0, 7))
     }
@@ -141,12 +136,10 @@ function AssetsContent() {
     )
   }
 
-  // Calculate months between start month and current month for an asset (but not exceeding remaining life)
   const getMonthsToProcess = (asset: any) => {
     const start = new Date(depStartMonth + "-01")
     if (isNaN(start.getTime())) return 0
     const now = new Date()
-    // Current month as first day
     const current = new Date(now.getFullYear(), now.getMonth(), 1)
     if (start > current) return 0
     let months = 0
@@ -155,7 +148,6 @@ function AssetsContent() {
       months++
       cursor.setMonth(cursor.getMonth() + 1)
     }
-    // Cap to asset's remaining life
     return Math.min(months, asset.remaining_life_months)
   }
 
@@ -183,7 +175,7 @@ function AssetsContent() {
     setDepResult(json)
     setDepRunning(false)
     if (json.success) {
-      fetchAssets() // refresh list
+      fetchAssets()
     }
   }
 
@@ -239,7 +231,7 @@ function AssetsContent() {
         .asset-table .center-header,
         .asset-table .center-cell { text-align:center !important; }
 
-        /* Modal overlay */
+        /* Modal */
         .modal-overlay {
           position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200;
           display: flex; align-items: center; justify-content: center; padding: 20px;
@@ -329,7 +321,10 @@ function AssetsContent() {
                   <td className="num-cell">{asset.cost_price?.toLocaleString()}</td>
                   <td className="num-cell">{asset.depreciation_per_month?.toLocaleString()}</td>
                   <td className="center-cell" style={{ color: asset.status === "Active" ? "#10B981" : asset.status === "Sold" ? "#F59E0B" : "#EF4444", fontWeight:600 }}>{asset.status}</td>
-                  <td><button className="btn-icon" onClick={() => router.push(`/dashboard/assets/${asset.id}`)} title="View"><Eye size={14} /></button></td>
+                  <td style={{ display:"flex", gap:4, justifyContent:"flex-end" }}>
+                    <button className="btn-icon" onClick={() => router.push(`/dashboard/reports/asset-ledger?asset_id=${asset.id}`)} title="Ledger"><BookOpen size={14} /></button>
+                    <button className="btn-icon" onClick={() => router.push(`/dashboard/assets/${asset.id}`)} title="View"><Eye size={14} /></button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -337,7 +332,7 @@ function AssetsContent() {
         </div>
       )}
 
-      {/* Depreciation Modal */}
+      {/* Depreciation Modal – unchanged */}
       {showDepModal && (
         <div className="modal-overlay" onClick={() => setShowDepModal(false)}>
           <div className="modal-card" onClick={e => e.stopPropagation()}>
