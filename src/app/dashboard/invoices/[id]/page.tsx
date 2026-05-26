@@ -178,13 +178,18 @@ export default function InvoiceDetailPage() {
         }
       })
 
-    // 5. Company settings – fixed to work without company_id filter
+    // 5. Company settings – NOW WITH company_id filter
     supabase
       .from("company_settings")
       .select("business_name, address, phone, email, tagline, logo_url, business_type")
-      .limit(1)
+      .eq("company_id", companyId)
       .maybeSingle()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("Company settings fetch error:", error)
+          return
+        }
+        console.log("Company settings fetched:", data)
         if (data) {
           setCompanySettings({
             name:          data.business_name || "",
@@ -195,6 +200,8 @@ export default function InvoiceDetailPage() {
             logo_url:      data.logo_url      || null,
             business_type: data.business_type || "",
           })
+        } else {
+          console.log("No company settings row found for company_id:", companyId)
         }
       })
   }, [companyId, invoiceId])
@@ -223,7 +230,7 @@ export default function InvoiceDetailPage() {
     const customer = invoice.customer
     const subTotal = invoice.items?.reduce((s, i) => s + i.total, 0) || 0
 
-    // If logo_url is a relative path, convert to full Supabase storage URL
+    // Resolve logo URL: if relative, convert to full Supabase storage public URL
     let logoUrl = companySettings.logo_url || null
     if (logoUrl && !logoUrl.startsWith("http")) {
       const { data: urlData } = supabase.storage
@@ -231,6 +238,8 @@ export default function InvoiceDetailPage() {
         .getPublicUrl(logoUrl)
       logoUrl = urlData?.publicUrl || null
     }
+
+    console.log("Logo URL used for PDF:", logoUrl)
 
     const pdfData = {
       companyName:    companySettings.name          || "",
