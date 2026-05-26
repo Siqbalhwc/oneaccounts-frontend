@@ -42,6 +42,9 @@ const navSections: NavSection[] = [
     { groupLabel: 'Reports', items: [
       { label: 'All Reports', icon: '📈', href: '/dashboard/reports' },
     ]},
+    { groupLabel: 'Fixed Assets', items: [
+      { label: 'Asset Register', icon: '📦', href: '/dashboard/assets', feature: 'asset_management' },
+    ]},
     { groupLabel: 'Automation', items: [
       { label: 'Invoice Automation', icon: '⚙️', href: '/dashboard/settings/invoice-automation', feature: 'invoice_automation' },
       { label: 'Investors',          icon: '💼', href: '/dashboard/investors', feature: 'investors' },
