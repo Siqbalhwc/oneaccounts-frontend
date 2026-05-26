@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { Search, Download, ArrowLeft } from "lucide-react"
@@ -14,7 +14,6 @@ interface LedgerLine {
   debit: number
   credit: number
   runningNBV: number
-  type: string
 }
 
 export default function AssetLedgerPage() {
@@ -52,7 +51,6 @@ export default function AssetLedgerPage() {
     })
   }, [])
 
-  // Auto-load ledger when assetId changes (including initial from query param)
   useEffect(() => {
     if (selectedAssetId && companyId) {
       fetchLedger(selectedAssetId)
@@ -79,28 +77,16 @@ export default function AssetLedgerPage() {
     const lines: LedgerLine[] = []
     let nbv = asset.cost_price
 
-    // Purchase / opening
-    if (asset.source_type === "opening" || asset.source_type === "manual" || asset.source_type === "purchase_bill") {
-      lines.push({
-        date: asset.purchase_date,
-        description: `Purchase / Acquisition of ${asset.name} (${asset.asset_no})`,
-        debit: asset.cost_price,
-        credit: 0,
-        runningNBV: nbv,
-        type: "purchase",
-      })
-    } else {
-      lines.push({
-        date: asset.purchase_date,
-        description: `Opening balance – ${asset.name} (${asset.asset_no})`,
-        debit: asset.cost_price,
-        credit: 0,
-        runningNBV: nbv,
-        type: "opening",
-      })
-    }
+    // 1. Purchase / Opening
+    lines.push({
+      date: asset.purchase_date,
+      description: `Purchase / Acquisition – ${asset.name} (${asset.asset_no})`,
+      debit: asset.cost_price,
+      credit: 0,
+      runningNBV: nbv,
+    })
 
-    // Depreciation schedule
+    // 2. Depreciation schedule
     const { data: depRows } = await supabase
       .from("asset_depreciation_schedule")
       .select("period, depreciation_amount, posted")
@@ -114,17 +100,16 @@ export default function AssetLedgerPage() {
           nbv -= d.depreciation_amount
           lines.push({
             date: d.period.slice(0, 10),
-            description: `Monthly depreciation for ${d.period.slice(0, 7)}`,
+            description: `Monthly depreciation – ${d.period.slice(0, 7)}`,
             debit: 0,
             credit: d.depreciation_amount,
             runningNBV: Math.max(nbv, 0),
-            type: "depreciation",
           })
         }
       }
     }
 
-    // Sale
+    // 3. Sale (if any) – remove remaining net book value
     const { data: sale } = await supabase
       .from("asset_sales")
       .select("*")
@@ -133,13 +118,14 @@ export default function AssetLedgerPage() {
       .maybeSingle()
 
     if (sale) {
+      // Remaining net book value just before sale
+      const remainingNBV = nbv
       lines.push({
         date: sale.sale_date,
-        description: `Sale of asset – PKR ${sale.sale_amount?.toLocaleString()}`,
-        debit: sale.sale_amount,
-        credit: 0,
+        description: `Disposal / Sale – remaining value written off`,
+        debit: 0,
+        credit: remainingNBV,
         runningNBV: 0,
-        type: "sale",
       })
     }
 
