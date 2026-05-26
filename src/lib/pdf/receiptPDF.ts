@@ -79,16 +79,32 @@ export async function generateReceiptPDF(data: ReceiptPDFData): Promise<jsPDF> {
   const LOGO_SIZE = 18, LOGO_X = ML, LOGO_Y = 6
   let logoData = null
   if (data.logoUrl) logoData = await loadImage(data.logoUrl)
+
+  // Add logo WITHOUT any background or circle
   if (logoData) {
-    doc.setFillColor(...NAVY)
-    doc.circle(LOGO_X + LOGO_SIZE / 2, LOGO_Y + LOGO_SIZE / 2, LOGO_SIZE / 2 + 1, "F")
     doc.addImage(logoData, "PNG", LOGO_X, LOGO_Y, LOGO_SIZE, LOGO_SIZE)
   }
+
   const textX = logoData ? LOGO_X + LOGO_SIZE + 4 : ML
   doc.setTextColor(...NAVY).setFont("helvetica", "bold").setFontSize(13)
   doc.text(data.companyName || "Your Company", textX, LOGO_Y + 7)
+
+  // Company details under the name
   doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...MUTED)
   doc.text(data.companyTagline || "", textX, LOGO_Y + 13)
+
+  let infoY = LOGO_Y + 18
+  if (data.companyAddress) {
+    doc.text(data.companyAddress, textX, infoY)
+    infoY += 4
+  }
+  if (data.companyPhone) {
+    doc.text("Phone: " + data.companyPhone, textX, infoY)
+    infoY += 4
+  }
+  if (data.companyEmail) {
+    doc.text("Email: " + data.companyEmail, textX, infoY)
+  }
 
   doc.setFont("helvetica", "bold").setFontSize(26).setTextColor(...NAVY)
   doc.text("RECEIPT", PW - MR, LOGO_Y + 9, { align: "right" })

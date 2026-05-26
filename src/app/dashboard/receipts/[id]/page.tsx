@@ -6,6 +6,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Printer, Send } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
+import { useCompany } from "@/contexts/CompanyContext"
 import { generateReceiptPDF } from "@/lib/pdf/receiptPDF"
 import RecordHistory from "@/components/RecordHistory"
 
@@ -54,14 +55,13 @@ export default function ReceiptDetailPage() {
   )
   const { role } = useRole()
   const { hasFeature } = usePlan()
+  const { companyName, companyTagline, logoUrl } = useCompany()
 
   const [receipt, setReceipt] = useState<Receipt | null>(null)
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [bank, setBank] = useState<Bank | null>(null)
   const [journalLines, setJournalLines] = useState<JournalLine[]>([])
   const [loading, setLoading] = useState(true)
-
-  const [companySettings, setCompanySettings] = useState<any>({})
 
   useEffect(() => {
     if (!role || !id) return
@@ -92,9 +92,6 @@ export default function ReceiptDetailPage() {
         setJournalLines(formatted)
       }
 
-      const { data: settings } = await supabase.from("company_settings").select("business_name, address, phone, email, tagline, logo_url").eq("company_id", rec.company_id).maybeSingle()
-      if (settings) setCompanySettings(settings)
-
       setLoading(false)
     }
     fetchData()
@@ -111,12 +108,12 @@ export default function ReceiptDetailPage() {
   const handlePrintPDF = async () => {
     if (!receipt) return
     const pdfData = {
-      companyName:    companySettings.business_name || "OneAccounts",
-      companyAddress: companySettings.address || "",
-      companyPhone:   companySettings.phone || "",
-      companyEmail:   companySettings.email || "",
-      companyTagline: companySettings.tagline || "",
-      logoUrl:        companySettings.logo_url || null,
+      companyName:    companyName || "OneAccounts",
+      companyAddress: "",  // not yet in context, can be added later
+      companyPhone:   "",
+      companyEmail:   "",
+      companyTagline: companyTagline || "",
+      logoUrl:        logoUrl,   // directly from context
       receiptNo:      receipt.receipt_no,
       date:           receipt.date,
       customerName:    customer?.name || "Customer",
