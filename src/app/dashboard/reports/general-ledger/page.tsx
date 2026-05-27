@@ -32,6 +32,16 @@ export default function GeneralLedgerPage() {
   const [startDate, setStartDate] = useState(searchParams.get("startDate") || `${now.getFullYear()}-01-01`)
   const [endDate, setEndDate] = useState(searchParams.get("endDate") || now.toISOString().split("T")[0])
 
+  // Tag filters
+  const [projects, setProjects] = useState<any[]>([])
+  const [donors, setDonors] = useState<any[]>([])
+  const [activities, setActivities] = useState<any[]>([])
+  const [locations, setLocations] = useState<any[]>([])
+  const [projectId, setProjectId] = useState("")
+  const [donorId, setDonorId] = useState("")
+  const [activityId, setActivityId] = useState("")
+  const [locationId, setLocationId] = useState("")
+
   const [ledgerLines, setLedgerLines] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [errorMsg, setErrorMsg] = useState("")
@@ -39,120 +49,61 @@ export default function GeneralLedgerPage() {
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
-  // Fetch company ID and all accounts
+  // Fetch company ID, accounts, and tag options
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
       if (cid) {
         setCompanyId(cid)
-        supabase
-          .from("accounts")
-          .select("id, code, name, type")
-          .eq("company_id", cid)
-          .order("code")
+        supabase.from("accounts").select("id, code, name, type").eq("company_id", cid).order("code")
           .then(({ data }) => data && setAccounts(data))
+        supabase.from("projects").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
+          .then(({ data }) => data && setProjects(data))
+        supabase.from("donors").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
+          .then(({ data }) => data && setDonors(data))
+        supabase.from("activities").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
+          .then(({ data }) => data && setActivities(data))
+        supabase.from("locations").select("id, name").eq("company_id", cid).order("name")
+          .then(({ data }) => data && setLocations(data))
       }
     })
   }, [])
 
   useEffect(() => {
-    if (urlAccountId && accounts.length > 0) {
-      setSelectedAccountId(urlAccountId)
-    }
+    if (urlAccountId && accounts.length > 0) setSelectedAccountId(urlAccountId)
   }, [urlAccountId, accounts])
 
   useEffect(() => {
-    if (!selectedAccountId || !companyId) {
-      setAccount(null)
-      return
-    }
-    supabase
-      .from("accounts")
-      .select("id, code, name, type")
-      .eq("id", selectedAccountId)
-      .eq("company_id", companyId)
-      .single()
+    if (!selectedAccountId || !companyId) { setAccount(null); return }
+    supabase.from("accounts").select("id, code, name, type").eq("id", selectedAccountId).eq("company_id", companyId).single()
       .then(({ data }) => data && setAccount(data))
   }, [selectedAccountId, companyId])
 
-  // ── CORRECT GENERAL LEDGER FETCH ──────────────────────────────────
+  // ── Fetch ledger via secure API ──────────────────────────────────
   const fetchLedger = async () => {
     if (!selectedAccountId || !companyId) return
     setLoading(true)
     setErrorMsg("")
 
+    const params = new URLSearchParams({
+      accountId: selectedAccountId,
+      startDate,
+      endDate,
+    })
+    if (projectId) params.append("projectId", projectId)
+    if (donorId) params.append("donorId", donorId)
+    if (activityId) params.append("activityId", activityId)
+    if (locationId) params.append("locationId", locationId)
+
     try {
-      // 1. Fetch ALL journal lines for THIS account, ordered by date
-      const { data: allLines } = await supabase
-        .from("journal_lines")
-        .select("id, debit, credit, journal_entries!inner(entry_no, date, description, deleted_at)")
-        .eq("account_id", selectedAccountId)          // ← ONLY this account
-        .eq("company_id", companyId)
-        .is("journal_entries.deleted_at", null)
-        .order("date", { foreignTable: "journal_entries", ascending: true })
-
-      if (!allLines || allLines.length === 0) {
-        // No transactions at all
-        setLedgerLines([{
-          id: "opening",
-          entry_no: "",
-          date: startDate,
-          description: "Opening Balance",
-          debit: 0,
-          credit: 0,
-          running_balance: 0,
-          isOpening: true,
-        }])
-        setLoading(false)
-        return
+      const res = await fetch(`/api/general-ledger?${params.toString()}`)
+      const data = await res.json()
+      if (data.error) {
+        setErrorMsg(data.error)
+        setLedgerLines([])
+      } else {
+        setLedgerLines(data.lines || [])
       }
-
-      // 2. Calculate opening balance and collect period lines
-      let openingBalance = 0
-      const periodLines: any[] = []
-
-      allLines.forEach((line: any) => {
-        const date = line.journal_entries?.date
-        if (!date) return
-        const net = (line.debit || 0) - (line.credit || 0)
-
-        if (date < startDate) {
-          openingBalance += net
-        } else if (date >= startDate && date <= endDate) {
-          periodLines.push({
-            id: line.id,
-            entry_no: line.journal_entries?.entry_no || "",
-            date,
-            description: line.journal_entries?.description || "",
-            debit: line.debit || 0,
-            credit: line.credit || 0,
-            running_balance: 0, // will be filled later
-          })
-        }
-      })
-
-      // 3. Build final lines with running balance
-      let running = openingBalance
-      const finalLines: any[] = [
-        {
-          id: "opening",
-          entry_no: "",
-          date: startDate,
-          description: "Opening Balance",
-          debit: openingBalance > 0 ? openingBalance : 0,
-          credit: openingBalance < 0 ? -openingBalance : 0,
-          running_balance: openingBalance,
-          isOpening: true,
-        },
-      ]
-
-      for (const line of periodLines) {
-        running += (line.debit || 0) - (line.credit || 0)
-        line.running_balance = running
-        finalLines.push(line)
-      }
-
-      setLedgerLines(finalLines)
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to load ledger")
     } finally {
@@ -162,7 +113,7 @@ export default function GeneralLedgerPage() {
 
   useEffect(() => {
     if (selectedAccountId && companyId) fetchLedger()
-  }, [selectedAccountId, companyId, startDate, endDate])
+  }, [selectedAccountId, companyId, startDate, endDate, projectId, donorId, activityId, locationId])
 
   // Sorting (unchanged)
   const sortedLines = useMemo(() => {
@@ -172,8 +123,7 @@ export default function GeneralLedgerPage() {
       if (!a.isOpening && b.isOpening) return 1
       let valA: any, valB: any
       if (sortField === "debit" || sortField === "credit" || sortField === "running_balance") {
-        valA = a[sortField] || 0
-        valB = b[sortField] || 0
+        valA = a[sortField] || 0; valB = b[sortField] || 0
       } else {
         valA = (a[sortField] || "").toString().toLowerCase()
         valB = (b[sortField] || "").toString().toLowerCase()
@@ -200,24 +150,17 @@ export default function GeneralLedgerPage() {
 
   const handlePrintPDF = async () => {
     if (!account || sortedLines.length === 0) return
-
     const pdfData = {
-      companyName:    companyName || "",
-      companyAddress: "",
-      companyPhone:   "",
-      companyEmail:   "",
+      companyName: companyName || "",
+      companyAddress: "", companyPhone: "", companyEmail: "",
       companyTagline: companyTagline || "",
-      logoUrl:        logoUrl,
-      accountName:    account.name,
-      accountCode:    account.code,
-      startDate:      startDate,
-      endDate:        endDate,
-      totalDebit:     totalDebit,
-      totalCredit:    totalCredit,
-      closingBalance: closingBalance,
-      ledgerLines:    sortedLines,
+      logoUrl,
+      accountName: account.name,
+      accountCode: account.code,
+      startDate, endDate,
+      totalDebit, totalCredit, closingBalance,
+      ledgerLines: sortedLines,
     }
-
     const doc = await generateGeneralLedgerPDF(pdfData)
     doc.save(`General_Ledger_${account.code}.pdf`)
   }
@@ -233,99 +176,69 @@ export default function GeneralLedgerPage() {
         .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
-        .ledger-header {
-          display: grid;
-          grid-template-columns: 90px 100px 1fr 110px 110px 130px;
-          padding: 14px 24px;
-          background: var(--card);
-          font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
-          border-bottom: 1px solid var(--border);
-        }
-        .ledger-row {
-          display: grid;
-          grid-template-columns: 90px 100px 1fr 110px 110px 130px;
-          padding: 12px 24px;
-          border-bottom: 1px solid var(--border);
-          font-size: 13px; align-items: center;
-          transition: background 0.15s;
-        }
+        .ledger-header { display: grid; grid-template-columns: 90px 100px 1fr 110px 110px 130px; padding: 14px 24px; background: var(--card); font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+        .ledger-row { display: grid; grid-template-columns: 90px 100px 1fr 110px 110px 130px; padding: 12px 24px; border-bottom: 1px solid var(--border); font-size: 13px; align-items: center; transition: background 0.15s; }
         .ledger-row:hover { background: var(--card-hover); }
         .ledger-row:last-child { border-bottom: none; }
         .opening-row { background: var(--bg-soft); font-weight: 600; }
-        .sort-btn {
-          background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
-          display: inline-flex; align-items: center; gap: 4px; padding: 0;
-          font-weight: 700; text-transform: uppercase; font-size: 10px; white-space: nowrap;
-        }
+        .sort-btn { background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted); display: inline-flex; align-items: center; gap: 4px; padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px; }
         .sort-btn:hover { color: var(--primary); }
-        .date-input {
-          height: 34px; border: 1.5px solid var(--border); border-radius: 8px;
-          padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text);
-          outline: none; font-family: inherit; width: 140px;
-        }
-        .date-input:focus { border-color: var(--primary); }
+        .date-input, .select-input { height: 34px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text); outline: none; font-family: inherit; width: 140px; }
+        .date-input:focus, .select-input:focus { border-color: var(--primary); }
         .btn { padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
         .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
         .btn-outline:hover { background: var(--card-hover); }
-        .account-select {
-          height: 34px; border: 1.5px solid var(--border); border-radius: 8px;
-          padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text);
-          outline: none; font-family: inherit; min-width: 220px;
-        }
+        .account-select { height: 34px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text); outline: none; font-family: inherit; min-width: 220px; }
         .account-select:focus { border-color: var(--primary); }
-        @media (max-width: 640px) {
-          .ledger-header, .ledger-row { grid-template-columns: 70px 80px 1fr 80px 80px 100px; }
-        }
+        @media (max-width: 640px) { .ledger-header, .ledger-row { grid-template-columns: 70px 80px 1fr 80px 80px 100px; } }
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-        <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}>
-          <ArrowLeft size={16} />
-        </button>
+        <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}><ArrowLeft size={16} /></button>
         <div style={{ flex: 1, minWidth: 200 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>
-            📒 General Ledger
-          </h1>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📒 General Ledger</h1>
           <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Transaction history for a specific account</p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <select
-            className="account-select"
-            value={selectedAccountId}
-            onChange={(e) => setSelectedAccountId(e.target.value)}
-          >
+          <select className="account-select" value={selectedAccountId} onChange={e => setSelectedAccountId(e.target.value)}>
             <option value="">— Select Account —</option>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.code} – {a.name}
-              </option>
-            ))}
+            {accounts.map(a => <option key={a.id} value={a.id}>{a.code} – {a.name}</option>)}
           </select>
           <input type="date" className="date-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
           <span style={{ color: "var(--text-muted)", fontSize: 12 }}>to</span>
           <input type="date" className="date-input" value={endDate} onChange={e => setEndDate(e.target.value)} />
           <button className="btn btn-outline" onClick={fetchLedger}>Refresh</button>
-          <button className="btn btn-outline" onClick={handlePrintPDF}>
-            <Printer size={16} /> Print PDF
-          </button>
+          <button className="btn btn-outline" onClick={handlePrintPDF}><Printer size={16} /> Print PDF</button>
         </div>
       </div>
 
-      {errorMsg && (
-        <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, border: "1px solid #FECACA" }}>
-          {errorMsg}
-        </div>
-      )}
+      {/* ── Tag filters (optional) ── */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+        <select className="select-input" value={projectId} onChange={e => setProjectId(e.target.value)}>
+          <option value="">All Projects</option>
+          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <select className="select-input" value={donorId} onChange={e => setDonorId(e.target.value)}>
+          <option value="">All Donors</option>
+          {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+        </select>
+        <select className="select-input" value={activityId} onChange={e => setActivityId(e.target.value)}>
+          <option value="">All Activities</option>
+          {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+        <select className="select-input" value={locationId} onChange={e => setLocationId(e.target.value)}>
+          <option value="">All Locations</option>
+          {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+        </select>
+      </div>
+
+      {/* ── Error / Data display ── */}
+      {errorMsg && <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, border: "1px solid #FECACA" }}>{errorMsg}</div>}
 
       {selectedAccountId && account ? (
         <>
-          <div style={{
-            background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12,
-            padding: "12px 20px", marginBottom: 20, display: "flex", alignItems: "center", gap: 16
-          }}>
-            <div style={{ background: "var(--bg-soft)", borderRadius: 8, padding: "6px 12px", fontWeight: 700, fontSize: 14, color: "var(--primary)" }}>
-              {account.code}
-            </div>
+          <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 20px", marginBottom: 20, display: "flex", alignItems: "center", gap: 16 }}>
+            <div style={{ background: "var(--bg-soft)", borderRadius: 8, padding: "6px 12px", fontWeight: 700, fontSize: 14, color: "var(--primary)" }}>{account.code}</div>
             <div>
               <div style={{ fontWeight: 700, color: "var(--text)" }}>{account.name}</div>
               <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{account.type}</div>
@@ -333,34 +246,21 @@ export default function GeneralLedgerPage() {
           </div>
 
           <div className="summary-grid">
-            <div className="summary-item">
-              <div className="summary-label">Total Debits</div>
-              <div className="summary-value" style={{ color: "#EF4444" }}>PKR {totalDebit.toLocaleString()}</div>
-            </div>
-            <div className="summary-item">
-              <div className="summary-label">Total Credits</div>
-              <div className="summary-value" style={{ color: "#10B981" }}>PKR {totalCredit.toLocaleString()}</div>
-            </div>
-            <div className="summary-item">
-              <div className="summary-label">Closing Balance</div>
-              <div className="summary-value" style={{ color: closingBalance >= 0 ? "#10B981" : "#EF4444" }}>
-                PKR {closingBalance.toLocaleString()}
-              </div>
-            </div>
+            <div className="summary-item"><div className="summary-label">Total Debits</div><div className="summary-value" style={{ color: "#EF4444" }}>PKR {totalDebit.toLocaleString()}</div></div>
+            <div className="summary-item"><div className="summary-label">Total Credits</div><div className="summary-value" style={{ color: "#10B981" }}>PKR {totalCredit.toLocaleString()}</div></div>
+            <div className="summary-item"><div className="summary-label">Closing Balance</div><div className="summary-value" style={{ color: closingBalance >= 0 ? "#10B981" : "#EF4444" }}>PKR {closingBalance.toLocaleString()}</div></div>
           </div>
 
           {loading ? (
             <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading ledger entries…</div>
           ) : sortedLines.length === 0 ? (
-            <div className="ledger-card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
-              No transactions found for this period.
-            </div>
+            <div className="ledger-card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>No transactions found for this period.</div>
           ) : (
             <div className="ledger-card">
               <div className="ledger-header">
                 <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
                 <button className="sort-btn" onClick={() => handleSort("description")}>Entry #{getSortIcon("description")}</button>
-                <button className="sort-btn" onClick={() => handleSort("description")}>Description {getSortIcon("description")}</button>
+                <span>Description</span>
                 <button className="sort-btn" onClick={() => handleSort("debit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
                 <button className="sort-btn" onClick={() => handleSort("credit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
                 <button className="sort-btn" onClick={() => handleSort("running_balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("running_balance")}</button>
@@ -370,15 +270,9 @@ export default function GeneralLedgerPage() {
                   <span style={{ fontSize: 12 }}>{line.isOpening ? "" : line.date}</span>
                   <span style={{ color: "var(--primary)", fontSize: 12 }}>{line.entry_no}</span>
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line.description}</span>
-                  <span style={{ textAlign: "right", color: line.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit > 0 ? 600 : 400 }}>
-                    {line.debit > 0 ? `PKR ${line.debit.toLocaleString()}` : "—"}
-                  </span>
-                  <span style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.credit > 0 ? 600 : 400 }}>
-                    {line.credit > 0 ? `PKR ${line.credit.toLocaleString()}` : "—"}
-                  </span>
-                  <span style={{ textAlign: "right", fontWeight: 600, color: line.running_balance >= 0 ? "#10B981" : "#EF4444" }}>
-                    PKR {line.running_balance.toLocaleString()}
-                  </span>
+                  <span style={{ textAlign: "right", color: line.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit > 0 ? 600 : 400 }}>{line.debit > 0 ? `PKR ${line.debit.toLocaleString()}` : "—"}</span>
+                  <span style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.credit > 0 ? 600 : 400 }}>{line.credit > 0 ? `PKR ${line.credit.toLocaleString()}` : "—"}</span>
+                  <span style={{ textAlign: "right", fontWeight: 600, color: line.running_balance >= 0 ? "#10B981" : "#EF4444" }}>PKR {line.running_balance.toLocaleString()}</span>
                 </div>
               ))}
             </div>
