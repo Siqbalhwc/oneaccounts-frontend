@@ -3,8 +3,16 @@ import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
+// Helper to check if a string is a valid YYYY-MM-DD date
+function isValidDate(str: string) {
+  const regex = /^\d{4}-\d{2}-\d{2}$/
+  if (!regex.test(str)) return false
+  const d = new Date(str)
+  return d instanceof Date && !isNaN(d.getTime())
+}
+
 export async function GET(request: NextRequest) {
-  // ── 1. Standard server client to read the authenticated user ─────
+  // 1. Authenticate with standard server client
   const cookieStore = await cookies()
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,13 +39,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'No company linked' }, { status: 400 })
   }
 
-  // ── 2. Service‑role client (bypasses RLS) – secure, server‑side only
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-
-  // ── 3. Parse query parameters ─────────────────────────────────────
+  // 2. Parse query params – validate dates strictly
   const { searchParams } = new URL(request.url)
   const accountId  = searchParams.get('accountId')
   const startDate  = searchParams.get('startDate')
@@ -47,11 +49,17 @@ export async function GET(request: NextRequest) {
   const activityId = searchParams.get('activityId') || null
   const locationId = searchParams.get('locationId') || null
 
-  if (!accountId || !startDate || !endDate) {
-    return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 })
+  if (!accountId || !startDate || !endDate || !isValidDate(startDate) || !isValidDate(endDate)) {
+    return NextResponse.json({ error: 'Missing or invalid required parameters (accountId, startDate, endDate)' }, { status: 400 })
   }
 
-  // ── 4. Build the base match object ────────────────────────────────
+  // 3. Service‑role client for data queries
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+
+  // 4. Build match object
   let match: any = {
     account_id: parseInt(accountId),
     company_id: companyId,
@@ -62,7 +70,7 @@ export async function GET(request: NextRequest) {
   if (activityId) match.activity_id = parseInt(activityId)
   if (locationId) match.location_id = parseInt(locationId)
 
-  // ── 5. Opening balance: sum(debit - credit) before start date ────
+  // 5. Opening balance (before start date)
   const { data: openingLines, error: openingErr } = await supabaseAdmin
     .from('journal_lines')
     .select('debit, credit, journal_entries!inner(date)')
@@ -78,7 +86,7 @@ export async function GET(request: NextRequest) {
     openingBalance += (line.debit || 0) - (line.credit || 0)
   })
 
-  // ── 6. Period lines ───────────────────────────────────────────────
+  // 6. Period lines
   const { data: periodLines, error: periodErr } = await supabaseAdmin
     .from('journal_lines')
     .select('id, debit, credit, journal_entries!inner(entry_no, date, description, id)')
@@ -91,7 +99,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: periodErr.message }, { status: 500 })
   }
 
-  // ── 7. Compute running balances ──────────────────────────────────
+  // 7. Running balances
   let running = openingBalance
   const finalLines: any[] = [
     {
@@ -122,9 +130,8 @@ export async function GET(request: NextRequest) {
     })
   })
 
-  // ── 8. Fetch tag labels (for display) ────────────────────────────
+  // 8. Tag labels
   const tagLabels: Record<string, string> = {}
-
   if (projectId) {
     const { data: p } = await supabaseAdmin.from('projects').select('name').eq('id', parseInt(projectId)).single()
     if (p) tagLabels.project = p.name
@@ -142,9 +149,5 @@ export async function GET(request: NextRequest) {
     if (l) tagLabels.location = l.name
   }
 
-  return NextResponse.json({
-    openingBalance,
-    lines: finalLines,
-    tagLabels,
-  })
+  return NextResponse.json({ openingBalance, lines: finalLines, tagLabels })
 }
