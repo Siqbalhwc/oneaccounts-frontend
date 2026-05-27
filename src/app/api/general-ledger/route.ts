@@ -1,22 +1,27 @@
+import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
-  // ── Authenticate user via session cookie ────────────────────────
+  // ── 1. Standard server client to read the authenticated user ─────
   const cookieStore = await cookies()
-  const token = cookieStore.get('sb-access-token')?.value
-  if (!token) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  // Service‑role client (bypasses RLS) – secure, server‑side only
-  const supabaseAdmin = createClient(
+  const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll() },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          )
+        },
+      },
+    }
   )
 
-  const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token)
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
   if (userError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -26,7 +31,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'No company linked' }, { status: 400 })
   }
 
-  // ── Parse query parameters ───────────────────────────────────────
+  // ── 2. Service‑role client (bypasses RLS) – secure, server‑side only
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+
+  // ── 3. Parse query parameters ─────────────────────────────────────
   const { searchParams } = new URL(request.url)
   const accountId  = searchParams.get('accountId')
   const startDate  = searchParams.get('startDate')
@@ -40,7 +51,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 })
   }
 
-  // ── Build the base match object ─────────────────────────────────
+  // ── 4. Build the base match object ────────────────────────────────
   let match: any = {
     account_id: parseInt(accountId),
     company_id: companyId,
@@ -51,7 +62,7 @@ export async function GET(request: NextRequest) {
   if (activityId) match.activity_id = parseInt(activityId)
   if (locationId) match.location_id = parseInt(locationId)
 
-  // ── 1. Opening balance: sum(debit - credit) before start date ──
+  // ── 5. Opening balance: sum(debit - credit) before start date ────
   const { data: openingLines, error: openingErr } = await supabaseAdmin
     .from('journal_lines')
     .select('debit, credit, journal_entries!inner(date)')
@@ -67,7 +78,7 @@ export async function GET(request: NextRequest) {
     openingBalance += (line.debit || 0) - (line.credit || 0)
   })
 
-  // ── 2. Period lines ────────────────────────────────────────────
+  // ── 6. Period lines ───────────────────────────────────────────────
   const { data: periodLines, error: periodErr } = await supabaseAdmin
     .from('journal_lines')
     .select('id, debit, credit, journal_entries!inner(entry_no, date, description, id)')
@@ -80,7 +91,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: periodErr.message }, { status: 500 })
   }
 
-  // ── 3. Compute running balances ─────────────────────────────────
+  // ── 7. Compute running balances ──────────────────────────────────
   let running = openingBalance
   const finalLines: any[] = [
     {
@@ -111,7 +122,7 @@ export async function GET(request: NextRequest) {
     })
   })
 
-  // ── 4. Fetch tag labels (for display) ───────────────────────────
+  // ── 8. Fetch tag labels (for display) ────────────────────────────
   const tagLabels: Record<string, string> = {}
 
   if (projectId) {
