@@ -340,17 +340,14 @@ export default function NewBillPage() {
       updated[idx].total = updated[idx].qty * updated[idx].unit_price
     }
 
-    // When location changes, reset activity (if the new location doesn't contain it)
     if (field === "location_id") {
       const locId = Number(value)
       const allowedActivities = locId ? (locationActivitiesMap[locId] || []) : activities.map(a => a.id)
       if (updated[idx].activity_id && !allowedActivities.includes(Number(updated[idx].activity_id))) {
         updated[idx].activity_id = ""
-        // Remove cached project/donor
       }
     }
 
-    // When activity changes, fetch project/donor and budget
     if (field === "activity_id" && updated[idx].activity_id && updated[idx].account_id) {
       const actId = Number(updated[idx].activity_id)
       const locId = updated[idx].location_id ? Number(updated[idx].location_id) : null
@@ -361,12 +358,14 @@ export default function NewBillPage() {
           .eq("id", actId)
           .single()
         if (actData) {
-          const projectName = actData.projects?.name || ""
+          // Fix: cast projects to any to avoid TypeScript error
+          const proj: any = actData.projects
+          const projectName = proj?.name || ""
           let donorName: string | null = null
-          if (actData.projects?.donor_id) {
+          if (proj?.donor_id) {
             const { data: donor } = await supabase.from("donors")
               .select("name")
-              .eq("id", actData.projects.donor_id)
+              .eq("id", proj.donor_id)
               .single()
             donorName = donor?.name || null
           }
@@ -376,7 +375,6 @@ export default function NewBillPage() {
           }))
         }
       }
-      // Fetch budget for activity+location+account
       fetchBudget(actId, Number(updated[idx].account_id), locId)
     }
 
@@ -546,7 +544,6 @@ export default function NewBillPage() {
     return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>Loading bill form…</div>
   }
 
-  // ── Helper to get allowed activities for a given location ──
   const getFilteredActivities = (locationId: string) => {
     const locNum = Number(locationId)
     if (!locNum) return activities
