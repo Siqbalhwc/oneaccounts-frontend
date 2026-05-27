@@ -47,7 +47,7 @@ export default function VendorLedgerPage() {
         setCompanyId(cid)
         supabase
           .from("suppliers")
-          .select("id, code, name, balance")
+          .select("id, code, name")
           .eq("company_id", cid)
           .is("deleted_at", null)
           .order("name")
@@ -69,114 +69,142 @@ export default function VendorLedgerPage() {
     }
     supabase
       .from("suppliers")
-      .select("id, code, name, balance")
+      .select("id, code, name")
       .eq("id", selectedSupplierId)
       .eq("company_id", companyId)
       .single()
       .then(({ data }) => data && setSupplier(data))
   }, [selectedSupplierId, companyId])
 
-  // ── CORRECT LEDGER FETCH using supplier.balance ──
+  // ── CORRECT LEDGER FETCH using journal entries directly ──
   const fetchLedger = async () => {
     if (!selectedSupplierId || !companyId) return
     setLoading(true)
     setErrorMsg("")
 
     try {
-      // 1. Fetch the supplier's current balance
-      const { data: supp } = await supabase
-        .from("suppliers")
-        .select("balance")
-        .eq("id", selectedSupplierId)
-        .single()
-      const currentBalance = supp?.balance || 0
+      // 1. Find the payable account (code 2000)
+      const { data: payableAccount } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("code", "2000")
+        .maybeSingle()
 
-      // 2. Fetch all bills for this supplier within the period
-      const { data: periodBills } = await supabase
+      if (!payableAccount) {
+        setErrorMsg("Accounts Payable account (2000) not found.")
+        setLoading(false)
+        return
+      }
+      const payableAccountId = payableAccount.id
+
+      // 2. All purchase bills for this supplier (any date)
+      const { data: bills } = await supabase
         .from("invoices")
-        .select("id, total, invoice_no, date")
+        .select("id")
         .eq("party_id", selectedSupplierId)
         .eq("type", "purchase")
         .is("deleted_at", null)
-        .gte("date", startDate)
-        .lte("date", endDate)
 
-      // 3. Fetch all payments for this supplier within the period
-      const { data: periodPayments } = await supabase
+      const billIds = bills?.map(b => b.id) || []
+
+      // 3. All payments to this supplier
+      const { data: payments } = await supabase
         .from("payments")
-        .select("id, amount, payment_no, payment_date")
+        .select("id")
         .eq("party_id", selectedSupplierId)
         .eq("party_type", "supplier")
-        .gte("payment_date", startDate)
-        .lte("payment_date", endDate)
 
-      // 4. Calculate net period change
-      // Bills increase payable (credit), payments decrease payable (debit)
-      const totalPeriodBills = (periodBills || []).reduce((s, b) => s + (b.total || 0), 0)
-      const totalPeriodPayments = (periodPayments || []).reduce((s, p) => s + (p.amount || 0), 0)
-      const netPeriodChange = totalPeriodBills - totalPeriodPayments
+      const paymentIds = payments?.map(p => p.id) || []
 
-      // 5. Opening balance = current balance - net period change
-      const openingBalance = currentBalance - netPeriodChange
-
-      // 6. Build ledger lines
-      const lines: any[] = []
-
-      // Opening balance row
-      lines.push({
-        id: "opening",
-        entry_no: "",
-        date: startDate,
-        description: "Opening Balance",
-        debit: openingBalance > 0 ? openingBalance : 0,
-        credit: openingBalance < 0 ? -openingBalance : 0,
-        running_balance: openingBalance,
-        isOpening: true,
-      })
-
-      // Bill rows (credit)
-      for (const bill of periodBills || []) {
-        lines.push({
-          id: `bill-${bill.id}`,
-          entry_no: `JE-BILL-${bill.invoice_no}`,
-          date: bill.date,
-          description: `Purchase Bill ${bill.invoice_no}`,
+      const sourceIds = [...billIds, ...paymentIds].filter(Boolean)
+      if (sourceIds.length === 0) {
+        // No transactions at all → opening and closing are zero
+        setLedgerLines([{
+          id: "opening",
+          entry_no: "",
+          date: startDate,
+          description: "Opening Balance",
           debit: 0,
-          credit: bill.total,
-          running_balance: 0, // will be calculated
-        })
-      }
-
-      // Payment rows (debit)
-      for (const payment of periodPayments || []) {
-        lines.push({
-          id: `payment-${payment.id}`,
-          entry_no: `JE-PAY-${payment.payment_no}`,
-          date: payment.payment_date,
-          description: `Payment ${payment.payment_no}`,
-          debit: payment.amount,
           credit: 0,
           running_balance: 0,
-        })
+          isOpening: true,
+        }])
+        setLoading(false)
+        return
       }
 
-      // Sort all period lines by date
-      lines.sort((a, b) => {
-        if (a.isOpening) return -1
-        if (b.isOpening) return 1
-        return a.date.localeCompare(b.date)
+      // 4. Fetch all payable-side journal lines for these source IDs, ordered by date
+      const { data: allLines } = await supabase
+        .from("journal_lines")
+        .select("id, debit, credit, journal_entries!inner(entry_no, date, description, deleted_at)")
+        .eq("account_id", payableAccountId)
+        .eq("company_id", companyId)
+        .in("source_id", sourceIds)
+        .is("journal_entries.deleted_at", null)
+        .order("date", { foreignTable: "journal_entries", ascending: true })
+
+      if (!allLines || allLines.length === 0) {
+        setLedgerLines([{
+          id: "opening",
+          entry_no: "",
+          date: startDate,
+          description: "Opening Balance",
+          debit: 0,
+          credit: 0,
+          running_balance: 0,
+          isOpening: true,
+        }])
+        setLoading(false)
+        return
+      }
+
+      // 5. Calculate opening balance (sum of movements before start date)
+      let openingBalance = 0
+      const periodLines: any[] = []
+
+      allLines.forEach((line: any) => {
+        const date = line.journal_entries?.date
+        if (!date) return
+        const net = (line.debit || 0) - (line.credit || 0)
+
+        if (date < startDate) {
+          openingBalance += net
+        } else if (date >= startDate && date <= endDate) {
+          periodLines.push({
+            id: line.id,
+            entry_no: line.journal_entries?.entry_no || "",
+            date,
+            description: line.journal_entries?.description || "",
+            debit: line.debit || 0,
+            credit: line.credit || 0,
+            running_balance: 0, // filled later
+          })
+        }
       })
 
-      // Calculate running balances
+      // 6. Build final ledger with running balances
       let running = openingBalance
-      for (const line of lines) {
-        if (!line.isOpening) {
-          running = running + (line.debit || 0) - (line.credit || 0)
-        }
+      const finalLines = [
+        {
+          id: "opening",
+          entry_no: "",
+          date: startDate,
+          description: "Opening Balance",
+          debit: openingBalance > 0 ? openingBalance : 0,
+          credit: openingBalance < 0 ? -openingBalance : 0,
+          running_balance: openingBalance,
+          isOpening: true,
+        },
+      ]
+
+      for (const line of periodLines) {
+        running += (line.debit || 0) - (line.credit || 0)
         line.running_balance = running
+        finalLines.push(line)
       }
 
-      setLedgerLines(lines)
+      setLedgerLines(finalLines)
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to load ledger")
     } finally {
@@ -188,7 +216,7 @@ export default function VendorLedgerPage() {
     if (selectedSupplierId && companyId) fetchLedger()
   }, [selectedSupplierId, companyId, startDate, endDate])
 
-  // Sorting
+  // Sorting (unchanged)
   const sortedLines = useMemo(() => {
     const list = [...ledgerLines]
     list.sort((a, b) => {
