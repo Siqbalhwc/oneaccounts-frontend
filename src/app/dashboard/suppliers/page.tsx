@@ -504,7 +504,8 @@ export default function SuppliersPage() {
                 <span>Created: {s.created_by || "—"}</span>
                 <span>Edited: {s.updated_by || "—"}</span>
               </div>
-              <button className="btn-icon" onClick={() => router.push(`/dashboard/reports/supplier-ledger?supplierId=${s.id}`)} title="View Ledger">
+              {/* FIXED: Correct URL to Vendor Ledger */}
+              <button className="btn-icon" onClick={() => router.push(`/dashboard/reports/vendor-ledger?supplierId=${s.id}`)} title="View Ledger">
                 <Eye size={14} />
               </button>
               <button className="btn-icon" onClick={() => openEdit(s)}><Edit size={14} /></button>
