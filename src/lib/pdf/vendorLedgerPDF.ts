@@ -185,11 +185,11 @@ export async function generateVendorLedgerPDF(data: VendorLedgerPDFData): Promis
   const afterTable = (doc as any).lastAutoTable.finalY as number
 
   // Rounded border around table
-  const TABLE_RADIUS = 4
-  const cornerSize = TABLE_RADIUS + 1
+    const TABLE_RADIUS = 4
+  const maskSize = 1.5   // tiny mask, won't cover data
   doc.setFillColor(...WHITE)
-  doc.rect(ML,                       afterTable - cornerSize, cornerSize, cornerSize, "F")
-  doc.rect(ML + CW - cornerSize,     afterTable - cornerSize, cornerSize, cornerSize, "F")
+  doc.rect(ML - 0.1, afterTable - maskSize + 0.5, maskSize, maskSize, "F")
+  doc.rect(ML + CW - maskSize + 0.1, afterTable - maskSize + 0.5, maskSize, maskSize, "F")
   doc.setDrawColor(...BORDER).setLineWidth(0.3)
   doc.roundedRect(ML, bodyStartY, CW, afterTable - bodyStartY, TABLE_RADIUS, TABLE_RADIUS, "S")
 

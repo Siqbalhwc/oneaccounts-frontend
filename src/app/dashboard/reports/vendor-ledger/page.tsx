@@ -22,14 +22,12 @@ export default function VendorLedgerPage() {
   const { companyName, companyTagline, logoUrl } = useCompany()
   const canView = role === "admin" || role === "accountant"
 
-  // Supplier selection
   const urlSupplierId = searchParams.get("supplierId")
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>(urlSupplierId || "")
   const [suppliers, setSuppliers] = useState<any[]>([])
   const [supplier, setSupplier] = useState<any>(null)
   const [companyId, setCompanyId] = useState<string>("")
 
-  // Date filters
   const now = new Date()
   const [startDate, setStartDate] = useState(searchParams.get("startDate") || `${now.getFullYear()}-01-01`)
   const [endDate, setEndDate] = useState(searchParams.get("endDate") || now.toISOString().split("T")[0])
@@ -38,7 +36,6 @@ export default function VendorLedgerPage() {
   const [loading, setLoading] = useState(true)
   const [errorMsg, setErrorMsg] = useState("")
 
-  // Sorting
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
@@ -59,14 +56,12 @@ export default function VendorLedgerPage() {
     })
   }, [])
 
-  // Auto-select from URL
   useEffect(() => {
     if (urlSupplierId && suppliers.length > 0) {
       setSelectedSupplierId(urlSupplierId)
     }
   }, [urlSupplierId, suppliers])
 
-  // Fetch supplier details
   useEffect(() => {
     if (!selectedSupplierId || !companyId) {
       setSupplier(null)
@@ -81,13 +76,14 @@ export default function VendorLedgerPage() {
       .then(({ data }) => data && setSupplier(data))
   }, [selectedSupplierId, companyId])
 
-  // Fetch ledger lines – only Accounts Payable lines
+  // ---------- CORRECT LEDGER FETCH ----------
   const fetchLedger = async () => {
     if (!selectedSupplierId || !companyId) return
     setLoading(true)
     setErrorMsg("")
+
     try {
-      // 1. Find the company's default Accounts Payable account (code 2000)
+      // 1. Find the payable account (code 2000)
       const { data: payableAccount } = await supabase
         .from("accounts")
         .select("id")
@@ -96,29 +92,32 @@ export default function VendorLedgerPage() {
         .maybeSingle()
 
       if (!payableAccount) {
-        setErrorMsg("Accounts Payable account (2000) not found in Chart of Accounts.")
+        setErrorMsg("Accounts Payable account (2000) not found.")
         setLoading(false)
         return
       }
       const payableAccountId = payableAccount.id
 
-      // 2. All purchase bills for this supplier
+      // 2. All bills for this supplier
       const { data: bills } = await supabase
         .from("invoices")
         .select("id")
         .eq("party_id", selectedSupplierId)
         .eq("type", "purchase")
         .is("deleted_at", null)
-      const billIds = bills?.map(inv => inv.id) || []
 
-      // 3. All payments to this supplier
+      const billIds = bills?.map(b => b.id) || []
+
+      // 3. All payments for this supplier
       const { data: payments } = await supabase
         .from("payments")
         .select("id")
         .eq("party_id", selectedSupplierId)
         .eq("party_type", "supplier")
+
       const paymentIds = payments?.map(p => p.id) || []
 
+      // Only use source IDs that belong to this supplier
       const sourceIds = [...billIds, ...paymentIds].filter(Boolean)
       if (sourceIds.length === 0) {
         setLedgerLines([])
@@ -126,61 +125,66 @@ export default function VendorLedgerPage() {
         return
       }
 
-      // 4. Fetch journal lines only for the payable account
-      const { data: lines } = await supabase
+      // 4. Fetch ALL lines for the payable account and these source IDs
+      const { data: allLines } = await supabase
         .from("journal_lines")
-        .select("id, debit, credit, journal_entries!inner(entry_no, date, description, deleted_at, company_id)")
-        .eq("account_id", payableAccountId)        // only the payable side
+        .select("id, debit, credit, journal_entries!inner(entry_no, date, description)")
+        .eq("account_id", payableAccountId)
         .eq("company_id", companyId)
-        .is("journal_entries.deleted_at", null)
-        .eq("journal_entries.company_id", companyId)
         .in("source_id", sourceIds)
+        .order("date", { foreignTable: "journal_entries", ascending: true })
 
-      if (!lines) {
+      if (!allLines || allLines.length === 0) {
         setLedgerLines([])
         setLoading(false)
         return
       }
 
-      // 5. Separate opening (before start date) and period lines
-      let running = 0
+      // 5. Calculate opening balance (sum of movements before start date)
+      let openingBalance = 0
       const periodLines: any[] = []
-      lines.forEach((l: any) => {
-        const date = l.journal_entries?.date
+
+      allLines.forEach((line: any) => {
+        const date = line.journal_entries?.date
         if (!date) return
-        const debit = l.debit || 0
-        const credit = l.credit || 0
+        const net = (line.debit || 0) - (line.credit || 0)
+
         if (date < startDate) {
-          running = running + debit - credit
+          openingBalance += net
         } else if (date >= startDate && date <= endDate) {
-          running = running + debit - credit
           periodLines.push({
-            id: l.id,
-            entry_no: l.journal_entries?.entry_no || "",
+            id: line.id,
+            entry_no: line.journal_entries?.entry_no || "",
             date,
-            description: l.journal_entries?.description || "",
-            debit,
-            credit,
-            running_balance: running,
+            description: line.journal_entries?.description || "",
+            debit: line.debit || 0,
+            credit: line.credit || 0,
+            running_balance: 0, // will be filled below
           })
         }
       })
 
-      // Opening balance = net total before period lines
-      const openingBal = running - periodLines.reduce((s, pl) => s + pl.debit - pl.credit, 0)
+      // 6. Build ledger with running balances
+      let running = openingBalance
       const finalLines = [
         {
           id: "opening",
           entry_no: "",
           date: startDate,
           description: "Opening Balance",
-          debit: openingBal > 0 ? openingBal : 0,
-          credit: openingBal < 0 ? -openingBal : 0,
-          running_balance: openingBal,
+          debit: openingBalance > 0 ? openingBalance : 0,
+          credit: openingBalance < 0 ? -openingBalance : 0,
+          running_balance: openingBalance,
           isOpening: true,
         },
-        ...periodLines,
       ]
+
+      for (const line of periodLines) {
+        running += (line.debit || 0) - (line.credit || 0)
+        line.running_balance = running
+        finalLines.push(line)
+      }
+
       setLedgerLines(finalLines)
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to load ledger")
