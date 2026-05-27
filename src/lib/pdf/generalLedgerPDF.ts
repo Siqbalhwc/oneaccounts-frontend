@@ -111,7 +111,7 @@ export async function generateGeneralLedgerPDF(data: GeneralLedgerPDFData): Prom
   // ── PERIOD (now below the separator, safe from being cut) ───────
   const periodY = HEADER_H + 5
   doc.setFont("helvetica", "italic").setFontSize(8).setTextColor(...MUTED)
-  doc.text(`Period: ${data.startDate} – ${data.endDate}`, ML, periodY)
+  doc.text(`Period: ${data.startDate} – ${data.endDate}`, PW - MR, periodY)
 
   // ── TABLE ───────────────────────────────────────────────────────
   const tableY = periodY + 5
