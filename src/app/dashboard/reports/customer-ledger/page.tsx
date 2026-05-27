@@ -22,14 +22,12 @@ export default function CustomerLedgerPage() {
   const { companyName, companyTagline, logoUrl } = useCompany()
   const canView = role === "admin" || role === "accountant"
 
-  // Customer selection
   const urlCustomerId = searchParams.get("customerId")
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>(urlCustomerId || "")
   const [customers, setCustomers] = useState<any[]>([])
   const [customer, setCustomer] = useState<any>(null)
   const [companyId, setCompanyId] = useState<string>("")
 
-  // Date filters
   const now = new Date()
   const [startDate, setStartDate] = useState(searchParams.get("startDate") || `${now.getFullYear()}-01-01`)
   const [endDate, setEndDate] = useState(searchParams.get("endDate") || now.toISOString().split("T")[0])
@@ -38,7 +36,6 @@ export default function CustomerLedgerPage() {
   const [loading, setLoading] = useState(true)
   const [errorMsg, setErrorMsg] = useState("")
 
-  // Sorting
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
@@ -59,14 +56,12 @@ export default function CustomerLedgerPage() {
     })
   }, [])
 
-  // If URL has customerId, auto-select it
   useEffect(() => {
     if (urlCustomerId && customers.length > 0) {
       setSelectedCustomerId(urlCustomerId)
     }
   }, [urlCustomerId, customers])
 
-  // Fetch customer details when selectedCustomerId changes
   useEffect(() => {
     if (!selectedCustomerId || !companyId) {
       setCustomer(null)
@@ -81,90 +76,94 @@ export default function CustomerLedgerPage() {
       .then(({ data }) => data && setCustomer(data))
   }, [selectedCustomerId, companyId])
 
-  // Fetch ledger lines with opening balance
+  // ── CORRECT LEDGER FETCH – same logic as Vendor Ledger ──────────────
   const fetchLedger = async () => {
     if (!selectedCustomerId || !companyId) return
     setLoading(true)
     setErrorMsg("")
+
     try {
       // 1. All sale invoices for this customer
-      const { data: invoices } = await supabase
+      const { data: allInvoices } = await supabase
         .from("invoices")
-        .select("id")
+        .select("id, total, invoice_no, date")
         .eq("party_id", selectedCustomerId)
         .eq("type", "sale")
         .is("deleted_at", null)
-      const invoiceIds = invoices?.map(inv => inv.id) || []
+        .order("date", { ascending: true })
 
-      // 2. All receipts for this customer
-      const { data: receipts } = await supabase
+      // 2. All receipts from this customer
+      const { data: allReceipts } = await supabase
         .from("receipts")
-        .select("id")
+        .select("id, amount, receipt_no, date")
         .eq("party_id", selectedCustomerId)
-      const receiptIds = receipts?.map(rec => rec.id) || []
+        .order("date", { ascending: true })
 
-      const sourceIds = [...invoiceIds, ...receiptIds].filter(Boolean)
-      if (sourceIds.length === 0) {
-        setLedgerLines([])
-        setLoading(false)
-        return
-      }
+      // 3. Compute opening balance = invoices before start - receipts before start
+      let openingBalance = 0
 
-      // 3. Fetch journal lines with these source_ids
-      let query = supabase
-        .from("journal_lines")
-        .select("id, debit, credit, journal_entries!inner(entry_no, date, description, deleted_at, company_id)")
-        .eq("company_id", companyId)
-        .is("journal_entries.deleted_at", null)
-        .eq("journal_entries.company_id", companyId)
-        .in("source_id", sourceIds)
-
-      const { data: lines } = await query
-      if (!lines) {
-        setLedgerLines([])
-        setLoading(false)
-        return
-      }
-
-      // 4. Separate opening (before start date) and period lines
-      let running = 0
       const periodLines: any[] = []
-      lines.forEach((l: any) => {
-        const date = l.journal_entries?.date
-        if (!date) return
-        const debit = l.debit || 0
-        const credit = l.credit || 0
-        if (date < startDate) {
-          running = running + debit - credit
-        } else if (date >= startDate && date <= endDate) {
-          running = running + debit - credit
+
+      // Process invoices (debit side – customer owes you)
+      for (const inv of allInvoices || []) {
+        if (inv.date < startDate) {
+          // Invoices increase what the customer owes (debit)
+          openingBalance += (inv.total || 0)
+        } else if (inv.date >= startDate && inv.date <= endDate) {
           periodLines.push({
-            id: l.id,
-            entry_no: l.journal_entries?.entry_no || "",
-            date,
-            description: l.journal_entries?.description || "",
-            debit,
-            credit,
-            running_balance: running,
+            id: `inv-${inv.id}`,
+            entry_no: `INV-${inv.invoice_no}`,
+            date: inv.date,
+            description: `Sales Invoice ${inv.invoice_no}`,
+            debit: inv.total || 0,
+            credit: 0,
+            running_balance: 0, // filled later
           })
         }
-      })
+      }
 
-      // Opening balance = net total before period lines
-      const openingBal = running - periodLines.reduce((s, pl) => s + pl.debit - pl.credit, 0)
-      const finalLines = [
+      // Process receipts (credit side – customer pays you)
+      for (const rec of allReceipts || []) {
+        if (rec.date < startDate) {
+          // Receipts decrease what the customer owes (credit)
+          openingBalance -= (rec.amount || 0)
+        } else if (rec.date >= startDate && rec.date <= endDate) {
+          periodLines.push({
+            id: `rec-${rec.id}`,
+            entry_no: `REC-${rec.receipt_no}`,
+            date: rec.date,
+            description: `Receipt ${rec.receipt_no}`,
+            debit: 0,
+            credit: rec.amount || 0,
+            running_balance: 0,
+          })
+        }
+      }
+
+      // Sort period lines by date
+      periodLines.sort((a, b) => a.date.localeCompare(b.date))
+
+      // Build final lines with running balance
+      const finalLines: any[] = [
         {
           id: "opening",
           entry_no: "",
           date: startDate,
           description: "Opening Balance",
-          debit: openingBal > 0 ? openingBal : 0,
-          credit: openingBal < 0 ? -openingBal : 0,
-          running_balance: openingBal,
+          debit: openingBalance > 0 ? openingBalance : 0,
+          credit: openingBalance < 0 ? -openingBalance : 0,
+          running_balance: openingBalance,
           isOpening: true,
         },
-        ...periodLines,
       ]
+
+      let running = openingBalance
+      for (const line of periodLines) {
+        running += (line.debit || 0) - (line.credit || 0)
+        line.running_balance = running
+        finalLines.push(line)
+      }
+
       setLedgerLines(finalLines)
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to load ledger")
@@ -177,7 +176,7 @@ export default function CustomerLedgerPage() {
     if (selectedCustomerId && companyId) fetchLedger()
   }, [selectedCustomerId, companyId, startDate, endDate])
 
-  // Sorting
+  // Sorting (unchanged)
   const sortedLines = useMemo(() => {
     const list = [...ledgerLines]
     list.sort((a, b) => {
@@ -314,19 +313,9 @@ export default function CustomerLedgerPage() {
               </option>
             ))}
           </select>
-          <input
-            type="date"
-            className="date-input"
-            value={startDate}
-            onChange={e => setStartDate(e.target.value)}
-          />
+          <input type="date" className="date-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
           <span style={{ color: "var(--text-muted)", fontSize: 12 }}>to</span>
-          <input
-            type="date"
-            className="date-input"
-            value={endDate}
-            onChange={e => setEndDate(e.target.value)}
-          />
+          <input type="date" className="date-input" value={endDate} onChange={e => setEndDate(e.target.value)} />
           <button className="btn btn-outline" onClick={fetchLedger}>Refresh</button>
           <button className="btn btn-outline" onClick={handlePrintPDF}>
             <Printer size={16} /> Print PDF
@@ -342,7 +331,6 @@ export default function CustomerLedgerPage() {
 
       {selectedCustomerId && customer ? (
         <>
-          {/* Customer info banner */}
           <div style={{
             background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12,
             padding: "12px 20px", marginBottom: 20, display: "flex", alignItems: "center", gap: 16
@@ -355,7 +343,6 @@ export default function CustomerLedgerPage() {
             </div>
           </div>
 
-          {/* Summary Cards */}
           <div className="summary-grid">
             <div className="summary-item">
               <div className="summary-label">Total Debits</div>
