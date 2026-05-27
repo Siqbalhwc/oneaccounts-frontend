@@ -22,12 +22,14 @@ export default function VendorLedgerPage() {
   const { companyName, companyTagline, logoUrl } = useCompany()
   const canView = role === "admin" || role === "accountant"
 
+  // Supplier selection
   const urlSupplierId = searchParams.get("supplierId")
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>(urlSupplierId || "")
   const [suppliers, setSuppliers] = useState<any[]>([])
   const [supplier, setSupplier] = useState<any>(null)
   const [companyId, setCompanyId] = useState<string>("")
 
+  // Date filters
   const now = new Date()
   const [startDate, setStartDate] = useState(searchParams.get("startDate") || `${now.getFullYear()}-01-01`)
   const [endDate, setEndDate] = useState(searchParams.get("endDate") || now.toISOString().split("T")[0])
@@ -36,6 +38,7 @@ export default function VendorLedgerPage() {
   const [loading, setLoading] = useState(true)
   const [errorMsg, setErrorMsg] = useState("")
 
+  // Sorting
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
@@ -56,12 +59,14 @@ export default function VendorLedgerPage() {
     })
   }, [])
 
+  // Auto-select from URL
   useEffect(() => {
     if (urlSupplierId && suppliers.length > 0) {
       setSelectedSupplierId(urlSupplierId)
     }
   }, [urlSupplierId, suppliers])
 
+  // Fetch supplier details
   useEffect(() => {
     if (!selectedSupplierId || !companyId) {
       setSupplier(null)
@@ -76,14 +81,19 @@ export default function VendorLedgerPage() {
       .then(({ data }) => data && setSupplier(data))
   }, [selectedSupplierId, companyId])
 
-  // ── CORRECT LEDGER FETCH using journal entries directly ──
+  // ── CORRECT LEDGER FETCH (detailed plan) ───────────────────────────────
   const fetchLedger = async () => {
     if (!selectedSupplierId || !companyId) return
     setLoading(true)
     setErrorMsg("")
 
     try {
-      // 1. Find the payable account (code 2000)
+      /*
+        STEP 1: Find the company's Accounts Payable account.
+        We use code "2000" – your system's default payable account.
+        Only journal lines belonging to this account are included,
+        so we never show expense or bank lines.
+      */
       const { data: payableAccount } = await supabase
         .from("accounts")
         .select("id")
@@ -98,26 +108,39 @@ export default function VendorLedgerPage() {
       }
       const payableAccountId = payableAccount.id
 
-      // 2. All purchase bills for this supplier (any date)
+      /*
+        STEP 2: Get all purchase bills for THIS supplier.
+        We use the bill's own ID because journal_lines.source_id
+        equals the bill's ID when a bill is posted.
+      */
       const { data: bills } = await supabase
         .from("invoices")
         .select("id")
-        .eq("party_id", selectedSupplierId)
+        .eq("party_id", selectedSupplierId)   // only this supplier
         .eq("type", "purchase")
         .is("deleted_at", null)
 
       const billIds = bills?.map(b => b.id) || []
 
-      // 3. All payments to this supplier
+      /*
+        STEP 3: Get all payments made to THIS supplier.
+        Again, the payment's ID matches journal_lines.source_id.
+      */
       const { data: payments } = await supabase
         .from("payments")
         .select("id")
-        .eq("party_id", selectedSupplierId)
+        .eq("party_id", selectedSupplierId)   // only this supplier
         .eq("party_type", "supplier")
 
       const paymentIds = payments?.map(p => p.id) || []
 
+      /*
+        STEP 4: Combine all source IDs.
+        These IDs ensure we only fetch journal lines that
+        belong to the selected supplier.
+      */
       const sourceIds = [...billIds, ...paymentIds].filter(Boolean)
+
       if (sourceIds.length === 0) {
         // No transactions at all → opening and closing are zero
         setLedgerLines([{
@@ -134,13 +157,20 @@ export default function VendorLedgerPage() {
         return
       }
 
-      // 4. Fetch all payable-side journal lines for these source IDs, ordered by date
+      /*
+        STEP 5: Fetch ONLY the payable-side journal lines for these source IDs.
+        Filter by account_id = payableAccountId to exclude expense/bank lines.
+        Filter by source_id IN (billIds + paymentIds) to isolate this supplier.
+        Join with journal_entries to get date/description.
+        Exclude soft-deleted journal entries.
+        Order by date ascending.
+      */
       const { data: allLines } = await supabase
         .from("journal_lines")
         .select("id, debit, credit, journal_entries!inner(entry_no, date, description, deleted_at)")
-        .eq("account_id", payableAccountId)
+        .eq("account_id", payableAccountId)           // only payable account
         .eq("company_id", companyId)
-        .in("source_id", sourceIds)
+        .in("source_id", sourceIds)                    // only this supplier's transactions
         .is("journal_entries.deleted_at", null)
         .order("date", { foreignTable: "journal_entries", ascending: true })
 
@@ -159,7 +189,13 @@ export default function VendorLedgerPage() {
         return
       }
 
-      // 5. Calculate opening balance (sum of movements before start date)
+      /*
+        STEP 6: Calculate opening balance.
+        For each journal line:
+          net = debit - credit
+          If date < startDate → add net to opening balance
+          If date between startDate and endDate → add to periodLines
+      */
       let openingBalance = 0
       const periodLines: any[] = []
 
@@ -178,12 +214,16 @@ export default function VendorLedgerPage() {
             description: line.journal_entries?.description || "",
             debit: line.debit || 0,
             credit: line.credit || 0,
-            running_balance: 0, // filled later
+            running_balance: 0, // will be filled below
           })
         }
       })
 
-      // 6. Build final ledger with running balances
+      /*
+        STEP 7: Build final ledger with running balances.
+        First row = opening balance.
+        Then each period line, updating the running balance as we go.
+      */
       let running = openingBalance
       const finalLines = [
         {
