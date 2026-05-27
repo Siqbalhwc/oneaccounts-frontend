@@ -9,63 +9,66 @@ import { useCompany } from "@/contexts/CompanyContext"
 import { generateGeneralLedgerPDF } from "@/lib/pdf/generalLedgerPDF"
 
 type SortField = "date" | "description" | "debit" | "credit" | "running_balance"
-type SortDir = "asc" | "desc"
+type SortDir   = "asc" | "desc"
 
 export default function GeneralLedgerPage() {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const router = useRouter()
+  const router       = useRouter()
   const searchParams = useSearchParams()
-  const { role } = useRole()
+  const { role }     = useRole()
   const { companyName, companyTagline, logoUrl } = useCompany()
   const canView = role === "admin" || role === "accountant"
 
   const urlAccountId = searchParams.get("accountId")
   const [selectedAccountId, setSelectedAccountId] = useState<string>(urlAccountId || "")
-  const [accounts, setAccounts] = useState<any[]>([])
-  const [account, setAccount] = useState<any>(null)
+  const [accounts, setAccounts]   = useState<any[]>([])
+  const [account,  setAccount]    = useState<any>(null)
   const [companyId, setCompanyId] = useState<string>("")
 
   const now = new Date()
   const [startDate, setStartDate] = useState(searchParams.get("startDate") || `${now.getFullYear()}-01-01`)
-  const [endDate, setEndDate] = useState(searchParams.get("endDate") || now.toISOString().split("T")[0])
+  const [endDate,   setEndDate]   = useState(searchParams.get("endDate")   || now.toISOString().split("T")[0])
 
-  // Tag filters
-  const [projects, setProjects] = useState<any[]>([])
-  const [donors, setDonors] = useState<any[]>([])
+  // Tag filter options
+  const [projects,   setProjects]   = useState<any[]>([])
+  const [donors,     setDonors]     = useState<any[]>([])
   const [activities, setActivities] = useState<any[]>([])
-  const [locations, setLocations] = useState<any[]>([])
-  const [projectId, setProjectId] = useState("")
-  const [donorId, setDonorId] = useState("")
+  const [locations,  setLocations]  = useState<any[]>([])
+
+  // Selected tag filter values
+  const [projectId,  setProjectId]  = useState("")
+  const [donorId,    setDonorId]    = useState("")
   const [activityId, setActivityId] = useState("")
   const [locationId, setLocationId] = useState("")
 
   const [ledgerLines, setLedgerLines] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [errorMsg, setErrorMsg] = useState("")
+  // tagLabels returned by the API for PDF use: { project: "Relief Fund", ... }
+  const [tagLabels,   setTagLabels]   = useState<Record<string, string>>({})
+  const [loading,   setLoading]   = useState(true)
+  const [errorMsg,  setErrorMsg]  = useState("")
 
   const [sortField, setSortField] = useState<SortField>("date")
-  const [sortDir, setSortDir] = useState<SortDir>("asc")
+  const [sortDir,   setSortDir]   = useState<SortDir>("asc")
 
-  // Fetch company ID, accounts, and tag options
+  // ── Fetch company ID, accounts, and tag options ───────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
-      if (cid) {
-        setCompanyId(cid)
-        supabase.from("accounts").select("id, code, name, type").eq("company_id", cid).order("code")
-          .then(({ data }) => data && setAccounts(data))
-        supabase.from("projects").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
-          .then(({ data }) => data && setProjects(data))
-        supabase.from("donors").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
-          .then(({ data }) => data && setDonors(data))
-        supabase.from("activities").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
-          .then(({ data }) => data && setActivities(data))
-        supabase.from("locations").select("id, name").eq("company_id", cid).order("name")
-          .then(({ data }) => data && setLocations(data))
-      }
+      if (!cid) return
+      setCompanyId(cid)
+      supabase.from("accounts")   .select("id, code, name, type").eq("company_id", cid).order("code")
+        .then(({ data }) => data && setAccounts(data))
+      supabase.from("projects")   .select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
+        .then(({ data }) => data && setProjects(data))
+      supabase.from("donors")     .select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
+        .then(({ data }) => data && setDonors(data))
+      supabase.from("activities") .select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
+        .then(({ data }) => data && setActivities(data))
+      supabase.from("locations")  .select("id, name").eq("company_id", cid).order("name")
+        .then(({ data }) => data && setLocations(data))
     })
   }, [])
 
@@ -75,34 +78,36 @@ export default function GeneralLedgerPage() {
 
   useEffect(() => {
     if (!selectedAccountId || !companyId) { setAccount(null); return }
-    supabase.from("accounts").select("id, code, name, type").eq("id", selectedAccountId).eq("company_id", companyId).single()
+    supabase.from("accounts")
+      .select("id, code, name, type")
+      .eq("id", selectedAccountId)
+      .eq("company_id", companyId)
+      .single()
       .then(({ data }) => data && setAccount(data))
   }, [selectedAccountId, companyId])
 
-  // ── Fetch ledger via secure API ──────────────────────────────────
+  // ── Fetch ledger via secure API ───────────────────────────────────
   const fetchLedger = async () => {
     if (!selectedAccountId || !companyId) return
     setLoading(true)
     setErrorMsg("")
 
-    const params = new URLSearchParams({
-      accountId: selectedAccountId,
-      startDate,
-      endDate,
-    })
-    if (projectId) params.append("projectId", projectId)
-    if (donorId) params.append("donorId", donorId)
+    const params = new URLSearchParams({ accountId: selectedAccountId, startDate, endDate })
+    if (projectId)  params.append("projectId",  projectId)
+    if (donorId)    params.append("donorId",    donorId)
     if (activityId) params.append("activityId", activityId)
     if (locationId) params.append("locationId", locationId)
 
     try {
-      const res = await fetch(`/api/general-ledger?${params.toString()}`)
+      const res  = await fetch(`/api/general-ledger?${params.toString()}`)
       const data = await res.json()
       if (data.error) {
         setErrorMsg(data.error)
         setLedgerLines([])
+        setTagLabels({})
       } else {
-        setLedgerLines(data.lines || [])
+        setLedgerLines(data.lines   || [])
+        setTagLabels(data.tagLabels || {})   // ← store tag names for PDF
       }
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to load ledger")
@@ -115,21 +120,21 @@ export default function GeneralLedgerPage() {
     if (selectedAccountId && companyId) fetchLedger()
   }, [selectedAccountId, companyId, startDate, endDate, projectId, donorId, activityId, locationId])
 
-  // Sorting (unchanged)
+  // ── Sorting ───────────────────────────────────────────────────────
   const sortedLines = useMemo(() => {
     const list = [...ledgerLines]
     list.sort((a, b) => {
       if (a.isOpening && !b.isOpening) return -1
       if (!a.isOpening && b.isOpening) return 1
       let valA: any, valB: any
-      if (sortField === "debit" || sortField === "credit" || sortField === "running_balance") {
+      if (["debit", "credit", "running_balance"].includes(sortField)) {
         valA = a[sortField] || 0; valB = b[sortField] || 0
       } else {
         valA = (a[sortField] || "").toString().toLowerCase()
         valB = (b[sortField] || "").toString().toLowerCase()
       }
       if (valA < valB) return sortDir === "asc" ? -1 : 1
-      if (valA > valB) return sortDir === "asc" ? 1 : -1
+      if (valA > valB) return sortDir === "asc" ?  1 : -1
       return 0
     })
     return list
@@ -144,29 +149,37 @@ export default function GeneralLedgerPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  const totalDebit = sortedLines.filter(l => !l.isOpening).reduce((s, l) => s + l.debit, 0)
-  const totalCredit = sortedLines.filter(l => !l.isOpening).reduce((s, l) => s + l.credit, 0)
-  const closingBalance = sortedLines.length > 0 ? sortedLines[sortedLines.length - 1].running_balance : 0
+  const totalDebit    = sortedLines.filter(l => !l.isOpening).reduce((s, l) => s + l.debit,  0)
+  const totalCredit   = sortedLines.filter(l => !l.isOpening).reduce((s, l) => s + l.credit, 0)
+  const closingBalance = sortedLines.length > 0
+    ? sortedLines[sortedLines.length - 1].running_balance
+    : 0
 
+  // ── PDF ───────────────────────────────────────────────────────────
   const handlePrintPDF = async () => {
     if (!account || sortedLines.length === 0) return
-    const pdfData = {
-      companyName: companyName || "",
-      companyAddress: "", companyPhone: "", companyEmail: "",
+    const doc = await generateGeneralLedgerPDF({
+      companyName:    companyName    || "",
+      companyAddress: "",
+      companyPhone:   "",
+      companyEmail:   "",
       companyTagline: companyTagline || "",
       logoUrl,
-      accountName: account.name,
-      accountCode: account.code,
-      startDate, endDate,
-      totalDebit, totalCredit, closingBalance,
-      ledgerLines: sortedLines,
-    }
-    const doc = await generateGeneralLedgerPDF(pdfData)
+      accountName:    account.name,
+      accountCode:    account.code,
+      startDate,
+      endDate,
+      totalDebit,
+      totalCredit,
+      closingBalance,
+      ledgerLines:    sortedLines,
+      tagLabels,        // ← pass resolved tag names to PDF
+    })
     doc.save(`General_Ledger_${account.code}.pdf`)
   }
 
-  if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
-  if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
+  if (!role)     return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
+  if (!canView)  return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -193,6 +206,7 @@ export default function GeneralLedgerPage() {
         @media (max-width: 640px) { .ledger-header, .ledger-row { grid-template-columns: 70px 80px 1fr 80px 80px 100px; } }
       `}</style>
 
+      {/* ── Toolbar ── */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
         <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}><ArrowLeft size={16} /></button>
         <div style={{ flex: 1, minWidth: 200 }}>
@@ -206,19 +220,19 @@ export default function GeneralLedgerPage() {
           </select>
           <input type="date" className="date-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
           <span style={{ color: "var(--text-muted)", fontSize: 12 }}>to</span>
-          <input type="date" className="date-input" value={endDate} onChange={e => setEndDate(e.target.value)} />
+          <input type="date" className="date-input" value={endDate}   onChange={e => setEndDate(e.target.value)} />
           <button className="btn btn-outline" onClick={fetchLedger}>Refresh</button>
           <button className="btn btn-outline" onClick={handlePrintPDF}><Printer size={16} /> Print PDF</button>
         </div>
       </div>
 
-      {/* ── Tag filters (optional) ── */}
+      {/* ── Tag filters ── */}
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-        <select className="select-input" value={projectId} onChange={e => setProjectId(e.target.value)}>
+        <select className="select-input" value={projectId}  onChange={e => setProjectId(e.target.value)}>
           <option value="">All Projects</option>
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        <select className="select-input" value={donorId} onChange={e => setDonorId(e.target.value)}>
+        <select className="select-input" value={donorId}    onChange={e => setDonorId(e.target.value)}>
           <option value="">All Donors</option>
           {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
         </select>
@@ -232,25 +246,50 @@ export default function GeneralLedgerPage() {
         </select>
       </div>
 
-      {/* ── Error / Data display ── */}
-      {errorMsg && <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, border: "1px solid #FECACA" }}>{errorMsg}</div>}
+      {errorMsg && (
+        <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, border: "1px solid #FECACA" }}>
+          {errorMsg}
+        </div>
+      )}
 
       {selectedAccountId && account ? (
         <>
+          {/* Account badge */}
           <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 20px", marginBottom: 20, display: "flex", alignItems: "center", gap: 16 }}>
             <div style={{ background: "var(--bg-soft)", borderRadius: 8, padding: "6px 12px", fontWeight: 700, fontSize: 14, color: "var(--primary)" }}>{account.code}</div>
             <div>
               <div style={{ fontWeight: 700, color: "var(--text)" }}>{account.name}</div>
               <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{account.type}</div>
             </div>
+            {/* Active tag chips */}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginLeft: "auto" }}>
+              {tagLabels.project  && <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, background: "var(--bg-soft)", color: "var(--text-muted)" }}>Project: {tagLabels.project}</span>}
+              {tagLabels.donor    && <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, background: "var(--bg-soft)", color: "var(--text-muted)" }}>Donor: {tagLabels.donor}</span>}
+              {tagLabels.activity && <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, background: "var(--bg-soft)", color: "var(--text-muted)" }}>Activity: {tagLabels.activity}</span>}
+              {tagLabels.location && <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, background: "var(--bg-soft)", color: "var(--text-muted)" }}>Location: {tagLabels.location}</span>}
+            </div>
           </div>
 
+          {/* Summary cards */}
           <div className="summary-grid">
-            <div className="summary-item"><div className="summary-label">Total Debits</div><div className="summary-value" style={{ color: "#EF4444" }}>PKR {totalDebit.toLocaleString()}</div></div>
-            <div className="summary-item"><div className="summary-label">Total Credits</div><div className="summary-value" style={{ color: "#10B981" }}>PKR {totalCredit.toLocaleString()}</div></div>
-            <div className="summary-item"><div className="summary-label">Closing Balance</div><div className="summary-value" style={{ color: closingBalance >= 0 ? "#10B981" : "#EF4444" }}>PKR {closingBalance.toLocaleString()}</div></div>
+            <div className="summary-item">
+              <div className="summary-label">Total Debits</div>
+              <div className="summary-value" style={{ color: "#EF4444" }}>PKR {totalDebit.toLocaleString("en-PK")}</div>
+            </div>
+            <div className="summary-item">
+              <div className="summary-label">Total Credits</div>
+              <div className="summary-value" style={{ color: "#10B981" }}>PKR {totalCredit.toLocaleString("en-PK")}</div>
+            </div>
+            <div className="summary-item">
+              <div className="summary-label">Closing Balance</div>
+              <div className="summary-value" style={{ color: closingBalance >= 0 ? "#10B981" : "#EF4444" }}>
+                PKR {Math.abs(closingBalance).toLocaleString("en-PK")}
+                <span style={{ fontSize: 12, fontWeight: 400, marginLeft: 4 }}>{closingBalance >= 0 ? "Dr" : "Cr"}</span>
+              </div>
+            </div>
           </div>
 
+          {/* Ledger table */}
           {loading ? (
             <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading ledger entries…</div>
           ) : sortedLines.length === 0 ? (
@@ -261,18 +300,21 @@ export default function GeneralLedgerPage() {
                 <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
                 <button className="sort-btn" onClick={() => handleSort("description")}>Entry #{getSortIcon("description")}</button>
                 <span>Description</span>
-                <button className="sort-btn" onClick={() => handleSort("debit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
-                <button className="sort-btn" onClick={() => handleSort("credit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
-                <button className="sort-btn" onClick={() => handleSort("running_balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("running_balance")}</button>
+                <button className="sort-btn" onClick={() => handleSort("debit")}            style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
+                <button className="sort-btn" onClick={() => handleSort("credit")}           style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
+                <button className="sort-btn" onClick={() => handleSort("running_balance")}  style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("running_balance")}</button>
               </div>
               {sortedLines.map((line, idx) => (
                 <div key={line.id || idx} className={`ledger-row ${line.isOpening ? "opening-row" : ""}`}>
                   <span style={{ fontSize: 12 }}>{line.isOpening ? "" : line.date}</span>
                   <span style={{ color: "var(--primary)", fontSize: 12 }}>{line.entry_no}</span>
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line.description}</span>
-                  <span style={{ textAlign: "right", color: line.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit > 0 ? 600 : 400 }}>{line.debit > 0 ? `PKR ${line.debit.toLocaleString()}` : "—"}</span>
-                  <span style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.credit > 0 ? 600 : 400 }}>{line.credit > 0 ? `PKR ${line.credit.toLocaleString()}` : "—"}</span>
-                  <span style={{ textAlign: "right", fontWeight: 600, color: line.running_balance >= 0 ? "#10B981" : "#EF4444" }}>PKR {line.running_balance.toLocaleString()}</span>
+                  <span style={{ textAlign: "right", color: line.debit  > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit  > 0 ? 600 : 400 }}>{line.debit  > 0 ? `PKR ${line.debit.toLocaleString("en-PK")}`  : "—"}</span>
+                  <span style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.credit > 0 ? 600 : 400 }}>{line.credit > 0 ? `PKR ${line.credit.toLocaleString("en-PK")}` : "—"}</span>
+                  <span style={{ textAlign: "right", fontWeight: 600, color: line.running_balance >= 0 ? "#10B981" : "#EF4444" }}>
+                    PKR {Math.abs(line.running_balance).toLocaleString("en-PK")}
+                    <span style={{ fontSize: 10, marginLeft: 2 }}>{line.running_balance >= 0 ? "Dr" : "Cr"}</span>
+                  </span>
                 </div>
               ))}
             </div>
