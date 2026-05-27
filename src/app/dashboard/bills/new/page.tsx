@@ -63,6 +63,11 @@ export default function NewBillPage() {
   const [budgetInfo, setBudgetInfo] = useState<Record<string, { budget: number; spent: number; available: number; hasBudget: boolean }>>({})
   const [budgetError, setBudgetError] = useState("")
 
+  // ── Location → activities mapping (from budgets) ──
+  const [locationActivitiesMap, setLocationActivitiesMap] = useState<Record<number, number[]>>({})
+  // ── Activity → project / donor cache ──
+  const [activityProjectDonor, setActivityProjectDonor] = useState<Record<number, { projectName: string; donorName: string | null }>>({})
+
   const fiscalYear = new Date().getFullYear()
 
   useEffect(() => {
@@ -90,19 +95,43 @@ export default function NewBillPage() {
         .order("code")
         .then(r => r.data && setAllAccounts(r.data))
 
-      if (isNGO) {
-        supabase.from("locations").select("id,name")
-          .eq("company_id", cid).order("name")
-          .then(r => r.data && setLocations(r.data))
+      // Load locations and activities (always, for NGO features)
+      supabase.from("locations").select("id,name")
+        .eq("company_id", cid).order("name")
+        .then(r => r.data && setLocations(r.data))
 
-        supabase.from("activities").select("id,name")
-          .eq("company_id", cid).order("name")
-          .then(r => r.data && setActivities(r.data))
-      }
+      supabase.from("activities").select("id,name,project_id")
+        .eq("company_id", cid).order("name")
+        .then(r => r.data && setActivities(r.data))
+
+      // Build location → activity map from budgets
+      supabase.from("budgets")
+        .select("location_id, activity_id")
+        .eq("company_id", cid)
+        .eq("fiscal_year", fiscalYear)
+        .is("month", null)
+        .then(({ data: budgetRows }) => {
+          const map: Record<number, Set<number>> = {}
+          if (budgetRows) {
+            budgetRows.forEach((b: any) => {
+              const locId = b.location_id
+              const actId = b.activity_id
+              if (locId && actId) {
+                if (!map[locId]) map[locId] = new Set()
+                map[locId].add(actId)
+              }
+            })
+          }
+          const finalMap: Record<number, number[]> = {}
+          for (const locId of Object.keys(map)) {
+            finalMap[Number(locId)] = Array.from(map[Number(locId)])
+          }
+          setLocationActivitiesMap(finalMap)
+        })
 
       setLoading(false)
     })
-  }, [showProducts, isNGO])
+  }, [showProducts])
 
   const loadSuppliers = (cid?: string) => {
     const targetId = cid || companyId
@@ -125,15 +154,14 @@ export default function NewBillPage() {
       .then(r => r.data && setProducts(r.data))
   }
 
-  // Fetch open POs for the selected supplier, computing already‑billed amount
+  // PO logic (unchanged) …
+
   useEffect(() => {
     if (!companyId || !supplierId || !showPO) {
       setOpenPOs([])
       setPoId(null)
       return
     }
-
-    // 1. Fetch approved POs with items using nested select (original method)
     supabase
       .from("purchase_orders")
       .select("id, po_no, expected_delivery, items:purchase_order_items(id,product_id,description,qty,unit_price,total)")
@@ -142,16 +170,10 @@ export default function NewBillPage() {
       .eq("status", "Approved")
       .order("po_no")
       .then(async ({ data: pos }) => {
-        if (!pos || pos.length === 0) {
-          setOpenPOs([])
-          return
-        }
-
-        // For each PO, ensure items array exists (fallback if FK missing)
+        if (!pos || pos.length === 0) { setOpenPOs([]); return }
         const enriched = []
         for (const po of pos) {
           let items = po.items || []
-          // If nested select didn't work, fetch items manually
           if (items.length === 0) {
             const { data: manualItems } = await supabase
               .from("purchase_order_items")
@@ -159,10 +181,7 @@ export default function NewBillPage() {
               .eq("po_id", po.id)
             items = manualItems || []
           }
-
           const totalPO = items.reduce((sum: number, i: any) => sum + (i.total || 0), 0)
-
-          // 2. Fetch already billed amount for this PO
           const { data: linkedBills } = await supabase
             .from("invoices")
             .select("id, total")
@@ -170,28 +189,16 @@ export default function NewBillPage() {
             .eq("company_id", companyId)
             .eq("po_id", po.id)
             .is("deleted_at", null)
-
           const billed = (linkedBills || []).reduce((s: number, b: any) => s + (b.total || 0), 0)
           const remaining = totalPO - billed
-
-          console.log(`PO ${po.po_no}: totalPO=${totalPO}, billed=${billed}, remaining=${remaining}`)
-
-          enriched.push({
-            ...po,
-            items,
-            totalPO,
-            billed,
-            remaining,
-          })
+          enriched.push({ ...po, items, totalPO, billed, remaining })
         }
-
-        // Only keep POs with remaining > 0
-        const filtered = enriched.filter(po => po.remaining > 0)
-        setOpenPOs(filtered)
+        setOpenPOs(enriched.filter(po => po.remaining > 0))
       })
   }, [companyId, supplierId, showPO])
 
-  // Load existing bill data for editing
+  // Load existing bill for editing (unchanged) …
+
   useEffect(() => {
     if (!editId || !companyId) return
     supabase.from("invoices")
@@ -250,7 +257,7 @@ export default function NewBillPage() {
     setSupplierId(null)
     setSelectedSupplier(null)
     setSupplierSearch("")
-    setShowSupplierList(true)   // intentionally opens search – but redirect avoids this after save
+    setShowSupplierList(true)
     setPoId(null)
     setPoRemaining(0)
   }
@@ -273,17 +280,11 @@ export default function NewBillPage() {
   }
 
   const handleSelectPO = (selectedPOId: number | null) => {
-    if (selectedPOId === null) {
-      setPoId(null)
-      setPoRemaining(0)
-      return
-    }
+    if (selectedPOId === null) { setPoId(null); setPoRemaining(0); return }
     const selectedPO = openPOs.find(p => p.id === selectedPOId)
     if (!selectedPO) return
-
     setPoId(selectedPOId)
     setPoRemaining(selectedPO.remaining)
-
     const poItems = (selectedPO.items || []).map((item: any) => ({
       product_id: item.product_id || null,
       description: item.description || "",
@@ -330,48 +331,106 @@ export default function NewBillPage() {
     }])
   }
 
+  // ── Updated updateItem ──────────────────────────────────────────────
   const updateItem = async (idx: number, field: string, value: any) => {
     const updated = [...items]
     updated[idx] = { ...updated[idx], [field]: value }
+
     if (field === "qty" || field === "unit_price") {
       updated[idx].total = updated[idx].qty * updated[idx].unit_price
     }
-    if ((field === "activity_id" || field === "account_id") && updated[idx].activity_id && updated[idx].account_id) {
-      fetchBudget(Number(updated[idx].activity_id), Number(updated[idx].account_id))
+
+    // When location changes, reset activity (if the new location doesn't contain it)
+    if (field === "location_id") {
+      const locId = Number(value)
+      const allowedActivities = locId ? (locationActivitiesMap[locId] || []) : activities.map(a => a.id)
+      if (updated[idx].activity_id && !allowedActivities.includes(Number(updated[idx].activity_id))) {
+        updated[idx].activity_id = ""
+        // Remove cached project/donor
+      }
     }
+
+    // When activity changes, fetch project/donor and budget
+    if (field === "activity_id" && updated[idx].activity_id && updated[idx].account_id) {
+      const actId = Number(updated[idx].activity_id)
+      const locId = updated[idx].location_id ? Number(updated[idx].location_id) : null
+      // Fetch project / donor
+      if (!activityProjectDonor[actId]) {
+        const { data: actData } = await supabase.from("activities")
+          .select("project_id, projects(name, donor_id)")
+          .eq("id", actId)
+          .single()
+        if (actData) {
+          const projectName = actData.projects?.name || ""
+          let donorName: string | null = null
+          if (actData.projects?.donor_id) {
+            const { data: donor } = await supabase.from("donors")
+              .select("name")
+              .eq("id", actData.projects.donor_id)
+              .single()
+            donorName = donor?.name || null
+          }
+          setActivityProjectDonor(prev => ({
+            ...prev,
+            [actId]: { projectName, donorName },
+          }))
+        }
+      }
+      // Fetch budget for activity+location+account
+      fetchBudget(actId, Number(updated[idx].account_id), locId)
+    }
+
+    if ((field === "account_id" || field === "location_id") && updated[idx].activity_id && updated[idx].account_id) {
+      const actId = Number(updated[idx].activity_id)
+      const locId = updated[idx].location_id ? Number(updated[idx].location_id) : null
+      fetchBudget(actId, Number(updated[idx].account_id), locId)
+    }
+
     setItems(updated)
     checkBudgetOverrun(updated)
   }
 
-  const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
-
-  const fetchBudget = async (activityId: number, accountId: number) => {
-    const key = `${activityId}_${accountId}`
+  // ── Budget fetch now includes location ──────────────────────────────
+  const fetchBudget = async (activityId: number, accountId: number, locationId: number | null) => {
+    const key = `${activityId}_${locationId || 'any'}_${accountId}`
     if (budgetInfo[key]) return
-    const { data: budgetRows } = await supabase.from("budgets")
+
+    let budgetQuery = supabase.from("budgets")
       .select("budgeted_amount")
       .eq("company_id", companyId)
       .eq("activity_id", activityId)
       .eq("account_id", accountId)
       .eq("fiscal_year", fiscalYear)
       .is("month", null)
-      .maybeSingle()
-    const { data: spentRows } = await supabase.from("journal_lines")
+
+    if (locationId) budgetQuery = budgetQuery.eq("location_id", locationId)
+
+    const { data: budgetRow } = await budgetQuery.maybeSingle()
+
+    let spentQuery = supabase.from("journal_lines")
       .select("debit, credit")
       .eq("company_id", companyId)
       .eq("activity_id", activityId)
       .eq("account_id", accountId)
+
+    if (locationId) spentQuery = spentQuery.eq("location_id", locationId)
+
+    const { data: spentRows } = await spentQuery
+
     const spent = (spentRows || []).reduce((sum, line) => sum + (line.debit || 0) - (line.credit || 0), 0)
-    const budget = budgetRows?.budgeted_amount || 0
+    const budget = budgetRow?.budgeted_amount || 0
     const available = budget - spent
-    setBudgetInfo(prev => ({ ...prev, [key]: { budget, spent, available, hasBudget: budgetRows !== null } }))
+
+    setBudgetInfo(prev => ({ ...prev, [key]: { budget, spent, available, hasBudget: budgetRow !== null } }))
   }
 
+  // ── Budget overrun check ────────────────────────────────────────────
   const checkBudgetOverrun = (currentItems: any[]) => {
     let overBudget = false
     for (const item of currentItems) {
       if (!item.product_id && item.activity_id && item.account_id) {
-        const key = `${item.activity_id}_${item.account_id}`
+        const locId = item.location_id ? Number(item.location_id) : null
+        const key = `${item.activity_id}_${locId || 'any'}_${item.account_id}`
         const info = budgetInfo[key]
         if (info && info.hasBudget && item.total > info.available) {
           overBudget = true
@@ -390,30 +449,19 @@ export default function NewBillPage() {
 
     for (const item of items) {
       if (!item.product_id) {
-        if (isNGO) {
-          if (!item.location_id || !item.activity_id || !item.account_id) {
-            setError("Each manual line must have Location, Activity, and GL Account selected")
-            return
-          }
-        } else {
-          if (!item.account_id) {
-            setError("Each manual line must have a GL Account selected")
-            return
-          }
-        }
+        const showLoc = isNGO || locations.length > 0
+        const showAct = isNGO || activities.length > 0
+        if (showLoc && !item.location_id) { setError("Each manual line must have Location selected"); return }
+        if (showAct && !item.activity_id) { setError("Each manual line must have Activity selected"); return }
+        if (!item.account_id) { setError("Each manual line must have a GL Account selected"); return }
       }
     }
 
-    if (budgetError) {
-      setError("Cannot save: some lines exceed the available budget.")
+    if (budgetError) { setError("Cannot save: some lines exceed the available budget."); return }
+
+    if (poId && poRemaining > 0 && totalAmount > poRemaining) {
+      setError(`Bill total exceeds remaining PO balance.`)
       return
-    }
-
-    if (poId && poRemaining > 0) {
-      if (totalAmount > poRemaining) {
-        setError(`Bill total (PKR ${totalAmount.toLocaleString()}) exceeds the remaining PO balance (PKR ${poRemaining.toLocaleString()}).`)
-        return
-      }
     }
 
     setSaving(true); setError("")
@@ -435,39 +483,20 @@ export default function NewBillPage() {
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: editId || undefined,
-          party_id: supplierId,
-          invoice_date: billDate,
-          due_date: dueDate,
-          items: payloadItems,
-          reference, notes,
-          po_id: poId || null,
-        }),
+        body: JSON.stringify({ id: editId || undefined, party_id: supplierId, invoice_date: billDate, due_date: dueDate, items: payloadItems, reference, notes, po_id: poId || null }),
       })
       const result = await res.json()
-      if (!result.success) {
-        setError(result.error || "Failed to save bill")
-        setSaving(false)
-        return
-      }
+      if (!result.success) { setError(result.error || "Failed to save bill"); setSaving(false); return }
 
-      // Show success message briefly, then redirect
       const savedBillId = result.bill?.id || editId
       setFlash(`✅ Bill ${editId ? "updated" : "saved"} successfully!`)
       loadSuppliers()
       setSaving(false)
 
-      // Redirect after a short delay – for new bills go to the detail page
       if (savedBillId) {
-        setTimeout(() => {
-          router.push(`/dashboard/bills/${savedBillId}`)
-        }, 800)
+        setTimeout(() => router.push(`/dashboard/bills/${savedBillId}`), 800)
       } else {
-        // Fallback: go to bill list
-        setTimeout(() => {
-          router.push("/dashboard/bills")
-        }, 800)
+        setTimeout(() => router.push("/dashboard/bills"), 800)
       }
     } catch {
       setError("Network error")
@@ -492,12 +521,7 @@ export default function NewBillPage() {
       customerAddress: "",
       customerPhone: "",
       customerEmail: "",
-      items: items.map(i => ({
-        description: i.description || "",
-        qty: i.qty || 0,
-        unit_price: i.unit_price || 0,
-        total: i.total || 0,
-      })),
+      items: items.map(i => ({ description: i.description || "", qty: i.qty || 0, unit_price: i.unit_price || 0, total: i.total || 0 })),
       subtotal: totalAmount,
       total: totalAmount,
       status: "Unpaid",
@@ -522,81 +546,44 @@ export default function NewBillPage() {
     return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>Loading bill form…</div>
   }
 
+  // ── Helper to get allowed activities for a given location ──
+  const getFilteredActivities = (locationId: string) => {
+    const locNum = Number(locationId)
+    if (!locNum) return activities
+    const allowed = locationActivitiesMap[locNum]
+    if (!allowed || allowed.length === 0) return activities
+    return activities.filter(a => allowed.includes(a.id))
+  }
+
   return (
     <div style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .inv-shell { max-width: 100%; margin: 0 auto; }
         .inv-title { font-size: 18px; font-weight: 700; color: var(--text); }
-        .inv-card {
-          background: var(--card); border-radius: 12px; border: 1px solid var(--border);
-          padding: 16px 20px; box-shadow: var(--shadow-sm);
-          margin-bottom: 12px;
-        }
-        .inv-label {
-          font-size: 10px; font-weight: 600; color: var(--text-muted);
-          text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block;
-        }
-        .inv-input, .inv-select {
-          width: 100%; height: 38px; border: 1.5px solid var(--border);
-          border-radius: 8px; padding: 0 12px; font-size: 13px;
-          font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box;
-        }
+        .inv-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 16px 20px; box-shadow: var(--shadow-sm); margin-bottom: 12px; }
+        .inv-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block; }
+        .inv-input, .inv-select { width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: 13px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box; }
         .inv-input:focus, .inv-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
         .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .inv-btn {
-          display: inline-flex; align-items: center; gap: 6px;
-          padding: 8px 14px; border-radius: 8px; font-size: 13px;
-          font-weight: 600; cursor: pointer; border: 1.5px solid var(--border);
-          background: transparent; color: var(--text-muted); font-family: inherit;
-          transition: all 0.15s; white-space: nowrap;
-        }
+        .inv-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; transition: all 0.15s; white-space: nowrap; }
         .inv-btn:hover { background: var(--card-hover); }
-
-        .inv-item-row {
-          display: grid;
-          grid-template-columns: ${isNGO ? "2fr 70px 90px 110px 110px 80px 90px 30px" : "2fr 70px 90px 120px 90px 30px"};
-          gap: 6px; align-items: center; padding: 6px 0;
-          border-bottom: 1px solid var(--border);
-        }
-        .inv-item-header {
-          display: grid;
-          grid-template-columns: ${isNGO ? "2fr 70px 90px 110px 110px 80px 90px 30px" : "2fr 70px 90px 120px 90px 30px"};
-          gap: 6px; font-size: 9px; font-weight: 700;
-          text-transform: uppercase; color: var(--text-muted); padding-bottom: 6px;
-        }
-
+        .inv-item-row { display: grid; grid-template-columns: ${isNGO || locations.length > 0 || activities.length > 0 ? "2fr 70px 90px 110px 110px 80px 90px 30px" : "2fr 70px 90px 120px 90px 30px"}; gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
+        .inv-item-header { display: grid; grid-template-columns: ${isNGO || locations.length > 0 || activities.length > 0 ? "2fr 70px 90px 110px 110px 80px 90px 30px" : "2fr 70px 90px 120px 90px 30px"}; gap: 6px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); padding-bottom: 6px; }
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
-        .cust-dropdown {
-          position: absolute; top: calc(100% + 4px); left: 0; right: 0;
-          background: var(--card); border: 1.5px solid var(--border); border-radius: 10px;
-          max-height: 220px; overflow-y: auto; z-index: 100;
-          box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-        }
-        .cust-option {
-          padding: 8px 12px; cursor: pointer;
-          border-bottom: 1px solid var(--border);
-          display: flex; justify-content: space-between; align-items: center;
-        }
+        .cust-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; max-height: 220px; overflow-y: auto; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
+        .cust-option { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
         .cust-option:last-child { border-bottom: none; }
         .cust-option:hover { background: var(--card-hover); }
         .cust-option-name { font-size: 13px; font-weight: 600; color: var(--text); }
         .cust-option-meta { font-size: 11px; color: var(--text-muted); }
         .cust-option-bal { font-size: 12px; font-weight: 600; color: var(--primary); white-space: nowrap; }
-        .cust-selected-badge {
-          display: inline-flex; align-items: center; gap: 6px;
-          background: var(--card); border: 1.5px solid var(--border);
-          border-radius: 8px; padding: 6px 12px; font-size: 13px;
-          font-weight: 600; color: var(--text); width: 100%; cursor: pointer;
-        }
-
+        .cust-selected-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 600; color: var(--text); width: 100%; cursor: pointer; }
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
         @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
-
         .budget-warning { background: var(--card); border: 1px solid #EF4444; color: #FCA5A5; padding: 8px 12px; border-radius: 6px; font-size: 12px; display: flex; align-items: center; gap: 6px; }
-
-        input[type="number"]::-webkit-inner-spin-button,
-        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .project-donor-info { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+        input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
       `}</style>
 
@@ -613,18 +600,15 @@ export default function NewBillPage() {
         </div>
 
         {error && (
-          <div style={{ background: "var(--card)", border: "1px solid #EF4444", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
-            {error}
-          </div>
+          <div style={{ background: "var(--card)", border: "1px solid #EF4444", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>
         )}
         {flash && (
-          <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
-            <CheckCircle size={16} /> {flash}
-          </div>
+          <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>
         )}
 
         <div className="header-grid">
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {/* Supplier selection card (unchanged) */}
             <div className="inv-card">
               <label className="inv-label">Supplier *</label>
               <div className="cust-wrap" ref={supplierRef}>
@@ -639,16 +623,9 @@ export default function NewBillPage() {
                   <>
                     <div className="cust-input-row">
                       <Search size={14} style={{ position: "absolute", left: 10, color: "var(--text-muted)" }} />
-                      <input
-                        className="inv-input"
-                        style={{ paddingLeft: 32, paddingRight: 32 }}
-                        placeholder="Search by name, code or phone..."
-                        value={supplierSearch}
+                      <input className="inv-input" style={{ paddingLeft: 32, paddingRight: 32 }} placeholder="Search by name, code or phone..." value={supplierSearch}
                         onChange={e => { setSupplierSearch(e.target.value); setShowSupplierList(true) }}
-                        onFocus={() => setShowSupplierList(true)}
-                        onClick={() => setShowSupplierList(true)}
-                        autoComplete="off"
-                      />
+                        onFocus={() => setShowSupplierList(true)} onClick={() => setShowSupplierList(true)} autoComplete="off" />
                       {supplierSearch && <button onClick={() => setSupplierSearch("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}><X size={13} /></button>}
                     </div>
                     {showSupplierList && (
@@ -658,10 +635,7 @@ export default function NewBillPage() {
                         ) : (
                           filteredSuppliers.map(s => (
                             <div key={s.id} className="cust-option" onMouseDown={() => selectSupplier(s)}>
-                              <div>
-                                <div className="cust-option-name">{s.name}</div>
-                                <div className="cust-option-meta">{s.code}{s.phone ? ` · ${s.phone}` : ""}</div>
-                              </div>
+                              <div><div className="cust-option-name">{s.name}</div><div className="cust-option-meta">{s.code}{s.phone ? ` · ${s.phone}` : ""}</div></div>
                               <div className="cust-option-bal">PKR {(s.balance || 0).toLocaleString()}</div>
                             </div>
                           ))
@@ -672,26 +646,18 @@ export default function NewBillPage() {
                 )}
               </div>
 
-              {/* PO linking dropdown – only shows POs with remaining balance */}
+              {/* PO linking (unchanged) */}
               {showPO && selectedSupplier && openPOs.length > 0 && (
                 <div style={{ marginTop: 14 }}>
                   <label className="inv-label">Link to Purchase Order (optional)</label>
-                  <select
-                    className="inv-select"
-                    value={poId ?? ""}
-                    onChange={(e) => handleSelectPO(e.target.value ? Number(e.target.value) : null)}
-                  >
+                  <select className="inv-select" value={poId ?? ""} onChange={(e) => handleSelectPO(e.target.value ? Number(e.target.value) : null)}>
                     <option value="">— None —</option>
                     {openPOs.map(po => (
-                      <option key={po.id} value={po.id}>
-                        {po.po_no} — Remaining: PKR {po.remaining.toLocaleString()}
-                      </option>
+                      <option key={po.id} value={po.id}>{po.po_no} — Remaining: PKR {po.remaining.toLocaleString()}</option>
                     ))}
                   </select>
                   {poId && poRemaining > 0 && (
-                    <div style={{ fontSize: 12, marginTop: 4, color: "var(--text-muted)" }}>
-                      PO balance remaining: PKR <strong>{poRemaining.toLocaleString()}</strong>
-                    </div>
+                    <div style={{ fontSize: 12, marginTop: 4, color: "var(--text-muted)" }}>PO balance remaining: PKR <strong>{poRemaining.toLocaleString()}</strong></div>
                   )}
                 </div>
               )}
@@ -705,22 +671,16 @@ export default function NewBillPage() {
                 <div><label className="inv-label">Notes</label><input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" /></div>
               </div>
 
-              {/* Add Item area */}
+              {/* Add Item area (unchanged) */}
               {showProducts ? (
                 <div style={{ marginTop: 14 }}>
                   <label className="inv-label">Add Item</label>
                   <div style={{ display: "flex", gap: 8 }}>
                     <div style={{ position: "relative", flex: 1 }}>
                       <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "var(--text-muted)" }} />
-                      <input
-                        className="inv-input"
-                        style={{ paddingLeft: 36 }}
-                        placeholder="Search product..."
-                        value={productSearch}
+                      <input className="inv-input" style={{ paddingLeft: 36 }} placeholder="Search product..." value={productSearch}
                         onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
-                        onFocus={() => setShowProductList(true)}
-                        onBlur={() => setTimeout(() => setShowProductList(false), 200)}
-                      />
+                        onFocus={() => setShowProductList(true)} onBlur={() => setTimeout(() => setShowProductList(false), 200)} />
                       {showProductList && (
                         <div className="cust-dropdown" style={{ marginTop: 4 }}>
                           {filteredProducts.map((p: any) => (
@@ -734,9 +694,6 @@ export default function NewBillPage() {
                               </div>
                             </div>
                           ))}
-                          {filteredProducts.length === 0 && (
-                            <div style={{ padding: 12, color: "var(--text-muted)", fontSize: 12 }}>No products found</div>
-                          )}
                         </div>
                       )}
                     </div>
@@ -766,28 +723,13 @@ export default function NewBillPage() {
                 <span>Total</span>
                 <span>PKR {totalAmount.toLocaleString()}</span>
               </div>
-              {budgetError && (
-                <div className="budget-warning" style={{ marginTop: 8 }}>
-                  ⚠️ {budgetError}
-                </div>
-              )}
+              {budgetError && <div className="budget-warning" style={{ marginTop: 8 }}>⚠️ {budgetError}</div>}
             </div>
             <div className="inv-card">
-              <button
-                className="inv-btn"
-                style={{ justifyContent: "center", padding: 10, width: "100%" }}
-                onClick={handleSubmit}
-                disabled={saving || budgetError !== ""}
-              >
+              <button className="inv-btn" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={saving || budgetError !== ""}>
                 {saving ? "Posting..." : editId ? "💾 UPDATE Bill" : "💾 POST Bill"}
               </button>
-              <button
-                className="inv-btn"
-                style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }}
-                onClick={handleBeforeSavePdf}
-              >
-                <Download size={14} /> PDF Preview
-              </button>
+              <button className="inv-btn" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleBeforeSavePdf}><Download size={14} /> PDF Preview</button>
             </div>
           </div>
         </div>
@@ -803,48 +745,53 @@ export default function NewBillPage() {
                 <span>Description</span>
                 <span>Qty</span>
                 <span>Price</span>
-                {isNGO && <span>Location</span>}
-                {isNGO && <span>Activity</span>}
+                {(isNGO || locations.length > 0) && <span>Location</span>}
+                {(isNGO || activities.length > 0) && <span>Activity</span>}
                 <span>GL Acc</span>
                 <span style={{ textAlign: "right" }}>Total</span>
                 <span></span>
               </div>
               {items.map((item, idx) => {
-                const budgetKey = item.activity_id && item.account_id ? `${item.activity_id}_${item.account_id}` : null
+                const locationId = item.location_id ? Number(item.location_id) : null
+                const activityId = item.activity_id ? Number(item.activity_id) : null
+                const accountId = item.account_id ? Number(item.account_id) : null
+                const budgetKey = activityId && accountId ? `${activityId}_${locationId || 'any'}_${accountId}` : null
                 const budgetData = budgetKey ? budgetInfo[budgetKey] : null
+                const projDonor = activityId ? activityProjectDonor[activityId] : null
+                const filteredActs = getFilteredActivities(item.location_id)
                 return (
                   <div key={idx}>
                     <div className="inv-item-row">
-                      <input
-                        className="inv-input"
-                        style={{ height: 34, fontSize: 12 }}
-                        value={item.description}
-                        onChange={e => updateItem(idx, "description", e.target.value)}
-                        placeholder="Description"
-                      />
-                      <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                      <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                      <input className="inv-input" style={{ height: 34, fontSize: 12 }} value={item.description}
+                        onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Description" />
+                      <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty}
+                        onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                      <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price}
+                        onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
                       {item.product_id ? (
                         <>
-                          {isNGO && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>—</span>}
-                          {isNGO && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>—</span>}
+                          {(isNGO || locations.length > 0) && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>—</span>}
+                          {(isNGO || activities.length > 0) && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>—</span>}
                           <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Inventory</span>
                         </>
                       ) : (
                         <>
-                          {isNGO && (
-                            <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.location_id} onChange={e => updateItem(idx, "location_id", e.target.value)}>
+                          {(isNGO || locations.length > 0) && (
+                            <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.location_id}
+                              onChange={e => updateItem(idx, "location_id", e.target.value)}>
                               <option value="">—</option>
                               {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                             </select>
                           )}
-                          {isNGO && (
-                            <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.activity_id} onChange={e => updateItem(idx, "activity_id", e.target.value)}>
+                          {(isNGO || activities.length > 0) && (
+                            <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.activity_id}
+                              onChange={e => updateItem(idx, "activity_id", e.target.value)}>
                               <option value="">—</option>
-                              {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                              {filteredActs.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                             </select>
                           )}
-                          <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.account_id ?? ""} onChange={e => updateItem(idx, "account_id", e.target.value ? Number(e.target.value) : null)}>
+                          <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.account_id ?? ""}
+                            onChange={e => updateItem(idx, "account_id", e.target.value ? Number(e.target.value) : null)}>
                             <option value="">—</option>
                             {allAccounts.map(a => <option key={a.id} value={a.id}>{a.code}</option>)}
                           </select>
@@ -853,11 +800,19 @@ export default function NewBillPage() {
                       <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>PKR {item.total.toLocaleString()}</span>
                       <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
                     </div>
+                    {/* Project / Donor info */}
+                    {projDonor && (
+                      <div className="project-donor-info" style={{ marginLeft: 8 }}>
+                        Project: {projDonor.projectName}
+                        {projDonor.donorName && ` · Donor: ${projDonor.donorName}`}
+                      </div>
+                    )}
+                    {/* Budget info */}
                     {budgetData && (
                       <div style={{ fontSize: 10, color: "var(--text-muted)", marginLeft: 8, display: "flex", gap: 12, padding: "2px 0" }}>
                         <span>Budget: PKR {budgetData.budget.toLocaleString()}</span>
                         <span>Spent: PKR {budgetData.spent.toLocaleString()}</span>
-                        <span style={{ color: budgetData.available < item.total ? "#EF4444" : "#10B981" }}>
+                        <span style={{ color: budgetData.available < (item.total || 0) ? "#EF4444" : "#10B981" }}>
                           Available: PKR {budgetData.available.toLocaleString()}
                         </span>
                       </div>
