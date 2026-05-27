@@ -81,23 +81,37 @@ export default function VendorLedgerPage() {
       .then(({ data }) => data && setSupplier(data))
   }, [selectedSupplierId, companyId])
 
-  // Fetch ledger lines using correct source IDs
+  // Fetch ledger lines – only Accounts Payable lines
   const fetchLedger = async () => {
     if (!selectedSupplierId || !companyId) return
     setLoading(true)
     setErrorMsg("")
     try {
-      // 1. All purchase bills for this supplier → use their IDs directly
+      // 1. Find the company's default Accounts Payable account (code 2000)
+      const { data: payableAccount } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("code", "2000")
+        .maybeSingle()
+
+      if (!payableAccount) {
+        setErrorMsg("Accounts Payable account (2000) not found in Chart of Accounts.")
+        setLoading(false)
+        return
+      }
+      const payableAccountId = payableAccount.id
+
+      // 2. All purchase bills for this supplier
       const { data: bills } = await supabase
         .from("invoices")
         .select("id")
         .eq("party_id", selectedSupplierId)
         .eq("type", "purchase")
         .is("deleted_at", null)
-
       const billIds = bills?.map(inv => inv.id) || []
 
-      // 2. All payments to this supplier
+      // 3. All payments to this supplier
       const { data: payments } = await supabase
         .from("payments")
         .select("id")
@@ -105,7 +119,6 @@ export default function VendorLedgerPage() {
         .eq("party_type", "supplier")
       const paymentIds = payments?.map(p => p.id) || []
 
-      // Combine all source IDs – these match journal_lines.source_id
       const sourceIds = [...billIds, ...paymentIds].filter(Boolean)
       if (sourceIds.length === 0) {
         setLedgerLines([])
@@ -113,10 +126,11 @@ export default function VendorLedgerPage() {
         return
       }
 
-      // 3. Fetch journal lines with these source_ids
+      // 4. Fetch journal lines only for the payable account
       const { data: lines } = await supabase
         .from("journal_lines")
         .select("id, debit, credit, journal_entries!inner(entry_no, date, description, deleted_at, company_id)")
+        .eq("account_id", payableAccountId)        // only the payable side
         .eq("company_id", companyId)
         .is("journal_entries.deleted_at", null)
         .eq("journal_entries.company_id", companyId)
@@ -128,7 +142,7 @@ export default function VendorLedgerPage() {
         return
       }
 
-      // 4. Separate opening (before start date) and period lines
+      // 5. Separate opening (before start date) and period lines
       let running = 0
       const periodLines: any[] = []
       lines.forEach((l: any) => {
