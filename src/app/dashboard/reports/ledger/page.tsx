@@ -3,73 +3,78 @@
 import { useState, useEffect, useMemo } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter, useSearchParams } from "next/navigation"
-import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, Printer } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
+import { useCompany } from "@/contexts/CompanyContext"
+import { generateGeneralLedgerPDF } from "@/lib/pdf/generalLedgerPDF"
 
 type SortField = "date" | "description" | "debit" | "credit" | "running_balance"
-type SortDir = "asc" | "desc"
+type SortDir   = "asc" | "desc"
 
 export default function LedgerPage() {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const router = useRouter()
+  const router       = useRouter()
   const searchParams = useSearchParams()
-  const { role } = useRole()
+  const { role }     = useRole()
+  const { companyName, companyTagline, logoUrl } = useCompany()
   const canView = role === "admin" || role === "accountant"
 
-  // Account selection
   const urlAccountId = searchParams.get("accountId")
   const [selectedAccountId, setSelectedAccountId] = useState<string>(urlAccountId || "")
-  const [accounts, setAccounts] = useState<any[]>([])
-  const [account, setAccount] = useState<any>(null)
-  const [companyId, setCompanyId] = useState<string>("")
+  const [accounts,   setAccounts]   = useState<any[]>([])
+  const [account,    setAccount]    = useState<any>(null)
+  const [companyId,  setCompanyId]  = useState<string>("")
 
-  // Date filters
   const now = new Date()
   const [startDate, setStartDate] = useState(searchParams.get("startDate") || `${now.getFullYear()}-01-01`)
-  const [endDate, setEndDate] = useState(searchParams.get("endDate") || now.toISOString().split("T")[0])
+  const [endDate,   setEndDate]   = useState(searchParams.get("endDate")   || now.toISOString().split("T")[0])
+
+  // ── Tag filters ──────────────────────────────────────────────────
+  const [projects,   setProjects]   = useState<any[]>([])
+  const [donors,     setDonors]     = useState<any[]>([])
+  const [activities, setActivities] = useState<any[]>([])
+  const [locations,  setLocations]  = useState<any[]>([])
+  const [projectId,  setProjectId]  = useState("")
+  const [donorId,    setDonorId]    = useState("")
+  const [activityId, setActivityId] = useState("")
+  const [locationId, setLocationId] = useState("")
 
   const [ledgerLines, setLedgerLines] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [errorMsg, setErrorMsg] = useState("")
+  const [tagLabels,   setTagLabels]   = useState<Record<string,string>>({})
+  const [loading,     setLoading]     = useState(true)
+  const [errorMsg,    setErrorMsg]    = useState("")
+  const [sortField,   setSortField]   = useState<SortField>("date")
+  const [sortDir,     setSortDir]     = useState<SortDir>("asc")
 
-  // Sorting
-  const [sortField, setSortField] = useState<SortField>("date")
-  const [sortDir, setSortDir] = useState<SortDir>("asc")
-
-  // Fetch company ID and all accounts
+  // ── Boot: company + lookups ───────────────────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
-      if (cid) {
-        setCompanyId(cid)
-        supabase
-          .from("accounts")
-          .select("id, code, name, type")
-          .eq("company_id", cid)
-          .order("code")
-          .then(({ data }) => data && setAccounts(data))
-      }
+      if (!cid) return
+      setCompanyId(cid)
+      supabase.from("accounts")  .select("id, code, name, type").eq("company_id", cid).order("code")
+        .then(({ data }) => data && setAccounts(data))
+      supabase.from("projects")  .select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
+        .then(({ data }) => data && setProjects(data))
+      supabase.from("donors")    .select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
+        .then(({ data }) => data && setDonors(data))
+      supabase.from("activities").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
+        .then(({ data }) => data && setActivities(data))
+      supabase.from("locations") .select("id, name").eq("company_id", cid).order("name")
+        .then(({ data }) => data && setLocations(data))
     })
   }, [])
 
-  // If URL has accountId, auto-select it
   useEffect(() => {
-    if (urlAccountId && accounts.length > 0) {
-      setSelectedAccountId(urlAccountId)
-    }
+    if (urlAccountId && accounts.length > 0) setSelectedAccountId(urlAccountId)
   }, [urlAccountId, accounts])
 
-  // Fetch account details when selectedAccountId changes
   useEffect(() => {
-    if (!selectedAccountId || !companyId) {
-      setAccount(null)
-      return
-    }
-    supabase
-      .from("accounts")
+    if (!selectedAccountId || !companyId) { setAccount(null); return }
+    supabase.from("accounts")
       .select("id, code, name, type")
       .eq("id", selectedAccountId)
       .eq("company_id", companyId)
@@ -77,72 +82,32 @@ export default function LedgerPage() {
       .then(({ data }) => data && setAccount(data))
   }, [selectedAccountId, companyId])
 
-  // Fetch ledger lines with opening balance
+  // ── Core fetch — uses API route to avoid client-side join filter bug ──
+  // The Supabase browser client silently ignores filters like
+  // .lt("journal_entries.date", x) on joined tables, returning wrong rows.
+  // The API route uses the service-role client which handles these correctly.
   const fetchLedger = async () => {
     if (!selectedAccountId || !companyId) return
     setLoading(true)
     setErrorMsg("")
+
+    const params = new URLSearchParams({ accountId: selectedAccountId, startDate, endDate })
+    if (projectId)  params.append("projectId",  projectId)
+    if (donorId)    params.append("donorId",    donorId)
+    if (activityId) params.append("activityId", activityId)
+    if (locationId) params.append("locationId", locationId)
+
     try {
-      // Opening balance before start date
-      let openingBalance = 0
-      const { data: openingLines } = await supabase
-        .from("journal_lines")
-        .select("debit, credit, journal_entries!inner(date, deleted_at, company_id)")
-        .eq("account_id", selectedAccountId)
-        .eq("company_id", companyId)
-        .is("journal_entries.deleted_at", null)
-        .eq("journal_entries.company_id", companyId)
-        .lt("journal_entries.date", startDate)
-
-      if (openingLines) {
-        openingBalance = openingLines.reduce((sum, line) => sum + (line.debit || 0) - (line.credit || 0), 0)
+      const res  = await fetch(`/api/general-ledger?${params.toString()}`)
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        setErrorMsg(data.error || "Failed to load ledger")
+        setLedgerLines([])
+        setTagLabels({})
+      } else {
+        setLedgerLines(data.lines    || [])
+        setTagLabels(data.tagLabels  || {})
       }
-
-      // Period lines
-      let query = supabase
-        .from("journal_lines")
-        .select("id, entry_id, debit, credit, journal_entries!inner(entry_no, date, description, deleted_at, company_id)")
-        .eq("account_id", selectedAccountId)
-        .eq("company_id", companyId)
-        .is("journal_entries.deleted_at", null)
-        .eq("journal_entries.company_id", companyId)
-
-      if (startDate) query = query.gte("journal_entries.date", startDate)
-      if (endDate) query = query.lte("journal_entries.date", endDate)
-
-      const { data: lines } = await query
-
-      // Build running balance
-      let running = openingBalance
-      const rows = (lines || []).map((l: any) => {
-        running = running + (l.debit || 0) - (l.credit || 0)
-        return {
-          id: l.id,
-          entry_id: l.entry_id,
-          entry_no: l.journal_entries?.entry_no || "",
-          date: l.journal_entries?.date || "",
-          description: l.journal_entries?.description || "",
-          debit: l.debit || 0,
-          credit: l.credit || 0,
-          running_balance: running,
-        }
-      })
-
-      // Prepend opening balance row
-      const finalLines = [
-        {
-          id: "opening",
-          entry_no: "",
-          date: startDate,
-          description: "Opening Balance",
-          debit: openingBalance > 0 ? openingBalance : 0,
-          credit: openingBalance < 0 ? -openingBalance : 0,
-          running_balance: openingBalance,
-          isOpening: true,
-        },
-        ...rows,
-      ]
-      setLedgerLines(finalLines)
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to load ledger")
     } finally {
@@ -152,56 +117,69 @@ export default function LedgerPage() {
 
   useEffect(() => {
     if (selectedAccountId && companyId) fetchLedger()
-  }, [selectedAccountId, companyId, startDate, endDate])
+  }, [selectedAccountId, companyId, startDate, endDate, projectId, donorId, activityId, locationId])
 
-  // Client-side sort
+  // ── Sorting ───────────────────────────────────────────────────────
   const sortedLines = useMemo(() => {
     const list = [...ledgerLines]
     list.sort((a, b) => {
       if (a.isOpening && !b.isOpening) return -1
       if (!a.isOpening && b.isOpening) return 1
       let valA: any, valB: any
-      if (sortField === "debit" || sortField === "credit" || sortField === "running_balance") {
-        valA = a[sortField] || 0
-        valB = b[sortField] || 0
+      if (["debit","credit","running_balance"].includes(sortField)) {
+        valA = a[sortField] || 0; valB = b[sortField] || 0
       } else {
         valA = (a[sortField] || "").toString().toLowerCase()
         valB = (b[sortField] || "").toString().toLowerCase()
       }
       if (valA < valB) return sortDir === "asc" ? -1 : 1
-      if (valA > valB) return sortDir === "asc" ? 1 : -1
+      if (valA > valB) return sortDir === "asc" ?  1 : -1
       return 0
     })
     return list
   }, [ledgerLines, sortField, sortDir])
 
   const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDir(prev => prev === "asc" ? "desc" : "asc")
-    } else {
-      setSortField(field)
-      setSortDir("asc")
-    }
+    if (sortField === field) setSortDir(p => p === "asc" ? "desc" : "asc")
+    else { setSortField(field); setSortDir("asc") }
   }
-
   const getSortIcon = (field: SortField) => {
     if (sortField !== field) return <ArrowUpDown size={12} style={{ opacity: 0.5 }} />
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  const totalDebit = sortedLines.filter(l => !l.isOpening).reduce((s, l) => s + l.debit, 0)
-  const totalCredit = sortedLines.filter(l => !l.isOpening).reduce((s, l) => s + l.credit, 0)
+  const totalDebit    = sortedLines.filter(l => !l.isOpening).reduce((s,l) => s + l.debit,  0)
+  const totalCredit   = sortedLines.filter(l => !l.isOpening).reduce((s,l) => s + l.credit, 0)
   const closingBalance = sortedLines.length > 0 ? sortedLines[sortedLines.length - 1].running_balance : 0
 
-  if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
-  if (!canView) {
-    return (
-      <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}>
-        <h2>Access Denied</h2>
-        <p style={{ color: "var(--text-muted)" }}>You do not have permission to view this page.</p>
-      </div>
-    )
+  // ── PDF ───────────────────────────────────────────────────────────
+  const handlePrintPDF = async () => {
+    if (!account || sortedLines.length === 0) return
+    const doc = await generateGeneralLedgerPDF({
+      companyName:    companyName    || "",
+      companyAddress: "", companyPhone: "", companyEmail: "",
+      companyTagline: companyTagline || "",
+      logoUrl,
+      accountName:    account.name,
+      accountCode:    account.code,
+      startDate, endDate,
+      totalDebit, totalCredit, closingBalance,
+      ledgerLines: sortedLines,
+      tagLabels,
+    })
+    doc.save(`General_Ledger_${account.code}.pdf`)
   }
+
+  if (!role)    return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
+  if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2><p style={{ color: "var(--text-muted)" }}>You do not have permission to view this page.</p></div>
+
+  // ── Active tag chips (for UI display) ─────────────────────────────
+  const activeTagChips = [
+    tagLabels.project  && { label: "Project",  value: tagLabels.project  },
+    tagLabels.donor    && { label: "Donor",    value: tagLabels.donor    },
+    tagLabels.activity && { label: "Activity", value: tagLabels.activity },
+    tagLabels.location && { label: "Location", value: tagLabels.location },
+  ].filter(Boolean) as { label: string; value: string }[]
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -211,96 +189,82 @@ export default function LedgerPage() {
         .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
-        .ledger-header {
-          display: grid;
-          grid-template-columns: 90px 100px 1fr 110px 110px 130px;
-          padding: 14px 24px;
-          background: var(--card);
-          font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
-          border-bottom: 1px solid var(--border);
-        }
-        .ledger-row {
-          display: grid;
-          grid-template-columns: 90px 100px 1fr 110px 110px 130px;
-          padding: 12px 24px;
-          border-bottom: 1px solid var(--border);
-          font-size: 13px; align-items: center;
-          transition: background 0.15s;
-          cursor: pointer;
-        }
+        .ledger-header { display: grid; grid-template-columns: 90px 100px 1fr 110px 110px 130px; padding: 14px 24px; background: var(--card); font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+        .ledger-row { display: grid; grid-template-columns: 90px 100px 1fr 110px 110px 130px; padding: 12px 24px; border-bottom: 1px solid var(--border); font-size: 13px; align-items: center; transition: background 0.15s; cursor: pointer; }
         .ledger-row:hover { background: var(--card-hover); }
         .ledger-row:last-child { border-bottom: none; }
-        .opening-row { background: var(--bg-soft); font-weight: 600; }
-        .sort-btn {
-          background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
-          display: inline-flex; align-items: center; gap: 4px; padding: 0;
-          font-weight: 700; text-transform: uppercase; font-size: 10px;
-        }
+        .opening-row { background: var(--bg-soft); font-weight: 600; cursor: default; }
+        .sort-btn { background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted); display: inline-flex; align-items: center; gap: 4px; padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px; }
         .sort-btn:hover { color: var(--primary); }
-        .date-input {
-          height: 34px; border: 1.5px solid var(--border); border-radius: 8px;
-          padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text);
-          outline: none; font-family: inherit; width: 140px;
-        }
-        .date-input:focus { border-color: var(--primary); }
+        .date-input, .select-input { height: 34px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text); outline: none; font-family: inherit; }
+        .date-input { width: 140px; }
+        .select-input { width: 148px; }
+        .date-input:focus, .select-input:focus { border-color: var(--primary); }
         .btn { padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
         .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
         .btn-outline:hover { background: var(--card-hover); }
-        .account-select {
-          height: 34px; border: 1.5px solid var(--border); border-radius: 8px;
-          padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text);
-          outline: none; font-family: inherit; min-width: 200px;
-        }
+        .account-select { height: 34px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text); outline: none; font-family: inherit; min-width: 200px; }
         .account-select:focus { border-color: var(--primary); }
-        @media (max-width: 640px) {
-          .ledger-header, .ledger-row { grid-template-columns: 70px 80px 1fr 80px 80px 100px; }
-        }
+        .tag-chip { font-size: 11px; padding: 3px 9px; border-radius: 6px; background: var(--bg-soft); color: var(--text-muted); border: 1px solid var(--border); }
+        @media (max-width: 640px) { .ledger-header, .ledger-row { grid-template-columns: 70px 80px 1fr 80px 80px 100px; } }
       `}</style>
 
-      {/* Header with account selector and date filters */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-        <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}>
-          <ArrowLeft size={16} />
-        </button>
+      {/* ── Toolbar ── */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+        <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}><ArrowLeft size={16} /></button>
         <div style={{ flex: 1, minWidth: 200 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>
-            📒 General Ledger
-          </h1>
-          <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
-            View detailed transaction history for a specific account
-          </p>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📒 General Ledger</h1>
+          <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>View detailed transaction history for a specific account</p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <select
-            className="account-select"
-            value={selectedAccountId}
-            onChange={(e) => setSelectedAccountId(e.target.value)}
-          >
+          <select className="account-select" value={selectedAccountId} onChange={e => setSelectedAccountId(e.target.value)}>
             <option value="">— Select Account —</option>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.code} – {a.name}
-              </option>
-            ))}
+            {accounts.map(a => <option key={a.id} value={a.id}>{a.code} – {a.name}</option>)}
           </select>
-          <input
-            type="date"
-            className="date-input"
-            value={startDate}
-            onChange={e => setStartDate(e.target.value)}
-          />
+          <input type="date" className="date-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
           <span style={{ color: "var(--text-muted)", fontSize: 12 }}>to</span>
-          <input
-            type="date"
-            className="date-input"
-            value={endDate}
-            onChange={e => setEndDate(e.target.value)}
-          />
-          <button className="btn btn-outline" onClick={fetchLedger}>
-            Refresh
-          </button>
+          <input type="date" className="date-input" value={endDate}   onChange={e => setEndDate(e.target.value)} />
+          <button className="btn btn-outline" onClick={fetchLedger}>Refresh</button>
+          <button className="btn btn-outline" onClick={handlePrintPDF}><Printer size={16} /> PDF</button>
         </div>
       </div>
+
+      {/* ── Tag filter row ── */}
+      {(projects.length > 0 || donors.length > 0 || activities.length > 0 || locations.length > 0) && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" }}>Filter:</span>
+          {projects.length > 0 && (
+            <select className="select-input" value={projectId} onChange={e => setProjectId(e.target.value)}>
+              <option value="">All Projects</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
+          {donors.length > 0 && (
+            <select className="select-input" value={donorId} onChange={e => setDonorId(e.target.value)}>
+              <option value="">All Donors</option>
+              {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          )}
+          {activities.length > 0 && (
+            <select className="select-input" value={activityId} onChange={e => setActivityId(e.target.value)}>
+              <option value="">All Activities</option>
+              {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          )}
+          {locations.length > 0 && (
+            <select className="select-input" value={locationId} onChange={e => setLocationId(e.target.value)}>
+              <option value="">All Locations</option>
+              {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+          )}
+          {(projectId || donorId || activityId || locationId) && (
+            <button className="btn btn-outline" style={{ fontSize: 11, padding: "4px 10px" }}
+              onClick={() => { setProjectId(""); setDonorId(""); setActivityId(""); setLocationId("") }}>
+              Clear
+            </button>
+          )}
+        </div>
+      )}
 
       {errorMsg && (
         <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, border: "1px solid #FECACA" }}>
@@ -308,24 +272,26 @@ export default function LedgerPage() {
         </div>
       )}
 
-      {/* Show account info and summary only when an account is selected */}
       {selectedAccountId && account ? (
         <>
           {/* Account info banner */}
-          <div style={{
-            background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12,
-            padding: "12px 20px", marginBottom: 20, display: "flex", alignItems: "center", gap: 16
-          }}>
-            <div style={{ background: "var(--bg-soft)", borderRadius: 8, padding: "6px 12px", fontWeight: 700, fontSize: 14, color: "var(--primary)" }}>
-              {account.code}
-            </div>
+          <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 20px", marginBottom: 20, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+            <div style={{ background: "var(--bg-soft)", borderRadius: 8, padding: "6px 12px", fontWeight: 700, fontSize: 14, color: "var(--primary)" }}>{account.code}</div>
             <div>
               <div style={{ fontWeight: 700, color: "var(--text)" }}>{account.name}</div>
               <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{account.type}</div>
             </div>
+            {/* Active filter chips */}
+            {activeTagChips.length > 0 && (
+              <div style={{ display: "flex", gap: 6, marginLeft: "auto", flexWrap: "wrap" }}>
+                {activeTagChips.map(chip => (
+                  <span key={chip.label} className="tag-chip">{chip.label}: {chip.value}</span>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Summary Cards */}
+          {/* Summary cards */}
           <div className="summary-grid">
             <div className="summary-item">
               <div className="summary-label">Total Debits</div>
@@ -338,57 +304,45 @@ export default function LedgerPage() {
             <div className="summary-item">
               <div className="summary-label">Closing Balance</div>
               <div className="summary-value" style={{ color: closingBalance >= 0 ? "#10B981" : "#EF4444" }}>
-                PKR {closingBalance.toLocaleString()}
+                PKR {Math.abs(closingBalance).toLocaleString()}
+                <span style={{ fontSize: 13, fontWeight: 500, marginLeft: 4 }}>{closingBalance >= 0 ? "Dr" : "Cr"}</span>
               </div>
             </div>
           </div>
 
-          {/* Ledger Table */}
+          {/* Ledger table */}
           {loading ? (
             <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading ledger entries…</div>
           ) : sortedLines.length === 0 ? (
-            <div className="ledger-card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
-              No transactions found for this period.
-            </div>
+            <div className="ledger-card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>No transactions found for this period.</div>
           ) : (
             <div className="ledger-card">
               <div className="ledger-header">
                 <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
                 <button className="sort-btn" onClick={() => handleSort("description")}>Entry #{getSortIcon("description")}</button>
                 <span>Description</span>
-                <button className="sort-btn" onClick={() => handleSort("debit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
-                <button className="sort-btn" onClick={() => handleSort("credit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
-                <button className="sort-btn" onClick={() => handleSort("running_balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("running_balance")}</button>
+                <button className="sort-btn" onClick={() => handleSort("debit")}           style={{ justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
+                <button className="sort-btn" onClick={() => handleSort("credit")}          style={{ justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
+                <button className="sort-btn" onClick={() => handleSort("running_balance")} style={{ justifyContent: "flex-end" }}>Balance {getSortIcon("running_balance")}</button>
               </div>
-              {sortedLines.map((line, idx) => {
-                // Navigate to journal entry on row click (except opening row)
-                const handleRowClick = () => {
-                  if (!line.isOpening && line.entry_id) {
-                    router.push(`/dashboard/journal/${line.entry_id}`)
-                  }
-                }
-                return (
-                  <div
-                    key={line.id || idx}
-                    className={`ledger-row ${line.isOpening ? "opening-row" : ""}`}
-                    onClick={handleRowClick}
-                    title={line.isOpening ? "" : "Click to view journal entry"}
-                  >
-                    <span style={{ fontSize: 12 }}>{line.isOpening ? "" : line.date}</span>
-                    <span style={{ color: "var(--primary)", fontSize: 12 }}>{line.entry_no}</span>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line.description}</span>
-                    <span style={{ textAlign: "right", color: line.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit > 0 ? 600 : 400 }}>
-                      {line.debit > 0 ? `PKR ${line.debit.toLocaleString()}` : "—"}
-                    </span>
-                    <span style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.credit > 0 ? 600 : 400 }}>
-                      {line.credit > 0 ? `PKR ${line.credit.toLocaleString()}` : "—"}
-                    </span>
-                    <span style={{ textAlign: "right", fontWeight: 600, color: line.running_balance >= 0 ? "#10B981" : "#EF4444" }}>
-                      PKR {line.running_balance.toLocaleString()}
-                    </span>
-                  </div>
-                )
-              })}
+              {sortedLines.map((line, idx) => (
+                <div
+                  key={line.id || idx}
+                  className={`ledger-row ${line.isOpening ? "opening-row" : ""}`}
+                  onClick={() => { if (!line.isOpening && line.entry_id) router.push(`/dashboard/journal/${line.entry_id}`) }}
+                  title={line.isOpening ? "" : "Click to view journal entry"}
+                >
+                  <span style={{ fontSize: 12 }}>{line.isOpening ? "" : line.date}</span>
+                  <span style={{ color: "var(--primary)", fontSize: 12 }}>{line.entry_no}</span>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line.description}</span>
+                  <span style={{ textAlign: "right", color: line.debit  > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit  > 0 ? 600 : 400 }}>{line.debit  > 0 ? `PKR ${line.debit.toLocaleString()}`  : "—"}</span>
+                  <span style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.credit > 0 ? 600 : 400 }}>{line.credit > 0 ? `PKR ${line.credit.toLocaleString()}` : "—"}</span>
+                  <span style={{ textAlign: "right", fontWeight: 600, color: line.running_balance >= 0 ? "#10B981" : "#EF4444" }}>
+                    PKR {Math.abs(line.running_balance).toLocaleString()}
+                    <span style={{ fontSize: 10, marginLeft: 2 }}>{line.running_balance >= 0 ? "Dr" : "Cr"}</span>
+                  </span>
+                </div>
+              ))}
             </div>
           )}
         </>
