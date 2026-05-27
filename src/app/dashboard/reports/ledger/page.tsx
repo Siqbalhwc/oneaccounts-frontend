@@ -32,39 +32,20 @@ export default function LedgerPage() {
   const [startDate, setStartDate] = useState(searchParams.get("startDate") || `${now.getFullYear()}-01-01`)
   const [endDate,   setEndDate]   = useState(searchParams.get("endDate")   || now.toISOString().split("T")[0])
 
-  // ── Tag filters ──────────────────────────────────────────────────
-  const [projects,   setProjects]   = useState<any[]>([])
-  const [donors,     setDonors]     = useState<any[]>([])
-  const [activities, setActivities] = useState<any[]>([])
-  const [locations,  setLocations]  = useState<any[]>([])
-  const [projectId,  setProjectId]  = useState("")
-  const [donorId,    setDonorId]    = useState("")
-  const [activityId, setActivityId] = useState("")
-  const [locationId, setLocationId] = useState("")
-
   const [ledgerLines, setLedgerLines] = useState<any[]>([])
-  const [tagLabels,   setTagLabels]   = useState<Record<string,string>>({})
   const [loading,     setLoading]     = useState(true)
   const [errorMsg,    setErrorMsg]    = useState("")
   const [sortField,   setSortField]   = useState<SortField>("date")
   const [sortDir,     setSortDir]     = useState<SortDir>("asc")
 
-  // ── Boot: company + lookups ───────────────────────────────────────
+  // Boot: load accounts
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
       if (!cid) return
       setCompanyId(cid)
-      supabase.from("accounts")  .select("id, code, name, type").eq("company_id", cid).order("code")
+      supabase.from("accounts").select("id, code, name, type").eq("company_id", cid).order("code")
         .then(({ data }) => data && setAccounts(data))
-      supabase.from("projects")  .select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
-        .then(({ data }) => data && setProjects(data))
-      supabase.from("donors")    .select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
-        .then(({ data }) => data && setDonors(data))
-      supabase.from("activities").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
-        .then(({ data }) => data && setActivities(data))
-      supabase.from("locations") .select("id, name").eq("company_id", cid).order("name")
-        .then(({ data }) => data && setLocations(data))
     })
   }, [])
 
@@ -82,20 +63,17 @@ export default function LedgerPage() {
       .then(({ data }) => data && setAccount(data))
   }, [selectedAccountId, companyId])
 
-  // ── Core fetch — uses API route to avoid client-side join filter bug ──
-  // The Supabase browser client silently ignores filters like
-  // .lt("journal_entries.date", x) on joined tables, returning wrong rows.
-  // The API route uses the service-role client which handles these correctly.
+  // ── Fetch ledger via secure API ──────────────────────────────────
   const fetchLedger = async () => {
     if (!selectedAccountId || !companyId) return
     setLoading(true)
     setErrorMsg("")
 
-    const params = new URLSearchParams({ accountId: selectedAccountId, startDate, endDate })
-    if (projectId)  params.append("projectId",  projectId)
-    if (donorId)    params.append("donorId",    donorId)
-    if (activityId) params.append("activityId", activityId)
-    if (locationId) params.append("locationId", locationId)
+    const params = new URLSearchParams({
+      accountId: selectedAccountId,
+      startDate,
+      endDate,
+    })
 
     try {
       const res  = await fetch(`/api/general-ledger?${params.toString()}`)
@@ -103,10 +81,8 @@ export default function LedgerPage() {
       if (!res.ok || data.error) {
         setErrorMsg(data.error || "Failed to load ledger")
         setLedgerLines([])
-        setTagLabels({})
       } else {
-        setLedgerLines(data.lines    || [])
-        setTagLabels(data.tagLabels  || {})
+        setLedgerLines(data.lines || [])
       }
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to load ledger")
@@ -117,7 +93,7 @@ export default function LedgerPage() {
 
   useEffect(() => {
     if (selectedAccountId && companyId) fetchLedger()
-  }, [selectedAccountId, companyId, startDate, endDate, projectId, donorId, activityId, locationId])
+  }, [selectedAccountId, companyId, startDate, endDate])
 
   // ── Sorting ───────────────────────────────────────────────────────
   const sortedLines = useMemo(() => {
@@ -165,21 +141,12 @@ export default function LedgerPage() {
       startDate, endDate,
       totalDebit, totalCredit, closingBalance,
       ledgerLines: sortedLines,
-      tagLabels,
     })
     doc.save(`General_Ledger_${account.code}.pdf`)
   }
 
   if (!role)    return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2><p style={{ color: "var(--text-muted)" }}>You do not have permission to view this page.</p></div>
-
-  // ── Active tag chips (for UI display) ─────────────────────────────
-  const activeTagChips = [
-    tagLabels.project  && { label: "Project",  value: tagLabels.project  },
-    tagLabels.donor    && { label: "Donor",    value: tagLabels.donor    },
-    tagLabels.activity && { label: "Activity", value: tagLabels.activity },
-    tagLabels.location && { label: "Location", value: tagLabels.location },
-  ].filter(Boolean) as { label: string; value: string }[]
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -196,25 +163,22 @@ export default function LedgerPage() {
         .opening-row { background: var(--bg-soft); font-weight: 600; cursor: default; }
         .sort-btn { background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted); display: inline-flex; align-items: center; gap: 4px; padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px; }
         .sort-btn:hover { color: var(--primary); }
-        .date-input, .select-input { height: 34px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text); outline: none; font-family: inherit; }
-        .date-input { width: 140px; }
-        .select-input { width: 148px; }
-        .date-input:focus, .select-input:focus { border-color: var(--primary); }
+        .date-input { height: 34px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text); outline: none; font-family: inherit; width: 140px; }
+        .date-input:focus { border-color: var(--primary); }
         .btn { padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
         .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
         .btn-outline:hover { background: var(--card-hover); }
         .account-select { height: 34px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text); outline: none; font-family: inherit; min-width: 200px; }
         .account-select:focus { border-color: var(--primary); }
-        .tag-chip { font-size: 11px; padding: 3px 9px; border-radius: 6px; background: var(--bg-soft); color: var(--text-muted); border: 1px solid var(--border); }
         @media (max-width: 640px) { .ledger-header, .ledger-row { grid-template-columns: 70px 80px 1fr 80px 80px 100px; } }
       `}</style>
 
       {/* ── Toolbar ── */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
         <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}><ArrowLeft size={16} /></button>
         <div style={{ flex: 1, minWidth: 200 }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📒 General Ledger</h1>
-          <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>View detailed transaction history for a specific account</p>
+          <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Full transaction history for a selected account</p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <select className="account-select" value={selectedAccountId} onChange={e => setSelectedAccountId(e.target.value)}>
@@ -228,43 +192,6 @@ export default function LedgerPage() {
           <button className="btn btn-outline" onClick={handlePrintPDF}><Printer size={16} /> PDF</button>
         </div>
       </div>
-
-      {/* ── Tag filter row ── */}
-      {(projects.length > 0 || donors.length > 0 || activities.length > 0 || locations.length > 0) && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" }}>Filter:</span>
-          {projects.length > 0 && (
-            <select className="select-input" value={projectId} onChange={e => setProjectId(e.target.value)}>
-              <option value="">All Projects</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          )}
-          {donors.length > 0 && (
-            <select className="select-input" value={donorId} onChange={e => setDonorId(e.target.value)}>
-              <option value="">All Donors</option>
-              {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          )}
-          {activities.length > 0 && (
-            <select className="select-input" value={activityId} onChange={e => setActivityId(e.target.value)}>
-              <option value="">All Activities</option>
-              {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-          )}
-          {locations.length > 0 && (
-            <select className="select-input" value={locationId} onChange={e => setLocationId(e.target.value)}>
-              <option value="">All Locations</option>
-              {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </select>
-          )}
-          {(projectId || donorId || activityId || locationId) && (
-            <button className="btn btn-outline" style={{ fontSize: 11, padding: "4px 10px" }}
-              onClick={() => { setProjectId(""); setDonorId(""); setActivityId(""); setLocationId("") }}>
-              Clear
-            </button>
-          )}
-        </div>
-      )}
 
       {errorMsg && (
         <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, border: "1px solid #FECACA" }}>
@@ -281,14 +208,6 @@ export default function LedgerPage() {
               <div style={{ fontWeight: 700, color: "var(--text)" }}>{account.name}</div>
               <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{account.type}</div>
             </div>
-            {/* Active filter chips */}
-            {activeTagChips.length > 0 && (
-              <div style={{ display: "flex", gap: 6, marginLeft: "auto", flexWrap: "wrap" }}>
-                {activeTagChips.map(chip => (
-                  <span key={chip.label} className="tag-chip">{chip.label}: {chip.value}</span>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* Summary cards */}

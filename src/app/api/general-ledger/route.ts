@@ -36,10 +36,6 @@ export async function GET(request: NextRequest) {
   const accountId  = searchParams.get('accountId')
   const startDate  = searchParams.get('startDate')
   const endDate    = searchParams.get('endDate')
-  const projectId  = searchParams.get('projectId')  || null
-  const donorId    = searchParams.get('donorId')    || null
-  const activityId = searchParams.get('activityId') || null
-  const locationId = searchParams.get('locationId') || null
 
   if (!accountId || !startDate || !endDate) {
     return NextResponse.json({ error: 'Missing accountId, startDate or endDate' }, { status: 400 })
@@ -51,16 +47,12 @@ export async function GET(request: NextRequest) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  // Build base query builder
+  // Base query builder (always applies account, company, and soft‑delete filter)
   const baseQuery = (query: any) => {
-    query = query.eq('account_id', parseInt(accountId))
-                .eq('company_id', companyId)
-                .is('journal_entries.deleted_at', null)   // correct null check
-    if (projectId)  query = query.eq('project_id', parseInt(projectId))
-    if (donorId)    query = query.eq('donor_id', parseInt(donorId))
-    if (activityId) query = query.eq('activity_id', parseInt(activityId))
-    if (locationId) query = query.eq('location_id', parseInt(locationId))
     return query
+      .eq('account_id', parseInt(accountId))
+      .eq('company_id', companyId)
+      .is('journal_entries.deleted_at', null)
   }
 
   try {
@@ -123,26 +115,7 @@ export async function GET(request: NextRequest) {
       })
     })
 
-    // 7. Tag labels
-    const tagLabels: Record<string, string> = {}
-    if (projectId) {
-      const { data: p } = await supabaseAdmin.from('projects').select('name').eq('id', parseInt(projectId)).single()
-      if (p) tagLabels.project = p.name
-    }
-    if (donorId) {
-      const { data: d } = await supabaseAdmin.from('donors').select('name').eq('id', parseInt(donorId)).single()
-      if (d) tagLabels.donor = d.name
-    }
-    if (activityId) {
-      const { data: a } = await supabaseAdmin.from('activities').select('name').eq('id', parseInt(activityId)).single()
-      if (a) tagLabels.activity = a.name
-    }
-    if (locationId) {
-      const { data: l } = await supabaseAdmin.from('locations').select('name').eq('id', parseInt(locationId)).single()
-      if (l) tagLabels.location = l.name
-    }
-
-    return NextResponse.json({ openingBalance, lines: finalLines, tagLabels })
+    return NextResponse.json({ openingBalance, lines: finalLines })
 
   } catch (err: any) {
     console.error('General Ledger API error:', err)
