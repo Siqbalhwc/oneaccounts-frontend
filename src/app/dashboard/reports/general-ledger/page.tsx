@@ -75,24 +75,24 @@ export default function GeneralLedgerPage() {
       .then(({ data }) => data && setAccount(data))
   }, [selectedAccountId, companyId])
 
-  // ── CORRECT GENERAL LEDGER FETCH ────────────────────────────────────
+  // ── CORRECT GENERAL LEDGER FETCH ──────────────────────────────────
   const fetchLedger = async () => {
     if (!selectedAccountId || !companyId) return
     setLoading(true)
     setErrorMsg("")
 
     try {
-      // 1. Fetch ALL journal lines for this account, ordered by date
+      // 1. Fetch ALL journal lines for THIS account, ordered by date
       const { data: allLines } = await supabase
         .from("journal_lines")
         .select("id, debit, credit, journal_entries!inner(entry_no, date, description, deleted_at)")
-        .eq("account_id", selectedAccountId)
+        .eq("account_id", selectedAccountId)          // ← ONLY this account
         .eq("company_id", companyId)
         .is("journal_entries.deleted_at", null)
         .order("date", { foreignTable: "journal_entries", ascending: true })
 
       if (!allLines || allLines.length === 0) {
-        // No transactions at all → opening/closing zero
+        // No transactions at all
         setLedgerLines([{
           id: "opening",
           entry_no: "",
@@ -126,7 +126,7 @@ export default function GeneralLedgerPage() {
             description: line.journal_entries?.description || "",
             debit: line.debit || 0,
             credit: line.credit || 0,
-            running_balance: 0, // filled later
+            running_balance: 0, // will be filled later
           })
         }
       })
@@ -255,7 +255,7 @@ export default function GeneralLedgerPage() {
         .sort-btn {
           background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
           display: inline-flex; align-items: center; gap: 4px; padding: 0;
-          font-weight: 700; text-transform: uppercase; font-size: 10px;
+          font-weight: 700; text-transform: uppercase; font-size: 10px; white-space: nowrap;
         }
         .sort-btn:hover { color: var(--primary); }
         .date-input {
@@ -360,7 +360,7 @@ export default function GeneralLedgerPage() {
               <div className="ledger-header">
                 <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
                 <button className="sort-btn" onClick={() => handleSort("description")}>Entry #{getSortIcon("description")}</button>
-                <span>Description</span>
+                <button className="sort-btn" onClick={() => handleSort("description")}>Description {getSortIcon("description")}</button>
                 <button className="sort-btn" onClick={() => handleSort("debit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
                 <button className="sort-btn" onClick={() => handleSort("credit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
                 <button className="sort-btn" onClick={() => handleSort("running_balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("running_balance")}</button>
