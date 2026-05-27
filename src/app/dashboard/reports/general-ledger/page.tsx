@@ -22,14 +22,12 @@ export default function GeneralLedgerPage() {
   const { companyName, companyTagline, logoUrl } = useCompany()
   const canView = role === "admin" || role === "accountant"
 
-  // Account selection
   const urlAccountId = searchParams.get("accountId")
   const [selectedAccountId, setSelectedAccountId] = useState<string>(urlAccountId || "")
   const [accounts, setAccounts] = useState<any[]>([])
   const [account, setAccount] = useState<any>(null)
   const [companyId, setCompanyId] = useState<string>("")
 
-  // Date filters
   const now = new Date()
   const [startDate, setStartDate] = useState(searchParams.get("startDate") || `${now.getFullYear()}-01-01`)
   const [endDate, setEndDate] = useState(searchParams.get("endDate") || now.toISOString().split("T")[0])
@@ -38,7 +36,6 @@ export default function GeneralLedgerPage() {
   const [loading, setLoading] = useState(true)
   const [errorMsg, setErrorMsg] = useState("")
 
-  // Sorting
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
@@ -58,14 +55,12 @@ export default function GeneralLedgerPage() {
     })
   }, [])
 
-  // Auto-select from URL
   useEffect(() => {
     if (urlAccountId && accounts.length > 0) {
       setSelectedAccountId(urlAccountId)
     }
   }, [urlAccountId, accounts])
 
-  // Fetch account details
   useEffect(() => {
     if (!selectedAccountId || !companyId) {
       setAccount(null)
@@ -80,66 +75,83 @@ export default function GeneralLedgerPage() {
       .then(({ data }) => data && setAccount(data))
   }, [selectedAccountId, companyId])
 
-  // Fetch ledger lines
+  // ── CORRECT GENERAL LEDGER FETCH ────────────────────────────────────
   const fetchLedger = async () => {
     if (!selectedAccountId || !companyId) return
     setLoading(true)
     setErrorMsg("")
+
     try {
-      // Fetch all journal lines for this account, joined with journal_entries for date/description
-      const { data: lines } = await supabase
+      // 1. Fetch ALL journal lines for this account, ordered by date
+      const { data: allLines } = await supabase
         .from("journal_lines")
-        .select("id, debit, credit, journal_entries!inner(entry_no, date, description, deleted_at, company_id)")
+        .select("id, debit, credit, journal_entries!inner(entry_no, date, description, deleted_at)")
         .eq("account_id", selectedAccountId)
         .eq("company_id", companyId)
         .is("journal_entries.deleted_at", null)
-        .eq("journal_entries.company_id", companyId)
-        .order("id", { ascending: true })
+        .order("date", { foreignTable: "journal_entries", ascending: true })
 
-      if (!lines) {
-        setLedgerLines([])
+      if (!allLines || allLines.length === 0) {
+        // No transactions at all → opening/closing zero
+        setLedgerLines([{
+          id: "opening",
+          entry_no: "",
+          date: startDate,
+          description: "Opening Balance",
+          debit: 0,
+          credit: 0,
+          running_balance: 0,
+          isOpening: true,
+        }])
         setLoading(false)
         return
       }
 
-      // Separate opening and period lines
-      let running = 0
+      // 2. Calculate opening balance and collect period lines
+      let openingBalance = 0
       const periodLines: any[] = []
-      lines.forEach((l: any) => {
-        const date = l.journal_entries?.date
+
+      allLines.forEach((line: any) => {
+        const date = line.journal_entries?.date
         if (!date) return
-        const debit = l.debit || 0
-        const credit = l.credit || 0
+        const net = (line.debit || 0) - (line.credit || 0)
+
         if (date < startDate) {
-          running = running + debit - credit
+          openingBalance += net
         } else if (date >= startDate && date <= endDate) {
-          running = running + debit - credit
           periodLines.push({
-            id: l.id,
-            entry_no: l.journal_entries?.entry_no || "",
+            id: line.id,
+            entry_no: line.journal_entries?.entry_no || "",
             date,
-            description: l.journal_entries?.description || "",
-            debit,
-            credit,
-            running_balance: running,
+            description: line.journal_entries?.description || "",
+            debit: line.debit || 0,
+            credit: line.credit || 0,
+            running_balance: 0, // filled later
           })
         }
       })
 
-      const openingBal = running - periodLines.reduce((s, pl) => s + pl.debit - pl.credit, 0)
-      const finalLines = [
+      // 3. Build final lines with running balance
+      let running = openingBalance
+      const finalLines: any[] = [
         {
           id: "opening",
           entry_no: "",
           date: startDate,
           description: "Opening Balance",
-          debit: openingBal > 0 ? openingBal : 0,
-          credit: openingBal < 0 ? -openingBal : 0,
-          running_balance: openingBal,
+          debit: openingBalance > 0 ? openingBalance : 0,
+          credit: openingBalance < 0 ? -openingBalance : 0,
+          running_balance: openingBalance,
           isOpening: true,
         },
-        ...periodLines,
       ]
+
+      for (const line of periodLines) {
+        running += (line.debit || 0) - (line.credit || 0)
+        line.running_balance = running
+        finalLines.push(line)
+      }
+
       setLedgerLines(finalLines)
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to load ledger")
@@ -152,7 +164,7 @@ export default function GeneralLedgerPage() {
     if (selectedAccountId && companyId) fetchLedger()
   }, [selectedAccountId, companyId, startDate, endDate])
 
-  // Sorting
+  // Sorting (unchanged)
   const sortedLines = useMemo(() => {
     const list = [...ledgerLines]
     list.sort((a, b) => {
