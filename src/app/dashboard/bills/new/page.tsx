@@ -154,8 +154,7 @@ export default function NewBillPage() {
       .then(r => r.data && setProducts(r.data))
   }
 
-  // PO logic (unchanged) …
-
+  // PO logic (unchanged)
   useEffect(() => {
     if (!companyId || !supplierId || !showPO) {
       setOpenPOs([])
@@ -197,8 +196,7 @@ export default function NewBillPage() {
       })
   }, [companyId, supplierId, showPO])
 
-  // Load existing bill for editing (unchanged) …
-
+  // Load existing bill for editing (unchanged)
   useEffect(() => {
     if (!editId || !companyId) return
     supabase.from("invoices")
@@ -331,6 +329,9 @@ export default function NewBillPage() {
     }])
   }
 
+  // ── removeItem – was missing in the previous version ──
+  const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
+
   // ── Updated updateItem ──────────────────────────────────────────────
   const updateItem = async (idx: number, field: string, value: any) => {
     const updated = [...items]
@@ -358,7 +359,6 @@ export default function NewBillPage() {
           .eq("id", actId)
           .single()
         if (actData) {
-          // Fix: cast projects to any to avoid TypeScript error
           const proj: any = actData.projects
           const projectName = proj?.name || ""
           let donorName: string | null = null
