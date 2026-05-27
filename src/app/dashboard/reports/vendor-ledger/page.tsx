@@ -59,7 +59,7 @@ export default function VendorLedgerPage() {
     })
   }, [])
 
-  // If URL has supplierId, auto-select it
+  // Auto-select from URL
   useEffect(() => {
     if (urlSupplierId && suppliers.length > 0) {
       setSelectedSupplierId(urlSupplierId)
@@ -81,20 +81,29 @@ export default function VendorLedgerPage() {
       .then(({ data }) => data && setSupplier(data))
   }, [selectedSupplierId, companyId])
 
-  // Fetch ledger lines
+  // Fetch ledger lines using correct source IDs (invoice_items for bills, payments for payments)
   const fetchLedger = async () => {
     if (!selectedSupplierId || !companyId) return
     setLoading(true)
     setErrorMsg("")
     try {
-      // 1. All purchase bills for this supplier
+      // 1. All purchase bills for this supplier → get their invoice_items.id
       const { data: bills } = await supabase
         .from("invoices")
         .select("id")
         .eq("party_id", selectedSupplierId)
         .eq("type", "purchase")
         .is("deleted_at", null)
+
       const billIds = bills?.map(inv => inv.id) || []
+      let billItemIds: number[] = []
+      if (billIds.length > 0) {
+        const { data: items } = await supabase
+          .from("invoice_items")
+          .select("id")
+          .in("invoice_id", billIds)
+        billItemIds = items?.map(i => i.id) || []
+      }
 
       // 2. All payments to this supplier
       const { data: payments } = await supabase
@@ -104,7 +113,8 @@ export default function VendorLedgerPage() {
         .eq("party_type", "supplier")
       const paymentIds = payments?.map(p => p.id) || []
 
-      const sourceIds = [...billIds, ...paymentIds].filter(Boolean)
+      // Combine all source IDs (these match journal_lines.source_id)
+      const sourceIds = [...billItemIds, ...paymentIds].filter(Boolean)
       if (sourceIds.length === 0) {
         setLedgerLines([])
         setLoading(false)
@@ -177,7 +187,7 @@ export default function VendorLedgerPage() {
     if (selectedSupplierId && companyId) fetchLedger()
   }, [selectedSupplierId, companyId, startDate, endDate])
 
-  // Sorting
+  // Sorting (same as before)
   const sortedLines = useMemo(() => {
     const list = [...ledgerLines]
     list.sort((a, b) => {

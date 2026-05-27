@@ -12,7 +12,7 @@ export default function ReportsPage() {
     { title: "Profit & Loss",        desc: "Revenue - Expenses = Net Profit",      icon: <TrendingUp size={24} />,    href: "/dashboard/reports/profit-loss",     color: "#10B981" },
     { title: "Balance Sheet",        desc: "Assets = Liabilities + Equity",        icon: <BarChart3 size={24} />,     href: "/dashboard/reports/balance-sheet",   color: "#8B5CF6" },
     { title: "Customer Ledger",      desc: "Full transaction history by customer", icon: <Users size={24} />,         href: "/dashboard/reports/customer-ledger", color: "#1D4ED8" },
-    { title: "Supplier Ledger",      desc: "Full transaction history by supplier", icon: <Truck size={24} />,         href: "/dashboard/reports/supplier-ledger", color: "#8B5CF6" },
+    { title: "Vendor Ledger",        desc: "Full transaction history by supplier", icon: <Truck size={24} />,         href: "/dashboard/reports/vendor-ledger",   color: "#8B5CF6" },
     { title: "AR Aging Report",      desc: "Accounts Receivable aging analysis",   icon: <Calendar size={24} />,      href: "/dashboard/reports/ar-aging",        color: "#F59E0B" },
     { title: "AP Aging Report",      desc: "Accounts Payable aging analysis",     icon: <Calendar size={24} />,      href: "/dashboard/reports/ap-aging",        color: "#EF4444" },
     { title: "Invoice Print",        desc: "Print or share invoice via WhatsApp",  icon: <FileText size={24} />,      href: "/dashboard/invoices",               color: "#10B981" },
