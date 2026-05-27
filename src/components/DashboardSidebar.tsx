@@ -41,6 +41,7 @@ const navSections: NavSection[] = [
     ]},
     { groupLabel: 'Reports', items: [
       { label: 'All Reports', icon: '📈', href: '/dashboard/reports' },
+      { label: 'Vendor Ledger', icon: '📋', href: '/dashboard/reports/vendor-ledger' },
     ]},
     { groupLabel: 'Fixed Assets', items: [
       { label: 'Asset Register', icon: '📦', href: '/dashboard/assets', feature: 'asset_management' },
