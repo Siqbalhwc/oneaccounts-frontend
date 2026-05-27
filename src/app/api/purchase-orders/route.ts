@@ -56,9 +56,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: poError?.message || "Failed to create PO" }, { status: 500 })
     }
 
-    // Insert items
+    // Insert items – NOW INCLUDES company_id
     const poItems = items.map((item: any) => ({
       po_id: newPO.id,
+      company_id,                          // ← added
       product_id: item.product_id || null,
       description: item.description,
       qty: item.qty,
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: itemsError.message }, { status: 500 })
     }
 
-    // Upload attachments
+    // Upload attachments – already includes company_id in the payload
     const files = formData.getAll("files") as File[]
     for (const file of files) {
       if (!file || !file.name) continue
@@ -86,7 +87,7 @@ export async function POST(request: NextRequest) {
 
       if (!uploadError) {
         await supabase.from("attachments").insert({
-          company_id,
+          company_id,                       // already present
           owner_type: "purchase_order",
           owner_id: newPO.id,
           file_name: file.name,
@@ -96,7 +97,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Audit log – correct signature: (tableName, recordId, action, newData?, changedBy?)
+    // Audit log
     await logDataChange(
       "purchase_orders",
       String(newPO.id),
@@ -152,12 +153,13 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: poError.message }, { status: 500 })
     }
 
-    // Delete old items and re-insert
+    // Delete old items and re-insert with company_id
     await supabase.from("purchase_order_items").delete().eq("po_id", id)
 
     if (items && items.length > 0) {
       const poItems = items.map((item: any) => ({
         po_id: Number(id),
+        company_id,                          // ← added
         product_id: item.product_id || null,
         description: item.description,
         qty: item.qty,
@@ -170,7 +172,7 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Handle new attachments
+    // Handle new attachments (already has company_id)
     const files = formData.getAll("files") as File[]
     for (const file of files) {
       if (!file || !file.name) continue
