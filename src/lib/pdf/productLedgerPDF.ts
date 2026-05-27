@@ -103,14 +103,13 @@ export async function generateProductLedgerPDF(data: ProductLedgerPDFData): Prom
 
   filledRect(doc, ML, tableY, CW, HEADER_ROW_H, NAVY, HEADER_RADIUS)
 
-  // Column widths
+  // Column widths – fixed for all except Invoice #, which takes the remaining space
   const dateW = 28
   const typeW = 30
-  const invW = 45
   const inflowW = 32
   const outflowW = 32
   const balanceW = 32
-  const descW = CW - dateW - typeW - invW - inflowW - outflowW - balanceW
+  const invW = CW - dateW - typeW - inflowW - outflowW - balanceW   // fills the rest
 
   const FONT_SIZE_HEADER = 8
   const headerTextY = tableY + HEADER_ROW_H / 2 + FONT_SIZE_HEADER * 0.35
@@ -123,7 +122,6 @@ export async function generateProductLedgerPDF(data: ProductLedgerPDFData): Prom
   colX += typeW
   doc.text("Invoice #", colX + 2, headerTextY)
   colX += invW
-  // Inflow & Outflow centered
   doc.text("Inflow", colX + inflowW / 2, headerTextY, { align: "center" })
   colX += inflowW
   doc.text("Outflow", colX + outflowW / 2, headerTextY, { align: "center" })
