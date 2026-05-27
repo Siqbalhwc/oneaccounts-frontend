@@ -69,115 +69,103 @@ export default function VendorLedgerPage() {
     }
     supabase
       .from("suppliers")
-      .select("id, code, name, balance")
+      .select("id, code, name")
       .eq("id", selectedSupplierId)
       .eq("company_id", companyId)
       .single()
       .then(({ data }) => data && setSupplier(data))
   }, [selectedSupplierId, companyId])
 
-  // ── CORRECT LEDGER FETCH using supplier.balance ──────────────────────
+  // ── CORRECT LEDGER FETCH ────────────────────────────────────────────
   const fetchLedger = async () => {
     if (!selectedSupplierId || !companyId) return
     setLoading(true)
     setErrorMsg("")
 
     try {
-      // 1. Get the supplier's current balance (maintained by the system)
-      const { data: supp } = await supabase
-        .from("suppliers")
-        .select("balance")
-        .eq("id", selectedSupplierId)
-        .single()
-
-      const currentBalance = supp?.balance || 0
-
-      // 2. Fetch all bills for this supplier within the period
-      const { data: periodBills } = await supabase
+      // 1. All bills for this supplier (any date, no deleted)
+      const { data: allBills } = await supabase
         .from("invoices")
         .select("id, total, invoice_no, date")
         .eq("party_id", selectedSupplierId)
         .eq("type", "purchase")
         .is("deleted_at", null)
-        .gte("date", startDate)
-        .lte("date", endDate)
+        .order("date", { ascending: true })
 
-      // 3. Fetch all payments for this supplier within the period
-      const { data: periodPayments } = await supabase
+      // 2. All payments for this supplier
+      const { data: allPayments } = await supabase
         .from("payments")
         .select("id, amount, payment_no, payment_date")
         .eq("party_id", selectedSupplierId)
         .eq("party_type", "supplier")
-        .gte("payment_date", startDate)
-        .lte("payment_date", endDate)
+        .order("payment_date", { ascending: true })
 
-      // 4. Calculate net period change
-      // Bills increase what you owe (credit), payments decrease (debit)
-      const totalPeriodBills = (periodBills || []).reduce((s, b) => s + (b.total || 0), 0)
-      const totalPeriodPayments = (periodPayments || []).reduce((s, p) => s + (p.amount || 0), 0)
-      const netPeriodChange = totalPeriodBills - totalPeriodPayments
+      // 3. Compute opening balance = sum of bills before start date - sum of payments before start date
+      let openingBalance = 0
 
-      // 5. Opening balance = current balance - net period change
-      const openingBalance = currentBalance - netPeriodChange
+      const periodLines: any[] = []
 
-      // 6. Build ledger lines
-      const lines: any[] = []
-
-      // Opening balance row
-      lines.push({
-        id: "opening",
-        entry_no: "",
-        date: startDate,
-        description: "Opening Balance",
-        debit: openingBalance > 0 ? openingBalance : 0,
-        credit: openingBalance < 0 ? -openingBalance : 0,
-        running_balance: openingBalance,
-        isOpening: true,
-      })
-
-      // Bill rows (credit)
-      for (const bill of periodBills || []) {
-        lines.push({
-          id: `bill-${bill.id}`,
-          entry_no: `JE-BILL-${bill.invoice_no}`,
-          date: bill.date,
-          description: `Purchase Bill ${bill.invoice_no}`,
-          debit: 0,
-          credit: bill.total,
-          running_balance: 0, // will be calculated
-        })
-      }
-
-      // Payment rows (debit)
-      for (const payment of periodPayments || []) {
-        lines.push({
-          id: `payment-${payment.id}`,
-          entry_no: `JE-PAY-${payment.payment_no}`,
-          date: payment.payment_date,
-          description: `Payment ${payment.payment_no}`,
-          debit: payment.amount,
-          credit: 0,
-          running_balance: 0,
-        })
-      }
-
-      // Sort all period lines by date
-      lines.sort((a, b) => {
-        if (a.isOpening) return -1
-        if (b.isOpening) return 1
-        return a.date.localeCompare(b.date)
-      })
-
-      // Calculate running balances
-      let running = openingBalance
-      for (const line of lines) {
-        if (!line.isOpening) {
-          running = running + (line.debit || 0) - (line.credit || 0)
+      // Process bills
+      for (const bill of allBills || []) {
+        if (bill.date < startDate) {
+          // Bills increase what you owe (credit)
+          openingBalance -= (bill.total || 0)
+        } else if (bill.date >= startDate && bill.date <= endDate) {
+          periodLines.push({
+            id: `bill-${bill.id}`,
+            entry_no: `JE-BILL-${bill.invoice_no}`,
+            date: bill.date,
+            description: `Purchase Bill ${bill.invoice_no}`,
+            debit: 0,
+            credit: bill.total || 0,
+            running_balance: 0, // filled later
+          })
         }
-        line.running_balance = running
       }
 
-      setLedgerLines(lines)
+      // Process payments
+      for (const payment of allPayments || []) {
+        if (payment.payment_date < startDate) {
+          // Payments decrease what you owe (debit)
+          openingBalance += (payment.amount || 0)
+        } else if (payment.payment_date >= startDate && payment.payment_date <= endDate) {
+          periodLines.push({
+            id: `payment-${payment.id}`,
+            entry_no: `JE-PAY-${payment.payment_no}`,
+            date: payment.payment_date,
+            description: `Payment ${payment.payment_no}`,
+            debit: payment.amount || 0,
+            credit: 0,
+            running_balance: 0,
+          })
+        }
+      }
+
+      // Sort period lines by date
+      periodLines.sort((a, b) => a.date.localeCompare(b.date))
+
+      // Build final lines with running balance
+      const finalLines: any[] = [
+        {
+          id: "opening",
+          entry_no: "",
+          date: startDate,
+          description: "Opening Balance",
+          debit: openingBalance > 0 ? openingBalance : 0,
+          credit: openingBalance < 0 ? -openingBalance : 0,
+          running_balance: openingBalance,
+          isOpening: true,
+        },
+      ]
+
+      let running = openingBalance
+      for (const line of periodLines) {
+        running += (line.debit || 0) - (line.credit || 0)
+        line.running_balance = running
+        finalLines.push(line)
+      }
+
+      setLedgerLines(finalLines)
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to load ledger")
     } finally {
