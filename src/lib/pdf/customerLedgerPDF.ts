@@ -117,7 +117,6 @@ export async function generateCustomerLedgerPDF(data: CustomerLedgerPDFData): Pr
   const headerTextY = tableY + HEADER_ROW_H / 2 + FONT_SIZE_HEADER * 0.35
   doc.setFont("helvetica", "bold").setFontSize(FONT_SIZE_HEADER).setTextColor(...WHITE)
 
-  // Draw headers – Date, Entry #, Description left-aligned; Debit, Credit, Balance centered
   let colX = ML
   doc.text("Date", colX + 2, headerTextY)
   colX += dateW
@@ -125,14 +124,10 @@ export async function generateCustomerLedgerPDF(data: CustomerLedgerPDFData): Pr
   colX += entryW
   doc.text("Description", colX + 2, headerTextY)
   colX += descW
-
-  // Debit centered in its column
   doc.text("Debit", colX + debitW / 2, headerTextY, { align: "center" })
   colX += debitW
-  // Credit centered
   doc.text("Credit", colX + creditW / 2, headerTextY, { align: "center" })
   colX += creditW
-  // Balance centered
   doc.text("Balance", colX + balanceW / 2, headerTextY, { align: "center" })
 
   const bodyStartY = tableY + HEADER_ROW_H
@@ -189,12 +184,16 @@ export async function generateCustomerLedgerPDF(data: CustomerLedgerPDFData): Pr
 
   const afterTable = (doc as any).lastAutoTable.finalY as number
 
-  // Rounded border around table
+  // Tiny white corner masks (only cover the sharp autoTable corners, never the cell text)
   const TABLE_RADIUS = 4
-  const cornerSize = TABLE_RADIUS + 1
+  const maskSize = 1.5
   doc.setFillColor(...WHITE)
-  doc.rect(ML,                       afterTable - cornerSize, cornerSize, cornerSize, "F")
-  doc.rect(ML + CW - cornerSize,     afterTable - cornerSize, cornerSize, cornerSize, "F")
+  // Bottom‑left corner
+  doc.rect(ML - 0.1, afterTable - maskSize + 0.5, maskSize, maskSize, "F")
+  // Bottom‑right corner
+  doc.rect(ML + CW - maskSize + 0.1, afterTable - maskSize + 0.5, maskSize, maskSize, "F")
+
+  // Rounded border around the table
   doc.setDrawColor(...BORDER).setLineWidth(0.3)
   doc.roundedRect(ML, bodyStartY, CW, afterTable - bodyStartY, TABLE_RADIUS, TABLE_RADIUS, "S")
 
