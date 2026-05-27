@@ -8,7 +8,7 @@ import { useRole } from "@/contexts/RoleContext"
 import { useCompany } from "@/contexts/CompanyContext"
 import { generateGeneralLedgerPDF } from "@/lib/pdf/generalLedgerPDF"
 
-type SortField = "date" | "description" | "debit" | "credit" | "running_balance"
+type SortField = "date" | "entry_no" | "description" | "debit" | "credit" | "running_balance"
 type SortDir   = "asc" | "desc"
 
 export default function LedgerPage() {
@@ -95,7 +95,7 @@ export default function LedgerPage() {
     if (selectedAccountId && companyId) fetchLedger()
   }, [selectedAccountId, companyId, startDate, endDate])
 
-  // ── Sorting ───────────────────────────────────────────────────────
+  // ── Sorting – now includes entry_no separately ─────────────────
   const sortedLines = useMemo(() => {
     const list = [...ledgerLines]
     list.sort((a, b) => {
@@ -103,8 +103,10 @@ export default function LedgerPage() {
       if (!a.isOpening && b.isOpening) return 1
       let valA: any, valB: any
       if (["debit","credit","running_balance"].includes(sortField)) {
-        valA = a[sortField] || 0; valB = b[sortField] || 0
+        valA = a[sortField] || 0
+        valB = b[sortField] || 0
       } else {
+        // entry_no, description, date are strings
         valA = (a[sortField] || "").toString().toLowerCase()
         valB = (b[sortField] || "").toString().toLowerCase()
       }
@@ -238,8 +240,8 @@ export default function LedgerPage() {
             <div className="ledger-card">
               <div className="ledger-header">
                 <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
-                <button className="sort-btn" onClick={() => handleSort("description")}>Entry #{getSortIcon("description")}</button>
-                <span>Description</span>
+                <button className="sort-btn" onClick={() => handleSort("entry_no")}>Entry # {getSortIcon("entry_no")}</button>
+                <button className="sort-btn" onClick={() => handleSort("description")}>Description {getSortIcon("description")}</button>
                 <button className="sort-btn" onClick={() => handleSort("debit")}           style={{ justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
                 <button className="sort-btn" onClick={() => handleSort("credit")}          style={{ justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
                 <button className="sort-btn" onClick={() => handleSort("running_balance")} style={{ justifyContent: "flex-end" }}>Balance {getSortIcon("running_balance")}</button>
