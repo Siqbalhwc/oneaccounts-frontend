@@ -5,6 +5,8 @@ import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Download, Printer, Calendar, TrendingUp, TrendingDown } from "lucide-react"
 import { useRouter } from "next/navigation"
 import * as XLSX from "xlsx"
+import { generateProfitLossPDF } from "@/lib/pdf/profitLossPDF"
+import { useCompany } from "@/contexts/CompanyContext"
 
 function getCategory(account: any): string {
   if (account.category) return account.category
@@ -38,6 +40,42 @@ export default function ProfitLossPage() {
   const [compareRows, setCompareRows] = useState<any[]>([])
   const [compareLoading, setCompareLoading] = useState(false)
 
+  const { companyName, companyTagline, logoUrl } = useCompany()
+
+  // ── Fetch period‑based P&L data from our fast API ──
+  const fetchAccounts = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/profit-loss?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`)
+      if (!res.ok) throw new Error(await res.text())
+      const json = await res.json()
+      const mapped = (json || []).map((row: any) => ({
+        id: row.account_id,
+        code: row.code,
+        name: row.name,
+        type: row.type,
+        category: row.category || getCategory({ code: row.code }),
+        balance: Number(row.net),
+      }))
+      setAccounts(mapped)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchProjects = async () => {
+    const { data } = await supabase.from("projects").select("id, name").is("deleted_at", null).order("name")
+    if (data) setProjects(data)
+  }
+
+  useEffect(() => {
+    fetchAccounts()
+    fetchProjects()
+  }, [startDate, endDate])
+
+  // Derived data
   const revenueAccounts = accounts.filter(a => a.type === "Revenue")
   const expenseAccounts = accounts.filter(a => a.type === "Expense")
   const directExpenses = expenseAccounts.filter(a => getCategory(a) === "Direct Expenses")
@@ -53,15 +91,7 @@ export default function ProfitLossPage() {
   const netProfit = grossProfit - totalOpEx - totalOther
   const margin = totalRevenue !== 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : "0.0"
 
-  useEffect(() => {
-    supabase.from("accounts").select("*").order("code").then(r => {
-      if (r.data) setAccounts(r.data)
-      setLoading(false)
-    })
-    supabase.from("projects").select("id, name").is("deleted_at", null).order("name")
-      .then(r => r.data && setProjects(r.data))
-  }, [])
-
+  // ── Project comparison (unchanged) ──
   useEffect(() => {
     if (!compareMode || accounts.length === 0) { setCompareRows([]); return }
     setCompareLoading(true)
@@ -144,17 +174,16 @@ export default function ProfitLossPage() {
     else navigateToTrialBalance("Expense", getCategory(account))
   }
 
-  // ── Excel export ──
+  // ── Excel export (unchanged) ──
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new()
-    const companyName = "Shahid Iqbal & Co"   // you can fetch from settings later
+    const companyNameLocal = companyName || "Shahid Iqbal & Co"
     const title = `Profit & Loss Statement`
     const period = `From ${startDate} to ${endDate}`
 
     if (!compareMode) {
-      // Single‑column export
       const sheetData: any[][] = [
-        [companyName],
+        [companyNameLocal],
         [title],
         [period],
         [""],
@@ -179,15 +208,21 @@ export default function ProfitLossPage() {
       ws["!cols"] = [{ wch: 50 }, { wch: 20 }]
       XLSX.utils.book_append_sheet(wb, ws, "Profit & Loss")
     } else {
-      // Project‑wise export
       const headers = ["Account", ...projects.map(p => p.name), "Unallocated", "Total"]
       const sheetData: any[][] = [
-        [companyName],
+        [companyNameLocal],
         [title],
         [period],
         [""],
         headers,
       ]
+
+      const projSubtotal = (filter: (r: any) => boolean, pid: string) =>
+        compareRows.filter(filter).reduce((s, r) => s + (r.projectAmounts[pid] || 0), 0)
+      const projUnallocatedSubtotal = (filter: (r: any) => boolean) =>
+        compareRows.filter(filter).reduce((s, r) => s + r.unallocated, 0)
+      const projTotal = (filter: (r: any) => boolean) =>
+        compareRows.filter(filter).reduce((s, r) => s + r.total, 0)
 
       const addSection = (heading: string, filter: (r: any) => boolean) => {
         sheetData.push([heading, ...projects.map(() => ""), "", ""])
@@ -195,14 +230,12 @@ export default function ProfitLossPage() {
           const vals = projects.map(p => fmtOrDash(row.projectAmounts[p.id] || 0))
           sheetData.push([`${row.code} – ${row.name}`, ...vals, fmtOrDash(row.unallocated), fmtOrDash(row.total)])
         })
-        // subtotal
         const subtotals = projects.map(p => fmt(projSubtotal(filter, p.id)))
         sheetData.push(["Total " + heading, ...subtotals, fmt(projUnallocatedSubtotal(filter)), fmt(projTotal(filter))])
       }
 
       addSection("Income / Revenue", r => r.type === "Revenue")
       if (directExpenses.length > 0) addSection("Cost of Goods Sold / Direct Expenses", r => r.category === "Direct Expenses")
-      // Gross Profit row
       const gpRow = ["Gross Profit"]
       projects.forEach(p => {
         const rev = projSubtotal(r => r.type === "Revenue", p.id)
@@ -232,6 +265,47 @@ export default function ProfitLossPage() {
     XLSX.writeFile(wb, `Profit_Loss_${startDate}_to_${endDate}.xlsx`)
   }
 
+  // ── PDF export handler ─────────────────────────────────────────
+  const handleExportPDF = async () => {
+    if (compareMode) {
+      const pdfData = {
+        companyName: companyName || "OneAccounts",
+        companyTagline: companyTagline || "",
+        logoUrl: logoUrl || null,
+        startDate,
+        endDate,
+        mode: "compare" as const,
+        projects,
+        compareRows,
+        compareGrossProfit: grossProfit,
+        compareNetProfit: netProfit,
+      }
+      const doc = await generateProfitLossPDF(pdfData)
+      doc.save(`Profit_Loss_Compare_${startDate}_to_${endDate}.pdf`)
+    } else {
+      const pdfData = {
+        companyName: companyName || "OneAccounts",
+        companyTagline: companyTagline || "",
+        logoUrl: logoUrl || null,
+        startDate,
+        endDate,
+        mode: "overall" as const,
+        revenueAccounts: revenueAccounts.map(a => ({ code: a.code, name: a.name, amount: Math.abs(a.balance || 0) })),
+        directExpenses: directExpenses.map(a => ({ code: a.code, name: a.name, amount: Math.abs(a.balance || 0) })),
+        operatingExpenses: operatingExpenses.map(a => ({ code: a.code, name: a.name, amount: Math.abs(a.balance || 0) })),
+        otherExpenses: otherExpenses.map(a => ({ code: a.code, name: a.name, amount: Math.abs(a.balance || 0) })),
+        grossProfit,
+        netProfit,
+        totalRevenue,
+        totalDirect,
+        totalOpEx,
+        totalOther,
+      }
+      const doc = await generateProfitLossPDF(pdfData)
+      doc.save(`Profit_Loss_${startDate}_to_${endDate}.pdf`)
+    }
+  }
+
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "var(--bg)", color: "var(--text-muted)", fontFamily: "'Inter', sans-serif", gap: 12 }}>
       <div style={{ width: 20, height: 20, border: "2px solid var(--primary)", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
@@ -240,12 +314,11 @@ export default function ProfitLossPage() {
     </div>
   )
 
+  // Helper functions for compare view
   const projSubtotal = (filter: (r: any) => boolean, pid: string) =>
     compareRows.filter(filter).reduce((s, r) => s + (r.projectAmounts[pid] || 0), 0)
-
   const projUnallocatedSubtotal = (filter: (r: any) => boolean) =>
     compareRows.filter(filter).reduce((s, r) => s + r.unallocated, 0)
-
   const projTotal = (filter: (r: any) => boolean) =>
     compareRows.filter(filter).reduce((s, r) => s + r.total, 0)
 
@@ -520,6 +593,7 @@ export default function ProfitLossPage() {
         <div className="date-actions">
           <button className="action-btn" onClick={() => window.print()}><Printer size={13} /> Print</button>
           <button className="action-btn" onClick={handleExportExcel}><Download size={13} /> Export</button>
+          <button className="action-btn" onClick={handleExportPDF}><Download size={13} /> PDF</button>
         </div>
       </div>
 
@@ -528,7 +602,7 @@ export default function ProfitLossPage() {
         <div className="report-body">
           {/* Print title block */}
           <div className="print-title" style={{ textAlign: "center", marginBottom: 20 }}>
-            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Shahid Iqbal &amp; Co</h2>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{companyName || "Shahid Iqbal & Co"}</h2>
             <h3 style={{ margin: "4px 0", fontSize: 14, fontWeight: 700 }}>Profit &amp; Loss Statement</h3>
             <div className="print-period" style={{ fontSize: 12, color: "var(--text-muted)" }}>
               From {startDate} to {endDate}
@@ -639,7 +713,7 @@ export default function ProfitLossPage() {
       ) : (
         <div className="compare-wrap">
           <div className="print-title" style={{ textAlign: "center", marginBottom: 20 }}>
-            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Shahid Iqbal &amp; Co</h2>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{companyName || "Shahid Iqbal & Co"}</h2>
             <h3 style={{ margin: "4px 0", fontSize: 14, fontWeight: 700 }}>Profit &amp; Loss Statement (Project‑wise)</h3>
             <div className="print-period" style={{ fontSize: 12, color: "var(--text-muted)" }}>
               From {startDate} to {endDate}
