@@ -3,12 +3,14 @@
 import { createContext, useContext, ReactNode } from "react"
 
 interface CompanyData {
+  companyId: string          // ← new
   companyName: string
   companyTagline: string
   logoUrl: string | null
 }
 
 const CompanyContext = createContext<CompanyData>({
+  companyId: "",
   companyName: "",
   companyTagline: "",
   logoUrl: null,

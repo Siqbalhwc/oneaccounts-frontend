@@ -234,10 +234,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
         <div className="dl-main">
           <CompanyProvider value={{
-            companyName: tenant.companyName,
-            companyTagline: tenant.companyTagline,
-            logoUrl: tenant.companyLogo,
-          }}>
+  companyId: tenant.companyId,          // ← new
+  companyName: tenant.companyName,
+  companyTagline: tenant.companyTagline,
+  logoUrl: tenant.companyLogo,
+}}>
             <QueryProvider>              {/* ← NEW – wraps all page content */}
               <div className="dl-main-content">{children}</div>
             </QueryProvider>

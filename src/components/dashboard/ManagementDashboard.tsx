@@ -1,25 +1,21 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
 import { TrendingUp, TrendingDown, Minus, CheckCircle, AlertTriangle } from "lucide-react"
 import { motion } from "framer-motion"
 import { useTheme } from "@/contexts/ThemeContext"
+import { useCompany } from "@/contexts/CompanyContext"
 import { useDashboardData } from "@/hooks/useDashboardData"
 
 export default function ManagementDashboard({ role }: { role: string }) {
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
   const router = useRouter()
 
   const { theme: themeMode } = useTheme()
   const isDark = themeMode === "dark"
 
-  const [companyId, setCompanyId] = useState<string | null>(null)
-  const [companyError, setCompanyError] = useState(false)
+  const { companyId } = useCompany()
+  const companyError = !companyId
 
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
@@ -51,26 +47,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
   // ── Top‑5 projects for the card ──
   const topFiveProjects: any[] = projectRows.slice(0, 5)
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user }, error }) => {
-      if (error || !user) {
-        setCompanyError(true)
-        return
-      }
-      const cid = (user?.app_metadata as any)?.company_id
-      if (cid) setCompanyId(cid)
-      else setCompanyError(true)
-    })
-  }, [])
-
-  useEffect(() => {
-    if (!companyId) return
-    supabase.from("projects").select("id, name").eq("company_id", companyId).order("name")
-      .then(r => r.data && setProjects(r.data))
-    supabase.from("donors").select("id, name").eq("company_id", companyId).order("name")
-      .then(r => r.data && setDonors(r.data))
-  }, [companyId])
 
   // ── Filtered data ─────────────────────────────────────────────────
   const filteredDonorBalances: any[] = donorBalances.filter((d: any) => !selectedDonorId || d.donor_id == selectedDonorId)
