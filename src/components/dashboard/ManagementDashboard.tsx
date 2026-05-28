@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { TrendingUp, TrendingDown, Minus, CheckCircle, AlertTriangle } from "lucide-react"
 import { motion } from "framer-motion"
 import { useTheme } from "@/contexts/ThemeContext"
+import { useDashboardData } from "@/hooks/useDashboardData"
 
 export default function ManagementDashboard({ role }: { role: string }) {
   const supabase = createBrowserClient(
@@ -19,7 +20,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
   const [companyId, setCompanyId] = useState<string | null>(null)
   const [companyError, setCompanyError] = useState(false)
-  const [loading, setLoading] = useState(true)
 
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
@@ -28,21 +28,26 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
 
-  const [donorBalances, setDonorBalances] = useState<any[]>([])
-  const [projectRows, setProjectRows] = useState<any[]>([])
-  const [totalBudget, setTotalBudget] = useState(0)
-  const [totalSpent, setTotalSpent] = useState(0)
-  const [overspentCount, setOverspentCount] = useState(0)
-  const [totalReceivables, setTotalReceivables] = useState(0)
-  const [totalPayables, setTotalPayables] = useState(0)
-  const [monthlySpending, setMonthlySpending] = useState(0)
-  const [lastMonthSpending, setLastMonthSpending] = useState(0)
-  const [spendingTrend, setSpendingTrend] = useState(0)
+  // ── React Query cached dashboard data ─────────────────────────────
+  const { data: dashData, isLoading, isError } = useDashboardData(companyId, fiscalYear)
+
+  // Extract cached values with safe defaults
+  const donorBalances = dashData?.donorBalances || []
+  const projectRows = dashData?.projectRows || []
+  const totalBudget = dashData?.totalBudget || 0
+  const totalSpent = dashData?.totalSpent || 0
+  const overspentCount = dashData?.overspentCount || 0
+  const totalReceivables = dashData?.totalReceivables || 0
+  const totalPayables = dashData?.totalPayables || 0
+  const monthlySpending = dashData?.monthlySpending || 0
+  const lastMonthSpending = dashData?.lastMonthSpending || 0
+  const spendingTrend = dashData?.spendingTrend || 0
+  const overdueInvoicesCount = dashData?.overdueInvoicesCount || 0
+  const lastUpdated = dashData?.lastUpdated || ""
+
+  // ── Underspent activities & activity health (unchanged) ─────────────
   const [underspentActivities, setUnderspentActivities] = useState<any[]>([])
   const [activityHealth, setActivityHealth] = useState<Record<string, { lowCount: number; threshold: number; message: string }>>({})
-  const [lastUpdated, setLastUpdated] = useState("")
-
-  const [overdueInvoicesCount, setOverdueInvoicesCount] = useState(0)
 
   // ── Top‑5 projects for the card ──
   const topFiveProjects = projectRows.slice(0, 5)
@@ -51,16 +56,11 @@ export default function ManagementDashboard({ role }: { role: string }) {
     supabase.auth.getUser().then(({ data: { user }, error }) => {
       if (error || !user) {
         setCompanyError(true)
-        setLoading(false)
         return
       }
       const cid = (user?.app_metadata as any)?.company_id
-      if (cid) {
-        setCompanyId(cid)
-      } else {
-        setCompanyError(true)
-        setLoading(false)
-      }
+      if (cid) setCompanyId(cid)
+      else setCompanyError(true)
     })
   }, [])
 
@@ -72,258 +72,18 @@ export default function ManagementDashboard({ role }: { role: string }) {
       .then(r => r.data && setDonors(r.data))
   }, [companyId])
 
-  useEffect(() => {
-    if (!companyId) return
-
-    const fetchData = async () => {
-      setLoading(true)
-      try {
-        const now = new Date()
-        const currentMonth = now.getMonth() + 1
-        const currentYear = now.getFullYear()
-        const startOfMonthISO = new Date(Date.UTC(currentYear, currentMonth - 1, 1)).toISOString().split("T")[0]
-        const todayISO = now.toISOString().split("T")[0]
-
-        // Total Budget
-        const { data: budgets } = await supabase
-          .from("budgets")
-          .select("budgeted_amount")
-          .eq("company_id", companyId)
-          .eq("fiscal_year", fiscalYear)
-          .is("month", null)
-          .not("activity_id", "is", null)
-        setTotalBudget(budgets?.reduce((s, b) => s + (b.budgeted_amount || 0), 0) || 0)
-
-        // Total Spent (RPC)
-        const { data: spentData } = await supabase.rpc("total_spent", { cid: companyId, fy: fiscalYear })
-        setTotalSpent(spentData?.[0]?.total || 0)
-
-        // Donor Balances (RPC)
-        const { data: donorData } = await supabase.rpc("dashboard_donor_balances", { cid: companyId, fy: fiscalYear })
-        setDonorBalances(donorData?.map((d: any) => {
-          const percentSpent = d.budget ? (d.actual_spent / d.budget) * 100 : 0
-          const monthsPassed = now.getMonth() + 1
-          const monthsTotal = 12
-          const timePercent = (monthsPassed / monthsTotal) * 100
-          const health = percentSpent > timePercent * 0.8 ? "on track" : percentSpent < timePercent * 0.4 ? "slow" : "ok"
-          return {
-            donor_id: d.donor_id, name: d.donor_name,
-            budget: d.budget, actual: d.actual_spent,
-            remaining: (d.budget || 0) - (d.actual_spent || 0),
-            pct: Math.round(percentSpent),
-            overspent: (d.actual_spent || 0) > (d.budget || 0),
-            monthsPassed,
-            monthsTotal,
-            health,
-          }
-        }) || [])
-
-        // Project Utilization (RPC)
-        const { data: projData } = await supabase.rpc("dashboard_project_utilization", {
-          p_company_id: companyId, p_fiscal_year: fiscalYear,
-        })
-        const projectsArr = projData?.map((p: any) => ({
-          id: p.project_id, name: p.project_name,
-          budget: p.budget || 0, actual: p.actual || 0,
-          pct: p.budget ? Math.round(((p.actual || 0) / p.budget) * 100) : (p.actual > 0 ? 100 : 0),
-        })) || []
-        const pastQ1 = now.getMonth() > 2
-        const enrichedProjects = projectsArr.map((p: any) => ({
-          ...p,
-          status: p.pct > 100 ? "Overspent" : p.pct > 80 ? "Review" : (pastQ1 && p.pct < 10) ? "At Risk" : "On Track",
-        }))
-        setProjectRows(enrichedProjects.sort((a: any, b: any) => b.pct - a.pct))
-        setOverspentCount(enrichedProjects.filter((p: any) => p.actual > p.budget).length)
-
-        // ... (rest of the fetch logic remains exactly the same)
-        // Quick stats, monthly spending, underspent activities, etc.
-        // (I'm including the full logic here to keep the file complete, but no changes below this point)
-
-        // Quick stats
-        const { data: custBals } = await supabase.from("customers").select("balance").eq("company_id", companyId)
-        setTotalReceivables(custBals?.reduce((s, c) => s + (c.balance || 0), 0) || 0)
-
-        const { data: suppBals } = await supabase.from("suppliers").select("balance").eq("company_id", companyId)
-        setTotalPayables(suppBals?.reduce((s, s2) => s + (s2.balance || 0), 0) || 0)
-
-        // Monthly spending (Expense + Fixed Asset accounts)
-        const { data: expenseAccounts } = await supabase.from("accounts")
-          .select("id").eq("company_id", companyId).eq("type", "Expense")
-        const { data: fixedAssets } = await supabase.from("accounts")
-          .select("id").eq("company_id", companyId).eq("type", "Asset")
-          .gte("code", "1400").lte("code", "1499")
-
-        const accountIds = [...(expenseAccounts?.map(a => a.id) || []), ...(fixedAssets?.map(a => a.id) || [])]
-
-        if (accountIds.length > 0) {
-          const { data: monthLines } = await supabase
-            .from("journal_lines")
-            .select("debit, credit, journal_entries!inner(date)")
-            .eq("company_id", companyId)
-            .in("account_id", accountIds)
-            .gte("journal_entries.date", startOfMonthISO)
-            .lte("journal_entries.date", todayISO)
-
-          const monthTotal = (monthLines || []).reduce((sum, l) => sum + (l.debit || 0) - (l.credit || 0), 0)
-          setMonthlySpending(monthTotal)
-
-          const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1
-          const prevYear = currentMonth === 1 ? currentYear - 1 : currentYear
-          const prevStart = new Date(Date.UTC(prevYear, prevMonth - 1, 1)).toISOString().split("T")[0]
-          const prevEnd = new Date(Date.UTC(prevYear, prevMonth, 0)).toISOString().split("T")[0]
-
-          const { data: prevMonthLines } = await supabase
-            .from("journal_lines")
-            .select("debit, credit, journal_entries!inner(date)")
-            .eq("company_id", companyId)
-            .in("account_id", accountIds)
-            .gte("journal_entries.date", prevStart)
-            .lte("journal_entries.date", prevEnd)
-
-          const prevMonthTotal = (prevMonthLines || []).reduce((sum, l) => sum + (l.debit || 0) - (l.credit || 0), 0)
-          setLastMonthSpending(prevMonthTotal)
-
-          if (prevMonthTotal > 0) {
-            setSpendingTrend(Math.round(((monthTotal - prevMonthTotal) / prevMonthTotal) * 100))
-          } else if (monthTotal > 0) {
-            setSpendingTrend(100)
-          } else {
-            setSpendingTrend(0)
-          }
-        }
-
-        // ── Top 5 underspent activities ──
-        const { data: actBudgets } = await supabase
-          .from("budgets")
-          .select("activity_id, activities(name), budgeted_amount, project_id")
-          .eq("company_id", companyId)
-          .eq("fiscal_year", fiscalYear)
-          .is("month", null)
-        const activityMap: Record<number, { name: string; budget: number; actual: number; projectId: number | null }> = {}
-        actBudgets?.forEach((b: any) => {
-          if (!b.activity_id) return
-          if (!activityMap[b.activity_id]) {
-            activityMap[b.activity_id] = {
-              name: b.activities?.name || `Activity ${b.activity_id}`,
-              budget: 0,
-              actual: 0,
-              projectId: b.project_id || null,
-            }
-          }
-          activityMap[b.activity_id].budget += b.budgeted_amount || 0
-        })
-        const { data: actLines } = await supabase
-          .from("journal_lines")
-          .select("activity_id, debit, credit, journal_entries!inner(date)")
-          .eq("company_id", companyId)
-          .in("account_id", accountIds.length > 0 ? accountIds : ["__none__"])
-          .gte("journal_entries.date", startOfMonthISO)
-          .lte("journal_entries.date", todayISO)
-        actLines?.forEach((l: any) => {
-          if (!l.activity_id || !activityMap[l.activity_id]) return
-          activityMap[l.activity_id].actual += (l.debit || 0) - (l.credit || 0)
-        })
-        const underspent = Object.entries(activityMap)
-          .filter(([_, a]) => a.budget > 0)
-          .map(([id, a]) => ({
-            id: Number(id),
-            name: a.name,
-            budget: a.budget,
-            actual: a.actual,
-            remaining: a.budget - a.actual,
-            pct: Math.round(((a.budget - a.actual) / a.budget) * 100),
-            projectId: a.projectId,
-          }))
-          .sort((a, b) => b.remaining - a.remaining)
-          .slice(0, 5)
-        setUnderspentActivities(underspent)
-
-        // Activity health per project
-        if (enrichedProjects.length > 0) {
-          const projectIds = enrichedProjects.map((p: any) => p.id)
-          const { data: actBudgetsAll } = await supabase
-            .from("budgets")
-            .select("project_id, activity_id, budgeted_amount")
-            .eq("company_id", companyId)
-            .eq("fiscal_year", fiscalYear)
-            .in("project_id", projectIds)
-            .is("month", null)
-          const projActBudget: Record<string, Record<string, number>> = {}
-          actBudgetsAll?.forEach((b: any) => {
-            const pid = String(b.project_id)
-            const aid = String(b.activity_id)
-            if (!projActBudget[pid]) projActBudget[pid] = {}
-            projActBudget[pid][aid] = (projActBudget[pid][aid] || 0) + (b.budgeted_amount || 0)
-          })
-          const allActIds = Array.from(new Set(actBudgetsAll?.map((b: any) => b.activity_id) || []))
-          const { data: actActuals } = await supabase
-            .from("journal_lines")
-            .select("activity_id, debit, credit")
-            .eq("company_id", companyId)
-            .in("activity_id", allActIds)
-            .gte("journal_entries.date", `${fiscalYear}-01-01`)
-            .lte("journal_entries.date", `${fiscalYear}-12-31`)
-          const actActualMap: Record<string, number> = {}
-          actActuals?.forEach((l: any) => {
-            const aid = String(l.activity_id)
-            actActualMap[aid] = (actActualMap[aid] || 0) + (l.debit || 0) - (l.credit || 0)
-          })
-
-          const healthData: Record<string, { lowCount: number; threshold: number; message: string }> = {}
-          enrichedProjects.forEach((proj: any) => {
-            const pid = String(proj.id)
-            const projPct = proj.pct
-            const activities = projActBudget[pid] || {}
-            let lowCount = 0
-            const threshold = Math.max(0, projPct - 20)
-            if (projPct > 0) {
-              Object.entries(activities).forEach(([aid, budget]) => {
-                const actual = actActualMap[aid] || 0
-                const actPct = budget > 0 ? (actual / budget) * 100 : 0
-                if (actPct < threshold) lowCount++
-              })
-            }
-            if (lowCount > 0) {
-              healthData[pid] = { lowCount, threshold, message: `⚠️ ${lowCount} act. below ${threshold}%` }
-            }
-          })
-          setActivityHealth(healthData)
-        }
-
-        // ── Overdue invoices count ──
-        const { data: overdueInvoices } = await supabase
-          .from("invoices")
-          .select("id")
-          .eq("company_id", companyId)
-          .eq("type", "sale")
-          .eq("status", "Unpaid")
-          .lt("due_date", todayISO)
-        setOverdueInvoicesCount(overdueInvoices?.length || 0)
-
-        setLastUpdated(new Date().toLocaleTimeString())
-      } catch (err) {
-        console.error("Dashboard fetch error:", err)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchData()
-  }, [companyId, fiscalYear])
-
-  // ── Filtered data ──
-  const filteredDonorBalances = donorBalances.filter(d => !selectedDonorId || d.donor_id == selectedDonorId)
-  const filteredProjectRows = projectRows.filter(p => !selectedProjectId || p.id == selectedProjectId)
-  const filteredTotalBudget = selectedProjectId ? filteredProjectRows.reduce((s, p) => s + p.budget, 0) : totalBudget
-  const filteredTotalSpent = selectedProjectId ? filteredProjectRows.reduce((s, p) => s + p.actual, 0) : totalSpent
-  const filteredOverspentCount = selectedProjectId ? filteredProjectRows.filter(p => p.actual > p.budget).length : overspentCount
+  // ── Filtered data ─────────────────────────────────────────────────
+  const filteredDonorBalances = donorBalances.filter((d: any) => !selectedDonorId || d.donor_id == selectedDonorId)
+  const filteredProjectRows = projectRows.filter((p: any) => !selectedProjectId || p.id == selectedProjectId)
+  const filteredTotalBudget = selectedProjectId ? filteredProjectRows.reduce((s: number, p: any) => s + p.budget, 0) : totalBudget
+  const filteredTotalSpent = selectedProjectId ? filteredProjectRows.reduce((s: number, p: any) => s + p.actual, 0) : totalSpent
+  const filteredOverspentCount = selectedProjectId ? filteredProjectRows.filter((p: any) => p.actual > p.budget).length : overspentCount
   const remainingFunds = filteredTotalBudget - filteredTotalSpent
   const spentPct = filteredTotalBudget ? Math.round((filteredTotalSpent / filteredTotalBudget) * 100) : 0
 
-  // Projects for variance display (highest & lowest spending % vs overall)
   const projectsSorted = [...filteredProjectRows].sort((a, b) => b.pct - a.pct)
   const highestProject = projectsSorted[0] || null
-  const lowestProject  = projectsSorted[projectsSorted.length - 1] || null
+  const lowestProject = projectsSorted[projectsSorted.length - 1] || null
 
   const getGreeting = () => {
     const hour = new Date().getHours()
@@ -366,7 +126,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
     )
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div style={{ padding: 40, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
         <motion.div
@@ -375,6 +135,15 @@ export default function ManagementDashboard({ role }: { role: string }) {
           style={{ width: 36, height: 36, borderRadius: "50%", border: "3px solid var(--border)", borderTop: "3px solid #A78BFA" }}
         />
         <div style={{ fontSize: "0.9rem" }}>Loading your dashboard…</div>
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div style={{ padding: 40, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>
+        <div style={{ fontSize: "1.2rem", marginBottom: 8, color: "#F87171" }}>Could not load dashboard</div>
+        <div style={{ fontSize: "0.85rem" }}>Please try refreshing the page.</div>
       </div>
     )
   }
@@ -498,7 +267,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
         .clickable { color: #93C5FD; text-decoration: underline; cursor: pointer; }
 
-        /* Compact overdue banner */
         .overdue-banner {
           background: var(--card); border: 1px solid var(--border); border-left: 4px solid #EF4444;
           border-radius: 8px; padding: 0.5rem 1rem; margin-bottom: 1rem;
