@@ -120,82 +120,62 @@ export async function generateTrialBalancePDF(data: TrialBalancePDFData): Promis
   doc.setTextColor(...NAVY)
   doc.text("TRIAL BALANCE", PW - MR, LOGO_Y + 9, { align: "right" })
 
-  // Date range
+  // Date range – now on one line
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8)
   doc.setTextColor(...MUTED)
-  doc.text(`From: ${data.startDate}`, PW - MR, LOGO_Y + 16, { align: "right" })
-  doc.text(`To:   ${data.endDate}`, PW - MR, LOGO_Y + 21, { align: "right" })
+  doc.text(`From: ${data.startDate}  To: ${data.endDate}`, PW - MR, LOGO_Y + 16, { align: "right" })
 
   const HEADER_H = LOGO_Y + LOGO_SIZE + 4
   doc.setDrawColor(...BORDER)
   doc.setLineWidth(0.4)
   doc.line(ML, HEADER_H, PW - MR, HEADER_H)
 
-  // ── SUMMARY BOX ────────────────────────────────────────────────────
-  let Y = HEADER_H + 7
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(11)
-  doc.setTextColor(...DARK)
-  doc.text("Summary", ML, Y)
-  Y += 6
-
-  const summaryData = [
-    ["Total Debits",  pkr(data.totalDebit)],
-    ["Total Credits", pkr(data.totalCredit)],
-    ["Status",        data.isBalanced ? "Balanced" : "Imbalance"],
-  ]
-
-  autoTable(doc, {
-    startY: Y,
-    margin: { left: ML, right: MR },
-    body: summaryData,
-    showHead: false,
-    styles: {
-      fontSize: 9,
-      cellPadding: { top: 2, bottom: 2, left: 3, right: 3 },
-      textColor: DARK,
-      lineColor: BORDER,
-      lineWidth: 0.2,
-    },
-    columnStyles: {
-      0: { fontStyle: "bold", cellWidth: 40, fillColor: [248, 249, 252] },
-      1: { halign: "right", cellWidth: "auto" },
-    },
-  })
-
-  Y = (doc as any).lastAutoTable.finalY + 5
-
   // ── TABLE HEADER (dark background) ─────────────────────────────────
+  let Y = HEADER_H + 10   // slightly more space after removing summary
   const HEADER_ROW_H = 10
   const HEADER_RADIUS = 4
 
   filledRect(doc, ML, Y, CW, HEADER_ROW_H, NAVY, HEADER_RADIUS)
 
-  const descColX = ML + 14 + 8 + 2   // same logic as invoice table
-  const descColW = CW - (14 + 8 + 2) - (16 + 32 + 34 + 4)  // adjust for trial columns
+  // Column widths (same as before)
+  const codeColW = 14
+  const typeColW = 16
+  const debitColW = 32
+  const creditColW = 34
+  const nameColW = CW - codeColW - typeColW - debitColW - creditColW - (8+2) // gap
 
+  const descColX = ML + codeColW + 2   // start of name column
   const textY = Y + HEADER_ROW_H / 2 + 1.5
 
   doc.setFont("helvetica", "bold")
   doc.setFontSize(8)
   doc.setTextColor(...WHITE)
 
-  doc.text("Code", ML + 14 + 8 / 2, textY, { align: "center" })
+  doc.text("Code", ML + codeColW / 2, textY, { align: "center" })
   doc.text("Account Name", descColX + 3, textY, { align: "left" })
-  doc.text("Type", descColX + descColW + 16 / 2, textY, { align: "center" })
-  doc.text("Debit", descColX + descColW + 16 + 32 / 2, textY, { align: "center" })
-  doc.text("Credit", descColX + descColW + 16 + 32 + 34 / 2, textY, { align: "center" })
+  doc.text("Type", descColX + nameColW + typeColW / 2, textY, { align: "center" })
+  doc.text("Debit", descColX + nameColW + typeColW + debitColW / 2, textY, { align: "center" })
+  doc.text("Credit", descColX + nameColW + typeColW + debitColW + creditColW / 2, textY, { align: "center" })
 
-  // ── TABLE BODY ─────────────────────────────────────────────────────
+  // ── TABLE BODY including totals row ────────────────────────────────
   const tableStartY = Y + HEADER_ROW_H
 
-  const tableRows = data.rows.map(row => [
+  const tableRows: any[] = data.rows.map(row => [
     row.code,
     row.name,
     row.type,
     row.debit > 0 ? pkr(row.debit) : "",
     row.credit > 0 ? pkr(row.credit) : "",
+  ])
+
+  // Totals row as last row
+  tableRows.push([
+    "",
+    "Total",
+    "",
+    pkr(data.totalDebit),
+    pkr(data.totalCredit),
   ])
 
   autoTable(doc, {
@@ -212,11 +192,18 @@ export async function generateTrialBalancePDF(data: TrialBalancePDFData): Promis
     },
     alternateRowStyles: { fillColor: ROW_ALT },
     columnStyles: {
-      0: { cellWidth: 14, halign: "center" },
-      1: { cellWidth: "auto", halign: "left" },
-      2: { cellWidth: 16, halign: "center" },
-      3: { cellWidth: 32, halign: "right" },
-      4: { cellWidth: 34, halign: "right" },
+      0: { cellWidth: codeColW, halign: "center" },
+      1: { cellWidth: nameColW, halign: "left" },
+      2: { cellWidth: typeColW, halign: "center" },
+      3: { cellWidth: debitColW, halign: "right" },
+      4: { cellWidth: creditColW, halign: "right" },
+    },
+    // Bold and gray background for the totals row (last row)
+    didParseCell: (hookData) => {
+      if (hookData.row.index === tableRows.length - 1 && hookData.row.section === 'body') {
+        hookData.cell.styles.fontStyle = 'bold'
+        hookData.cell.styles.fillColor = [240, 240, 245]  // light gray
+      }
     },
   })
 
