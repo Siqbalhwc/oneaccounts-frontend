@@ -412,7 +412,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
             transition={{ delay: 0.4, duration: 0.5 }}
           >
             <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>📊 Top 5 Project Utilization</div>
-            {topFiveProjects.map((p, idx) => {
+            {topFiveProjects.map((p: any, idx: number) => {
               const health = activityHealth[p.id]
               return (
                 <div key={idx} onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}&fy=${fiscalYear}`)} style={{
