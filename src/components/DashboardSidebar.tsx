@@ -61,6 +61,19 @@ const navSections: NavSection[] = [
   ]},
 ]
 
+// Helper to find which section a path belongs to
+function getSectionForPath(path: string): string {
+  for (const sec of navSections) {
+    if (sec.items?.some(item => path.startsWith(item.href))) return sec.section
+    if (sec.groups) {
+      for (const grp of sec.groups) {
+        if (grp.items.some(item => path.startsWith(item.href))) return sec.section
+      }
+    }
+  }
+  return "MAIN"
+}
+
 export default function DashboardSidebar({
   email, initial, logoUrl, companyName, companyTagline,
 }: { email: string; initial: string; logoUrl: string; companyName: string; companyTagline: string }) {
@@ -77,6 +90,9 @@ export default function DashboardSidebar({
 
   const GAP = 6
 
+  // ✅ Initialise with the correct section based on current URL
+  const [openSection, setOpenSection] = useState<string>(() => getSectionForPath(pathname))
+
   useEffect(() => {
     localStorage.setItem("sidebarCollapsed", String(collapsed))
     if (collapsed) {
@@ -86,29 +102,14 @@ export default function DashboardSidebar({
     }
   }, [collapsed])
 
-  // ── Only one section open at a time ──
-  const [openSection, setOpenSection] = useState<string>("MAIN")
-
-  const getSectionForPath = useCallback((path: string) => {
-    for (const sec of navSections) {
-      if (sec.items?.some(item => path.startsWith(item.href))) return sec.section
-      if (sec.groups) {
-        for (const grp of sec.groups) {
-          if (grp.items.some(item => path.startsWith(item.href))) return sec.section
-        }
-      }
-    }
-    return "MAIN"
-  }, [])
-
-  // Keep active section open when route changes
+  // ✅ Keep the active section in sync with the URL
   useEffect(() => {
     setOpenSection(getSectionForPath(pathname))
-  }, [pathname, getSectionForPath])
+  }, [pathname])
 
-  // Clicking a section header opens that one and closes others
+  // ✅ Clicking a section header opens that one (never closes)
   const handleSectionClick = (section: string) => {
-    setOpenSection(prev => prev === section ? prev : section)
+    setOpenSection(section)
   }
 
   const [visitedFeatures, setVisitedFeatures] = useState<Record<string, boolean>>({})
@@ -131,7 +132,6 @@ export default function DashboardSidebar({
 
   // ── Text colours: OneAccounts always white (dark gradient), light/dark follow system ──
   const isDarkText = theme === "light" || (theme === "system" && typeof window !== "undefined" && !window.matchMedia("(prefers-color-scheme: dark)").matches)
-  // OneAccounts → white text; dark → white; light → dark
   const textColor      = theme === "oneaccounts" ? "rgba(255,255,255,0.9)" : (isDarkText ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.85)")
   const mutedTextColor  = theme === "oneaccounts" ? "rgba(255,255,255,0.6)" : (isDarkText ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.5)")
   const borderColor     = theme === "oneaccounts" ? "rgba(255,255,255,0.15)" : (isDarkText ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.08)")
