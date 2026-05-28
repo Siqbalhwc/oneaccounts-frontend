@@ -21,7 +21,7 @@ export default function NewAdjustmentPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  // True available stock = opening_qty + sum(purchases) - sum(sales)
+  // True available stock = opening_qty + purchases - sales + adjustments
   const [trueStock, setTrueStock] = useState<number | null>(null)
 
   useEffect(() => {
@@ -61,7 +61,18 @@ export default function NewAdjustmentPage() {
         })
       }
 
-      setTrueStock(openingQty + totalInflow - totalOutflow)
+      // Fetch all stock moves (adjustments) for this product
+      const { data: moves } = await supabase
+        .from("stock_moves")
+        .select("qty")
+        .eq("product_id", productId)
+
+      let netAdjustment = 0
+      if (moves) {
+        moves.forEach((m: any) => { netAdjustment += m.qty || 0 })
+      }
+
+      setTrueStock(openingQty + totalInflow - totalOutflow + netAdjustment)
     }
     fetchTrueStock()
   }, [productId, products, supabase])
@@ -221,11 +232,11 @@ export default function NewAdjustmentPage() {
               />
             </div>
 
-            {/* Summary section shows true stock = opening + purchases - sales */}
+            {/* Summary section shows true stock = opening + purchases - sales + adjustments */}
             {selectedProduct && trueStock !== null && (
               <div className="summary-grid" style={{ marginBottom: 16 }}>
                 <div className="summary-item">
-                  <div className="summary-label">Current Stock (incl. opening)</div>
+                  <div className="summary-label">Current Stock (incl. opening & adjustments)</div>
                   <div className="summary-value">{currentStock}</div>
                 </div>
                 <div className="summary-item">
