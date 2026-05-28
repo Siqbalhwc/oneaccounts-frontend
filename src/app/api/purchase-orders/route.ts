@@ -1,30 +1,50 @@
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
 import { logDataChange } from "@/lib/audit"
 
 export async function POST(request: NextRequest) {
   try {
+    // 1. Authenticate and get company from session – ignore client‑sent company_id
+    const cookieStore = await cookies()
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { return cookieStore.getAll() },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            )
+          },
+        },
+      }
+    )
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const companyId = (user?.app_metadata as any)?.company_id
+    if (!companyId) return NextResponse.json({ error: 'No company linked' }, { status: 400 })
+
     const formData = await request.formData()
     const dataStr = formData.get("data") as string | null
     if (!dataStr) {
       return NextResponse.json({ success: false, error: "Missing PO data" }, { status: 400 })
     }
 
-    const { company_id, supplier_id, date, expected_delivery, notes, items } = JSON.parse(dataStr)
+    const { supplier_id, date, expected_delivery, notes, items } = JSON.parse(dataStr)
 
-    if (!company_id || !supplier_id || !date || !items || items.length === 0) {
+    if (!supplier_id || !date || !items || items.length === 0) {
       return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 })
     }
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-    const supabase = createClient(supabaseUrl, serviceRoleKey)
 
     // Generate PO number
     const { data: lastPO } = await supabase
       .from("purchase_orders")
       .select("po_no")
-      .eq("company_id", company_id)
+      .eq("company_id", companyId)
       .order("id", { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -40,14 +60,14 @@ export async function POST(request: NextRequest) {
     const { data: newPO, error: poError } = await supabase
       .from("purchase_orders")
       .insert({
-        company_id,
+        company_id: companyId,
         supplier_id,
         po_no: poNo,
         date,
         expected_delivery: expected_delivery || null,
         notes,
         status: "Draft",
-        created_by: "system",
+        created_by: user.email || "system",
       })
       .select()
       .single()
@@ -56,10 +76,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: poError?.message || "Failed to create PO" }, { status: 500 })
     }
 
-    // Insert items – NOW INCLUDES company_id
+    // Insert items with company_id
     const poItems = items.map((item: any) => ({
       po_id: newPO.id,
-      company_id,                          // ← added
+      company_id: companyId,
       product_id: item.product_id || null,
       description: item.description,
       qty: item.qty,
@@ -72,12 +92,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: itemsError.message }, { status: 500 })
     }
 
-    // Upload attachments – already includes company_id in the payload
+    // Upload attachments
     const files = formData.getAll("files") as File[]
     for (const file of files) {
       if (!file || !file.name) continue
       const buffer = Buffer.from(await file.arrayBuffer())
-      const filePath = `purchase-orders/${company_id}/${newPO.id}/${Date.now()}-${file.name}`
+      const filePath = `purchase-orders/${companyId}/${newPO.id}/${Date.now()}-${file.name}`
       const { error: uploadError } = await supabase.storage
         .from("documents")
         .upload(filePath, buffer, {
@@ -87,12 +107,12 @@ export async function POST(request: NextRequest) {
 
       if (!uploadError) {
         await supabase.from("attachments").insert({
-          company_id,                       // already present
+          company_id: companyId,
           owner_type: "purchase_order",
           owner_id: newPO.id,
           file_name: file.name,
           file_path: filePath,
-          uploaded_by: "system",
+          uploaded_by: user.email || "system",
         })
       }
     }
@@ -103,7 +123,7 @@ export async function POST(request: NextRequest) {
       String(newPO.id),
       "INSERT",
       { po_no: poNo, supplier_id, date, status: "Draft" },
-      "system"
+      user.email || "system"
     )
 
     return NextResponse.json({ success: true, id: newPO.id, po_no: poNo })
@@ -114,6 +134,28 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    const cookieStore = await cookies()
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { return cookieStore.getAll() },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            )
+          },
+        },
+      }
+    )
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const companyId = (user?.app_metadata as any)?.company_id
+    if (!companyId) return NextResponse.json({ error: 'No company linked' }, { status: 400 })
+
     const url = new URL(request.url)
     const id = url.searchParams.get("id")
     if (!id) {
@@ -126,14 +168,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Missing PO data" }, { status: 400 })
     }
 
-    const { company_id, supplier_id, date, expected_delivery, notes, items } = JSON.parse(dataStr)
-    if (!company_id) {
-      return NextResponse.json({ success: false, error: "Missing company_id" }, { status: 400 })
-    }
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-    const supabase = createClient(supabaseUrl, serviceRoleKey)
+    const { supplier_id, date, expected_delivery, notes, items } = JSON.parse(dataStr)
 
     // Update header
     const { error: poError } = await supabase
@@ -143,11 +178,11 @@ export async function PUT(request: NextRequest) {
         date,
         expected_delivery: expected_delivery || null,
         notes,
-        updated_by: "system",
+        updated_by: user.email || "system",
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
-      .eq("company_id", company_id)
+      .eq("company_id", companyId)
 
     if (poError) {
       return NextResponse.json({ success: false, error: poError.message }, { status: 500 })
@@ -159,7 +194,7 @@ export async function PUT(request: NextRequest) {
     if (items && items.length > 0) {
       const poItems = items.map((item: any) => ({
         po_id: Number(id),
-        company_id,                          // ← added
+        company_id: companyId,
         product_id: item.product_id || null,
         description: item.description,
         qty: item.qty,
@@ -172,12 +207,12 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Handle new attachments (already has company_id)
+    // Handle new attachments
     const files = formData.getAll("files") as File[]
     for (const file of files) {
       if (!file || !file.name) continue
       const buffer = Buffer.from(await file.arrayBuffer())
-      const filePath = `purchase-orders/${company_id}/${id}/${Date.now()}-${file.name}`
+      const filePath = `purchase-orders/${companyId}/${id}/${Date.now()}-${file.name}`
       const { error: uploadError } = await supabase.storage
         .from("documents")
         .upload(filePath, buffer, {
@@ -187,12 +222,12 @@ export async function PUT(request: NextRequest) {
 
       if (!uploadError) {
         await supabase.from("attachments").insert({
-          company_id,
+          company_id: companyId,
           owner_type: "purchase_order",
           owner_id: Number(id),
           file_name: file.name,
           file_path: filePath,
-          uploaded_by: "system",
+          uploaded_by: user.email || "system",
         })
       }
     }
@@ -203,7 +238,7 @@ export async function PUT(request: NextRequest) {
       id,
       "UPDATE",
       { supplier_id, date, notes },
-      "system"
+      user.email || "system"
     )
 
     return NextResponse.json({ success: true })
