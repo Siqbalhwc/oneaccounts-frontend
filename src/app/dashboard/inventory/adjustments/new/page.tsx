@@ -13,6 +13,7 @@ export default function NewAdjustmentPage() {
   )
 
   const [products, setProducts] = useState<any[]>([])
+  const [stockMap, setStockMap] = useState<Record<number, number>>({})
   const [productId, setProductId] = useState<number | null>(null)
   const [qty, setQty] = useState("")
   const [reason, setReason] = useState("")
@@ -24,58 +25,59 @@ export default function NewAdjustmentPage() {
   // True available stock = opening_qty + purchases - sales + adjustments
   const [trueStock, setTrueStock] = useState<number | null>(null)
 
+  // Fetch all products and pre-compute closing stock for all in one batch
   useEffect(() => {
-    supabase
-      .from("products")
-      .select("id, code, name, opening_qty, cost_price")
-      .order("code")
-      .then(({ data }) => {
-        if (data) setProducts(data)
+    const fetchProductsAndStock = async () => {
+      const { data: prods } = await supabase
+        .from("products")
+        .select("id, code, name, opening_qty, cost_price")
+        .order("code")
+      if (!prods) return
+      setProducts(prods)
+
+      // Fetch all invoice items and stock moves in parallel
+      const [{ data: items }, { data: moves }] = await Promise.all([
+        supabase
+          .from("invoice_items")
+          .select("qty, product_id, invoices!inner(type)"),
+        supabase
+          .from("stock_moves")
+          .select("qty, product_id"),
+      ])
+
+      // Build closing stock map starting from opening_qty
+      const map: Record<number, number> = {}
+      prods.forEach((p: any) => {
+        map[p.id] = p.opening_qty || 0
       })
+
+      if (items) {
+        items.forEach((item: any) => {
+          const type = item.invoices?.type
+          if (type === "purchase") map[item.product_id] = (map[item.product_id] || 0) + item.qty
+          else if (type === "sale") map[item.product_id] = (map[item.product_id] || 0) - item.qty
+        })
+      }
+
+      if (moves) {
+        moves.forEach((m: any) => {
+          map[m.product_id] = (map[m.product_id] || 0) + (m.qty || 0)
+        })
+      }
+
+      setStockMap(map)
+    }
+    fetchProductsAndStock()
   }, [])
 
-  // Compute true stock when product selected
+  // Set trueStock from pre-computed stockMap when product is selected
   useEffect(() => {
     if (!productId) {
       setTrueStock(null)
       return
     }
-    const fetchTrueStock = async () => {
-      const prod = products.find(p => p.id === productId)
-      if (!prod) return
-
-      const openingQty = prod.opening_qty || 0
-
-      // Fetch all invoice items for this product
-      const { data: items } = await supabase
-        .from("invoice_items")
-        .select("qty, invoices!inner(type)")
-        .eq("product_id", productId)
-
-      let totalInflow = 0, totalOutflow = 0
-      if (items) {
-        items.forEach((item: any) => {
-          const invType = item.invoices?.type
-          if (invType === "purchase") totalInflow += item.qty
-          else if (invType === "sale") totalOutflow += item.qty
-        })
-      }
-
-      // Fetch all stock moves (adjustments) for this product
-      const { data: moves } = await supabase
-        .from("stock_moves")
-        .select("qty")
-        .eq("product_id", productId)
-
-      let netAdjustment = 0
-      if (moves) {
-        moves.forEach((m: any) => { netAdjustment += m.qty || 0 })
-      }
-
-      setTrueStock(openingQty + totalInflow - totalOutflow + netAdjustment)
-    }
-    fetchTrueStock()
-  }, [productId, products, supabase])
+    setTrueStock(stockMap[productId] ?? null)
+  }, [productId, stockMap])
 
   const selectedProduct = useMemo(
     () => products.find(p => p.id === productId) || null,
@@ -193,7 +195,7 @@ export default function NewAdjustmentPage() {
                 <option value="">Select product</option>
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.code} – {p.name} (Opening: {p.opening_qty ?? 0})
+                    {p.code} – {p.name} (In Hand: {stockMap[p.id] ?? p.opening_qty ?? 0})
                   </option>
                 ))}
               </select>
@@ -236,7 +238,7 @@ export default function NewAdjustmentPage() {
             {selectedProduct && trueStock !== null && (
               <div className="summary-grid" style={{ marginBottom: 16 }}>
                 <div className="summary-item">
-                  <div className="summary-label">Current Stock (incl. opening & adjustments)</div>
+                  <div className="summary-label">Current Stock (In Hand)</div>
                   <div className="summary-value">{currentStock}</div>
                 </div>
                 <div className="summary-item">
@@ -244,7 +246,7 @@ export default function NewAdjustmentPage() {
                   <div className="summary-value">PKR {costPrice.toLocaleString()}</div>
                 </div>
                 <div className="summary-item">
-                  <div className="summary-label">New Stock</div>
+                  <div className="summary-label">New Stock After Adjustment</div>
                   <div className="summary-value" style={{ color: newStock >= 0 ? "#10B981" : "#EF4444" }}>
                     {newStock}
                   </div>
