@@ -68,6 +68,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'To bank account not found' }, { status: 404 })
   }
 
+  // Cast the nested 'accounts' to any to access properties directly
+  const fromGL = (fromAccount.accounts as any)
+  const toGL   = (toAccount.accounts as any)
+
   // 5. Update bank_accounts.balance
   const newFromBankBalance = (fromAccount.balance || 0) - amount
   const newToBankBalance = (toAccount.balance || 0) + amount
@@ -87,22 +91,20 @@ export async function POST(request: NextRequest) {
     .eq('id', to_bank_account_id)
 
   if (updateToBankErr) {
-    // Rollback from bank balance
     await supabaseAdmin.from('bank_accounts').update({ balance: fromAccount.balance }).eq('id', from_bank_account_id)
     return NextResponse.json({ error: 'Failed to update to bank account: ' + updateToBankErr.message }, { status: 500 })
   }
 
   // 6. Update GL account balances (this is what the bank accounts list page reads)
-  const newFromGLBalance = (fromAccount.accounts?.balance || 0) - amount
-  const newToGLBalance = (toAccount.accounts?.balance || 0) + amount
+  const newFromGLBalance = (fromGL?.balance || 0) - amount
+  const newToGLBalance = (toGL?.balance || 0) + amount
 
   const { error: updateFromGLErr } = await supabaseAdmin
     .from('accounts')
     .update({ balance: newFromGLBalance })
-    .eq('id', fromAccount.accounts?.id)
+    .eq('id', fromGL?.id)
 
   if (updateFromGLErr) {
-    // Rollback both bank updates
     await supabaseAdmin.from('bank_accounts').update({ balance: fromAccount.balance }).eq('id', from_bank_account_id)
     await supabaseAdmin.from('bank_accounts').update({ balance: toAccount.balance }).eq('id', to_bank_account_id)
     return NextResponse.json({ error: 'Failed to update from GL account: ' + updateFromGLErr.message }, { status: 500 })
@@ -111,11 +113,10 @@ export async function POST(request: NextRequest) {
   const { error: updateToGLErr } = await supabaseAdmin
     .from('accounts')
     .update({ balance: newToGLBalance })
-    .eq('id', toAccount.accounts?.id)
+    .eq('id', toGL?.id)
 
   if (updateToGLErr) {
-    // Rollback everything
-    await supabaseAdmin.from('accounts').update({ balance: fromAccount.accounts?.balance }).eq('id', fromAccount.accounts?.id)
+    await supabaseAdmin.from('accounts').update({ balance: fromGL?.balance || 0 }).eq('id', fromGL?.id)
     await supabaseAdmin.from('bank_accounts').update({ balance: fromAccount.balance }).eq('id', from_bank_account_id)
     await supabaseAdmin.from('bank_accounts').update({ balance: toAccount.balance }).eq('id', to_bank_account_id)
     return NextResponse.json({ error: 'Failed to update to GL account: ' + updateToGLErr.message }, { status: 500 })
@@ -138,9 +139,8 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (transferErr) {
-    // Rollback all balance updates
-    await supabaseAdmin.from('accounts').update({ balance: fromAccount.accounts?.balance }).eq('id', fromAccount.accounts?.id)
-    await supabaseAdmin.from('accounts').update({ balance: toAccount.accounts?.balance }).eq('id', toAccount.accounts?.id)
+    await supabaseAdmin.from('accounts').update({ balance: fromGL?.balance || 0 }).eq('id', fromGL?.id)
+    await supabaseAdmin.from('accounts').update({ balance: toGL?.balance || 0 }).eq('id', toGL?.id)
     await supabaseAdmin.from('bank_accounts').update({ balance: fromAccount.balance }).eq('id', from_bank_account_id)
     await supabaseAdmin.from('bank_accounts').update({ balance: toAccount.balance }).eq('id', to_bank_account_id)
     return NextResponse.json({ error: 'Failed to record transfer: ' + transferErr.message }, { status: 500 })
@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
       company_id: companyId,
       entry_no: entryNo,
       date: transferDate,
-      description: `Bank Transfer: ${fromAccount.accounts?.id} → ${toAccount.accounts?.id}`,
+      description: `Bank Transfer: ${fromGL?.id || '?'} → ${toGL?.id || '?'}`,
     })
     .select('id')
     .single()
@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
       {
         company_id: companyId,
         entry_id: entry.id,
-        account_id: toAccount.accounts?.id,
+        account_id: toGL?.id,
         debit: amount,
         credit: 0,
         source_type: 'bank_transfer',
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
       {
         company_id: companyId,
         entry_id: entry.id,
-        account_id: fromAccount.accounts?.id,
+        account_id: fromGL?.id,
         debit: 0,
         credit: amount,
         source_type: 'bank_transfer',
