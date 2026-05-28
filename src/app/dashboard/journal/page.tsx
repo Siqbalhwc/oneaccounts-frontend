@@ -31,7 +31,6 @@ function getSourceFromReference(ref?: string | null): string {
     case "REC": return "Receipt"
     case "PAY": return "Payment"
     case "INV-ADJ": return "Inventory Adjustment"
-    case "INV": return "Sales Invoice"
     default: return ref
   }
 }
@@ -197,22 +196,25 @@ export default function JournalPage() {
         }
         .btn-icon:hover { background: var(--card-hover); }
 
-        .journal-header {
+        /* ── Grid columns ── */
+        /* col order: chevron | date | entry# | description | source | debit | credit | eye */
+        .journal-header,
+        .journal-row {
           display: grid;
-          grid-template-columns: 32px 100px 100px 1fr 130px 100px 100px 40px;
-          column-gap: 8px;
-          padding: 14px 24px;
+          grid-template-columns: 32px 105px 165px 1fr 130px 125px 125px 40px;
+          column-gap: 12px;
+          padding: 12px 24px;
+          align-items: center;
+        }
+        .journal-header {
           background: var(--card);
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
+          padding-top: 14px; padding-bottom: 14px;
         }
         .journal-row {
-          display: grid;
-          grid-template-columns: 32px 100px 100px 1fr 130px 100px 100px 40px;
-          column-gap: 8px;
-          padding: 12px 24px;
           border-bottom: 1px solid var(--border);
-          font-size: 13px; align-items: center;
+          font-size: 13px;
           transition: background 0.15s;
           cursor: pointer;
         }
@@ -226,9 +228,18 @@ export default function JournalPage() {
         }
         .sort-btn:hover { color: var(--primary); }
 
+        /* entry# cell: never wrap, truncate if truly tiny screen */
+        .entry-no-cell {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          font-weight: 600;
+          color: var(--primary);
+        }
+
         .desc-cell {
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-          max-width: 260px; display: block; cursor: default;
+          display: block; cursor: default;
         }
 
         .lines-container {
@@ -251,14 +262,40 @@ export default function JournalPage() {
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
 
-        @media (max-width: 768px) {
-          .journal-header, .journal-row { grid-template-columns: 30px 80px 80px 1fr 100px 80px 80px 40px; column-gap: 4px; }
-          .desc-cell { max-width: 140px; }
+        /* ── Tablet ── */
+        @media (max-width: 900px) {
+          .journal-header,
+          .journal-row {
+            grid-template-columns: 28px 95px 150px 1fr 110px 105px 105px 36px;
+            column-gap: 8px;
+            padding-left: 16px; padding-right: 16px;
+          }
         }
+
+        /* ── Small tablet / large phone ── */
+        @media (max-width: 700px) {
+          .journal-header,
+          .journal-row {
+            /* hide Source column on small screens */
+            grid-template-columns: 28px 90px 140px 1fr 100px 100px 32px;
+            column-gap: 6px;
+            padding-left: 12px; padding-right: 12px;
+          }
+          .hide-sm { display: none; }
+        }
+
+        /* ── Mobile ── */
         @media (max-width: 480px) {
-          .journal-header, .journal-row { grid-template-columns: 24px 60px 60px 1fr 80px 60px 60px 32px; column-gap: 2px; }
-          .desc-cell { max-width: 100px; }
+          .journal-header,
+          .journal-row {
+            /* show: chevron | date | entry# | description | debit | eye */
+            grid-template-columns: 24px 80px 110px 1fr 80px 28px;
+            column-gap: 4px;
+            padding-left: 10px; padding-right: 10px;
+            font-size: 11px;
+          }
           .hide-mobile { display: none; }
+          .summary-value { font-size: 17px; }
         }
       `}</style>
 
@@ -312,33 +349,49 @@ export default function JournalPage() {
         </div>
       ) : (
         <div className="card" style={{ padding: 0, overflowX: "auto" }}>
+          {/* Header */}
           <div className="journal-header">
             <span></span>
             <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
             <button className="sort-btn" onClick={() => handleSort("entry_no")}>Entry # {getSortIcon("entry_no")}</button>
             <button className="sort-btn" onClick={() => handleSort("description")}>Description {getSortIcon("description")}</button>
-            <button className="sort-btn" onClick={() => handleSort("source")}>Source {getSortIcon("source")}</button>
-            <button className="sort-btn" onClick={() => handleSort("total_debit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("total_debit")}</button>
-            <button className="sort-btn" onClick={() => handleSort("total_credit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("total_credit")}</button>
+            <button className="sort-btn hide-sm" onClick={() => handleSort("source")}>Source {getSortIcon("source")}</button>
+            <button className="sort-btn hide-mobile" onClick={() => handleSort("total_debit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("total_debit")}</button>
+            <button className="sort-btn hide-mobile" onClick={() => handleSort("total_credit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("total_credit")}</button>
             <span></span>
           </div>
 
           {sortedFiltered.map((je) => (
             <div key={je.id}>
               <div className="journal-row" onClick={() => toggleExpand(je.id)}>
+                {/* Chevron */}
                 <span style={{ color: "var(--text-muted)" }}>
                   {expandedId === je.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </span>
-                <span style={{ fontWeight: 500, color: "var(--text)" }}>{je.date}</span>
-                <span style={{ fontWeight: 600, color: "var(--primary)" }}>{je.entry_no}</span>
-                <span className="desc-cell" title={je.description || ""} style={{ color: "var(--text)" }}>{je.description || "—"}</span>
-                <span style={{ color: "var(--text-muted)" }}>{je.source || "—"}</span>
-                <span style={{ textAlign: "right", fontWeight: 600, color: "#EF4444" }}>
+
+                {/* Date */}
+                <span style={{ fontWeight: 500, color: "var(--text)", whiteSpace: "nowrap" }}>{je.date}</span>
+
+                {/* Entry # — nowrap + ellipsis so it never bleeds into description */}
+                <span className="entry-no-cell" title={je.entry_no}>{je.entry_no}</span>
+
+                {/* Description */}
+                <span className="desc-cell" title={je.description || ""}>{je.description || "—"}</span>
+
+                {/* Source — hidden on small screens */}
+                <span className="hide-sm" style={{ color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{je.source || "—"}</span>
+
+                {/* Debit — hidden on mobile */}
+                <span className="hide-mobile" style={{ textAlign: "right", fontWeight: 600, color: "#EF4444" }}>
                   {(je.total_debit ?? 0) > 0 ? `PKR ${(je.total_debit ?? 0).toLocaleString()}` : "—"}
                 </span>
-                <span style={{ textAlign: "right", fontWeight: 600, color: "#10B981" }}>
+
+                {/* Credit — hidden on mobile */}
+                <span className="hide-mobile" style={{ textAlign: "right", fontWeight: 600, color: "#10B981" }}>
                   {(je.total_credit ?? 0) > 0 ? `PKR ${(je.total_credit ?? 0).toLocaleString()}` : "—"}
                 </span>
+
+                {/* Eye / view button */}
                 <button
                   className="btn-icon"
                   style={{ justifySelf: "center" }}
