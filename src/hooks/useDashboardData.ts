@@ -15,6 +15,12 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
   const startOfMonthISO = new Date(Date.UTC(currentYear, currentMonth - 1, 1)).toISOString().split("T")[0]
   const todayISO = now.toISOString().split("T")[0]
 
+  // Previous month boundaries
+  const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1
+  const prevYear = currentMonth === 1 ? currentYear - 1 : currentYear
+  const prevStart = new Date(Date.UTC(prevYear, prevMonth - 1, 1)).toISOString().split("T")[0]
+  const prevEnd = new Date(Date.UTC(prevYear, prevMonth, 0)).toISOString().split("T")[0]
+
   const [
     budgetsRes,
     spentRes,
@@ -22,8 +28,8 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
     projRes,
     custBalsRes,
     suppBalsRes,
-    expenseAccountsRes,
-    fixedAssetsRes,
+    currentMonthSpendingRes,
+    prevMonthSpendingRes,
     overdueInvoicesRes,
   ] = await Promise.all([
     supabase.from("budgets").select("budgeted_amount").eq("company_id", companyId).eq("fiscal_year", fiscalYear).is("month", null).not("activity_id", "is", null),
@@ -32,8 +38,8 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
     supabase.rpc("dashboard_project_utilization", { p_company_id: companyId, p_fiscal_year: fiscalYear }),
     supabase.from("customers").select("balance").eq("company_id", companyId),
     supabase.from("suppliers").select("balance").eq("company_id", companyId),
-    supabase.from("accounts").select("id").eq("company_id", companyId).eq("type", "Expense"),
-    supabase.from("accounts").select("id").eq("company_id", companyId).eq("type", "Asset").gte("code", "1400").lte("code", "1499"),
+    supabase.rpc("get_period_spending", { cid: companyId, start_d: startOfMonthISO, end_d: todayISO }),
+    supabase.rpc("get_period_spending", { cid: companyId, start_d: prevStart, end_d: prevEnd }),
     supabase.from("invoices").select("id").eq("company_id", companyId).eq("type", "sale").eq("status", "Unpaid").lt("due_date", todayISO),
   ])
 
@@ -71,29 +77,15 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
   const totalReceivables = custBalsRes.data?.reduce((s: number, c: any) => s + (c.balance || 0), 0) || 0
   const totalPayables = suppBalsRes.data?.reduce((s: number, s2: any) => s + (s2.balance || 0), 0) || 0
 
-  const accountIds = [...(expenseAccountsRes.data?.map((a: any) => a.id) || []), ...(fixedAssetsRes.data?.map((a: any) => a.id) || [])]
-  let monthlySpending = 0, lastMonthSpending = 0, spendingTrend = 0
+  // Monthly spending from the new RPC functions (safe, no long URLs)
+  const monthlySpending = currentMonthSpendingRes.data || 0
+  const lastMonthSpending = prevMonthSpendingRes.data || 0
 
-  if (accountIds.length > 0) {
-    const [monthLinesRes, prevMonthLinesRes] = await Promise.all([
-      supabase.from("journal_lines").select("debit, credit").eq("company_id", companyId).in("account_id", accountIds).gte("date", startOfMonthISO).lte("date", todayISO),
-      (async () => {
-        const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1
-        const prevYear = currentMonth === 1 ? currentYear - 1 : currentYear
-        const prevStart = new Date(Date.UTC(prevYear, prevMonth - 1, 1)).toISOString().split("T")[0]
-        const prevEnd = new Date(Date.UTC(prevYear, prevMonth, 0)).toISOString().split("T")[0]
-        return supabase.from("journal_lines").select("debit, credit").eq("company_id", companyId).in("account_id", accountIds).gte("date", prevStart).lte("date", prevEnd)
-      })(),
-    ])
-
-    monthlySpending = (monthLinesRes.data || []).reduce((s: number, l: any) => s + (l.debit || 0) - (l.credit || 0), 0)
-    lastMonthSpending = (prevMonthLinesRes.data || []).reduce((s: number, l: any) => s + (l.debit || 0) - (l.credit || 0), 0)
-
-    if (lastMonthSpending > 0) {
-      spendingTrend = Math.round(((monthlySpending - lastMonthSpending) / lastMonthSpending) * 100)
-    } else if (monthlySpending > 0) {
-      spendingTrend = 100
-    }
+  let spendingTrend = 0
+  if (lastMonthSpending > 0) {
+    spendingTrend = Math.round(((monthlySpending - lastMonthSpending) / lastMonthSpending) * 100)
+  } else if (monthlySpending > 0) {
+    spendingTrend = 100
   }
 
   const overdueInvoicesCount = overdueInvoicesRes.data?.length || 0
