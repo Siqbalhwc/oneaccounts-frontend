@@ -24,7 +24,6 @@ export default function NewBankTransferPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  // Summary
   const [totalTransfers, setTotalTransfers] = useState(0)
 
   useEffect(() => {
@@ -43,7 +42,6 @@ export default function NewBankTransferPage() {
         .order("code")
       if (accounts) setGlAccounts(accounts)
 
-      // Get total transfers count
       const { count } = await supabase
         .from("bank_transfers")
         .select("id", { count: "exact", head: true })
@@ -67,32 +65,27 @@ export default function NewBankTransferPage() {
     setLoading(true)
     setError("")
 
-    const { data: { user } } = await supabase.auth.getUser()
-    const userEmail = user?.email || "system"
-
-    const { data, error: insertErr } = await supabase
-      .from("bank_transfers")
-      .insert({
-        company_id: companyId,
-        from_account_id: fromAccountId,
-        to_account_id: toAccountId,
+    // Call the API route that updates both bank and GL balances
+    const res = await fetch("/api/banking/bank-transfers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from_bank_account_id: fromAccountId,
+        to_bank_account_id: toAccountId,
         amount: parseFloat(amount),
         transfer_date: transferDate,
-        reference,
         notes,
-        created_by: userEmail,
-        updated_by: userEmail,
-      })
-      .select("id")
-      .single()
+      }),
+    })
 
-    if (insertErr) {
-      setError(insertErr.message)
+    const result = await res.json()
+    if (!result.success) {
+      setError(result.error || "Transfer failed")
       setLoading(false)
       return
     }
 
-    setFlash("✅ Transfer recorded!")
+    setFlash("✅ Transfer recorded and balances updated!")
     setFromAccountId(null); setToAccountId(null); setAmount(""); setReference(""); setNotes("")
     setTotalTransfers(prev => prev + 1)
     setLoading(false)
