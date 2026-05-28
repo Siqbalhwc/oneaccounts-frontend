@@ -1,7 +1,7 @@
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
-// ─── Brand colours (same as invoice) ────────────────────────────────
+// ─── Brand colours ────────────────────────────────────────────────
 const NAVY  = [7,   8,  91]  as [number,number,number]
 const RED   = [220, 38,  38]  as [number,number,number]
 const AMBER = [245,158,  11]  as [number,number,number]
@@ -75,7 +75,7 @@ export async function generateTrialBalancePDF(data: TrialBalancePDFData): Promis
   const MR = 14
   const CW = PW - ML - MR
 
-  // ── LOGO ──────────────────────────────────────────────────────────
+  // ── LOGO & COMPANY INFO ─────────────────────────────────────────
   const LOGO_SIZE = 18
   const LOGO_X = ML
   const LOGO_Y = 6
@@ -88,39 +88,28 @@ export async function generateTrialBalancePDF(data: TrialBalancePDFData): Promis
   }
 
   const textX = logoData ? LOGO_X + LOGO_SIZE + 4 : ML
-  // Company name
   doc.setTextColor(...NAVY)
   doc.setFont("helvetica", "bold")
   doc.setFontSize(13)
   doc.text(data.companyName || "Your Company", textX, LOGO_Y + 7)
 
-  // Tagline
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8.5)
   doc.setTextColor(...MUTED)
   doc.text(data.companyTagline || "", textX, LOGO_Y + 13)
 
-  // Optional address / contact
   let infoY = LOGO_Y + 18
-  if (data.companyAddress) {
-    doc.text(data.companyAddress, textX, infoY)
-    infoY += 4
-  }
-  if (data.companyPhone) {
-    doc.text("Phone: " + data.companyPhone, textX, infoY)
-    infoY += 4
-  }
-  if (data.companyEmail) {
-    doc.text("Email: " + data.companyEmail, textX, infoY)
-  }
+  if (data.companyAddress) { doc.text(data.companyAddress, textX, infoY); infoY += 4 }
+  if (data.companyPhone)   { doc.text("Phone: " + data.companyPhone, textX, infoY); infoY += 4 }
+  if (data.companyEmail)   { doc.text("Email: " + data.companyEmail, textX, infoY) }
 
-  // ── REPORT TITLE ───────────────────────────────────────────────────
+  // ── REPORT TITLE ─────────────────────────────────────────────────
   doc.setFont("helvetica", "bold")
   doc.setFontSize(26)
   doc.setTextColor(...NAVY)
   doc.text("TRIAL BALANCE", PW - MR, LOGO_Y + 9, { align: "right" })
 
-  // Date range – now on one line
+  // Single‑line date
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8)
   doc.setTextColor(...MUTED)
@@ -131,34 +120,39 @@ export async function generateTrialBalancePDF(data: TrialBalancePDFData): Promis
   doc.setLineWidth(0.4)
   doc.line(ML, HEADER_H, PW - MR, HEADER_H)
 
-  // ── TABLE HEADER (dark background) ─────────────────────────────────
-  let Y = HEADER_H + 10   // slightly more space after removing summary
+  // ── TABLE COLUMN WIDTHS ──────────────────────────────────────────
+  const codeColW  = 14
+  const typeColW  = 24   // widened to prevent wrapping
+  const debitColW = 32
+  const creditColW = 34
+  const nameColW  = CW - codeColW - typeColW - debitColW - creditColW  // remaining
+
+  // ── TABLE HEADER (navy bar) ──────────────────────────────────────
+  let Y = HEADER_H + 10
   const HEADER_ROW_H = 10
   const HEADER_RADIUS = 4
 
   filledRect(doc, ML, Y, CW, HEADER_ROW_H, NAVY, HEADER_RADIUS)
 
-  // Column widths (same as before)
-  const codeColW = 14
-  const typeColW = 16
-  const debitColW = 32
-  const creditColW = 34
-  const nameColW = CW - codeColW - typeColW - debitColW - creditColW - (8+2) // gap
-
-  const descColX = ML + codeColW + 2   // start of name column
-  const textY = Y + HEADER_ROW_H / 2 + 1.5
-
+  const headerTextY = Y + HEADER_ROW_H / 2 + 1.5
   doc.setFont("helvetica", "bold")
   doc.setFontSize(8)
   doc.setTextColor(...WHITE)
 
-  doc.text("Code", ML + codeColW / 2, textY, { align: "center" })
-  doc.text("Account Name", descColX + 3, textY, { align: "left" })
-  doc.text("Type", descColX + nameColW + typeColW / 2, textY, { align: "center" })
-  doc.text("Debit", descColX + nameColW + typeColW + debitColW / 2, textY, { align: "center" })
-  doc.text("Credit", descColX + nameColW + typeColW + debitColW + creditColW / 2, textY, { align: "center" })
+  // Precise X positions for each column header
+  const codeX = ML + codeColW / 2
+  const nameX = ML + codeColW + 2                // left padding of name column
+  const typeX = ML + codeColW + nameColW + typeColW / 2
+  const debitX = ML + codeColW + nameColW + typeColW + debitColW / 2
+  const creditX = ML + codeColW + nameColW + typeColW + debitColW + creditColW / 2
 
-  // ── TABLE BODY including totals row ────────────────────────────────
+  doc.text("Code", codeX, headerTextY, { align: "center" })
+  doc.text("Account Name", nameX + 3, headerTextY, { align: "left" })
+  doc.text("Type", typeX, headerTextY, { align: "center" })         // centered
+  doc.text("Debit", debitX, headerTextY, { align: "center" })
+  doc.text("Credit", creditX, headerTextY, { align: "center" })
+
+  // ── TABLE BODY ───────────────────────────────────────────────────
   const tableStartY = Y + HEADER_ROW_H
 
   const tableRows: any[] = data.rows.map(row => [
@@ -169,7 +163,7 @@ export async function generateTrialBalancePDF(data: TrialBalancePDFData): Promis
     row.credit > 0 ? pkr(row.credit) : "",
   ])
 
-  // Totals row as last row
+  // Totals row appended
   tableRows.push([
     "",
     "Total",
@@ -198,28 +192,25 @@ export async function generateTrialBalancePDF(data: TrialBalancePDFData): Promis
       3: { cellWidth: debitColW, halign: "right" },
       4: { cellWidth: creditColW, halign: "right" },
     },
-    // Bold and gray background for the totals row (last row)
+    // Bold and light background for totals row
     didParseCell: (hookData) => {
       if (hookData.row.index === tableRows.length - 1 && hookData.row.section === 'body') {
         hookData.cell.styles.fontStyle = 'bold'
-        hookData.cell.styles.fillColor = [240, 240, 245]  // light gray
+        hookData.cell.styles.fillColor = [240, 240, 245]
       }
     },
   })
 
   const afterTable = (doc as any).lastAutoTable.finalY as number
 
-  // Rounded border for table
-  const TABLE_RADIUS = 4
-  const cornerSize = TABLE_RADIUS + 1
-  doc.setFillColor(...WHITE)
-  doc.rect(ML, afterTable - cornerSize, cornerSize, cornerSize, "F")
-  doc.rect(ML + CW - cornerSize, afterTable - cornerSize, cornerSize, cornerSize, "F")
+  // ── Clean rounded border without overlapping patches ────────────
+  // Use a thin rounded rectangle exactly around the table area,
+  // without adding white squares that hide text.
   doc.setDrawColor(...BORDER)
   doc.setLineWidth(0.3)
-  doc.roundedRect(ML, tableStartY, CW, afterTable - tableStartY, TABLE_RADIUS, TABLE_RADIUS, "S")
+  doc.roundedRect(ML, tableStartY, CW, afterTable - tableStartY, 4, 4, "S")
 
-  // ── FOOTER ─────────────────────────────────────────────────────────
+  // ── FOOTER ───────────────────────────────────────────────────────
   doc.setDrawColor(...BORDER)
   doc.setLineWidth(0.3)
   doc.line(ML, PH - 16, PW - MR, PH - 16)

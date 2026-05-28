@@ -267,9 +267,9 @@ export default function TrialBalancePage() {
           <div className="tb-table-header">
             <button className="tb-sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
             <button className="tb-sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
-            <span>Type</span>
-            <span style={{ textAlign: "right" }}>Debit</span>
-            <span style={{ textAlign: "right" }}>Credit</span>
+            <span className="tb-sort-btn">Type</span>
+            <span className="tb-sort-btn" style={{ textAlign: "right" }}>Debit</span>
+            <span className="tb-sort-btn" style={{ textAlign: "right" }}>Credit</span>
           </div>
           {sortedData.map((a, i) => (
             <div key={a.id} className="tb-row" onClick={() => openLedger(a.id)} title={`View ledger for ${a.code}`}>
