@@ -1,7 +1,6 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Download, Printer } from "lucide-react"
 import { useRouter } from "next/navigation"
 import PremiumGuard from "@/components/PremiumGuard"
@@ -24,7 +23,6 @@ function getCategory(account: any): string {
   return "Other"
 }
 
-// Round and format – no decimals
 function fmt(n: number) { return Math.round(Math.abs(n)).toLocaleString("en-PK") }
 function sign(n: number) { return n < 0 ? "-" : "" }
 function fmtPos(n: number) { return Math.round(Math.abs(n)).toLocaleString("en-PK") }
@@ -33,7 +31,7 @@ const CURRENT_ASSET_CATS = ["Cash & Bank", "Accounts Receivable", "Inventory", "
 const FIXED_ASSET_CATS = ["Fixed Assets", "Vehicles"]
 const LIABILITY_CATS = ["Accounts Payable", "Other Current Liabilities"]
 
-// ── Placeholder row (invisible, same height) ──
+// Placeholder row component
 function PlaceholderRow() {
   return (
     <div style={{ height: 40, opacity: 0, pointerEvents: "none" }}>
@@ -42,7 +40,7 @@ function PlaceholderRow() {
   )
 }
 
-// ── Account row component ──
+// Account row component
 function AccountRow({ account, showAbsolute, getBalance, onClick }: {
   account: any
   showAbsolute: boolean
@@ -62,7 +60,7 @@ function AccountRow({ account, showAbsolute, getBalance, onClick }: {
   )
 }
 
-// ── Category header component ──
+// Category header component
 function CategoryHeader({ cat, total, showAbsolute, onClick }: {
   cat: string
   total: number
@@ -80,7 +78,7 @@ function CategoryHeader({ cat, total, showAbsolute, onClick }: {
   )
 }
 
-// ── Subtotal band ──
+// Subtotal band
 function SubtotalBand({ label, value, showAbsolute }: { label: string; value: number; showAbsolute: boolean }) {
   const rounded = Math.round(value)
   return (
@@ -91,7 +89,7 @@ function SubtotalBand({ label, value, showAbsolute }: { label: string; value: nu
   )
 }
 
-// ── Total band ──
+// Total band
 function TotalBand({ label, value, showAbsolute }: { label: string; value: number; showAbsolute: boolean }) {
   const rounded = Math.round(value)
   return (
@@ -102,7 +100,7 @@ function TotalBand({ label, value, showAbsolute }: { label: string; value: numbe
   )
 }
 
-// ── Section builder (aligns account rows, then puts subtotals on the same row) ──
+// Section builder
 function buildSection(
   leftMainRows: React.ReactElement[],
   rightMainRows: React.ReactElement[],
@@ -121,7 +119,6 @@ function buildSection(
   }
 
   const rows: React.ReactElement[] = []
-
   for (let i = 0; i < max; i++) {
     rows.push(
       <React.Fragment key={`row-${i}`}>
@@ -135,7 +132,6 @@ function buildSection(
     )
   }
 
-  // add subtotal row (both totals in one grid row)
   rows.push(
     <React.Fragment key="subtotal-row">
       <div style={{ borderRight: "1px solid var(--border)", padding: "0 24px" }}>
@@ -146,43 +142,47 @@ function buildSection(
       </div>
     </React.Fragment>
   )
-
   return rows
 }
 
 function BalanceSheetContent() {
   const router = useRouter()
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
   const [accounts, setAccounts] = useState<any[]>([])
-  const [computedBalances, setComputedBalances] = useState<Record<number, number>>({})
   const [loading, setLoading] = useState(true)
   const now = new Date()
+  const asOfDate = now.toISOString().split("T")[0]
 
-  useEffect(() => {
-    const fetchData = async () => {
-      const { data: accts } = await supabase.from("accounts").select("*").order("code")
-      if (!accts) { setLoading(false); return }
-
-      const { data: lines } = await supabase.from("journal_lines").select("account_id, debit, credit")
-      const balances: Record<number, number> = {}
-      if (lines) {
-        lines.forEach((l: any) => {
-          balances[l.account_id] = (balances[l.account_id] || 0) + (l.debit || 0) - (l.credit || 0)
-        })
-      }
-      setAccounts(accts)
-      setComputedBalances(balances)
+  // ── Fetch balance sheet data from the fast API ──
+  const fetchBalanceSheet = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/balance-sheet?asOfDate=${encodeURIComponent(asOfDate)}`)
+      if (!res.ok) throw new Error(await res.text())
+      const json = await res.json()
+      // API returns: { account_id, code, name, type, category, net }
+      const mapped = (json || []).map((row: any) => ({
+        id: row.account_id,
+        code: row.code,
+        name: row.name,
+        type: row.type,
+        category: row.category || getCategory({ code: row.code }),
+        net: Number(row.net),
+      }))
+      setAccounts(mapped)
+    } catch (e) {
+      console.error(e)
+    } finally {
       setLoading(false)
     }
-    fetchData()
+  }
+
+  useEffect(() => {
+    fetchBalanceSheet()
   }, [])
 
-  const getBalance = (account: any) =>
-    computedBalances[account.id] !== undefined ? computedBalances[account.id] : (account.balance || 0)
+  const getBalance = (account: any) => account.net
 
+  // Grouping and totals
   const grouped = accounts.reduce((acc: Record<string, any[]>, a) => {
     const cat = getCategory(a)
     if (!acc[cat]) acc[cat] = []
@@ -215,7 +215,7 @@ function BalanceSheetContent() {
   }
 
   const openLedger = (id: number) => {
-    router.push(`/dashboard/reports/ledger?accountId=${id}&startDate=${now.getFullYear()}-01-01&endDate=${now.toISOString().split("T")[0]}`)
+    router.push(`/dashboard/reports/ledger?accountId=${id}&startDate=${now.getFullYear()}-01-01&endDate=${asOfDate}`)
   }
 
   // ── Excel export (unchanged) ──
@@ -223,7 +223,7 @@ function BalanceSheetContent() {
     const wb = XLSX.utils.book_new()
     const sheetData: any[][] = [
       ["Balance Sheet", "", ""],
-      ["As at", now.toLocaleDateString("en-PK"), ""],
+      ["As at", asOfDate, ""],
       ["", "", ""],
       ["ASSETS", "", ""],
     ]
@@ -266,12 +266,10 @@ function BalanceSheetContent() {
     const ws = XLSX.utils.aoa_to_sheet(sheetData)
     ws["!cols"] = [{ wch: 40 }, { wch: 5 }, { wch: 20 }]
     XLSX.utils.book_append_sheet(wb, ws, "Balance Sheet")
-    XLSX.writeFile(wb, `Balance_Sheet_${now.toISOString().split("T")[0]}.xlsx`)
+    XLSX.writeFile(wb, `Balance_Sheet_${asOfDate}.xlsx`)
   }
 
-  // ── Build rows for each section (without subtotals) ──
-
-  // Current Assets (without total)
+  // ── Build rows for each section (same synchronized layout as original) ──
   const currentAssetRows: React.ReactElement[] = [
     <h3 key="h3ca" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
       Current Assets
@@ -292,7 +290,6 @@ function BalanceSheetContent() {
     })
   })
 
-  // Current Liabilities (without total)
   const currentLiabilityRows: React.ReactElement[] = [
     <h3 key="h3cl" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
       Current Liabilities
@@ -313,30 +310,22 @@ function BalanceSheetContent() {
     })
   })
 
-  // ── Simple alignment: make sure "Other Current Assets" and "Other Current Liabilities"
-  //     appear at the same row index by inserting a placeholder before the shorter side's
-  //     "Other" category if needed. Safe – no loops.
-
-  // Find the index of "Other Current Assets" header (if any)
+  // Align "Other Current Assets" and "Other Current Liabilities" if both exist
   const otherAssetIdx = currentAssetRows.findIndex(el => {
     return el.type === CategoryHeader && (el.props as any)?.cat === "Other Current Assets"
   })
-  // Find the index of "Other Current Liabilities" header (if any)
   const otherLiabilityIdx = currentLiabilityRows.findIndex(el => {
     return el.type === CategoryHeader && (el.props as any)?.cat === "Other Current Liabilities"
   })
 
   if (otherAssetIdx !== -1 && otherLiabilityIdx !== -1) {
-    // Insert placeholders to align those two headers at the same index
     const maxIdx = Math.max(otherAssetIdx, otherLiabilityIdx)
-    // Pad the asset side if its "Other" is before the liability's "Other"
     if (otherAssetIdx < maxIdx) {
       const diff = maxIdx - otherAssetIdx
       for (let i = 0; i < diff; i++) {
         currentAssetRows.splice(otherAssetIdx, 0, <PlaceholderRow key={`oca-pad-${i}`} />)
       }
     }
-    // Pad the liability side if its "Other" is before the asset's "Other"
     if (otherLiabilityIdx < maxIdx) {
       const diff = maxIdx - otherLiabilityIdx
       for (let i = 0; i < diff; i++) {
@@ -352,7 +341,6 @@ function BalanceSheetContent() {
     <SubtotalBand label="Total Current Liabilities" value={totalCurrentLiabilities} showAbsolute={true} />
   )
 
-  // Fixed Assets (without total)
   const fixedAssetRows: React.ReactElement[] = [
     <h3 key="h3fa" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
       Fixed Assets
@@ -373,7 +361,6 @@ function BalanceSheetContent() {
     })
   })
 
-  // Equity (without total)
   const equityRows: React.ReactElement[] = [
     <h3 key="h3eq" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
       Equity
@@ -401,7 +388,6 @@ function BalanceSheetContent() {
     <SubtotalBand label="Total Equity" value={totalEquity} showAbsolute={true} />
   )
 
-  // Grand Totals (single row)
   const grandTotals = (
     <React.Fragment key="gt">
       <div style={{ borderRight: "1px solid var(--border)", padding: "0 24px" }}>
@@ -501,7 +487,6 @@ function BalanceSheetContent() {
           font-size: 11px; color: var(--text-soft); margin-top: 4px;
         }
 
-        /* aligned grid */
         .bs-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;

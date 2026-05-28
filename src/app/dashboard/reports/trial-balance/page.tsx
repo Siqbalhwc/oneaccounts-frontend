@@ -1,14 +1,12 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 
 type SortField = "code" | "name" | "type" | "category"
 type SortDir = "asc" | "desc"
 
-// Fallback category for accounts without stored category
 function getFallbackCategory(code?: string): string {
   if (!code) return "Other"
   const num = parseFloat(code)
@@ -25,20 +23,13 @@ function getFallbackCategory(code?: string): string {
   if (num >= 4000 && num <= 4099) return "Revenue"
   if (num >= 5000 && num <= 5099) return "Direct Expenses"
   if (num >= 5100 && num <= 5199) return "Operating Expenses"
-  if (num >= 1000 && num <= 1999) return "Other Assets"
-  if (num >= 2000 && num <= 2999) return "Other Liabilities"
   return "Other"
 }
 
 export default function TrialBalancePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
 
-  // Date range – default to current fiscal year
   const now = new Date()
   const [startDate, setStartDate] = useState(`${now.getFullYear()}-01-01`)
   const [endDate, setEndDate] = useState(now.toISOString().split("T")[0])
@@ -49,74 +40,27 @@ export default function TrialBalancePage() {
   const [sortDir, setSortDir] = useState<SortDir>("asc")
   const [errorMsg, setErrorMsg] = useState("")
 
-  // Read type/category filters from URL
   const filterType = searchParams.get("type") || ""
   const filterCategory = searchParams.get("category") || ""
 
-  // Fetch period‑based trial balance
   const fetchTrial = async () => {
     setLoading(true)
     setErrorMsg("")
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      const cid = (user?.app_metadata as any)?.company_id
-      if (!cid) {
-        setErrorMsg("Company not found")
-        setLoading(false)
-        return
-      }
+      const res = await fetch(`/api/trial-balance?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`)
+      if (!res.ok) throw new Error(await res.text())
+      const json = await res.json()
+      // json is an array of { account_id, code, name, type, category, debit, credit }
+      const rows = (json || []).map((row: any) => ({
+        id: row.account_id,
+        code: row.code,
+        name: row.name,
+        type: row.type,
+        category: row.category || getFallbackCategory(row.code),
+        debit: Number(row.debit),
+        credit: Number(row.credit),
+      }))
 
-      // 1. Get all accounts for company
-      const { data: accounts, error: accErr } = await supabase
-        .from("accounts")
-        .select("id, code, name, type, category")
-        .eq("company_id", cid)
-        .order("code")
-
-      if (accErr) throw accErr
-      if (!accounts) { setLoading(false); return }
-
-      // 2. Fetch journal lines within the period (exclude soft‑deleted)
-      let query = supabase
-        .from("journal_lines")
-        .select("account_id, debit, credit, journal_entries!inner(date, deleted_at, company_id)")
-        .eq("company_id", cid)
-        .is("journal_entries.deleted_at", null)
-        .eq("journal_entries.company_id", cid)
-
-      if (startDate) query = query.gte("journal_entries.date", startDate)
-      if (endDate)   query = query.lte("journal_entries.date", endDate)
-
-      const { data: lines, error: linesErr } = await query
-      if (linesErr) throw linesErr
-
-      // 3. Aggregate by account: net = sum(debit) - sum(credit)
-      const agg: Record<number, number> = {}
-      ;(lines || []).forEach((l: any) => {
-        const aid = l.account_id
-        agg[aid] = (agg[aid] || 0) + (l.debit || 0) - (l.credit || 0)
-      })
-
-      // 4. Build rows with universal rule: positive → Debit, negative → Credit
-      const rows = accounts.map(acc => {
-        const net = agg[acc.id] || 0
-        let debit = 0, credit = 0
-        if (net > 0) debit = net
-        else if (net < 0) credit = -net
-
-        const category = acc.category || getFallbackCategory(acc.code)
-        return {
-          id: acc.id,
-          code: acc.code,
-          name: acc.name,
-          type: acc.type,
-          category,
-          debit,
-          credit,
-        }
-      })
-
-      // Apply URL filters
       let filtered = rows
       if (filterType) {
         filtered = filtered.filter(r => r.type.toLowerCase() === filterType.toLowerCase())
@@ -137,7 +81,6 @@ export default function TrialBalancePage() {
     fetchTrial()
   }, [startDate, endDate, filterType, filterCategory])
 
-  // Sorting
   const sortedData = useMemo(() => {
     const list = [...trialData]
     list.sort((a, b) => {
@@ -176,7 +119,6 @@ export default function TrialBalancePage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  // Open Ledger with the same date range
   const openLedger = (accountId: number) => {
     router.push(
       `/dashboard/reports/ledger?accountId=${accountId}&startDate=${startDate}&endDate=${endDate}`
@@ -228,7 +170,6 @@ export default function TrialBalancePage() {
         }
       `}</style>
 
-      {/* Header with date filter on the right */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
         <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}>
           <ArrowLeft size={16} />
@@ -239,7 +180,6 @@ export default function TrialBalancePage() {
             {filterType || filterCategory ? `Filtered: ${filterType || ""} ${filterCategory || ""}` : "All accounts"}
           </p>
         </div>
-        {/* Date filter on the right */}
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <input
             type="date"
@@ -266,7 +206,6 @@ export default function TrialBalancePage() {
         </div>
       )}
 
-      {/* Summary tiles */}
       <div className="tb-summary-grid">
         <div className="tb-summary-item">
           <div style={{ background: "#FEE2E2", borderRadius: 10, padding: 10 }}>📊</div>
