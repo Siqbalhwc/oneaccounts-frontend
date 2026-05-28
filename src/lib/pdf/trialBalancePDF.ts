@@ -113,11 +113,13 @@ export async function generateTrialBalancePDF(data: TrialBalancePDFData): Promis
   const creditColW = 34
   const nameColW  = CW - codeColW - typeColW - debitColW - creditColW
 
-  // ── TABLE HEADER (square, navy) ───────────────────────────────────
+  // ── TABLE HEADER (same height as data rows) ──────────────────────
+  // We'll use a compact row height of 6 mm (matches data rows after reduced padding)
+  const ROW_HEIGHT = 6
   let Y = HEADER_H + 10
-  const HEADER_ROW_H = 10
+  const HEADER_ROW_H = ROW_HEIGHT
 
-  // Square filled rectangle
+  // Square navy header
   doc.setFillColor(...NAVY)
   doc.rect(ML, Y, CW, HEADER_ROW_H, "F")
 
@@ -149,7 +151,7 @@ export async function generateTrialBalancePDF(data: TrialBalancePDFData): Promis
     row.credit > 0 ? pkr(row.credit) : "",
   ])
 
-  // Totals row with navy background
+  // Totals row (same height as others)
   tableRows.push([
     "",
     "Total",
@@ -165,10 +167,11 @@ export async function generateTrialBalancePDF(data: TrialBalancePDFData): Promis
     showHead: false,
     styles: {
       fontSize: 8,
-      cellPadding: { top: 2, bottom: 2, left: 3, right: 3 },
+      cellPadding: { top: 1, bottom: 1, left: 3, right: 3 },   // reduced padding
       textColor: DARK,
       lineColor: BORDER,
       lineWidth: 0.2,
+      minCellHeight: ROW_HEIGHT,   // force all rows exactly 6 mm
     },
     alternateRowStyles: { fillColor: ROW_ALT },
     columnStyles: {
@@ -179,7 +182,6 @@ export async function generateTrialBalancePDF(data: TrialBalancePDFData): Promis
       4: { cellWidth: creditColW, halign: "right" },
     },
     didParseCell: (hookData) => {
-      // Totals row: bold white text on navy background
       if (hookData.row.index === tableRows.length - 1 && hookData.row.section === 'body') {
         hookData.cell.styles.fontStyle = 'bold'
         hookData.cell.styles.textColor = WHITE
