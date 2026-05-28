@@ -7,7 +7,7 @@ import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, Printer } from "lucide-reac
 import { useCompany } from "@/contexts/CompanyContext"
 import { generateProductLedgerPDF } from "@/lib/pdf/productLedgerPDF"
 
-type SortField = "date" | "type" | "qty_in" | "qty_out" | "balance"
+type SortField = "date" | "type" | "invoice_no" | "qty_in" | "qty_out" | "balance"
 type SortDir = "asc" | "desc"
 
 export default function ProductLedgerPage() {
@@ -125,12 +125,12 @@ export default function ProductLedgerPage() {
 
   useEffect(() => { if (productId) fetchLedger() }, [productId, startDate, endDate])
 
-  // Sorting – opening row always first
+  // Sorting – opening row always first, now includes invoice_no
   const sortedLines = [...ledgerLines].sort((a, b) => {
     if (a.isOpening && !b.isOpening) return -1
     if (!a.isOpening && b.isOpening) return 1
     let valA: any, valB: any
-    if (sortField === "balance" || sortField === "qty_in" || sortField === "qty_out") {
+    if (["qty_in","qty_out","balance"].includes(sortField)) {
       valA = a[sortField] || 0; valB = b[sortField] || 0
     } else {
       valA = (a[sortField] || "").toString().toLowerCase()
@@ -277,7 +277,7 @@ export default function ProductLedgerPage() {
           <div className="ledger-header">
             <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
             <button className="sort-btn" onClick={() => handleSort("type")}>Type {getSortIcon("type")}</button>
-            <span>Invoice #</span>
+            <button className="sort-btn" onClick={() => handleSort("invoice_no")}>Invoice # {getSortIcon("invoice_no")}</button>
             <button className="sort-btn" onClick={() => handleSort("qty_in")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Inflow {getSortIcon("qty_in")}</button>
             <button className="sort-btn" onClick={() => handleSort("qty_out")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Outflow {getSortIcon("qty_out")}</button>
             <button className="sort-btn" onClick={() => handleSort("balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("balance")}</button>
