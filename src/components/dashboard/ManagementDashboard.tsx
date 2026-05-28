@@ -32,25 +32,25 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const { data: dashData, isLoading, isError } = useDashboardData(companyId, fiscalYear)
 
   // Extract cached values with safe defaults
-  const donorBalances = dashData?.donorBalances || []
-  const projectRows = dashData?.projectRows || []
-  const totalBudget = dashData?.totalBudget || 0
-  const totalSpent = dashData?.totalSpent || 0
-  const overspentCount = dashData?.overspentCount || 0
-  const totalReceivables = dashData?.totalReceivables || 0
-  const totalPayables = dashData?.totalPayables || 0
-  const monthlySpending = dashData?.monthlySpending || 0
-  const lastMonthSpending = dashData?.lastMonthSpending || 0
-  const spendingTrend = dashData?.spendingTrend || 0
-  const overdueInvoicesCount = dashData?.overdueInvoicesCount || 0
-  const lastUpdated = dashData?.lastUpdated || ""
+  const donorBalances: any[] = dashData?.donorBalances || []
+  const projectRows: any[] = dashData?.projectRows || []
+  const totalBudget: number = dashData?.totalBudget || 0
+  const totalSpent: number = dashData?.totalSpent || 0
+  const overspentCount: number = dashData?.overspentCount || 0
+  const totalReceivables: number = dashData?.totalReceivables || 0
+  const totalPayables: number = dashData?.totalPayables || 0
+  const monthlySpending: number = dashData?.monthlySpending || 0
+  const lastMonthSpending: number = dashData?.lastMonthSpending || 0
+  const spendingTrend: number = dashData?.spendingTrend || 0
+  const overdueInvoicesCount: number = dashData?.overdueInvoicesCount || 0
+  const lastUpdated: string = dashData?.lastUpdated || ""
 
   // ── Underspent activities & activity health (unchanged) ─────────────
   const [underspentActivities, setUnderspentActivities] = useState<any[]>([])
   const [activityHealth, setActivityHealth] = useState<Record<string, { lowCount: number; threshold: number; message: string }>>({})
 
   // ── Top‑5 projects for the card ──
-  const topFiveProjects = projectRows.slice(0, 5)
+  const topFiveProjects: any[] = projectRows.slice(0, 5)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user }, error }) => {
@@ -73,32 +73,32 @@ export default function ManagementDashboard({ role }: { role: string }) {
   }, [companyId])
 
   // ── Filtered data ─────────────────────────────────────────────────
-  const filteredDonorBalances = donorBalances.filter((d: any) => !selectedDonorId || d.donor_id == selectedDonorId)
-  const filteredProjectRows = projectRows.filter((p: any) => !selectedProjectId || p.id == selectedProjectId)
-  const filteredTotalBudget = selectedProjectId ? filteredProjectRows.reduce((s: number, p: any) => s + p.budget, 0) : totalBudget
-  const filteredTotalSpent = selectedProjectId ? filteredProjectRows.reduce((s: number, p: any) => s + p.actual, 0) : totalSpent
-  const filteredOverspentCount = selectedProjectId ? filteredProjectRows.filter((p: any) => p.actual > p.budget).length : overspentCount
-  const remainingFunds = filteredTotalBudget - filteredTotalSpent
-  const spentPct = filteredTotalBudget ? Math.round((filteredTotalSpent / filteredTotalBudget) * 100) : 0
+  const filteredDonorBalances: any[] = donorBalances.filter((d: any) => !selectedDonorId || d.donor_id == selectedDonorId)
+  const filteredProjectRows: any[] = projectRows.filter((p: any) => !selectedProjectId || p.id == selectedProjectId)
+  const filteredTotalBudget: number = selectedProjectId ? filteredProjectRows.reduce((s: number, p: any) => s + p.budget, 0) : totalBudget
+  const filteredTotalSpent: number = selectedProjectId ? filteredProjectRows.reduce((s: number, p: any) => s + p.actual, 0) : totalSpent
+  const filteredOverspentCount: number = selectedProjectId ? filteredProjectRows.filter((p: any) => p.actual > p.budget).length : overspentCount
+  const remainingFunds: number = filteredTotalBudget - filteredTotalSpent
+  const spentPct: number = filteredTotalBudget ? Math.round((filteredTotalSpent / filteredTotalBudget) * 100) : 0
 
-  const projectsSorted = [...filteredProjectRows].sort((a, b) => b.pct - a.pct)
-  const highestProject = projectsSorted[0] || null
-  const lowestProject = projectsSorted[projectsSorted.length - 1] || null
+  const projectsSorted: any[] = [...filteredProjectRows].sort((a: any, b: any) => b.pct - a.pct)
+  const highestProject: any = projectsSorted[0] || null
+  const lowestProject: any = projectsSorted[projectsSorted.length - 1] || null
 
-  const getGreeting = () => {
+  const getGreeting = (): string => {
     const hour = new Date().getHours()
     if (hour < 12) return "Good morning"
     if (hour < 18) return "Good afternoon"
     return "Good evening"
   }
 
-  const formatPKR = (v: number) => {
+  const formatPKR = (v: number): string => {
     const sign = v < 0 ? "-" : ""
     const abs = Math.abs(v)
     return `${sign}PKR ${(abs / 1_000_000).toFixed(1)}M`
   }
 
-  const detailQuery = (extra: Record<string, string> = {}) => {
+  const detailQuery = (extra: Record<string, string> = {}): string => {
     const params = new URLSearchParams({ fy: String(fiscalYear) })
     if (selectedProjectId) params.set("project", selectedProjectId)
     if (selectedDonorId) params.set("donor", selectedDonorId)
@@ -320,17 +320,17 @@ export default function ManagementDashboard({ role }: { role: string }) {
           <div className="hero-filters">
             <span className="filter-label">Period:</span>
             <select className="filter-pill" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
-              {[2024,2025,2026,2027].map(y => <option key={y} value={y}>FY {y}</option>)}
+              {[2024,2025,2026,2027].map((y: number) => <option key={y} value={y}>FY {y}</option>)}
             </select>
             <span className="filter-label">Projects:</span>
             <select className="filter-pill" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
               <option value="">All Projects</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {projects.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
             <span className="filter-label">Donors:</span>
             <select className="filter-pill" value={selectedDonorId} onChange={e => setSelectedDonorId(e.target.value)}>
               <option value="">All Donors</option>
-              {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              {donors.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
         </motion.div>
@@ -374,7 +374,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
             { label: remainingFunds < 0 ? "Overspent" : "Remaining", value: formatPKR(remainingFunds), meta: `${Math.abs(Math.round((remainingFunds / filteredTotalBudget) * 100))}% ${remainingFunds < 0 ? "over" : "left"}`, color: remainingFunds >= 0 ? "#2DD4BF" : "#F87171", link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null },
             { label: "Portfolio Health", value: filteredOverspentCount > 0 ? "⚠️ Needs Attention" : "Healthy", meta: `${Math.round((1 - filteredOverspentCount / Math.max(filteredProjectRows.length, 1)) * 100)}% health score`, color: filteredOverspentCount > 0 ? "#F97316" : "#2DD4BF", link: "/dashboard/reports/overspent" },
             { label: "📆 Monthly Spending", value: monthlySpending > 0 ? formatPKR(monthlySpending) : "—", meta: monthlySpending === 0 ? "No transactions this month" : `vs. ${formatPKR(lastMonthSpending)} last month`, color: monthlySpending > 0 ? "#F97316" : "#94A3B8", link: "/dashboard/reports/spending-detail" },
-          ].map((kpi, i) => (
+          ].map((kpi: any, i: number) => (
             <motion.div
               key={kpi.label}
               className="card"
@@ -457,7 +457,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
             transition={{ delay: 0.5, duration: 0.5 }}
           >
             <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>💧 Donor Balances</div>
-            {filteredDonorBalances.map((d, idx) => (
+            {filteredDonorBalances.map((d: any, idx: number) => (
               <div key={idx} onClick={() => router.push(`/dashboard/settings/budgets?donor=${d.donor_id}&fy=${fiscalYear}`)} style={{
                 display: "flex", alignItems: "center", gap: "0.8rem",
                 background: "var(--card)", borderRadius: "12px", padding: "0.5rem 1rem",
@@ -495,7 +495,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 100px", gap: 8, fontSize: "0.65rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", paddingBottom: 6, borderBottom: "1px solid var(--border)", marginBottom: 6 }}>
                   <span>Activity</span><span>Budget</span><span>Actual</span><span>Unspent</span>
                 </div>
-                {underspentActivities.map((act, idx) => (
+                {underspentActivities.map((act: any, idx: number) => (
                   <div key={idx} style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 100px", gap: 8, alignItems: "center", padding: "5px 0", borderBottom: "1px solid var(--border)", fontSize: "0.8rem" }}>
                     <span className="clickable" onClick={(e) => { e.stopPropagation(); router.push(act.projectId ? `/dashboard/settings/budgets?project=${act.projectId}&activity=${act.id}` : `/dashboard/reports/spending-detail?activity=${act.id}&fy=${fiscalYear}`) }}>
                       {act.name}
