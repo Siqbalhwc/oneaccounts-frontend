@@ -63,10 +63,10 @@ export default function TrialBalancePage() {
 
       let filtered = rows
       if (filterType) {
-        filtered = filtered.filter(r => r.type.toLowerCase() === filterType.toLowerCase())
+        filtered = filtered.filter((r: any) => r.type.toLowerCase() === filterType.toLowerCase())
       }
       if (filterCategory) {
-        filtered = filtered.filter(r => r.category === filterCategory)
+        filtered = filtered.filter((r: any) => r.category === filterCategory)
       }
 
       setTrialData(filtered)
