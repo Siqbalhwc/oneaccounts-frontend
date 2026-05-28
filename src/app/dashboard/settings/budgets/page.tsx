@@ -484,36 +484,56 @@ export default function BudgetsPage() {
   }
   const grandVariance = grandBudget - grandActual
 
-  if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>Loading...</div>
-  if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "#E2E8F0" }}><h2>Access Denied</h2></div>
+  if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
+  if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
   return (
-    <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .budget-shell { max-width: 100%; overflow-x: auto; }
         .filter-bar { display: flex; gap: 10px; margin: 16px 0; flex-wrap: wrap; align-items: center; }
-        .filter-select { padding: 8px 12px; border: 1px solid #334155; border-radius: 8px; font-size: 13px; background: #1E293B; color: #F1F5F9; }
-        .table { border-collapse: collapse; width: 100%; font-size: 11px; background: #111827; }
-        .table th, .table td { border: 1px solid #1E293B; padding: 4px 6px; text-align: center; }
-        .table th { background: #1E293B; color: #94A3B8; }
-        .act-header td { background: #1E293B; font-weight: 700; text-align: left; padding: 6px; color: #F1F5F9; }
-        .sub-header th { background: #1E293B; font-weight: 600; font-size: 9px; color: #94A3B8; }
-        .input-budget { width: 70px; text-align: right; border: 1px solid #334155; border-radius: 4px; padding: 2px 4px; font-size: 10px; background: #1E293B; color: #F1F5F9; }
-        .total-row td { font-weight: 700; background: #1E293B; color: #F1F5F9; }
-        .btn-primary { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; background: #1E3A8A; color: white; transition: all 0.15s; white-space: nowrap; }
-        .btn-primary:hover { background: #1E40AF; }
-        .btn-outline { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; background: transparent; border: 1.5px solid #334155; color: #CBD5E1; transition: all 0.15s; white-space: nowrap; }
-        .btn-outline:hover { background: #1E293B; }
+        .filter-select {
+          padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px;
+          background: var(--card); color: var(--text);
+        }
+        .table { border-collapse: collapse; width: 100%; font-size: 11px; background: var(--card); }
+        .table th, .table td { border: 1px solid var(--border); padding: 4px 6px; text-align: center; }
+        .table th { background: var(--card-hover); color: var(--text-muted); }
+        .act-header td { background: var(--card-hover); font-weight: 700; text-align: left; padding: 6px; color: var(--text); }
+        .sub-header th { background: var(--card-hover); font-weight: 600; font-size: 9px; color: var(--text-muted); }
+        .input-budget {
+          width: 70px; text-align: right; border: 1px solid var(--border); border-radius: 4px;
+          padding: 2px 4px; font-size: 10px; background: var(--bg); color: var(--text);
+        }
+        .total-row td { font-weight: 700; background: var(--card-hover); color: var(--text); }
+        .btn-primary {
+          display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px;
+          font-size: 13px; font-weight: 600; cursor: pointer; border: none;
+          background: var(--primary); color: var(--primary-text); transition: all 0.15s; white-space: nowrap;
+        }
+        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-outline {
+          display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px;
+          font-size: 13px; font-weight: 600; cursor: pointer; background: transparent;
+          border: 1.5px solid var(--border); color: var(--text-muted); transition: all 0.15s; white-space: nowrap;
+        }
+        .btn-outline:hover { background: var(--card-hover); }
         .btn-sm { padding: 6px 12px; font-size: 12px; }
-        h2 { color: #F1F5F9; }
-        p { color: #94A3B8; }
+        h2 { color: var(--text); }
+        p { color: var(--text-muted); }
         input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
+        .message-bar {
+          background: var(--card); border: 1px solid var(--border); padding: 10px 14px;
+          border-radius: 8px; margin-bottom: 12px; font-size: 13px;
+        }
+        .message-bar.success { border-color: #065F46; color: #6EE7B7; }
+        .message-bar.error { border-color: #EF4444; color: #FCA5A5; }
       `}</style>
 
       <div className="budget-shell">
-        <h2 style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9" }}>Budget vs Actuals</h2>
-        <p style={{ fontSize: 13, color: "#94A3B8", marginTop: 2 }}>
+        <h2 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)" }}>Budget vs Actuals</h2>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>
           {businessType === "ngo"
             ? "Enter budgets per Project, Donor, Activity, and Location"
             : "Enter budgets per Project, Activity, and Location"}
@@ -556,27 +576,27 @@ export default function BudgetsPage() {
         </div>
 
         {flash && (
-          <div style={{ background: flash.startsWith("Error") ? "#1E293B" : "#064E3B", border: flash.startsWith("Error") ? "1px solid #EF4444" : "1px solid #065F46", color: flash.startsWith("Error") ? "#FCA5A5" : "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
+          <div className={`message-bar ${flash.startsWith("Error") ? "error" : "success"}`}>
             {flash}
           </div>
         )}
 
         {(!selectedProjectId && !selectedDonorId) ? (
-          <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>
+          <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>
             {businessType === "ngo"
               ? "Please select Project and/or Donor to display the budget matrix."
               : "Please select a Project to display the budget matrix."}
           </div>
         ) : loading ? (
-          <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>Loading budgets & actuals...</div>
+          <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading budgets & actuals...</div>
         ) : displayActivities.length === 0 ? (
-          <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>
+          <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>
             No Activities found for this project. Create them in Settings.
           </div>
         ) : viewMode === "gl" ? (
           /* ───────────────── GL‑wise view ───────────────── */
           relevantAccounts.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>
+            <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>
               No budget accounts found. Add Fixed Asset or Expense accounts to start budgeting.
             </div>
           ) : (
@@ -630,7 +650,7 @@ export default function BudgetsPage() {
                           let rowBudget = 0, rowActual = 0
                           return (
                             <tr key={lid}>
-                              <td style={{ fontWeight: 600, textAlign: "left", paddingLeft: 16, color: "#E2E8F0" }}>{loc?.name || lid}</td>
+                              <td style={{ fontWeight: 600, textAlign: "left", paddingLeft: 16, color: "var(--text)" }}>{loc?.name || lid}</td>
                               {relevantAccounts.map(acc => {
                                 const cell = actData[lid]?.[String(acc.id)] || { budget: 0, actual: 0 }
                                 rowBudget += cell.budget
@@ -648,16 +668,16 @@ export default function BudgetsPage() {
                                         placeholder="0"
                                       />
                                     </td>
-                                    <td style={{ fontSize: 10, color: "#E2E8F0" }}>{cell.actual.toLocaleString()}</td>
-                                    <td style={{ fontSize: 10, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "#94A3B8" }}>
+                                    <td style={{ fontSize: 10, color: "var(--text)" }}>{cell.actual.toLocaleString()}</td>
+                                    <td style={{ fontSize: 10, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "var(--text-muted)" }}>
                                       {variance === 0 ? "—" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
                                     </td>
                                   </Fragment>
                                 )
                               })}
-                              <td style={{ fontWeight: 600, color: "#E2E8F0" }}>{rowBudget.toLocaleString()}</td>
-                              <td style={{ fontWeight: 600, color: "#E2E8F0" }}>{rowActual.toLocaleString()}</td>
-                              <td style={{ fontWeight: 600, color: (rowBudget - rowActual) < 0 ? "#EF4444" : (rowBudget - rowActual) > 0 ? "#10B981" : "#94A3B8" }}>
+                              <td style={{ fontWeight: 600, color: "var(--text)" }}>{rowBudget.toLocaleString()}</td>
+                              <td style={{ fontWeight: 600, color: "var(--text)" }}>{rowActual.toLocaleString()}</td>
+                              <td style={{ fontWeight: 600, color: (rowBudget - rowActual) < 0 ? "#EF4444" : (rowBudget - rowActual) > 0 ? "#10B981" : "var(--text-muted)" }}>
                                 {(rowBudget - rowActual) === 0 ? "—" : (rowBudget - rowActual > 0 ? "+" : "") + (rowBudget - rowActual).toLocaleString()}
                               </td>
                             </tr>
@@ -666,7 +686,7 @@ export default function BudgetsPage() {
                         <tr>
                           <td>
                             <select
-                              style={{ width: "100%", padding: "2px 4px", fontSize: 10, background: "#1E293B", color: "#F1F5F9", borderColor: "#334155" }}
+                              style={{ width: "100%", padding: "2px 4px", fontSize: 10, background: "var(--bg)", color: "var(--text)", borderColor: "var(--border)" }}
                               value=""
                               onChange={e => { if (e.target.value) addLocationRow(act.id, e.target.value) }}
                             >
@@ -691,7 +711,7 @@ export default function BudgetsPage() {
                               <Fragment key={acc.id}>
                                 <td>{sb.toLocaleString()}</td>
                                 <td>{sa.toLocaleString()}</td>
-                                <td style={{ color: sv < 0 ? "#EF4444" : sv > 0 ? "#10B981" : "#94A3B8" }}>
+                                <td style={{ color: sv < 0 ? "#EF4444" : sv > 0 ? "#10B981" : "var(--text-muted)" }}>
                                   {sv === 0 ? "—" : (sv > 0 ? "+" : "") + sv.toLocaleString()}
                                 </td>
                               </Fragment>
@@ -699,7 +719,7 @@ export default function BudgetsPage() {
                           })}
                           <td>{actTotalBudget.toLocaleString()}</td>
                           <td>{actTotalActual.toLocaleString()}</td>
-                          <td style={{ color: (actTotalBudget - actTotalActual) < 0 ? "#EF4444" : (actTotalBudget - actTotalActual) > 0 ? "#10B981" : "#94A3B8" }}>
+                          <td style={{ color: (actTotalBudget - actTotalActual) < 0 ? "#EF4444" : (actTotalBudget - actTotalActual) > 0 ? "#10B981" : "var(--text-muted)" }}>
                             {(actTotalBudget - actTotalActual) === 0 ? "—" : (actTotalBudget - actTotalActual > 0 ? "+" : "") + (actTotalBudget - actTotalActual).toLocaleString()}
                           </td>
                         </tr>
@@ -719,13 +739,13 @@ export default function BudgetsPage() {
                         <Fragment key={acc.id}>
                           <td>{gb.toLocaleString()}</td>
                           <td>{ga.toLocaleString()}</td>
-                          <td style={{ color: gv < 0 ? "#EF4444" : gv > 0 ? "#10B981" : "#94A3B8" }}>{gv === 0 ? "—" : (gv > 0 ? "+" : "") + gv.toLocaleString()}</td>
+                          <td style={{ color: gv < 0 ? "#EF4444" : gv > 0 ? "#10B981" : "var(--text-muted)" }}>{gv === 0 ? "—" : (gv > 0 ? "+" : "") + gv.toLocaleString()}</td>
                         </Fragment>
                       )
                     })}
                     <td>{grandBudget.toLocaleString()}</td>
                     <td>{grandActual.toLocaleString()}</td>
-                    <td style={{ color: grandVariance < 0 ? "#EF4444" : grandVariance > 0 ? "#10B981" : "#94A3B8" }}>{grandVariance === 0 ? "—" : (grandVariance > 0 ? "+" : "") + grandVariance.toLocaleString()}</td>
+                    <td style={{ color: grandVariance < 0 ? "#EF4444" : grandVariance > 0 ? "#10B981" : "var(--text-muted)" }}>{grandVariance === 0 ? "—" : (grandVariance > 0 ? "+" : "") + grandVariance.toLocaleString()}</td>
                   </tr>
                 </tbody>
               </table>
@@ -744,7 +764,7 @@ export default function BudgetsPage() {
         ) : (
           /* ───────────────── Month‑wise view ───────────────── */
           relevantAccounts.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 40, color: "#94A3B8" }}>
+            <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>
               No budget accounts found. Add Fixed Asset or Expense accounts to start budgeting.
             </div>
           ) : (
@@ -778,7 +798,7 @@ export default function BudgetsPage() {
                           const loc = locations.find(l => l.id == lid)
                           return (
                             <tr key={lid}>
-                              <td style={{ fontWeight: 600, textAlign: "left", paddingLeft: 16, color: "#E2E8F0" }}>{loc?.name || lid}</td>
+                              <td style={{ fontWeight: 600, textAlign: "left", paddingLeft: 16, color: "var(--text)" }}>{loc?.name || lid}</td>
                               {MONTHS.slice(0, projectDuration).map((_, idx) => {
                                 const monthNum = idx + 1
                                 const budget = getMonthBudget(act.id, lid, monthNum)
@@ -796,16 +816,16 @@ export default function BudgetsPage() {
                                         placeholder="0"
                                       />
                                     </td>
-                                    <td style={{ fontSize: 10, color: "#E2E8F0" }}>{actual.toLocaleString()}</td>
-                                    <td style={{ fontSize: 10, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "#94A3B8" }}>
+                                    <td style={{ fontSize: 10, color: "var(--text)" }}>{actual.toLocaleString()}</td>
+                                    <td style={{ fontSize: 10, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "var(--text-muted)" }}>
                                       {variance === 0 ? "—" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
                                     </td>
                                   </Fragment>
                                 )
                               })}
-                              <td style={{ fontWeight: 600, color: "#E2E8F0" }}>{monthRowTotal(act.id, lid).toLocaleString()}</td>
-                              <td style={{ fontWeight: 600, color: "#E2E8F0" }}>{rowTotalActual(act.id, lid).toLocaleString()}</td>
-                              <td style={{ fontWeight: 600, color: (monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid)) < 0 ? "#EF4444" : (monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid)) > 0 ? "#10B981" : "#94A3B8" }}>
+                              <td style={{ fontWeight: 600, color: "var(--text)" }}>{monthRowTotal(act.id, lid).toLocaleString()}</td>
+                              <td style={{ fontWeight: 600, color: "var(--text)" }}>{rowTotalActual(act.id, lid).toLocaleString()}</td>
+                              <td style={{ fontWeight: 600, color: (monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid)) < 0 ? "#EF4444" : (monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid)) > 0 ? "#10B981" : "var(--text-muted)" }}>
                                 {(monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid)) === 0 ? "—" : (monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid) > 0 ? "+" : "") + (monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid)).toLocaleString()}
                               </td>
                             </tr>
