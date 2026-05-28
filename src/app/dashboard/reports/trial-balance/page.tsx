@@ -1,8 +1,10 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, Download } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { generateTrialBalancePDF } from "@/lib/pdf/trialBalancePDF"
+import { useCompany } from "@/contexts/CompanyContext"
 
 type SortField = "code" | "name" | "type" | "category"
 type SortDir = "asc" | "desc"
@@ -43,6 +45,8 @@ export default function TrialBalancePage() {
   const filterType = searchParams.get("type") || ""
   const filterCategory = searchParams.get("category") || ""
 
+  const { companyName, companyTagline, logoUrl } = useCompany()
+
   const fetchTrial = async () => {
     setLoading(true)
     setErrorMsg("")
@@ -50,7 +54,6 @@ export default function TrialBalancePage() {
       const res = await fetch(`/api/trial-balance?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`)
       if (!res.ok) throw new Error(await res.text())
       const json = await res.json()
-      // json is an array of { account_id, code, name, type, category, debit, credit }
       const rows = (json || []).map((row: any) => ({
         id: row.account_id,
         code: row.code,
@@ -125,6 +128,28 @@ export default function TrialBalancePage() {
     )
   }
 
+  const handleExportPDF = async () => {
+    const pdfData = {
+      companyName: companyName || "OneAccounts",
+      companyTagline: companyTagline || "",
+      logoUrl: logoUrl || null,
+      startDate,
+      endDate,
+      rows: sortedData.map(r => ({
+        code: r.code,
+        name: r.name,
+        type: r.type,
+        debit: r.debit,
+        credit: r.credit,
+      })),
+      totalDebit,
+      totalCredit,
+      isBalanced,
+    }
+    const doc = await generateTrialBalancePDF(pdfData)
+    doc.save(`Trial_Balance_${startDate}_to_${endDate}.pdf`)
+  }
+
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
@@ -196,6 +221,9 @@ export default function TrialBalancePage() {
           />
           <button className="btn btn-outline" onClick={fetchTrial}>
             Refresh
+          </button>
+          <button className="btn btn-outline" onClick={handleExportPDF}>
+            <Download size={16} /> PDF
           </button>
         </div>
       </div>
