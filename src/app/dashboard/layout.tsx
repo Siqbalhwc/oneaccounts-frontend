@@ -5,6 +5,7 @@ import SidebarClient from './sidebar-client'
 import BottomNav from "@/components/BottomNav"
 import DashboardSidebar from "@/components/DashboardSidebar"
 import { CompanyProvider } from "@/contexts/CompanyContext"
+import QueryProvider from "@/components/QueryProvider"   // ← NEW
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -237,7 +238,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
             companyTagline: tenant.companyTagline,
             logoUrl: tenant.companyLogo,
           }}>
-            <div className="dl-main-content">{children}</div>
+            <QueryProvider>              {/* ← NEW – wraps all page content */}
+              <div className="dl-main-content">{children}</div>
+            </QueryProvider>
           </CompanyProvider>
           <div className="mobile-bottom-nav"><BottomNav /></div>
         </div>
