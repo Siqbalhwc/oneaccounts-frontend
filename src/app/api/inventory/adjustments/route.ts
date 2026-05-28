@@ -1,8 +1,32 @@
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
 
 export async function POST(request: NextRequest) {
   try {
+    // 1. Authenticate and get company from session
+    const cookieStore = await cookies()
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { return cookieStore.getAll() },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            )
+          },
+        },
+      }
+    )
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const companyId = (user?.app_metadata as any)?.company_id
+    if (!companyId) return NextResponse.json({ error: 'No company linked' }, { status: 400 })
+
     const body = await request.json()
     const { product_id, qty, reason, date } = body
 
@@ -15,22 +39,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Quantity must be a non‑zero number" }, { status: 400 })
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-    const supabase = createClient(supabaseUrl, serviceRoleKey)
-
-    // 1. Get product details
+    // 2. Get product details (scoped to user's company)
     const { data: product } = await supabase
       .from("products")
-      .select("id, code, cost_price, qty_on_hand, total_inflow, total_outflow, company_id")
+      .select("id, code, cost_price, qty_on_hand, total_inflow, total_outflow")
       .eq("id", product_id)
+      .eq("company_id", companyId)
       .single()
 
     if (!product) {
       return NextResponse.json({ success: false, error: "Product not found" }, { status: 404 })
     }
 
-    const companyId = product.company_id
     const costPrice = product.cost_price || 0
     const oldQty = product.qty_on_hand || 0
     const newQty = oldQty + qtyNum
@@ -41,7 +61,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Insufficient stock" }, { status: 400 })
     }
 
-    // 2. Insert stock movement
+    // 3. Insert stock movement
     const { data: moveData, error: moveError } = await supabase
       .from("stock_moves")
       .insert({
@@ -58,7 +78,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: moveError?.message || "Failed to record movement" }, { status: 500 })
     }
 
-    // 3. Update product quantity and summary fields
+    // 4. Update product quantity and summary fields (scoped)
     const { error: updateError } = await supabase
       .from("products")
       .update({
@@ -67,14 +87,15 @@ export async function POST(request: NextRequest) {
         total_outflow: totalOutflow,
       })
       .eq("id", product_id)
+      .eq("company_id", companyId)
 
     if (updateError) {
       return NextResponse.json({ success: false, error: updateError.message }, { status: 500 })
     }
 
-    // 4. Ensure Inventory account (1200) exists
+    // 5. Ensure Inventory account (1200) exists
     const inventoryAccount = await getOrCreateAccount(supabase, companyId, "1200", "Inventory", "Asset")
-    // 5. Ensure Owner Equity account (3000) exists
+    // 6. Ensure Owner Equity account (3000) exists
     const equityAccount = await getOrCreateAccount(supabase, companyId, "3000", "Owner Equity", "Equity")
 
     if (!inventoryAccount || !equityAccount) {
@@ -83,23 +104,15 @@ export async function POST(request: NextRequest) {
 
     const amount = Math.abs(qtyNum) * costPrice
 
-    // 6. Determine the next entry_no for this company
-    const { data: lastEntry } = await supabase
-      .from("journal_entries")
-      .select("entry_no")
-      .eq("company_id", companyId)
-      .order("entry_no", { ascending: false })
-      .limit(1)
-      .maybeSingle()
+    // 7. Generate a safe journal entry number
+    const entryNo = `JE-ADJ-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
 
-    const nextEntryNo = (lastEntry?.entry_no ?? 0) + 1
-
-    // 7. Create journal entry
+    // 8. Create journal entry
     const { data: journalEntry, error: journalError } = await supabase
       .from("journal_entries")
       .insert({
         company_id: companyId,
-        entry_no: nextEntryNo,
+        entry_no: entryNo,
         date,
         reference: `INV-ADJ-${moveData.id}`,
         description: reason,
@@ -111,7 +124,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: journalError?.message || "Failed to create journal entry" }, { status: 500 })
     }
 
-    // 8. Journal lines – use entry_id (not journal_entry_id) and include company_id
+    // 9. Journal lines
     const lines = qtyNum > 0
       ? [
           { company_id: companyId, entry_id: journalEntry.id, account_id: inventoryAccount.id, debit: amount, credit: 0, source_type: "inventory_adjustment", source_id: moveData.id },
@@ -130,7 +143,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: linesError.message }, { status: 500 })
     }
 
-    // 9. Update account balances (optional)
+    // 10. Update account balances (optional)
     const inventoryDelta = qtyNum > 0 ? amount : -amount
     const equityDelta = qtyNum > 0 ? -amount : amount
     try {
