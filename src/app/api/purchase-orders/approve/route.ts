@@ -1,29 +1,49 @@
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
 import { logDataChange } from "@/lib/audit"
 
 export async function PATCH(request: NextRequest) {
   try {
+    // 1. Authenticate and get company from session
+    const cookieStore = await cookies()
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { return cookieStore.getAll() },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            )
+          },
+        },
+      }
+    )
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const companyId = (user?.app_metadata as any)?.company_id
+    if (!companyId) return NextResponse.json({ error: 'No company linked' }, { status: 400 })
+
     const body = await request.json()
-    const { id, company_id } = body
+    const { id } = body   // only need the PO id – company comes from session
 
-    if (!id || !company_id) {
-      return NextResponse.json({ success: false, error: "Missing id or company_id" }, { status: 400 })
+    if (!id) {
+      return NextResponse.json({ success: false, error: "Missing id" }, { status: 400 })
     }
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-    const supabase = createClient(supabaseUrl, serviceRoleKey)
 
     const { error } = await supabase
       .from("purchase_orders")
       .update({
         status: "Approved",
-        updated_by: "system",
+        updated_by: user.email || "system",
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
-      .eq("company_id", company_id)
+      .eq("company_id", companyId)
       .eq("status", "Draft")
 
     if (error) {
@@ -36,7 +56,7 @@ export async function PATCH(request: NextRequest) {
       String(id),
       "UPDATE",
       { status: "Approved" },
-      "system"
+      user.email || "system"
     )
 
     return NextResponse.json({ success: true })
