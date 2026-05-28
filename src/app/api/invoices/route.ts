@@ -269,7 +269,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Profit allocation – only if feature is enabled
+    // Profit allocation – only if feature is enabled (ROUNDING FIXED)
     if (effectiveProfitEnabled && partners.length > 0) {
       let netProfit = totalSalesAmount - totalAutomationExpense
       if (businessType === 'trading') {
@@ -280,10 +280,24 @@ export async function POST(request: NextRequest) {
         const retainedEarnings = await getAccount(supabase, '3000', companyId)
         if (retainedEarnings) {
           jeLines.push({ account_id: retainedEarnings.id, debit: netProfit, credit: 0 })
-          for (const partner of partners) {
-            if (!partner.account_id || partner.percentage <= 0) continue
-            const partnerAmount = (netProfit * partner.percentage) / 100
-            jeLines.push({ account_id: partner.account_id, debit: 0, credit: partnerAmount })
+
+          // Filter active partners with positive percentage
+          const activePartners = partners.filter(p => p.account_id && p.percentage > 0)
+
+          if (activePartners.length > 0) {
+            let allocated = 0
+            // Allocate all except the last partner using the standard calculation
+            for (let i = 0; i < activePartners.length - 1; i++) {
+              const p = activePartners[i]
+              const amount = Math.round((netProfit * p.percentage) / 100 * 100) / 100  // round to 2 decimals
+              allocated += amount
+              jeLines.push({ account_id: p.account_id, debit: 0, credit: amount })
+            }
+
+            // Last partner gets the exact remainder to avoid any rounding imbalance
+            const lastPartner = activePartners[activePartners.length - 1]
+            const lastAmount = netProfit - allocated
+            jeLines.push({ account_id: lastPartner.account_id, debit: 0, credit: lastAmount })
           }
         }
       }
