@@ -31,106 +31,105 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No company linked' }, { status: 400 })
   }
 
-  // 2. Parse request body
+  // 2. Parse request body – use GL account IDs, not bank_account IDs
   const body = await request.json()
-  const { from_bank_account_id, to_bank_account_id, amount, transfer_date, notes } = body
+  const { from_account_id, to_account_id, amount, transfer_date, notes } = body
 
-  if (!from_bank_account_id || !to_bank_account_id || !amount || amount <= 0) {
+  if (!from_account_id || !to_account_id || !amount || amount <= 0) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
-  // 3. Service‑role client (bypasses RLS)
+  // 3. Service‑role client
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  // 4. Fetch both bank accounts with their linked GL accounts
-  const { data: fromAccount, error: fromErr } = await supabaseAdmin
-    .from('bank_accounts')
-    .select('id, balance, accounts(id, balance)')
-    .eq('id', from_bank_account_id)
+  // 4. Fetch both GL accounts
+  const { data: fromGL, error: fromGLErr } = await supabaseAdmin
+    .from('accounts')
+    .select('id, balance, code')
+    .eq('id', from_account_id)
     .eq('company_id', companyId)
     .single()
 
-  if (fromErr || !fromAccount) {
-    return NextResponse.json({ error: 'From bank account not found' }, { status: 404 })
+  if (fromGLErr || !fromGL) {
+    return NextResponse.json({ error: 'From account not found' }, { status: 404 })
   }
 
-  const { data: toAccount, error: toErr } = await supabaseAdmin
-    .from('bank_accounts')
-    .select('id, balance, accounts(id, balance)')
-    .eq('id', to_bank_account_id)
+  const { data: toGL, error: toGLErr } = await supabaseAdmin
+    .from('accounts')
+    .select('id, balance, code')
+    .eq('id', to_account_id)
     .eq('company_id', companyId)
     .single()
 
-  if (toErr || !toAccount) {
-    return NextResponse.json({ error: 'To bank account not found' }, { status: 404 })
+  if (toGLErr || !toGL) {
+    return NextResponse.json({ error: 'To account not found' }, { status: 404 })
   }
 
-  // Cast the nested 'accounts' to any to access properties directly
-  const fromGL = (fromAccount.accounts as any)
-  const toGL   = (toAccount.accounts as any)
-
-  // 5. Update bank_accounts.balance
-  const newFromBankBalance = (fromAccount.balance || 0) - amount
-  const newToBankBalance = (toAccount.balance || 0) + amount
-
-  const { error: updateFromBankErr } = await supabaseAdmin
-    .from('bank_accounts')
-    .update({ balance: newFromBankBalance })
-    .eq('id', from_bank_account_id)
-
-  if (updateFromBankErr) {
-    return NextResponse.json({ error: 'Failed to update from bank account: ' + updateFromBankErr.message }, { status: 500 })
-  }
-
-  const { error: updateToBankErr } = await supabaseAdmin
-    .from('bank_accounts')
-    .update({ balance: newToBankBalance })
-    .eq('id', to_bank_account_id)
-
-  if (updateToBankErr) {
-    await supabaseAdmin.from('bank_accounts').update({ balance: fromAccount.balance }).eq('id', from_bank_account_id)
-    return NextResponse.json({ error: 'Failed to update to bank account: ' + updateToBankErr.message }, { status: 500 })
-  }
-
-  // 6. Update GL account balances (this is what the bank accounts list page reads)
-  const newFromGLBalance = (fromGL?.balance || 0) - amount
-  const newToGLBalance = (toGL?.balance || 0) + amount
+  // 5. Update GL account balances
+  const newFromBalance = (fromGL.balance || 0) - amount
+  const newToBalance   = (toGL.balance || 0) + amount
 
   const { error: updateFromGLErr } = await supabaseAdmin
     .from('accounts')
-    .update({ balance: newFromGLBalance })
-    .eq('id', fromGL?.id)
+    .update({ balance: newFromBalance })
+    .eq('id', fromGL.id)
 
   if (updateFromGLErr) {
-    await supabaseAdmin.from('bank_accounts').update({ balance: fromAccount.balance }).eq('id', from_bank_account_id)
-    await supabaseAdmin.from('bank_accounts').update({ balance: toAccount.balance }).eq('id', to_bank_account_id)
-    return NextResponse.json({ error: 'Failed to update from GL account: ' + updateFromGLErr.message }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to update from account' }, { status: 500 })
   }
 
   const { error: updateToGLErr } = await supabaseAdmin
     .from('accounts')
-    .update({ balance: newToGLBalance })
-    .eq('id', toGL?.id)
+    .update({ balance: newToBalance })
+    .eq('id', toGL.id)
 
   if (updateToGLErr) {
-    await supabaseAdmin.from('accounts').update({ balance: fromGL?.balance || 0 }).eq('id', fromGL?.id)
-    await supabaseAdmin.from('bank_accounts').update({ balance: fromAccount.balance }).eq('id', from_bank_account_id)
-    await supabaseAdmin.from('bank_accounts').update({ balance: toAccount.balance }).eq('id', to_bank_account_id)
-    return NextResponse.json({ error: 'Failed to update to GL account: ' + updateToGLErr.message }, { status: 500 })
+    // rollback from account
+    await supabaseAdmin.from('accounts').update({ balance: fromGL.balance }).eq('id', fromGL.id)
+    return NextResponse.json({ error: 'Failed to update to account' }, { status: 500 })
   }
 
-  // 7. Insert the bank transfer record
+  // 6. Also update the linked bank_accounts.balance if they exist
+  const { data: fromBank } = await supabaseAdmin
+    .from('bank_accounts')
+    .select('id, balance')
+    .eq('account_id', fromGL.id)
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  if (fromBank) {
+    await supabaseAdmin
+      .from('bank_accounts')
+      .update({ balance: newFromBalance })
+      .eq('id', fromBank.id)
+  }
+
+  const { data: toBank } = await supabaseAdmin
+    .from('bank_accounts')
+    .select('id, balance')
+    .eq('account_id', toGL.id)
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  if (toBank) {
+    await supabaseAdmin
+      .from('bank_accounts')
+      .update({ balance: newToBalance })
+      .eq('id', toBank.id)
+  }
+
+  // 7. Insert the bank transfer record (using GL account IDs)
   const transferDate = transfer_date || new Date().toISOString().split('T')[0]
 
   const { data: transfer, error: transferErr } = await supabaseAdmin
     .from('bank_transfers')
     .insert({
       company_id: companyId,
-      from_bank_account_id,
-      to_bank_account_id,
+      from_account_id,       // GL account ID
+      to_account_id,         // GL account ID
       amount,
       transfer_date: transferDate,
       notes: notes || null,
@@ -139,54 +138,34 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (transferErr) {
-    await supabaseAdmin.from('accounts').update({ balance: fromGL?.balance || 0 }).eq('id', fromGL?.id)
-    await supabaseAdmin.from('accounts').update({ balance: toGL?.balance || 0 }).eq('id', toGL?.id)
-    await supabaseAdmin.from('bank_accounts').update({ balance: fromAccount.balance }).eq('id', from_bank_account_id)
-    await supabaseAdmin.from('bank_accounts').update({ balance: toAccount.balance }).eq('id', to_bank_account_id)
-    return NextResponse.json({ error: 'Failed to record transfer: ' + transferErr.message }, { status: 500 })
+    // rollback everything
+    await supabaseAdmin.from('accounts').update({ balance: fromGL.balance }).eq('id', fromGL.id)
+    await supabaseAdmin.from('accounts').update({ balance: toGL.balance }).eq('id', toGL.id)
+    if (fromBank) await supabaseAdmin.from('bank_accounts').update({ balance: fromBank.balance }).eq('id', fromBank.id)
+    if (toBank)   await supabaseAdmin.from('bank_accounts').update({ balance: toBank.balance }).eq('id', toBank.id)
+    return NextResponse.json({ error: transferErr.message }, { status: 500 })
   }
 
-  // 8. Create a journal entry (optional but recommended)
+  // 8. Create journal entry (optional)
   const entryNo = `JE-BT-${transfer.id}`
-  const { data: entry, error: entryErr } = await supabaseAdmin
+  const { data: entry } = await supabaseAdmin
     .from('journal_entries')
     .insert({
       company_id: companyId,
       entry_no: entryNo,
       date: transferDate,
-      description: `Bank Transfer: ${fromGL?.id || '?'} → ${toGL?.id || '?'}`,
+      description: `Bank Transfer: ${fromGL.code || fromGL.id} → ${toGL.code || toGL.id}`,
     })
     .select('id')
     .single()
 
-  if (!entryErr && entry) {
+  if (entry) {
     const lines = [
-      {
-        company_id: companyId,
-        entry_id: entry.id,
-        account_id: toGL?.id,
-        debit: amount,
-        credit: 0,
-        source_type: 'bank_transfer',
-        source_id: transfer.id,
-      },
-      {
-        company_id: companyId,
-        entry_id: entry.id,
-        account_id: fromGL?.id,
-        debit: 0,
-        credit: amount,
-        source_type: 'bank_transfer',
-        source_id: transfer.id,
-      },
+      { company_id: companyId, entry_id: entry.id, account_id: toGL.id, debit: amount, credit: 0, source_type: 'bank_transfer', source_id: transfer.id },
+      { company_id: companyId, entry_id: entry.id, account_id: fromGL.id, debit: 0, credit: amount, source_type: 'bank_transfer', source_id: transfer.id },
     ]
     await supabaseAdmin.from('journal_lines').insert(lines)
   }
 
-  return NextResponse.json({
-    success: true,
-    transfer_id: transfer.id,
-    from_balance: newFromBankBalance,
-    to_balance: newToBankBalance,
-  })
+  return NextResponse.json({ success: true, transfer_id: transfer.id })
 }
