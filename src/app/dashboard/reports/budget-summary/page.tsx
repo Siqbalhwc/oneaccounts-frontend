@@ -133,25 +133,110 @@ export default function BudgetSummaryPage() {
     v >= 1_000_000 ? `PKR ${(v / 1_000_000).toFixed(1)}M` : `PKR ${v.toLocaleString()}`
 
   return (
-    <div style={{ padding: "20px 24px", fontFamily: "Segoe UI, system-ui, sans-serif", background: "#f0f4f8", minHeight: "100vh" }}>
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .card { background: white; border-radius: 24px; border: 1px solid #e2e8f0; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-        .table th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; text-align: left; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; }
-        .table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
-        .filter-select { padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; background: white; box-sizing: border-box; }
-        .btn { padding: 8px 16px; border: none; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-        .btn-secondary { background: #e2e8f0; color: #1e293b; }
+        .card {
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 20px;
+          box-shadow: var(--shadow-sm);
+          overflow-x: auto;
+        }
+        .table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+        .table th {
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: var(--text-muted);
+          text-align: left;
+          padding: 10px 12px;
+          border-bottom: 1px solid var(--border);
+          background: var(--card);
+          white-space: nowrap;
+        }
+        .table td {
+          padding: 10px 12px;
+          border-bottom: 1px solid var(--border);
+          font-size: 13px;
+          color: var(--text);
+          white-space: nowrap;
+        }
+        .table tr:hover td {
+          background: var(--card-hover);
+        }
+        .filter-select {
+          height: 38px;
+          border: 1.5px solid var(--border);
+          border-radius: 8px;
+          padding: 0 12px;
+          font-size: 13px;
+          background: var(--card);
+          color: var(--text);
+          outline: none;
+          font-family: inherit;
+          box-sizing: border-box;
+        }
+        .filter-select:focus {
+          border-color: var(--primary);
+        }
+        .btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 16px;
+          border-radius: 8px;
+          border: 1.5px solid var(--border);
+          font-weight: 600;
+          font-size: 13px;
+          cursor: pointer;
+          font-family: inherit;
+          transition: background 0.15s;
+          white-space: nowrap;
+        }
+        .btn-outline {
+          background: transparent;
+          color: var(--text-muted);
+          border-color: var(--border);
+        }
+        .btn-outline:hover {
+          background: var(--card-hover);
+        }
+        .btn-secondary {
+          background: var(--card);
+          color: var(--text-muted);
+          border-color: var(--border);
+        }
+        .btn-secondary:hover {
+          background: var(--card-hover);
+        }
+        @media (max-width: 640px) {
+          .table th, .table td {
+            padding: 8px 6px;
+            font-size: 11px;
+          }
+          .btn {
+            padding: 6px 12px;
+            font-size: 12px;
+          }
+        }
       `}</style>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
-        <button onClick={() => router.back()} style={{ background: "none", border: "none", cursor: "pointer" }}>← Back</button>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+        <button className="btn btn-outline" onClick={() => router.back()}>← Back</button>
         <div>
-          <h2 style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", margin: 0 }}>Budget Summary</h2>
-          <p style={{ fontSize: 14, color: "#64748b", margin: 0 }}>All active budget lines with project, donor, activity, location and account</p>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>Budget Summary</h1>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>All active budget lines with project, donor, activity, location and account</p>
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
+      {/* Filters & Export */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
         <select className="filter-select" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
           {[2024,2025,2026,2027].map(y => <option key={y} value={y}>{y}</option>)}
         </select>
@@ -165,30 +250,40 @@ export default function BudgetSummaryPage() {
         </div>
       </div>
 
-      <div className="card" style={{ overflowX: "auto" }}>
-        {loading ? <p>Loading...</p> : rows.length === 0 ? <p style={{ color: "#94a3b8", textAlign: "center", padding: 40 }}>No budget lines found.</p> : (
-          <table className="table" style={{ width: "100%", borderCollapse: "collapse" }}>
+      {/* Table */}
+      <div className="card">
+        {loading ? (
+          <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading budget lines…</div>
+        ) : rows.length === 0 ? (
+          <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>No budget lines found.</div>
+        ) : (
+          <table className="table">
             <thead>
               <tr>
-                <th>Project</th><th>Donor</th><th>Activity</th><th>Location</th>
-                <th>Code</th><th>Account</th><th style={{ textAlign: "right" }}>Budget</th>
+                <th>Project</th>
+                <th>Donor</th>
+                <th>Activity</th>
+                <th>Location</th>
+                <th>Code</th>
+                <th>Account</th>
+                <th style={{ textAlign: "right" }}>Budget</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r, i) => (
                 <tr key={i}>
-                  <td style={{ fontWeight: 600 }}>{r.project}</td>
-                  <td>{r.donor||"—"}</td>
-                  <td>{r.activity||"—"}</td>
-                  <td>{r.location||"—"}</td>
-                  <td>{r.account_code}</td>
+                  <td style={{ fontWeight: 600, color: "var(--primary)" }}>{r.project}</td>
+                  <td>{r.donor || "—"}</td>
+                  <td>{r.activity || "—"}</td>
+                  <td>{r.location || "—"}</td>
+                  <td style={{ fontFamily: "monospace" }}>{r.account_code}</td>
                   <td>{r.account_name}</td>
                   <td style={{ textAlign: "right", fontWeight: 600 }}>{formatPKR(r.amount)}</td>
                 </tr>
               ))}
-              <tr style={{ fontWeight: 700, borderTop: "2px solid #e2e8f0" }}>
+              <tr style={{ fontWeight: 700, borderTop: "2px solid var(--border)" }}>
                 <td colSpan={6} style={{ textAlign: "right" }}>Total</td>
-                <td style={{ textAlign: "right" }}>{formatPKR(rows.reduce((s,r)=>s+(r.amount||0),0))}</td>
+                <td style={{ textAlign: "right" }}>{formatPKR(rows.reduce((s, r) => s + (r.amount || 0), 0))}</td>
               </tr>
             </tbody>
           </table>
