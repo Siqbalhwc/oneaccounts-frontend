@@ -21,15 +21,51 @@ export default function NewAdjustmentPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
+  // Computed real stock for the selected product (opening + net movements)
+  const [realStock, setRealStock] = useState<number | null>(null)
+
   useEffect(() => {
     supabase
       .from("products")
-      .select("id, code, name, qty_on_hand, cost_price")
+      .select("id, code, name, opening_qty, cost_price")
       .order("code")
       .then(({ data }) => {
         if (data) setProducts(data)
       })
   }, [])
+
+  // When a product is selected, compute its true available stock
+  useEffect(() => {
+    if (!productId) {
+      setRealStock(null)
+      return
+    }
+    const fetchRealStock = async () => {
+      // Get the product’s opening quantity
+      const prod = products.find(p => p.id === productId)
+      if (!prod) return
+
+      const openingQty = prod.opening_qty || 0
+
+      // Fetch all invoice items for this product (purchases increase, sales decrease)
+      const { data: items } = await supabase
+        .from("invoice_items")
+        .select("qty, invoices!inner(type)")
+        .eq("product_id", productId)
+
+      let netMovements = 0
+      if (items) {
+        items.forEach((item: any) => {
+          const invType = item.invoices?.type
+          if (invType === "purchase") netMovements += item.qty
+          else if (invType === "sale") netMovements -= item.qty
+        })
+      }
+
+      setRealStock(openingQty + netMovements)
+    }
+    fetchRealStock()
+  }, [productId, products, supabase])
 
   // Selected product details
   const selectedProduct = useMemo(
@@ -39,7 +75,7 @@ export default function NewAdjustmentPage() {
 
   const qtyNum = parseFloat(qty)
   const adjustmentQty = isNaN(qtyNum) ? 0 : qtyNum
-  const currentStock = selectedProduct?.qty_on_hand ?? 0
+  const currentStock = realStock ?? 0          // true available stock
   const newStock = currentStock + adjustmentQty
   const costPrice = selectedProduct?.cost_price ?? 0
   const valueChange = adjustmentQty * costPrice
@@ -56,6 +92,7 @@ export default function NewAdjustmentPage() {
       setError("Quantity must be a non‑zero number.")
       return
     }
+    // Validate against true stock (including opening)
     if (newStock < 0) {
       setError("Insufficient stock for this adjustment.")
       return
@@ -148,7 +185,7 @@ export default function NewAdjustmentPage() {
                 <option value="">Select product</option>
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.code} – {p.name} (Stock: {p.qty_on_hand ?? 0})
+                    {p.code} – {p.name} (Opening: {p.opening_qty ?? 0})
                   </option>
                 ))}
               </select>
@@ -188,10 +225,10 @@ export default function NewAdjustmentPage() {
             </div>
 
             {/* Summary section (visible only when product selected) */}
-            {selectedProduct && (
+            {selectedProduct && realStock !== null && (
               <div className="summary-grid" style={{ marginBottom: 16 }}>
                 <div className="summary-item">
-                  <div className="summary-label">Current Stock</div>
+                  <div className="summary-label">Current Stock (incl. opening)</div>
                   <div className="summary-value">{currentStock}</div>
                 </div>
                 <div className="summary-item">
