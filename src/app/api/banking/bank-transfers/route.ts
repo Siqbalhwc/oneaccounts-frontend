@@ -31,12 +31,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No company linked' }, { status: 400 })
   }
 
-  // 2. Parse request body – use GL account IDs, not bank_account IDs
+  // 2. Parse request body – accept both naming styles
   const body = await request.json()
-  const { from_account_id, to_account_id, amount, transfer_date, notes } = body
+  const fromGLId = body.from_account_id || body.from_bank_account_id
+  const toGLId   = body.to_account_id   || body.to_bank_account_id
+  const amount   = parseFloat(body.amount)
+  const transferDate = body.transfer_date || new Date().toISOString().split('T')[0]
+  const notes    = body.notes || null
 
-  if (!from_account_id || !to_account_id || !amount || amount <= 0) {
-    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+  if (!fromGLId || !toGLId || !amount || amount <= 0) {
+    return NextResponse.json({ error: 'Missing required fields (from_account, to_account, amount)' }, { status: 400 })
   }
 
   // 3. Service‑role client
@@ -49,7 +53,7 @@ export async function POST(request: NextRequest) {
   const { data: fromGL, error: fromGLErr } = await supabaseAdmin
     .from('accounts')
     .select('id, balance, code')
-    .eq('id', from_account_id)
+    .eq('id', fromGLId)
     .eq('company_id', companyId)
     .single()
 
@@ -60,7 +64,7 @@ export async function POST(request: NextRequest) {
   const { data: toGL, error: toGLErr } = await supabaseAdmin
     .from('accounts')
     .select('id, balance, code')
-    .eq('id', to_account_id)
+    .eq('id', toGLId)
     .eq('company_id', companyId)
     .single()
 
@@ -87,12 +91,12 @@ export async function POST(request: NextRequest) {
     .eq('id', toGL.id)
 
   if (updateToGLErr) {
-    // rollback from account
+    // rollback
     await supabaseAdmin.from('accounts').update({ balance: fromGL.balance }).eq('id', fromGL.id)
     return NextResponse.json({ error: 'Failed to update to account' }, { status: 500 })
   }
 
-  // 6. Also update the linked bank_accounts.balance if they exist
+  // 6. Also update linked bank_accounts.balance (if they exist)
   const { data: fromBank } = await supabaseAdmin
     .from('bank_accounts')
     .select('id, balance')
@@ -101,10 +105,7 @@ export async function POST(request: NextRequest) {
     .maybeSingle()
 
   if (fromBank) {
-    await supabaseAdmin
-      .from('bank_accounts')
-      .update({ balance: newFromBalance })
-      .eq('id', fromBank.id)
+    await supabaseAdmin.from('bank_accounts').update({ balance: newFromBalance }).eq('id', fromBank.id)
   }
 
   const { data: toBank } = await supabaseAdmin
@@ -115,24 +116,19 @@ export async function POST(request: NextRequest) {
     .maybeSingle()
 
   if (toBank) {
-    await supabaseAdmin
-      .from('bank_accounts')
-      .update({ balance: newToBalance })
-      .eq('id', toBank.id)
+    await supabaseAdmin.from('bank_accounts').update({ balance: newToBalance }).eq('id', toBank.id)
   }
 
-  // 7. Insert the bank transfer record (using GL account IDs)
-  const transferDate = transfer_date || new Date().toISOString().split('T')[0]
-
+  // 7. Insert the bank transfer record (store GL account IDs)
   const { data: transfer, error: transferErr } = await supabaseAdmin
     .from('bank_transfers')
     .insert({
       company_id: companyId,
-      from_account_id,       // GL account ID
-      to_account_id,         // GL account ID
+      from_account_id: fromGL.id,   // GL account ID
+      to_account_id:   toGL.id,     // GL account ID
       amount,
       transfer_date: transferDate,
-      notes: notes || null,
+      notes,
     })
     .select('id')
     .single()
