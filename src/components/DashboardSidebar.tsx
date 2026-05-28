@@ -61,13 +61,17 @@ const navSections: NavSection[] = [
   ]},
 ]
 
+// ── Helper: exact match for /dashboard, startsWith for all other routes ──
+const matchesItem = (item: NavItem, path: string): boolean =>
+  item.href === "/dashboard" ? path === item.href : path.startsWith(item.href)
+
 // Helper to find which section a path belongs to
 function getSectionForPath(path: string): string {
   for (const sec of navSections) {
-    if (sec.items?.some(item => path.startsWith(item.href))) return sec.section
+    if (sec.items?.some(item => matchesItem(item, path))) return sec.section
     if (sec.groups) {
       for (const grp of sec.groups) {
-        if (grp.items.some(item => path.startsWith(item.href))) return sec.section
+        if (grp.items.some(item => matchesItem(item, path))) return sec.section
       }
     }
   }
@@ -211,10 +215,10 @@ export default function DashboardSidebar({
                     {sec.groups?.map(group => (
                       <div key={group.groupLabel}>
                         {!collapsed && <div style={{ padding: "6px 14px 2px", color: mutedTextColor, fontSize: 8, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{group.groupLabel}</div>}
-                        {group.items.map(item => isVisible(item) && <NavLink key={item.href} {...{ item, collapsed, isNew: isNew(item), markVisited, isActive: pathname.startsWith(item.href), textColor, mutedTextColor, router }} />)}
+                        {group.items.map(item => isVisible(item) && <NavLink key={item.href} {...{ item, collapsed, isNew: isNew(item), markVisited, isActive: matchesItem(item, pathname), textColor, mutedTextColor, router }} />)}
                       </div>
                     ))}
-                    {sec.items?.map(item => isVisible(item) && <NavLink key={item.href} {...{ item, collapsed, isNew: isNew(item), markVisited, isActive: pathname.startsWith(item.href), textColor, mutedTextColor, router }} />)}
+                    {sec.items?.map(item => isVisible(item) && <NavLink key={item.href} {...{ item, collapsed, isNew: isNew(item), markVisited, isActive: matchesItem(item, pathname), textColor, mutedTextColor, router }} />)}
                   </motion.div>
                 )}
               </AnimatePresence>
