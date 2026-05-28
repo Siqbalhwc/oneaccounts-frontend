@@ -282,7 +282,7 @@ export async function POST(request: NextRequest) {
           jeLines.push({ account_id: retainedEarnings.id, debit: netProfit, credit: 0 })
 
           // Filter active partners with positive percentage
-          const activePartners = partners.filter(p => p.account_id && p.percentage > 0)
+          const activePartners = partners.filter((p: any) => p.account_id && p.percentage > 0)
 
           if (activePartners.length > 0) {
             let allocated = 0
