@@ -3,8 +3,6 @@ import autoTable from "jspdf-autotable"
 
 // ─── Brand colours ────────────────────────────────────────────────
 const NAVY  = [7,   8,  91]  as [number,number,number]
-const RED   = [220, 38,  38]  as [number,number,number]
-const AMBER = [245,158,  11]  as [number,number,number]
 const DARK  = [17,  24,  39]  as [number,number,number]
 const MUTED = [107,114, 128]  as [number,number,number]
 const BORDER = [229,231, 235]  as [number,number,number]
@@ -29,18 +27,6 @@ async function loadImage(url: string): Promise<string | null> {
 
 const pkr = (n: number) =>
   "PKR " + n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
-function filledRect(
-  doc: jsPDF,
-  x: number, y: number, w: number, h: number,
-  fillRgb: [number,number,number],
-  radius = 0,
-) {
-  doc.setFillColor(...fillRgb)
-  radius > 0
-    ? doc.roundedRect(x, y, w, h, radius, radius, "F")
-    : doc.rect(x, y, w, h, "F")
-}
 
 export interface TrialBalanceRow {
   code: string
@@ -122,33 +108,33 @@ export async function generateTrialBalancePDF(data: TrialBalancePDFData): Promis
 
   // ── TABLE COLUMN WIDTHS ──────────────────────────────────────────
   const codeColW  = 14
-  const typeColW  = 24   // widened to prevent wrapping
+  const typeColW  = 24
   const debitColW = 32
   const creditColW = 34
-  const nameColW  = CW - codeColW - typeColW - debitColW - creditColW  // remaining
+  const nameColW  = CW - codeColW - typeColW - debitColW - creditColW
 
-  // ── TABLE HEADER (navy bar) ──────────────────────────────────────
+  // ── TABLE HEADER (square, navy) ───────────────────────────────────
   let Y = HEADER_H + 10
   const HEADER_ROW_H = 10
-  const HEADER_RADIUS = 4
 
-  filledRect(doc, ML, Y, CW, HEADER_ROW_H, NAVY, HEADER_RADIUS)
+  // Square filled rectangle
+  doc.setFillColor(...NAVY)
+  doc.rect(ML, Y, CW, HEADER_ROW_H, "F")
 
   const headerTextY = Y + HEADER_ROW_H / 2 + 1.5
   doc.setFont("helvetica", "bold")
   doc.setFontSize(8)
   doc.setTextColor(...WHITE)
 
-  // Precise X positions for each column header
   const codeX = ML + codeColW / 2
-  const nameX = ML + codeColW + 2                // left padding of name column
+  const nameX = ML + codeColW + 2
   const typeX = ML + codeColW + nameColW + typeColW / 2
   const debitX = ML + codeColW + nameColW + typeColW + debitColW / 2
   const creditX = ML + codeColW + nameColW + typeColW + debitColW + creditColW / 2
 
   doc.text("Code", codeX, headerTextY, { align: "center" })
   doc.text("Account Name", nameX + 3, headerTextY, { align: "left" })
-  doc.text("Type", typeX, headerTextY, { align: "center" })         // centered
+  doc.text("Type", typeX, headerTextY, { align: "center" })
   doc.text("Debit", debitX, headerTextY, { align: "center" })
   doc.text("Credit", creditX, headerTextY, { align: "center" })
 
@@ -163,7 +149,7 @@ export async function generateTrialBalancePDF(data: TrialBalancePDFData): Promis
     row.credit > 0 ? pkr(row.credit) : "",
   ])
 
-  // Totals row appended
+  // Totals row with navy background
   tableRows.push([
     "",
     "Total",
@@ -192,23 +178,22 @@ export async function generateTrialBalancePDF(data: TrialBalancePDFData): Promis
       3: { cellWidth: debitColW, halign: "right" },
       4: { cellWidth: creditColW, halign: "right" },
     },
-    // Bold and light background for totals row
     didParseCell: (hookData) => {
+      // Totals row: bold white text on navy background
       if (hookData.row.index === tableRows.length - 1 && hookData.row.section === 'body') {
         hookData.cell.styles.fontStyle = 'bold'
-        hookData.cell.styles.fillColor = [240, 240, 245]
+        hookData.cell.styles.textColor = WHITE
+        hookData.cell.styles.fillColor = NAVY
       }
     },
   })
 
   const afterTable = (doc as any).lastAutoTable.finalY as number
 
-  // ── Clean rounded border without overlapping patches ────────────
-  // Use a thin rounded rectangle exactly around the table area,
-  // without adding white squares that hide text.
+  // ── Simple border around the entire table (including header) ─────
   doc.setDrawColor(...BORDER)
   doc.setLineWidth(0.3)
-  doc.roundedRect(ML, tableStartY, CW, afterTable - tableStartY, 4, 4, "S")
+  doc.rect(ML, Y, CW, afterTable - Y, "S")
 
   // ── FOOTER ───────────────────────────────────────────────────────
   doc.setDrawColor(...BORDER)
