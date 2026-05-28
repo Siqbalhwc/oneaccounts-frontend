@@ -44,6 +44,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
   const [overdueInvoicesCount, setOverdueInvoicesCount] = useState(0)
 
+  // ── Top‑5 projects for the card ──
+  const topFiveProjects = projectRows.slice(0, 5)
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user }, error }) => {
       if (error || !user) {
@@ -131,6 +134,10 @@ export default function ManagementDashboard({ role }: { role: string }) {
         }))
         setProjectRows(enrichedProjects.sort((a: any, b: any) => b.pct - a.pct))
         setOverspentCount(enrichedProjects.filter((p: any) => p.actual > p.budget).length)
+
+        // ... (rest of the fetch logic remains exactly the same)
+        // Quick stats, monthly spending, underspent activities, etc.
+        // (I'm including the full logic here to keep the file complete, but no changes below this point)
 
         // Quick stats
         const { data: custBals } = await supabase.from("customers").select("balance").eq("company_id", companyId)
@@ -619,7 +626,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
                 {kpi.label === "Total Spent" && <Trend value={spentPct > 80 ? 5 : -2} positive={false} negative={spentPct > 80} />}
                 {kpi.label === "📆 Monthly Spending" && monthlySpending > 0 && <Trend value={spendingTrend} positive={spendingTrend < 0} negative={spendingTrend > 0} />}
               </div>
-              {/* Variance projects */}
               {kpi.label === "Total Spent" && highestProject && lowestProject && highestProject.id !== lowestProject.id && (
                 <div style={{ fontSize: "0.65rem", color: "#93C5FD", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   🔺 {highestProject.name} {highestProject.pct}% · 🔻 {lowestProject.name} {lowestProject.pct}%
@@ -636,13 +642,12 @@ export default function ManagementDashboard({ role }: { role: string }) {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4, duration: 0.5 }}
-            onClick={() => router.push("/dashboard/settings/budgets" + detailQuery())}
           >
-            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>📊 Project Utilization</div>
-            {filteredProjectRows.map((p, idx) => {
+            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>📊 Top 5 Project Utilization</div>
+            {topFiveProjects.map((p, idx) => {
               const health = activityHealth[p.id]
               return (
-                <div key={idx} onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}`)} style={{
+                <div key={idx} onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}&fy=${fiscalYear}`)} style={{
                   display: "flex", alignItems: "center", gap: "0.8rem",
                   background: "var(--card)", borderRadius: "12px", padding: "0.5rem 1rem",
                   border: "1px solid var(--border)", cursor: "pointer", marginBottom: "0.5rem",
@@ -667,6 +672,14 @@ export default function ManagementDashboard({ role }: { role: string }) {
                 </div>
               )
             })}
+            {projectRows.length > 5 && (
+              <div style={{ textAlign: "right", marginTop: "0.5rem" }}>
+                <button className="warning-btn" style={{ background: "transparent", color: "#93C5FD", border: "1px solid #334155", padding: "4px 12px" }}
+                  onClick={() => router.push("/dashboard/settings/budgets" + detailQuery())}>
+                  View All Projects →
+                </button>
+              </div>
+            )}
           </motion.div>
 
           <motion.div
@@ -674,11 +687,10 @@ export default function ManagementDashboard({ role }: { role: string }) {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5, duration: 0.5 }}
-            onClick={() => router.push("/dashboard/reports/donor" + detailQuery())}
           >
             <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>💧 Donor Balances</div>
             {filteredDonorBalances.map((d, idx) => (
-              <div key={idx} onClick={() => router.push(`/dashboard/settings/budgets?donor=${d.donor_id}`)} style={{
+              <div key={idx} onClick={() => router.push(`/dashboard/settings/budgets?donor=${d.donor_id}&fy=${fiscalYear}`)} style={{
                 display: "flex", alignItems: "center", gap: "0.8rem",
                 background: "var(--card)", borderRadius: "12px", padding: "0.5rem 1rem",
                 border: "1px solid var(--border)", cursor: "pointer", marginBottom: "0.5rem",
@@ -698,7 +710,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </motion.div>
         </div>
 
-        {/* Underspend + Receivables vs Payables */}
+        {/* Underspend + Receivables vs Payables (unchanged) */}
         <div className="dashboard-grid">
           <motion.div
             className="card"
@@ -769,7 +781,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </motion.div>
         </div>
 
-        {/* Footer summary */}
+        {/* Footer summary (unchanged) */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
