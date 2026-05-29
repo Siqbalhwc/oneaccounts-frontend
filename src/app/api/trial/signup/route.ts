@@ -8,6 +8,29 @@ const supabaseAdmin = createClient(
   { auth: { persistSession: false, autoRefreshToken: false } }
 )
 
+// Map business type to plan code
+function getPlanCode(businessType: string): string {
+  switch (businessType) {
+    case 'trading': return 'basic-trading'
+    case 'service': return 'basic-service'
+    case 'ngo':
+    default:        return 'basic-ngo'
+  }
+}
+
+// Features to enable based on business type (beyond base)
+function getTypeFeatures(businessType: string): string[] {
+  switch (businessType) {
+    case 'trading':
+      return ['inventory', 'product_register']
+    case 'ngo':
+      return ['project_tracking', 'ngo_dashboard', 'budget_vs_actual']
+    case 'service':
+    default:
+      return []
+  }
+}
+
 export async function POST(request: Request) {
   const supabase = await createSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -30,18 +53,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'You already belong to a company.' }, { status: 400 })
   }
 
-  // Use Professional plan
+  const type = businessType || 'ngo'
+  const planCode = getPlanCode(type)
+
+  // Get plan from new plans table
   const { data: plan } = await supabaseAdmin
     .from('plans')
-    .select('id')
-    .eq('code', 'pro')
+    .select('id, trial_days')
+    .eq('code', planCode)
     .single()
+
   if (!plan) {
-    return NextResponse.json({ error: 'Professional plan not found' }, { status: 500 })
+    return NextResponse.json({ error: `Plan "${planCode}" not found` }, { status: 500 })
   }
 
-  // Create company with 14‑day trial and business type
-  const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+  // Create company with business type
+  const trialEnd = new Date(Date.now() + (plan.trial_days || 10) * 24 * 60 * 60 * 1000).toISOString()
   const { data: company, error: companyError } = await supabaseAdmin
     .from('companies')
     .insert({
@@ -49,7 +76,7 @@ export async function POST(request: Request) {
       plan_id: plan.id,
       trial_ends_at: trialEnd,
       is_trial: true,
-      business_type: businessType || 'ngo',   // ✅ new field
+      business_type: type,
     })
     .select('id')
     .single()
@@ -61,12 +88,61 @@ export async function POST(request: Request) {
     )
   }
 
+  // Insert subscription row
+  const { error: subError } = await supabaseAdmin
+    .from('subscriptions')
+    .insert({
+      company_id: company.id,
+      plan_type: planCode,
+      status: 'trial',
+      start_date: new Date().toISOString().split('T')[0],
+      end_date: trialEnd.split('T')[0],
+      max_users: 1,
+      trial_count: 1,
+      payment_status: 'pending',
+    })
+
+  if (subError) {
+    console.error('Subscription creation failed:', subError)
+    // Non-fatal – continue
+  }
+
   // Seed accounts with business type awareness
   await supabaseAdmin.rpc('seed_accounts_for_company', {
     target_company_id: company.id,
     actor_user_id: user.id,
-    business_type: businessType || 'ngo',
+    business_type: type,
   })
+
+  // Enable base features for all plans + type-specific features
+  const baseFeatures = [
+    'invoices', 'bills', 'receipts', 'payments',
+    'banking', 'journal', 'reports',
+    'trial_balance', 'profit_loss', 'balance_sheet',
+    'general_ledger', 'customer_ledger', 'vendor_ledger',
+  ]
+
+  const typeFeatures = getTypeFeatures(type)
+  const allFeatures = [...baseFeatures, ...typeFeatures]
+
+  // Get feature IDs
+  const { data: featureRows } = await supabaseAdmin
+    .from('features')
+    .select('id, code')
+    .in('code', allFeatures)
+
+  if (featureRows) {
+    const featureIds = featureRows.map(f => f.id)
+    // Use upsert to enable features
+    const featureInserts = featureRows.map(f => ({
+      company_id: company.id,
+      feature_id: f.id,
+      enabled: true,
+    }))
+    await supabaseAdmin.from('company_features').upsert(featureInserts, {
+      onConflict: 'company_id,feature_id',
+    })
+  }
 
   // Upsert admin role
   await supabaseAdmin.from('user_roles')
@@ -89,7 +165,7 @@ export async function POST(request: Request) {
     success: true,
     companyId: company.id,
     companyName: companyName.trim(),
-    message: `${companyName.trim()} is ready with a 14‑day Professional trial.`,
+    message: `${companyName.trim()} is ready with a ${plan.trial_days || 10}-day trial.`,
   })
 
   response.cookies.set('active_company_id', company.id, {
