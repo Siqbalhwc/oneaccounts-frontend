@@ -63,7 +63,6 @@ export default function ProjectsPage() {
   }
 
   const handleGeneratePDF = async (project: any) => {
-    // Fetch project transaction data
     const res = await fetch(`/api/projects/report?projectId=${project.id}`)
     const reportData = await res.json()
 
@@ -109,7 +108,6 @@ export default function ProjectsPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  // Sorting logic
   const sorted = [...projects].sort((a, b) => {
     let valA: any, valB: any
     switch (sortField) {
@@ -134,7 +132,7 @@ export default function ProjectsPage() {
         valB = (b[sortField] || "").toString().toLowerCase()
     }
     if (valA < valB) return sortDir === "asc" ? -1 : 1
-    if (valA > valB) return sortDir === "asc" ? 1 : -1	
+    if (valA > valB) return sortDir === "asc" ? 1 : -1
     return 0
   })
 
@@ -153,16 +151,55 @@ export default function ProjectsPage() {
         .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
         .btn-outline:hover { background: var(--card-hover); }
         .filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-        .table-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-        .table-header { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 140px 60px; padding: 14px 24px; color: white; font-size: 10px; font-weight: 700; text-transform: uppercase; }
-        .table-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 140px 60px; padding: 12px 24px; font-size: 13px; align-items: center; border-bottom: 1px solid var(--border); transition: background 0.15s; }
+        .table-wrap {
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          overflow: hidden;
+        }
+        .table-header {
+          display: grid;
+          grid-template-columns: minmax(200px, 2fr) minmax(100px, 1fr) minmax(80px, 100px) minmax(70px, 90px) 180px 80px 60px;
+          padding: 14px 24px;
+          color: white;
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+        }
+        .table-row {
+          display: grid;
+          grid-template-columns: minmax(200px, 2fr) minmax(100px, 1fr) minmax(80px, 100px) minmax(70px, 90px) 180px 80px 60px;
+          padding: 12px 24px;
+          font-size: 13px;
+          align-items: center;
+          border-bottom: 1px solid var(--border);
+          transition: background 0.15s;
+        }
         .table-row:hover { background: var(--card-hover); }
-        .sort-btn { background: none; border: none; cursor: pointer; font: inherit; color: white; display: inline-flex; align-items: center; gap: 4px; padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px; }
-        .status-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+        .sort-btn {
+          background: none; border: none; cursor: pointer;
+          font: inherit; color: white;
+          display: inline-flex; align-items: center; gap: 4px;
+          padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px;
+        }
+        .status-badge {
+          display: inline-flex; align-items: center; gap: 4px;
+          padding: 4px 10px; border-radius: 20px;
+          font-size: 11px; font-weight: 600;
+        }
         .status-active { background: #DCFCE7; color: #166534; }
         .status-inactive { background: #FEF2F2; color: #B91C1C; }
         .approved-icon { color: #10B981; cursor: pointer; }
         .not-approved-icon { color: #CBD5E1; cursor: pointer; }
+
+        @media (max-width: 900px) {
+          .table-wrap { overflow-x: auto; }
+          .table-header, .table-row {
+            grid-template-columns: 160px 90px 80px 70px 140px 60px 50px;
+            padding: 10px 12px;
+            font-size: 11px;
+          }
+        }
       `}</style>
 
       <div className="page-header">
@@ -219,7 +256,7 @@ export default function ProjectsPage() {
                   <X size={18} className="not-approved-icon" />
                 )}
               </span>
-              <span style={{ textAlign: "right", fontWeight: 500 }}>{fmt(p.totalBudget || 0)}</span>
+              <span style={{ textAlign: "right", fontWeight: 500, whiteSpace: "nowrap" }}>{fmt(p.totalBudget || 0)}</span>
               <span style={{ textAlign: "center" }}>
                 <button className="btn btn-outline" style={{ padding: "4px 8px" }} onClick={() => handleGeneratePDF(p)}>
                   <FileText size={12} /> PDF
