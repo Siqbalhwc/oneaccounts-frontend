@@ -1,12 +1,14 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { ArrowLeft, Download, Printer } from "lucide-react"
+import { ArrowLeft, Download } from "lucide-react"
 import { useRouter } from "next/navigation"
 import PremiumGuard from "@/components/PremiumGuard"
 import * as XLSX from "xlsx"
+import { generateBalanceSheetPDF } from "@/lib/pdf/balanceSheetPDF"
+import { useCompany } from "@/contexts/CompanyContext"
 
-// ── helpers ──
+// ── helpers ────────────────────────────────────────────────────────
 function getCategory(account: any): string {
   if (account.category) return account.category
   const num = parseFloat(account.code)
@@ -23,24 +25,20 @@ function getCategory(account: any): string {
   return "Other"
 }
 
-function fmt(n: number) { return Math.round(Math.abs(n)).toLocaleString("en-PK") }
+function fmt(n: number) { return Math.abs(n).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
 function sign(n: number) { return n < 0 ? "-" : "" }
-function fmtPos(n: number) { return Math.round(Math.abs(n)).toLocaleString("en-PK") }
+function fmtPos(n: number) { return Math.abs(n).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
 
 const CURRENT_ASSET_CATS = ["Cash & Bank", "Accounts Receivable", "Inventory", "Other Current Assets"]
 const FIXED_ASSET_CATS = ["Fixed Assets", "Vehicles"]
 const LIABILITY_CATS = ["Accounts Payable", "Other Current Liabilities"]
 
-// Placeholder row component
+// ── Placeholder row component ─────────────────────────────────────
 function PlaceholderRow() {
-  return (
-    <div style={{ height: 40, opacity: 0, pointerEvents: "none" }}>
-      &nbsp;
-    </div>
-  )
+  return <div style={{ height: 40, opacity: 0, pointerEvents: "none" }}>&nbsp;</div>
 }
 
-// Account row component
+// ── Account row ────────────────────────────────────────────────────
 function AccountRow({ account, showAbsolute, getBalance, onClick }: {
   account: any
   showAbsolute: boolean
@@ -60,7 +58,7 @@ function AccountRow({ account, showAbsolute, getBalance, onClick }: {
   )
 }
 
-// Category header component
+// ── Category header ────────────────────────────────────────────────
 function CategoryHeader({ cat, total, showAbsolute, onClick }: {
   cat: string
   total: number
@@ -78,7 +76,7 @@ function CategoryHeader({ cat, total, showAbsolute, onClick }: {
   )
 }
 
-// Subtotal band
+// ── Subtotal band ──────────────────────────────────────────────────
 function SubtotalBand({ label, value, showAbsolute }: { label: string; value: number; showAbsolute: boolean }) {
   const rounded = Math.round(value)
   return (
@@ -89,7 +87,7 @@ function SubtotalBand({ label, value, showAbsolute }: { label: string; value: nu
   )
 }
 
-// Total band
+// ── Total band ─────────────────────────────────────────────────────
 function TotalBand({ label, value, showAbsolute }: { label: string; value: number; showAbsolute: boolean }) {
   const rounded = Math.round(value)
   return (
@@ -100,7 +98,7 @@ function TotalBand({ label, value, showAbsolute }: { label: string; value: numbe
   )
 }
 
-// Section builder
+// ── Section builder ────────────────────────────────────────────────
 function buildSection(
   leftMainRows: React.ReactElement[],
   rightMainRows: React.ReactElement[],
@@ -110,36 +108,21 @@ function buildSection(
   const max = Math.max(leftMainRows.length, rightMainRows.length)
   const paddedLeft = [...leftMainRows]
   const paddedRight = [...rightMainRows]
-
-  while (paddedLeft.length < max) {
-    paddedLeft.push(<PlaceholderRow key={`pl-${paddedLeft.length}`} />)
-  }
-  while (paddedRight.length < max) {
-    paddedRight.push(<PlaceholderRow key={`pr-${paddedRight.length}`} />)
-  }
-
+  while (paddedLeft.length < max) paddedLeft.push(<PlaceholderRow key={`pl-${paddedLeft.length}`} />)
+  while (paddedRight.length < max) paddedRight.push(<PlaceholderRow key={`pr-${paddedRight.length}`} />)
   const rows: React.ReactElement[] = []
   for (let i = 0; i < max; i++) {
     rows.push(
       <React.Fragment key={`row-${i}`}>
-        <div style={{ borderRight: "1px solid var(--border)", padding: "0 24px" }}>
-          {paddedLeft[i]}
-        </div>
-        <div style={{ padding: "0 24px" }}>
-          {paddedRight[i]}
-        </div>
+        <div style={{ borderRight: "1px solid var(--border)", padding: "0 24px" }}>{paddedLeft[i]}</div>
+        <div style={{ padding: "0 24px" }}>{paddedRight[i]}</div>
       </React.Fragment>
     )
   }
-
   rows.push(
     <React.Fragment key="subtotal-row">
-      <div style={{ borderRight: "1px solid var(--border)", padding: "0 24px" }}>
-        {leftTotal}
-      </div>
-      <div style={{ padding: "0 24px" }}>
-        {rightTotal}
-      </div>
+      <div style={{ borderRight: "1px solid var(--border)", padding: "0 24px" }}>{leftTotal}</div>
+      <div style={{ padding: "0 24px" }}>{rightTotal}</div>
     </React.Fragment>
   )
   return rows
@@ -152,14 +135,14 @@ function BalanceSheetContent() {
   const now = new Date()
   const asOfDate = now.toISOString().split("T")[0]
 
-  // ── Fetch balance sheet data from the fast API ──
+  const { companyName, companyTagline, logoUrl } = useCompany()
+
   const fetchBalanceSheet = async () => {
     setLoading(true)
     try {
       const res = await fetch(`/api/balance-sheet?asOfDate=${encodeURIComponent(asOfDate)}`)
       if (!res.ok) throw new Error(await res.text())
       const json = await res.json()
-      // API returns: { account_id, code, name, type, category, net }
       const mapped = (json || []).map((row: any) => ({
         id: row.account_id,
         code: row.code,
@@ -182,7 +165,6 @@ function BalanceSheetContent() {
 
   const getBalance = (account: any) => account.net
 
-  // Grouping and totals
   const grouped = accounts.reduce((acc: Record<string, any[]>, a) => {
     const cat = getCategory(a)
     if (!acc[cat]) acc[cat] = []
@@ -197,9 +179,7 @@ function BalanceSheetContent() {
   const totalAssets = totalCurrentAssets + totalFixedAssets
 
   const totalCurrentLiabilities = Math.abs(LIABILITY_CATS.reduce((s, c) => s + catTotal(c), 0))
-  const totalEquityAccounts = Math.abs(
-    accounts.filter(a => a.type === "Equity").reduce((s, a) => s + getBalance(a), 0)
-  )
+  const totalEquityAccounts = Math.abs(accounts.filter(a => a.type === "Equity").reduce((s, a) => s + getBalance(a), 0))
   const revenue = accounts.filter(a => a.type === "Revenue").reduce((s, a) => s + Math.abs(getBalance(a)), 0)
   const expenses = accounts.filter(a => a.type === "Expense").reduce((s, a) => s + Math.abs(getBalance(a)), 0)
   const netProfit = revenue - expenses
@@ -218,7 +198,48 @@ function BalanceSheetContent() {
     router.push(`/dashboard/reports/ledger?accountId=${id}&startDate=${now.getFullYear()}-01-01&endDate=${asOfDate}`)
   }
 
-  // ── Excel export (unchanged) ──
+  // ── Build PDF data ──────────────────────────────────────────────
+  const handleExportPDF = async () => {
+    const buildSections = (cats: string[], showAbsolute: boolean) => {
+      const sections: any[] = []
+      cats.forEach(cat => {
+        const items = grouped[cat] || []
+        if (items.length === 0) return
+        const total = catTotal(cat)
+        sections.push({ text: cat, amount: total, isHeader: true, indent: 0 })
+        items.forEach(a => {
+          sections.push({ text: `${a.code} – ${a.name}`, amount: getBalance(a), isHeader: false, indent: 8 })
+        })
+      })
+      return sections
+    }
+
+    const pdfData = {
+      companyName: companyName || "OneAccounts",
+      companyTagline: companyTagline || "",
+      logoUrl: logoUrl || null,
+      asOfDate,
+      currentAssetSections: buildSections(CURRENT_ASSET_CATS, false),
+      totalCurrentAssets,
+      fixedAssetSections: buildSections(FIXED_ASSET_CATS, false),
+      totalFixedAssets,
+      totalAssets,
+      liabilitySections: buildSections(LIABILITY_CATS, true),
+      totalLiabilities: totalCurrentLiabilities,
+      equitySections: [
+        ...(grouped["Equity"] || []).map((a: any) => ({ text: `${a.code} – ${a.name}`, amount: getBalance(a), isHeader: false, indent: 8 })),
+        { text: "Retained Earnings (Net P&L)", amount: netProfit, isHeader: false, indent: 8 },
+      ],
+      netProfit,
+      totalEquity,
+      totalLiabEquity,
+    }
+
+    const doc = await generateBalanceSheetPDF(pdfData)
+    doc.save(`Balance_Sheet_${asOfDate}.pdf`)
+  }
+
+  // Excel export (unchanged)
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new()
     const sheetData: any[][] = [
@@ -227,7 +248,6 @@ function BalanceSheetContent() {
       ["", "", ""],
       ["ASSETS", "", ""],
     ]
-
     const addSection = (title: string, cats: string[], showAbsolute: boolean) => {
       sheetData.push([title, "", ""])
       for (const cat of cats) {
@@ -240,7 +260,6 @@ function BalanceSheetContent() {
         }
       }
     }
-
     addSection("Current Assets", CURRENT_ASSET_CATS, false)
     sheetData.push(["Total Current Assets", "", `${sign(totalCurrentAssets)}PKR ${fmt(totalCurrentAssets)}`])
     sheetData.push(["", "", ""])
@@ -262,26 +281,22 @@ function BalanceSheetContent() {
     sheetData.push(["Total Equity", "", `PKR ${fmtPos(totalEquity)}`])
     sheetData.push(["", "", ""])
     sheetData.push(["TOTAL LIABILITIES + EQUITY", "", `PKR ${fmtPos(totalLiabEquity)}`])
-
     const ws = XLSX.utils.aoa_to_sheet(sheetData)
     ws["!cols"] = [{ wch: 40 }, { wch: 5 }, { wch: 20 }]
     XLSX.utils.book_append_sheet(wb, ws, "Balance Sheet")
     XLSX.writeFile(wb, `Balance_Sheet_${asOfDate}.xlsx`)
   }
 
-  // ── Build rows for each section (same synchronized layout as original) ──
+  // ── Build rows for UI (same as before) ──────────────────────────
   const currentAssetRows: React.ReactElement[] = [
-    <h3 key="h3ca" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
-      Current Assets
-    </h3>
+    <h3 key="h3ca" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>Current Assets</h3>
   ]
   CURRENT_ASSET_CATS.forEach(cat => {
     const items = grouped[cat] || []
     if (items.length === 0) return
     const total = catTotal(cat)
     currentAssetRows.push(
-      <CategoryHeader key={`ca-${cat}`} cat={cat} total={total} showAbsolute={false}
-        onClick={() => navigateToTrialBalance("Asset", cat)} />
+      <CategoryHeader key={`ca-${cat}`} cat={cat} total={total} showAbsolute={false} onClick={() => navigateToTrialBalance("Asset", cat)} />
     )
     items.forEach(a => {
       currentAssetRows.push(
@@ -291,17 +306,14 @@ function BalanceSheetContent() {
   })
 
   const currentLiabilityRows: React.ReactElement[] = [
-    <h3 key="h3cl" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
-      Current Liabilities
-    </h3>
+    <h3 key="h3cl" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>Current Liabilities</h3>
   ]
   LIABILITY_CATS.forEach(cat => {
     const items = grouped[cat] || []
     if (items.length === 0) return
     const total = catTotal(cat)
     currentLiabilityRows.push(
-      <CategoryHeader key={`cl-${cat}`} cat={cat} total={total} showAbsolute={true}
-        onClick={() => navigateToTrialBalance("Liability", cat)} />
+      <CategoryHeader key={`cl-${cat}`} cat={cat} total={total} showAbsolute={true} onClick={() => navigateToTrialBalance("Liability", cat)} />
     )
     items.forEach(a => {
       currentLiabilityRows.push(
@@ -310,49 +322,35 @@ function BalanceSheetContent() {
     })
   })
 
-  // Align "Other Current Assets" and "Other Current Liabilities" if both exist
-  const otherAssetIdx = currentAssetRows.findIndex(el => {
-    return el.type === CategoryHeader && (el.props as any)?.cat === "Other Current Assets"
-  })
-  const otherLiabilityIdx = currentLiabilityRows.findIndex(el => {
-    return el.type === CategoryHeader && (el.props as any)?.cat === "Other Current Liabilities"
-  })
-
+  const otherAssetIdx = currentAssetRows.findIndex(el => el.type === CategoryHeader && (el.props as any)?.cat === "Other Current Assets")
+  const otherLiabilityIdx = currentLiabilityRows.findIndex(el => el.type === CategoryHeader && (el.props as any)?.cat === "Other Current Liabilities")
   if (otherAssetIdx !== -1 && otherLiabilityIdx !== -1) {
     const maxIdx = Math.max(otherAssetIdx, otherLiabilityIdx)
     if (otherAssetIdx < maxIdx) {
       const diff = maxIdx - otherAssetIdx
-      for (let i = 0; i < diff; i++) {
-        currentAssetRows.splice(otherAssetIdx, 0, <PlaceholderRow key={`oca-pad-${i}`} />)
-      }
+      for (let i = 0; i < diff; i++) currentAssetRows.splice(otherAssetIdx, 0, <PlaceholderRow key={`oca-pad-${i}`} />)
     }
     if (otherLiabilityIdx < maxIdx) {
       const diff = maxIdx - otherLiabilityIdx
-      for (let i = 0; i < diff; i++) {
-        currentLiabilityRows.splice(otherLiabilityIdx, 0, <PlaceholderRow key={`ocl-pad-${i}`} />)
-      }
+      for (let i = 0; i < diff; i++) currentLiabilityRows.splice(otherLiabilityIdx, 0, <PlaceholderRow key={`ocl-pad-${i}`} />)
     }
   }
 
   const currentSection = buildSection(
-    currentAssetRows,
-    currentLiabilityRows,
+    currentAssetRows, currentLiabilityRows,
     <SubtotalBand label="Total Current Assets" value={totalCurrentAssets} showAbsolute={false} />,
     <SubtotalBand label="Total Current Liabilities" value={totalCurrentLiabilities} showAbsolute={true} />
   )
 
   const fixedAssetRows: React.ReactElement[] = [
-    <h3 key="h3fa" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
-      Fixed Assets
-    </h3>
+    <h3 key="h3fa" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>Fixed Assets</h3>
   ]
   FIXED_ASSET_CATS.forEach(cat => {
     const items = grouped[cat] || []
     if (items.length === 0) return
     const total = catTotal(cat)
     fixedAssetRows.push(
-      <CategoryHeader key={`fa-${cat}`} cat={cat} total={total} showAbsolute={false}
-        onClick={() => navigateToTrialBalance("Asset", cat)} />
+      <CategoryHeader key={`fa-${cat}`} cat={cat} total={total} showAbsolute={false} onClick={() => navigateToTrialBalance("Asset", cat)} />
     )
     items.forEach(a => {
       fixedAssetRows.push(
@@ -362,9 +360,7 @@ function BalanceSheetContent() {
   })
 
   const equityRows: React.ReactElement[] = [
-    <h3 key="h3eq" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>
-      Equity
-    </h3>
+    <h3 key="h3eq" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>Equity</h3>
   ]
   ;(grouped["Equity"] || []).forEach(a => {
     equityRows.push(
@@ -382,8 +378,7 @@ function BalanceSheetContent() {
   )
 
   const fixedVsEquitySection = buildSection(
-    fixedAssetRows,
-    equityRows,
+    fixedAssetRows, equityRows,
     <SubtotalBand label="Total Fixed Assets" value={totalFixedAssets} showAbsolute={false} />,
     <SubtotalBand label="Total Equity" value={totalEquity} showAbsolute={true} />
   )
@@ -399,11 +394,7 @@ function BalanceSheetContent() {
     </React.Fragment>
   )
 
-  const syncedRows: React.ReactElement[] = [
-    ...currentSection,
-    ...fixedVsEquitySection,
-    grandTotals
-  ]
+  const syncedRows = [...currentSection, ...fixedVsEquitySection, grandTotals]
 
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "var(--bg)", color: "var(--text-muted)", fontFamily: "'Inter', sans-serif", gap: 12 }}>
@@ -417,7 +408,6 @@ function BalanceSheetContent() {
     <div style={{ background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         * { box-sizing: border-box; }
-
         .bs-header {
           background: var(--topbar-bg);
           border-bottom: 1px solid var(--border);
@@ -573,8 +563,8 @@ function BalanceSheetContent() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="action-btn" onClick={() => window.print()}><Printer size={13} /> Print</button>
           <button className="action-btn" onClick={handleExportExcel}><Download size={13} /> Export</button>
+          <button className="action-btn" onClick={handleExportPDF}><Download size={13} /> PDF</button>
         </div>
       </div>
 
@@ -621,11 +611,7 @@ function BalanceSheetContent() {
 
 export default function BalanceSheetPage() {
   return (
-    <PremiumGuard
-      featureCode="balance_sheet"
-      featureName="Balance Sheet"
-      featureDesc="View your assets, liabilities, and equity."
-    >
+    <PremiumGuard featureCode="balance_sheet" featureName="Balance Sheet" featureDesc="View your assets, liabilities, and equity.">
       <BalanceSheetContent />
     </PremiumGuard>
   )
