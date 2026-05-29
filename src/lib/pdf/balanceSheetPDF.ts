@@ -1,5 +1,4 @@
 import jsPDF from "jspdf"
-import autoTable from "jspdf-autotable"
 
 // ─── Brand colours ────────────────────────────────────────────────
 const NAVY  = [7,   8,  91]  as [number,number,number]
@@ -7,7 +6,6 @@ const DARK  = [17,  24,  39]  as [number,number,number]
 const MUTED = [107,114, 128]  as [number,number,number]
 const BORDER = [229,231, 235]  as [number,number,number]
 const WHITE = [255,255, 255]  as [number,number,number]
-const ROW_ALT = [248,249, 252]  as [number,number,number]
 
 async function loadImage(url: string): Promise<string | null> {
   try {
@@ -28,12 +26,11 @@ async function loadImage(url: string): Promise<string | null> {
 const pkr = (n: number) =>
   "PKR " + n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-// Simple section row definition
 interface SectionRow {
-  text: string       // e.g. "Cash & Bank" or "Fixed Assets" or "1000 – Cash"
+  text: string
   amount: number
-  isHeader?: boolean // true for category headers
-  indent?: number    // 0 for header, 10 for account
+  isHeader?: boolean
+  indent?: number
 }
 
 export interface BalanceSheetPDFData {
@@ -45,29 +42,28 @@ export interface BalanceSheetPDFData {
   logoUrl?: string | null
 
   asOfDate: string
-  // Assets
   currentAssetSections: SectionRow[]
   totalCurrentAssets: number
   fixedAssetSections: SectionRow[]
   totalFixedAssets: number
   totalAssets: number
 
-  // Liabilities & Equity
   liabilitySections: SectionRow[]
   totalLiabilities: number
   equitySections: SectionRow[]
-  netProfit: number        // retained earnings
+  netProfit: number
   totalEquity: number
   totalLiabEquity: number
 }
 
 export async function generateBalanceSheetPDF(data: BalanceSheetPDFData): Promise<jsPDF> {
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
-  const PW = 210, PH = 297
-  const ML = 14, MR = 14
+  // ── Landscape A4 ─────────────────────────────────────────────────
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" })
+  const PW = 297   // width in landscape
+  const PH = 210   // height in landscape
+  const ML = 14
+  const MR = 14
   const CW = PW - ML - MR
-  const LEFT_X = ML
-  const RIGHT_X = ML + CW / 2 + 4   // start of right column
 
   // ── LOGO & COMPANY INFO ─────────────────────────────────────────
   const LOGO_SIZE = 18
@@ -103,7 +99,6 @@ export async function generateBalanceSheetPDF(data: BalanceSheetPDFData): Promis
   doc.setTextColor(...NAVY)
   doc.text("BALANCE SHEET", PW - MR, LOGO_Y + 9, { align: "right" })
 
-  // Single‑line date
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8)
   doc.setTextColor(...MUTED)
@@ -114,32 +109,27 @@ export async function generateBalanceSheetPDF(data: BalanceSheetPDFData): Promis
   doc.setLineWidth(0.4)
   doc.line(ML, HEADER_H, PW - MR, HEADER_H)
 
-  // ── Column headers ──────────────────────────────────────────────
+  // ── Column layout ────────────────────────────────────────────────
   let Y = HEADER_H + 10
   const ROW_H = 6
-  const colW = CW / 2 - 4   // width for each side
+  const colW = (CW - 6) / 2   // two columns with a gap
+  const LEFT_X = ML
+  const RIGHT_X = LEFT_X + colW + 6
 
-  // Left column header (navy)
+  // Column headers (navy bars)
   doc.setFillColor(...NAVY)
   doc.rect(LEFT_X, Y, colW, ROW_H, "F")
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(8)
-  doc.setTextColor(...WHITE)
-  doc.text("ASSETS", LEFT_X + 2, Y + ROW_H / 2 + 1.5)
-
-  // Right column header (navy)
-  doc.setFillColor(...NAVY)
   doc.rect(RIGHT_X, Y, colW, ROW_H, "F")
   doc.setFont("helvetica", "bold")
   doc.setFontSize(8)
   doc.setTextColor(...WHITE)
+  doc.text("ASSETS", LEFT_X + 2, Y + ROW_H / 2 + 1.5)
   doc.text("LIABILITIES & EQUITY", RIGHT_X + 2, Y + ROW_H / 2 + 1.5)
   Y += ROW_H + 2
 
   // ── Helper to draw a column ─────────────────────────────────────
   const drawColumn = (x: number, sections: SectionRow[], total: number, totalLabel: string) => {
     let currentY = Y
-    // Draw each row
     sections.forEach(sec => {
       doc.setFont("helvetica", sec.isHeader ? "bold" : "normal")
       doc.setFontSize(sec.isHeader ? 8 : 7.5)
@@ -149,7 +139,7 @@ export async function generateBalanceSheetPDF(data: BalanceSheetPDFData): Promis
       doc.text(pkr(sec.amount), x + colW - 2, currentY + 4, { align: "right" })
       currentY += ROW_H
     })
-    // Total line
+    // Subtotal
     doc.setDrawColor(...BORDER)
     doc.setLineWidth(0.3)
     doc.line(x, currentY, x + colW, currentY)
@@ -164,19 +154,16 @@ export async function generateBalanceSheetPDF(data: BalanceSheetPDFData): Promis
 
   // Draw left column (Assets)
   let leftEndY = drawColumn(LEFT_X, data.currentAssetSections, data.totalCurrentAssets, "Total Current Assets")
-  // Fixed assets sub-section (if any)
   if (data.fixedAssetSections.length > 0) {
     leftEndY = drawColumn(LEFT_X, data.fixedAssetSections, data.totalFixedAssets, "Total Fixed Assets") - 2
   }
 
   // Draw right column (Liabilities & Equity)
   let rightEndY = drawColumn(RIGHT_X, data.liabilitySections, data.totalLiabilities, "Total Liabilities")
-  // Equity sub-section
   if (data.equitySections.length > 0) {
     rightEndY = drawColumn(RIGHT_X, data.equitySections, data.totalEquity, "Total Equity") - 2
   }
 
-  // Move Y to the max of both columns
   Y = Math.max(leftEndY, rightEndY) + 4
 
   // ── Grand totals ─────────────────────────────────────────────────
