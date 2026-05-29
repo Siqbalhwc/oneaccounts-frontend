@@ -54,6 +54,7 @@ export default function TrialBalancePage() {
   const { companyName, companyTagline, logoUrl } = useCompany()
   const { theme: themeMode } = useTheme()
   const isDark = themeMode !== "light"
+  const isOneAccounts = themeMode === "oneaccounts"
 
   const fetchTrial = async () => {
     setLoading(true)
@@ -162,10 +163,11 @@ export default function TrialBalancePage() {
   }
 
   // ── Theme‑sensitive colours ───────────────────────────────────────
-  const headerBg = isDark ? "#1E3A8A" : "#07085B"
+  // Header background: OneAccounts theme → navy, Dark → black, Light → navy
+  const headerBg = isOneAccounts ? "#07085B" : (isDark ? "#000000" : "#07085B")
   const rowLight = isDark ? "#1E293B" : "#FFFFFF"
   const rowDark  = isDark ? "#111827" : "#F8F9FC"
-  const totalBg  = isDark ? "#1E3A8A" : "#07085B"
+  const totalBg  = headerBg // totals row same as header
   const textMuted = isDark ? "#94A3B8" : "#64748B"
 
   return (
@@ -259,14 +261,14 @@ export default function TrialBalancePage() {
         }
         .table-header {
           display: grid;
-          grid-template-columns: 90px 1fr 90px 110px 110px;
+          grid-template-columns: 90px 1fr 90px 140px 140px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700;
           text-transform: uppercase; color: white;
         }
         .table-row {
           display: grid;
-          grid-template-columns: 90px 1fr 90px 110px 110px;
+          grid-template-columns: 90px 1fr 90px 140px 140px;
           padding: 12px 24px;
           font-size: 13px; align-items: center;
           cursor: pointer; transition: background 0.15s;
@@ -274,7 +276,7 @@ export default function TrialBalancePage() {
         .table-row:hover { background: var(--card-hover); }
         .totals-row {
           display: grid;
-          grid-template-columns: 90px 1fr 90px 110px 110px;
+          grid-template-columns: 90px 1fr 90px 140px 140px;
           padding: 14px 24px;
           color: white; font-weight: 700; font-size: 13px;
         }
@@ -289,7 +291,7 @@ export default function TrialBalancePage() {
 
         @media (max-width: 640px) {
           .table-header, .table-row, .totals-row {
-            grid-template-columns: 70px 1fr 80px 80px 90px;
+            grid-template-columns: 70px 1fr 80px 100px 100px;
           }
         }
       `}</style>
@@ -332,12 +334,6 @@ export default function TrialBalancePage() {
           <div className="kpi-label">Total Credits</div>
           <div className="kpi-value" style={{ color: "#10B981" }}>
             PKR {fmt(totalCredit)}
-          </div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Difference</div>
-          <div className="kpi-value" style={{ color: isBalanced ? "#10B981" : "#EF4444" }}>
-            {isBalanced ? "PKR 0.00" : `PKR ${fmt(Math.abs(totalDebit - totalCredit))}`}
           </div>
         </div>
         <div className="kpi-card">
