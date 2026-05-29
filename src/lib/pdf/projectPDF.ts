@@ -1,15 +1,14 @@
-// lib/pdf/projectBudgetPDF.ts
-
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
-const NAVY    = [7, 8, 91]   as [number, number, number]
-const DARK    = [17, 24, 39]  as [number, number, number]
-const MUTED   = [107, 114, 128] as [number, number, number]
-const BORDER  = [229, 231, 235] as [number, number, number]
-const WHITE   = [255, 255, 255] as [number, number, number]
-const ROW_ALT = [248, 249, 252] as [number, number, number]
+const NAVY       = [7, 8, 91]     as [number, number, number]
+const DARK       = [17, 24, 39]   as [number, number, number]
+const MUTED      = [107, 114, 128] as [number, number, number]
+const BORDER     = [229, 231, 235] as [number, number, number]
+const WHITE      = [255, 255, 255] as [number, number, number]
+const ROW_ALT    = [248, 249, 252] as [number, number, number]
 const SUBTOTAL_BG = [240, 245, 255] as [number, number, number]
+const HEADING_BG  = [235, 238, 250] as [number, number, number]
 
 async function loadImage(url: string): Promise<string | null> {
   try {
@@ -41,8 +40,8 @@ export interface ProjectPDFData {
   startDate?: string
   endDate?: string
 
-  // For GL mode:  columns = GL accounts  →  groupBy = "gl"
-  // For Month mode: columns = months     →  groupBy = "month"
+  // "gl"    → Activity × GL Account  (Report 1)
+  // "month" → Activity × Month       (Report 2)
   groupBy?: "gl" | "month"
 
   columns: { code: string; name: string }[]
@@ -62,12 +61,13 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" })
   const PW = 297, PH = 210, ML = 14, MR = 14
 
-  // ── Logo & company block ─────────────────────────────────────
+  // ── Logo ─────────────────────────────────────────────────────
   const LOGO_SIZE = 20, LOGO_X = ML, LOGO_Y = 7
   let logoData: string | null = null
   if (data.logoUrl) logoData = await loadImage(data.logoUrl)
   if (logoData) doc.addImage(logoData, "PNG", LOGO_X, LOGO_Y, LOGO_SIZE, LOGO_SIZE)
 
+  // ── Company info (left) ──────────────────────────────────────
   const textX = logoData ? LOGO_X + LOGO_SIZE + 5 : ML
   doc.setTextColor(...NAVY)
   doc.setFont("helvetica", "bold")
@@ -84,15 +84,11 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
   if (data.companyPhone)   { doc.text("Phone: " + data.companyPhone, textX, infoY); infoY += 4 }
   if (data.companyEmail)   { doc.text("Email: " + data.companyEmail, textX, infoY) }
 
-  // ── Report title block (right) ───────────────────────────────
-  const reportTitle = data.groupBy === "month"
-    ? "PROJECT BUDGET\n(Activity × Month)"
-    : "PROJECT BUDGET\n(Activity × GL)"
-
+  // ── Report title (right) ─────────────────────────────────────
   doc.setFont("helvetica", "bold")
-  doc.setFontSize(20)
+  doc.setFontSize(22)
   doc.setTextColor(...NAVY)
-  doc.text(reportTitle, PW - MR, LOGO_Y + 8, { align: "right" })
+  doc.text("PROJECT BUDGET", PW - MR, LOGO_Y + 12, { align: "right" })
 
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8.5)
@@ -106,6 +102,7 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
   doc.setLineWidth(0.6)
   doc.line(ML, HEADER_BOTTOM, PW - MR, HEADER_BOTTOM)
 
+  // ── Duration (right, below divider) ──────────────────────────
   let Y = HEADER_BOTTOM + 5
   if (data.startDate || data.endDate) {
     const start = data.startDate
@@ -120,37 +117,43 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
   }
   Y += 2
 
-  // ── Build columns ────────────────────────────────────────────
-  // FIX: Always prepend Activity + Location as the first two columns
-
-  // 1. Drop GL/month columns whose every row is zero (keeps table tidy)
+  // ── Filter zero columns ───────────────────────────────────────
   const nonZeroCols = data.columns.filter(col =>
     data.rows.some(row => (row.amounts[col.code] ?? 0) !== 0)
   )
-  // Keep at least one column even if all zeros (edge-case safety)
   const visibleCols = nonZeroCols.length > 0 ? nonZeroCols : data.columns
 
-  // 2. Build the full column list: Activity | Location | GL/Month cols... | Total
-  const allColumns: { header: string; dataKey: string; isNumeric?: boolean }[] = [
-    { header: "Activity",      dataKey: "activity",  isNumeric: false },
-    { header: "Location",      dataKey: "location",  isNumeric: false },
+  // ── Build column definitions ──────────────────────────────────
+  // Single merged "Activity / Location" column + GL/month cols + Total
+  const allColumns: { header: string; dataKey: string }[] = [
+    { header: "Activity / Location", dataKey: "description" },
     ...visibleCols.map(col => ({
-      header:    `${col.code}\n${col.name}\nPKR`,
-      dataKey:   col.code,
-      isNumeric: true,
+      header:  `${col.code}\n${col.name}\nPKR`,
+      dataKey: col.code,
     })),
-    { header: "Total\nPKR",   dataKey: "total",     isNumeric: true },
+    { header: "Total\nPKR", dataKey: "total" },
   ]
 
-  // ── Format rows ──────────────────────────────────────────────
+  // ── Format helper ─────────────────────────────────────────────
   const fmt = (n: number) =>
     n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+  // ── Build table rows ──────────────────────────────────────────
   const tableRows = data.rows.map(row => {
-    const obj: Record<string, string> = {
-      activity: row.activity ?? "",
-      location: row.location ?? "",
+    const obj: Record<string, string> = {}
+
+    if (row.isGrandTotal) {
+      obj.description = "Grand Total"
+    } else if (row.isSubtotal) {
+      obj.description = row.activity ? `Total ${row.activity}` : "Subtotal"
+    } else if (row.activity && (!row.location || row.location.trim() === "")) {
+      // Activity heading row — bold, no amounts
+      obj.description = row.activity
+    } else {
+      // Location data row — indented under activity heading
+      obj.description = `    ${row.location}`
     }
+
     visibleCols.forEach(col => {
       obj[col.code] = fmt(row.amounts[col.code] ?? 0)
     })
@@ -158,25 +161,22 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
     return obj
   })
 
-  // ── Column widths (auto-distribute remaining space) ──────────
-  const usableWidth   = PW - ML - MR          // e.g. 269 mm
-  const activityWidth = 48                     // wider for text
-  const locationWidth = 28
-  const totalWidth    = 26
-  const numericCols   = visibleCols.length
-  const remaining     = usableWidth - activityWidth - locationWidth - totalWidth
-  const colW          = Math.max(20, Math.floor(remaining / Math.max(numericCols, 1)))
+  // ── Column widths ─────────────────────────────────────────────
+  const usableWidth = PW - ML - MR           // ~269 mm
+  const descWidth   = 55
+  const totalWidth  = 28
+  const remaining   = usableWidth - descWidth - totalWidth
+  const colW        = Math.max(20, Math.floor(remaining / Math.max(visibleCols.length, 1)))
 
   const columnStyles: Record<string, object> = {
-    activity: { cellWidth: activityWidth, halign: "left" as const },
-    location: { cellWidth: locationWidth, halign: "left" as const },
-    total:    { cellWidth: totalWidth,    halign: "right" as const, fontStyle: "bold" as const },
+    description: { cellWidth: descWidth, halign: "left"  as const },
+    total:       { cellWidth: totalWidth, halign: "right" as const, fontStyle: "bold" as const },
   }
   visibleCols.forEach(col => {
     columnStyles[col.code] = { cellWidth: colW, halign: "right" as const }
   })
 
-  // ── Render table ─────────────────────────────────────────────
+  // ── Render table ──────────────────────────────────────────────
   autoTable(doc, {
     startY: Y,
     margin: { left: ML, right: MR },
@@ -202,30 +202,34 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
     },
     alternateRowStyles: { fillColor: ROW_ALT },
     didParseCell: hookData => {
-      if (hookData.section === "body") {
-        const row = data.rows[hookData.row.index]
-        if (!row) return
+      if (hookData.section !== "body") return
+      const row = data.rows[hookData.row.index]
+      if (!row) return
 
-        if (row.isSubtotal) {
-          hookData.cell.styles.fontStyle = "bold"
-          hookData.cell.styles.fillColor = SUBTOTAL_BG
-          hookData.cell.styles.textColor = NAVY
-          // Activity cell for subtotals spans visually — label it clearly
-          if (hookData.column.dataKey === "activity") {
-            hookData.cell.styles.halign = "left"
-          }
-        }
+      // Activity heading row
+      const isActivityHeading =
+        !row.isSubtotal &&
+        !row.isGrandTotal &&
+        !!row.activity &&
+        (!row.location || row.location.trim() === "")
 
-        if (row.isGrandTotal) {
-          hookData.cell.styles.fontStyle = "bold"
-          hookData.cell.styles.fillColor = NAVY
-          hookData.cell.styles.textColor = WHITE
-        }
+      if (isActivityHeading) {
+        hookData.cell.styles.fontStyle  = "bold"
+        hookData.cell.styles.textColor  = NAVY
+        hookData.cell.styles.fillColor  = HEADING_BG
+      } else if (row.isSubtotal) {
+        hookData.cell.styles.fontStyle  = "bold"
+        hookData.cell.styles.fillColor  = SUBTOTAL_BG
+        hookData.cell.styles.textColor  = NAVY
+      } else if (row.isGrandTotal) {
+        hookData.cell.styles.fontStyle  = "bold"
+        hookData.cell.styles.fillColor  = NAVY
+        hookData.cell.styles.textColor  = WHITE
       }
     },
   })
 
-  // ── Footer ───────────────────────────────────────────────────
+  // ── Footer ────────────────────────────────────────────────────
   doc.setDrawColor(...NAVY)
   doc.setLineWidth(0.4)
   doc.line(ML, PH - 14, PW - MR, PH - 14)
