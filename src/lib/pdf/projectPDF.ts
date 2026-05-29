@@ -38,8 +38,8 @@ export interface ProjectPDFData {
   startDate?: string
   endDate?: string
 
-  columns: { code: string; name: string }[]
-  rows: any[]
+  columns: { code: string; name: string }[]   // GL accounts (Expense + Fixed Assets)
+  rows: any[]                                    // cross‑tab rows from API
   columnTotals: Record<string, number>
   grandTotal: number
 }
@@ -122,13 +122,14 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
       location: row.location,
     }
     data.columns.forEach(col => {
-      obj[col.code] = row.amounts[col.code]?.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"
+      const val = row.amounts[col.code] || 0
+      obj[col.code] = val.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     })
     obj.total = row.total.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     return obj
   })
 
-  // Optional: if more than 10 columns, remove zero‑only columns
+  // If more than 10 GL columns, remove those that are zero in every row
   let displayColumns = columns
   if (columns.length - 1 > 10) { // -1 for total column
     const zeroCols = data.columns.filter(col =>
