@@ -33,13 +33,16 @@ export interface ProjectPDFData {
   logoUrl?: string | null
 
   projectName: string
-  projectDescription?: string
   donorName?: string
   projectStatus: string
   isApproved: boolean
   totalBudgeted?: number
+  startDate?: string
+  endDate?: string
+  amountFC?: number
+  amountPKR?: number
 
-  activityBreakdown: { activity: string; budget: number }[]
+  activityBreakdown: { activity: string; locations: string; accounts: string; budget: number }[]
   monthlyBreakdown: { month: string; budget: number }[]
 }
 
@@ -74,7 +77,7 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
   doc.setFont("helvetica", "bold")
   doc.setFontSize(24)
   doc.setTextColor(...NAVY)
-  doc.text("PROJECT BUDGET", PW - MR, LOGO_Y + 8, { align: "right" })
+  doc.text("PROJECT BUDGET REPORT", PW - MR, LOGO_Y + 8, { align: "right" })
 
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8.5)
@@ -94,6 +97,10 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
     ["Donor", data.donorName || "—"],
     ["Status", data.projectStatus],
     ["Approved", data.isApproved ? "Yes" : "No"],
+    ["Start Date", data.startDate ? new Date(data.startDate).toLocaleDateString("en-PK") : "—"],
+    ["End Date", data.endDate ? new Date(data.endDate).toLocaleDateString("en-PK") : "—"],
+    ["Amount (FC)", data.amountFC ? data.amountFC.toLocaleString("en-PK", { minimumFractionDigits: 2 }) : "—"],
+    ["Amount (PKR)", data.amountPKR ? pkr(data.amountPKR) : "—"],
     ["Total Budgeted", data.totalBudgeted ? pkr(data.totalBudgeted) : "—"],
   ]
 
@@ -119,17 +126,19 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
 
   Y += 6
 
-  // ── Activity‑wise Budget ──────────────────────────────────────
+  // ── Activity‑wise Budget with Locations & GL ───────────────────
   if (data.activityBreakdown.length > 0) {
     doc.setFont("helvetica", "bold")
     doc.setFontSize(10)
     doc.setTextColor(...DARK)
-    doc.text("Budget by Activity", ML, Y)
+    doc.text("Budget by Activity (with Locations & GL Accounts)", ML, Y)
     Y += 8
 
-    const actHeaders = ["Activity", "Budgeted Amount"]
+    const actHeaders = ["Activity", "Locations", "GL Accounts", "Budgeted Amount"]
     const actRows = data.activityBreakdown.map(a => [
       a.activity,
+      a.locations || "—",
+      a.accounts || "—",
       pkr(a.budget),
     ])
 
@@ -142,8 +151,10 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
       headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: "bold", fontSize: 8 },
       alternateRowStyles: { fillColor: ROW_ALT },
       columnStyles: {
-        0: { cellWidth: "auto" },
-        1: { cellWidth: 50, halign: "right" },
+        0: { cellWidth: 50 },
+        1: { cellWidth: 50 },
+        2: { cellWidth: 60 },
+        3: { cellWidth: 40, halign: "right" },
       },
     })
 

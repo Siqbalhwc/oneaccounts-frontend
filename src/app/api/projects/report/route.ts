@@ -11,7 +11,6 @@ export async function GET(req: NextRequest) {
   const projectId = req.nextUrl.searchParams.get("projectId")
   if (!projectId) return NextResponse.json({ error: "Missing projectId" }, { status: 400 })
 
-  // Fetch project info
   const { data: project } = await supabaseAdmin
     .from("projects")
     .select("company_id")
@@ -21,40 +20,55 @@ export async function GET(req: NextRequest) {
 
   const cid = project.company_id
 
-  // 1. Annual budgets (month IS NULL) – used for total approved budget
-  const { data: annualBudgets } = await supabaseAdmin
+  // 1. Annual budgets with activity, location, and account details
+  const { data: budgets } = await supabaseAdmin
     .from("budgets")
-    .select("budgeted_amount")
+    .select(`
+      budgeted_amount,
+      activities ( id, name ),
+      locations ( id, name ),
+      accounts ( code, name )
+    `)
     .eq("company_id", cid)
     .eq("project_id", projectId)
-    .is("month", null)
+    .is("month", null)            -- annual only
 
-  const totalAnnualBudget = annualBudgets?.reduce((s, b) => s + (b.budgeted_amount || 0), 0) || 0
+  const totalAnnualBudget = budgets?.reduce((s, b) => s + (b.budgeted_amount || 0), 0) || 0
 
-  // 2. Activity‑wise budget – annual budgets linked to activities
-  const { data: activityBudgets } = await supabaseAdmin
-    .from("budgets")
-    .select("budgeted_amount, activities(id, name)")
-    .eq("company_id", cid)
-    .eq("project_id", projectId)
-    .is("month", null)
-    .not("activity_id", "is", null)
-
-  // Group by activity
-  const activityMap: Record<string, { name: string; budget: number }> = {}
-  activityBudgets?.forEach((b: any) => {
+  // Group by activity → list of locations and accounts
+  const activityMap: Record<string, any> = {}
+  budgets?.forEach((b: any) => {
     const act = b.activities
+    const loc = b.locations
+    const acc = b.accounts
     if (!act) return
-    const key = act.name || act.id
-    if (!activityMap[key]) activityMap[key] = { name: act.name || key, budget: 0 }
+
+    const key = act.id || act.name
+    if (!activityMap[key]) {
+      activityMap[key] = {
+        activity: act.name || key,
+        locations: [],
+        accounts: [],
+        budget: 0,
+      }
+    }
+    if (loc && !activityMap[key].locations.find((l: any) => l.id === loc.id)) {
+      activityMap[key].locations.push({ id: loc.id, name: loc.name || loc.id })
+    }
+    if (acc && !activityMap[key].accounts.find((a: any) => a.code === acc.code)) {
+      activityMap[key].accounts.push({ code: acc.code, name: acc.name })
+    }
     activityMap[key].budget += b.budgeted_amount || 0
   })
-  const activityBreakdown = Object.values(activityMap).map(a => ({
-    activity: a.name,
+
+  const activityBreakdown = Object.values(activityMap).map((a: any) => ({
+    activity: a.activity,
+    locations: a.locations.map((l: any) => l.name).join(", "),
+    accounts: a.accounts.map((a: any) => `${a.code} - ${a.name}`).join("; "),
     budget: a.budget,
   }))
 
-  // 3. Month‑wise budget (month IS NOT NULL)
+  // 2. Month‑wise budget (optional)
   const { data: monthlyBudgets } = await supabaseAdmin
     .from("budgets")
     .select("month, budgeted_amount")
@@ -63,7 +77,6 @@ export async function GET(req: NextRequest) {
     .not("month", "is", null)
     .order("month", { ascending: true })
 
-  // Group by month
   const monthMap: Record<string, number> = {}
   monthlyBudgets?.forEach((b: any) => {
     monthMap[b.month] = (monthMap[b.month] || 0) + (b.budgeted_amount || 0)
