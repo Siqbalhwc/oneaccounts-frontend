@@ -56,7 +56,10 @@ export default function SuperAdminPage() {
   })
   const [savingSubscription, setSavingSubscription] = useState(false)
 
-  useEffect(() => { fetchCompanies() }, [])
+  // ── NEW: Payment notifications ────────────────────────────────
+  const [payments, setPayments] = useState<any[]>([])
+
+  useEffect(() => { fetchCompanies(); fetchPayments() }, [])
 
   const fetchCompanies = async () => {
     setLoading(true)
@@ -69,6 +72,14 @@ export default function SuperAdminPage() {
     setLoading(false)
   }
 
+  const fetchPayments = async () => {
+    try {
+      const res = await fetch("/api/super-admin/payments")
+      const data = await res.json()
+      if (data.payments) setPayments(data.payments)
+    } catch {}
+  }
+
   const showMessage = (msg: string, isError = false) => {
     setMessage(msg)
     setTimeout(() => setMessage(""), 4000)
@@ -77,7 +88,6 @@ export default function SuperAdminPage() {
   // ── Feature toggle (opens modal) ─────────────────────────────
   const openFeatureModal = async (company: Company) => {
     setSelectedCompanyForFeatures(company)
-    // Fetch current features for this company
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     try {
@@ -111,7 +121,6 @@ export default function SuperAdminPage() {
     showMessage(`✅ ${FEATURE_LABELS[code] || code} updated`)
   }
 
-  // ── Impersonation ─────────────────────────────────────────────
   const impersonate = async (company: Company) => {
     const res = await fetch("/api/super-admin/impersonate", {
       method: "POST",
@@ -126,7 +135,6 @@ export default function SuperAdminPage() {
     }
   }
 
-  // ── Delete company ────────────────────────────────────────────
   const deleteCompany = async (company: Company) => {
     if (!confirm(`Permanently delete ${company.name} and ALL its data?`)) return
     const res = await fetch("/api/super-admin/companies/delete", {
@@ -142,7 +150,6 @@ export default function SuperAdminPage() {
     } else showMessage(data.error || "Delete failed", true)
   }
 
-  // ── Subscription modal handlers ───────────────────────────────
   const openSubscriptionModal = (company: Company) => {
     setSubscriptionForm({
       companyId: company.id,
@@ -185,7 +192,6 @@ export default function SuperAdminPage() {
   const expiredTrials = companies.filter(c => c.is_trial && c.trial_ends_at && new Date(c.trial_ends_at) <= new Date())
   const activeClients = companies.filter(c => !c.is_trial)
 
-  // ── KPI cards ─────────────────────────────────────────────────
   const kpiStyle = (bg: string) => ({
     background: bg, borderRadius: 8, padding: "12px 14px", color: "white",
     minWidth: 120, textAlign: "center" as const, fontWeight: 700,
@@ -230,6 +236,10 @@ export default function SuperAdminPage() {
         }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
         .input-field { width: 100%; padding: 6px 10px; border: 1px solid #E2E8F0; border-radius: 6px; font-size: 12px; margin-bottom: 10px; }
+        /* payment table */
+        .pay-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        .pay-table th { text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 700; color: #64748B; border-bottom: 2px solid #E2E8F0; }
+        .pay-table td { padding: 8px 12px; font-size: 12px; color: #334155; border-bottom: 1px solid #E2E8F0; }
       `}</style>
 
       <div className="sa-header">
@@ -336,6 +346,50 @@ export default function SuperAdminPage() {
           ))}
         </div>
       )}
+
+      {/* ── NEW: Payment Notifications Section ─────────────────────── */}
+      <div className="sa-section">
+        <div className="sa-section-title">📬 Payment Notifications ({payments.length})</div>
+        {payments.length === 0 ? (
+          <div style={{ background: "white", borderRadius: 8, padding: 16, textAlign: "center", color: "#94A3B8", border: "1px solid #E2E8F0" }}>
+            No payment notifications yet.
+          </div>
+        ) : (
+          <div style={{ background: "white", borderRadius: 8, border: "1px solid #E2E8F0", overflow: "hidden" }}>
+            <table className="pay-table">
+              <thead>
+                <tr>
+                  <th>Company</th>
+                  <th>Amount</th>
+                  <th>Plan / Period</th>
+                  <th>Top‑ups</th>
+                  <th>Receipt</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map((p: any) => (
+                  <tr key={p.id}>
+                    <td>{p.companies?.name || '—'}</td>
+                    <td>PKR {p.amount?.toLocaleString()}</td>
+                    <td>{p.plan_code} / {p.period}</td>
+                    <td>{p.topups?.join(', ') || '—'}</td>
+                    <td>
+                      {p.receipt_url ? (
+                        <a href={p.receipt_url} target="_blank" rel="noopener noreferrer"
+                           style={{ color: '#3B82F6', textDecoration: 'underline' }}>
+                          View
+                        </a>
+                      ) : '—'}
+                    </td>
+                    <td>{new Date(p.created_at).toLocaleDateString('en-PK')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* ── Feature Toggle Modal ─────────────────────────────────── */}
       {showFeatureModal && selectedCompanyForFeatures && (
