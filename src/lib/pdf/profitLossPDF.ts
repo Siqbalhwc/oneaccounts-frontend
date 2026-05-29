@@ -44,9 +44,12 @@ export interface PnLAccount {
 }
 
 export interface PnLCompareRow {
+  id?: number | string
   code: string
   name: string
-  amounts: Record<string, number>  // project id -> amount
+  type: string           // "Revenue" or "Expense"
+  category: string       // e.g. "Direct Expenses", "Operating Expenses"
+  amounts: Record<string, number>  // project id → amount
   unallocated: number
   total: number
 }
@@ -78,7 +81,6 @@ export interface ProfitLossPDFData {
   // Compare mode
   projects?: { id: string; name: string }[]
   compareRows?: PnLCompareRow[]
-  // Totals for compare mode (used in section headers)
   compareGrossProfit?: number
   compareNetProfit?: number
 }
@@ -147,15 +149,14 @@ export async function generateProfitLossPDF(data: ProfitLossPDFData): Promise<js
   const ROW_HEIGHT = 6
 
   if (data.mode === "overall") {
-    // ── PORTRAIT: one section per category ─────────────────────────
-    const addSection = (title: string, accounts: PnLAccount[], total: number, color: [number,number,number]) => {
-      // Section header
-      filledRect(doc, ML, Y, CW, ROW_HEIGHT, color)
+    // ── PORTRAIT MODE ──────────────────────────────────────────────
+    const addSection = (title: string, accounts: PnLAccount[], total: number) => {
+      // Section header – bold text, no background
       doc.setFont("helvetica", "bold")
-      doc.setFontSize(8)
-      doc.setTextColor(...WHITE)
-      doc.text(title, ML + 3, Y + ROW_HEIGHT / 2 + 1.5, { align: "left" })
-      doc.text(pkr(total), PW - MR - 3, Y + ROW_HEIGHT / 2 + 1.5, { align: "right" })
+      doc.setFontSize(9)
+      doc.setTextColor(...DARK)
+      doc.text(title, ML + 2, Y + 4)
+      doc.text(pkr(total), PW - MR - 2, Y + 4, { align: "right" })
       Y += ROW_HEIGHT
 
       // Account rows
@@ -163,78 +164,78 @@ export async function generateProfitLossPDF(data: ProfitLossPDFData): Promise<js
         doc.setFont("helvetica", "normal")
         doc.setFontSize(8)
         doc.setTextColor(...DARK)
-        // simple two‑column line
-        doc.text(`${acc.code} - ${acc.name}`, ML + 3, Y + 4)
-        doc.text(pkr(acc.amount), PW - MR - 3, Y + 4, { align: "right" })
+        doc.text(`${acc.code} - ${acc.name}`, ML + 5, Y + 4)
+        doc.text(pkr(acc.amount), PW - MR - 2, Y + 4, { align: "right" })
         Y += ROW_HEIGHT
       })
-      Y += 2 // small gap
+      Y += 2
     }
 
-    addSection("Income / Revenue", data.revenueAccounts || [], data.totalRevenue || 0, NAVY)
+    // Revenue section
+    addSection("Income / Revenue", data.revenueAccounts || [], data.totalRevenue || 0)
     if (data.directExpenses?.length) {
-      addSection("Cost of Goods Sold / Direct Expenses", data.directExpenses, data.totalDirect || 0, [220,38,38])
+      addSection("Cost of Goods Sold / Direct Expenses", data.directExpenses, data.totalDirect || 0)
     }
-    // Gross Profit row
-    doc.setFont("helvetica", "bold")
-    doc.setFontSize(9)
-    doc.setTextColor(...DARK)
-    doc.text("Gross Profit", ML + 3, Y + 4)
-    doc.text(pkr(data.grossProfit || 0), PW - MR - 3, Y + 4, { align: "right" })
-    Y += ROW_HEIGHT + 2
 
-    if (data.operatingExpenses?.length) {
-      addSection("Operating Expenses", data.operatingExpenses, data.totalOpEx || 0, [245,158,11])
-    }
-    if (data.otherExpenses?.length) {
-      addSection("Other Expenses", data.otherExpenses, data.totalOther || 0, [139,92,246])
-    }
-    // Net Profit row
+    // Gross Profit – navy blue bold
     doc.setFont("helvetica", "bold")
     doc.setFontSize(10)
     doc.setTextColor(...NAVY)
-    doc.text("Net Profit / Loss", ML + 3, Y + 4)
-    doc.text(pkr(data.netProfit || 0), PW - MR - 3, Y + 4, { align: "right" })
+    doc.text("Gross Profit", ML + 2, Y + 4)
+    doc.text(pkr(data.grossProfit || 0), PW - MR - 2, Y + 4, { align: "right" })
+    Y += ROW_HEIGHT + 2
+
+    if (data.operatingExpenses?.length) {
+      addSection("Operating Expenses", data.operatingExpenses, data.totalOpEx || 0)
+    }
+    if (data.otherExpenses?.length) {
+      addSection("Other Expenses", data.otherExpenses, data.totalOther || 0)
+    }
+
+    // Net Profit – navy blue bold
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(11)
+    doc.setTextColor(...NAVY)
+    doc.text("Net Profit / Loss", ML + 2, Y + 4)
+    doc.text(pkr(data.netProfit || 0), PW - MR - 2, Y + 4, { align: "right" })
 
   } else {
-    // ── LANDSCAPE: project‑wise columns ────────────────────────────
+    // ── LANDSCAPE MODE – project‑wise columns ──────────────────────
     const projects = data.projects || []
     const rows = data.compareRows || []
-    const numProj = projects.length
 
-    // Column widths: account col = 60, each project = 25, unallocated = 25, total = 25
+    // Column widths
     const accColW = 60
-    const projColW = Math.min(25, (CW - accColW - 50) / (numProj + 2)) // ensure fits
-    const unallocColW = projColW
-    const totalColW = projColW
-    const totalTableW = accColW + numProj * projColW + unallocColW + totalColW
-    const startX = ML // left-aligned
+    const numProj = projects.length
+    // Distribute remaining width among project columns + unallocated + total
+    const remaining = CW - accColW
+    const numExtraCols = numProj + 2  // projects + unallocated + total
+    const extraColW = Math.floor(remaining / numExtraCols)
 
-    // Table header (navy)
-    filledRect(doc, startX, Y, totalTableW, ROW_HEIGHT, NAVY)
+    // Build header
+    filledRect(doc, ML, Y, CW, ROW_HEIGHT, NAVY)
     doc.setFont("helvetica", "bold")
     doc.setFontSize(7)
     doc.setTextColor(...WHITE)
-    let colX = startX
-    doc.text("Account", colX + 2, Y + ROW_HEIGHT / 2 + 1.5)
-    colX += accColW
+    let curX = ML
+    doc.text("Account", curX + 2, Y + ROW_HEIGHT / 2 + 1.5)
+    curX += accColW
     projects.forEach(p => {
-      doc.text(p.name, colX + projColW / 2, Y + ROW_HEIGHT / 2 + 1.5, { align: "center" })
-      colX += projColW
+      doc.text(p.name, curX + extraColW / 2, Y + ROW_HEIGHT / 2 + 1.5, { align: "center" })
+      curX += extraColW
     })
-    doc.text("Unalloc.", colX + unallocColW / 2, Y + ROW_HEIGHT / 2 + 1.5, { align: "center" })
-    colX += unallocColW
-    doc.text("Total", colX + totalColW / 2, Y + ROW_HEIGHT / 2 + 1.5, { align: "center" })
+    doc.text("Unalloc.", curX + extraColW / 2, Y + ROW_HEIGHT / 2 + 1.5, { align: "center" })
+    curX += extraColW
+    doc.text("Total", curX + extraColW / 2, Y + ROW_HEIGHT / 2 + 1.5, { align: "center" })
     Y += ROW_HEIGHT
 
-    // Section: Revenue, Direct Expenses, etc.
-    const addCompareSection = (title: string, filter: (r: PnLCompareRow) => boolean, color: [number,number,number]) => {
-      // Section header
-      filledRect(doc, startX, Y, totalTableW, ROW_HEIGHT, color)
+    // Helper to draw a section
+    const addCompareSection = (title: string, filter: (r: PnLCompareRow) => boolean) => {
+      // Section header – bold, no background
       doc.setFont("helvetica", "bold")
-      doc.setFontSize(7)
-      doc.setTextColor(...WHITE)
-      doc.text(title, startX + 2, Y + ROW_HEIGHT / 2 + 1.5)
+      doc.setFontSize(8)
+      doc.setTextColor(...DARK)
+      doc.text(title, ML + 2, Y + 4)
       Y += ROW_HEIGHT
 
       const sectionRows = rows.filter(filter)
@@ -242,58 +243,68 @@ export async function generateProfitLossPDF(data: ProfitLossPDFData): Promise<js
         doc.setFont("helvetica", "normal")
         doc.setFontSize(7)
         doc.setTextColor(...DARK)
-        let x = startX
-        doc.text(`${row.code} - ${row.name}`, x + 2, Y + 4)
-        x += accColW
+        curX = ML
+        doc.text(`${row.code} - ${row.name}`, curX + 2, Y + 4)
+        curX += accColW
         projects.forEach(p => {
           const val = row.amounts[p.id] || 0
-          doc.text(val > 0 ? pkr(val) : "–", x + projColW / 2, Y + 4, { align: "center" })
-          x += projColW
+          doc.text(val > 0 ? pkr(val) : "–", curX + extraColW / 2, Y + 4, { align: "center" })
+          curX += extraColW
         })
-        doc.text(row.unallocated > 0 ? pkr(row.unallocated) : "–", x + unallocColW / 2, Y + 4, { align: "center" })
-        x += unallocColW
-        doc.text(pkr(row.total), x + totalColW / 2, Y + 4, { align: "center" })
+        doc.text(row.unallocated > 0 ? pkr(row.unallocated) : "–", curX + extraColW / 2, Y + 4, { align: "center" })
+        curX += extraColW
+        doc.text(pkr(row.total), curX + extraColW / 2, Y + 4, { align: "center" })
         Y += ROW_HEIGHT
       })
       Y += 2
     }
 
-    addCompareSection("Income / Revenue", r => r.code.startsWith("4"), NAVY)
-    addCompareSection("Cost of Goods Sold / Direct Expenses", r => r.code.startsWith("5"), [220,38,38])
-    // Gross Profit row
-    doc.setFont("helvetica", "bold")
-    doc.setFontSize(7)
-    doc.setTextColor(...DARK)
-    let x = startX
-    doc.text("Gross Profit", x + 2, Y + 4)
-    x += accColW
-    projects.forEach(p => {
-      // compute gross profit per project from data? we'll skip for simplicity, just placeholder or compute from passed data
-      doc.text("–", x + projColW / 2, Y + 4, { align: "center" })
-      x += projColW
-    })
-    doc.text("–", x + unallocColW / 2, Y + 4, { align: "center" })
-    x += unallocColW
-    doc.text(pkr(data.compareGrossProfit || 0), x + totalColW / 2, Y + 4, { align: "center" })
-    Y += ROW_HEIGHT + 2
+    // Sections using type and category from compareRows
+    addCompareSection("Income / Revenue", r => r.type === "Revenue")
+    addCompareSection("Cost of Goods Sold / Direct Expenses", r => r.category === "Direct Expenses")
 
-    addCompareSection("Operating Expenses", r => r.code.startsWith("51"), [245,158,11])
-    addCompareSection("Other Expenses", r => !r.code.startsWith("4") && !r.code.startsWith("5") && !r.code.startsWith("51"), [139,92,246])
-
-    // Net Profit row
+    // Gross Profit – navy blue bold
     doc.setFont("helvetica", "bold")
     doc.setFontSize(8)
     doc.setTextColor(...NAVY)
-    x = startX
-    doc.text("Net Profit / Loss", x + 2, Y + 4)
-    x += accColW
+    curX = ML
+    doc.text("Gross Profit", curX + 2, Y + 4)
+    curX += accColW
     projects.forEach(p => {
-      doc.text("–", x + projColW / 2, Y + 4, { align: "center" })
-      x += projColW
+      // compute from data if available, else show passed value
+      const revRows = rows.filter(r => r.type === "Revenue")
+      const expRows = rows.filter(r => r.category === "Direct Expenses")
+      const rev = revRows.reduce((s, r) => s + (r.amounts[p.id] || 0), 0)
+      const exp = expRows.reduce((s, r) => s + (r.amounts[p.id] || 0), 0)
+      const gp = rev - exp
+      doc.text(gp !== 0 ? pkr(gp) : "–", curX + extraColW / 2, Y + 4, { align: "center" })
+      curX += extraColW
     })
-    doc.text("–", x + unallocColW / 2, Y + 4, { align: "center" })
-    x += unallocColW
-    doc.text(pkr(data.compareNetProfit || 0), x + totalColW / 2, Y + 4, { align: "center" })
+    doc.text("–", curX + extraColW / 2, Y + 4, { align: "center" })
+    curX += extraColW
+    doc.text(pkr(data.compareGrossProfit || 0), curX + extraColW / 2, Y + 4, { align: "center" })
+    Y += ROW_HEIGHT + 2
+
+    addCompareSection("Operating Expenses", r => r.category === "Operating Expenses")
+    addCompareSection("Other Expenses", r => r.category === "Other" && r.type === "Expense")
+
+    // Net Profit – navy blue bold
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(8)
+    doc.setTextColor(...NAVY)
+    curX = ML
+    doc.text("Net Profit / Loss", curX + 2, Y + 4)
+    curX += accColW
+    projects.forEach(p => {
+      const rev = rows.filter(r => r.type === "Revenue").reduce((s, r) => s + (r.amounts[p.id] || 0), 0)
+      const exp = rows.filter(r => r.type === "Expense").reduce((s, r) => s + (r.amounts[p.id] || 0), 0)
+      const net = rev - exp
+      doc.text(net !== 0 ? pkr(net) : "–", curX + extraColW / 2, Y + 4, { align: "center" })
+      curX += extraColW
+    })
+    doc.text("–", curX + extraColW / 2, Y + 4, { align: "center" })
+    curX += extraColW
+    doc.text(pkr(data.compareNetProfit || 0), curX + extraColW / 2, Y + 4, { align: "center" })
   }
 
   // ── FOOTER ───────────────────────────────────────────────────────
