@@ -280,6 +280,38 @@ export default function ManagementDashboard({ role }: { role: string }) {
         @media (max-width: 380px) {
           .dashboard-grid { grid-template-columns: 1fr; }
         }
+
+        /* ── Responsive fix for Project Utilization + Donor Balances ── */
+        .mgmt .util-donor-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 1rem;
+          margin-bottom: 1rem;
+        }
+        .mgmt .util-card {
+          flex: 3;
+          min-width: 280px;
+        }
+        .mgmt .donor-card {
+          flex: 2;
+          min-width: 220px;
+        }
+        @media (max-width: 640px) {
+          .mgmt .util-donor-row {
+            flex-direction: row;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            gap: 0.8rem;
+            padding-bottom: 0.5rem;
+          }
+          .mgmt .util-card,
+          .mgmt .donor-card {
+            flex: 0 0 auto;
+            width: 85vw;
+            max-width: 320px;
+          }
+        }
       `}</style>
 
       <div className="mgmt" style={{ padding: "0.8rem 1.2rem" }}>
@@ -379,10 +411,10 @@ export default function ManagementDashboard({ role }: { role: string }) {
           ))}
         </div>
 
-        {/* Project Utilization + Donor Balances */}
-        <div className="dashboard-grid" style={{ gridTemplateColumns: "3fr 2fr" }}>
+        {/* ── Project Utilization + Donor Balances (responsive row) ── */}
+        <div className="util-donor-row">
           <motion.div
-            className="card"
+            className="card util-card"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4, duration: 0.5 }}
@@ -427,7 +459,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </motion.div>
 
           <motion.div
-            className="card"
+            className="card donor-card"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5, duration: 0.5 }}
