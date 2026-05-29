@@ -376,7 +376,8 @@ export default function ProfitLossPage() {
         .compare-table th { background: ${headerBg}; color: white; padding: 10px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; text-align: right; white-space: nowrap; }
         .compare-table th.col-account { text-align: left; }
         .compare-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; text-align: right; white-space: nowrap; }
-        .compare-table td.td-account { text-align: left; font-weight: 500; white-space: normal; word-break: break-word; }
+        .compare-table td.td-account { text-align: left; font-weight: 500; white-space: nowrap; }
+.compare-table tr.section-head td { font-weight: 700; font-size: 11px; text-transform: uppercase; padding-top: 18px; padding-bottom: 6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
         .compare-table tr.section-head td { font-weight: 700; font-size: 11px; text-transform: uppercase; padding-top: 18px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
         .compare-table tr.subtotal td { font-weight: 700; font-size: 13px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
         .compare-table tr.bold td { font-weight: 700; font-size: 13px; border-top: 2px solid var(--border-strong); border-bottom: 2px solid var(--border-strong); }
