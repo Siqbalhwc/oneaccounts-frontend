@@ -40,10 +40,8 @@ export interface ProjectPDFData {
   isApproved: boolean
   totalBudgeted?: number
 
-  // GL‑wise breakdown
   accountGroups: { code: string; name: string; amount: number; type: string }[]
-  // Month‑wise breakdown
-  monthlyTotals: { month: string; amount: number; type: string }[]
+  monthlyTotals: { month: string; budget: number; actual: number; type: string }[]
 }
 
 export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
@@ -94,7 +92,6 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
   // ── Project details box ──────────────────────────────────────
   const details = [
     ["Project Name", data.projectName],
-    ["Code", data.projectCode || "—"],
     ["Donor", data.donorName || "—"],
     ["Status", data.projectStatus],
     ["Approved", data.isApproved ? "Yes" : "No"],
@@ -123,12 +120,47 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
 
   Y += 6
 
-  // ── GL‑wise table ────────────────────────────────────────────
+  // ── Monthly Budget vs Actual ──────────────────────────────────
+  if (data.monthlyTotals.length > 0) {
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(10)
+    doc.setTextColor(...DARK)
+    doc.text("Monthly Budget vs Actual", ML, Y)
+    Y += 8
+
+    const monthHeaders = ["Month", "Budget", "Actual", "Type"]
+    const monthRows = data.monthlyTotals.map(m => [
+      m.month,
+      pkr(m.budget),
+      pkr(m.actual),
+      m.type,
+    ])
+
+    autoTable(doc, {
+      startY: Y,
+      margin: { left: ML, right: MR },
+      head: [monthHeaders],
+      body: monthRows,
+      styles: { fontSize: 7.5, cellPadding: { top: 2, bottom: 2, left: 2, right: 2 }, textColor: DARK, lineColor: BORDER, lineWidth: 0.2 },
+      headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: "bold", fontSize: 8 },
+      alternateRowStyles: { fillColor: ROW_ALT },
+      columnStyles: {
+        0: { cellWidth: 40 },
+        1: { cellWidth: 45, halign: "right" },
+        2: { cellWidth: 45, halign: "right" },
+        3: { cellWidth: 30, halign: "center" },
+      },
+    })
+
+    Y = (doc as any).lastAutoTable.finalY + 10
+  }
+
+  // ── GL‑wise Breakdown ────────────────────────────────────────
   if (data.accountGroups.length > 0) {
     doc.setFont("helvetica", "bold")
     doc.setFontSize(10)
     doc.setTextColor(...DARK)
-    doc.text("GL‑wise Breakdown (by Account)", ML, Y)
+    doc.text("GL‑wise Breakdown (Actuals)", ML, Y)
     Y += 8
 
     const glHeaders = ["Code", "Account Name", "Amount", "Type"]
@@ -150,41 +182,8 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
       columnStyles: {
         0: { cellWidth: 20 },
         1: { cellWidth: "auto" },
-        2: { cellWidth: 40, halign: "right" },
-        3: { cellWidth: 22, halign: "center" },
-      },
-    })
-
-    Y = (doc as any).lastAutoTable.finalY + 6
-  }
-
-  // ── Monthly breakdown table ──────────────────────────────────
-  if (data.monthlyTotals.length > 0) {
-    doc.setFont("helvetica", "bold")
-    doc.setFontSize(10)
-    doc.setTextColor(...DARK)
-    doc.text("Monthly Breakdown", ML, Y)
-    Y += 8
-
-    const monthHeaders = ["Month", "Amount", "Type"]
-    const monthRows = data.monthlyTotals.map(m => [
-      m.month,
-      pkr(m.amount),
-      m.type,
-    ])
-
-    autoTable(doc, {
-      startY: Y,
-      margin: { left: ML, right: MR },
-      head: [monthHeaders],
-      body: monthRows,
-      styles: { fontSize: 7.5, cellPadding: { top: 2, bottom: 2, left: 2, right: 2 }, textColor: DARK, lineColor: BORDER, lineWidth: 0.2 },
-      headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: "bold", fontSize: 8 },
-      alternateRowStyles: { fillColor: ROW_ALT },
-      columnStyles: {
-        0: { cellWidth: 40 },
-        1: { cellWidth: 50, halign: "right" },
-        2: { cellWidth: 30, halign: "center" },
+        2: { cellWidth: 45, halign: "right" },
+        3: { cellWidth: 30, halign: "center" },
       },
     })
   }
