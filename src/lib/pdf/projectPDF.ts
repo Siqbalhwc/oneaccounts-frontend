@@ -1,12 +1,12 @@
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
-const NAVY       = [7, 8, 91]     as [number, number, number]
-const DARK       = [17, 24, 39]   as [number, number, number]
-const MUTED      = [107, 114, 128] as [number, number, number]
-const BORDER     = [229, 231, 235] as [number, number, number]
-const WHITE      = [255, 255, 255] as [number, number, number]
-const ROW_ALT    = [248, 249, 252] as [number, number, number]
+const NAVY        = [7, 8, 91]      as [number, number, number]
+const DARK        = [17, 24, 39]    as [number, number, number]
+const MUTED       = [107, 114, 128] as [number, number, number]
+const BORDER      = [229, 231, 235] as [number, number, number]
+const WHITE       = [255, 255, 255] as [number, number, number]
+const ROW_ALT     = [248, 249, 252] as [number, number, number]
 const SUBTOTAL_BG = [240, 245, 255] as [number, number, number]
 const HEADING_BG  = [235, 238, 250] as [number, number, number]
 
@@ -50,8 +50,9 @@ export interface ProjectPDFData {
     location: string
     amounts: Record<string, number>
     total: number
-    isSubtotal?: boolean
+    isSubtotal?:   boolean
     isGrandTotal?: boolean
+    isHeading?:    boolean   // true for activity heading rows
   }[]
   columnTotals: Record<string, number>
   grandTotal: number
@@ -124,7 +125,6 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
   const visibleCols = nonZeroCols.length > 0 ? nonZeroCols : data.columns
 
   // ── Build column definitions ──────────────────────────────────
-  // Single merged "Activity / Location" column + GL/month cols + Total
   const allColumns: { header: string; dataKey: string }[] = [
     { header: "Activity / Location", dataKey: "description" },
     ...visibleCols.map(col => ({
@@ -143,26 +143,41 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
     const obj: Record<string, string> = {}
 
     if (row.isGrandTotal) {
+      // Grand total — dark navy row at bottom
       obj.description = "Grand Total"
+      visibleCols.forEach(col => { obj[col.code] = fmt(row.amounts[col.code] ?? 0) })
+      obj.total = fmt(row.total)
+
     } else if (row.isSubtotal) {
+      // Subtotal row per activity
       obj.description = row.activity ? `Total ${row.activity}` : "Subtotal"
-    } else if (row.activity && (!row.location || row.location.trim() === "")) {
-      // Activity heading row — bold, no amounts
+      visibleCols.forEach(col => { obj[col.code] = fmt(row.amounts[col.code] ?? 0) })
+      obj.total = fmt(row.total)
+
+    } else if (row.isHeading) {
+      // Activity heading row — label only, no amounts
       obj.description = row.activity
+      visibleCols.forEach(col => { obj[col.code] = "" })
+      obj.total = ""
+
+    } else if (row.activity && (!row.location || row.location.trim() === "")) {
+      // Fallback: treat as heading if activity set and location empty
+      obj.description = row.activity
+      visibleCols.forEach(col => { obj[col.code] = "" })
+      obj.total = ""
+
     } else {
-      // Location data row — indented under activity heading
+      // Normal location data row — indented under activity heading
       obj.description = `    ${row.location}`
+      visibleCols.forEach(col => { obj[col.code] = fmt(row.amounts[col.code] ?? 0) })
+      obj.total = fmt(row.total)
     }
 
-    visibleCols.forEach(col => {
-      obj[col.code] = fmt(row.amounts[col.code] ?? 0)
-    })
-    obj.total = fmt(row.total)
     return obj
   })
 
   // ── Column widths ─────────────────────────────────────────────
-  const usableWidth = PW - ML - MR           // ~269 mm
+  const usableWidth = PW - ML - MR
   const descWidth   = 55
   const totalWidth  = 28
   const remaining   = usableWidth - descWidth - totalWidth
@@ -206,25 +221,28 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
       const row = data.rows[hookData.row.index]
       if (!row) return
 
-      // Activity heading row
+      // Determine if this is an activity heading row
       const isActivityHeading =
-        !row.isSubtotal &&
-        !row.isGrandTotal &&
-        !!row.activity &&
-        (!row.location || row.location.trim() === "")
+        row.isHeading === true ||
+        (
+          !row.isSubtotal &&
+          !row.isGrandTotal &&
+          !!row.activity &&
+          (!row.location || row.location.trim() === "")
+        )
 
       if (isActivityHeading) {
-        hookData.cell.styles.fontStyle  = "bold"
-        hookData.cell.styles.textColor  = NAVY
-        hookData.cell.styles.fillColor  = HEADING_BG
+        hookData.cell.styles.fontStyle = "bold"
+        hookData.cell.styles.textColor = NAVY
+        hookData.cell.styles.fillColor = HEADING_BG
       } else if (row.isSubtotal) {
-        hookData.cell.styles.fontStyle  = "bold"
-        hookData.cell.styles.fillColor  = SUBTOTAL_BG
-        hookData.cell.styles.textColor  = NAVY
+        hookData.cell.styles.fontStyle = "bold"
+        hookData.cell.styles.fillColor = SUBTOTAL_BG
+        hookData.cell.styles.textColor = NAVY
       } else if (row.isGrandTotal) {
-        hookData.cell.styles.fontStyle  = "bold"
-        hookData.cell.styles.fillColor  = NAVY
-        hookData.cell.styles.textColor  = WHITE
+        hookData.cell.styles.fontStyle = "bold"
+        hookData.cell.styles.fillColor = NAVY
+        hookData.cell.styles.textColor = WHITE
       }
     },
   })
