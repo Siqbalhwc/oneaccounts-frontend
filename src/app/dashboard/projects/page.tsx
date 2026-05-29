@@ -3,10 +3,17 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Download, FileText, CheckCircle, XCircle } from "lucide-react"
+import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, FileText, Check, X } from "lucide-react"
 import { useCompany } from "@/contexts/CompanyContext"
 import { useTheme } from "@/contexts/ThemeContext"
 import { generateProjectPDF } from "@/lib/pdf/projectPDF"
+
+type SortField = "name" | "code" | "status" | "budget"
+type SortDir = "asc" | "desc"
+
+function fmt(n: number) {
+  return "PKR " + n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
 
 export default function ProjectsPage() {
   const supabase = createBrowserClient(
@@ -21,6 +28,9 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true)
   const [showInactive, setShowInactive] = useState(false)
 
+  const [sortField, setSortField] = useState<SortField>("name")
+  const [sortDir, setSortDir] = useState<SortDir>("asc")
+
   useEffect(() => {
     fetchProjects()
   }, [showInactive])
@@ -29,48 +39,81 @@ export default function ProjectsPage() {
     setLoading(true)
     let query = supabase.from("projects").select("*").order("name")
     if (!showInactive) {
-      query = query.is("deleted_at", null) // active projects only
+      query = query.is("deleted_at", null)
     }
     const { data } = await query
-    if (data) setProjects(data)
+    if (data) {
+      // fetch total budget for each project
+      const enriched = await Promise.all(
+        data.map(async (p: any) => {
+          const { data: budgets } = await supabase
+            .from("budgets")
+            .select("budgeted_amount")
+            .eq("project_id", p.id)
+            .is("month", null)
+          const totalBudget = budgets?.reduce((s: number, b: any) => s + (b.budgeted_amount || 0), 0) || 0
+          return { ...p, totalBudget }
+        })
+      )
+      setProjects(enriched)
+    }
     setLoading(false)
   }
 
   const handleGeneratePDF = async (project: any) => {
-    // Fetch budgets for this project
-    const { data: budgets } = await supabase
-      .from("budgets")
-      .select("*")
-      .eq("project_id", project.id)
-      .is("month", null) // annual budgets, not monthly
-
-    // Calculate total budgeted amount
-    const totalBudgeted = budgets?.reduce((sum, b) => sum + (b.budgeted_amount || 0), 0) || 0
-
-    // Fetch actual spent (from journal_lines or we can compute via the dashboard_rpc)
-    const { data: spentData } = await supabase
-      .rpc("total_spent", { cid: project.company_id, fy: new Date().getFullYear() }) // approximate; better to filter by project
-    // Since total_spent is per company per fiscal year, we need a more specific query.
-    // For now, we'll just pass the budgets array and let the PDF show planned vs actual if available,
-    // or we can skip actuals for simplicity.
-
     const pdfData = {
       companyName: companyName || "OneAccounts",
       companyTagline: companyTagline || "",
       logoUrl: logoUrl || null,
       projectName: project.name,
-      projectStatus: project.deleted_at ? "Inactive" : "Active",
       projectCode: project.code || "",
       projectDescription: project.description || "",
-      totalBudgeted,
-      // You can add more fields if needed
+      projectStatus: project.deleted_at ? "Inactive" : "Active",
+      totalBudgeted: project.totalBudget || 0,
     }
-
     const doc = await generateProjectPDF(pdfData)
     doc.save(`Project_${project.name.replace(/\s+/g, '_')}.pdf`)
   }
 
-  const isDark = themeMode === "dark" || themeMode === "system"
+  const toggleApproval = async (project: any) => {
+    const newApproved = !project.is_approved
+    await supabase
+      .from("projects")
+      .update({ is_approved: newApproved })
+      .eq("id", project.id)
+    setProjects(prev =>
+      prev.map(p => (p.id === project.id ? { ...p, is_approved: newApproved } : p))
+    )
+  }
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) setSortDir(prev => (prev === "asc" ? "desc" : "asc"))
+    else {
+      setSortField(field)
+      setSortDir("asc")
+    }
+  }
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown size={12} style={{ opacity: 0.7 }} />
+    return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+  }
+
+  // Sort projects
+  const sorted = [...projects].sort((a, b) => {
+    let valA: any, valB: any
+    if (sortField === "budget") {
+      valA = a.totalBudget || 0
+      valB = b.totalBudget || 0
+    } else {
+      valA = (a[sortField] || "").toString().toLowerCase()
+      valB = (b[sortField] || "").toString().toLowerCase()
+    }
+    if (valA < valB) return sortDir === "asc" ? -1 : 1
+    if (valA > valB) return sortDir === "asc" ? 1 : -1
+    return 0
+  })
+
+  const isDark = themeMode === "dark"
   const isLightStyle = themeMode === "light" || themeMode === "oneaccounts"
   const rowLight = isLightStyle ? "#FFFFFF" : "#1E293B"
   const rowDark  = isLightStyle ? "#F8F9FC" : "#111827"
@@ -85,14 +128,17 @@ export default function ProjectsPage() {
         .btn { padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-family: inherit; }
         .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
         .btn-outline:hover { background: var(--card-hover); }
-        .filter-toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 13px; color: var(--text-muted); }
-        .project-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
-        .project-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: var(--shadow-sm); }
-        .project-card h3 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--text); }
-        .project-card p { font-size: 13px; color: var(--text-muted); margin: 4px 0; }
+        .filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+        .table-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+        .table-header { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 120px 120px 100px; padding: 14px 24px; color: white; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+        .table-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 120px 120px 100px; padding: 12px 24px; font-size: 13px; align-items: center; border-bottom: 1px solid var(--border); transition: background 0.15s; }
+        .table-row:hover { background: var(--card-hover); }
+        .sort-btn { background: none; border: none; cursor: pointer; font: inherit; color: white; display: inline-flex; align-items: center; gap: 4px; padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px; }
         .status-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
         .status-active { background: #DCFCE7; color: #166534; }
         .status-inactive { background: #FEF2F2; color: #B91C1C; }
+        .approved-icon { color: #10B981; cursor: pointer; }
+        .not-approved-icon { color: #CBD5E1; cursor: pointer; }
       `}</style>
 
       <div className="page-header">
@@ -101,54 +147,63 @@ export default function ProjectsPage() {
         </button>
         <div style={{ flex: 1 }}>
           <h1 className="page-title">📁 Projects</h1>
-          <p className="page-subtitle">View and manage all projects</p>
+          <p className="page-subtitle">All projects with budget and approval status</p>
         </div>
       </div>
 
-      <div className="filter-toggle">
-        <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={showInactive}
-            onChange={(e) => setShowInactive(e.target.checked)}
-          />
+      <div className="filter-bar">
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--text-muted)", cursor: "pointer" }}>
+          <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} />
           Show inactive projects
         </label>
       </div>
 
       {loading ? (
         <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading projects…</div>
-      ) : projects.length === 0 ? (
+      ) : sorted.length === 0 ? (
         <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
           No projects found.
         </div>
       ) : (
-        <div className="project-grid">
-          {projects.map((project, i) => (
+        <div className="table-wrap">
+          <div className="table-header" style={{ background: headerBg }}>
+            <button className="sort-btn" onClick={() => handleSort("name")}>Project Name {getSortIcon("name")}</button>
+            <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
+            <span>Status</span>
+            <span>Approved</span>
+            <button className="sort-btn" onClick={() => handleSort("budget")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Budget {getSortIcon("budget")}</button>
+            <span style={{ textAlign: "center" }}>PDF</span>
+            <span style={{ textAlign: "center" }}>Actions</span>
+          </div>
+          {sorted.map((p, i) => (
             <div
-              key={project.id}
-              className="project-card"
+              key={p.id}
+              className="table-row"
               style={{ background: i % 2 === 0 ? rowLight : rowDark }}
             >
-              <h3>{project.name}</h3>
-              {project.code && <p style={{ fontWeight: 600, color: "var(--primary)" }}>{project.code}</p>}
-              {project.description && <p>{project.description}</p>}
-              <div style={{ marginTop: 12 }}>
-                <span className={`status-badge ${project.deleted_at ? "status-inactive" : "status-active"}`}>
-                  {project.deleted_at ? (
-                    <><XCircle size={12} /> Inactive</>
-                  ) : (
-                    <><CheckCircle size={12} /> Active</>
-                  )}
+              <span style={{ fontWeight: 600, color: "var(--text)" }}>{p.name}</span>
+              <span style={{ color: "var(--primary)", fontSize: 12 }}>{p.code || "—"}</span>
+              <span>
+                <span className={`status-badge ${p.deleted_at ? "status-inactive" : "status-active"}`}>
+                  {p.deleted_at ? "Inactive" : "Active"}
                 </span>
-              </div>
-              <button
-                className="btn btn-outline"
-                style={{ marginTop: 16, width: "100%" }}
-                onClick={() => handleGeneratePDF(project)}
-              >
-                <FileText size={14} /> View Project Report (PDF)
-              </button>
+              </span>
+              <span style={{ textAlign: "center", cursor: "pointer" }} onClick={() => toggleApproval(p)}>
+                {p.is_approved ? (
+                  <Check size={18} className="approved-icon" />
+                ) : (
+                  <X size={18} className="not-approved-icon" />
+                )}
+              </span>
+              <span style={{ textAlign: "right", fontWeight: 500 }}>{fmt(p.totalBudget || 0)}</span>
+              <span style={{ textAlign: "center" }}>
+                <button className="btn btn-outline" style={{ padding: "4px 8px" }} onClick={() => handleGeneratePDF(p)}>
+                  <FileText size={12} /> PDF
+                </button>
+              </span>
+              <span style={{ textAlign: "center" }}>
+                {/* Future edit/delete actions can go here */}
+              </span>
             </div>
           ))}
         </div>
