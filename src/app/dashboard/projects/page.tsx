@@ -35,29 +35,19 @@ export default function ProjectsPage() {
     fetchProjects()
   }, [showInactive])
 
+  // ── Optimized fetch – single API call returns all projects with totalBudget ──
   const fetchProjects = async () => {
     setLoading(true)
-    let query = supabase
-      .from("projects")
-      .select("*, donors(name)")
-      .order("name")
-    if (!showInactive) {
-      query = query.is("deleted_at", null)
-    }
-    const { data } = await query
-    if (data) {
-      const enriched = await Promise.all(
-        data.map(async (p: any) => {
-          const { data: budgets } = await supabase
-            .from("budgets")
-            .select("budgeted_amount")
-            .eq("project_id", p.id)
-            .is("month", null)
-          const totalBudget = budgets?.reduce((s: number, b: any) => s + (b.budgeted_amount || 0), 0) || 0
-          return { ...p, totalBudget }
-        })
-      )
-      setProjects(enriched)
+    try {
+      const res = await fetch("/api/projects")
+      const data = await res.json()
+      if (Array.isArray(data)) {
+        // Apply inactive filter locally
+        const filtered = showInactive ? data : data.filter((p: any) => !p.deleted_at)
+        setProjects(filtered)
+      }
+    } catch (e) {
+      console.error(e)
     }
     setLoading(false)
   }
