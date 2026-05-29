@@ -594,7 +594,6 @@ export default function ProfitLossPage() {
           Compare Projects
         </label>
         <div className="date-actions">
-          <button className="action-btn" onClick={() => window.print()}><Printer size={13} /> Print</button>
           <button className="action-btn" onClick={handleExportExcel}><Download size={13} /> Export</button>
           <button className="action-btn" onClick={handleExportPDF}><Download size={13} /> PDF</button>
         </div>
