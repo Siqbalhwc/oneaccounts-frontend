@@ -5,8 +5,9 @@ import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, Download } from "lucide-rea
 import { useRouter, useSearchParams } from "next/navigation"
 import { generateTrialBalancePDF } from "@/lib/pdf/trialBalancePDF"
 import { useCompany } from "@/contexts/CompanyContext"
+import { useTheme } from "@/contexts/ThemeContext"
 
-type SortField = "code" | "name" | "type" | "category"
+type SortField = "code" | "name" | "type" | "debit" | "credit"
 type SortDir = "asc" | "desc"
 
 function getFallbackCategory(code?: string): string {
@@ -51,6 +52,8 @@ export default function TrialBalancePage() {
   const filterCategory = searchParams.get("category") || ""
 
   const { companyName, companyTagline, logoUrl } = useCompany()
+  const { theme: themeMode } = useTheme()
+  const isDark = themeMode !== "light"
 
   const fetchTrial = async () => {
     setLoading(true)
@@ -92,15 +95,18 @@ export default function TrialBalancePage() {
   const sortedData = useMemo(() => {
     const list = [...trialData]
     list.sort((a, b) => {
-      let valA = (a[sortField] || "").toString().toLowerCase()
-      let valB = (b[sortField] || "").toString().toLowerCase()
+      let valA: any, valB: any
       if (sortField === "code") {
-        const numA = parseFloat(a.code)
-        const numB = parseFloat(b.code)
-        if (!isNaN(numA) && !isNaN(numB)) {
-          valA = numA.toString().padStart(10, "0")
-          valB = numB.toString().padStart(10, "0")
-        }
+        valA = parseFloat(a.code)
+        valB = parseFloat(b.code)
+        if (isNaN(valA)) valA = a.code
+        if (isNaN(valB)) valB = b.code
+      } else if (sortField === "debit" || sortField === "credit") {
+        valA = a[sortField] || 0
+        valB = b[sortField] || 0
+      } else {
+        valA = (a[sortField] || "").toString().toLowerCase()
+        valB = (b[sortField] || "").toString().toLowerCase()
       }
       if (valA < valB) return sortDir === "asc" ? -1 : 1
       if (valA > valB) return sortDir === "asc" ? 1 : -1
@@ -123,7 +129,7 @@ export default function TrialBalancePage() {
   }
 
   const getSortIcon = (field: SortField) => {
-    if (sortField !== field) return <ArrowUpDown size={12} />
+    if (sortField !== field) return <ArrowUpDown size={12} style={{ opacity: 0.7 }} />
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
@@ -155,10 +161,16 @@ export default function TrialBalancePage() {
     doc.save(`Trial_Balance_${startDate}_to_${endDate}.pdf`)
   }
 
+  // ── Theme‑sensitive colours ───────────────────────────────────────
+  const headerBg = isDark ? "#1E3A8A" : "#07085B"
+  const rowLight = isDark ? "#1E293B" : "#FFFFFF"
+  const rowDark  = isDark ? "#111827" : "#F8F9FC"
+  const totalBg  = isDark ? "#1E3A8A" : "#07085B"
+  const textMuted = isDark ? "#94A3B8" : "#64748B"
+
   return (
-    <div style={{ background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+    <div style={{ background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)", transition: "background 0.3s, color 0.3s" }}>
       <style>{`
-        /* ── Report header (matches PDF) ── */
         .report-header {
           background: var(--card);
           border-bottom: 1px solid var(--border);
@@ -175,155 +187,104 @@ export default function TrialBalancePage() {
           gap: 14px;
         }
         .report-logo {
-          width: 34px;
-          height: 34px;
+          width: 34px; height: 34px;
           border-radius: 9px;
           object-fit: contain;
         }
         .report-company-name {
-          font-size: 16px;
-          font-weight: 700;
-          color: #07085B;
+          font-size: 16px; font-weight: 700;
+          color: var(--text);
         }
         .report-company-tagline {
-          font-size: 11px;
-          color: #64748B;
+          font-size: 11px; color: var(--text-muted);
         }
         .report-header-right {
           text-align: right;
         }
         .report-title {
-          font-size: 24px;
-          font-weight: 800;
-          color: #07085B;
+          font-size: 24px; font-weight: 800;
+          color: var(--text);
         }
         .report-period {
-          font-size: 12px;
-          color: #64748B;
+          font-size: 12px; color: var(--text-muted);
         }
 
-        /* ── KPI cards ── */
         .kpi-row {
-          display: flex;
-          gap: 16px;
-          padding: 24px 32px;
-          flex-wrap: wrap;
+          display: flex; gap: 16px;
+          padding: 24px 32px; flex-wrap: wrap;
         }
         .kpi-card {
           background: var(--card);
           border: 1px solid var(--border);
-          border-radius: 12px;
-          padding: 18px 24px;
-          min-width: 170px;
-          box-shadow: var(--shadow-sm);
+          border-radius: 12px; padding: 18px 24px;
+          min-width: 170px; box-shadow: var(--shadow-sm);
         }
         .kpi-label {
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-          color: var(--text-muted);
-          margin-bottom: 6px;
+          font-size: 10px; font-weight: 700;
+          text-transform: uppercase; letter-spacing: 0.08em;
+          color: var(--text-muted); margin-bottom: 6px;
         }
-        .kpi-value {
-          font-size: 26px;
-          font-weight: 800;
-        }
+        .kpi-value { font-size: 26px; font-weight: 800; }
 
-        /* ── Filter bar ── */
         .filter-bar {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 0 32px 20px;
-          flex-wrap: wrap;
+          display: flex; align-items: center; gap: 12px;
+          padding: 0 32px 20px; flex-wrap: wrap;
         }
         .btn {
-          padding: 8px 16px;
-          border-radius: 8px;
-          border: 1.5px solid var(--border);
-          font-weight: 600;
-          font-size: 13px;
-          cursor: pointer;
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
+          padding: 8px 16px; border-radius: 8px;
+          border: 1.5px solid var(--border); font-weight: 600;
+          font-size: 13px; cursor: pointer;
+          display: inline-flex; align-items: center; gap: 6px;
           font-family: inherit;
         }
         .btn-outline {
-          background: transparent;
-          color: var(--text-muted);
+          background: transparent; color: var(--text-muted);
           border-color: var(--border);
         }
         .btn-outline:hover { background: var(--card-hover); }
         .date-input {
-          height: 34px;
-          border: 1.5px solid var(--border);
-          border-radius: 8px;
-          padding: 0 10px;
-          font-size: 12px;
-          background: var(--card);
-          color: var(--text);
-          outline: none;
-          font-family: inherit;
-          width: 140px;
+          height: 34px; border: 1.5px solid var(--border);
+          border-radius: 8px; padding: 0 10px; font-size: 12px;
+          background: var(--card); color: var(--text);
+          outline: none; font-family: inherit; width: 140px;
         }
+        .date-input:focus { border-color: var(--primary); }
 
-        /* ── Table ── */
         .table-wrap {
           margin: 0 32px 32px;
           background: var(--card);
           border: 1px solid var(--border);
-          border-radius: 12px;
-          overflow: hidden;
+          border-radius: 12px; overflow: hidden;
           box-shadow: var(--shadow-sm);
         }
         .table-header {
           display: grid;
           grid-template-columns: 90px 1fr 90px 110px 110px;
           padding: 14px 24px;
-          background: #07085B;
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-          color: white;
+          font-size: 10px; font-weight: 700;
+          text-transform: uppercase; color: white;
         }
         .table-row {
           display: grid;
           grid-template-columns: 90px 1fr 90px 110px 110px;
           padding: 12px 24px;
-          font-size: 13px;
-          align-items: center;
-          cursor: pointer;
-          transition: background 0.15s;
+          font-size: 13px; align-items: center;
+          cursor: pointer; transition: background 0.15s;
         }
         .table-row:hover { background: var(--card-hover); }
-        .row-light { background: #FFFFFF; }
-        .row-dark  { background: #F8F9FC; }
-        .sort-btn {
-          background: none;
-          border: none;
-          cursor: pointer;
-          font: inherit;
-          color: white;
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          padding: 0;
-          font-weight: 700;
-          text-transform: uppercase;
-          font-size: 10px;
-        }
-
-        /* totals row */
         .totals-row {
           display: grid;
           grid-template-columns: 90px 1fr 90px 110px 110px;
           padding: 14px 24px;
-          background: #07085B;
-          color: white;
-          font-weight: 700;
-          font-size: 13px;
+          color: white; font-weight: 700; font-size: 13px;
+        }
+
+        .sort-btn {
+          background: none; border: none; cursor: pointer;
+          font: inherit; color: white;
+          display: inline-flex; align-items: center; gap: 4px;
+          padding: 0; font-weight: 700; text-transform: uppercase;
+          font-size: 10px;
         }
 
         @media (max-width: 640px) {
@@ -339,7 +300,12 @@ export default function TrialBalancePage() {
           {logoUrl ? (
             <img src={logoUrl} alt={companyName} className="report-logo" width={34} height={34} />
           ) : (
-            <div style={{ width: 34, height: 34, borderRadius: 9, background: "#07085B", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 700 }}>
+            <div style={{
+              width: 34, height: 34, borderRadius: 9,
+              background: "var(--primary)", display: "flex",
+              alignItems: "center", justifyContent: "center",
+              color: "white", fontWeight: 700,
+            }}>
               {(companyName || "O")[0]}
             </div>
           )}
@@ -400,37 +366,53 @@ export default function TrialBalancePage() {
       {loading ? (
         <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading accounts…</div>
       ) : sortedData.length === 0 ? (
-        <div style={{ margin: "0 32px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
+        <div style={{
+          margin: "0 32px", background: "var(--card)", border: "1px solid var(--border)",
+          borderRadius: 12, padding: 40, textAlign: "center", color: "var(--text-muted)",
+        }}>
           No accounts match the selected filter or date range.
         </div>
       ) : (
         <div className="table-wrap">
-          <div className="table-header">
+          <div className="table-header" style={{ background: headerBg }}>
             <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
             <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
-            <span>Type</span>
-            <span style={{ textAlign: "right" }}>Debit</span>
-            <span style={{ textAlign: "right" }}>Credit</span>
+            <button className="sort-btn" onClick={() => handleSort("type")}>Type {getSortIcon("type")}</button>
+            <button className="sort-btn" onClick={() => handleSort("debit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
+            <button className="sort-btn" onClick={() => handleSort("credit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
           </div>
           {sortedData.map((a, i) => (
-            <div key={a.id} className={`table-row ${i % 2 === 0 ? "row-light" : "row-dark"}`} onClick={() => openLedger(a.id)}>
+            <div
+              key={a.id}
+              className="table-row"
+              style={{ background: i % 2 === 0 ? rowLight : rowDark }}
+              onClick={() => openLedger(a.id)}
+            >
               <span style={{ fontWeight: 600, color: "var(--primary)" }}>{a.code}</span>
               <span style={{ color: "var(--text)" }}>{a.name}</span>
-              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{a.type}</span>
-              <span style={{ textAlign: "right", color: a.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: a.debit > 0 ? 600 : 400 }}>
+              <span style={{ fontSize: 11, color: textMuted }}>{a.type}</span>
+              <span style={{
+                textAlign: "right",
+                color: a.debit > 0 ? "#EF4444" : "var(--text-muted)",
+                fontWeight: a.debit > 0 ? 600 : 400,
+              }}>
                 {a.debit > 0 ? `PKR ${fmt(a.debit)}` : "—"}
               </span>
-              <span style={{ textAlign: "right", color: a.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: a.credit > 0 ? 600 : 400 }}>
+              <span style={{
+                textAlign: "right",
+                color: a.credit > 0 ? "#10B981" : "var(--text-muted)",
+                fontWeight: a.credit > 0 ? 600 : 400,
+              }}>
                 {a.credit > 0 ? `PKR ${fmt(a.credit)}` : "—"}
               </span>
             </div>
           ))}
-          <div className="totals-row">
-            <span style={{ fontWeight: 700 }}></span>
-            <span style={{ fontWeight: 700 }}>Total</span>
+          <div className="totals-row" style={{ background: totalBg }}>
             <span></span>
-            <span style={{ textAlign: "right", color: "#FF9999" }}>PKR {fmt(totalDebit)}</span>
-            <span style={{ textAlign: "right", color: "#99FF99" }}>PKR {fmt(totalCredit)}</span>
+            <span>Total</span>
+            <span></span>
+            <span style={{ textAlign: "right", color: "#FFA7A7" }}>PKR {fmt(totalDebit)}</span>
+            <span style={{ textAlign: "right", color: "#A7F3D0" }}>PKR {fmt(totalCredit)}</span>
           </div>
         </div>
       )}
