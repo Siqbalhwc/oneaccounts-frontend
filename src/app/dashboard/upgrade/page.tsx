@@ -759,9 +759,9 @@ export default function UpgradePage() {
               className={`topup-card ${isCommitted ? "committed" : isSelected ? "selected" : ""}`}
               onClick={() => !isCommitted && toggleTopup(topup.code)}
             >
-              <div className="topup-icon">
-                <i className={`ti ti-${topup.icon}`} style={{ fontSize: 18 }} aria-hidden="true" />
-              </div>
+              <div className="topup-icon" style={{ fontSize: 22, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+  {topup.icon}
+</div>
               <div className="topup-name">{topup.name}</div>
               <div className="topup-desc">{topup.desc}</div>
 
