@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
     `)
     .eq("company_id", cid)
     .eq("project_id", projectId)
-    .is("month", null)            -- annual only
+    .is("month", null)
 
   const totalAnnualBudget = budgets?.reduce((s, b) => s + (b.budgeted_amount || 0), 0) || 0
 
