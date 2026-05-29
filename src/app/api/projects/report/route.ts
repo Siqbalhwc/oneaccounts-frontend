@@ -11,6 +11,7 @@ export async function GET(req: NextRequest) {
   const projectId = req.nextUrl.searchParams.get("projectId")
   if (!projectId) return NextResponse.json({ error: "Missing projectId" }, { status: 400 })
 
+  // 1. Get the project's company_id
   const { data: project } = await supabaseAdmin
     .from("projects")
     .select("company_id")
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
 
   const cid = project.company_id
 
-  // 1. Get all relevant GL accounts (Expense 5xxx, Fixed Assets 14xx)
+  // 2. Fetch all relevant GL accounts (Expense + Fixed Assets 14xx)
   const { data: glAccounts } = await supabaseAdmin
     .from("accounts")
     .select("code, name")
@@ -28,9 +29,13 @@ export async function GET(req: NextRequest) {
     .or("type.eq.Expense,and(type.eq.Asset,code.gte.1400,code.lte.1499)")
     .order("code")
 
-  if (!glAccounts) return NextResponse.json({ error: "No GL accounts found" }, { status: 500 })
+  if (!glAccounts || glAccounts.length === 0) {
+    return NextResponse.json({ columns: [], rows: [], columnTotals: {}, grandTotal: 0 })
+  }
 
-  // 2. Fetch annual budgets (month IS NULL) with activity and location
+  const glCodes = glAccounts.map(a => a.code)
+
+  // 3. Fetch annual budgets with activity, location, and account info
   const { data: budgets } = await supabaseAdmin
     .from("budgets")
     .select(`
@@ -43,100 +48,97 @@ export async function GET(req: NextRequest) {
     `)
     .eq("company_id", cid)
     .eq("project_id", projectId)
-    .is("month", null)
+    .is("month", null)   // annual budgets only
 
-  // Build a map: activity -> location -> account -> sum
-  // activity and location might be null if not set; we'll treat null as "Unallocated"
-  const matrixMap: Record<string, Record<string, Record<string, number>>> = {}
+  // 4. Build matrix: activity -> location -> account -> amount
+  const matrix: Record<string, Record<string, Record<string, number>>> = {}
 
   budgets?.forEach((b: any) => {
     const actName = b.activities?.name || "Unallocated"
     const locName = b.locations?.name || "Unallocated"
-    const accCode = b.account_id   // we need to map account_id to code; we'll fetch later
-    // But we don't have account code directly; we have account_id. We'll load account codes in a second pass.
-    // For efficiency, we'll group by account_id and later map to code.
-    const actKey = actName
-    const locKey = locName
-    if (!matrixMap[actKey]) matrixMap[actKey] = {}
-    if (!matrixMap[actKey][locKey]) matrixMap[actKey][locKey] = {}
-    matrixMap[actKey][locKey][b.account_id] = (matrixMap[actKey][locKey][b.account_id] || 0) + (b.budgeted_amount || 0)
+    const accId = b.account_id
+
+    // We need account code; we'll look it up later
+    if (!matrix[actName]) matrix[actName] = {}
+    if (!matrix[actName][locName]) matrix[actName][locName] = {}
+    matrix[actName][locName][accId] = (matrix[actName][locName][accId] || 0) + (b.budgeted_amount || 0)
   })
 
-  // Fetch account code mapping
-  const accountIds = [...new Set(budgets?.map((b: any) => b.account_id) || [])]
-  let accountMap: Record<string, string> = {}
-  if (accountIds.length > 0) {
-    const { data: accs } = await supabaseAdmin
-      .from("accounts")
-      .select("id, code")
-      .in("id", accountIds)
-    accs?.forEach((a: any) => { accountMap[a.id] = a.code })
-  }
+  // 5. Build a mapping from account_id to code for all accounts used
+  const usedAccountIds = new Set<string>()
+  Object.values(matrix).forEach(act => Object.values(act).forEach(loc => Object.keys(loc).forEach(id => usedAccountIds.add(id))))
+  const { data: accountIdToCode } = await supabaseAdmin
+    .from("accounts")
+    .select("id, code")
+    .in("id", Array.from(usedAccountIds))
+  const id2code: Record<string, string> = {}
+  accountIdToCode?.forEach((a: any) => { id2code[a.id] = a.code })
 
-  // Build rows: each activity-location combination with amounts per GL column
+  // 6. Build rows array
   const rows: any[] = []
-  const activityOrder = Object.keys(matrixMap).sort()
-  const glCodes = glAccounts.map(a => a.code)
 
+  // Sort activities alphabetically
+  const activityOrder = Object.keys(matrix).sort()
   for (const act of activityOrder) {
-    const locMap = matrixMap[act]
+    const locMap = matrix[act]
     const locOrder = Object.keys(locMap).sort()
+
+    // Activity subtotal
     let actTotal = 0
-    // For each location under this activity
+    const actSums: Record<string, number> = {}
+    glCodes.forEach(code => actSums[code] = 0)
+
+    // Location sub‑rows
     for (const loc of locOrder) {
-      const accAmounts = locMap[loc]
-      const rowAmounts: Record<string, number> = {}
+      const accMap = locMap[loc]
+      const amounts: Record<string, number> = {}
       let rowTotal = 0
       glCodes.forEach(code => {
-        // Find account_id for this code? We have accountMap but it maps id->code. We need reverse map? Better: we can iterate over accAmounts keys (which are account_ids) and map to code.
-        // Simpler: we'll build a code->amount map for the row.
-        const amount = Object.entries(accAmounts).reduce((sum, [accId, amt]) => {
-          const codeFromId = accountMap[accId]
-          if (codeFromId === code) return sum + amt
-          return sum
-        }, 0)
-        rowAmounts[code] = amount
+        // Find the account_id that corresponds to this code
+        let amount = 0
+        for (const accId in accMap) {
+          if (id2code[accId] === code) {
+            amount = accMap[accId]
+            break
+          }
+        }
+        amounts[code] = amount
         rowTotal += amount
+        actSums[code] += amount
       })
+      actTotal += rowTotal
       rows.push({
         activity: act,
         location: loc,
-        amounts: rowAmounts,
+        amounts,
         total: rowTotal,
+        isSubtotal: false,
       })
-      actTotal += rowTotal
     }
+
     // Activity subtotal row
     rows.push({
       activity: act,
       location: "Subtotal",
-      isSubtotal: true,
-      amounts: glCodes.reduce((obj, code) => {
-        // sum of all locations for this activity and code
-        obj[code] = locOrder.reduce((sum, loc) => sum + (matrixMap[act][loc][code] || 0), 0)
-        return obj
-      }, {} as Record<string, number>),
+      amounts: actSums,
       total: actTotal,
+      isSubtotal: true,
     })
   }
 
   // Grand total row
-  const grandTotal = rows.filter(r => r.isSubtotal).reduce((s, r) => s + r.total, 0)
+  const grandTotal = rows.filter(r => r.isSubtotal).reduce((s: number, r: any) => s + r.total, 0)
+  const columnTotals: Record<string, number> = {}
+  glCodes.forEach(code => {
+    columnTotals[code] = rows.filter(r => r.isSubtotal).reduce((s, r) => s + (r.amounts[code] || 0), 0)
+  })
+
   rows.push({
     activity: "",
     location: "Grand Total",
-    isGrandTotal: true,
-    amounts: glCodes.reduce((obj, code) => {
-      obj[code] = rows.filter(r => r.isSubtotal).reduce((s, r) => s + (r.amounts[code] || 0), 0)
-      return obj
-    }, {} as Record<string, number>),
+    amounts: columnTotals,
     total: grandTotal,
-  })
-
-  // Column totals (for footer)
-  const columnTotals: Record<string, number> = {}
-  glCodes.forEach(code => {
-    columnTotals[code] = rows.filter(r => r.isGrandTotal)[0]?.amounts[code] || 0
+    isGrandTotal: true,
   })
 
   return NextResponse.json({
