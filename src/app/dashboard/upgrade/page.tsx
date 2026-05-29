@@ -2,266 +2,115 @@
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { Check, X, ArrowRight, Star, Clock } from "lucide-react"
+import { Check, X, ArrowRight, Star, Clock, Plus } from "lucide-react"
+import { useCompany } from "@/contexts/CompanyContext"
 
-const PLAN_PRICES: Record<string, number> = {
-  pro: 4999,
-  enterprise: 0, // Custom pricing — will trigger Contact Us
-}
-
-const PLANS = [
-  {
-    code: "basic",
-    name: "Basic",
-    price: "Rs 1,999 / month",
-    features: {
-      "Dashboard": true,
-      "Customers – Invoices, Print, Ledger": true,
-      "Vendors – Bills, Print, Ledger": true,
-      "Bank – Transfers, Multiple Accounts": true,
-      "Journal – Adjustment Entries": true,
-      "Reports – General Ledger, Trial Balance": true,
-      "Reports – Profit & Loss": true,
-      "Inventory": false,
-      "Investors": false,
-      "Balance Sheet": false,
-      "Purchase Orders": false,
-      "Email Reports": false,
-      "WhatsApp Invoice Sending": false,
-      "Payment Reminders": false,
-      "CSV Import / Export": false,
-      "Invoice Automation": false,
-      "Profit Allocation": false,
-    },
-  },
-  {
-    code: "pro",
-    name: "Professional",
-    price: "Rs 4,999 / month",
-    popular: true,
-    features: {
-      "Dashboard": true,
-      "Customers – Invoices, Print, Ledger": true,
-      "Vendors – Bills, Print, Ledger": true,
-      "Bank – Transfers, Multiple Accounts": true,
-      "Journal – Adjustment Entries": true,
-      "Reports – General Ledger, Trial Balance": true,
-      "Reports – Profit & Loss": true,
-      "Inventory": true,
-      "Investors": true,
-      "Balance Sheet": true,
-      "Purchase Orders": true,
-      "Email Reports": true,
-      "WhatsApp Invoice Sending": false,
-      "Payment Reminders": false,
-      "CSV Import / Export": false,
-      "Invoice Automation": false,
-      "Profit Allocation": false,
-    },
-  },
-  {
-    code: "enterprise",
-    name: "Enterprise",
-    price: "Custom",
-    features: {
-      "Dashboard": true,
-      "Customers – Invoices, Print, Ledger": true,
-      "Vendors – Bills, Print, Ledger": true,
-      "Bank – Transfers, Multiple Accounts": true,
-      "Journal – Adjustment Entries": true,
-      "Reports – General Ledger, Trial Balance": true,
-      "Reports – Profit & Loss": true,
-      "Inventory": true,
-      "Investors": true,
-      "Balance Sheet": true,
-      "Purchase Orders": true,
-      "Email Reports": true,
-      "WhatsApp Invoice Sending": true,
-      "Payment Reminders": true,
-      "CSV Import / Export": true,
-      "Invoice Automation": true,
-      "Profit Allocation": true,
-    },
-  },
+// ── Top‑up features available for purchase ──────────────────────────
+const TOPUP_FEATURES = [
+  { code: "asset_management", name: "Fixed Asset Management", price: 500 },
+  { code: "purchase_orders", name: "Purchase Orders", price: 500 },
+  { code: "whatsapp", name: "WhatsApp Integration", price: 500 },
+  { code: "invoice_automation", name: "Invoice Automation", price: 500 },
+  { code: "profit_allocation", name: "Profit Allocation", price: 500 },
+  { code: "investors", name: "Investors Module", price: 500 },
 ]
 
 export default function UpgradePage() {
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
-  const [currentPlan, setCurrentPlan] = useState<string>("basic")
-  const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null)
+  const { companyId, companyName: ctxCompanyName } = useCompany()
+
+  const [plan, setPlan] = useState<any>(null)
+  const [subscription, setSubscription] = useState<any>(null)
+  const [activeTopups, setActiveTopups] = useState<string[]>([])
+  const [businessType, setBusinessType] = useState("")
   const [loading, setLoading] = useState(true)
-  const [upgrading, setUpgrading] = useState<string | null>(null) // plan code being processed
   const [message, setMessage] = useState("")
 
   useEffect(() => {
-    async function fetchSettings() {
+    if (!companyId) return
+    const fetchData = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) throw new Error("Not logged in")
-
-        const { data: role } = await supabase
-          .from("user_roles")
-          .select("company_id")
-          .eq("user_id", user.id)
-          .maybeSingle()
-
-        if (!role?.company_id) throw new Error("No company found")
-
+        // Get company plan + business type
         const { data: company } = await supabase
           .from("companies")
-          .select("plan_id, trial_ends_at, plans(code)")
-          .eq("id", role.company_id)
+          .select("business_type, plans(code, name, monthly_price_per_user, half_yearly_price_per_user, yearly_price_per_user, trial_days, description)")
+          .eq("id", companyId)
           .single()
 
         if (company) {
-          const plan = Array.isArray(company.plans) ? company.plans[0] : company.plans
-          setCurrentPlan(plan?.code || "basic")
-          setTrialEndsAt(company.trial_ends_at || null)
+          const planData = Array.isArray(company.plans) ? company.plans[0] : company.plans
+          setPlan(planData)
+          setBusinessType(company.business_type || "")
         }
-      } catch {
-        // silently fallback to "basic"
+
+        // Get current subscription
+        const { data: sub } = await supabase
+          .from("subscriptions")
+          .select("*")
+          .eq("company_id", companyId)
+          .maybeSingle()
+
+        setSubscription(sub)
+
+        // Get active top‑ups
+        if (sub) {
+          const { data: topups } = await supabase
+            .from("subscription_topups")
+            .select("feature_code")
+            .eq("subscription_id", sub.id)
+            .eq("status", "active")
+          if (topups) setActiveTopups(topups.map(t => t.feature_code))
+        }
+      } catch (e) {
+        console.error(e)
       }
       setLoading(false)
     }
-    fetchSettings()
-  }, [supabase])
+    fetchData()
+  }, [companyId])
 
-  const handleUpgrade = async (targetPlan: string) => {
-    const price = PLAN_PRICES[targetPlan]
-    if (!price) {
-      // Enterprise – still uses email for now (Custom pricing)
-      window.location.href = `mailto:siqbalhwc@gmail.com?subject=Upgrade to ${targetPlan}`
-      return
-    }
-
-    setUpgrading(targetPlan)
+  const handleActivateTopup = async (featureCode: string) => {
     setMessage("")
-
-    try {
-      const res = await fetch("/api/payments/jazzcash/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount: price,
-          paymentType: "plan_upgrade",
-          metadata: { plan_from: currentPlan, plan_to: targetPlan },
-        }),
-      })
-      const data = await res.json()
-
-      if (data.success) {
-        // Build a form and auto-submit to JazzCash
-        const form = document.createElement("form")
-        form.method = "POST"
-        form.action = data.redirectUrl
-
-        Object.entries(data.params).forEach(([key, value]) => {
-          const input = document.createElement("input")
-          input.type = "hidden"
-          input.name = key
-          input.value = value as string
-          form.appendChild(input)
-        })
-
-        document.body.appendChild(form)
-        form.submit()
-      } else {
-        setMessage(data.error || "Failed to initiate payment")
-      }
-    } catch (e: any) {
-      setMessage("Network error. Please try again.")
-    }
-    setUpgrading(null)
+    // For now, just show a bank transfer message
+    setMessage(`To activate ${featureCode}, please transfer PKR 500 per user to our bank account and contact support.`)
   }
+
+  const daysLeft = subscription?.end_date
+    ? Math.ceil((new Date(subscription.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : null
+
+  const pricing = plan
+    ? { monthly: plan.monthly_price_per_user, halfYearly: plan.half_yearly_price_per_user, yearly: plan.yearly_price_per_user }
+    : { monthly: 3000, halfYearly: 16000, yearly: 30000 }
 
   if (loading) return <div style={{ padding: 40, textAlign: "center" }}>Loading...</div>
 
-  const daysLeft = trialEndsAt
-    ? Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-    : null
-
   return (
-    <div style={{
-      padding: 24,
-      background: "#EFF4FB",
-      minHeight: "100vh",
-      fontFamily: "'Plus Jakarta Sans', sans-serif",
-    }}>
+    <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <style>{`
-        .upgrade-title { font-size: 24px; font-weight: 800; color: #1E293B; margin-bottom: 4px; }
-        .upgrade-subtitle { font-size: 14px; color: #64748B; margin-bottom: 24px; }
-        .plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 32px; }
-        .plan-card {
-          background: white;
-          border-radius: 14px;
-          border: 2px solid #E2E8F0;
-          padding: 24px;
-          transition: all 0.3s;
-          position: relative;
-        }
-        .plan-card.popular { border-color: #3B82F6; box-shadow: 0 4px 20px rgba(59,130,246,0.15); }
-        .plan-card:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,0,0,0.1); }
-        .plan-badge {
-          position: absolute;
-          top: -12px;
-          right: 20px;
-          background: #3B82F6;
-          color: white;
-          padding: 4px 12px;
-          border-radius: 20px;
-          font-size: 11px;
-          font-weight: 700;
-        }
-        .plan-name { font-size: 18px; font-weight: 700; color: #1E293B; margin-bottom: 4px; }
-        .plan-price { font-size: 28px; font-weight: 800; color: #1E3A8A; margin-bottom: 16px; }
-        .plan-current { background: #F0FDF4; color: #15803D; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; display: inline-block; margin-bottom: 12px; }
+        .plan-card { background: white; border-radius: 14px; border: 2px solid #E2E8F0; padding: 24px; transition: all 0.3s; }
+        .plan-card.current { border-color: #3B82F6; box-shadow: 0 4px 20px rgba(59,130,246,0.15); }
+        .plan-name { font-size: 18px; font-weight: 700; color: #1E293B; }
+        .plan-price { font-size: 28px; font-weight: 800; color: #1E3A8A; }
+        .plan-badge { background: #F0FDF4; color: #15803D; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; display: inline-block; }
         .feature-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; color: #475569; }
-        .btn-upgrade {
-          display: block;
-          width: 100%;
-          padding: 12px;
-          background: linear-gradient(135deg, #1740C8, #071352);
-          color: white;
-          border: none;
-          border-radius: 10px;
-          font-size: 14px;
-          font-weight: 600;
-          cursor: pointer;
-          font-family: inherit;
-          text-align: center;
-          margin-top: 16px;
-        }
-        .btn-upgrade:disabled { opacity: 0.5; cursor: not-allowed; }
-        .trial-banner {
-          background: linear-gradient(135deg, #D1FAE5, #F0FDF4);
-          border: 1px solid #A7F3D0;
-          border-radius: 12px;
-          padding: 16px 20px;
-          margin-bottom: 24px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          flex-wrap: wrap;
-          gap: 12px;
-        }
-        @media (max-width: 600px) {
-          .plan-grid { grid-template-columns: 1fr; }
-        }
+        .btn { padding: 10px 20px; border-radius: 10px; font-weight: 600; cursor: pointer; font-family: inherit; border: none; }
+        .btn-primary { background: linear-gradient(135deg, #1740C8, #071352); color: white; }
+        .trial-banner { background: linear-gradient(135deg, #D1FAE5, #F0FDF4); border: 1px solid #A7F3D0; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
       `}</style>
 
-      <h1 className="upgrade-title">⚡ Plans & Pricing</h1>
-      <p className="upgrade-subtitle">Choose the plan that fits your business</p>
+      <h1 style={{ fontSize: 24, fontWeight: 800, color: "#1E293B", marginBottom: 4 }}>💼 Your Plan</h1>
+      <p style={{ fontSize: 14, color: "#64748B", marginBottom: 24 }}>
+        {businessType.charAt(0).toUpperCase() + businessType.slice(1)} business · {plan?.name || "Basic"}
+      </p>
 
       {message && (
-        <div style={{
-          background: "#FEF2F2", color: "#B91C1C", padding: "10px 16px",
-          borderRadius: 8, marginBottom: 16, fontSize: 13,
-        }}>
+        <div style={{ background: "#FEF2F2", color: "#B91C1C", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
           {message}
         </div>
       )}
 
-      {trialEndsAt && daysLeft !== null && daysLeft > 0 && (
+      {subscription?.status === "trial" && daysLeft !== null && daysLeft > 0 && (
         <div className="trial-banner">
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Clock size={18} color="#10B981" />
@@ -269,37 +118,56 @@ export default function UpgradePage() {
               Your free trial ends in {daysLeft} day{daysLeft !== 1 ? "s" : ""}
             </span>
           </div>
-          <button className="btn-upgrade" style={{ width: "auto", padding: "8px 20px" }}
-            onClick={() => handleUpgrade("pro")}>
-            Upgrade Now <ArrowRight size={14} />
-          </button>
         </div>
       )}
 
-      <div className="plan-grid">
-        {PLANS.map(plan => {
-          const isCurrent = currentPlan === plan.code
+      {/* Current Plan Card */}
+      <div className="plan-card current" style={{ marginBottom: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <span className="plan-name">{plan?.name || "Basic Plan"}</span>
+          <span className="plan-badge">✓ Current Plan</span>
+        </div>
+        <div className="plan-price">PKR {pricing.monthly} <span style={{ fontSize: 14, fontWeight: 400, color: "#64748B" }}>/ user / month</span></div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 12 }}>
+          <div style={{ fontSize: 12, color: "#475569" }}><strong>6-Month:</strong> PKR {pricing.halfYearly}/user</div>
+          <div style={{ fontSize: 12, color: "#475569" }}><strong>Yearly:</strong> PKR {pricing.yearly}/user</div>
+          <div style={{ fontSize: 12, color: "#475569" }}><strong>Users:</strong> {subscription?.max_users || 1}</div>
+        </div>
+
+        <div style={{ marginTop: 12 }}>
+          <p style={{ fontWeight: 600, fontSize: 13, color: "#1E293B", marginBottom: 4 }}>Included Features:</p>
+          <div className="feature-row"><Check size={14} color="#10B981" /> CRM (Customers, Suppliers, Invoices, Bills, Receipts, Payments)</div>
+          <div className="feature-row"><Check size={14} color="#10B981" /> Banking (Bank Accounts, Transfers)</div>
+          <div className="feature-row"><Check size={14} color="#10B981" /> Accounting (Chart of Accounts, Journal Entries)</div>
+          <div className="feature-row"><Check size={14} color="#10B981" /> Reports (Trial Balance, P&L, Balance Sheet, Ledgers)</div>
+          <div className="feature-row"><Check size={14} color="#10B981" /> Settings (Logo, Name, Contact)</div>
+          <div className="feature-row"><Check size={14} color="#10B981" /> Admin Panel (User Management)</div>
+          {businessType === "trading" && <div className="feature-row"><Check size={14} color="#10B981" /> Inventory, Stock Register, Product Selection</div>}
+          {businessType === "ngo" && <div className="feature-row"><Check size={14} color="#10B981" /> Project/Activity/Location Tags, NGO Dashboard, Budget vs Actual</div>}
+        </div>
+
+        {subscription?.status !== "active" && (
+          <button className="btn btn-primary" style={{ marginTop: 16, width: "100%" }} onClick={() => setMessage("To activate your subscription, please transfer the plan fee to our bank account and email us the transaction ID.")}>
+            Upgrade to Paid Plan <ArrowRight size={14} />
+          </button>
+        )}
+      </div>
+
+      {/* Top‑up Features */}
+      <h2 style={{ fontSize: 18, fontWeight: 700, color: "#1E293B", marginTop: 24, marginBottom: 12 }}>🔧 Optional Top‑Up Features (PKR 500 / user / month each)</h2>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+        {TOPUP_FEATURES.map(topup => {
+          const isActive = activeTopups.includes(topup.code)
           return (
-            <div key={plan.code} className={`plan-card ${plan.popular ? "popular" : ""}`}>
-              {plan.popular && <div className="plan-badge"><Star size={10} /> Popular</div>}
-              <div className="plan-name">{plan.name}</div>
-              <div className="plan-price">{plan.price}</div>
-              {isCurrent && <div className="plan-current">✓ Current Plan</div>}
-              <div style={{ marginTop: 8 }}>
-                {Object.entries(plan.features).map(([feature, enabled]) => (
-                  <div key={feature} className="feature-row">
-                    {enabled ? <Check size={14} color="#10B981" /> : <X size={14} color="#EF4444" />}
-                    <span style={{ color: enabled ? "#475569" : "#CBD5E1" }}>{feature}</span>
-                  </div>
-                ))}
-              </div>
-              {!isCurrent && (
-                <button
-                  className="btn-upgrade"
-                  onClick={() => handleUpgrade(plan.code)}
-                  disabled={upgrading === plan.code}
-                >
-                  {upgrading === plan.code ? "Redirecting..." : `Upgrade to ${plan.name}`} <ArrowRight size={14} />
+            <div key={topup.code} className="plan-card">
+              <div className="plan-name" style={{ fontSize: 15 }}>{topup.name}</div>
+              <div style={{ fontSize: 13, color: "#64748B", marginTop: 4 }}>PKR {topup.price}/user/month</div>
+              {isActive ? (
+                <div style={{ marginTop: 8, color: "#10B981", fontWeight: 600, fontSize: 13 }}>✓ Active</div>
+              ) : (
+                <button className="btn btn-primary" style={{ marginTop: 12, width: "100%" }} onClick={() => handleActivateTopup(topup.code)}>
+                  Activate <Plus size={14} />
                 </button>
               )}
             </div>
