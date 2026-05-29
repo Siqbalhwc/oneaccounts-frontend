@@ -39,37 +39,37 @@ const TOPUP_FEATURES = [
   {
     code: "asset_management",
     name: "Fixed Asset Management",
-    icon: "building",
+    icon: "🏗️",
     desc: "Register assets, post depreciation automatically, record disposals, and run the asset schedule report.",
   },
   {
     code: "purchase_orders",
     name: "Purchase Orders",
-    icon: "package",
+    icon: "📦",
     desc: "Full PO workflow — raise, approve, receive (GRN), and auto-post supplier bills on receipt.",
   },
   {
     code: "whatsapp",
     name: "WhatsApp Integration",
-    icon: "brand-whatsapp",
+    icon: "💬",
     desc: "Send invoices, payment receipts, and overdue reminders directly to customers via WhatsApp.",
   },
   {
     code: "invoice_automation",
     name: "Invoice Automation",
-    icon: "repeat",
+    icon: "⚡",
     desc: "Set up recurring invoices and scheduled billing runs — OneAccounts posts them automatically.",
   },
   {
     code: "profit_allocation",
     name: "Profit Allocation",
-    icon: "arrows-split",
+    icon: "💰",
     desc: "Define partner or investor shares and allocate net profit to capital accounts in one click.",
   },
   {
     code: "investors",
     name: "Investors Module",
-    icon: "chart-candle",
+    icon: "📈",
     desc: "Track investor capital, returns, and statements. Generate investor-facing reports at any date.",
   },
 ]
