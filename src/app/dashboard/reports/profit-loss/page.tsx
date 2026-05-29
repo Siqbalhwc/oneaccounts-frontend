@@ -17,7 +17,10 @@ function getCategory(account: any): string {
   return "Other"
 }
 
-function fmt(n: number) { return Math.abs(n).toLocaleString("en-PK") }
+// ── Uniform formatting: always 2 decimals ──────────────────────────
+function fmt(n: number) {
+  return Math.abs(n).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
 function fmtOrDash(n: number) { return n === 0 ? "–" : fmt(n) }
 
 export default function ProfitLossPage() {
@@ -265,7 +268,7 @@ export default function ProfitLossPage() {
     XLSX.writeFile(wb, `Profit_Loss_${startDate}_to_${endDate}.xlsx`)
   }
 
-  // ── PDF export handler ─────────────────────────────────────────
+  // ── PDF export handler (unchanged) ──────────────────────────────
   const handleExportPDF = async () => {
     if (compareMode) {
       const pdfData = {
