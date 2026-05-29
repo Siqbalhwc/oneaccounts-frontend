@@ -53,8 +53,11 @@ export default function TrialBalancePage() {
 
   const { companyName, companyTagline, logoUrl } = useCompany()
   const { theme: themeMode } = useTheme()
-  const isDark = themeMode !== "light"
+
+  // ── Theme helpers ─────────────────────────────────────────────────
+  const isDarkTheme = themeMode === "dark" || themeMode === "system"
   const isOneAccounts = themeMode === "oneaccounts"
+  const isLightStyle = themeMode === "light" || isOneAccounts   // OneAccounts uses light visual style
 
   const fetchTrial = async () => {
     setLoading(true)
@@ -163,12 +166,15 @@ export default function TrialBalancePage() {
   }
 
   // ── Theme‑sensitive colours ───────────────────────────────────────
-  // Header background: OneAccounts theme → navy, Dark → black, Light → navy
-  const headerBg = isOneAccounts ? "#07085B" : (isDark ? "#000000" : "#07085B")
-  const rowLight = isDark ? "#1E293B" : "#FFFFFF"
-  const rowDark  = isDark ? "#111827" : "#F8F9FC"
-  const totalBg  = headerBg // totals row same as header
-  const textMuted = isDark ? "#94A3B8" : "#64748B"
+  const headerBg = isOneAccounts ? "#07085B" : (isDarkTheme ? "#000000" : "#07085B")
+  // Row backgrounds: light style = white/grey, dark style = slate shades
+  const rowLight = isLightStyle ? "#FFFFFF" : "#1E293B"
+  const rowDark  = isLightStyle ? "#F8F9FC" : "#111827"
+  const totalBg  = headerBg
+  const textMuted = isLightStyle ? "#64748B" : "#94A3B8"
+  // Override text color on OneAccounts so it's always readable (dark text on light rows)
+  const reportTextColor = isOneAccounts ? "#1E293B" : "var(--text)"
+  const reportMutedColor = isOneAccounts ? "#64748B" : "var(--text-muted)"
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)", transition: "background 0.3s, color 0.3s" }}>
@@ -195,20 +201,18 @@ export default function TrialBalancePage() {
         }
         .report-company-name {
           font-size: 16px; font-weight: 700;
-          color: var(--text);
         }
         .report-company-tagline {
-          font-size: 11px; color: var(--text-muted);
+          font-size: 11px;
         }
         .report-header-right {
           text-align: right;
         }
         .report-title {
           font-size: 24px; font-weight: 800;
-          color: var(--text);
         }
         .report-period {
-          font-size: 12px; color: var(--text-muted);
+          font-size: 12px;
         }
 
         .kpi-row {
@@ -312,13 +316,17 @@ export default function TrialBalancePage() {
             </div>
           )}
           <div>
-            <div className="report-company-name">{companyName || "OneAccounts"}</div>
-            <div className="report-company-tagline">{companyTagline || ""}</div>
+            <div className="report-company-name" style={{ color: reportTextColor }}>
+              {companyName || "OneAccounts"}
+            </div>
+            <div className="report-company-tagline" style={{ color: reportMutedColor }}>
+              {companyTagline || ""}
+            </div>
           </div>
         </div>
         <div className="report-header-right">
-          <div className="report-title">Trial Balance</div>
-          <div className="report-period">From {startDate} to {endDate}</div>
+          <div className="report-title" style={{ color: reportTextColor }}>Trial Balance</div>
+          <div className="report-period" style={{ color: reportMutedColor }}>From {startDate} to {endDate}</div>
         </div>
       </div>
 
@@ -381,22 +389,25 @@ export default function TrialBalancePage() {
             <div
               key={a.id}
               className="table-row"
-              style={{ background: i % 2 === 0 ? rowLight : rowDark }}
+              style={{
+                background: i % 2 === 0 ? rowLight : rowDark,
+                color: isOneAccounts ? "#1E293B" : "inherit",
+              }}
               onClick={() => openLedger(a.id)}
             >
               <span style={{ fontWeight: 600, color: "var(--primary)" }}>{a.code}</span>
-              <span style={{ color: "var(--text)" }}>{a.name}</span>
+              <span>{a.name}</span>
               <span style={{ fontSize: 11, color: textMuted }}>{a.type}</span>
               <span style={{
                 textAlign: "right",
-                color: a.debit > 0 ? "#EF4444" : "var(--text-muted)",
+                color: a.debit > 0 ? "#EF4444" : textMuted,
                 fontWeight: a.debit > 0 ? 600 : 400,
               }}>
                 {a.debit > 0 ? `PKR ${fmt(a.debit)}` : "—"}
               </span>
               <span style={{
                 textAlign: "right",
-                color: a.credit > 0 ? "#10B981" : "var(--text-muted)",
+                color: a.credit > 0 ? "#10B981" : textMuted,
                 fontWeight: a.credit > 0 ? 600 : 400,
               }}>
                 {a.credit > 0 ? `PKR ${fmt(a.credit)}` : "—"}
