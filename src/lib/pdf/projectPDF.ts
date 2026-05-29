@@ -1,7 +1,7 @@
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
-const NAVY    = [7, 8, 91] as [number,number,number]
+const NAVY    = [7,8,91] as [number,number,number]
 const DARK    = [17,24,39] as [number,number,number]
 const MUTED   = [107,114,128] as [number,number,number]
 const BORDER  = [229,231,235] as [number,number,number]
@@ -32,14 +32,14 @@ export interface ProjectPDFData {
 
   projectName: string
   donorName?: string
-  projectStatus: string
-  isApproved: boolean
+  projectStatus?: string
+  isApproved?: boolean
   totalBudgeted?: number
   startDate?: string
   endDate?: string
 
-  columns: { code: string; name: string }[]   // GL accounts (Expense + Fixed Assets)
-  rows: any[]                                    // cross‑tab rows from API
+  columns: { code: string; name: string }[]
+  rows: any[]
   columnTotals: Record<string, number>
   grandTotal: number
 }
@@ -76,13 +76,13 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
   doc.setTextColor(...NAVY)
   doc.text("PROJECT BUDGET", PW - MR, LOGO_Y + 8, { align: "right" })
 
-  // Project name on the right
+  // Project name (right)
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8.5)
   doc.setTextColor(...MUTED)
   doc.text(`Project: ${data.projectName}`, PW - MR, LOGO_Y + 16, { align: "right" })
 
-  // Donor line below project name, above the divider
+  // Donor (right, above divider)
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8)
   doc.text(`Donor: ${data.donorName || "—"}`, PW - MR, LOGO_Y + 20, { align: "right" })
@@ -93,7 +93,7 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
   doc.setLineWidth(0.6)
   doc.line(ML, HEADER_BOTTOM, PW - MR, HEADER_BOTTOM)
 
-  // ── Duration below the divider (right side) ──────────────────
+  // ── Duration (right, below divider) ──────────────────────────
   let Y = HEADER_BOTTOM + 5
   if (data.startDate || data.endDate) {
     const start = data.startDate ? new Date(data.startDate).toLocaleDateString("en-PK") : "—"
@@ -104,39 +104,41 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
     doc.text(`Duration: ${start} – ${end}`, PW - MR, Y, { align: "right" })
     Y += 6
   }
-
   Y += 4
 
-  // ── Build cross‑tab table ─────────────────────────────────────
-  const columns = data.columns.map(col => ({
+  // ── Build cross‑tab table ────────────────────────────────────
+  // Prepare column headers: "code\nname\nPKR" + "Total"
+  const columnHeaders = data.columns.map(col => ({
     header: `${col.code}\n${col.name}\nPKR`,
     dataKey: col.code,
   }))
-  // Add total column at the end
-  columns.push({ header: "Total\nPKR", dataKey: "total" })
+  columnHeaders.push({ header: "Total\nPKR", dataKey: "total" })
 
-  // Prepare rows: each row has activity, location, amounts per GL, and total
+  // Convert rows into plain objects for autoTable
   const tableRows = data.rows.map(row => {
     const obj: any = {
-      activity: row.isSubtotal ? "" : row.activity,
+      activity: row.isSubtotal || row.isGrandTotal ? "" : row.activity,
       location: row.location,
     }
     data.columns.forEach(col => {
-      const val = row.amounts[col.code] || 0
+      const val = row.amounts[col.code] ?? 0
       obj[col.code] = val.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     })
     obj.total = row.total.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     return obj
   })
 
-  // If more than 10 GL columns, remove those that are zero in every row
-  let displayColumns = columns
-  if (columns.length - 1 > 10) { // -1 for total column
-    const zeroCols = data.columns.filter(col =>
-      data.rows.every(row => (row.amounts[col.code] || 0) === 0)
-    ).map(col => col.code)
+  // If there are many zero‑only columns, hide them (keep Total)
+  let displayColumns = columnHeaders
+  const totalCols = columnHeaders.length - 1  // exclude total column
+  if (totalCols > 10) {
+    const zeroCols = data.columns
+      .filter(col => data.rows.every(row => (row.amounts[col.code] ?? 0) === 0))
+      .map(col => col.code)
     if (zeroCols.length > 0) {
-      displayColumns = columns.filter(col => col.dataKey === "total" || !zeroCols.includes(col.dataKey as string))
+      displayColumns = columnHeaders.filter(
+        col => col.dataKey === "total" || !zeroCols.includes(col.dataKey as string)
+      )
     }
   }
 
@@ -161,14 +163,16 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
     alternateRowStyles: { fillColor: ROW_ALT },
     didParseCell: (hookData) => {
       const row = data.rows[hookData.row.index]
-      if (row?.isSubtotal) {
-        hookData.cell.styles.fontStyle = "bold"
-        hookData.cell.styles.fillColor = [240, 245, 255]
-      }
-      if (row?.isGrandTotal) {
-        hookData.cell.styles.fontStyle = "bold"
-        hookData.cell.styles.fillColor = NAVY
-        hookData.cell.styles.textColor = WHITE
+      if (row) {
+        if (row.isSubtotal) {
+          hookData.cell.styles.fontStyle = "bold"
+          hookData.cell.styles.fillColor = [240, 245, 255]
+        }
+        if (row.isGrandTotal) {
+          hookData.cell.styles.fontStyle = "bold"
+          hookData.cell.styles.fillColor = NAVY
+          hookData.cell.styles.textColor = WHITE
+        }
       }
     },
   })
