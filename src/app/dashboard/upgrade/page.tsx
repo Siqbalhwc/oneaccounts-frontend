@@ -3,11 +3,20 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { Check, Clock, ArrowRight, Star, ChevronDown } from "lucide-react"
+import { Check, Clock, ArrowRight, Star, ChevronDown, Plus } from "lucide-react"
 import { useCompany } from "@/contexts/CompanyContext"
 
 const BENCHMARK_NOTE =
   "Competitor plans start at PKR 10,000+ / user / month (Odoo, QuickBooks, Zoho). You save up to 70% with OneAccounts."
+
+const TOPUP_FEATURES = [
+  { code: "asset_management", name: "Fixed Asset Management", price: 500 },
+  { code: "purchase_orders", name: "Purchase Orders", price: 500 },
+  { code: "whatsapp", name: "WhatsApp Integration", price: 500 },
+  { code: "invoice_automation", name: "Invoice Automation", price: 500 },
+  { code: "profit_allocation", name: "Profit Allocation", price: 500 },
+  { code: "investors", name: "Investors Module", price: 500 },
+]
 
 export default function UpgradePage() {
   const supabase = createBrowserClient(
@@ -19,9 +28,11 @@ export default function UpgradePage() {
 
   const [plan, setPlan] = useState<any>(null)
   const [subscription, setSubscription] = useState<any>(null)
+  const [activeTopups, setActiveTopups] = useState<string[]>([])
   const [businessType, setBusinessType] = useState("")
   const [loading, setLoading] = useState(true)
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "half_yearly" | "yearly">("yearly")
+  const [message, setMessage] = useState("")
 
   useEffect(() => {
     if (!companyId) return
@@ -45,6 +56,15 @@ export default function UpgradePage() {
           .maybeSingle()
 
         setSubscription(sub)
+
+        if (sub) {
+          const { data: topups } = await supabase
+            .from("subscription_topups")
+            .select("feature_code")
+            .eq("subscription_id", sub.id)
+            .eq("status", "active")
+          if (topups) setActiveTopups(topups.map(t => t.feature_code))
+        }
       } catch (e) {
         console.error(e)
       }
@@ -56,6 +76,11 @@ export default function UpgradePage() {
   const handleUpgrade = () => {
     const price = getPrice()
     router.push(`/dashboard/upgrade/payment?amount=${price}&period=${billingPeriod}&plan=${plan?.code || ''}`)
+  }
+
+  const handleActivateTopup = async (featureCode: string) => {
+    setMessage("")
+    setMessage(`To activate ${featureCode}, please transfer PKR 500 per user to our bank account and contact support.`)
   }
 
   const getPrice = (): number => {
@@ -121,6 +146,12 @@ export default function UpgradePage() {
           appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
           background-repeat: no-repeat; background-position: right 14px center;
         }
+        .topup-card {
+          background: white; border-radius: 14px; border: 2px solid #E2E8F0;
+          padding: 20px; transition: all 0.3s;
+        }
+        .topup-card:hover { border-color: #3B82F6; }
+        .topup-card.active { border-color: #10B981; background: #F0FDF4; }
       `}</style>
 
       <h1 style={{ fontSize: 26, fontWeight: 800, color: "#0F172A", marginBottom: 4 }}>💼 Plan & Billing</h1>
@@ -128,7 +159,14 @@ export default function UpgradePage() {
         {businessType ? businessType.charAt(0).toUpperCase() + businessType.slice(1) : ""} business · {plan?.name || "Basic"}
       </p>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, alignItems: "start" }}>
+      {message && (
+        <div style={{ background: "#FEF2F2", color: "#B91C1C", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+          {message}
+        </div>
+      )}
+
+      {/* Two-column layout for Current Plan vs Upgrade */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, alignItems: "start", marginBottom: 32 }}>
         {/* Left column – Current Trial */}
         <div className="card">
           <div className="label">CURRENT PLAN</div>
@@ -146,9 +184,6 @@ export default function UpgradePage() {
             <div className="feature-row"><Check size={14} color="#10B981" /> {userCount} user{userCount !== 1 ? "s" : ""}</div>
             {businessType === "trading" && <div className="feature-row"><Check size={14} color="#10B981" /> Inventory & Products</div>}
             {businessType === "ngo" && <div className="feature-row"><Check size={14} color="#10B981" /> NGO Dashboard & Project Tracking</div>}
-          </div>
-          <div style={{ marginTop: 20, fontSize: 12, color: "#94A3B8" }}>
-            Trial includes all features of your plan for 10 days.
           </div>
         </div>
 
@@ -181,9 +216,37 @@ export default function UpgradePage() {
             Upgrade Now <ArrowRight size={16} />
           </button>
           <div style={{ marginTop: 12, fontSize: 12, color: "#94A3B8", textAlign: "center" }}>
-            You'll be redirected to our secure payment page with bank details.
+            Secure payment page with bank details.
           </div>
         </div>
+      </div>
+
+      {/* Top‑up Features Section */}
+      <h2 style={{ fontSize: 20, fontWeight: 700, color: "#0F172A", marginBottom: 4 }}>
+        🔧 Optional Top‑Up Features
+      </h2>
+      <p style={{ color: "#64748B", fontSize: 14, marginBottom: 16 }}>
+        Enhance your plan with these add‑ons — PKR 500 / user / month each
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+        {TOPUP_FEATURES.map(topup => {
+          const isActive = activeTopups.includes(topup.code)
+          return (
+            <div key={topup.code} className={`topup-card ${isActive ? "active" : ""}`}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: "#0F172A" }}>{topup.name}</div>
+              <div style={{ fontSize: 13, color: "#64748B", marginTop: 4 }}>
+                PKR {topup.price}<sup style={{ fontSize: "0.65em", marginLeft: 2 }}>/ user / month</sup>
+              </div>
+              {isActive ? (
+                <div style={{ marginTop: 8, color: "#10B981", fontWeight: 600, fontSize: 13 }}>✓ Active</div>
+              ) : (
+                <button className="btn-primary" style={{ marginTop: 12, background: "linear-gradient(135deg, #1740C8, #071352)" }} onClick={() => handleActivateTopup(topup.code)}>
+                  <Plus size={14} /> Activate
+                </button>
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
