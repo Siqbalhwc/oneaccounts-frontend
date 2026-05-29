@@ -1,10 +1,12 @@
 import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
 
-const NAVY  = [7,   8,  91]  as [number,number,number]
-const DARK  = [17,  24,  39]  as [number,number,number]
-const MUTED = [107,114, 128]  as [number,number,number]
-const BORDER = [229,231, 235]  as [number,number,number]
-const WHITE = [255,255, 255]  as [number,number,number]
+const NAVY   = [7,8,91] as [number,number,number]
+const DARK   = [17,24,39] as [number,number,number]
+const MUTED  = [107,114,128] as [number,number,number]
+const BORDER = [229,231,235] as [number,number,number]
+const WHITE  = [255,255,255] as [number,number,number]
+const ROW_ALT = [248,249,252] as [number,number,number]
 
 async function loadImage(url: string): Promise<string | null> {
   try {
@@ -20,8 +22,7 @@ async function loadImage(url: string): Promise<string | null> {
   } catch { return null }
 }
 
-const pkr = (n: number) =>
-  "PKR " + n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const pkr = (n: number) => "PKR " + n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export interface ProjectPDFData {
   companyName: string
@@ -34,16 +35,23 @@ export interface ProjectPDFData {
   projectName: string
   projectCode?: string
   projectDescription?: string
+  donorName?: string
   projectStatus: string
+  isApproved: boolean
   totalBudgeted?: number
-  totalActual?: number
+
+  // GL‑wise breakdown
+  accountGroups: { code: string; name: string; amount: number; type: string }[]
+  // Month‑wise breakdown
+  monthlyTotals: { month: string; amount: number; type: string }[]
 }
 
 export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
-  const PW = 210, PH = 297, ML = 14, MR = 14, CW = PW - ML - MR
+  // Landscape A4
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" })
+  const PW = 297, PH = 210, ML = 14, MR = 14
 
-  // ── LOGO & COMPANY INFO ─────────────────────────────────────────
+  // ── Logo & company info ──────────────────────────────────────
   const LOGO_SIZE = 20, LOGO_X = ML, LOGO_Y = 7
   let logoData: string | null = null
   if (data.logoUrl) logoData = await loadImage(data.logoUrl)
@@ -65,32 +73,32 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
   if (data.companyPhone)   { doc.text("Phone: " + data.companyPhone, textX, infoY); infoY += 4 }
   if (data.companyEmail)   { doc.text("Email: " + data.companyEmail, textX, infoY) }
 
-  // ── REPORT TITLE ─────────────────────────────────────────────────
+  // ── Report title ─────────────────────────────────────────────
   doc.setFont("helvetica", "bold")
-  doc.setFontSize(26)
+  doc.setFontSize(24)
   doc.setTextColor(...NAVY)
-  doc.text("PROJECT REPORT", PW - MR, LOGO_Y + 9, { align: "right" })
+  doc.text("PROJECT REPORT", PW - MR, LOGO_Y + 8, { align: "right" })
 
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8.5)
   doc.setTextColor(...MUTED)
-  doc.text(`Project: ${data.projectName}`, PW - MR, LOGO_Y + 18, { align: "right" })
+  doc.text(`Project: ${data.projectName}`, PW - MR, LOGO_Y + 16, { align: "right" })
 
   const HEADER_BOTTOM = LOGO_Y + LOGO_SIZE + 5
   doc.setDrawColor(...NAVY)
   doc.setLineWidth(0.6)
   doc.line(ML, HEADER_BOTTOM, PW - MR, HEADER_BOTTOM)
 
-  let Y = HEADER_BOTTOM + 8
+  let Y = HEADER_BOTTOM + 6
 
-  // Project details table
+  // ── Project details box ──────────────────────────────────────
   const details = [
     ["Project Name", data.projectName],
     ["Code", data.projectCode || "—"],
+    ["Donor", data.donorName || "—"],
     ["Status", data.projectStatus],
-    ["Description", data.projectDescription || "—"],
+    ["Approved", data.isApproved ? "Yes" : "No"],
     ["Total Budgeted", data.totalBudgeted ? pkr(data.totalBudgeted) : "—"],
-    ["Total Actual", data.totalActual ? pkr(data.totalActual) : "—"],
   ]
 
   doc.setFont("helvetica", "bold")
@@ -109,11 +117,79 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
     Y += 8
     if (i % 2 === 0) {
       doc.setFillColor(245, 246, 250)
-      doc.rect(ML, Y - 8, CW, 8, "F")
+      doc.rect(ML, Y - 8, PW - ML - MR, 8, "F")
     }
   })
 
-  // Footer
+  Y += 6
+
+  // ── GL‑wise table ────────────────────────────────────────────
+  if (data.accountGroups.length > 0) {
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(10)
+    doc.setTextColor(...DARK)
+    doc.text("GL‑wise Breakdown (by Account)", ML, Y)
+    Y += 8
+
+    const glHeaders = ["Code", "Account Name", "Amount", "Type"]
+    const glRows = data.accountGroups.map(a => [
+      a.code,
+      a.name,
+      pkr(a.amount),
+      a.type,
+    ])
+
+    autoTable(doc, {
+      startY: Y,
+      margin: { left: ML, right: MR },
+      head: [glHeaders],
+      body: glRows,
+      styles: { fontSize: 7.5, cellPadding: { top: 2, bottom: 2, left: 2, right: 2 }, textColor: DARK, lineColor: BORDER, lineWidth: 0.2 },
+      headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: "bold", fontSize: 8 },
+      alternateRowStyles: { fillColor: ROW_ALT },
+      columnStyles: {
+        0: { cellWidth: 20 },
+        1: { cellWidth: "auto" },
+        2: { cellWidth: 40, halign: "right" },
+        3: { cellWidth: 22, halign: "center" },
+      },
+    })
+
+    Y = (doc as any).lastAutoTable.finalY + 6
+  }
+
+  // ── Monthly breakdown table ──────────────────────────────────
+  if (data.monthlyTotals.length > 0) {
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(10)
+    doc.setTextColor(...DARK)
+    doc.text("Monthly Breakdown", ML, Y)
+    Y += 8
+
+    const monthHeaders = ["Month", "Amount", "Type"]
+    const monthRows = data.monthlyTotals.map(m => [
+      m.month,
+      pkr(m.amount),
+      m.type,
+    ])
+
+    autoTable(doc, {
+      startY: Y,
+      margin: { left: ML, right: MR },
+      head: [monthHeaders],
+      body: monthRows,
+      styles: { fontSize: 7.5, cellPadding: { top: 2, bottom: 2, left: 2, right: 2 }, textColor: DARK, lineColor: BORDER, lineWidth: 0.2 },
+      headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: "bold", fontSize: 8 },
+      alternateRowStyles: { fillColor: ROW_ALT },
+      columnStyles: {
+        0: { cellWidth: 40 },
+        1: { cellWidth: 50, halign: "right" },
+        2: { cellWidth: 30, halign: "center" },
+      },
+    })
+  }
+
+  // ── Footer ───────────────────────────────────────────────────
   doc.setDrawColor(...NAVY)
   doc.setLineWidth(0.4)
   doc.line(ML, PH - 14, PW - MR, PH - 14)
@@ -121,8 +197,7 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
   doc.setFont("helvetica", "normal")
   doc.setFontSize(7.5)
   doc.setTextColor(...MUTED)
-  const footerParts = ["Generated by " + (data.companyName || ""), data.companyTagline || ""].filter(Boolean)
-  doc.text(footerParts.join("  ·  "), PW / 2, PH - 8, { align: "center" })
+  doc.text(`Generated by ${data.companyName}  ·  ${data.companyTagline}`, PW / 2, PH - 8, { align: "center" })
 
   return doc
 }

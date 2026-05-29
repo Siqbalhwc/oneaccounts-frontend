@@ -8,7 +8,7 @@ import { useCompany } from "@/contexts/CompanyContext"
 import { useTheme } from "@/contexts/ThemeContext"
 import { generateProjectPDF } from "@/lib/pdf/projectPDF"
 
-type SortField = "name" | "code" | "status" | "budget"
+type SortField = "name" | "code" | "status" | "approved" | "budget" | "donor"
 type SortDir = "asc" | "desc"
 
 function fmt(n: number) {
@@ -37,13 +37,15 @@ export default function ProjectsPage() {
 
   const fetchProjects = async () => {
     setLoading(true)
-    let query = supabase.from("projects").select("*").order("name")
+    let query = supabase
+      .from("projects")
+      .select("*, donors(name)")
+      .order("name")
     if (!showInactive) {
       query = query.is("deleted_at", null)
     }
     const { data } = await query
     if (data) {
-      // fetch total budget for each project
       const enriched = await Promise.all(
         data.map(async (p: any) => {
           const { data: budgets } = await supabase
@@ -61,6 +63,10 @@ export default function ProjectsPage() {
   }
 
   const handleGeneratePDF = async (project: any) => {
+    // Fetch project transaction data
+    const res = await fetch(`/api/projects/report?projectId=${project.id}`)
+    const reportData = await res.json()
+
     const pdfData = {
       companyName: companyName || "OneAccounts",
       companyTagline: companyTagline || "",
@@ -68,9 +74,14 @@ export default function ProjectsPage() {
       projectName: project.name,
       projectCode: project.code || "",
       projectDescription: project.description || "",
+      donorName: project.donors?.name || "—",
       projectStatus: project.deleted_at ? "Inactive" : "Active",
+      isApproved: project.is_approved,
       totalBudgeted: project.totalBudget || 0,
+      accountGroups: reportData.accountGroups || [],
+      monthlyTotals: reportData.monthlyTotals || [],
     }
+
     const doc = await generateProjectPDF(pdfData)
     doc.save(`Project_${project.name.replace(/\s+/g, '_')}.pdf`)
   }
@@ -98,22 +109,35 @@ export default function ProjectsPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  // Sort projects
+  // Sorting logic
   const sorted = [...projects].sort((a, b) => {
     let valA: any, valB: any
-    if (sortField === "budget") {
-      valA = a.totalBudget || 0
-      valB = b.totalBudget || 0
-    } else {
-      valA = (a[sortField] || "").toString().toLowerCase()
-      valB = (b[sortField] || "").toString().toLowerCase()
+    switch (sortField) {
+      case "budget":
+        valA = a.totalBudget || 0
+        valB = b.totalBudget || 0
+        break
+      case "approved":
+        valA = a.is_approved ? 1 : 0
+        valB = b.is_approved ? 1 : 0
+        break
+      case "status":
+        valA = a.deleted_at ? "inactive" : "active"
+        valB = b.deleted_at ? "inactive" : "active"
+        break
+      case "donor":
+        valA = (a.donors?.name || "").toLowerCase()
+        valB = (b.donors?.name || "").toLowerCase()
+        break
+      default:
+        valA = (a[sortField] || "").toString().toLowerCase()
+        valB = (b[sortField] || "").toString().toLowerCase()
     }
     if (valA < valB) return sortDir === "asc" ? -1 : 1
     if (valA > valB) return sortDir === "asc" ? 1 : -1
     return 0
   })
 
-  const isDark = themeMode === "dark"
   const isLightStyle = themeMode === "light" || themeMode === "oneaccounts"
   const rowLight = isLightStyle ? "#FFFFFF" : "#1E293B"
   const rowDark  = isLightStyle ? "#F8F9FC" : "#111827"
@@ -130,8 +154,8 @@ export default function ProjectsPage() {
         .btn-outline:hover { background: var(--card-hover); }
         .filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
         .table-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-        .table-header { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 120px 120px 100px; padding: 14px 24px; color: white; font-size: 10px; font-weight: 700; text-transform: uppercase; }
-        .table-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 120px 120px 100px; padding: 12px 24px; font-size: 13px; align-items: center; border-bottom: 1px solid var(--border); transition: background 0.15s; }
+        .table-header { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 100px 60px; padding: 14px 24px; color: white; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+        .table-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 100px 60px; padding: 12px 24px; font-size: 13px; align-items: center; border-bottom: 1px solid var(--border); transition: background 0.15s; }
         .table-row:hover { background: var(--card-hover); }
         .sort-btn { background: none; border: none; cursor: pointer; font: inherit; color: white; display: inline-flex; align-items: center; gap: 4px; padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px; }
         .status-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
@@ -147,7 +171,7 @@ export default function ProjectsPage() {
         </button>
         <div style={{ flex: 1 }}>
           <h1 className="page-title">📁 Projects</h1>
-          <p className="page-subtitle">All projects with budget and approval status</p>
+          <p className="page-subtitle">All projects with budget, donor, and approval status</p>
         </div>
       </div>
 
@@ -169,11 +193,12 @@ export default function ProjectsPage() {
           <div className="table-header" style={{ background: headerBg }}>
             <button className="sort-btn" onClick={() => handleSort("name")}>Project Name {getSortIcon("name")}</button>
             <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
-            <span>Status</span>
-            <span>Approved</span>
+            <button className="sort-btn" onClick={() => handleSort("donor")}>Donor {getSortIcon("donor")}</button>
+            <button className="sort-btn" onClick={() => handleSort("status")}>Status {getSortIcon("status")}</button>
+            <button className="sort-btn" onClick={() => handleSort("approved")}>Approved {getSortIcon("approved")}</button>
             <button className="sort-btn" onClick={() => handleSort("budget")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Budget {getSortIcon("budget")}</button>
             <span style={{ textAlign: "center" }}>PDF</span>
-            <span style={{ textAlign: "center" }}>Actions</span>
+            <span></span>
           </div>
           {sorted.map((p, i) => (
             <div
@@ -183,6 +208,7 @@ export default function ProjectsPage() {
             >
               <span style={{ fontWeight: 600, color: "var(--text)" }}>{p.name}</span>
               <span style={{ color: "var(--primary)", fontSize: 12 }}>{p.code || "—"}</span>
+              <span style={{ fontSize: 13, color: "var(--text)" }}>{p.donors?.name || "—"}</span>
               <span>
                 <span className={`status-badge ${p.deleted_at ? "status-inactive" : "status-active"}`}>
                   {p.deleted_at ? "Inactive" : "Active"}
@@ -201,9 +227,7 @@ export default function ProjectsPage() {
                   <FileText size={12} /> PDF
                 </button>
               </span>
-              <span style={{ textAlign: "center" }}>
-                {/* Future edit/delete actions can go here */}
-              </span>
+              <span></span>
             </div>
           ))}
         </div>
