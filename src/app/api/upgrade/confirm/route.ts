@@ -1,4 +1,4 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -10,22 +10,37 @@ const supabaseAdmin = createClient(
 )
 
 export async function POST(req: NextRequest) {
-  const supabase = createRouteHandlerClient({ cookies })
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const cookieStore = await cookies()
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll() },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const formData = await req.formData()
   const file = formData.get('receipt') as File
   const amount = formData.get('amount') as string
   const period = formData.get('period') as string
   const planCode = formData.get('plan') as string
-  const topups = formData.get('topups') as string   // comma-separated
+  const topups = formData.get('topups') as string
 
   if (!file || !amount) {
     return NextResponse.json({ error: 'Missing file or amount' }, { status: 400 })
   }
 
-  // 1. Get the user's company_id
+  // 1. Get company_id
   const { data: role } = await supabaseAdmin
     .from('user_roles')
     .select('company_id')
@@ -39,7 +54,7 @@ export async function POST(req: NextRequest) {
 
   const companyId = role.company_id
 
-  // 2. Upload the receipt to Supabase Storage
+  // 2. Upload receipt
   const fileExt = file.name.split('.').pop() || 'png'
   const filePath = `${user.id}/${Date.now()}-receipt.${fileExt}`
   const arrayBuffer = await file.arrayBuffer()
@@ -58,11 +73,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to upload receipt' }, { status: 500 })
   }
 
-  // 3. Get public URL (even though bucket is private, we can create a signed URL)
+  // 3. Get signed URL
   const { data: signedUrlData } = await supabaseAdmin
     .storage
     .from('receipts')
-    .createSignedUrl(filePath, 60 * 60 * 24 * 7) // valid for 7 days
+    .createSignedUrl(filePath, 60 * 60 * 24 * 7)
 
   const receiptUrl = signedUrlData?.signedUrl || filePath
 
@@ -84,10 +99,9 @@ export async function POST(req: NextRequest) {
     })
     .eq('company_id', companyId)
 
-  // 5. Activate selected top‑ups (if any)
+  // 5. Activate top‑ups
   if (topups && topups.trim() !== '') {
     const topupCodes = topups.split(',').filter(Boolean)
-    // Get subscription id
     const { data: sub } = await supabaseAdmin
       .from('subscriptions')
       .select('id')
@@ -96,7 +110,6 @@ export async function POST(req: NextRequest) {
 
     if (sub) {
       for (const code of topupCodes) {
-        // Get feature id
         const { data: feature } = await supabaseAdmin
           .from('features')
           .select('id')
@@ -104,18 +117,16 @@ export async function POST(req: NextRequest) {
           .single()
 
         if (feature) {
-          // Enable in company_features
           await supabaseAdmin.from('company_features')
             .upsert({ company_id: companyId, feature_id: feature.id, enabled: true }, { onConflict: 'company_id,feature_id' })
 
-          // Insert top‑up record
           await supabaseAdmin.from('subscription_topups')
             .insert({
               subscription_id: sub.id,
               feature_code: code,
               start_date: now.toISOString().split('T')[0],
               end_date: endDate.toISOString().split('T')[0],
-              price_per_user: 500, // you can adjust
+              price_per_user: 500,
               status: 'active',
             })
         }
@@ -123,7 +134,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 6. Create notification for super‑admin
+  // 6. Notify super‑admin
   await supabaseAdmin.from('payment_notifications').insert({
     company_id: companyId,
     user_id: user.id,
