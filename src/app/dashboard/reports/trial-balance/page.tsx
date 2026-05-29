@@ -28,6 +28,11 @@ function getFallbackCategory(code?: string): string {
   return "Other"
 }
 
+// ── Consistent 2‑decimal format ────────────────────────────────────
+function fmt(n: number) {
+  return n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 export default function TrialBalancePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -151,139 +156,282 @@ export default function TrialBalancePage() {
   }
 
   return (
-    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+    <div style={{ background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .tb-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; box-shadow: var(--shadow-sm); }
-        .tb-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
-        .tb-summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; display: flex; align-items: center; gap: 14px; }
-        .tb-table-header {
-          display: grid;
-          grid-template-columns: 80px 1fr 80px 100px 100px;
-          padding: 14px 24px;
+        /* ── Report header (matches PDF) ── */
+        .report-header {
           background: var(--card);
-          font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
+          padding: 20px 32px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 16px;
         }
-        .tb-row {
-          display: grid;
-          grid-template-columns: 80px 1fr 80px 100px 100px;
-          padding: 12px 24px;
-          border-bottom: 1px solid var(--border);
-          font-size: 13px; align-items: center;
-          transition: background 0.15s; cursor: pointer;
+        .report-header-left {
+          display: flex;
+          align-items: center;
+          gap: 14px;
         }
-        .tb-row:hover { background: var(--card-hover); }
-        .tb-row:last-child { border-bottom: none; }
-        .tb-sort-btn {
-          background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
-          display: inline-flex; align-items: center; gap: 4px; padding: 0;
-          font-weight: 700; text-transform: uppercase; font-size: 10px;
+        .report-logo {
+          width: 34px;
+          height: 34px;
+          border-radius: 9px;
+          object-fit: contain;
         }
-        .tb-sort-btn:hover { color: var(--primary); }
-        .date-input {
-          height: 34px; border: 1.5px solid var(--border); border-radius: 8px;
-          padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text);
-          outline: none; font-family: inherit; width: 140px;
+        .report-company-name {
+          font-size: 16px;
+          font-weight: 700;
+          color: #07085B;
         }
-        .date-input:focus { border-color: var(--primary); }
-        .btn { padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-        .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
+        .report-company-tagline {
+          font-size: 11px;
+          color: #64748B;
+        }
+        .report-header-right {
+          text-align: right;
+        }
+        .report-title {
+          font-size: 24px;
+          font-weight: 800;
+          color: #07085B;
+        }
+        .report-period {
+          font-size: 12px;
+          color: #64748B;
+        }
+
+        /* ── KPI cards ── */
+        .kpi-row {
+          display: flex;
+          gap: 16px;
+          padding: 24px 32px;
+          flex-wrap: wrap;
+        }
+        .kpi-card {
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 18px 24px;
+          min-width: 170px;
+          box-shadow: var(--shadow-sm);
+        }
+        .kpi-label {
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          color: var(--text-muted);
+          margin-bottom: 6px;
+        }
+        .kpi-value {
+          font-size: 26px;
+          font-weight: 800;
+        }
+
+        /* ── Filter bar ── */
+        .filter-bar {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 0 32px 20px;
+          flex-wrap: wrap;
+        }
+        .btn {
+          padding: 8px 16px;
+          border-radius: 8px;
+          border: 1.5px solid var(--border);
+          font-weight: 600;
+          font-size: 13px;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font-family: inherit;
+        }
+        .btn-outline {
+          background: transparent;
+          color: var(--text-muted);
+          border-color: var(--border);
+        }
         .btn-outline:hover { background: var(--card-hover); }
+        .date-input {
+          height: 34px;
+          border: 1.5px solid var(--border);
+          border-radius: 8px;
+          padding: 0 10px;
+          font-size: 12px;
+          background: var(--card);
+          color: var(--text);
+          outline: none;
+          font-family: inherit;
+          width: 140px;
+        }
+
+        /* ── Table ── */
+        .table-wrap {
+          margin: 0 32px 32px;
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          overflow: hidden;
+          box-shadow: var(--shadow-sm);
+        }
+        .table-header {
+          display: grid;
+          grid-template-columns: 90px 1fr 90px 110px 110px;
+          padding: 14px 24px;
+          background: #07085B;
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          color: white;
+        }
+        .table-row {
+          display: grid;
+          grid-template-columns: 90px 1fr 90px 110px 110px;
+          padding: 12px 24px;
+          font-size: 13px;
+          align-items: center;
+          cursor: pointer;
+          transition: background 0.15s;
+        }
+        .table-row:hover { background: var(--card-hover); }
+        .row-light { background: #FFFFFF; }
+        .row-dark  { background: #F8F9FC; }
+        .sort-btn {
+          background: none;
+          border: none;
+          cursor: pointer;
+          font: inherit;
+          color: white;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 0;
+          font-weight: 700;
+          text-transform: uppercase;
+          font-size: 10px;
+        }
+
+        /* totals row */
+        .totals-row {
+          display: grid;
+          grid-template-columns: 90px 1fr 90px 110px 110px;
+          padding: 14px 24px;
+          background: #07085B;
+          color: white;
+          font-weight: 700;
+          font-size: 13px;
+        }
+
         @media (max-width: 640px) {
-          .tb-table-header, .tb-row { grid-template-columns: 60px 1fr 70px 70px; }
-          .tb-table-header span:nth-child(3), .tb-row span:nth-child(3) { display: none; }
+          .table-header, .table-row, .totals-row {
+            grid-template-columns: 70px 1fr 80px 80px 90px;
+          }
         }
       `}</style>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-        <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}>
-          <ArrowLeft size={16} />
-        </button>
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>⚖️ Trial Balance</h1>
-          <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
-            {filterType || filterCategory ? `Filtered: ${filterType || ""} ${filterCategory || ""}` : "All accounts"}
-          </p>
+      {/* ── Report Header ── */}
+      <div className="report-header">
+        <div className="report-header-left">
+          {logoUrl ? (
+            <img src={logoUrl} alt={companyName} className="report-logo" width={34} height={34} />
+          ) : (
+            <div style={{ width: 34, height: 34, borderRadius: 9, background: "#07085B", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 700 }}>
+              {(companyName || "O")[0]}
+            </div>
+          )}
+          <div>
+            <div className="report-company-name">{companyName || "OneAccounts"}</div>
+            <div className="report-company-tagline">{companyTagline || ""}</div>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input
-            type="date"
-            className="date-input"
-            value={startDate}
-            onChange={e => setStartDate(e.target.value)}
-          />
-          <span style={{ color: "var(--text-muted)", fontSize: 12 }}>to</span>
-          <input
-            type="date"
-            className="date-input"
-            value={endDate}
-            onChange={e => setEndDate(e.target.value)}
-          />
-          <button className="btn btn-outline" onClick={fetchTrial}>
-            Refresh
-          </button>
-          <button className="btn btn-outline" onClick={handleExportPDF}>
-            <Download size={16} /> PDF
-          </button>
+        <div className="report-header-right">
+          <div className="report-title">Trial Balance</div>
+          <div className="report-period">From {startDate} to {endDate}</div>
         </div>
       </div>
 
+      {/* ── KPI cards ── */}
+      <div className="kpi-row">
+        <div className="kpi-card">
+          <div className="kpi-label">Total Debits</div>
+          <div className="kpi-value" style={{ color: "#EF4444" }}>
+            PKR {fmt(totalDebit)}
+          </div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-label">Total Credits</div>
+          <div className="kpi-value" style={{ color: "#10B981" }}>
+            PKR {fmt(totalCredit)}
+          </div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-label">Difference</div>
+          <div className="kpi-value" style={{ color: isBalanced ? "#10B981" : "#EF4444" }}>
+            {isBalanced ? "PKR 0.00" : `PKR ${fmt(Math.abs(totalDebit - totalCredit))}`}
+          </div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-label">Status</div>
+          <div className="kpi-value" style={{ color: isBalanced ? "#10B981" : "#EF4444", fontSize: 20 }}>
+            {isBalanced ? "✓ Balanced" : "✗ Imbalance"}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Filters ── */}
+      <div className="filter-bar">
+        <input type="date" className="date-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
+        <span style={{ color: "var(--text-muted)", fontSize: 12 }}>to</span>
+        <input type="date" className="date-input" value={endDate} onChange={e => setEndDate(e.target.value)} />
+        <button className="btn btn-outline" onClick={fetchTrial}>Refresh</button>
+        <button className="btn btn-outline" onClick={handleExportPDF}><Download size={16} /> PDF</button>
+      </div>
+
       {errorMsg && (
-        <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, border: "1px solid #FECACA" }}>
+        <div style={{ margin: "0 32px 16px", background: "#FEF2F2", color: "#B91C1C", padding: "10px 14px", borderRadius: 8, fontSize: 13 }}>
           {errorMsg}
         </div>
       )}
 
-      <div className="tb-summary-grid">
-        <div className="tb-summary-item">
-          <div style={{ background: "#FEE2E2", borderRadius: 10, padding: 10 }}>📊</div>
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Total Debits</div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: "#EF4444" }}>PKR {totalDebit.toLocaleString()}</div>
-          </div>
-        </div>
-        <div className="tb-summary-item">
-          <div style={{ background: "#D1FAE5", borderRadius: 10, padding: 10 }}>💰</div>
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Total Credits</div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: "#10B981" }}>PKR {totalCredit.toLocaleString()}</div>
-          </div>
-        </div>
-        <div className="tb-summary-item">
-          <div style={{ background: isBalanced ? "#D1FAE5" : "#FEE2E2", borderRadius: 10, padding: 10 }}>⚖️</div>
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Status</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: isBalanced ? "#10B981" : "#EF4444" }}>{isBalanced ? "✅ Balanced" : "❌ Not Balanced"}</div>
-          </div>
-        </div>
-      </div>
-
       {loading ? (
         <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading accounts…</div>
       ) : sortedData.length === 0 ? (
-        <div className="tb-card" style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>No accounts match the selected filter or date range.</div>
+        <div style={{ margin: "0 32px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
+          No accounts match the selected filter or date range.
+        </div>
       ) : (
-        <div className="tb-card" style={{ padding: 0, overflowX: "auto" }}>
-          <div className="tb-table-header">
-            <button className="tb-sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
-            <button className="tb-sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
-            <span className="tb-sort-btn">Type</span>
-            <span className="tb-sort-btn" style={{ textAlign: "right" }}>Debit</span>
-            <span className="tb-sort-btn" style={{ textAlign: "right" }}>Credit</span>
+        <div className="table-wrap">
+          <div className="table-header">
+            <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
+            <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
+            <span>Type</span>
+            <span style={{ textAlign: "right" }}>Debit</span>
+            <span style={{ textAlign: "right" }}>Credit</span>
           </div>
           {sortedData.map((a, i) => (
-            <div key={a.id} className="tb-row" onClick={() => openLedger(a.id)} title={`View ledger for ${a.code}`}>
+            <div key={a.id} className={`table-row ${i % 2 === 0 ? "row-light" : "row-dark"}`} onClick={() => openLedger(a.id)}>
               <span style={{ fontWeight: 600, color: "var(--primary)" }}>{a.code}</span>
               <span style={{ color: "var(--text)" }}>{a.name}</span>
-              <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{a.type}</span>
+              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{a.type}</span>
               <span style={{ textAlign: "right", color: a.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: a.debit > 0 ? 600 : 400 }}>
-                {a.debit > 0 ? `PKR ${a.debit.toLocaleString()}` : "-"}
+                {a.debit > 0 ? `PKR ${fmt(a.debit)}` : "—"}
               </span>
               <span style={{ textAlign: "right", color: a.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: a.credit > 0 ? 600 : 400 }}>
-                {a.credit > 0 ? `PKR ${a.credit.toLocaleString()}` : "-"}
+                {a.credit > 0 ? `PKR ${fmt(a.credit)}` : "—"}
               </span>
             </div>
           ))}
+          <div className="totals-row">
+            <span style={{ fontWeight: 700 }}></span>
+            <span style={{ fontWeight: 700 }}>Total</span>
+            <span></span>
+            <span style={{ textAlign: "right", color: "#FF9999" }}>PKR {fmt(totalDebit)}</span>
+            <span style={{ textAlign: "right", color: "#99FF99" }}>PKR {fmt(totalCredit)}</span>
+          </div>
         </div>
       )}
     </div>
