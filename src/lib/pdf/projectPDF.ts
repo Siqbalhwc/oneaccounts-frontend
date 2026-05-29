@@ -33,15 +33,14 @@ export interface ProjectPDFData {
   logoUrl?: string | null
 
   projectName: string
-  projectCode?: string
   projectDescription?: string
   donorName?: string
   projectStatus: string
   isApproved: boolean
   totalBudgeted?: number
 
-  accountGroups: { code: string; name: string; amount: number; type: string }[]
-  monthlyTotals: { month: string; budget: number; actual: number; type: string }[]
+  activityBreakdown: { activity: string; budget: number }[]
+  monthlyBreakdown: { month: string; budget: number }[]
 }
 
 export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
@@ -75,7 +74,7 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
   doc.setFont("helvetica", "bold")
   doc.setFontSize(24)
   doc.setTextColor(...NAVY)
-  doc.text("PROJECT REPORT", PW - MR, LOGO_Y + 8, { align: "right" })
+  doc.text("PROJECT BUDGET", PW - MR, LOGO_Y + 8, { align: "right" })
 
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8.5)
@@ -120,20 +119,49 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
 
   Y += 6
 
-  // ── Monthly Budget vs Actual ──────────────────────────────────
-  if (data.monthlyTotals.length > 0) {
+  // ── Activity‑wise Budget ──────────────────────────────────────
+  if (data.activityBreakdown.length > 0) {
     doc.setFont("helvetica", "bold")
     doc.setFontSize(10)
     doc.setTextColor(...DARK)
-    doc.text("Monthly Budget vs Actual", ML, Y)
+    doc.text("Budget by Activity", ML, Y)
     Y += 8
 
-    const monthHeaders = ["Month", "Budget", "Actual", "Type"]
-    const monthRows = data.monthlyTotals.map(m => [
+    const actHeaders = ["Activity", "Budgeted Amount"]
+    const actRows = data.activityBreakdown.map(a => [
+      a.activity,
+      pkr(a.budget),
+    ])
+
+    autoTable(doc, {
+      startY: Y,
+      margin: { left: ML, right: MR },
+      head: [actHeaders],
+      body: actRows,
+      styles: { fontSize: 7.5, cellPadding: { top: 2, bottom: 2, left: 2, right: 2 }, textColor: DARK, lineColor: BORDER, lineWidth: 0.2 },
+      headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: "bold", fontSize: 8 },
+      alternateRowStyles: { fillColor: ROW_ALT },
+      columnStyles: {
+        0: { cellWidth: "auto" },
+        1: { cellWidth: 50, halign: "right" },
+      },
+    })
+
+    Y = (doc as any).lastAutoTable.finalY + 10
+  }
+
+  // ── Month‑wise Budget ─────────────────────────────────────────
+  if (data.monthlyBreakdown.length > 0) {
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(10)
+    doc.setTextColor(...DARK)
+    doc.text("Budget by Month", ML, Y)
+    Y += 8
+
+    const monthHeaders = ["Month", "Budgeted Amount"]
+    const monthRows = data.monthlyBreakdown.map(m => [
       m.month,
       pkr(m.budget),
-      pkr(m.actual),
-      m.type,
     ])
 
     autoTable(doc, {
@@ -146,44 +174,7 @@ export async function generateProjectPDF(data: ProjectPDFData): Promise<jsPDF> {
       alternateRowStyles: { fillColor: ROW_ALT },
       columnStyles: {
         0: { cellWidth: 40 },
-        1: { cellWidth: 45, halign: "right" },
-        2: { cellWidth: 45, halign: "right" },
-        3: { cellWidth: 30, halign: "center" },
-      },
-    })
-
-    Y = (doc as any).lastAutoTable.finalY + 10
-  }
-
-  // ── GL‑wise Breakdown ────────────────────────────────────────
-  if (data.accountGroups.length > 0) {
-    doc.setFont("helvetica", "bold")
-    doc.setFontSize(10)
-    doc.setTextColor(...DARK)
-    doc.text("GL‑wise Breakdown (Actuals)", ML, Y)
-    Y += 8
-
-    const glHeaders = ["Code", "Account Name", "Amount", "Type"]
-    const glRows = data.accountGroups.map(a => [
-      a.code,
-      a.name,
-      pkr(a.amount),
-      a.type,
-    ])
-
-    autoTable(doc, {
-      startY: Y,
-      margin: { left: ML, right: MR },
-      head: [glHeaders],
-      body: glRows,
-      styles: { fontSize: 7.5, cellPadding: { top: 2, bottom: 2, left: 2, right: 2 }, textColor: DARK, lineColor: BORDER, lineWidth: 0.2 },
-      headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: "bold", fontSize: 8 },
-      alternateRowStyles: { fillColor: ROW_ALT },
-      columnStyles: {
-        0: { cellWidth: 20 },
-        1: { cellWidth: "auto" },
-        2: { cellWidth: 45, halign: "right" },
-        3: { cellWidth: 30, halign: "center" },
+        1: { cellWidth: 50, halign: "right" },
       },
     })
   }

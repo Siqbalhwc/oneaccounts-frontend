@@ -8,7 +8,7 @@ import { useCompany } from "@/contexts/CompanyContext"
 import { useTheme } from "@/contexts/ThemeContext"
 import { generateProjectPDF } from "@/lib/pdf/projectPDF"
 
-type SortField = "name" | "code" | "status" | "approved" | "budget" | "donor"
+type SortField = "name" | "status" | "approved" | "budget" | "donor"
 type SortDir = "asc" | "desc"
 
 function fmt(n: number) {
@@ -71,14 +71,13 @@ export default function ProjectsPage() {
       companyTagline: companyTagline || "",
       logoUrl: logoUrl || null,
       projectName: project.name,
-      projectCode: project.code || "",
       projectDescription: project.description || "",
       donorName: project.donors?.name || "—",
       projectStatus: project.deleted_at ? "Inactive" : "Active",
       isApproved: project.is_approved,
       totalBudgeted: project.totalBudget || 0,
-      accountGroups: reportData.accountGroups || [],
-      monthlyTotals: reportData.monthlyTotals || [],
+      activityBreakdown: reportData.activityBreakdown || [],
+      monthlyBreakdown: reportData.monthlyBreakdown || [],
     }
 
     const doc = await generateProjectPDF(pdfData)
