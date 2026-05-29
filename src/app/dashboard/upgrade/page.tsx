@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { Check, Clock, ArrowRight, Plus, ShieldCheck, Zap, AlertTriangle, Star, TrendingUp } from "lucide-react"
+import { Check, Clock, ArrowRight, Plus, Minus, ShieldCheck, Zap, Star, TrendingUp } from "lucide-react"
 import { useCompany } from "@/contexts/CompanyContext"
 
 const BENCHMARK_NOTE =
@@ -18,20 +18,12 @@ const TOPUP_FEATURES = [
   { code: "investors",          name: "Investors Module",       price: 500, icon: "📈", desc: "Capital, returns & statements" },
 ]
 
-const PERIOD_LABELS: Record<string, string> = {
-  monthly:     "month",
-  half_yearly: "6 months",
-  yearly:      "year",
-}
-
-// Capitalise every word: "ngo business" → "NGO Business"
 function formatBusinessType(raw: string): string {
   if (!raw) return ""
   return raw
     .split(" ")
     .map((w) => {
       const upper = w.toUpperCase()
-      // known acronyms stay fully uppercase
       if (["ngo", "llc", "pvt", "ltd"].includes(w.toLowerCase())) return upper
       return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
     })
@@ -46,12 +38,15 @@ export default function UpgradePage() {
   const router = useRouter()
   const { companyId } = useCompany()
 
-  const [plan, setPlan]                   = useState<any>(null)
-  const [subscription, setSubscription]   = useState<any>(null)
-  const [activeTopups, setActiveTopups]   = useState<string[]>([])
-  const [businessType, setBusinessType]   = useState("")
-  const [loading, setLoading]             = useState(true)
+  const [plan, setPlan] = useState<any>(null)
+  const [subscription, setSubscription] = useState<any>(null)
+  const [activeTopups, setActiveTopups] = useState<string[]>([])  // from DB
+  const [businessType, setBusinessType] = useState("")
+  const [loading, setLoading] = useState(true)
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "half_yearly" | "yearly">("yearly")
+
+  // ----- Local selection of top‑ups (not yet purchased) -----
+  const [selectedTopups, setSelectedTopups] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (!companyId) return
@@ -59,9 +54,7 @@ export default function UpgradePage() {
       try {
         const { data: company } = await supabase
           .from("companies")
-          .select(
-            "business_type, plans(code, name, monthly_price_per_user, half_yearly_price_per_user, yearly_price_per_user, trial_days)"
-          )
+          .select("business_type, plans(code, name, monthly_price_per_user, half_yearly_price_per_user, yearly_price_per_user, trial_days)")
           .eq("id", companyId)
           .single()
 
@@ -94,44 +87,62 @@ export default function UpgradePage() {
     fetchData()
   }, [companyId])
 
-  const getPrice = (): number => {
+  // ----- Price calculations -----
+  const getBasePrice = useCallback((): number => {
     if (!plan) return 0
     switch (billingPeriod) {
-      case "monthly":     return plan.monthly_price_per_user || 0
+      case "monthly": return plan.monthly_price_per_user || 0
       case "half_yearly": return plan.half_yearly_price_per_user || 0
-      case "yearly":      return plan.yearly_price_per_user || 0
+      case "yearly": return plan.yearly_price_per_user || 0
     }
+  }, [plan, billingPeriod])
+
+  // Discount factor = (base price for period) / (monthly price * number of months)
+  const getDiscountFactor = useCallback((): number => {
+    if (!plan || !plan.monthly_price_per_user) return 1
+    const months = billingPeriod === "monthly" ? 1 : billingPeriod === "half_yearly" ? 6 : 12
+    const periodPrice = getBasePrice()
+    const fullPrice = plan.monthly_price_per_user * months
+    return fullPrice > 0 ? periodPrice / fullPrice : 1
+  }, [plan, billingPeriod, getBasePrice])
+
+  const getAddonPriceForPeriod = useCallback((monthlyAddonPrice: number): number => {
+    const months = billingPeriod === "monthly" ? 1 : billingPeriod === "half_yearly" ? 6 : 12
+    const fullAddonPrice = monthlyAddonPrice * months
+    return Math.round(fullAddonPrice * getDiscountFactor())
+  }, [billingPeriod, getDiscountFactor])
+
+  const totalAddonPrice = () => {
+    let total = 0
+    selectedTopups.forEach(code => {
+      const feature = TOPUP_FEATURES.find(f => f.code === code)
+      if (feature) total += getAddonPriceForPeriod(feature.price)
+    })
+    return total
   }
+
+  const totalPrice = getBasePrice() + totalAddonPrice()
 
   const handleUpgrade = () => {
-    const price = getPrice()
     router.push(
-      `/dashboard/upgrade/payment?amount=${price}&period=${billingPeriod}&plan=${plan?.code || ""}`
+      `/dashboard/upgrade/payment?amount=${totalPrice}&period=${billingPeriod}&plan=${plan?.code || ""}&topups=${Array.from(selectedTopups).join(",")}`
     )
   }
 
-  const handleActivateTopup = (featureCode: string, featureName: string) => {
-    router.push(
-      `/dashboard/upgrade/payment?amount=500&period=monthly&plan=${plan?.code || ""}&topup=${featureCode}&topup_name=${encodeURIComponent(featureName)}`
-    )
+  const toggleTopup = (code: string) => {
+    setSelectedTopups(prev => {
+      const next = new Set(prev)
+      if (next.has(code)) next.delete(code)
+      else next.add(code)
+      return next
+    })
   }
 
   const daysLeft = subscription?.end_date
     ? Math.ceil((new Date(subscription.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
     : null
 
-  const price           = getPrice()
-  const periodLabel     = PERIOD_LABELS[billingPeriod]
-  const userCount       = subscription?.max_users || 1
-  const monthlyCost     = plan?.monthly_price_per_user || 0
-  const yearlyCost      = plan?.yearly_price_per_user || 0
-  const yearlySavingPct = monthlyCost > 0
-    ? Math.round(((monthlyCost * 12 - yearlyCost) / (monthlyCost * 12)) * 100)
-    : 0
-
-  const isTrialExpired  = daysLeft !== null && daysLeft <= 0
-  const isTrialUrgent   = daysLeft !== null && daysLeft > 0 && daysLeft <= 7
-  const isTrialHealthy  = daysLeft !== null && daysLeft > 7
+  const userCount = subscription?.max_users || 1
 
   if (loading) {
     return (
@@ -152,65 +163,16 @@ export default function UpgradePage() {
   }
 
   return (
-    <div style={{
-      padding: "28px 28px 48px",
-      background: "#F8FAFC",
-      minHeight: "100vh",
-      fontFamily: "'Plus Jakarta Sans', sans-serif",
-    }}>
+    <div style={{ padding: "28px 28px 48px", background: "#F8FAFC", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <style>{`
-        /* ── Reset & base ── */
         * { box-sizing: border-box; }
-
-        /* ── Page header ── */
-        .ph-title {
-          font-size: 26px; font-weight: 800; color: #0F172A;
-          margin: 0 0 4px; letter-spacing: -0.5px;
-        }
-        .ph-sub {
-          font-size: 14px; color: #64748B; margin: 0;
-          display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-        }
+        .ph-title { font-size: 26px; font-weight: 800; color: #0F172A; margin: 0 0 4px; letter-spacing: -0.5px; }
+        .ph-sub { font-size: 14px; color: #64748B; margin: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
         .ph-dot { color: #CBD5E1; }
 
-        /* ── Alert banners ── */
-        .banner {
-          display: flex; align-items: center; gap: 10px;
-          padding: 12px 16px; border-radius: 12px;
-          font-size: 13px; font-weight: 500; margin-bottom: 24px;
-        }
-        .banner-warn  { background: #FFF7ED; border: 1px solid #FED7AA; color: #9A3412; }
-        .banner-error { background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; }
-
-        /* ── Billing period toggle ── */
-        .period-toggle {
-          display: inline-flex; border: 1px solid #E2E8F0;
-          border-radius: 10px; overflow: hidden; margin-bottom: 20px;
-        }
-        .period-btn {
-          padding: 8px 16px; font-size: 13px; font-weight: 600;
-          border: none; cursor: pointer; background: white;
-          color: #64748B; transition: all 0.15s; font-family: inherit;
-          white-space: nowrap;
-        }
-        .period-btn:hover { background: #F1F5F9; color: #0F172A; }
-        .period-btn.active {
-          background: #1740C8; color: white;
-        }
-        .period-btn .save-tag {
-          display: inline-block; background: rgba(255,255,255,0.22);
-          font-size: 10px; padding: 1px 6px; border-radius: 20px;
-          margin-left: 5px; font-weight: 700;
-        }
-
-        /* ── Plan cards grid ── */
-        .plan-grid {
-          display: grid; grid-template-columns: 1fr 1fr;
-          gap: 24px; align-items: stretch; margin-bottom: 40px;
-        }
+        .plan-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: stretch; margin-bottom: 40px; }
         @media (max-width: 680px) { .plan-grid { grid-template-columns: 1fr; } }
 
-        /* ── Card base ── */
         .plan-card {
           background: white; border-radius: 20px; padding: 28px;
           border: 1px solid #E2E8F0;
@@ -221,20 +183,17 @@ export default function UpgradePage() {
           box-shadow: 0 8px 40px rgba(23,64,200,0.10);
         }
 
-        /* ── Card label ── */
         .card-label {
           font-size: 10px; font-weight: 800; text-transform: uppercase;
           letter-spacing: 0.12em; color: #94A3B8; margin-bottom: 6px;
         }
         .card-label-upgrade { color: #1740C8; }
 
-        /* ── Plan name ── */
         .plan-name {
           font-size: 22px; font-weight: 800; color: #0F172A;
           margin: 0 0 14px; letter-spacing: -0.3px;
         }
 
-        /* ── Badges ── */
         .badge {
           display: inline-flex; align-items: center; gap: 4px;
           font-size: 11px; font-weight: 700; padding: 4px 10px;
@@ -244,9 +203,7 @@ export default function UpgradePage() {
         .badge-red    { background: #FEF2F2; color: #B91C1C; }
         .badge-amber  { background: #FEF3C7; color: #92400E; }
         .badge-blue   { background: #EFF6FF; color: #1D4ED8; }
-        .badge-purple { background: #F3E8FF; color: #7E22CE; }
 
-        /* ── Feature list ── */
         .feature-list { list-style: none; padding: 0; margin: 0 0 auto; }
         .feature-item {
           display: flex; align-items: center; gap: 10px;
@@ -260,20 +217,28 @@ export default function UpgradePage() {
           justify-content: center; flex-shrink: 0;
         }
 
-        /* ── Price display ── */
-        .price-wrap { margin: 20px 0 6px; }
-        .price-amount {
-          font-size: 38px; font-weight: 800; color: #0F172A;
-          letter-spacing: -1px; line-height: 1;
+        .period-toggle {
+          display: inline-flex; border: 1px solid #E2E8F0;
+          border-radius: 10px; overflow: hidden;
         }
-        .price-unit {
-          font-size: 14px; font-weight: 400; color: #94A3B8; margin-left: 6px;
+        .period-btn {
+          padding: 8px 16px; font-size: 13px; font-weight: 600;
+          border: none; cursor: pointer; background: white;
+          color: #64748B; transition: all 0.15s; font-family: inherit;
+          white-space: nowrap;
         }
-        .price-zero {
-          font-size: 18px; font-weight: 600; color: #94A3B8;
+        .period-btn:hover { background: #F1F5F9; color: #0F172A; }
+        .period-btn.active { background: #1740C8; color: white; }
+        .period-btn .save-tag {
+          display: inline-block; background: rgba(255,255,255,0.22);
+          font-size: 10px; padding: 1px 6px; border-radius: 20px;
+          margin-left: 5px; font-weight: 700;
         }
 
-        /* ── Benchmark note ── */
+        .price-wrap { margin: 20px 0 6px; }
+        .price-amount { font-size: 38px; font-weight: 800; color: #0F172A; letter-spacing: -1px; line-height: 1; }
+        .price-unit { font-size: 14px; font-weight: 400; color: #94A3B8; margin-left: 6px; }
+
         .benchmark {
           font-size: 12px; color: #475569; background: #F1F5F9;
           padding: 10px 14px; border-radius: 10px;
@@ -281,7 +246,6 @@ export default function UpgradePage() {
           line-height: 1.5;
         }
 
-        /* ── CTA button ── */
         .btn-upgrade {
           width: 100%; padding: 14px; border-radius: 12px;
           background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
@@ -293,59 +257,32 @@ export default function UpgradePage() {
         .btn-upgrade:hover { opacity: 0.88; }
         .btn-upgrade:disabled { opacity: 0.45; cursor: not-allowed; }
 
-        /* ── Trust row ── */
         .trust-row {
           display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px;
           justify-content: center;
         }
-        .trust-item {
-          display: flex; align-items: center; gap: 5px;
-          font-size: 11px; color: #94A3B8;
-        }
+        .trust-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #94A3B8; }
 
-        /* ── Divider ── */
         .divider { border: none; border-top: 1px solid #F1F5F9; margin: 16px 0; }
 
-        /* ── Section heading ── */
-        .section-heading {
-          font-size: 20px; font-weight: 800; color: #0F172A;
-          letter-spacing: -0.3px; margin: 0 0 4px;
-        }
-        .section-sub {
-          font-size: 13px; color: #64748B; margin: 0 0 20px;
-        }
+        .section-heading { font-size: 20px; font-weight: 800; color: #0F172A; letter-spacing: -0.3px; margin: 0 0 4px; }
+        .section-sub { font-size: 13px; color: #64748B; margin: 0 0 20px; }
 
-        /* ── Top-up grid ── */
-        .topup-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-          gap: 14px;
-        }
-
-        /* ── Top-up card ── */
+        .topup-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
         .topup-card {
           background: white; border-radius: 16px;
           border: 1.5px solid #E2E8F0; padding: 20px;
           transition: border-color 0.2s, box-shadow 0.2s;
-          display: flex; flex-direction: column;
+          display: flex; flex-direction: column; cursor: pointer;
         }
-        .topup-card:hover {
-          border-color: #1740C8;
-          box-shadow: 0 4px 20px rgba(23,64,200,0.08);
-        }
-        .topup-card.topup-active {
-          border-color: #10B981; background: #F0FDF4;
-        }
+        .topup-card:hover { border-color: #1740C8; box-shadow: 0 4px 20px rgba(23,64,200,0.08); }
+        .topup-card.selected { border-color: #1740C8; background: #EFF6FF; }
+        .topup-card.active { border-color: #10B981; background: #F0FDF4; }
+
         .topup-icon { font-size: 24px; margin-bottom: 10px; }
-        .topup-name {
-          font-size: 14px; font-weight: 700; color: #0F172A; margin-bottom: 3px;
-        }
-        .topup-desc {
-          font-size: 12px; color: #64748B; margin-bottom: 10px; line-height: 1.4;
-        }
-        .topup-price {
-          font-size: 13px; color: #475569; margin-bottom: 12px; margin-top: auto;
-        }
+        .topup-name { font-size: 14px; font-weight: 700; color: #0F172A; margin-bottom: 3px; }
+        .topup-desc { font-size: 12px; color: #64748B; margin-bottom: 10px; line-height: 1.4; }
+        .topup-price { font-size: 13px; color: #475569; margin-bottom: 12px; margin-top: auto; }
         .btn-topup {
           width: 100%; padding: 9px; border-radius: 9px;
           background: #EFF6FF; color: #1D4ED8;
@@ -355,102 +292,34 @@ export default function UpgradePage() {
           gap: 6px; transition: background 0.15s;
         }
         .btn-topup:hover { background: #DBEAFE; }
-        .topup-active-label {
-          display: flex; align-items: center; gap: 6px;
-          font-size: 13px; font-weight: 700; color: #059669;
-          margin-top: auto; padding-top: 12px;
-        }
+        .topup-active-label { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: #059669; margin-top: auto; padding-top: 12px; }
       `}</style>
 
-      {/* ── Page header ── */}
+      {/* Page header */}
       <div style={{ marginBottom: 24 }}>
         <h1 className="ph-title">💼 Plan &amp; Billing</h1>
         <p className="ph-sub">
           {formatBusinessType(businessType)}
           {businessType && <span className="ph-dot">·</span>}
           {plan?.name || "Basic"}
-          {daysLeft !== null && daysLeft > 0 && (
-            <>
-              <span className="ph-dot">·</span>
-              <span style={{ color: daysLeft <= 7 ? "#DC2626" : "#059669", fontWeight: 600 }}>
-                Trial ends in {daysLeft} day{daysLeft !== 1 ? "s" : ""}
-              </span>
-            </>
-          )}
-          {isTrialExpired && (
-            <>
-              <span className="ph-dot">·</span>
-              <span style={{ color: "#DC2626", fontWeight: 600 }}>Trial expired</span>
-            </>
-          )}
         </p>
       </div>
 
-      {/* ── Urgency banners ── */}
-      {isTrialUrgent && (
-        <div className="banner banner-warn">
-          <Clock size={16} />
-          Your trial expires in <strong>{daysLeft} day{daysLeft !== 1 ? "s" : ""}</strong>.
-          Upgrade now to avoid any interruption to your data.
-        </div>
-      )}
-      {isTrialExpired && (
-        <div className="banner banner-error">
-          <AlertTriangle size={16} />
-          Your trial has expired. Upgrade immediately to restore full access.
-        </div>
-      )}
-
-      {/* ── Billing period toggle (above both cards) ── */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
-          Billing period
-        </div>
-        <div className="period-toggle">
-          <button
-            className={`period-btn ${billingPeriod === "monthly" ? "active" : ""}`}
-            onClick={() => setBillingPeriod("monthly")}
-          >
-            Monthly
-          </button>
-          <button
-            className={`period-btn ${billingPeriod === "half_yearly" ? "active" : ""}`}
-            onClick={() => setBillingPeriod("half_yearly")}
-          >
-            6 Months
-          </button>
-          <button
-            className={`period-btn ${billingPeriod === "yearly" ? "active" : ""}`}
-            onClick={() => setBillingPeriod("yearly")}
-          >
-            12 Months
-            {yearlySavingPct > 0 && (
-              <span className="save-tag">Save {yearlySavingPct}%</span>
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* ── Plan cards ── */}
+      {/* Plan cards */}
       <div className="plan-grid">
-
-        {/* LEFT — Current plan */}
+        {/* LEFT — Trial card */}
         <div className="plan-card">
-          <div className="card-label">Current plan</div>
+          <div className="card-label">
+            Trial <sup style={{ fontWeight: 400, fontSize: "0.8em", color: "#94A3B8", letterSpacing: 0 }}>10 days</sup>
+          </div>
           <h2 className="plan-name">{plan?.name || "Basic"}</h2>
 
-          {/* Trial status badge */}
-          {isTrialHealthy && (
+          {daysLeft !== null && daysLeft > 0 && (
             <span className="badge badge-green" style={{ marginBottom: 14, alignSelf: "flex-start" }}>
-              <Clock size={11} /> {daysLeft} days remaining
+              <Clock size={11} /> {daysLeft} day{daysLeft !== 1 ? "s" : ""} remaining
             </span>
           )}
-          {isTrialUrgent && (
-            <span className="badge badge-red" style={{ marginBottom: 14, alignSelf: "flex-start" }}>
-              <Clock size={11} /> {daysLeft} day{daysLeft !== 1 ? "s" : ""} left — expiring soon
-            </span>
-          )}
-          {isTrialExpired && (
+          {daysLeft !== null && daysLeft <= 0 && (
             <span className="badge badge-red" style={{ marginBottom: 14, alignSelf: "flex-start" }}>
               Trial expired
             </span>
@@ -459,19 +328,23 @@ export default function UpgradePage() {
           <ul className="feature-list">
             <li className="feature-item">
               <span className="feature-check"><Check size={11} color="#16A34A" /></span>
-              Full CRM
+              CRM — Customers, Invoices, Receipts, Suppliers, Bills, Payments
             </li>
             <li className="feature-item">
               <span className="feature-check"><Check size={11} color="#16A34A" /></span>
-              Banking
+              Banking — Bank accounts, transfers
             </li>
             <li className="feature-item">
               <span className="feature-check"><Check size={11} color="#16A34A" /></span>
-              Accounting (CoA, Journal)
+              Accounting — Chart of Accounts, Journal Entries
             </li>
             <li className="feature-item">
               <span className="feature-check"><Check size={11} color="#16A34A" /></span>
-              All core reports
+              Reports — Trial Balance, P&L, Balance Sheet, all Ledgers
+            </li>
+            <li className="feature-item">
+              <span className="feature-check"><Check size={11} color="#16A34A" /></span>
+              Settings — Company branding, address, contact
             </li>
             <li className="feature-item">
               <span className="feature-check"><Check size={11} color="#16A34A" /></span>
@@ -480,21 +353,16 @@ export default function UpgradePage() {
             {businessType === "trading" && (
               <li className="feature-item">
                 <span className="feature-check"><Check size={11} color="#16A34A" /></span>
-                Inventory &amp; Products
+                Inventory — Stock register, product selection, adjustments
               </li>
             )}
             {businessType === "ngo" && (
               <li className="feature-item">
                 <span className="feature-check"><Check size={11} color="#16A34A" /></span>
-                NGO Dashboard &amp; Project Tracking
+                NGO toolkit — Project/Activity/Location tags, Dashboard, Budget vs Actual
               </li>
             )}
           </ul>
-
-          <hr className="divider" />
-          <p style={{ fontSize: 12, color: "#94A3B8", margin: 0 }}>
-            Trial includes all features for {plan?.trial_days || 10} days.
-          </p>
         </div>
 
         {/* RIGHT — Upgrade card */}
@@ -502,79 +370,57 @@ export default function UpgradePage() {
           <div className="card-label card-label-upgrade">Upgrade to paid</div>
           <h2 className="plan-name">{plan?.name || "Basic"}</h2>
 
-          {/* Price block */}
+          {/* Billing period toggle inside the card */}
+          <div style={{ margin: "16px 0 12px" }}>
+            <div className="period-toggle">
+              <button
+                className={`period-btn ${billingPeriod === "monthly" ? "active" : ""}`}
+                onClick={() => setBillingPeriod("monthly")}
+              >
+                Monthly
+              </button>
+              <button
+                className={`period-btn ${billingPeriod === "half_yearly" ? "active" : ""}`}
+                onClick={() => setBillingPeriod("half_yearly")}
+              >
+                6 Months
+              </button>
+              <button
+                className={`period-btn ${billingPeriod === "yearly" ? "active" : ""}`}
+                onClick={() => setBillingPeriod("yearly")}
+              >
+                12 Months
+                {(() => {
+                  if (!plan) return null
+                  const monthly = plan.monthly_price_per_user || 0
+                  const yearly = plan.yearly_price_per_user || 0
+                  const saving = monthly * 12 - yearly
+                  const pct = monthly > 0 ? Math.round((saving / (monthly * 12)) * 100) : 0
+                  return <span className="save-tag">Save {pct}%</span>
+                })()}
+              </button>
+            </div>
+          </div>
+
+          {/* Price */}
           <div className="price-wrap">
-            {price > 0 ? (
-              <>
-                <span className="price-amount">PKR {price.toLocaleString()}</span>
-                <span className="price-unit">/ user / {periodLabel}</span>
-              </>
-            ) : (
-              <span className="price-zero">Contact us for pricing</span>
-            )}
+            <span className="price-amount">PKR {totalPrice.toLocaleString()}</span>
+            <span className="price-unit">/ user / {billingPeriod === "monthly" ? "month" : billingPeriod === "half_yearly" ? "6 months" : "year"}</span>
           </div>
 
-          {/* Badges row */}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
-            {billingPeriod === "yearly" && (
-              <span className="badge badge-amber">
-                <Star size={10} /> Best offer
-              </span>
-            )}
-            {billingPeriod === "yearly" && yearlySavingPct > 0 && (
-              <span className="badge badge-green">
-                <TrendingUp size={10} /> Save {yearlySavingPct}%
-              </span>
-            )}
-            {billingPeriod === "half_yearly" && (
-              <span className="badge badge-blue">6-month plan</span>
-            )}
-            {billingPeriod === "monthly" && (
-              <span className="badge badge-purple">Monthly flexibility</span>
-            )}
-          </div>
-
-          {/* What's included */}
-          <ul className="feature-list" style={{ marginTop: 16 }}>
-            <li className="feature-item">
-              <span className="feature-check"><Check size={11} color="#16A34A" /></span>
-              Everything in your current trial
-            </li>
-            <li className="feature-item">
-              <span className="feature-check"><Check size={11} color="#16A34A" /></span>
-              Unlimited invoices &amp; transactions
-            </li>
-            <li className="feature-item">
-              <span className="feature-check"><Check size={11} color="#16A34A" /></span>
-              Priority support
-            </li>
-            <li className="feature-item">
-              <span className="feature-check"><Check size={11} color="#16A34A" /></span>
-              Data export (CSV / PDF)
-            </li>
-            <li className="feature-item">
-              <span className="feature-check"><Check size={11} color="#16A34A" /></span>
-              Custom branding on reports
-            </li>
-          </ul>
+          {/* Selected add-ons summary */}
+          {selectedTopups.size > 0 && (
+            <div style={{ fontSize: 13, color: "#475569", marginTop: 8 }}>
+              Includes add‑ons: {Array.from(selectedTopups).map(c => TOPUP_FEATURES.find(f => f.code === c)?.name).join(", ")}
+            </div>
+          )}
 
           {/* Benchmark */}
           <div className="benchmark">{BENCHMARK_NOTE}</div>
 
-          <button
-            className="btn-upgrade"
-            onClick={handleUpgrade}
-            disabled={price === 0}
-            title={price === 0 ? "Price not configured — please contact support" : undefined}
-          >
+          <button className="btn-upgrade" onClick={handleUpgrade} disabled={totalPrice === 0}>
             Upgrade Now <ArrowRight size={16} />
           </button>
-
-          {price === 0 && (
-            <p style={{ fontSize: 12, color: "#94A3B8", textAlign: "center", marginTop: 8 }}>
-              Pricing for this plan is not yet configured. Please contact support.
-            </p>
-          )}
 
           <div className="trust-row">
             <span className="trust-item"><ShieldCheck size={13} /> Secure payment</span>
@@ -583,19 +429,26 @@ export default function UpgradePage() {
         </div>
       </div>
 
-      {/* ── Top-up features ── */}
+      {/* Top‑up features (selectable) */}
       <div style={{ marginBottom: 20 }}>
-        <h2 className="section-heading">🔧 Optional Add-On Features</h2>
+        <h2 className="section-heading">🔧 Optional Add‑On Features</h2>
         <p className="section-sub">
-          Extend your plan with powerful modules — PKR 500 / user / month each
+          Click to add or remove — PKR 500 / user / month each (discount applies with billing period)
         </p>
       </div>
 
       <div className="topup-grid">
         {TOPUP_FEATURES.map((topup) => {
-          const isActive = activeTopups.includes(topup.code)
+          const isAlreadyActive = activeTopups.includes(topup.code)   // already purchased
+          const isSelected = selectedTopups.has(topup.code)           // currently toggled for new purchase
+
           return (
-            <div key={topup.code} className={`topup-card ${isActive ? "topup-active" : ""}`}>
+            <div
+              key={topup.code}
+              className={`topup-card ${isAlreadyActive ? "active" : ""} ${isSelected ? "selected" : ""}`}
+              onClick={() => !isAlreadyActive && toggleTopup(topup.code)}
+              style={{ cursor: isAlreadyActive ? "default" : "pointer" }}
+            >
               <div className="topup-icon">{topup.icon}</div>
               <div className="topup-name">{topup.name}</div>
               <div className="topup-desc">{topup.desc}</div>
@@ -603,17 +456,16 @@ export default function UpgradePage() {
                 PKR {topup.price}
                 <span style={{ fontSize: "0.8em", color: "#94A3B8", marginLeft: 2 }}>/ user / month</span>
               </div>
-              {isActive ? (
-                <div className="topup-active-label">
-                  <Check size={14} /> Active
+              {isAlreadyActive ? (
+                <div className="topup-active-label"><Check size={14} /> Active</div>
+              ) : isSelected ? (
+                <div className="btn-topup" onClick={(e) => { e.stopPropagation(); toggleTopup(topup.code) }}>
+                  <Minus size={13} /> Remove
                 </div>
               ) : (
-                <button
-                  className="btn-topup"
-                  onClick={() => handleActivateTopup(topup.code, topup.name)}
-                >
-                  <Plus size={13} /> Activate
-                </button>
+                <div className="btn-topup" onClick={(e) => { e.stopPropagation(); toggleTopup(topup.code) }}>
+                  <Plus size={13} /> Add
+                </div>
               )}
             </div>
           )
