@@ -56,7 +56,7 @@ export default function SuperAdminPage() {
   })
   const [savingSubscription, setSavingSubscription] = useState(false)
 
-  // ── NEW: Payment notifications ────────────────────────────────
+  // ── NEW: Payment notifications state ──────────────────────────
   const [payments, setPayments] = useState<any[]>([])
 
   useEffect(() => { fetchCompanies(); fetchPayments() }, [])
@@ -72,6 +72,7 @@ export default function SuperAdminPage() {
     setLoading(false)
   }
 
+  // ── NEW: Fetch payment notifications ─────────────────────────
   const fetchPayments = async () => {
     try {
       const res = await fetch("/api/super-admin/payments")
@@ -347,7 +348,7 @@ export default function SuperAdminPage() {
         </div>
       )}
 
-      {/* ── NEW: Payment Notifications Section ─────────────────────── */}
+      {/* ── Payment Notifications Section ─────────────────────────── */}
       <div className="sa-section">
         <div className="sa-section-title">📬 Payment Notifications ({payments.length})</div>
         {payments.length === 0 ? (
