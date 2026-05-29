@@ -58,6 +58,7 @@ const navSections: NavSection[] = [
     { label: 'New Company',     icon: '🏢', href: '/dashboard/companies/new' },
     { label: 'Upgrade Plan',    icon: '⭐', href: '/dashboard/upgrade' },
     { label: 'Super Admin',     icon: '🛡️', href: '/dashboard/super-admin',      adminOnly: true },
+    { label: 'Projects', icon: '📁', href: '/dashboard/projects' },
   ]},
 ]
 
