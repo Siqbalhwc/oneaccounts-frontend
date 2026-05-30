@@ -8,9 +8,6 @@ import "./theme-utils.css"
 export const metadata: Metadata = {
   title: "OneAccounts",
   description: "Accounting Software for Trading, Service & NGO",
-  icons: {
-    icon: "/logo.png",
-  },
 }
 
 export default function RootLayout({
@@ -20,6 +17,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="icon" href="/logo.png" sizes="any" />
+      </head>
       <body>
         <ThemeProvider>
           <RoleProvider>
