@@ -347,6 +347,7 @@ export default function NewInvoicePage() {
       customerPhone: selectedCustomer.phone || "",
       customerAddress: selectedCustomer.address || "",
       customerEmail: selectedCustomer.email || "",
+      paymentTerms: selectedCustomer.payment_terms || null,
       items: items.map(i => ({
         description: i.description || "",
         qty: i.qty || 0,
@@ -400,6 +401,7 @@ export default function NewInvoicePage() {
       customerPhone: selectedCustomer.phone || "",
       customerAddress: selectedCustomer.address || "",
       customerEmail: selectedCustomer.email || "",
+      paymentTerms: selectedCustomer.payment_terms || null,
       items: items.map(i => ({
         description: i.description || "",
         qty: i.qty || 0,
@@ -695,13 +697,6 @@ export default function NewInvoicePage() {
                 </div>
               )}
             </div>
-
-            {editId && (
-              <div className="inv-card" style={{ marginTop: 12 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
-                <RecordHistory tableName="invoices" recordId={editId} />
-              </div>
-            )}
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -779,6 +774,14 @@ export default function NewInvoicePage() {
             </div>
           )}
         </div>
+
+        {/* Change History – moved below items */}
+        {editId && (
+          <div className="inv-card" style={{ marginTop: 16 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
+            <RecordHistory tableName="invoices" recordId={editId} />
+          </div>
+        )}
       </div>
     </div>
   )

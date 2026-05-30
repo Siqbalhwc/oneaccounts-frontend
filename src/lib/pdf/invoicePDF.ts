@@ -1,67 +1,16 @@
-/**
- * invoicePDF.ts
- * Generates a sales invoice PDF matching the Shahid Iqbal & Co sample.
- *
- * Place at:  src/lib/pdf/invoicePDF.ts
- * Deps:      npm install jspdf jspdf-autotable
- */
-
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
-// ─── Brand colours ────────────────────────────────────────────────────────────
-const NAVY            = [7,   8,  91]  as [number,number,number]
-const RED             = [220, 38,  38]  as [number,number,number]
-const AMBER           = [245,158,  11]  as [number,number,number]
-const DARK            = [17,  24,  39]  as [number,number,number]
-const MUTED           = [107,114, 128]  as [number,number,number]
-const BORDER          = [229,231, 235]  as [number,number,number]
-const WHITE           = [255,255, 255]  as [number,number,number]
-const ROW_ALT         = [248,249, 252]  as [number,number,number]
+// ─── Brand colours ────────────────────────────────────────────────
+const NAVY     = [7,   8,  91]  as [number,number,number]
+const RED      = [220, 38,  38]  as [number,number,number]
+const AMBER    = [245,158,  11]  as [number,number,number]
+const DARK     = [17,  24,  39]  as [number,number,number]
+const MUTED    = [107,114, 128]  as [number,number,number]
+const BORDER   = [229,231, 235]  as [number,number,number]
+const WHITE    = [255,255, 255]  as [number,number,number]
+const ROW_ALT  = [248,249, 252]  as [number,number,number]
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-export interface InvoiceItem {
-  description:   string
-  qty:           number
-  unit_price:    number
-  total:         number
-  image_path?:   string | null
-  product_id?:   string | null
-  product_name?: string
-}
-
-export interface InvoicePDFData {
-  companyName:    string
-  companyAddress: string
-  companyPhone:   string
-  companyEmail:   string
-  companyTagline: string
-  logoUrl?:       string | null
-  businessType?:  string
-
-  invoiceNo:  string
-  date:       string
-  dueDate:    string
-
-  customerName:    string
-  customerAddress: string
-  customerPhone:   string
-  customerEmail?:  string
-
-  paymentTerms?: string | null
-  notes?: string | null
-
-  status:     string
-  items:      InvoiceItem[]
-  subtotal:   number
-  total:      number
-  paid:       number
-  balanceDue: number
-
-  reference?: string
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 async function loadImage(url: string): Promise<string | null> {
   try {
     const res = await fetch(url)
@@ -93,7 +42,47 @@ function filledRect(
     : doc.rect(x, y, w, h, "F")
 }
 
-// ─── Main export ──────────────────────────────────────────────────────────────
+export interface InvoiceItem {
+  description:   string
+  qty:           number
+  unit_price:    number
+  total:         number
+  image_path?:   string | null
+  product_id?:   string | null
+  product_name?: string
+}
+
+export interface InvoicePDFData {
+  companyName:    string
+  companyAddress: string
+  companyPhone:   string
+  companyEmail:   string
+  companyTagline: string
+  logoUrl?:       string | null
+  businessType?:  string
+
+  invoiceNo:  string
+  date:       string
+  dueDate:    string
+
+  customerName:    string
+  customerAddress: string
+  customerPhone:   string
+  customerEmail?:  string
+
+  paymentTerms?: string | null   // ✅ new field
+  notes?: string | null
+
+  status:     string
+  items:      InvoiceItem[]
+  subtotal:   number
+  total:      number
+  paid:       number
+  balanceDue: number
+
+  reference?: string
+}
+
 export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
 
@@ -113,7 +102,6 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     logoData = await loadImage(data.logoUrl)
   }
 
-  // Add logo WITHOUT any background or circle
   if (logoData) {
     doc.addImage(logoData, "PNG", LOGO_X, LOGO_Y, LOGO_SIZE, LOGO_SIZE)
   }
@@ -124,13 +112,11 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setFontSize(13)
   doc.text(data.companyName || "Your Company", textX, LOGO_Y + 7)
 
-  // Company details under the name
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8.5)
   doc.setTextColor(...MUTED)
   doc.text(data.companyTagline || "", textX, LOGO_Y + 13)
 
-  // Add address, phone, email below tagline
   let infoY = LOGO_Y + 18
   if (data.companyAddress) {
     doc.text(data.companyAddress, textX, infoY)
@@ -363,17 +349,11 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
 
   const afterTable = (doc as any).lastAutoTable.finalY as number
 
-  // ── Rounded border — white corner patches to hide square autoTable edges ──
-  const TABLE_RADIUS = 4
-  const cornerSize   = TABLE_RADIUS + 1
-
-  doc.setFillColor(...WHITE)
-  doc.rect(ML,                       afterTable - cornerSize, cornerSize, cornerSize, "F")
-  doc.rect(ML + CW - cornerSize,     afterTable - cornerSize, cornerSize, cornerSize, "F")
-
+  // ── Simple square border around the table body (no white patches) ──
   doc.setDrawColor(...BORDER)
   doc.setLineWidth(0.3)
-  doc.roundedRect(ML, bodyStartY, CW, afterTable - bodyStartY, TABLE_RADIUS, TABLE_RADIUS, "S")
+  // draw a rectangle around the table body, aligned with the header
+  doc.rect(ML, bodyStartY, CW, afterTable - bodyStartY, "S")
 
   // ── SECTION 5: SUBTOTAL / TAX / TOTAL ──────────────────────────────────────
   let SY = afterTable + 6
@@ -425,15 +405,10 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   // ── SECTION 6: NOTES & TERMS ───────────────────────────────────────────────
   SY += 6
 
-  const termsLines: string[] = []
-  if (data.paymentTerms) termsLines.push(data.paymentTerms)
-  if (data.notes)        termsLines.push(data.notes)
-  if (termsLines.length === 0) {
-    termsLines.push(
-      "Payment is due within 30 days of invoice date.",
-      "Please reference the invoice number with your payment.",
-    )
-  }
+  // ✅ Use actual payment terms from customer, fallback to the existing text
+  const terms = data.paymentTerms || "Payment is due within 30 days of invoice date."
+  const termsLines: string[] = [terms]
+  if (data.notes) termsLines.push(data.notes)
 
   doc.setFont("helvetica", "bold")
   doc.setFontSize(7.5)
