@@ -114,14 +114,6 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   if (data.companyPhone)   { doc.text("Phone: " + data.companyPhone, textX, infoY); infoY += 4 }
   if (data.companyEmail)   { doc.text("Email: " + data.companyEmail, textX, infoY) }
 
-  // ── Prepared by ─────────────────────────────────────────────────
-  if (data.createdBy) {
-    doc.setFont("helvetica", "normal")
-    doc.setFontSize(7.5)
-    doc.setTextColor(...MUTED)
-    doc.text("Prepared by: " + data.createdBy, ML, infoY + 4)
-  }
-
   // ── REPORT TITLE ─────────────────────────────────────────────────
   doc.setFont("helvetica", "bold")
   doc.setFontSize(26)
