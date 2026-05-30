@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Printer, Send } from "lucide-react"
+import { generateReceiptPDF } from "@/lib/pdf/receiptPDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
 import { useCompany } from "@/contexts/CompanyContext"
@@ -63,6 +64,32 @@ export default function ReceiptDetailPage() {
       })
   }, [companyId, receiptId])
 
+  const handlePrintPDF = async () => {
+    if (!receipt) return
+
+    const pdfData = {
+      companyName:    companyName || "",
+      companyAddress: "",
+      companyPhone:   "",
+      companyEmail:   "",
+      companyTagline: companyTagline || "",
+      logoUrl:        logoUrl,
+      receiptNo:      receipt.receipt_no,
+      date:           receipt.date,
+      customerName:    receipt.customer?.name    || "Unknown",
+      customerAddress: receipt.customer?.address || "",
+      customerPhone:   receipt.customer?.phone   || "",
+      customerEmail:   receipt.customer?.email   || "",
+      paymentMethod:   receipt.payment_method,
+      amount:          receipt.amount || 0,
+      reference:       receipt.reference || "",
+      notes:           receipt.notes || "",
+    }
+
+    const doc = await generateReceiptPDF(pdfData)
+    doc.save(`Receipt_${receipt.receipt_no}.pdf`)
+  }
+
   if (loading) return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>Loading…</div>
   if (!receipt) return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>Receipt not found</div>
 
@@ -75,6 +102,8 @@ export default function ReceiptDetailPage() {
         .value { color: var(--text); font-weight: 500; }
         .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; text-decoration: none; }
         .btn:hover { background: var(--card-hover); }
+        .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+        .btn-primary:hover { background: var(--primary-hover); }
         .record-history { background: var(--bg-soft); border-radius: 8px; padding: 8px; }
         @media (max-width: 640px) {
           .label { width: 100px; }
@@ -91,6 +120,9 @@ export default function ReceiptDetailPage() {
             <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>{receipt.customer?.name || "Unknown Customer"}</p>
           </div>
         </div>
+        <button className="btn btn-primary" onClick={handlePrintPDF}>
+          <Printer size={14} /> Print PDF
+        </button>
       </div>
 
       <div className="card">
