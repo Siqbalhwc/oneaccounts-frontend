@@ -182,25 +182,23 @@ export default function CustomersPage() {
       <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
         <style>{`
           .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; width: 100%; }
+          /* Flexible table that fills available width on large screens, scrolls on small */
+          .cust-table { width: 100%; }
           .header-row {
             display: grid;
-            grid-template-columns: 80px 250px 120px 100px 130px 55px 55px 55px;
-            column-gap: 8px;
+            grid-template-columns: minmax(80px, 1fr) minmax(150px, 2fr) minmax(100px, 1fr) minmax(100px, 1fr) minmax(140px, 1.5fr) 55px 55px 55px;
             padding: 14px 24px;
             background: var(--card-hover);
             font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
             border-bottom: 1px solid var(--border);
-            width: 100%;
           }
           .data-row {
             display: grid;
-            grid-template-columns: 80px 250px 120px 100px 130px 55px 55px 55px;
-            column-gap: 8px;
+            grid-template-columns: minmax(80px, 1fr) minmax(150px, 2fr) minmax(100px, 1fr) minmax(100px, 1fr) minmax(140px, 1.5fr) 55px 55px 55px;
             padding: 12px 24px;
             border-bottom: 1px solid var(--border);
             font-size: 13px; align-items: center;
             transition: background 0.15s;
-            width: 100%;
           }
           .data-row:hover { background: var(--card-hover); }
           .data-row:last-child { border-bottom: none; }
@@ -252,8 +250,22 @@ export default function CustomersPage() {
             word-wrap: break-word;
           }
           .message { padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
+
+          /* Responsive: on small screens, allow horizontal scroll */
+          @media (max-width: 900px) {
+            .header-row, .data-row {
+              grid-template-columns: minmax(80px, 1fr) minmax(150px, 2fr) minmax(100px, 1fr) minmax(100px, 1fr) minmax(140px, 1.5fr) 55px 55px 55px;
+              padding: 10px 16px;
+            }
+            .cust-table { overflow-x: auto; }
+          }
           @media (max-width: 640px) {
-            .header-row, .data-row { grid-template-columns: 60px 150px 80px 70px 100px 45px 45px 45px; column-gap: 4px; }
+            .header-row, .data-row {
+              grid-template-columns: 80px 150px 100px 100px 140px 55px 55px 55px;
+              column-gap: 4px;
+              padding: 10px 12px;
+              font-size: 11px;
+            }
             .search-input { width: 100%; }
           }
         `}</style>
@@ -330,7 +342,7 @@ export default function CustomersPage() {
             No customers found. {canEdit && "Add a customer to get started."}
           </div>
         ) : (
-          <div className="card">
+          <div className="card cust-table">
             <div className="header-row">
               <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
               <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
