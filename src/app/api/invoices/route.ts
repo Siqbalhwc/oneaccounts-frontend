@@ -39,7 +39,7 @@ async function createJE(
   // ⚡ Batch update account balances using a single SQL call
   const accountUpdates = lines.reduce((acc, l) => {
     const key = l.account_id
-    const existing = acc.find(u => u.account_id === key)
+    const existing = acc.find((u: any) => u.account_id === key)
     if (existing) {
       existing.delta += (l.debit || 0) - (l.credit || 0)
     } else {
