@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useCompany } from "@/contexts/CompanyContext"   // ← reads companyId from context
 
 async function resolveUserEmail(userId: string): Promise<string> {
   if (userId.includes("@")) return userId
@@ -20,12 +21,12 @@ async function resolveUserEmail(userId: string): Promise<string> {
 export default function RecordHistory({
   tableName,
   recordId,
-  companyId,
 }: {
   tableName: string
   recordId: string
-  companyId: string
 }) {
+  const { companyId } = useCompany()   // ← automatically gets the current company
+
   const [logs, setLogs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [userNames, setUserNames] = useState<Record<string, string>>({})
