@@ -32,6 +32,7 @@ interface Invoice {
   reference?: string
   notes?: string
   party_id: number
+  created_by?: string   // ✅ new
   items?: InvoiceItem[]
   customer?: {
     name: string
@@ -40,6 +41,7 @@ interface Invoice {
     country_code?: string
     address?: string
     email?: string
+    payment_terms?: string   // ✅ new
   }
 }
 
@@ -93,11 +95,11 @@ export default function InvoiceDetailPage() {
 
         const inv: Invoice = data
 
-        // 2. Load customer
+        // 2. Load customer – now includes payment_terms
         if (inv.party_id) {
           const { data: cust } = await supabase
             .from("customers")
-            .select("name, code, phone, country_code, address, email")
+            .select("name, code, phone, country_code, address, email, payment_terms")
             .eq("id", inv.party_id)
             .single()
           inv.customer = cust || undefined
@@ -197,11 +199,11 @@ export default function InvoiceDetailPage() {
 
     const pdfData = {
       companyName:    companyName || "",
-      companyAddress: "",        // address not yet in context, can be added later
+      companyAddress: "",
       companyPhone:   "",
       companyEmail:   "",
       companyTagline: companyTagline || "",
-      logoUrl:        logoUrl,   // directly from context – the base64 data URL
+      logoUrl:        logoUrl,
       businessType:   "",
       invoiceNo:      invoice.invoice_no,
       date:           invoice.date,
@@ -210,7 +212,9 @@ export default function InvoiceDetailPage() {
       customerAddress: customer?.address || "",
       customerPhone:   customer?.phone   || "",
       customerEmail:   customer?.email   || "",
-      status: invoice.status,
+      paymentTerms:    customer?.payment_terms || null,   // ✅ actual terms
+      createdBy:       invoice.created_by || "—",         // ✅ preparer
+      status:          invoice.status,
       items: (invoice.items || []).map(item => ({
         description:  item.description   || "",
         qty:          item.qty           || 0,
