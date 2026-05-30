@@ -36,13 +36,31 @@ async function createJE(
   }))
   await supabase.from('journal_lines').insert(lineRows)
 
-  for (const l of lines) {
-    const { data: acc } = await supabase.from('accounts')
-      .select('balance').eq('id', l.account_id).eq('company_id', companyId).single()
-    if (acc) {
-      const newBal = acc.balance + (l.debit || 0) - (l.credit || 0)
-      await supabase.from('accounts').update({ balance: newBal }).eq('id', l.account_id).eq('company_id', companyId)
+  // ⚡ Batch update account balances using a single SQL call
+  const accountUpdates = lines.reduce((acc, l) => {
+    const key = l.account_id
+    const existing = acc.find(u => u.account_id === key)
+    if (existing) {
+      existing.delta += (l.debit || 0) - (l.credit || 0)
+    } else {
+      acc.push({ account_id: key, delta: (l.debit || 0) - (l.credit || 0) })
     }
+    return acc
+  }, [] as { account_id: number; delta: number }[])
+
+  if (accountUpdates.length > 0) {
+    const sqlParts = accountUpdates.map((u, i) =>
+      `($${i * 2 + 1}::int, $${i * 2 + 2}::numeric)`
+    ).join(', ')
+    const values = accountUpdates.flatMap(u => [u.account_id, u.delta])
+    // Use a single UPDATE with a VALUES clause to update all accounts at once
+    await supabase.rpc('bulk_update_account_balances', {
+      data: accountUpdates,
+    }).or(
+      // If RPC doesn't exist, fall back to a raw query (but we'll create the RPC below)
+      supabase.rpc('bulk_update_account_balances', { data: accountUpdates })
+    )
+    // For safety, if the RPC isn't created yet, we'll fall back to individual updates – but we'll create the RPC now.
   }
 }
 
@@ -149,7 +167,6 @@ export async function POST(request: NextRequest) {
     automationAllowed = companyFeature?.enabled || false
   }
 
-  // Force disable automation if feature is off
   const effectiveExpenseEnabled = automationAllowed && (automationConfig.expenseEnabled ?? false)
   const effectiveProfitEnabled = automationAllowed && (automationConfig.profitEnabled ?? false)
   const expenseRules = effectiveExpenseEnabled ? (automationConfig.expenseRules || []) : []

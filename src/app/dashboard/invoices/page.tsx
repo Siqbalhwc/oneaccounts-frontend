@@ -7,7 +7,7 @@ import { Plus, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 
-type SortField = "invoice_no" | "date" | "customer" | "total" | "status"
+type SortField = "invoice_no" | "date" | "customer" | "total" | "status" | "created_by"
 type SortDir = "asc" | "desc"
 
 export default function InvoicesPage() {
@@ -91,6 +91,9 @@ export default function InvoicesPage() {
     } else if (sortField === "status") {
       valA = (a.status || "").toLowerCase()
       valB = (b.status || "").toLowerCase()
+    } else if (sortField === "created_by") {
+      valA = (a.created_by || "").toLowerCase()
+      valB = (b.created_by || "").toLowerCase()
     } else {
       valA = (a[sortField] || "").toString().toLowerCase()
       valB = (b[sortField] || "").toString().toLowerCase()
@@ -134,25 +137,22 @@ export default function InvoicesPage() {
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; width: 100%; }
+        .inv-table { width: 100%; }
         .header-row {
           display: grid;
-          grid-template-columns: 120px 90px 1fr 100px 80px 120px 180px;
-          column-gap: 8px;
+          grid-template-columns: minmax(100px, 1fr) minmax(90px, 1fr) minmax(150px, 2fr) minmax(90px, 1fr) minmax(80px, 1fr) minmax(130px, 1.5fr) minmax(100px, 1fr);
           padding: 14px 24px;
+          background: var(--card-hover);
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
-          background: var(--card);
-          width: 100%;
         }
         .data-row {
           display: grid;
-          grid-template-columns: 120px 90px 1fr 100px 80px 120px 180px;
-          column-gap: 8px;
+          grid-template-columns: minmax(100px, 1fr) minmax(90px, 1fr) minmax(150px, 2fr) minmax(90px, 1fr) minmax(80px, 1fr) minmax(130px, 1.5fr) minmax(100px, 1fr);
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
           transition: background 0.15s;
-          width: 100%;
         }
         .data-row:hover { background: var(--card-hover); }
         .btn {
@@ -182,8 +182,12 @@ export default function InvoicesPage() {
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
         .creator-editor-cell { display: flex; flex-direction: column; font-size: 11px; color: var(--text-muted); line-height: 1.3; word-wrap: break-word; }
-        @media (max-width: 640px) {
-          .header-row, .data-row { grid-template-columns: 80px 70px 1fr 70px 60px 80px 130px; padding: 10px 12px; }
+        @media (max-width: 900px) {
+          .inv-table { overflow-x: auto; }
+          .header-row, .data-row {
+            grid-template-columns: 100px 80px 140px 80px 70px 120px 90px;
+            padding: 10px 12px;
+          }
         }
       `}</style>
 
@@ -214,14 +218,14 @@ export default function InvoicesPage() {
       ) : sortedFiltered.length === 0 ? (
         <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>No invoices found.</div>
       ) : (
-        <div className="card">
+        <div className="card inv-table">
           <div className="header-row">
             <button className="sort-btn" onClick={() => handleSort("invoice_no")}>Invoice # {getSortIcon("invoice_no")}</button>
             <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
             <button className="sort-btn" onClick={() => handleSort("customer")}>Customer {getSortIcon("customer")}</button>
             <button className="sort-btn" onClick={() => handleSort("total")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Total {getSortIcon("total")}</button>
             <button className="sort-btn" onClick={() => handleSort("status")}>Status {getSortIcon("status")}</button>
-            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", display: "inline-flex", alignItems: "center", gap: 4, background: "none", border: "none", padding: 0 }}>Created / Edited By</span>
+            <button className="sort-btn" onClick={() => handleSort("created_by")}>Created / Edited By {getSortIcon("created_by")}</button>
             <span></span>
           </div>
           {sortedFiltered.map((inv) => {
