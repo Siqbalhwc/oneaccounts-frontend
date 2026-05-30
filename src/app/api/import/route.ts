@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
 
       const row: any = {}
       headers.forEach((h, idx) => {
-        let val = values[idx]
+        let val: any = values[idx]
         if (["balance", "sale_price", "cost_price", "qty_on_hand", "reorder_level"].includes(h)) {
           val = parseFloat(val) || 0
         }
