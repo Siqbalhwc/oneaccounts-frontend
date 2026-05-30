@@ -1,12 +1,38 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { TrendingUp, TrendingDown, Minus, CheckCircle, AlertTriangle } from "lucide-react"
 import { motion } from "framer-motion"
 import { useTheme } from "@/contexts/ThemeContext"
 import { useCompany } from "@/contexts/CompanyContext"
 import { useDashboardData } from "@/hooks/useDashboardData"
+
+// ── Simple animated number hook ────────────────────────────────────
+function useAnimatedNumber(target: number, duration = 500) {
+  const [display, setDisplay] = useState(0)
+  const prev = useRef(0)
+
+  useEffect(() => {
+    const start = prev.current
+    const diff = target - start
+    if (diff === 0) return
+    const startTime = performance.now()
+
+    const tick = (now: number) => {
+      const elapsed = now - startTime
+      const progress = Math.min(elapsed / duration, 1)
+      // easeOutCubic
+      const ease = 1 - Math.pow(1 - progress, 3)
+      setDisplay(start + diff * ease)
+      if (progress < 1) requestAnimationFrame(tick)
+      else prev.current = target
+    }
+    requestAnimationFrame(tick)
+  }, [target, duration])
+
+  return display
+}
 
 export default function ManagementDashboard({ role }: { role: string }) {
   const router = useRouter()
@@ -41,6 +67,12 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const overdueInvoicesCount: number = dashData?.overdueInvoicesCount || 0
   const lastUpdated: string = dashData?.lastUpdated || ""
 
+  // ── Animated versions of the main KPIs ────────────────────────────
+  const animBudget = useAnimatedNumber(totalBudget / 1_000_000, 600)
+  const animSpent = useAnimatedNumber(totalSpent / 1_000_000, 600)
+  const animRemaining = useAnimatedNumber(Math.abs(totalBudget - totalSpent) / 1_000_000, 600)
+  const animMonthly = useAnimatedNumber(monthlySpending / 1_000_000, 600)
+
   // ── Underspent activities & activity health (unchanged) ─────────────
   const [underspentActivities, setUnderspentActivities] = useState<any[]>([])
   const [activityHealth, setActivityHealth] = useState<Record<string, { lowCount: number; threshold: number; message: string }>>({})
@@ -71,7 +103,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const formatPKR = (v: number): string => {
     const sign = v < 0 ? "-" : ""
     const abs = Math.abs(v)
-    return `${sign}PKR ${(abs / 1_000_000).toFixed(1)}M`
+    return `${sign}PKR ${abs.toFixed(1)}M`
   }
 
   const detailQuery = (extra: Record<string, string> = {}): string => {
@@ -180,7 +212,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
         }
         .mgmt .hero-greeting p {
           color: var(--text-muted); font-size: 0.85rem; margin: 0;
-          /* allow wrapping on small screens */
           white-space: normal;
         }
         .mgmt .hero-filters {
@@ -238,7 +269,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
           gap: 1rem;
           margin-bottom: 1rem;
         }
-        /* on small screens, keep cards side‑by‑side with horizontal scroll */
         @media (max-width: 640px) {
           .dashboard-grid-32 {
             display: flex;
@@ -310,6 +340,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
       `}</style>
 
       <div className="mgmt" style={{ padding: "0.8rem 1.2rem" }}>
+        {/* ── Hero ── */}
         <motion.div
           className="hero"
           initial={{ opacity: 0, y: -10 }}
@@ -369,14 +400,14 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </motion.div>
         )}
 
-        {/* KPI cards */}
+        {/* KPI cards – using animated numbers */}
         <div className="dashboard-grid">
           {[
-            { label: "Total Budget", value: formatPKR(filteredTotalBudget), meta: `${filteredProjectRows.length} projects`, color: "#A78BFA", link: "/dashboard/reports/budget-summary" },
-            { label: "Total Spent", value: formatPKR(filteredTotalSpent), meta: `${spentPct}% of budget`, color: "#F97316", link: "/dashboard/reports/spending-detail" },
-            { label: remainingFunds < 0 ? "Overspent" : "Remaining", value: formatPKR(remainingFunds), meta: `${Math.abs(Math.round((remainingFunds / filteredTotalBudget) * 100))}% ${remainingFunds < 0 ? "over" : "left"}`, color: remainingFunds >= 0 ? "#2DD4BF" : "#F87171", link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null },
+            { label: "Total Budget", value: formatPKR(animBudget * 1_000_000), meta: `${filteredProjectRows.length} projects`, color: "#A78BFA", link: "/dashboard/reports/budget-summary" },
+            { label: "Total Spent", value: formatPKR(animSpent * 1_000_000), meta: `${spentPct}% of budget`, color: "#F97316", link: "/dashboard/reports/spending-detail" },
+            { label: remainingFunds < 0 ? "Overspent" : "Remaining", value: formatPKR(animRemaining * 1_000_000), meta: `${Math.abs(Math.round((remainingFunds / filteredTotalBudget) * 100))}% ${remainingFunds < 0 ? "over" : "left"}`, color: remainingFunds >= 0 ? "#2DD4BF" : "#F87171", link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null },
             { label: "Portfolio Health", value: filteredOverspentCount > 0 ? "⚠️ Needs Attention" : "Healthy", meta: `${Math.round((1 - filteredOverspentCount / Math.max(filteredProjectRows.length, 1)) * 100)}% health score`, color: filteredOverspentCount > 0 ? "#F97316" : "#2DD4BF", link: "/dashboard/reports/overspent" },
-            { label: "📆 Monthly Spending", value: monthlySpending > 0 ? formatPKR(monthlySpending) : "—", meta: monthlySpending === 0 ? "No transactions this month" : `vs. ${formatPKR(lastMonthSpending)} last month`, color: monthlySpending > 0 ? "#F97316" : "#94A3B8", link: "/dashboard/reports/spending-detail" },
+            { label: "📆 Monthly Spending", value: monthlySpending > 0 ? formatPKR(animMonthly * 1_000_000) : "—", meta: monthlySpending === 0 ? "No transactions this month" : `vs. ${formatPKR(lastMonthSpending)} last month`, color: monthlySpending > 0 ? "#F97316" : "#94A3B8", link: "/dashboard/reports/spending-detail" },
           ].map((kpi: any, i: number) => (
             <motion.div
               key={kpi.label}
