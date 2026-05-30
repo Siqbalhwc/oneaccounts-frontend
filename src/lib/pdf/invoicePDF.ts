@@ -70,8 +70,9 @@ export interface InvoicePDFData {
   customerPhone:   string
   customerEmail?:  string
 
-  paymentTerms?: string | null   // ✅ new field
+  paymentTerms?: string | null
   notes?: string | null
+  createdBy?: string | null   // ✅ new field
 
   status:     string
   items:      InvoiceItem[]
@@ -128,6 +129,14 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   }
   if (data.companyEmail) {
     doc.text("Email: " + data.companyEmail, textX, infoY)
+  }
+
+  // ── Prepared by ────────────────────────────────────────────────────────────
+  if (data.createdBy) {
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(7.5)
+    doc.setTextColor(...MUTED)
+    doc.text("Prepared by: " + data.createdBy, ML, infoY + 4)
   }
 
   doc.setFont("helvetica", "bold")
@@ -230,10 +239,10 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setLineWidth(0.3)
   doc.line(ML, divY, PW - MR, divY)
 
-  // ── SECTION 3: CUSTOM ROUNDED TABLE HEADER ─────────────────────────────────
+  // ── SECTION 3: SQUARE TABLE HEADER ─────────────────────────────────────────
   const tableY = divY + 4
   const HEADER_ROW_H = 10
-  const HEADER_RADIUS = 4
+  const HEADER_RADIUS = 0   // ✅ square corners
 
   filledRect(doc, ML, tableY, CW, HEADER_ROW_H, NAVY, HEADER_RADIUS)
 
@@ -349,13 +358,12 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
 
   const afterTable = (doc as any).lastAutoTable.finalY as number
 
-  // ── Simple square border around the table body (no white patches) ──
+  // ── Square border around the table body ──
   doc.setDrawColor(...BORDER)
   doc.setLineWidth(0.3)
-  // draw a rectangle around the table body, aligned with the header
   doc.rect(ML, bodyStartY, CW, afterTable - bodyStartY, "S")
 
-  // ── SECTION 5: SUBTOTAL / TAX / TOTAL ──────────────────────────────────────
+  // ── SECTION 5: SUBTOTAL / TAX / TOTAL (SQUARE BOX) ─────────────────────────
   let SY = afterTable + 6
 
   const sumX = PW - MR - 70
@@ -376,7 +384,8 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.text(pkr(0), valX, SY, { align: "right" })
   SY += 5.5
 
-  const TOTAL_RADIUS = 4
+  // ✅ Square total box
+  const TOTAL_RADIUS = 0
   filledRect(doc, sumX - 2, SY - 4, valX - sumX + 4, 9, NAVY, TOTAL_RADIUS)
   doc.setFont("helvetica", "bold")
   doc.setFontSize(10)
@@ -405,7 +414,6 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   // ── SECTION 6: NOTES & TERMS ───────────────────────────────────────────────
   SY += 6
 
-  // ✅ Use actual payment terms from customer, fallback to the existing text
   const terms = data.paymentTerms || "Payment is due within 30 days of invoice date."
   const termsLines: string[] = [terms]
   if (data.notes) termsLines.push(data.notes)
