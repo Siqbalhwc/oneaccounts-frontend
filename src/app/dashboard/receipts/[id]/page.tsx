@@ -218,7 +218,7 @@ export default function ReceiptDetailPage() {
       {receipt && (
         <div className="card">
           <h3 style={{ marginTop:0, fontSize:16, fontWeight:700, color:"var(--text)", marginBottom:12 }}>📝 Change History</h3>
-          <div className="record-history"><RecordHistory tableName="receipts" recordId={String(receipt.id)} /></div>
+          <div className="record-history"><RecordHistory tableName="receipts" recordId={String(receipt.id)} companyId={companyId} /></div>
         </div>
       )}
     </div>

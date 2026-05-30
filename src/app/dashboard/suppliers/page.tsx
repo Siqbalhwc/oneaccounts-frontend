@@ -583,8 +583,7 @@ export default function SuppliersPage() {
               {editingSupplier && (
                 <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 4 }}>
                   <h4 style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>📝 Change History</h4>
-                  <RecordHistory tableName="suppliers" recordId={String(editingSupplier.id)} />
-                </div>
+                  <RecordHistory tableName="suppliers" recordId={String(supplier.id)} companyId={companyId} />                </div>
               )}
             </div>
             <div style={{ padding: "16px 24px", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
