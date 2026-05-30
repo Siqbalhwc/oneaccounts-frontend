@@ -34,12 +34,9 @@ function filledRect(
   doc: jsPDF,
   x: number, y: number, w: number, h: number,
   fillRgb: [number,number,number],
-  radius = 0,
 ) {
   doc.setFillColor(...fillRgb)
-  radius > 0
-    ? doc.roundedRect(x, y, w, h, radius, radius, "F")
-    : doc.rect(x, y, w, h, "F")
+  doc.rect(x, y, w, h, "F")
 }
 
 export interface InvoiceItem {
@@ -71,8 +68,8 @@ export interface InvoicePDFData {
   customerEmail?:  string
 
   paymentTerms?: string | null
-  notes?: string | null
-  createdBy?: string | null   // ✅ new field
+  notes?:       string | null
+  createdBy?:   string | null
 
   status:     string
   items:      InvoiceItem[]
@@ -93,19 +90,13 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   const MR = 14
   const CW = PW - ML - MR
 
-  // ── SECTION 1: HEADER ───────────────────────────────────────────────────────
+  // ── LOGO & COMPANY INFO ─────────────────────────────────────────
   const LOGO_SIZE = 18
-  const LOGO_X    = ML
-  const LOGO_Y    = 6
-
+  const LOGO_X = ML
+  const LOGO_Y = 6
   let logoData: string | null = null
-  if (data.logoUrl) {
-    logoData = await loadImage(data.logoUrl)
-  }
-
-  if (logoData) {
-    doc.addImage(logoData, "PNG", LOGO_X, LOGO_Y, LOGO_SIZE, LOGO_SIZE)
-  }
+  if (data.logoUrl) logoData = await loadImage(data.logoUrl)
+  if (logoData) doc.addImage(logoData, "PNG", LOGO_X, LOGO_Y, LOGO_SIZE, LOGO_SIZE)
 
   const textX = logoData ? LOGO_X + LOGO_SIZE + 4 : ML
   doc.setTextColor(...NAVY)
@@ -119,19 +110,11 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.text(data.companyTagline || "", textX, LOGO_Y + 13)
 
   let infoY = LOGO_Y + 18
-  if (data.companyAddress) {
-    doc.text(data.companyAddress, textX, infoY)
-    infoY += 4
-  }
-  if (data.companyPhone) {
-    doc.text("Phone: " + data.companyPhone, textX, infoY)
-    infoY += 4
-  }
-  if (data.companyEmail) {
-    doc.text("Email: " + data.companyEmail, textX, infoY)
-  }
+  if (data.companyAddress) { doc.text(data.companyAddress, textX, infoY); infoY += 4 }
+  if (data.companyPhone)   { doc.text("Phone: " + data.companyPhone, textX, infoY); infoY += 4 }
+  if (data.companyEmail)   { doc.text("Email: " + data.companyEmail, textX, infoY) }
 
-  // ── Prepared by ────────────────────────────────────────────────────────────
+  // ── Prepared by ─────────────────────────────────────────────────
   if (data.createdBy) {
     doc.setFont("helvetica", "normal")
     doc.setFontSize(7.5)
@@ -139,6 +122,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     doc.text("Prepared by: " + data.createdBy, ML, infoY + 4)
   }
 
+  // ── REPORT TITLE ─────────────────────────────────────────────────
   doc.setFont("helvetica", "bold")
   doc.setFontSize(26)
   doc.setTextColor(...NAVY)
@@ -156,12 +140,11 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.text(data.date,      PW - MR, metaY + 5, { align: "right" })
 
   const HEADER_H = LOGO_Y + LOGO_SIZE + 4
-
   doc.setDrawColor(...BORDER)
   doc.setLineWidth(0.4)
   doc.line(ML, HEADER_H, PW - MR, HEADER_H)
 
-  // ── SECTION 2: BILL TO / AMOUNT DUE ────────────────────────────────────────
+  // ── BILL TO / AMOUNT DUE ────────────────────────────────────────
   let Y = HEADER_H + 7
 
   doc.setFont("helvetica", "bold")
@@ -228,7 +211,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   const badgeH = 6
   const badgeX = PW - MR - badgeW
   const badgeY = statusLabelY + 2
-  filledRect(doc, badgeX, badgeY, badgeW, badgeH, badgeColor, 2)
+  filledRect(doc, badgeX, badgeY, badgeW, badgeH, badgeColor)
   doc.setFont("helvetica", "bold")
   doc.setFontSize(7.5)
   doc.setTextColor(...WHITE)
@@ -239,57 +222,62 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setLineWidth(0.3)
   doc.line(ML, divY, PW - MR, divY)
 
-  // ── SECTION 3: SQUARE TABLE HEADER ─────────────────────────────────────────
+  // ── THINNER TABLE HEADER (6 mm) with white separators ───────────
   const tableY = divY + 4
-  const HEADER_ROW_H = 10
-  const HEADER_RADIUS = 0   // ✅ square corners
+  const ROW_H = 6
+  const HEADER_ROW_H = ROW_H
 
-  filledRect(doc, ML, tableY, CW, HEADER_ROW_H, NAVY, HEADER_RADIUS)
+  // Column widths (same as before)
+  const codeColW = 14
+  const nameColW = CW - codeColW - 16 - 32 - 34 - (8+2)  // approximate
+  const qtyColW = 16
+  const priceColW = 32
+  const amtColW = 34
 
-  const descColX = ML + 14 + 8 + 2
-  const descColW = CW - (14 + 8 + 2) - (16 + 32 + 34 + 4)
+  // Draw navy background
+  filledRect(doc, ML, tableY, CW, HEADER_ROW_H, NAVY)
 
-  const FONT_SIZE_HEADER = 9
-  const textY = tableY + HEADER_ROW_H / 2 + FONT_SIZE_HEADER * 0.35
+  // White vertical separators between columns
+  doc.setDrawColor(...WHITE)
+  doc.setLineWidth(0.2)
+  let sepX = ML + codeColW
+  doc.line(sepX, tableY, sepX, tableY + HEADER_ROW_H)
 
+  sepX += nameColW
+  doc.line(sepX, tableY, sepX, tableY + HEADER_ROW_H)
+
+  sepX += qtyColW
+  doc.line(sepX, tableY, sepX, tableY + HEADER_ROW_H)
+
+  sepX += priceColW
+  doc.line(sepX, tableY, sepX, tableY + HEADER_ROW_H)
+
+  // Header text
+  const headerTextY = tableY + HEADER_ROW_H / 2 + 1.5
   doc.setFont("helvetica", "bold")
-  doc.setFontSize(FONT_SIZE_HEADER)
+  doc.setFontSize(7.5)
   doc.setTextColor(...WHITE)
 
-  doc.text("#", ML + 14 + 8 / 2, textY, { align: "center" })
-  doc.text("Description", descColX + 3, textY, { align: "left" })
-  doc.text("Qty", descColX + descColW + 16 / 2, textY, { align: "center" })
-  doc.text("Unit Price", descColX + descColW + 16 + 32 / 2, textY, { align: "center" })
-  doc.text("Amount", descColX + descColW + 16 + 32 + 34 / 2, textY, { align: "center" })
+  // Column positions (approximate)
+  const col1X = ML + codeColW / 2
+  const col2X = ML + codeColW + 3
+  const col3X = ML + codeColW + nameColW + qtyColW / 2
+  const col4X = ML + codeColW + nameColW + qtyColW + priceColW / 2
+  const col5X = ML + codeColW + nameColW + qtyColW + priceColW + amtColW / 2
 
-  // ── SECTION 4: ITEMS TABLE (body only, no head) ───────────────────────────
+  doc.text("#",        col1X, headerTextY, { align: "center" })
+  doc.text("Description", col2X, headerTextY, { align: "left" })
+  doc.text("Qty",      col3X, headerTextY, { align: "center" })
+  doc.text("Unit Price", col4X, headerTextY, { align: "center" })
+  doc.text("Amount",   col5X, headerTextY, { align: "center" })
+
+  // ── TABLE BODY ───────────────────────────────────────────────────
   const bodyStartY = tableY + HEADER_ROW_H
-
-  const tableColumns = [
-    { header: "",            dataKey: "img"         },
-    { header: "#",           dataKey: "num"         },
-    { header: "Description", dataKey: "description" },
-    { header: "Qty",         dataKey: "qty"         },
-    { header: "Unit Price",  dataKey: "unit_price"  },
-    { header: "Amount",      dataKey: "amount"      },
-  ]
-
-  const imageCache: Record<number, string> = {}
-  await Promise.all(
-    data.items.map(async (item, i) => {
-      if (item.image_path) {
-        const img = await loadImage(item.image_path)
-        if (img) imageCache[i] = img
-      }
-    }),
-  )
 
   const tableRows = data.items.map((item, i) => {
     const productIdStr = String(item.product_id ?? "")
     let namepart = ""
-    if (item.product_name) {
-      namepart = ` - ${item.product_name}`
-    }
+    if (item.product_name) namepart = ` - ${item.product_name}`
     let desc = ""
     if (productIdStr) {
       desc = `${productIdStr}${namepart}`
@@ -304,66 +292,46 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
       desc = (item.description ?? "").trim()
     }
 
-    return {
-      img:         i,
-      num:         i + 1,
-      description: desc,
-      qty:         item.qty,
-      unit_price:  pkr(item.unit_price),
-      amount:      pkr(item.total),
-    }
+    return [
+      i + 1,
+      desc,
+      item.qty.toString(),
+      pkr(item.unit_price),
+      pkr(item.total),
+    ]
   })
 
   autoTable(doc, {
-    startY:       bodyStartY,
-    margin:       { left: ML, right: MR },
-    columns:      tableColumns,
-    body:         tableRows,
-    showHead:     false,
-    rowPageBreak: "avoid",
+    startY: bodyStartY,
+    margin: { left: ML, right: MR },
+    body: tableRows,
+    showHead: false,
     styles: {
-      fontSize:      9,
-      cellPadding:   { top: 3, bottom: 3, left: 3, right: 3 },
-      textColor:     DARK,
-      lineColor:     BORDER,
-      lineWidth:     0.2,
-      minCellHeight: 14,
+      fontSize: 8,
+      cellPadding: { top: 1.5, bottom: 1.5, left: 2, right: 2 },
+      textColor: DARK,
+      lineColor: BORDER,
+      lineWidth: 0.2,
+      minCellHeight: ROW_H,
     },
     alternateRowStyles: { fillColor: ROW_ALT },
     columnStyles: {
-      img:         { cellWidth: 14, halign: "center" },
-      num:         { cellWidth: 8,  halign: "center" },
-      description: { cellWidth: "auto", halign: "left" },
-      qty:         { cellWidth: 16, halign: "center" },
-      unit_price:  { cellWidth: 32, halign: "right"  },
-      amount:      { cellWidth: 34, halign: "right", fontStyle: "bold" },
-    },
-    didDrawCell(hookData) {
-      if (hookData.section === "body" && hookData.column.dataKey === "img") {
-        const imgData = imageCache[hookData.row.index]
-        if (imgData) {
-          const { x, y, width, height } = hookData.cell
-          const pad  = 2
-          const size = Math.min(width, height) - pad * 2
-          doc.addImage(
-            imgData, "JPEG",
-            x + (width  - size) / 2,
-            y + (height - size) / 2,
-            size, size,
-          )
-        }
-      }
+      0: { cellWidth: codeColW, halign: "center" },
+      1: { cellWidth: nameColW, halign: "left" },
+      2: { cellWidth: qtyColW, halign: "center" },
+      3: { cellWidth: priceColW, halign: "right" },
+      4: { cellWidth: amtColW, halign: "right", fontStyle: "bold" },
     },
   })
 
   const afterTable = (doc as any).lastAutoTable.finalY as number
 
-  // ── Square border around the table body ──
+  // ── Square border around table body ─────────────────────────────
   doc.setDrawColor(...BORDER)
   doc.setLineWidth(0.3)
   doc.rect(ML, bodyStartY, CW, afterTable - bodyStartY, "S")
 
-  // ── SECTION 5: SUBTOTAL / TAX / TOTAL (SQUARE BOX) ─────────────────────────
+  // ── SUBTOTAL / TAX / TOTAL (square box) ─────────────────────────
   let SY = afterTable + 6
 
   const sumX = PW - MR - 70
@@ -384,9 +352,8 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.text(pkr(0), valX, SY, { align: "right" })
   SY += 5.5
 
-  // ✅ Square total box
-  const TOTAL_RADIUS = 0
-  filledRect(doc, sumX - 2, SY - 4, valX - sumX + 4, 9, NAVY, TOTAL_RADIUS)
+  // Square total box
+  filledRect(doc, sumX - 2, SY - 4, valX - sumX + 4, 9, NAVY)
   doc.setFont("helvetica", "bold")
   doc.setFontSize(10)
   doc.setTextColor(...WHITE)
@@ -411,7 +378,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     SY += 5
   }
 
-  // ── SECTION 6: NOTES & TERMS ───────────────────────────────────────────────
+  // ── NOTES & TERMS ───────────────────────────────────────────────
   SY += 6
 
   const terms = data.paymentTerms || "Payment is due within 30 days of invoice date."
@@ -430,7 +397,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   const noteLines = doc.splitTextToSize(termsLines.join("\n"), CW)
   doc.text(noteLines, ML, SY)
 
-  // ── SECTION 7: FOOTER ───────────────────────────────────────────────────────
+  // ── FOOTER ───────────────────────────────────────────────────────
   doc.setDrawColor(...BORDER)
   doc.setLineWidth(0.3)
   doc.line(ML, PH - 16, PW - MR, PH - 16)
