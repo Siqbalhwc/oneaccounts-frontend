@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createClient } from "@/lib/supabase/client"
+import { createBrowserClient } from "@supabase/ssr"
 
 async function resolveUserEmail(userId: string): Promise<string> {
   if (userId.includes("@")) return userId
@@ -25,7 +25,10 @@ export default function RecordHistory({
   tableName: string
   recordId: string
 }) {
-  const supabase = createClient()
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
   const [logs, setLogs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [userNames, setUserNames] = useState<Record<string, string>>({})
@@ -33,24 +36,35 @@ export default function RecordHistory({
   useEffect(() => {
     if (!tableName || !recordId) return
     setLoading(true)
-    supabase
-      .from("data_change_logs")
-      .select("*")
-      .eq("table_name", tableName)
-      .eq("record_id", recordId)
-      .order("changed_at", { ascending: false })
-      .then(async ({ data }: { data: any[] | null }) => {
-        const logs = data || []
-        setLogs(logs)
 
-        const ids = [...new Set(logs.map(l => l.changed_by).filter(Boolean))]
-        const resolved: Record<string, string> = {}
-        for (const id of ids) {
-          resolved[id] = await resolveUserEmail(id)
-        }
-        setUserNames(resolved)
+    // Get user's company_id first
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id
+      if (!cid) {
         setLoading(false)
-      })
+        return
+      }
+
+      supabase
+        .from("data_change_logs")
+        .select("*")
+        .eq("table_name", tableName)
+        .eq("record_id", recordId)
+        .eq("company_id", cid)                     // ← required for RLS
+        .order("changed_at", { ascending: false })
+        .then(async ({ data }: { data: any[] | null }) => {
+          const logs = data || []
+          setLogs(logs)
+
+          const ids = [...new Set(logs.map(l => l.changed_by).filter(Boolean))]
+          const resolved: Record<string, string> = {}
+          for (const id of ids) {
+            resolved[id] = await resolveUserEmail(id)
+          }
+          setUserNames(resolved)
+          setLoading(false)
+        })
+    })
   }, [tableName, recordId])
 
   if (loading) return <p style={{ padding: 12, color: "#94A3B8" }}>Loading history…</p>
