@@ -400,7 +400,11 @@ export default function InvoiceDetailPage() {
             📝 Change History
           </h3>
           <div className="record-history">
-            <RecordHistory tableName="invoices" recordId={String(invoice.id)} />
+            <RecordHistory
+  tableName="invoices"
+  recordId={String(invoice.id)}
+  companyId={companyId}
+/>
           </div>
         </div>
       )}
