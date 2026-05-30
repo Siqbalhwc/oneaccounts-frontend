@@ -88,7 +88,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   const PH = 297
   const ML = 14
   const MR = 14
-  const CW = PW - ML - MR
+  const CW = PW - ML - MR   // 182 mm
 
   // ── LOGO & COMPANY INFO ─────────────────────────────────────────
   const LOGO_SIZE = 18
@@ -222,35 +222,32 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setLineWidth(0.3)
   doc.line(ML, divY, PW - MR, divY)
 
-  // ── THINNER TABLE HEADER (6 mm) with white separators ───────────
+  // ── TABLE HEADER (6 mm, white separators) ───────────────────────
   const tableY = divY + 4
   const ROW_H = 6
   const HEADER_ROW_H = ROW_H
 
-  // Column widths (same as before)
-  const codeColW = 14
-  const nameColW = CW - codeColW - 16 - 32 - 34 - (8+2)  // approximate
-  const qtyColW = 16
-  const priceColW = 32
-  const amtColW = 34
+  // Precise column widths that sum to CW = 182 mm
+  const COL_NUM_W  = 14
+  const COL_QTY_W  = 16
+  const COL_PRICE_W = 32
+  const COL_AMT_W  = 34
+  const COL_DESC_W = CW - COL_NUM_W - COL_QTY_W - COL_PRICE_W - COL_AMT_W  // 86 mm
 
   // Draw navy background
   filledRect(doc, ML, tableY, CW, HEADER_ROW_H, NAVY)
 
-  // White vertical separators between columns
+  // White vertical separators
   doc.setDrawColor(...WHITE)
   doc.setLineWidth(0.2)
-  let sepX = ML + codeColW
-  doc.line(sepX, tableY, sepX, tableY + HEADER_ROW_H)
-
-  sepX += nameColW
-  doc.line(sepX, tableY, sepX, tableY + HEADER_ROW_H)
-
-  sepX += qtyColW
-  doc.line(sepX, tableY, sepX, tableY + HEADER_ROW_H)
-
-  sepX += priceColW
-  doc.line(sepX, tableY, sepX, tableY + HEADER_ROW_H)
+  let x = ML + COL_NUM_W
+  doc.line(x, tableY, x, tableY + HEADER_ROW_H)
+  x += COL_DESC_W
+  doc.line(x, tableY, x, tableY + HEADER_ROW_H)
+  x += COL_QTY_W
+  doc.line(x, tableY, x, tableY + HEADER_ROW_H)
+  x += COL_PRICE_W
+  doc.line(x, tableY, x, tableY + HEADER_ROW_H)
 
   // Header text
   const headerTextY = tableY + HEADER_ROW_H / 2 + 1.5
@@ -258,18 +255,17 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setFontSize(7.5)
   doc.setTextColor(...WHITE)
 
-  // Column positions (approximate)
-  const col1X = ML + codeColW / 2
-  const col2X = ML + codeColW + 3
-  const col3X = ML + codeColW + nameColW + qtyColW / 2
-  const col4X = ML + codeColW + nameColW + qtyColW + priceColW / 2
-  const col5X = ML + codeColW + nameColW + qtyColW + priceColW + amtColW / 2
+  const centerX1 = ML + COL_NUM_W / 2
+  const leftX2   = ML + COL_NUM_W + 2
+  const centerX3 = ML + COL_NUM_W + COL_DESC_W + COL_QTY_W / 2
+  const centerX4 = ML + COL_NUM_W + COL_DESC_W + COL_QTY_W + COL_PRICE_W / 2
+  const centerX5 = ML + COL_NUM_W + COL_DESC_W + COL_QTY_W + COL_PRICE_W + COL_AMT_W / 2
 
-  doc.text("#",        col1X, headerTextY, { align: "center" })
-  doc.text("Description", col2X, headerTextY, { align: "left" })
-  doc.text("Qty",      col3X, headerTextY, { align: "center" })
-  doc.text("Unit Price", col4X, headerTextY, { align: "center" })
-  doc.text("Amount",   col5X, headerTextY, { align: "center" })
+  doc.text("#",          centerX1, headerTextY, { align: "center" })
+  doc.text("Description", leftX2,   headerTextY, { align: "left" })
+  doc.text("Qty",        centerX3, headerTextY, { align: "center" })
+  doc.text("Unit Price", centerX4, headerTextY, { align: "center" })
+  doc.text("Amount",     centerX5, headerTextY, { align: "center" })
 
   // ── TABLE BODY ───────────────────────────────────────────────────
   const bodyStartY = tableY + HEADER_ROW_H
@@ -316,11 +312,11 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     },
     alternateRowStyles: { fillColor: ROW_ALT },
     columnStyles: {
-      0: { cellWidth: codeColW, halign: "center" },
-      1: { cellWidth: nameColW, halign: "left" },
-      2: { cellWidth: qtyColW, halign: "center" },
-      3: { cellWidth: priceColW, halign: "right" },
-      4: { cellWidth: amtColW, halign: "right", fontStyle: "bold" },
+      0: { cellWidth: COL_NUM_W,  halign: "center" },
+      1: { cellWidth: COL_DESC_W, halign: "left" },
+      2: { cellWidth: COL_QTY_W,  halign: "center" },
+      3: { cellWidth: COL_PRICE_W, halign: "right" },
+      4: { cellWidth: COL_AMT_W,  halign: "right", fontStyle: "bold" },
     },
   })
 
@@ -331,7 +327,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setLineWidth(0.3)
   doc.rect(ML, bodyStartY, CW, afterTable - bodyStartY, "S")
 
-  // ── SUBTOTAL / TAX / TOTAL (square box) ─────────────────────────
+  // ── SUBTOTAL / TAX / TOTAL (height = ROW_H) ────────────────────
   let SY = afterTable + 6
 
   const sumX = PW - MR - 70
@@ -352,14 +348,15 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.text(pkr(0), valX, SY, { align: "right" })
   SY += 5.5
 
-  // Square total box
-  filledRect(doc, sumX - 2, SY - 4, valX - sumX + 4, 9, NAVY)
+  // Total box – same height as header
+  const TOTAL_H = ROW_H
+  filledRect(doc, sumX - 2, SY - 3, valX - sumX + 4, TOTAL_H, NAVY)
   doc.setFont("helvetica", "bold")
-  doc.setFontSize(10)
+  doc.setFontSize(9)
   doc.setTextColor(...WHITE)
-  doc.text("Total", sumX + 2, SY + 1.5)
-  doc.text(pkr(data.total), valX - 2, SY + 1.5, { align: "right" })
-  SY += 10
+  doc.text("Total", sumX + 2, SY + TOTAL_H / 2 - 0.5)
+  doc.text(pkr(data.total), valX - 2, SY + TOTAL_H / 2 - 0.5, { align: "right" })
+  SY += TOTAL_H + 2
 
   if (data.paid > 0) {
     SY += 2
