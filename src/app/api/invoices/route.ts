@@ -49,10 +49,10 @@ async function createJE(
   }, [] as { account_id: number; delta: number }[])
 
   if (accountUpdates.length > 0) {
-    const sqlParts = accountUpdates.map((u, i) =>
+    const sqlParts = accountUpdates.map((u: any, i: number) =>
       `($${i * 2 + 1}::int, $${i * 2 + 2}::numeric)`
     ).join(', ')
-    const values = accountUpdates.flatMap(u => [u.account_id, u.delta])
+    const values = accountUpdates.flatMap((u: any) => [u.account_id, u.delta])
     // Use a single UPDATE with a VALUES clause to update all accounts at once
     await supabase.rpc('bulk_update_account_balances', {
       data: accountUpdates,
