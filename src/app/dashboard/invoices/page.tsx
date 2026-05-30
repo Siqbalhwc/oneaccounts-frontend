@@ -140,7 +140,7 @@ export default function InvoicesPage() {
         .inv-table { width: 100%; }
         .header-row {
           display: grid;
-          grid-template-columns: minmax(100px, 1fr) minmax(90px, 1fr) minmax(150px, 2fr) minmax(90px, 1fr) minmax(80px, 1fr) minmax(130px, 1.5fr) minmax(100px, 1fr);
+          grid-template-columns: minmax(100px, 1fr) minmax(90px, 1fr) minmax(140px, 2fr) minmax(80px, 1fr) minmax(70px, 1fr) minmax(130px, 1.5fr) 120px;
           padding: 14px 24px;
           background: var(--card-hover);
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
@@ -148,7 +148,7 @@ export default function InvoicesPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: minmax(100px, 1fr) minmax(90px, 1fr) minmax(150px, 2fr) minmax(90px, 1fr) minmax(80px, 1fr) minmax(130px, 1.5fr) minmax(100px, 1fr);
+          grid-template-columns: minmax(100px, 1fr) minmax(90px, 1fr) minmax(140px, 2fr) minmax(80px, 1fr) minmax(70px, 1fr) minmax(130px, 1.5fr) 120px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
@@ -185,7 +185,7 @@ export default function InvoicesPage() {
         @media (max-width: 900px) {
           .inv-table { overflow-x: auto; }
           .header-row, .data-row {
-            grid-template-columns: 100px 80px 140px 80px 70px 120px 90px;
+            grid-template-columns: 100px 80px 140px 70px 60px 120px 110px;
             padding: 10px 12px;
           }
         }
@@ -226,7 +226,7 @@ export default function InvoicesPage() {
             <button className="sort-btn" onClick={() => handleSort("total")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Total {getSortIcon("total")}</button>
             <button className="sort-btn" onClick={() => handleSort("status")}>Status {getSortIcon("status")}</button>
             <button className="sort-btn" onClick={() => handleSort("created_by")}>Created / Edited By {getSortIcon("created_by")}</button>
-            <span></span>
+            <span style={{ textAlign: "center", fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Actions</span>
           </div>
           {sortedFiltered.map((inv) => {
             const cust = customerMap[inv.party_id]
