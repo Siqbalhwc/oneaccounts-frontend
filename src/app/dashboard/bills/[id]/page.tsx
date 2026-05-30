@@ -269,7 +269,7 @@ export default function BillDetailPage() {
             📝 Change History
           </h3>
           <div className="record-history">
-            <RecordHistory tableName="invoices" recordId={String(bill.id)} />
+            <RecordHistory tableName="invoices" recordId={String(bill.id)} companyId={companyId} />
           </div>
         </div>
       )}
