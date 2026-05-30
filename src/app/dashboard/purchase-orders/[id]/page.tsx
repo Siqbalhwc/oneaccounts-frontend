@@ -294,7 +294,7 @@ export default function PurchaseOrderDetailPage() {
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>
             📝 Change History
           </h3>
-          <RecordHistory tableName="purchase_orders" recordId={String(po.id)} companyId={companyId} />
+          <RecordHistory tableName="purchase_orders" recordId={String(po.id)} />
         </div>
       )}
     </div>

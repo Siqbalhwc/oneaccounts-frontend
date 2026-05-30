@@ -779,7 +779,7 @@ export default function NewInvoicePage() {
         {editId && (
           <div className="inv-card" style={{ marginTop: 16 }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
-            <RecordHistory tableName="invoices" recordId={editId} companyId={companyId} />
+            <RecordHistory tableName="invoices" recordId={editId} />
           </div>
         )}
       </div>
