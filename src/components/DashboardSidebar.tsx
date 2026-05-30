@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
+import { createBrowserClient } from "@supabase/ssr"
 import { usePlan } from "@/contexts/PlanContext"
 import { useRole } from "@/contexts/RoleContext"
 import { useTheme } from "@/contexts/ThemeContext"
@@ -58,7 +59,7 @@ const navSections: NavSection[] = [
     { label: 'New Company',     icon: '🏢', href: '/dashboard/companies/new' },
     { label: 'Upgrade Plan',    icon: '⭐', href: '/dashboard/upgrade' },
     { label: 'Super Admin',     icon: '🛡️', href: '/dashboard/super-admin',      adminOnly: true },
-    { label: 'Projects', icon: '📁', href: '/dashboard/projects' },
+    { label: 'Projects',        icon: '📁', href: '/dashboard/projects' },
   ]},
 ]
 
@@ -87,6 +88,11 @@ export default function DashboardSidebar({
   const { hasFeature } = usePlan()
   const { role } = useRole()
   const { theme } = useTheme()
+
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
 
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window !== "undefined") return localStorage.getItem("sidebarCollapsed") === "true"
@@ -144,6 +150,12 @@ export default function DashboardSidebar({
     ? "0 25px 50px -12px rgba(0,0,0,0.6)"
     : (isDarkText ? "0 25px 50px -12px rgba(0,0,0,0.15)" : "0 25px 50px -12px rgba(0,0,0,0.5)")
 
+  // ── Handle sign out ──
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
   return (
     <motion.aside
       className="dl-sidebar"
@@ -175,7 +187,7 @@ export default function DashboardSidebar({
         borderBottom: `1px solid ${borderColor}`, transition: "padding 0.3s",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, overflow: "hidden", flex: 1, minWidth: 0 }}>
-          <img src={logoUrl} alt={companyName} className="dl-sidebar-logo-img" />
+          <img src={logoUrl} alt={companyName} className="dl-sidebar-logo-img" width={34} height={34} />
           {!collapsed && (
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ color: textColor, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{companyName}</div>
@@ -238,9 +250,12 @@ export default function DashboardSidebar({
         {!collapsed && (
           <div style={{ overflow: "hidden", flex: 1, minWidth: 0 }}>
             <div style={{ color: textColor, fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{email}</div>
-            <form action="/auth/signout" method="post">
-              <button type="submit" style={{ color: mutedTextColor, fontSize: 10, background: "none", border: "none", cursor: "pointer", padding: 0 }}>Sign out</button>
-            </form>
+            <button
+              onClick={handleSignOut}
+              style={{ color: mutedTextColor, fontSize: 10, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+            >
+              Sign out
+            </button>
           </div>
         )}
         {!collapsed && <ThemeToggleButton />}
