@@ -22,8 +22,7 @@ function useAnimatedNumber(target: number, duration = 500) {
     const tick = (now: number) => {
       const elapsed = now - startTime
       const progress = Math.min(elapsed / duration, 1)
-      // easeOutCubic
-      const ease = 1 - Math.pow(1 - progress, 3)
+      const ease = 1 - Math.pow(1 - progress, 3) // easeOutCubic
       setDisplay(start + diff * ease)
       if (progress < 1) requestAnimationFrame(tick)
       else prev.current = target
@@ -67,11 +66,17 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const overdueInvoicesCount: number = dashData?.overdueInvoicesCount || 0
   const lastUpdated: string = dashData?.lastUpdated || ""
 
-  // ── Animated versions of the main KPIs ────────────────────────────
+  // ── Animated values – already in millions ──────────────────────────
   const animBudget = useAnimatedNumber(totalBudget / 1_000_000, 600)
   const animSpent = useAnimatedNumber(totalSpent / 1_000_000, 600)
   const animRemaining = useAnimatedNumber(Math.abs(totalBudget - totalSpent) / 1_000_000, 600)
   const animMonthly = useAnimatedNumber(monthlySpending / 1_000_000, 600)
+
+  // ── Formatter that expects a number in millions ────────────────────
+  const fmtM = (valueInMillions: number): string => {
+    const sign = valueInMillions < 0 ? "-" : ""
+    return `${sign}PKR ${Math.abs(valueInMillions).toFixed(1)}M`
+  }
 
   // ── Underspent activities & activity health (unchanged) ─────────────
   const [underspentActivities, setUnderspentActivities] = useState<any[]>([])
@@ -100,10 +105,11 @@ export default function ManagementDashboard({ role }: { role: string }) {
     return "Good evening"
   }
 
+  // ── For non‑animated values (e.g., project rows) ──────────────────
   const formatPKR = (v: number): string => {
     const sign = v < 0 ? "-" : ""
     const abs = Math.abs(v)
-    return `${sign}PKR ${abs.toFixed(1)}M`
+    return `${sign}PKR ${(abs / 1_000_000).toFixed(1)}M`
   }
 
   const detailQuery = (extra: Record<string, string> = {}): string => {
@@ -262,7 +268,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
           margin-bottom: 1rem;
         }
 
-        /* second row: perfectly aligned 3:2 */
         .dashboard-grid-32 {
           display: grid;
           grid-template-columns: 3fr 2fr;
@@ -400,14 +405,14 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </motion.div>
         )}
 
-        {/* KPI cards – using animated numbers */}
+        {/* KPI cards – animated numbers, clean millions */}
         <div className="dashboard-grid">
           {[
-            { label: "Total Budget", value: formatPKR(animBudget * 1_000_000), meta: `${filteredProjectRows.length} projects`, color: "#A78BFA", link: "/dashboard/reports/budget-summary" },
-            { label: "Total Spent", value: formatPKR(animSpent * 1_000_000), meta: `${spentPct}% of budget`, color: "#F97316", link: "/dashboard/reports/spending-detail" },
-            { label: remainingFunds < 0 ? "Overspent" : "Remaining", value: formatPKR(animRemaining * 1_000_000), meta: `${Math.abs(Math.round((remainingFunds / filteredTotalBudget) * 100))}% ${remainingFunds < 0 ? "over" : "left"}`, color: remainingFunds >= 0 ? "#2DD4BF" : "#F87171", link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null },
+            { label: "Total Budget",   value: fmtM(animBudget),   meta: `${filteredProjectRows.length} projects`, color: "#A78BFA", link: "/dashboard/reports/budget-summary" },
+            { label: "Total Spent",     value: fmtM(animSpent),    meta: `${spentPct}% of budget`, color: "#F97316", link: "/dashboard/reports/spending-detail" },
+            { label: remainingFunds < 0 ? "Overspent" : "Remaining", value: fmtM(animRemaining), meta: `${Math.abs(Math.round((remainingFunds / filteredTotalBudget) * 100))}% ${remainingFunds < 0 ? "over" : "left"}`, color: remainingFunds >= 0 ? "#2DD4BF" : "#F87171", link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null },
             { label: "Portfolio Health", value: filteredOverspentCount > 0 ? "⚠️ Needs Attention" : "Healthy", meta: `${Math.round((1 - filteredOverspentCount / Math.max(filteredProjectRows.length, 1)) * 100)}% health score`, color: filteredOverspentCount > 0 ? "#F97316" : "#2DD4BF", link: "/dashboard/reports/overspent" },
-            { label: "📆 Monthly Spending", value: monthlySpending > 0 ? formatPKR(animMonthly * 1_000_000) : "—", meta: monthlySpending === 0 ? "No transactions this month" : `vs. ${formatPKR(lastMonthSpending)} last month`, color: monthlySpending > 0 ? "#F97316" : "#94A3B8", link: "/dashboard/reports/spending-detail" },
+            { label: "📆 Monthly Spending", value: monthlySpending > 0 ? fmtM(animMonthly) : "—", meta: monthlySpending === 0 ? "No transactions this month" : `vs. ${formatPKR(lastMonthSpending)} last month`, color: monthlySpending > 0 ? "#F97316" : "#94A3B8", link: "/dashboard/reports/spending-detail" },
           ].map((kpi: any, i: number) => (
             <motion.div
               key={kpi.label}
@@ -437,7 +442,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           ))}
         </div>
 
-        {/* ── Project Utilization + Donor Balances (perfect 3:2 grid) ── */}
+        {/* ── Project Utilization + Donor Balances ── */}
         <div className="dashboard-grid-32">
           <motion.div
             className="card"
@@ -512,7 +517,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </motion.div>
         </div>
 
-        {/* Underspend + Receivables vs Payables (unchanged) */}
+        {/* Underspend + Receivables vs Payables */}
         <div className="dashboard-grid">
           <motion.div
             className="card"
@@ -583,7 +588,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </motion.div>
         </div>
 
-        {/* Footer summary (unchanged) */}
+        {/* Footer summary */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
