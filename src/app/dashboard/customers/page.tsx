@@ -8,7 +8,7 @@ import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 
-type SortField = "code" | "name" | "phone" | "balance"
+type SortField = "code" | "name" | "phone" | "balance" | "created_by"
 type SortDir = "asc" | "desc"
 
 export default function CustomersPage() {
@@ -74,12 +74,14 @@ export default function CustomersPage() {
     }
 
     return [...list].sort((a, b) => {
-      let valA = (a[sortField] || "").toString().toLowerCase()
-      let valB = (b[sortField] || "").toString().toLowerCase()
       if (sortField === "balance") {
-        valA = parseFloat(a.balance || 0)
-        valB = parseFloat(b.balance || 0)
+        const valA = parseFloat(a.balance || 0)
+        const valB = parseFloat(b.balance || 0)
+        return sortDir === "asc" ? valA - valB : valB - valA
       }
+      // default string comparison
+      const valA = (a[sortField] || "").toString().toLowerCase()
+      const valB = (b[sortField] || "").toString().toLowerCase()
       if (valA < valB) return sortDir === "asc" ? -1 : 1
       if (valA > valB) return sortDir === "asc" ? 1 : -1
       return 0
@@ -182,7 +184,6 @@ export default function CustomersPage() {
       <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
         <style>{`
           .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; width: 100%; }
-          /* Flexible table that fills available width on large screens, scrolls on small */
           .cust-table { width: 100%; }
           .header-row {
             display: grid;
@@ -250,8 +251,6 @@ export default function CustomersPage() {
             word-wrap: break-word;
           }
           .message { padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
-
-          /* Responsive: on small screens, allow horizontal scroll */
           @media (max-width: 900px) {
             .header-row, .data-row {
               grid-template-columns: minmax(80px, 1fr) minmax(150px, 2fr) minmax(100px, 1fr) minmax(100px, 1fr) minmax(140px, 1.5fr) 55px 55px 55px;
@@ -348,9 +347,9 @@ export default function CustomersPage() {
               <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
               <button className="sort-btn" onClick={() => handleSort("phone")}>Phone {getSortIcon("phone")}</button>
               <button className="sort-btn" onClick={() => handleSort("balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("balance")}</button>
-              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
-                Created / Edited By
-              </span>
+              <button className="sort-btn" onClick={() => handleSort("created_by")} style={{ justifyContent: "flex-start" }}>
+                Created / Edited By {getSortIcon("created_by")}
+              </button>
               <span></span>
               <span></span>
               <span></span>
