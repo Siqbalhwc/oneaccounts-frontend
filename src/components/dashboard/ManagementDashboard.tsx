@@ -176,13 +176,15 @@ export default function ManagementDashboard({ role }: { role: string }) {
         }
 
         .mgmt .hero-greeting h2 {
-          font-size: 1.3rem; font-weight: 700; color: var(--text); margin-bottom: 0.15rem; white-space: nowrap;
+          font-size: 1.3rem; font-weight: 700; color: var(--text); margin-bottom: 0.15rem;
         }
         .mgmt .hero-greeting p {
-          color: var(--text-muted); font-size: 0.85rem; margin: 0; white-space: nowrap;
+          color: var(--text-muted); font-size: 0.85rem; margin: 0;
+          /* allow wrapping on small screens */
+          white-space: normal;
         }
         .mgmt .hero-filters {
-          display: flex; align-items: center; gap: 0.5rem;
+          display: flex; align-items: center; gap: 0.4rem;
           flex-wrap: wrap;
         }
         .mgmt .filter-label {
@@ -190,15 +192,16 @@ export default function ManagementDashboard({ role }: { role: string }) {
         }
         .mgmt .filter-pill {
           background: var(--card); border: 1px solid var(--border);
-          padding: 0.2rem 0.6rem; border-radius: 20px;
+          padding: 0.2rem 0.5rem; border-radius: 20px;
           font-size: 0.78rem; font-weight: 500; color: var(--text);
           cursor: pointer; transition: 0.15s;
           -webkit-appearance: none; appearance: none;
           background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
           background-repeat: no-repeat;
           background-position: right 0.5rem center;
-          padding-right: 1.8rem;
+          padding-right: 1.6rem;
           font-family: inherit;
+          max-width: 150px;
         }
         .mgmt .filter-pill:focus { outline: none; border-color: var(--border-strong); }
 
@@ -226,6 +229,30 @@ export default function ManagementDashboard({ role }: { role: string }) {
           grid-template-columns: repeat(5, 1fr);
           gap: 1rem;
           margin-bottom: 1rem;
+        }
+
+        /* second row: perfectly aligned 3:2 */
+        .dashboard-grid-32 {
+          display: grid;
+          grid-template-columns: 3fr 2fr;
+          gap: 1rem;
+          margin-bottom: 1rem;
+        }
+        /* on small screens, keep cards side‑by‑side with horizontal scroll */
+        @media (max-width: 640px) {
+          .dashboard-grid-32 {
+            display: flex;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            gap: 0.8rem;
+            padding-bottom: 0.5rem;
+          }
+          .dashboard-grid-32 > .card {
+            flex: 0 0 auto;
+            width: 85vw;
+            max-width: 340px;
+          }
         }
 
         .kpi-label { text-transform: uppercase; font-size: 0.7rem; font-weight: 700; color: var(--text-muted); letter-spacing: 0.04em; }
@@ -269,48 +296,16 @@ export default function ManagementDashboard({ role }: { role: string }) {
         @media (max-width: 640px) {
           .dashboard-grid { grid-template-columns: repeat(2, 1fr); }
           .hero { padding: 1rem; }
-          .hero-greeting h2 { font-size: 1.1rem; white-space: normal; }
-          .hero-greeting p { font-size: 0.8rem; white-space: normal; }
-          .hero-filters { width: 100%; justify-content: space-between; gap: 0.4rem; }
+          .hero-greeting h2 { font-size: 1.1rem; }
+          .hero-greeting p { font-size: 0.8rem; }
+          .hero-filters { width: 100%; justify-content: space-between; gap: 0.3rem; }
           .filter-label { font-size: 0.7rem; }
-          .filter-pill { font-size: 0.7rem; padding: 0.2rem 0.5rem; padding-right: 1.5rem; background-position: right 0.3rem center; }
+          .filter-pill { font-size: 0.7rem; padding: 0.15rem 0.4rem; padding-right: 1.4rem; background-position: right 0.3rem center; max-width: 120px; }
           .card { padding: 1rem; }
           .kpi-value { font-size: 1.4rem; }
         }
         @media (max-width: 380px) {
           .dashboard-grid { grid-template-columns: 1fr; }
-        }
-
-        /* ── Responsive fix for Project Utilization + Donor Balances ── */
-        .mgmt .util-donor-row {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 1rem;
-          margin-bottom: 1rem;
-        }
-        .mgmt .util-card {
-          flex: 3;
-          min-width: 280px;
-        }
-        .mgmt .donor-card {
-          flex: 2;
-          min-width: 220px;
-        }
-        @media (max-width: 640px) {
-          .mgmt .util-donor-row {
-            flex-direction: row;
-            flex-wrap: nowrap;
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-            gap: 0.8rem;
-            padding-bottom: 0.5rem;
-          }
-          .mgmt .util-card,
-          .mgmt .donor-card {
-            flex: 0 0 auto;
-            width: 85vw;
-            max-width: 320px;
-          }
         }
       `}</style>
 
@@ -411,10 +406,10 @@ export default function ManagementDashboard({ role }: { role: string }) {
           ))}
         </div>
 
-        {/* ── Project Utilization + Donor Balances (responsive row) ── */}
-        <div className="util-donor-row">
+        {/* ── Project Utilization + Donor Balances (perfect 3:2 grid) ── */}
+        <div className="dashboard-grid-32">
           <motion.div
-            className="card util-card"
+            className="card"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4, duration: 0.5 }}
@@ -459,7 +454,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </motion.div>
 
           <motion.div
-            className="card donor-card"
+            className="card"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5, duration: 0.5 }}
