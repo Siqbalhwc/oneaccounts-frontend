@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Plus, CheckCircle } from "lucide-react"
 
-// Country codes for WhatsApp
 const COUNTRY_CODES = [
   { code: "+92", label: "🇵🇰 +92" },
   { code: "+1",  label: "🇺🇸 +1" },
@@ -21,29 +20,13 @@ const COUNTRY_CODES = [
   { code: "+27", label: "🇿🇦 +27" },
 ]
 
-// ── Digits required per country code ──
 const PHONE_LENGTHS: Record<string, number> = {
-  "+92": 10,   // Pakistan
-  "+1":  10,   // USA
-  "+44": 10,   // UK
-  "+971": 9,   // UAE
-  "+966": 9,   // Saudi
-  "+91": 10,   // India
-  "+86": 11,   // China
-  "+81": 10,   // Japan
-  "+49": 10,   // Germany
-  "+33": 9,    // France
-  "+61": 9,    // Australia
-  "+27": 9,    // South Africa
+  "+92": 10, "+1": 10, "+44": 10, "+971": 9,
+  "+966": 9, "+91": 10, "+86": 11, "+81": 10,
+  "+49": 10, "+33": 9, "+61": 9, "+27": 9,
 }
 
-const PAYMENT_TERMS = [
-  "Due on Receipt",
-  "Net 7",
-  "Net 15",
-  "Net 30",
-  "Net 60",
-]
+const PAYMENT_TERMS = ["Due on Receipt", "Net 7", "Net 15", "Net 30", "Net 60"]
 
 export default function NewCustomerPage() {
   const router = useRouter()
@@ -68,11 +51,10 @@ export default function NewCustomerPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  // Summary state
+  // Summary state – fetched once quickly
   const [totalCustomers, setTotalCustomers] = useState(0)
   const [totalReceivables, setTotalReceivables] = useState(0)
 
-  // Load company, generate code, fetch summary, and if editing → load existing data
   useEffect(() => {
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -80,21 +62,20 @@ export default function NewCustomerPage() {
       if (!cid) return
       setCompanyId(cid)
 
-      // Summary
-      supabase
+      // Fast aggregate summary
+      const { data: summary } = await supabase
         .from("customers")
-        .select("id, balance")
+        .select("balance")
         .eq("company_id", cid)
         .is("deleted_at", null)
-        .then(({ data }) => {
-          if (data) {
-            setTotalCustomers(data.length)
-            setTotalReceivables(data.reduce((sum, c) => sum + (c.balance || 0), 0))
-          }
-        })
+
+      if (summary) {
+        setTotalCustomers(summary.length)
+        setTotalReceivables(summary.reduce((s, c) => s + (c.balance || 0), 0))
+      }
 
       if (editId) {
-        // Editing existing customer
+        // Editing existing customer – load its data
         const { data: customer } = await supabase
           .from("customers")
           .select("*")
@@ -120,21 +101,20 @@ export default function NewCustomerPage() {
         }
       } else {
         // New customer → generate next code
-        supabase
+        const { data: codes } = await supabase
           .from("customers")
           .select("code")
           .eq("company_id", cid)
           .ilike("code", "CUST-%")
           .order("code", { ascending: false })
           .limit(1)
-          .then(({ data }) => {
-            let nextNum = 1
-            if (data && data.length > 0) {
-              const match = data[0].code?.match(/CUST-(\d+)/)
-              if (match) nextNum = parseInt(match[1], 10) + 1
-            }
-            setCustomerCode(`CUST-${String(nextNum).padStart(3, "0")}`)
-          })
+
+        let nextNum = 1
+        if (codes && codes.length > 0) {
+          const match = codes[0].code?.match(/CUST-(\d+)/)
+          if (match) nextNum = parseInt(match[1], 10) + 1
+        }
+        setCustomerCode(`CUST-${String(nextNum).padStart(3, "0")}`)
       }
     }
 
@@ -145,13 +125,11 @@ export default function NewCustomerPage() {
     if (!companyId) { setError("Company not loaded"); return }
     if (!customerName.trim()) { setError("Customer name is required"); return }
 
-    // ── Validate phone number length for the selected country ──
     if (phoneNumber.trim()) {
       const digitsOnly = phoneNumber.trim().replace(/\D/g, "")
       const expectedLength = PHONE_LENGTHS[countryCode]
       if (expectedLength && digitsOnly.length !== expectedLength) {
         setError(`Phone number must be ${expectedLength} digits for ${countryCode}. Current: ${digitsOnly.length} digits.`)
-        setLoading(false)
         return
       }
     }
@@ -159,7 +137,6 @@ export default function NewCustomerPage() {
     setLoading(true)
     setError("")
 
-    // Get current user email for audit
     const { data: { user } } = await supabase.auth.getUser()
     const userEmail = user?.email || "system"
 
@@ -167,7 +144,6 @@ export default function NewCustomerPage() {
     const fullPhone = countryCode + (phoneNumber.trim().replace(/\D/g, ""))
 
     if (editId) {
-      // ── UPDATE existing customer ──
       const { error: updateErr } = await supabase
         .from("customers")
         .update({
@@ -193,7 +169,6 @@ export default function NewCustomerPage() {
       return
     }
 
-    // ── INSERT new customer ──
     const { data, error: insertErr } = await supabase
       .from("customers")
       .insert({
@@ -221,17 +196,12 @@ export default function NewCustomerPage() {
       return
     }
 
-    // ── Post opening balance journal entry (if amount > 0) ──
     if (balance > 0 && data) {
       try {
         await fetch("/api/customers/opening-entry", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            customerId: data.id,
-            amount: balance,
-            date: new Date().toISOString().split("T")[0],
-          }),
+          body: JSON.stringify({ customerId: data.id, amount: balance, date: new Date().toISOString().split("T")[0] }),
         })
       } catch (err) {
         console.error("Opening entry failed:", err)
@@ -317,7 +287,6 @@ export default function NewCustomerPage() {
         <div className="layout">
           <div className="form-side">
             <div className="form-card">
-              {/* Customer Code – system generated, read‑only */}
               <div style={{ marginBottom: 16 }}>
                 <label className="label">Customer Code</label>
                 <input className="input" value={customerCode} disabled />
@@ -329,7 +298,6 @@ export default function NewCustomerPage() {
                 <input className="input" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="e.g. ABC Corporation" />
               </div>
 
-              {/* Phone with country code */}
               <div style={{ marginBottom: 16 }}>
                 <label className="label">Phone</label>
                 <div className="phone-row">
@@ -367,7 +335,6 @@ export default function NewCustomerPage() {
             </div>
           </div>
 
-          {/* Right side summary */}
           <div className="summary-side">
             <div className="summary-card">
               <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 16 }}>📊 Customers Summary</h2>
