@@ -70,12 +70,15 @@ export default function ReceiptDetailPage() {
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: var(--shadow-sm); }
-        .row { display: flex; margin-bottom: 10px; font-size: 14px; align-items: center; }
+        .row { display: flex; margin-bottom: 10px; font-size: 14px; align-items: center; flex-wrap: wrap; }
         .label { width: 130px; color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
         .value { color: var(--text); font-weight: 500; }
         .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; text-decoration: none; }
         .btn:hover { background: var(--card-hover); }
         .record-history { background: var(--bg-soft); border-radius: 8px; padding: 8px; }
+        @media (max-width: 640px) {
+          .label { width: 100px; }
+        }
       `}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
@@ -95,6 +98,9 @@ export default function ReceiptDetailPage() {
         <div className="row"><span className="label">Date</span><span className="value">{receipt.date}</span></div>
         <div className="row"><span className="label">Customer</span><span className="value">{receipt.customer?.code} – {receipt.customer?.name}</span></div>
         <div className="row"><span className="label">Amount</span><span className="value" style={{ fontSize: 18, fontWeight: 700, color: "#10B981" }}>PKR {receipt.amount?.toLocaleString()}</span></div>
+        <div className="row"><span className="label">Method</span><span className="value">{receipt.payment_method || "—"}</span></div>
+        {receipt.reference && <div className="row"><span className="label">Reference</span><span className="value">{receipt.reference}</span></div>}
+        {receipt.notes && <div className="row"><span className="label">Notes</span><span className="value">{receipt.notes}</span></div>}
       </div>
 
       {receipt && (

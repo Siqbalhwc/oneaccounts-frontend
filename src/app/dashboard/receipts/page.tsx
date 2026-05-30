@@ -27,10 +27,8 @@ export default function ReceiptsPage() {
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
 
-  // Customer map for names & phone lookup
   const [customerMap, setCustomerMap] = useState<Record<number, { name: string; phone: string }>>({})
 
-  // 1. Fetch customers
   useEffect(() => {
     if (!role) return
     supabase
@@ -47,7 +45,6 @@ export default function ReceiptsPage() {
       })
   }, [role])
 
-  // 2. Fetch receipts
   useEffect(() => {
     if (!role) return
     if (!canView) {
@@ -65,7 +62,6 @@ export default function ReceiptsPage() {
       })
   }, [role, canView, sortField, sortDir])
 
-  // 3. Filter
   const filtered = search.trim()
     ? receipts.filter((rec) => {
         const cust = customerMap[rec.party_id]
@@ -77,7 +73,6 @@ export default function ReceiptsPage() {
       })
     : receipts
 
-  // 4. Client‑side sort for customer name
   const sortedFiltered = [...filtered].sort((a, b) => {
     let valA: any, valB: any
     if (sortField === "customer") {
@@ -116,7 +111,6 @@ export default function ReceiptsPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  // WhatsApp helper
   const sendWhatsApp = (rec: any) => {
     const cust = customerMap[rec.party_id]
     if (!cust?.phone) {
@@ -135,9 +129,10 @@ export default function ReceiptsPage() {
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
+        .rec-table { width: 100%; }
         .header-row {
           display: grid;
-          grid-template-columns: 140px 100px 1fr 120px 130px 130px 55px 55px;
+          grid-template-columns: minmax(120px, 1fr) minmax(90px, 1fr) minmax(140px, 2fr) minmax(90px, 1fr) minmax(90px, 1fr) minmax(130px, 1.2fr) 55px 55px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
@@ -145,7 +140,7 @@ export default function ReceiptsPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: 140px 100px 1fr 120px 130px 130px 55px 55px;
+          grid-template-columns: minmax(120px, 1fr) minmax(90px, 1fr) minmax(140px, 2fr) minmax(90px, 1fr) minmax(90px, 1fr) minmax(130px, 1.2fr) 55px 55px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
@@ -189,8 +184,12 @@ export default function ReceiptsPage() {
           line-height: 1.3;
           word-wrap: break-word;
         }
-        @media (max-width: 640px) {
-          .header-row, .data-row { grid-template-columns: 90px 70px 1fr 70px 80px 80px 45px 45px; padding: 10px 12px; }
+        @media (max-width: 900px) {
+          .rec-table { overflow-x: auto; }
+          .header-row, .data-row {
+            grid-template-columns: 100px 80px 130px 80px 80px 110px 45px 45px;
+            padding: 10px 12px;
+          }
         }
       `}</style>
 
@@ -238,14 +237,14 @@ export default function ReceiptsPage() {
           No receipts found.
         </div>
       ) : (
-        <div className="card">
+        <div className="card rec-table">
           <div className="header-row">
             <button className="sort-btn" onClick={() => handleSort("receipt_no")}>Receipt # {getSortIcon("receipt_no")}</button>
             <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
             <button className="sort-btn" onClick={() => handleSort("customer")}>Customer {getSortIcon("customer")}</button>
             <button className="sort-btn" onClick={() => handleSort("amount")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Amount {getSortIcon("amount")}</button>
-            <button className="sort-btn" onClick={() => handleSort("method")}>Method {getSortIcon("method")}</button>
-            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Created / Edited By</span>
+            <button className="sort-btn" onClick={() => handleSort("method")} style={{ justifyContent: "center", textAlign: "center" }}>Method {getSortIcon("method")}</button>
+            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", textAlign: "center" }}>Created / Edited By</span>
             <span></span>
             <span></span>
           </div>
@@ -258,8 +257,8 @@ export default function ReceiptsPage() {
                 <span>{rec.date}</span>
                 <span>{custName}</span>
                 <span style={{ fontWeight: 600, color: "#10B981", textAlign: "right" }}>PKR {rec.amount?.toLocaleString()}</span>
-                <span style={{ whiteSpace: "nowrap" }}>{rec.payment_method || "—"}</span>
-                <div className="creator-editor-cell">
+                <span style={{ textAlign: "center" }}>{rec.payment_method || "—"}</span>
+                <div className="creator-editor-cell" style={{ textAlign: "center" }}>
                   <span>Created: {rec.created_by || "—"}</span>
                   <span>Edited: {rec.updated_by || "—"}</span>
                 </div>
