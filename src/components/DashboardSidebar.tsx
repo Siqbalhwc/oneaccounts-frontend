@@ -136,43 +136,19 @@ export default function DashboardSidebar({
 
   const isVisible = (item: NavItem) => !(item.adminOnly && role !== "admin") && (!item.feature || hasFeature(item.feature))
 
-  // ── Background for each theme (unchanged) ──
+  // ── Background for each theme ──
   const bg = theme === "oneaccounts"
     ? "linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%)"
     : "var(--main-bg)"
 
-  // ── Text colours (FIXED: light/dark visibility, OneAccounts untouched) ──
-  // Determine if the theme appears dark or light
-  const isDarkAppearance =
-    theme === "dark" ||
-    (theme === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches)
-
-  let textColor: string
-  let mutedTextColor: string
-  let borderColor: string
-
-  if (theme === "oneaccounts") {
-    // OneAccounts theme – always white text on dark gradient (unchanged)
-    textColor = "rgba(255,255,255,0.9)"
-    mutedTextColor = "rgba(255,255,255,0.6)"
-    borderColor = "rgba(255,255,255,0.15)"
-  } else if (isDarkAppearance) {
-    // Dark theme – light text
-    textColor = "rgba(255,255,255,0.85)"
-    mutedTextColor = "rgba(255,255,255,0.5)"
-    borderColor = "rgba(255,255,255,0.08)"
-  } else {
-    // Light theme – dark text
-    textColor = "rgba(0,0,0,0.8)"
-    mutedTextColor = "rgba(0,0,0,0.5)"
-    borderColor = "rgba(0,0,0,0.06)"
-  }
-
+  // ── Text colours: OneAccounts always white (dark gradient), light/dark follow system ──
+  const isDarkText = theme === "light" || (theme === "system" && typeof window !== "undefined" && !window.matchMedia("(prefers-color-scheme: dark)").matches)
+  const textColor      = theme === "oneaccounts" ? "rgba(255,255,255,0.9)" : (isDarkText ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.85)")
+  const mutedTextColor  = theme === "oneaccounts" ? "rgba(255,255,255,0.6)" : (isDarkText ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.5)")
+  const borderColor     = theme === "oneaccounts" ? "rgba(255,255,255,0.15)" : (isDarkText ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.08)")
   const shadow = theme === "oneaccounts"
     ? "0 25px 50px -12px rgba(0,0,0,0.6)"
-    : (theme === "light" || (theme === "system" && typeof window !== "undefined" && !window.matchMedia("(prefers-color-scheme: dark)").matches)
-        ? "0 25px 50px -12px rgba(0,0,0,0.15)"
-        : "0 25px 50px -12px rgba(0,0,0,0.5)")
+    : (isDarkText ? "0 25px 50px -12px rgba(0,0,0,0.15)" : "0 25px 50px -12px rgba(0,0,0,0.5)")
 
   // ── Handle sign out ──
   const handleSignOut = async () => {
