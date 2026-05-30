@@ -1,8 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,6 +22,9 @@ export async function POST() {
   // Sign out the user
   await supabase.auth.signOut()
 
-  // Redirect to the login page
-  return NextResponse.redirect(new URL('/login', process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'))
+  // Get the origin from the request (works in local and production)
+  const origin = request.nextUrl.origin
+
+  // Redirect to the login page using the correct domain
+  return NextResponse.redirect(new URL('/login', origin))
 }
