@@ -403,8 +403,7 @@ export default function InvoiceDetailPage() {
             <RecordHistory
   tableName="invoices"
   recordId={String(invoice.id)}
-  companyId={companyId}
-/>
+  />
           </div>
         </div>
       )}
