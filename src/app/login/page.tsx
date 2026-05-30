@@ -91,7 +91,7 @@ export default function LoginPage() {
           display: flex;
           flex-direction: column;
           justify-content: space-between;
-          padding: 44px 52px;
+          padding: 28px 52px 24px;
           position: relative;
           overflow: hidden;
         }
@@ -138,8 +138,8 @@ export default function LoginPage() {
           display: inline-flex; align-items: center; gap: 7px;
           background: rgba(255,255,255,0.10);
           border: 1px solid rgba(255,255,255,0.20);
-          border-radius: 100px; padding: 5px 14px;
-          margin-bottom: 18px; width: fit-content;
+          border-radius: 100px; padding: 4px 13px;
+          margin-bottom: 12px; width: fit-content;
         }
         .oa-badge-dot {
           width: 6px; height: 6px; border-radius: 50%; background: #60A5FA;
@@ -160,12 +160,12 @@ export default function LoginPage() {
         .oa-hero {
           position: relative; z-index: 2;
           flex: 1; display: flex; flex-direction: column;
-          justify-content: center; padding: 32px 0;
+          justify-content: center; padding: 20px 0;
         }
         .oa-headline {
-          font-size: 42px; font-weight: 800; color: white;
+          font-size: 38px; font-weight: 800; color: white;
           line-height: 1.10; letter-spacing: -0.8px;
-          margin-bottom: 14px;
+          margin-bottom: 10px;
         }
         .oa-headline-grad {
           background: linear-gradient(90deg, #93C5FD, #818CF8);
@@ -173,22 +173,22 @@ export default function LoginPage() {
           background-clip: text;
         }
         .oa-desc {
-          font-size: 13.5px; color: rgba(255,255,255,0.56);
-          line-height: 1.72; max-width: 400px; margin-bottom: 22px; font-weight: 400;
+          font-size: 13px; color: rgba(255,255,255,0.56);
+          line-height: 1.62; max-width: 400px; margin-bottom: 16px; font-weight: 400;
         }
         .oa-pills { display: flex; flex-wrap: wrap; gap: 8px; }
         .oa-pill {
           background: rgba(255,255,255,0.09);
           border: 1px solid rgba(255,255,255,0.16);
-          border-radius: 8px; padding: 6px 13px;
-          font-size: 11.5px; color: rgba(255,255,255,0.82); font-weight: 500;
+          border-radius: 8px; padding: 5px 11px;
+          font-size: 11px; color: rgba(255,255,255,0.82); font-weight: 500;
         }
 
         /* stats */
         .oa-stats {
           position: relative; z-index: 2;
           border-top: 1px solid rgba(255,255,255,0.12);
-          padding-top: 20px;
+          padding-top: 14px;
           display: grid; grid-template-columns: repeat(4, 1fr);
           gap: 0;
         }
@@ -198,15 +198,15 @@ export default function LoginPage() {
           border-left: 1px solid rgba(255,255,255,0.10);
         }
         .oa-stat-val {
-          font-size: 26px; font-weight: 800; color: white; line-height: 1;
+          font-size: 22px; font-weight: 800; color: white; line-height: 1;
         }
         .oa-stat-lbl {
-          font-size: 10px; color: rgba(255,255,255,0.36);
-          text-transform: uppercase; letter-spacing: 0.10em; margin-top: 5px;
+          font-size: 9.5px; color: rgba(255,255,255,0.36);
+          text-transform: uppercase; letter-spacing: 0.10em; margin-top: 4px;
         }
         .oa-footer-txt {
           font-size: 10px; color: rgba(255,255,255,0.18);
-          position: relative; z-index: 2; margin-top: 14px;
+          position: relative; z-index: 2; margin-top: 10px;
         }
 
         /* ═══════════════════════════════════════
@@ -215,7 +215,7 @@ export default function LoginPage() {
         .oa-right {
           flex: 1;
           display: flex; align-items: center; justify-content: center;
-          padding: 40px 48px;
+          padding: 24px 40px;
           background: #EEF2FB;
           overflow-y: auto;
         }
@@ -233,13 +233,13 @@ export default function LoginPage() {
           overflow: hidden;
         }
         .oa-card-head {
-          padding: 26px 28px 20px;
+          padding: 18px 28px 14px;
           border-bottom: 1px solid #F0F2F9;
           text-align: center;
         }
-        .oa-card-body { padding: 22px 28px; }
+        .oa-card-body { padding: 16px 28px 18px; }
         .oa-card-foot {
-          padding: 16px 28px 20px;
+          padding: 12px 28px 14px;
           border-top: 1px solid #F0F2F9;
           background: #F8FAFF;
           text-align: center;
@@ -247,34 +247,34 @@ export default function LoginPage() {
 
         /* card head content */
         .oa-card-logo {
-          width: 62px; height: 62px; border-radius: 14px;
-          object-fit: contain; margin: 0 auto 12px; display: block;
+          width: 48px; height: 48px; border-radius: 12px;
+          object-fit: contain; margin: 0 auto 8px; display: block;
         }
         .oa-secure-badge {
           display: inline-flex; align-items: center; gap: 5px;
           background: linear-gradient(135deg, #EEF2FF, #E8EFFE);
           border: 1px solid #C7D2FE; border-radius: 100px;
-          padding: 4px 12px; margin-bottom: 10px;
-          font-size: 10px; color: #4338CA; font-weight: 700; letter-spacing: 0.05em;
+          padding: 3px 10px; margin-bottom: 7px;
+          font-size: 9.5px; color: #4338CA; font-weight: 700; letter-spacing: 0.05em;
         }
         .oa-title {
-          font-size: 21px; font-weight: 800; color: #0F172A;
-          letter-spacing: -0.4px; margin-bottom: 4px;
+          font-size: 19px; font-weight: 800; color: #0F172A;
+          letter-spacing: -0.4px; margin-bottom: 3px;
         }
-        .oa-subtitle { font-size: 12.5px; color: #6B7280; }
+        .oa-subtitle { font-size: 12px; color: #6B7280; }
         .oa-subtitle strong { color: #1E3A8A; font-weight: 700; }
 
         /* ═══════════════════════════════════════
            FORM FIELDS
         ═══════════════════════════════════════ */
         .oa-label {
-          display: block; font-size: 10.5px; font-weight: 600;
+          display: block; font-size: 10px; font-weight: 600;
           color: #6B7280; letter-spacing: 0.07em; text-transform: uppercase;
-          margin-bottom: 5px;
+          margin-bottom: 4px;
         }
-        .oa-input-wrap { position: relative; margin-bottom: 14px; }
+        .oa-input-wrap { position: relative; margin-bottom: 11px; }
         .oa-input {
-          width: 100%; height: 42px;
+          width: 100%; height: 39px;
           border: 1.5px solid #E5EAF2; border-radius: 9px;
           padding: 0 40px 0 13px;
           font-size: 13px; font-family: inherit;
@@ -298,10 +298,10 @@ export default function LoginPage() {
         /* forgot */
         .oa-forgot-row {
           display: flex; justify-content: flex-end;
-          margin-top: -8px; margin-bottom: 16px;
+          margin-top: -6px; margin-bottom: 12px;
         }
         .oa-forgot {
-          font-size: 11.5px; color: #4F6EF7; font-weight: 500;
+          font-size: 11px; color: #4F6EF7; font-weight: 500;
           text-decoration: none; background: none; border: none;
           cursor: pointer; font-family: inherit;
         }
@@ -311,10 +311,10 @@ export default function LoginPage() {
            BUTTONS
         ═══════════════════════════════════════ */
         .oa-btn {
-          width: 100%; height: 44px;
+          width: 100%; height: 41px;
           background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
           border: none; border-radius: 9px;
-          font-size: 14px; font-weight: 700; color: white;
+          font-size: 13.5px; font-weight: 700; color: white;
           font-family: inherit; cursor: pointer;
           box-shadow: 0 4px 14px rgba(7,19,82,0.34);
           transition: all 0.2s;
@@ -328,7 +328,7 @@ export default function LoginPage() {
         .oa-btn:disabled { opacity: 0.68; cursor: not-allowed; }
 
         .oa-spinner {
-          width: 15px; height: 15px; border-radius: 50%;
+          width: 14px; height: 14px; border-radius: 50%;
           border: 2px solid rgba(255,255,255,0.35);
           border-top-color: white;
           animation: spin 0.7s linear infinite;
@@ -336,25 +336,25 @@ export default function LoginPage() {
         @keyframes spin { to { transform: rotate(360deg); } }
 
         .oa-ssl {
-          font-size: 10.5px; color: #9CA3AF;
-          padding: 8px 0 2px; text-align: center;
+          font-size: 10px; color: #9CA3AF;
+          padding: 5px 0 0; text-align: center;
         }
 
         /* divider */
         .oa-divider {
           display: flex; align-items: center; gap: 10px;
-          margin: 14px 0;
+          margin: 10px 0;
         }
         .oa-div-line { flex: 1; height: 1px; background: #E8EDF5; }
-        .oa-div-txt  { font-size: 11px; color: #A0AEC0; font-weight: 500; }
+        .oa-div-txt  { font-size: 10.5px; color: #A0AEC0; font-weight: 500; }
 
         /* trial button */
         .oa-trial-btn {
           display: flex; align-items: center; justify-content: center;
-          width: 100%; height: 44px;
+          width: 100%; height: 41px;
           background: linear-gradient(135deg, #10B981 0%, #047857 100%);
           border: none; border-radius: 9px;
-          font-size: 13px; font-weight: 700; color: white;
+          font-size: 12.5px; font-weight: 700; color: white;
           font-family: inherit; cursor: pointer; text-decoration: none;
           box-shadow: 0 4px 12px rgba(5,150,105,0.28);
           transition: all 0.2s;
@@ -364,38 +364,38 @@ export default function LoginPage() {
           box-shadow: 0 6px 18px rgba(5,150,105,0.38);
         }
         .oa-trial-note {
-          font-size: 10.5px; color: #9CA3AF;
-          margin-top: 6px; text-align: center;
+          font-size: 10px; color: #9CA3AF;
+          margin-top: 5px; text-align: center;
         }
 
         /* switch + alerts */
-        .oa-switch-row { text-align: center; margin-top: 12px; }
+        .oa-switch-row { text-align: center; margin-top: 9px; }
         .oa-switch {
           background: none; border: none;
-          font-size: 12px; color: #4F6EF7; font-weight: 600;
+          font-size: 11.5px; color: #4F6EF7; font-weight: 600;
           cursor: pointer; font-family: inherit; text-decoration: underline;
         }
         .oa-error {
           background: #FEF2F2; border: 1px solid #FECACA;
-          border-radius: 8px; padding: 10px 13px;
-          font-size: 12.5px; color: #B91C1C; margin-bottom: 14px;
+          border-radius: 8px; padding: 8px 12px;
+          font-size: 12px; color: #B91C1C; margin-bottom: 11px;
         }
         .oa-success {
           background: #F0FDF4; border: 1px solid #BBF7D0;
-          border-radius: 8px; padding: 10px 13px;
-          font-size: 12.5px; color: #15803D; margin-bottom: 14px;
+          border-radius: 8px; padding: 8px 12px;
+          font-size: 12px; color: #15803D; margin-bottom: 11px;
         }
 
         /* support links */
-        .oa-support-lbl { font-size: 11px; color: #9CA3AF; margin-bottom: 8px; }
+        .oa-support-lbl { font-size: 10.5px; color: #9CA3AF; margin-bottom: 6px; }
         .oa-support-links {
           display: flex; align-items: center; justify-content: center;
           gap: 8px; flex-wrap: wrap;
         }
         .oa-support-link {
           display: inline-flex; align-items: center; gap: 5px;
-          font-size: 11.5px; color: #4F6EF7; font-weight: 600;
-          text-decoration: none; padding: 6px 13px;
+          font-size: 11px; color: #4F6EF7; font-weight: 600;
+          text-decoration: none; padding: 5px 11px;
           border-radius: 8px; background: #F5F7FF;
           border: 1px solid #DBEAFE; transition: all 0.15s;
         }
