@@ -84,12 +84,13 @@ export default function BankAccountsPage() {
       .order("created_at")
 
     const { data: accountData } = await supabase
-      .from("accounts")
-      .select("id, code, name, balance")
-      .eq("type", "Asset")
-      .like("code", "10%")
-      .eq("company_id", companyId)
-      .order("code")
+  .from("accounts")
+  .select("id, code, name, balance")
+  .eq("type", "Asset")
+  .like("code", "10%")
+  .eq("category", "Cash and Bank")   // ← new filter
+  .eq("company_id", companyId)
+  .order("code")
 
     if (bankData) {
       const enriched = bankData.map((b: any) => {

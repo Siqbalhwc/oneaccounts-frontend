@@ -151,9 +151,16 @@ export default function BankTransfersPage() {
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
+        .table-wrapper {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+        .table-grid {
+          min-width: 900px; /* ensures columns never shrink below this width */
+        }
         .header-row {
           display: grid;
-          grid-template-columns: 100px 220px 220px 100px 120px 130px;
+          grid-template-columns: 100px 1fr 1fr 100px 1fr 130px;
           column-gap: 8px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
@@ -162,7 +169,7 @@ export default function BankTransfersPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: 100px 220px 220px 100px 120px 130px;
+          grid-template-columns: 100px 1fr 1fr 100px 1fr 130px;
           column-gap: 8px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
@@ -197,9 +204,6 @@ export default function BankTransfersPage() {
         .creator-editor-cell {
           display: flex; flex-direction: column; font-size: 11px; color: var(--text-muted);
           line-height: 1.3; word-wrap: break-word;
-        }
-        @media (max-width: 768px) {
-          .header-row, .data-row { grid-template-columns: 80px 150px 150px 80px 80px 80px; column-gap: 4px; }
         }
       `}</style>
 
@@ -250,32 +254,33 @@ export default function BankTransfersPage() {
             No transfers recorded yet. {canEdit && 'Click "New Transfer" to record one.'}
           </div>
         ) : (
-          <>
-            <div className="header-row">
-              <button className="sort-btn" onClick={() => handleSort("transfer_date")}>Date {getSortIcon("transfer_date")}</button>
-              <button className="sort-btn" onClick={() => handleSort("from_code")}>From Account {getSortIcon("from_code")}</button>
-              <button className="sort-btn" onClick={() => handleSort("to_code")}>To Account {getSortIcon("to_code")}</button>
-              <button className="sort-btn" onClick={() => handleSort("amount")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Amount {getSortIcon("amount")}</button>
-              <button className="sort-btn" onClick={() => handleSort("reference")}>Reference {getSortIcon("reference")}</button>
-              {/* Created / Edited By heading styled like sort-btn */}
-              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
-                Created / Edited By
-              </span>
-            </div>
-            {sortedFiltered.map(t => (
-              <div key={t.id} className="data-row">
-                <span>{new Date(t.transfer_date).toLocaleDateString()}</span>
-                <span>{t.from_code} - {t.from_name}</span>
-                <span>{t.to_code} - {t.to_name}</span>
-                <span style={{ fontWeight: 600, textAlign: "right" }}>PKR {t.amount.toLocaleString()}</span>
-                <span style={{ color: "var(--text-muted)" }}>{t.reference || "—"}</span>
-                <div className="creator-editor-cell">
-                  <span>Created: {t.created_by || "—"}</span>
-                  <span>Edited: {t.updated_by || "—"}</span>
-                </div>
+          <div className="table-wrapper">
+            <div className="table-grid">
+              <div className="header-row">
+                <button className="sort-btn" onClick={() => handleSort("transfer_date")}>Date {getSortIcon("transfer_date")}</button>
+                <button className="sort-btn" onClick={() => handleSort("from_code")}>From Account {getSortIcon("from_code")}</button>
+                <button className="sort-btn" onClick={() => handleSort("to_code")}>To Account {getSortIcon("to_code")}</button>
+                <button className="sort-btn" onClick={() => handleSort("amount")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Amount {getSortIcon("amount")}</button>
+                <button className="sort-btn" onClick={() => handleSort("reference")}>Reference {getSortIcon("reference")}</button>
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
+                  Created / Edited By
+                </span>
               </div>
-            ))}
-          </>
+              {sortedFiltered.map(t => (
+                <div key={t.id} className="data-row">
+                  <span>{new Date(t.transfer_date).toLocaleDateString()}</span>
+                  <span>{t.from_code} - {t.from_name}</span>
+                  <span>{t.to_code} - {t.to_name}</span>
+                  <span style={{ fontWeight: 600, textAlign: "right" }}>PKR {t.amount.toLocaleString()}</span>
+                  <span style={{ color: "var(--text-muted)" }}>{t.reference || "—"}</span>
+                  <div className="creator-editor-cell">
+                    <span>Created: {t.created_by || "—"}</span>
+                    <span>Edited: {t.updated_by || "—"}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>

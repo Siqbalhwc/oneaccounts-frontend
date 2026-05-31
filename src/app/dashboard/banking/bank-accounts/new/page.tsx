@@ -23,7 +23,6 @@ export default function NewBankAccountPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  // Summary state
   const [totalAccounts, setTotalAccounts] = useState(0)
   const [totalBalance, setTotalBalance] = useState(0)
 
@@ -34,17 +33,17 @@ export default function NewBankAccountPage() {
       if (!cid) return
       setCompanyId(cid)
 
-      // Fetch cash accounts (code starting with "10")
+      // Fetch ONLY Cash and Bank accounts
       const { data: accounts } = await supabase
         .from("accounts")
         .select("id, code, name, balance")
         .eq("type", "Asset")
         .like("code", "10%")
+        .eq("category", "Cash and Bank")   // ← restricts to cash/bank only
         .eq("company_id", cid)
         .order("code")
       if (accounts) setCashAccounts(accounts)
 
-      // Fetch bank accounts for summary
       const { data: bankData } = await supabase
         .from("bank_accounts")
         .select("id")
