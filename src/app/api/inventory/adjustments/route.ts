@@ -61,14 +61,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Insufficient stock" }, { status: 400 })
     }
 
-    // 3. Insert stock movement
+    // 3. Insert stock movement with type and reference
     const { data: moveData, error: moveError } = await supabase
       .from("stock_moves")
       .insert({
         company_id: companyId,
         product_id: product_id,
+        move_type: qtyNum > 0 ? 'stock_in' : 'stock_out',
         qty: qtyNum,
         date,
+        ref: reason,          // show the reason as reference
         reason,
       })
       .select()

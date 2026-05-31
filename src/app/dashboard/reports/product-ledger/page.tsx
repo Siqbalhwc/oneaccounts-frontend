@@ -319,7 +319,9 @@ export default function ProductLedgerPage() {
           </div>
           {sortedLines.map((line, idx) => (
             <div key={line.id || idx} className={`ledger-row ${line.isOpening ? "opening-row" : ""}`}>
-              <span style={{ fontSize: 12 }}>{line.isOpening ? "" : line.date}</span>
+              <span style={{ fontSize: 12 }}>
+                {line.isOpening ? "" : new Date(line.date).toLocaleDateString()}
+              </span>
               <span>{line.type}</span>
               <span style={{ color: line.invoice_no ? "var(--primary)" : "var(--text-muted)" }}>
                 {line.invoice_no || "Opening Balance"}
