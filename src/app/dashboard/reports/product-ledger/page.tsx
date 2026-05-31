@@ -46,11 +46,14 @@ export default function ProductLedgerPage() {
 
     // Fetch ALL stock_moves for this product
     const { data: moves } = await supabase
-  .from("stock_moves")
-  .select("*")
-  .eq("product_id", productId)
-  .eq("company_id", prod.company_id)   // ← add this line
-  .order("date", { ascending: true })
+      .from("stock_moves")
+      .select("*")
+      .eq("product_id", productId)
+      .eq("company_id", prod.company_id)
+      .order("date", { ascending: true })
+
+    // DEBUG – check browser console (F12 → Console) for this log
+    console.log("Stock moves fetched:", moves)
 
     const allLines: any[] = []
     if (moves) {
@@ -93,7 +96,9 @@ export default function ProductLedgerPage() {
 
     runningQty = openingBalanceQty
     for (const line of allLines) {
-      if (line.date >= startDate && line.date <= endDate) {
+      // Compare only the date part to avoid timezone mismatches
+      const lineDate = line.date.toString().substring(0, 10)
+      if (lineDate >= startDate && lineDate <= endDate) {
         runningQty = runningQty + line.qty_in - line.qty_out
         periodLines.push({ ...line, balance: runningQty, isOpening: false })
       }
@@ -105,7 +110,6 @@ export default function ProductLedgerPage() {
 
   useEffect(() => { if (productId) fetchLedger() }, [productId, startDate, endDate])
 
-  // Sorting – opening row always first
   const sortedLines = [...ledgerLines].sort((a, b) => {
     if (a.isOpening && !b.isOpening) return -1
     if (!a.isOpening && b.isOpening) return 1
