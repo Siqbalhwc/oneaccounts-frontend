@@ -45,7 +45,7 @@ export default function ProductLedgerPage() {
     setProduct(prod)
     if (!prod) { setLoading(false); return }
 
-    // 2. Invoice items (sales & purchases)
+    // 2. Invoice items (purchases & sales)
     const { data: items } = await supabase
       .from("invoice_items")
       .select(`
@@ -67,7 +67,7 @@ export default function ProductLedgerPage() {
       .eq("product_id", productId)
       .order("date", { ascending: true })
 
-    // Build combined list
+    // Combine both sources
     const allLines: any[] = []
 
     // Invoice items
@@ -89,7 +89,7 @@ export default function ProductLedgerPage() {
       })
     }
 
-    // Adjustments from inventory_transactions
+    // Inventory transactions
     if (adjustments) {
       adjustments.forEach((adj: any) => {
         const qty = adj.qty || 0
@@ -105,20 +105,21 @@ export default function ProductLedgerPage() {
       })
     }
 
-    // 4. Sort all lines by date (ascending for computing opening)
+    // Sort all movements by date
     allLines.sort((a, b) => a.date.localeCompare(b.date))
 
-    // 5. Compute opening balance before start date
+    // Compute opening balance before start date
     const opening = prod.opening_qty || 0
     let runningQty = opening
 
-    const periodLines: any[] = []
     for (const line of allLines) {
       if (line.date < startDate) {
         runningQty = runningQty + line.qty_in - line.qty_out
       }
     }
     const openingBalanceQty = runningQty
+
+    const periodLines: any[] = []
 
     // Opening balance row
     periodLines.push({
@@ -176,7 +177,6 @@ export default function ProductLedgerPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  // Summary totals (exclude opening row)
   const totalInflow = ledgerLines.filter(l => !l.isOpening).reduce((s, l) => s + l.qty_in, 0)
   const totalOutflow = ledgerLines.filter(l => !l.isOpening).reduce((s, l) => s + l.qty_out, 0)
   const closingBalance = ledgerLines.length > 0 ? ledgerLines[ledgerLines.length - 1].balance : 0
