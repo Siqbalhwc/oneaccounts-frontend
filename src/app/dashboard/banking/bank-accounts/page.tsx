@@ -41,11 +41,9 @@ export default function BankAccountsPage() {
   const [search, setSearch] = useState("")
   const [flash, setFlash] = useState("")
 
-  // Sorting state
   const [sortField, setSortField] = useState<SortField>("account")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
-  // Edit modal state
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<BankAccount | null>(null)
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null)
@@ -55,13 +53,6 @@ export default function BankAccountsPage() {
   const [isActive, setIsActive] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleteId, setDeleteId] = useState<number | null>(null)
-
-  // New GL Account modal
-  const [showNewAccountModal, setShowNewAccountModal] = useState(false)
-  const [newAccountCode, setNewAccountCode] = useState("")
-  const [newAccountName, setNewAccountName] = useState("")
-  const [newAccountBalance, setNewAccountBalance] = useState("0")
-  const [creatingAccount, setCreatingAccount] = useState(false)
 
   // ── 1. Get company ID ────────────────────────────────────────────────────
   useEffect(() => {
@@ -84,13 +75,13 @@ export default function BankAccountsPage() {
       .order("created_at")
 
     const { data: accountData } = await supabase
-  .from("accounts")
-  .select("id, code, name, balance")
-  .eq("type", "Asset")
-  .like("code", "10%")
-  .eq("category", "Cash and Bank")   // ← new filter
-  .eq("company_id", companyId)
-  .order("code")
+      .from("accounts")
+      .select("id, code, name, balance")
+      .eq("type", "Asset")
+      .like("code", "10%")
+      .eq("category", "Cash & Bank")   // ← only Cash & Bank accounts
+      .eq("company_id", companyId)
+      .order("code")
 
     if (bankData) {
       const enriched = bankData.map((b: any) => {
@@ -242,28 +233,6 @@ export default function BankAccountsPage() {
     setTimeout(() => setFlash(""), 3000)
   }
 
-  const handleCreateAccount = async () => {
-    if (!companyId || !newAccountCode.trim() || !newAccountName.trim()) return
-    setCreatingAccount(true)
-    const { error } = await supabase.from("accounts").insert({
-      company_id: companyId,
-      code: newAccountCode.trim(),
-      name: newAccountName.trim(),
-      type: "Asset",
-      balance: parseFloat(newAccountBalance) || 0,
-    })
-    if (error) {
-      setFlash("Error creating account: " + error.message)
-    } else {
-      setFlash("Account created! You can now link bank details.")
-      setShowNewAccountModal(false)
-      setNewAccountCode(""); setNewAccountName(""); setNewAccountBalance("0")
-      fetchData()
-    }
-    setCreatingAccount(false)
-    setTimeout(() => setFlash(""), 4000)
-  }
-
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
@@ -329,9 +298,6 @@ export default function BankAccountsPage() {
         .pr-field-input, .pr-field-select { width: 100%; height: 40px; border: 1.5px solid var(--border); border-radius: 9px; padding: 0 14px; font-size: 13px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; }
         .pr-field-input:focus, .pr-field-select:focus { border-color: var(--primary); }
         .pr-modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
-        @media (max-width: 768px) {
-          .header-row, .data-row { grid-template-columns: 1fr 80px 60px 60px 60px 80px 40px 40px; }
-        }
       `}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
@@ -346,7 +312,8 @@ export default function BankAccountsPage() {
             <button className="btn btn-primary" onClick={() => router.push("/dashboard/banking/bank-accounts/new")}>
               <Plus size={16} /> Add Bank Account
             </button>
-            <button className="btn btn-outline" onClick={() => setShowNewAccountModal(true)}>
+            {/* Open the proper New Account page for chart-of-accounts */}
+            <button className="btn btn-outline" onClick={() => router.push("/dashboard/accounts/new")}>
               <Plus size={16} /> New GL Account
             </button>
           </div>
@@ -385,7 +352,7 @@ export default function BankAccountsPage() {
           <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading...</div>
         ) : sortedFiltered.length === 0 ? (
           <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
-            No bank accounts found. {canEdit && 'Use "Add Bank Account" to link a cash/bank account, or create a new GL account first.'}
+            No bank accounts found. {canEdit && 'Use "Add Bank Account" to link a Cash & Bank account, or create a new GL account first.'}
           </div>
         ) : (
           <>
@@ -423,26 +390,10 @@ export default function BankAccountsPage() {
         <div className="pr-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="pr-modal" onClick={(e) => e.stopPropagation()}>
             <div className="pr-modal-header">
-              <div className="pr-modal-title">{editing ? "Edit Bank Account" : "Add Bank Account"}</div>
+              <div className="pr-modal-title">Edit Bank Account</div>
               <button className="btn-icon" onClick={() => setShowModal(false)}><X size={18} /></button>
             </div>
             <div className="pr-modal-body">
-              {!editing && (
-                <div>
-                  <label className="pr-field-label">GL Account *</label>
-                  <select
-                    className="pr-field-select"
-                    value={selectedAccountId || ""}
-                    onChange={(e) => setSelectedAccountId(Number(e.target.value) || null)}
-                  >
-                    {cashAccounts
-                      .filter((a) => !bankAccounts.some((b) => b.account_id === a.id))
-                      .map((a) => (
-                        <option key={a.id} value={a.id}>{a.code} - {a.name} (PKR {a.balance?.toLocaleString()})</option>
-                      ))}
-                  </select>
-                </div>
-              )}
               <div>
                 <label className="pr-field-label">Bank Name *</label>
                 <input className="pr-field-input" value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="e.g. HBL, UBL" />
@@ -465,38 +416,6 @@ export default function BankAccountsPage() {
             <div className="pr-modal-footer">
               <button className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* New GL Account Modal */}
-      {showNewAccountModal && canEdit && (
-        <div className="pr-modal-overlay" onClick={() => setShowNewAccountModal(false)}>
-          <div className="pr-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 450 }}>
-            <div className="pr-modal-header">
-              <div className="pr-modal-title">New Cash / Bank Account</div>
-              <button className="btn-icon" onClick={() => setShowNewAccountModal(false)}><X size={18}/></button>
-            </div>
-            <div className="pr-modal-body">
-              <div>
-                <label className="pr-field-label">Account Code *</label>
-                <input className="pr-field-input" value={newAccountCode} onChange={e => setNewAccountCode(e.target.value)} placeholder="e.g. 1002" />
-              </div>
-              <div>
-                <label className="pr-field-label">Account Name *</label>
-                <input className="pr-field-input" value={newAccountName} onChange={e => setNewAccountName(e.target.value)} placeholder="e.g. Meezan Bank" />
-              </div>
-              <div>
-                <label className="pr-field-label">Opening Balance (PKR)</label>
-                <input className="pr-field-input" type="number" value={newAccountBalance} onChange={e => setNewAccountBalance(e.target.value)} />
-              </div>
-            </div>
-            <div className="pr-modal-footer">
-              <button className="btn btn-outline" onClick={() => setShowNewAccountModal(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleCreateAccount} disabled={creatingAccount}>
-                {creatingAccount ? "Creating..." : "Create Account"}
-              </button>
             </div>
           </div>
         </div>

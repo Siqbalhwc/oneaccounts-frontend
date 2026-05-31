@@ -33,13 +33,13 @@ export default function NewBankAccountPage() {
       if (!cid) return
       setCompanyId(cid)
 
-      // Fetch ONLY Cash and Bank accounts
+      // Fetch ONLY Cash & Bank accounts (correct category)
       const { data: accounts } = await supabase
         .from("accounts")
         .select("id, code, name, balance")
         .eq("type", "Asset")
         .like("code", "10%")
-        .eq("category", "Cash and Bank")   // ← restricts to cash/bank only
+        .eq("category", "Cash & Bank")   // ← correct category name
         .eq("company_id", cid)
         .order("code")
       if (accounts) setCashAccounts(accounts)
