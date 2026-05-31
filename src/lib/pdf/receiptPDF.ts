@@ -23,9 +23,7 @@ async function loadImage(url: string): Promise<string | null> {
       reader.onerror = () => resolve("")
       reader.readAsDataURL(blob)
     })
-  } catch {
-    return null
-  }
+  } catch { return null }
 }
 
 const pkr = (n: number) =>
@@ -40,10 +38,13 @@ function filledRect(
   doc.rect(x, y, w, h, "F")
 }
 
-// ── Receipt allocation item ────────────────────────────────────────
-export interface ReceiptAllocation {
-  invoice_no: string
-  amount:     number
+// ── Journal line from the receipt ─────────────────────────────────
+export interface ReceiptJournalLine {
+  account_code: string
+  account_name: string
+  description?: string
+  debit: number
+  credit: number
 }
 
 export interface ReceiptPDFData {
@@ -63,14 +64,12 @@ export interface ReceiptPDFData {
   customerEmail?:  string
 
   paymentMethod?: string | null
-  bankName?:      string | null
   amount:         number
   reference?:     string
   notes?:         string
 
-  status?:          string           // "Active"
-  allocations?:     ReceiptAllocation[]   // invoices the receipt is applied to
-  journalSummary?: { debit: number; credit: number } | null
+  status?:         string
+  journalLines:    ReceiptJournalLine[]     // ✅ used for the main table
 }
 
 export async function generateReceiptPDF(data: ReceiptPDFData): Promise<jsPDF> {
@@ -112,12 +111,13 @@ export async function generateReceiptPDF(data: ReceiptPDFData): Promise<jsPDF> {
   doc.setTextColor(...NAVY)
   doc.text("RECEIPT", PW - MR, LOGO_Y + 9, { align: "right" })
 
+  // Receipt number & date – add space between label and value
   const metaY = LOGO_Y + 15
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8)
   doc.setTextColor(...MUTED)
-  doc.text("Receipt No:", PW - MR - 36, metaY)
-  doc.text("Date:",       PW - MR - 36, metaY + 5)
+  doc.text("Receipt No:",  PW - MR - 42, metaY)       // slightly wider column
+  doc.text("Date:",        PW - MR - 42, metaY + 5)
   doc.setFont("helvetica", "bold")
   doc.setTextColor(...DARK)
   doc.text(data.receiptNo, PW - MR, metaY,     { align: "right" })
@@ -146,53 +146,37 @@ export async function generateReceiptPDF(data: ReceiptPDFData): Promise<jsPDF> {
 
   doc.setFont("helvetica", "bold")
   doc.setFontSize(18)
-  doc.setTextColor(16, 185, 129)   // green for received payment
+  doc.setTextColor(16, 185, 129)   // green
   doc.text(pkr(data.amount), PW - MR, Y, { align: "right" })
 
   Y += 5
 
-  const phone = (data.customerPhone ?? "").trim()
-  if (phone) {
+  if (data.customerPhone) {
     doc.setFont("helvetica", "normal")
     doc.setFontSize(9)
     doc.setTextColor(...MUTED)
-    doc.text("- " + phone, ML, Y)
+    doc.text("- " + data.customerPhone, ML, Y)
     Y += 4.5
   }
-
-  const address = (data.customerAddress ?? "").trim()
-  if (address) {
+  if (data.customerAddress) {
     doc.setFont("helvetica", "normal")
     doc.setFontSize(9)
     doc.setTextColor(...MUTED)
-    const addrLines = doc.splitTextToSize("- " + address, CW * 0.55)
+    const addrLines = doc.splitTextToSize("- " + data.customerAddress, CW * 0.55)
     doc.text(addrLines, ML, Y)
     Y += addrLines.length * 4.5
   }
 
-  const email = (data.customerEmail ?? "").trim()
-  if (email) {
-    doc.setFont("helvetica", "normal")
-    doc.setFontSize(9)
-    doc.setTextColor(...MUTED)
-    doc.text("- " + email, ML, Y)
-    Y += 4.5
-  }
-
   // Status badge
   const statusText = (data.status || "Active").toUpperCase()
-  const statusColor: [number,number,number] = [5, 150, 105]   // green
-
+  const statusColor: [number,number,number] = [5, 150, 105]
   const statusLabelY = HEADER_H + 7 + 5 + 5
   doc.setFont("helvetica", "bold")
   doc.setFontSize(7.5)
   doc.setTextColor(...MUTED)
   doc.text("STATUS", PW - MR, statusLabelY, { align: "right" })
-
-  const badgeW = 22
-  const badgeH = 6
-  const badgeX = PW - MR - badgeW
-  const badgeY = statusLabelY + 2
+  const badgeW = 22, badgeH = 6
+  const badgeX = PW - MR - badgeW, badgeY = statusLabelY + 2
   filledRect(doc, badgeX, badgeY, badgeW, badgeH, statusColor)
   doc.setFont("helvetica", "bold")
   doc.setFontSize(7.5)
@@ -204,106 +188,86 @@ export async function generateReceiptPDF(data: ReceiptPDFData): Promise<jsPDF> {
   doc.setLineWidth(0.3)
   doc.line(ML, divY, PW - MR, divY)
 
-  // ── DETAILS TABLE (navy header with white separators) ────────────
-  const tableY = divY + 4
-  const ROW_H = 6
-  const HEADER_ROW_H = ROW_H
-
-  // Columns: label / value
-  const LABEL_W = 60
-  const VALUE_W = CW - LABEL_W
-
-  // Navy header
-  filledRect(doc, ML, tableY, CW, HEADER_ROW_H, NAVY)
-  // White separator
-  doc.setDrawColor(...WHITE)
-  doc.setLineWidth(0.2)
-  doc.line(ML + LABEL_W, tableY, ML + LABEL_W, tableY + HEADER_ROW_H)
-
-  const headerTextY = tableY + HEADER_ROW_H / 2 + 1.5
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(7.5)
-  doc.setTextColor(...WHITE)
-  doc.text("Detail", ML + 2, headerTextY)
-  doc.text("Value",  ML + LABEL_W + 2, headerTextY)
-
-  // Body rows
-  const bodyStartY = tableY + HEADER_ROW_H
-
-  const detailRows = [
-    ["Payment Method", data.paymentMethod || "—"],
-    ["Bank",           data.bankName || "—"],
-    ["Reference",      data.reference || "—"],
-    ["Notes",          data.notes || "—"],
-  ].filter(([_, val]) => val !== "—")   // hide empty rows (optional)
-
-  autoTable(doc, {
-    startY: bodyStartY,
-    margin: { left: ML, right: MR },
-    body: detailRows,
-    showHead: false,
-    styles: {
-      fontSize: 8,
-      cellPadding: { top: 1.5, bottom: 1.5, left: 2, right: 2 },
-      textColor: DARK,
-      lineColor: BORDER,
-      lineWidth: 0.2,
-      minCellHeight: ROW_H,
-    },
-    alternateRowStyles: { fillColor: ROW_ALT },
-    columnStyles: {
-      0: { cellWidth: LABEL_W, fontStyle: "bold", halign: "left" },
-      1: { cellWidth: VALUE_W, halign: "left" },
-    },
-  })
-
-  const afterDetails = (doc as any).lastAutoTable.finalY as number
-
-  // Square border around details
-  doc.setDrawColor(...BORDER)
-  doc.setLineWidth(0.3)
-  doc.rect(ML, bodyStartY, CW, afterDetails - bodyStartY, "S")
-
-  let SY = afterDetails + 8
-
-  // ── INVOICE ALLOCATIONS (if any) ─────────────────────────────────
-  if (data.allocations && data.allocations.length > 0) {
-    const allocStartY = SY
-
+  // ── PAYMENT METHOD (above the journal table) ─────────────────────
+  Y = divY + 6
+  if (data.paymentMethod) {
     doc.setFont("helvetica", "bold")
     doc.setFontSize(9)
-    doc.setTextColor(...NAVY)
-    doc.text("Applied to Invoices", ML, SY)
-    SY += 6
+    doc.setTextColor(...DARK)
+    doc.text("Method: ", ML, Y)
+    doc.setFont("helvetica", "normal")
+    doc.text(data.paymentMethod, ML + 22, Y)
+    Y += 7
+  }
 
-    const allocRows = data.allocations.map((a, i) => [
-      i + 1,
-      a.invoice_no,
-      pkr(a.amount),
-    ])
+  // ── JOURNAL ENTRY TABLE ──────────────────────────────────────────
+  if (data.journalLines.length > 0) {
+    const ROW_H = 6
+    const tableStartY = Y + 2
 
-    // mini table
-    const ALLOC_NUM_W = 12
-    const ALLOC_INV_W = CW - ALLOC_NUM_W - 50
-    const ALLOC_AMT_W = 50
+    // Column widths
+    const NUM_W   = 10
+    const ACC_W   = 50
+    const DESC_W  = CW - NUM_W - ACC_W - 40 - 40   // remaining for description
+    const DEB_W   = 40
+    const CRED_W  = 40
 
-    // Header row
-    filledRect(doc, ML, SY, CW, ROW_H, NAVY)
+    // Navy header
+    filledRect(doc, ML, tableStartY, CW, ROW_H, NAVY)
     doc.setFont("helvetica", "bold")
     doc.setFontSize(7)
     doc.setTextColor(...WHITE)
-    doc.text("#",        ML + ALLOC_NUM_W / 2, SY + ROW_H / 2 + 1.5, { align: "center" })
-    doc.text("Invoice #", ML + ALLOC_NUM_W + 2, SY + ROW_H / 2 + 1.5, { align: "left" })
-    doc.text("Amount",    PW - MR - ALLOC_AMT_W / 2, SY + ROW_H / 2 + 1.5, { align: "center" })
-    SY += ROW_H
+    const hTextY = tableStartY + ROW_H / 2 + 1.2
+    let xPos = ML
+    doc.text("Sr.",      xPos + NUM_W/2, hTextY, { align: "center" })
+    xPos += NUM_W
+    doc.text("Account",  xPos + ACC_W/2, hTextY, { align: "center" })
+    xPos += ACC_W
+    doc.text("Description", xPos + DESC_W/2, hTextY, { align: "center" })
+    xPos += DESC_W
+    doc.text("Debit (PKR)", xPos + DEB_W/2, hTextY, { align: "center" })
+    xPos += DEB_W
+    doc.text("Credit (PKR)", xPos + CRED_W/2, hTextY, { align: "center" })
+
+    // White vertical separators
+    doc.setDrawColor(...WHITE)
+    doc.setLineWidth(0.2)
+    xPos = ML + NUM_W
+    doc.line(xPos, tableStartY, xPos, tableStartY + ROW_H)
+    xPos += ACC_W
+    doc.line(xPos, tableStartY, xPos, tableStartY + ROW_H)
+    xPos += DESC_W
+    doc.line(xPos, tableStartY, xPos, tableStartY + ROW_H)
+    xPos += DEB_W
+    doc.line(xPos, tableStartY, xPos, tableStartY + ROW_H)
+
+    const bodyStartY = tableStartY + ROW_H
+    const rows = data.journalLines.map((line, i) => [
+      i + 1,
+      `${line.account_code} – ${line.account_name}`,
+      line.description || "—",
+      line.debit > 0 ? pkr(line.debit) : "–",
+      line.credit > 0 ? pkr(line.credit) : "–",
+    ])
+
+    // Totals row
+    const totalDebit = data.journalLines.reduce((s, l) => s + l.debit, 0)
+    const totalCredit = data.journalLines.reduce((s, l) => s + l.credit, 0)
+    rows.push([
+      "",
+      "Total",
+      "",
+      pkr(totalDebit),
+      pkr(totalCredit),
+    ])
 
     autoTable(doc, {
-      startY: SY,
+      startY: bodyStartY,
       margin: { left: ML, right: MR },
-      body: allocRows,
+      body: rows,
       showHead: false,
       styles: {
-        fontSize: 8,
+        fontSize: 7.5,
         cellPadding: { top: 1.5, bottom: 1.5, left: 2, right: 2 },
         textColor: DARK,
         lineColor: BORDER,
@@ -312,76 +276,63 @@ export async function generateReceiptPDF(data: ReceiptPDFData): Promise<jsPDF> {
       },
       alternateRowStyles: { fillColor: ROW_ALT },
       columnStyles: {
-        0: { cellWidth: ALLOC_NUM_W, halign: "center" },
-        1: { cellWidth: ALLOC_INV_W, halign: "left" },
-        2: { cellWidth: ALLOC_AMT_W, halign: "right", fontStyle: "bold" },
+        0: { cellWidth: NUM_W,  halign: "center" },
+        1: { cellWidth: ACC_W,  halign: "left" },
+        2: { cellWidth: DESC_W, halign: "left" },
+        3: { cellWidth: DEB_W,  halign: "right" },
+        4: { cellWidth: CRED_W, halign: "right" },
+      },
+      didParseCell: (hookData) => {
+        // Last row is totals → bold & navy background
+        if (hookData.row.index === rows.length - 1) {
+          hookData.cell.styles.fontStyle = "bold"
+          hookData.cell.styles.fillColor = NAVY
+          hookData.cell.styles.textColor = WHITE
+        }
       },
     })
 
-    const afterAlloc = (doc as any).lastAutoTable.finalY as number
+    const afterTable = (doc as any).lastAutoTable.finalY as number
 
-    // Square border around allocations
+    // Square border around table
     doc.setDrawColor(...BORDER)
     doc.setLineWidth(0.3)
-    doc.rect(ML, allocStartY, CW, afterAlloc - allocStartY, "S")
+    doc.rect(ML, bodyStartY, CW, afterTable - bodyStartY, "S")
 
-    SY = afterAlloc + 6
+    Y = afterTable + 8
   }
 
-  // ── JOURNAL SUMMARY (if present) ─────────────────────────────────
-  if (data.journalSummary) {
+  // ── REFERENCE & NOTES (if present) ─────────────────────────────
+  if (data.reference) {
     doc.setFont("helvetica", "bold")
     doc.setFontSize(9)
-    doc.setTextColor(...NAVY)
-    doc.text("Journal Entry Summary", ML, SY)
-    SY += 6
-
-    const sumX = PW - MR - 70
-    const valX = PW - MR
-
+    doc.setTextColor(...DARK)
+    doc.text("Reference:", ML, Y)
     doc.setFont("helvetica", "normal")
+    doc.text(data.reference, ML + 28, Y)
+    Y += 6
+  }
+  if (data.notes) {
+    doc.setFont("helvetica", "bold")
     doc.setFontSize(9)
-    doc.setTextColor(...MUTED)
-    doc.text("Total Debits",  sumX, SY)
-    doc.setTextColor(220, 38, 38)
-    doc.text(pkr(data.journalSummary.debit), valX, SY, { align: "right" })
-    SY += 5.5
-
-    doc.setTextColor(...MUTED)
-    doc.text("Total Credits", sumX, SY)
-    doc.setTextColor(16, 185, 129)
-    doc.text(pkr(data.journalSummary.credit), valX, SY, { align: "right" })
-    SY += 5.5
+    doc.setTextColor(...DARK)
+    doc.text("Notes:", ML, Y)
+    doc.setFont("helvetica", "normal")
+    doc.text(data.notes, ML + 20, Y)
+    Y += 6
   }
 
-  // ── TOTAL RECEIPT AMOUNT (navy box) ─────────────────────────────
-  SY += 2
-
-  const sumX = PW - MR - 70
-  const valX = PW - MR
-  const TOTAL_H = ROW_H
-  filledRect(doc, sumX - 2, SY - 2, valX - sumX + 4, TOTAL_H, NAVY)
+  // ── TOTAL RECEIVED (navy box) ────────────────────────────────────
+  const TOTAL_H = 6
+  const totalX = PW - MR - 70
+  const totalW = 70
+  filledRect(doc, totalX - 2, Y + 2, totalW + 4, TOTAL_H, NAVY)
   doc.setFont("helvetica", "bold")
   doc.setFontSize(9)
   doc.setTextColor(...WHITE)
-  doc.text("Total Received", sumX + 2, SY + TOTAL_H / 2 - 0.5)
-  doc.text(pkr(data.amount), valX - 2, SY + TOTAL_H / 2 - 0.5, { align: "right" })
-  SY += TOTAL_H + 6
-
-  // ── NOTES (if any) ──────────────────────────────────────────────
-  if (data.notes) {
-    doc.setFont("helvetica", "bold")
-    doc.setFontSize(7.5)
-    doc.setTextColor(...MUTED)
-    doc.text("NOTES", ML, SY)
-    SY += 4
-
-    doc.setFont("helvetica", "normal")
-    doc.setFontSize(8.5)
-    doc.setTextColor(...DARK)
-    const noteLines = doc.splitTextToSize(data.notes, CW)
-    doc.text(noteLines, ML, SY)
-  }
+  doc.text("Total Received", totalX + 2, Y + 2 + TOTAL_H / 2 + 0.2)
+  doc.text(pkr(data.amount), PW - MR - 2, Y + 2 + TOTAL_H / 2 + 0.2, { align: "right" })
+  Y += TOTAL_H + 10
 
   // ── FOOTER ───────────────────────────────────────────────────────
   doc.setDrawColor(...BORDER)

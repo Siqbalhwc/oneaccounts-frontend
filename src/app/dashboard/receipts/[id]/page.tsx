@@ -42,6 +42,7 @@ interface JournalLine {
   account_id: number
   account_code?: string
   account_name?: string
+  description?: string
   debit: number
   credit: number
 }
@@ -61,7 +62,7 @@ export default function ReceiptDetailPage() {
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [bank, setBank] = useState<Bank | null>(null)
   const [journalLines, setJournalLines] = useState<JournalLine[]>([])
-  const [allocations, setAllocations] = useState<any[]>([])   // ✅ NEW
+  const [allocations, setAllocations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -87,7 +88,7 @@ export default function ReceiptDetailPage() {
         setCustomer(cust)
       }
 
-      // 3. Bank – simple query, no nested join
+      // 3. Bank
       if (rec.bank_account_id) {
         const { data: bk } = await supabase
           .from("bank_accounts")
@@ -97,10 +98,10 @@ export default function ReceiptDetailPage() {
         setBank(bk ? { id: bk.id, bank_name: bk.bank_name, account_number: bk.account_number } : null)
       }
 
-      // 4. Journal lines
+      // 4. Journal lines – now includes description
       const { data: lines } = await supabase
         .from("journal_lines")
-        .select("account_id, debit, credit, accounts(code, name)")
+        .select("account_id, debit, credit, description, accounts(code, name)")
         .eq("source_type", "receipt")
         .eq("source_id", id)
       if (lines) {
@@ -108,13 +109,14 @@ export default function ReceiptDetailPage() {
           account_id: l.account_id,
           account_code: l.accounts?.code || "",
           account_name: l.accounts?.name || "",
+          description: l.description || "",
           debit: l.debit || 0,
           credit: l.credit || 0,
         }))
         setJournalLines(formatted)
       }
 
-      // 5. Allocations ✅ NEW
+      // 5. Allocations
       supabase
         .from("receipt_allocations")
         .select("amount, invoices(invoice_no)")
@@ -142,16 +144,9 @@ export default function ReceiptDetailPage() {
     return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
   }
 
-  // ✅ REPLACED – now uses the professional PDF generator
+  // ✅ PDF handler – passes journal lines with description
   const handlePDF = async () => {
     if (!receipt) return
-
-    const journalSum = journalLines.length > 0
-      ? {
-          debit: journalLines.reduce((s, l) => s + l.debit, 0),
-          credit: journalLines.reduce((s, l) => s + l.credit, 0),
-        }
-      : null
 
     const pdfData: any = {
       companyName:    companyName || "OneAccounts",
@@ -167,13 +162,17 @@ export default function ReceiptDetailPage() {
       customerPhone:   customer?.phone || "",
       customerEmail:   "",
       paymentMethod:   receipt.payment_method,
-      bankName:        bank?.bank_name || null,
       amount:          receipt.amount || 0,
       reference:       receipt.reference || "",
       notes:           receipt.notes || "",
       status:          "Active",
-      allocations:     allocations.length > 0 ? allocations : undefined,
-      journalSummary:  journalSum,
+      journalLines:    journalLines.map(l => ({
+        account_code: l.account_code || "",
+        account_name: l.account_name || "",
+        description:  l.description || "",
+        debit:        l.debit,
+        credit:       l.credit,
+      })),
     }
 
     const doc = await generateReceiptPDF(pdfData)
@@ -301,6 +300,7 @@ export default function ReceiptDetailPage() {
             <thead>
               <tr>
                 <th>Account</th>
+                <th>Description</th>
                 <th style={{ textAlign: "right" }}>Debit (PKR)</th>
                 <th style={{ textAlign: "right" }}>Credit (PKR)</th>
               </tr>
@@ -309,6 +309,7 @@ export default function ReceiptDetailPage() {
               {journalLines.map((line, idx) => (
                 <tr key={idx}>
                   <td>{line.account_code} – {line.account_name}</td>
+                  <td>{line.description || "—"}</td>
                   <td style={{ textAlign: "right", color: line.debit > 0 ? "#F87171" : "#475569" }}>
                     {line.debit > 0 ? line.debit.toLocaleString() : "–"}
                   </td>
@@ -320,7 +321,7 @@ export default function ReceiptDetailPage() {
             </tbody>
             <tfoot>
               <tr style={{ background: "#1E293B", fontWeight: 700 }}>
-                <td>Total</td>
+                <td colSpan={2}>Total</td>
                 <td style={{ textAlign: "right", color: "#F87171" }}>{totalDebit.toLocaleString()}</td>
                 <td style={{ textAlign: "right", color: "#2DD4BF" }}>{totalCredit.toLocaleString()}</td>
               </tr>
