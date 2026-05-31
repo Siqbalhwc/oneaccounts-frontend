@@ -336,9 +336,10 @@ export default function SuppliersPage() {
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; width: 100%; }
+        .table-wrap { width: 100%; }
         .header-row {
           display: grid;
-          grid-template-columns: 100px 250px 130px 100px 130px 55px 55px 50px;
+          grid-template-columns: minmax(100px, 1fr) minmax(150px, 2fr) minmax(100px, 1fr) minmax(90px, 1fr) minmax(110px, 1.2fr) 55px 55px 50px;
           column-gap: 8px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
@@ -348,7 +349,7 @@ export default function SuppliersPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: 100px 250px 130px 100px 130px 55px 55px 50px;
+          grid-template-columns: minmax(100px, 1fr) minmax(150px, 2fr) minmax(100px, 1fr) minmax(90px, 1fr) minmax(110px, 1.2fr) 55px 55px 50px;
           column-gap: 8px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
@@ -404,8 +405,17 @@ export default function SuppliersPage() {
         .input:focus, .select:focus { border-color: var(--primary); outline: none; }
         label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; display: block; }
         .message { padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
+
+        @media (max-width: 900px) {
+          .table-wrap { overflow-x: auto; }
+          .header-row, .data-row {
+            grid-template-columns: 90px 130px 90px 70px 100px 45px 45px 45px;
+            column-gap: 4px;
+            padding: 10px 12px;
+          }
+        }
         @media (max-width: 640px) {
-          .header-row, .data-row { grid-template-columns: 70px 150px 80px 70px 100px 40px 40px 40px; column-gap: 4px; padding: 10px 12px; }
+          .header-row, .data-row { grid-template-columns: 70px 110px 70px 60px 80px 40px 40px 40px; padding: 10px 8px; }
           .search-input { width: 100%; }
         }
       `}</style>
@@ -438,7 +448,6 @@ export default function SuppliersPage() {
         </div>
       </div>
 
-      {/* Import/export message */}
       {importMessage && (
         <div className="message" style={{ background: importMessage.startsWith("✅") ? "#065F46" : "#7C2D12", color: "white" }}>
           {importMessage}
@@ -481,37 +490,38 @@ export default function SuppliersPage() {
           {search ? "No matching suppliers found." : "No suppliers yet. Add your first supplier."}
         </div>
       ) : (
-        <div className="card">
-          <div className="header-row">
-            <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
-            <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
-            <button className="sort-btn" onClick={() => handleSort("phone")}>Phone {getSortIcon("phone")}</button>
-            <button className="sort-btn" onClick={() => handleSort("balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("balance")}</button>
-            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
-              Created / Edited By
-            </span>
-            <span></span>
-            <span></span>
-            <span></span>
-          </div>
-          {suppliers.map(s => (
-            <div key={s.id} className="data-row">
-              <span style={{ fontWeight: 600, color: "var(--primary)" }}>{s.code}</span>
-              <span style={{ color: "var(--text)" }}>{s.name}</span>
-              <span style={{ color: "var(--text-muted)" }}>{s.phone || "—"}</span>
-              <span style={{ textAlign: "right", fontWeight: 600, color: s.balance >= 0 ? "#10B981" : "#EF4444" }}>PKR {s.balance?.toLocaleString()}</span>
-              <div className="creator-editor-cell">
-                <span>Created: {s.created_by || "—"}</span>
-                <span>Edited: {s.updated_by || "—"}</span>
-              </div>
-              {/* FIXED: Correct URL to Vendor Ledger */}
-              <button className="btn-icon" onClick={() => router.push(`/dashboard/reports/vendor-ledger?supplierId=${s.id}`)} title="View Ledger">
-                <Eye size={14} />
-              </button>
-              <button className="btn-icon" onClick={() => openEdit(s)}><Edit size={14} /></button>
-              <button className="btn-icon" onClick={() => handleDelete(s.id)} style={{ color: "#EF4444" }}><Trash2 size={14} /></button>
+        <div className="table-wrap">
+          <div className="card">
+            <div className="header-row">
+              <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
+              <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
+              <button className="sort-btn" onClick={() => handleSort("phone")}>Phone {getSortIcon("phone")}</button>
+              <button className="sort-btn" onClick={() => handleSort("balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("balance")}</button>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
+                Created / Edited By
+              </span>
+              <span></span>
+              <span></span>
+              <span></span>
             </div>
-          ))}
+            {suppliers.map(s => (
+              <div key={s.id} className="data-row">
+                <span style={{ fontWeight: 600, color: "var(--primary)" }}>{s.code}</span>
+                <span style={{ color: "var(--text)" }}>{s.name}</span>
+                <span style={{ color: "var(--text-muted)" }}>{s.phone || "—"}</span>
+                <span style={{ textAlign: "right", fontWeight: 600, color: s.balance >= 0 ? "#10B981" : "#EF4444" }}>PKR {s.balance?.toLocaleString()}</span>
+                <div className="creator-editor-cell">
+                  <span>Created: {s.created_by || "—"}</span>
+                  <span>Edited: {s.updated_by || "—"}</span>
+                </div>
+                <button className="btn-icon" onClick={() => router.push(`/dashboard/reports/vendor-ledger?supplierId=${s.id}`)} title="View Ledger">
+                  <Eye size={14} />
+                </button>
+                <button className="btn-icon" onClick={() => openEdit(s)}><Edit size={14} /></button>
+                <button className="btn-icon" onClick={() => handleDelete(s.id)} style={{ color: "#EF4444" }}><Trash2 size={14} /></button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
