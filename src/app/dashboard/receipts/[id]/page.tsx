@@ -7,6 +7,8 @@ import { ArrowLeft, Printer, Send } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 import RecordHistory from "@/components/RecordHistory"
+import { generateReceiptPDF } from "@/lib/pdf/receiptPDF"
+import { useCompany } from "@/contexts/CompanyContext"
 
 interface Receipt {
   id: number
@@ -123,7 +125,31 @@ export default function ReceiptDetailPage() {
     return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
   }
 
-  const handlePrint = () => window.print()
+  const { companyName, companyTagline, logoUrl } = useCompany()
+
+const handlePDF = async () => {
+  if (!receipt) return
+  const pdfData = {
+    companyName:    companyName || "OneAccounts",
+    companyAddress: "",
+    companyPhone:   "",
+    companyEmail:   "",
+    companyTagline: companyTagline || "",
+    logoUrl:        logoUrl,
+    receiptNo:      receipt.receipt_no,
+    date:           receipt.date,
+    customerName:    customer?.name || "Customer",
+    customerAddress: "",
+    customerPhone:   customer?.phone || "",
+    customerEmail:   "",
+    paymentMethod:   receipt.payment_method,
+    amount:          receipt.amount || 0,
+    reference:       receipt.reference || "",
+    notes:           receipt.notes || "",
+  }
+  const doc = await generateReceiptPDF(pdfData)
+  doc.save(`Receipt_${receipt.receipt_no}.pdf`)
+}
 
   if (loading || !role) {
     return <div style={{ padding: 24, textAlign: "center", background: "#0B1120", minHeight: "100vh", color: "#94A3B8" }}>Loading…</div>
@@ -168,7 +194,7 @@ export default function ReceiptDetailPage() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn" onClick={handlePrint}><Printer size={14} /> Print</button>
+          <button className="btn" onClick={handlePDF}><Printer size={14} /> PDF</button>
           {getWhatsAppLink() && hasFeature("whatsapp_invoice") && (
             <a href={getWhatsAppLink()} target="_blank" rel="noopener noreferrer" className="btn btn-success">
               <Send size={14} /> WhatsApp
