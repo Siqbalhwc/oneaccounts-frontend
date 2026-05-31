@@ -187,7 +187,7 @@ export default function PaymentDetailPage() {
         .row { display: flex; margin-bottom: 10px; font-size: 14px; align-items: center; }
         .label { width: 130px; color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
         .value { color: var(--text); font-weight: 500; }
-        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; min-width: 600px; } /* min-width ensures table won't shrink too much */
         th { text-align: left; padding: 10px 12px; background: var(--card-hover); font-weight: 700; color: var(--text-muted); font-size: 10px; text-transform: uppercase; border-bottom: 1px solid var(--border); }
         td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); }
         tr:hover td { background: var(--card-hover); }
@@ -198,6 +198,8 @@ export default function PaymentDetailPage() {
         .btn-success { background: #25D366; color: white; border-color: #25D366; }
         .btn-success:hover { background: #22C55E; }
         .record-history { background: var(--bg-soft); border-radius: 8px; padding: 8px; }
+        .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 8px; }
+
         @media (max-width: 640px) {
           .row { flex-direction: column; align-items: flex-start; }
           .label { margin-bottom: 2px; }
@@ -236,46 +238,52 @@ export default function PaymentDetailPage() {
       {payment.allocations && payment.allocations.length > 0 && (
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>Applied to Bills</h3>
-          <table>
-            <thead><tr><th>Bill Number</th><th style={{ textAlign: "right" }}>Amount</th></tr></thead>
-            <tbody>
-              {payment.allocations.map((alloc, idx) => (
-                <tr key={idx}><td>{alloc.invoice_no}</td><td style={{ textAlign: "right", fontWeight: 600 }}>PKR {alloc.amount?.toLocaleString()}</td></tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-wrapper">
+            <table>
+              <thead><tr><th>Bill Number</th><th style={{ textAlign: "right" }}>Amount</th></tr></thead>
+              <tbody>
+                {payment.allocations.map((alloc, idx) => (
+                  <tr key={idx}><td>{alloc.invoice_no}</td><td style={{ textAlign: "right", fontWeight: 600 }}>PKR {alloc.amount?.toLocaleString()}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
       {journalLines.length > 0 && (
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📒 Journal Entry</h3>
-          <table>
-            <thead><tr><th>Account</th><th style={{ textAlign: "right" }}>Debit (PKR)</th><th style={{ textAlign: "right" }}>Credit (PKR)</th></tr></thead>
-            <tbody>
-              {journalLines.map((line, idx) => (
-                <tr key={idx}>
-                  <td>{line.account_code} – {line.account_name}</td>
-                  <td style={{ textAlign: "right", color: line.debit > 0 ? "#F87171" : "var(--text-muted)" }}>{line.debit > 0 ? line.debit.toLocaleString() : "–"}</td>
-                  <td style={{ textAlign: "right", color: line.credit > 0 ? "#2DD4BF" : "var(--text-muted)" }}>{line.credit > 0 ? line.credit.toLocaleString() : "–"}</td>
+          <div className="table-wrapper">
+            <table>
+              <thead><tr><th>Account</th><th style={{ textAlign: "right" }}>Debit (PKR)</th><th style={{ textAlign: "right" }}>Credit (PKR)</th></tr></thead>
+              <tbody>
+                {journalLines.map((line, idx) => (
+                  <tr key={idx}>
+                    <td>{line.account_code} – {line.account_name}</td>
+                    <td style={{ textAlign: "right", color: line.debit > 0 ? "#F87171" : "var(--text-muted)" }}>{line.debit > 0 ? line.debit.toLocaleString() : "–"}</td>
+                    <td style={{ textAlign: "right", color: line.credit > 0 ? "#2DD4BF" : "var(--text-muted)" }}>{line.credit > 0 ? line.credit.toLocaleString() : "–"}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
+                  <td>Total</td>
+                  <td style={{ textAlign: "right", color: "#F87171" }}>{totalDebit.toLocaleString()}</td>
+                  <td style={{ textAlign: "right", color: "#2DD4BF" }}>{totalCredit.toLocaleString()}</td>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
-                <td>Total</td>
-                <td style={{ textAlign: "right", color: "#F87171" }}>{totalDebit.toLocaleString()}</td>
-                <td style={{ textAlign: "right", color: "#2DD4BF" }}>{totalCredit.toLocaleString()}</td>
-              </tr>
-            </tfoot>
-          </table>
+              </tfoot>
+            </table>
+          </div>
         </div>
       )}
 
-      {payment && (
+      {payment && payment.id && (
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
-          <div className="record-history"><RecordHistory tableName="payments" recordId={String(payment.id)} /></div>
+          <div className="record-history">
+            <RecordHistory tableName="payments" recordId={String(payment.id)} />
+          </div>
         </div>
       )}
     </div>
