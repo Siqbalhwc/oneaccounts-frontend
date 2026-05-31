@@ -6,7 +6,6 @@ const DARK     = [17,  24,  39]  as [number,number,number]
 const MUTED    = [107,114, 128]  as [number,number,number]
 const BORDER   = [229,231, 235]  as [number,number,number]
 const WHITE    = [255,255, 255]  as [number,number,number]
-const ROW_ALT  = [248,249, 252]  as [number,number,number]
 
 async function loadImage(url: string): Promise<string | null> {
   try {
@@ -101,13 +100,13 @@ export async function generateReceiptPDF(data: ReceiptPDFData): Promise<jsPDF> {
   doc.setTextColor(...NAVY)
   doc.text("RECEIPT", PW - MR, LOGO_Y + 9, { align: "right" })
 
-  // Receipt number (below the title, with spacing)
+  // Receipt number (below title, well‑separated)
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8.5)
   doc.setTextColor(...MUTED)
   doc.text(`Receipt #: ${data.receiptNo}`, PW - MR, LOGO_Y + 17, { align: "right" })
 
-  // Date (right aligned, below receipt number)
+  // Date
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8)
   doc.setTextColor(...MUTED)
@@ -118,13 +117,14 @@ export async function generateReceiptPDF(data: ReceiptPDFData): Promise<jsPDF> {
   doc.setLineWidth(0.4)
   doc.line(ML, HEADER_H, PW - MR, HEADER_H)
 
-  // ── CUSTOMER DETAILS ──────────────────────────────────────────────
+  // ── RECEIVED FROM / AMOUNT ──────────────────────────────────────
   let Y = HEADER_H + 7
 
   doc.setFont("helvetica", "bold")
-  doc.setFontSize(8)
+  doc.setFontSize(7.5)
   doc.setTextColor(...MUTED)
   doc.text("RECEIVED FROM", ML, Y)
+  doc.text("AMOUNT", PW - MR, Y, { align: "right" })
 
   Y += 5
 
@@ -132,6 +132,11 @@ export async function generateReceiptPDF(data: ReceiptPDFData): Promise<jsPDF> {
   doc.setFontSize(13)
   doc.setTextColor(...DARK)
   doc.text(data.customerName || "", ML, Y)
+
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(18)
+  doc.setTextColor(16, 185, 129)   // green for payment received
+  doc.text(pkr(data.amount), PW - MR, Y, { align: "right" })
 
   Y += 5
 
@@ -148,11 +153,11 @@ export async function generateReceiptPDF(data: ReceiptPDFData): Promise<jsPDF> {
     doc.setFont("helvetica", "normal")
     doc.setFontSize(9)
     doc.setTextColor(...MUTED)
-    doc.text(`Phone: ${data.customerPhone}`, ML, Y)
+    doc.text("Phone: " + data.customerPhone, ML, Y)
     Y += 4.5
   }
 
-  // ── DIVIDER ────────────────────────────────────────────────────────
+  // ── DIVIDER ──────────────────────────────────────────────────────
   Y += 2
   doc.setDrawColor(...BORDER)
   doc.setLineWidth(0.3)
@@ -160,62 +165,52 @@ export async function generateReceiptPDF(data: ReceiptPDFData): Promise<jsPDF> {
 
   Y += 6
 
-  // ── RECEIPT DETAILS TABLE ──────────────────────────────────────────
-  // We'll create a simple two-column layout for the receipt info
-  const leftX = ML
-  const rightX = ML + 60
+  // ── DETAILS TABLE ────────────────────────────────────────────────
+  // Square border around the details section (matches invoice style)
+  const detailsStartY = Y
 
   doc.setFont("helvetica", "bold")
   doc.setFontSize(9)
   doc.setTextColor(...DARK)
-  doc.text("Amount Received:", leftX, Y)
+  doc.text("Payment Method:", ML, Y)
   doc.setFont("helvetica", "normal")
-  doc.setFontSize(13)
-  doc.setTextColor(16, 185, 129)   // green for payment received
-  doc.text(pkr(data.amount), rightX, Y)
+  doc.text(data.paymentMethod || "—", ML + 60, Y)
 
-  Y += 8
-
-  if (data.paymentMethod) {
-    doc.setFont("helvetica", "bold")
-    doc.setFontSize(9)
-    doc.setTextColor(...DARK)
-    doc.text("Payment Method:", leftX, Y)
-    doc.setFont("helvetica", "normal")
-    doc.setFontSize(9)
-    doc.setTextColor(...DARK)
-    doc.text(data.paymentMethod, rightX, Y)
-    Y += 8
-  }
+  Y += 7
 
   if (data.reference) {
     doc.setFont("helvetica", "bold")
     doc.setFontSize(9)
     doc.setTextColor(...DARK)
-    doc.text("Reference:", leftX, Y)
+    doc.text("Reference:", ML, Y)
     doc.setFont("helvetica", "normal")
-    doc.setTextColor(...DARK)
-    doc.text(data.reference, rightX, Y)
-    Y += 8
+    doc.text(data.reference, ML + 60, Y)
+    Y += 7
   }
 
   if (data.notes) {
     doc.setFont("helvetica", "bold")
     doc.setFontSize(9)
     doc.setTextColor(...DARK)
-    doc.text("Notes:", leftX, Y)
+    doc.text("Notes:", ML, Y)
     doc.setFont("helvetica", "normal")
-    doc.setTextColor(...DARK)
-    doc.text(data.notes, rightX, Y)
-    Y += 8
+    doc.text(data.notes, ML + 60, Y)
+    Y += 7
   }
 
-  // ── SQUARE BORDER AROUND THE DETAILS ───────────────────────────────
-  const boxStartY = HEADER_H + 7 + 5 + (data.customerAddress ? 12 : 0) + (data.customerPhone ? 5 : 0) + 2
-  const boxHeight = Y - boxStartY + 4
+  // Square border around the details
+  const detailsHeight = Y - detailsStartY + 4
   doc.setDrawColor(...BORDER)
   doc.setLineWidth(0.3)
-  doc.rect(ML, boxStartY, CW, boxHeight, "S")
+  doc.rect(ML, detailsStartY, CW, detailsHeight, "S")
+
+  Y += 10
+
+  // ── THANK YOU NOTE ──────────────────────────────────────────────
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(10)
+  doc.setTextColor(...NAVY)
+  doc.text("Thank you for your payment!", PW / 2, Y, { align: "center" })
 
   // ── FOOTER ───────────────────────────────────────────────────────
   doc.setDrawColor(...BORDER)
@@ -225,7 +220,7 @@ export async function generateReceiptPDF(data: ReceiptPDFData): Promise<jsPDF> {
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8)
   doc.setTextColor(...MUTED)
-  const footerParts = ["Thank you for your business!", data.companyName, data.companyTagline].filter(Boolean)
+  const footerParts = ["Generated by " + data.companyName, data.companyTagline].filter(Boolean)
   doc.text(footerParts.join(" · "), PW / 2, PH - 10, { align: "center" })
 
   return doc
