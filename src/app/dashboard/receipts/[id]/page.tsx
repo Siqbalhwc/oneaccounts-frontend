@@ -6,9 +6,9 @@ import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Printer, Send } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
-import RecordHistory from "@/components/RecordHistory"
 import { generateReceiptPDF } from "@/lib/pdf/receiptPDF"
 import { useCompany } from "@/contexts/CompanyContext"
+import RecordHistory from "@/components/RecordHistory"
 
 interface Receipt {
   id: number
@@ -55,11 +55,13 @@ export default function ReceiptDetailPage() {
   )
   const { role } = useRole()
   const { hasFeature } = usePlan()
+  const { companyName, companyTagline, logoUrl } = useCompany()
 
   const [receipt, setReceipt] = useState<Receipt | null>(null)
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [bank, setBank] = useState<Bank | null>(null)
   const [journalLines, setJournalLines] = useState<JournalLine[]>([])
+  const [allocations, setAllocations] = useState<any[]>([])   // ✅ NEW
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -112,6 +114,21 @@ export default function ReceiptDetailPage() {
         setJournalLines(formatted)
       }
 
+      // 5. Allocations ✅ NEW
+      supabase
+        .from("receipt_allocations")
+        .select("amount, invoices(invoice_no)")
+        .eq("receipt_id", rec.id)
+        .then(({ data: allocs }) => {
+          if (allocs) {
+            const mapped = allocs.map((a: any) => ({
+              invoice_no: a.invoices?.invoice_no || "—",
+              amount: a.amount,
+            }))
+            setAllocations(mapped)
+          }
+        })
+
       setLoading(false)
     }
     fetchData()
@@ -125,31 +142,43 @@ export default function ReceiptDetailPage() {
     return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
   }
 
-  const { companyName, companyTagline, logoUrl } = useCompany()
+  // ✅ REPLACED – now uses the professional PDF generator
+  const handlePDF = async () => {
+    if (!receipt) return
 
-const handlePDF = async () => {
-  if (!receipt) return
-  const pdfData = {
-    companyName:    companyName || "OneAccounts",
-    companyAddress: "",
-    companyPhone:   "",
-    companyEmail:   "",
-    companyTagline: companyTagline || "",
-    logoUrl:        logoUrl,
-    receiptNo:      receipt.receipt_no,
-    date:           receipt.date,
-    customerName:    customer?.name || "Customer",
-    customerAddress: "",
-    customerPhone:   customer?.phone || "",
-    customerEmail:   "",
-    paymentMethod:   receipt.payment_method,
-    amount:          receipt.amount || 0,
-    reference:       receipt.reference || "",
-    notes:           receipt.notes || "",
+    const journalSum = journalLines.length > 0
+      ? {
+          debit: journalLines.reduce((s, l) => s + l.debit, 0),
+          credit: journalLines.reduce((s, l) => s + l.credit, 0),
+        }
+      : null
+
+    const pdfData: any = {
+      companyName:    companyName || "OneAccounts",
+      companyAddress: "",
+      companyPhone:   "",
+      companyEmail:   "",
+      companyTagline: companyTagline || "",
+      logoUrl:        logoUrl,
+      receiptNo:      receipt.receipt_no,
+      date:           receipt.date,
+      customerName:    customer?.name || "Customer",
+      customerAddress: "",
+      customerPhone:   customer?.phone || "",
+      customerEmail:   "",
+      paymentMethod:   receipt.payment_method,
+      bankName:        bank?.bank_name || null,
+      amount:          receipt.amount || 0,
+      reference:       receipt.reference || "",
+      notes:           receipt.notes || "",
+      status:          "Active",
+      allocations:     allocations.length > 0 ? allocations : undefined,
+      journalSummary:  journalSum,
+    }
+
+    const doc = await generateReceiptPDF(pdfData)
+    doc.save(`Receipt_${receipt.receipt_no}.pdf`)
   }
-  const doc = await generateReceiptPDF(pdfData)
-  doc.save(`Receipt_${receipt.receipt_no}.pdf`)
-}
 
   if (loading || !role) {
     return <div style={{ padding: 24, textAlign: "center", background: "#0B1120", minHeight: "100vh", color: "#94A3B8" }}>Loading…</div>
@@ -240,6 +269,29 @@ const handlePDF = async () => {
           </div>
         </div>
       </div>
+
+      {/* Allocations (if any) */}
+      {allocations.length > 0 && (
+        <div className="card">
+          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>Applied to Invoices</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Invoice Number</th>
+                <th style={{ textAlign: "right" }}>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {allocations.map((alloc, idx) => (
+                <tr key={idx}>
+                  <td>{alloc.invoice_no}</td>
+                  <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {alloc.amount?.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Journal Entry (if exists) */}
       {journalLines.length > 0 && (
