@@ -25,7 +25,6 @@ interface Receipt {
     code: string
     phone?: string
     email?: string
-    address?: string
   }
   allocations?: {
     invoice_id: number
@@ -91,16 +90,17 @@ export default function ReceiptDetailPage() {
           if (bank) setBankName(bank.bank_name)
         }
 
+        // Fetch customer (same logic as payment fetches supplier)
         if (rec.party_id && rec.party_type === "customer") {
           const { data: cust } = await supabase
             .from("customers")
-            .select("name, code, phone, email, address")
+            .select("name, code, phone, email")
             .eq("id", rec.party_id)
             .single()
           rec.customer = cust || undefined
         }
 
-        // Fetch receipt allocations (if any)
+        // Fetch allocations
         const { data: allocs } = await supabase
           .from("receipt_allocations")
           .select("amount, invoice_id, invoices(invoice_no)")
@@ -158,7 +158,7 @@ export default function ReceiptDetailPage() {
       receiptNo:      receipt.receipt_no,
       date:           receipt.date,
       customerName:    receipt.customer?.name || "Customer",
-      customerAddress: receipt.customer?.address || "",
+      customerAddress: "",
       customerPhone:   receipt.customer?.phone || "",
       customerEmail:   receipt.customer?.email || "",
       paymentMethod:   receipt.payment_method,
