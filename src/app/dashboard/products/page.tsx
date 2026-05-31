@@ -76,13 +76,46 @@ export default function StockRegisterPage() {
     }
 
     query = query.order(sortField, { ascending: sortDir === "asc" })
-    query.range(start, end).then(({ data, count }) => {
-      const enriched = (data || []).map((p: any) => ({
-        ...p,
-        total_inflow: p.total_inflow || 0,
-        total_outflow: p.total_outflow || 0,
-        qty_on_hand: (p.opening_qty || 0) + (p.total_inflow || 0) - (p.total_outflow || 0),
-      }))
+    query.range(start, end).then(async ({ data, count }) => {
+      if (!data || data.length === 0) {
+        setProducts([])
+        setTotal(0)
+        setLoading(false)
+        return
+      }
+
+      // ── Live calculation from stock_moves ──
+      const productIds = data.map((p: any) => p.id)
+      const { data: moves } = await supabase
+        .from("stock_moves")
+        .select("product_id, qty")
+        .in("product_id", productIds)
+        .eq("company_id", companyId)
+
+      const inflowMap: Record<number, number> = {}
+      const outflowMap: Record<number, number> = {}
+      if (moves) {
+        moves.forEach((m: any) => {
+          const qty = m.qty || 0
+          if (qty > 0) {
+            inflowMap[m.product_id] = (inflowMap[m.product_id] || 0) + qty
+          } else {
+            outflowMap[m.product_id] = (outflowMap[m.product_id] || 0) + Math.abs(qty)
+          }
+        })
+      }
+
+      const enriched = data.map((p: any) => {
+        const inflow = inflowMap[p.id] || 0
+        const outflow = outflowMap[p.id] || 0
+        return {
+          ...p,
+          total_inflow: inflow,
+          total_outflow: outflow,
+          qty_on_hand: (p.opening_qty || 0) + inflow - outflow,
+        }
+      })
+
       setProducts(enriched)
       setTotal(count || 0)
       setLoading(false)
@@ -117,7 +150,7 @@ export default function StockRegisterPage() {
 
   // ── Summary: sum of (closing qty × cost price) ──
   const totalStockValue = products.reduce((sum, p) => {
-    const qty = (p.opening_qty || 0) + (p.total_inflow || 0) - (p.total_outflow || 0)
+    const qty = p.qty_on_hand
     return sum + (qty * (p.cost_price || 0))
   }, 0)
   const totalProducts = total
@@ -273,22 +306,18 @@ export default function StockRegisterPage() {
             <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
             <button className="sort-btn" onClick={() => handleSort("cost_price")}>Cost {getSortIcon("cost_price")}</button>
             <button className="sort-btn" onClick={() => handleSort("sale_price")}>Sale {getSortIcon("sale_price")}</button>
-            {/* Opening – now sortable */}
             <button className="sort-btn" onClick={() => handleSort("opening_qty")} style={{ justifyContent: "center" }}>Opening {getSortIcon("opening_qty")}</button>
-            {/* Inflow – now sortable */}
             <button className="sort-btn" onClick={() => handleSort("total_inflow")} style={{ justifyContent: "center" }}>Inflow {getSortIcon("total_inflow")}</button>
-            {/* Outflow – now sortable */}
             <button className="sort-btn" onClick={() => handleSort("total_outflow")} style={{ justifyContent: "center" }}>Outflow {getSortIcon("total_outflow")}</button>
             <button className="sort-btn" onClick={() => handleSort("qty_on_hand")} style={{ justifyContent: "center" }}>Closing {getSortIcon("qty_on_hand")}</button>
-            {/* Img – non‑sortable, styled like other headers */}
             <span className="header-span">Img</span>
             <span></span>
             <span></span>
             <span></span>
           </div>
           {products.map(prod => {
-            const inflow = prod.total_inflow || 0
-            const outflow = prod.total_outflow || 0
+            const inflow = prod.total_inflow
+            const outflow = prod.total_outflow
             const closing = prod.qty_on_hand
             return (
               <div key={prod.id} className="data-row">
