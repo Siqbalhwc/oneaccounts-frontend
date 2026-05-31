@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { logDataChange } from '@/lib/audit'
+import { generateNextCode } from '@/lib/generate-code'
 
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies()
@@ -23,31 +24,20 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
+
   const { code, name, phone, email, address, opening_balance } = await request.json()
 
-  // Auto‑generate code if missing
+  // Auto‑generate code if missing (uses helper that ignores soft‑deleted rows)
   let suppCode = code || ''
   if (!suppCode) {
-    const { data: last } = await supabase
-      .from('suppliers')
-      .select('code')
-      .like('code', 'SUP-%')
-      .order('code', { ascending: false })
-      .limit(1)
-    let nextNum = 1
-    if (last && last.length > 0) {
-      const parts = last[0].code.split('-')
-      if (parts.length === 2) {
-        const n = parseInt(parts[1])
-        if (!isNaN(n)) nextNum = n + 1
-      }
-    }
-    suppCode = `SUP-${String(nextNum).padStart(3, '0')}`
+    suppCode = await generateNextCode('suppliers', 'SUP-', companyId)
   }
 
   const { data: supplier, error } = await supabase
     .from('suppliers')
     .insert({
+      company_id: companyId,
       code: suppCode,
       name,
       phone,
