@@ -200,7 +200,7 @@ export default function NewBillPage() {
       .eq("id", editId)
       .eq("company_id", companyId)
       .single()
-      .then(({ data: bill }) => {
+      .then(async ({ data: bill }) => {
         if (!bill) return
         setSupplierId(bill.party_id)
         const supp = suppliers.find((s: any) => s.id === bill.party_id)
@@ -210,25 +210,33 @@ export default function NewBillPage() {
         setReference(bill.reference || "")
         setNotes(bill.notes || "")
         setPoId(bill.po_id || null)
-        supabase.from("invoice_items")
+
+        const { data: itemsData } = await supabase
+          .from("invoice_items")
           .select("*")
           .eq("invoice_id", bill.id)
           .order("id")
-          .then(({ data: itemsData }) => {
-            if (itemsData) {
-              const loaded = itemsData.map((item: any) => ({
-                product_id: item.product_id || null,
-                description: item.description,
-                qty: item.qty,
-                unit_price: item.unit_price,
-                total: item.total,
-                location_id: item.location_id || "",
-                activity_id: item.activity_id || "",
-                account_id: item.account_id || null,
-              }))
-              setItems(loaded)
+
+        if (itemsData) {
+          const loaded = itemsData.map((item: any) => ({
+            product_id: item.product_id || null,
+            description: item.description,
+            qty: item.qty,
+            unit_price: item.unit_price,
+            total: item.total,
+            location_id: item.location_id || "",
+            activity_id: item.activity_id || "",
+            account_id: item.account_id || null,
+          }))
+          setItems(loaded)
+
+          // Fetch project/donor for each line that has activity
+          loaded.forEach(item => {
+            if (item.activity_id) {
+              fetchProjectDonor(Number(item.activity_id))
             }
           })
+        }
       })
   }, [editId, companyId, suppliers])
 
@@ -342,6 +350,41 @@ export default function NewBillPage() {
 
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
 
+  // ── Helper to fetch project/donor for a given activity ──────────
+  const fetchProjectDonor = async (actId: number) => {
+    if (activityProjectDonor[actId]) return   // already cached
+    try {
+      const { data: actData } = await supabase
+        .from("activities")
+        .select("project_id")
+        .eq("id", actId)
+        .single()
+
+      if (actData?.project_id) {
+        const { data: proj } = await supabase
+          .from("projects")
+          .select("name, donor_id")
+          .eq("id", actData.project_id)
+          .single()
+
+        const projectName = proj?.name || ""
+        let donorName: string | null = null
+        if (proj?.donor_id) {
+          const { data: donor } = await supabase
+            .from("donors")
+            .select("name")
+            .eq("id", proj.donor_id)
+            .single()
+          donorName = donor?.name || null
+        }
+        setActivityProjectDonor(prev => ({
+          ...prev,
+          [actId]: { projectName, donorName },
+        }))
+      }
+    } catch {}
+  }
+
   const updateItem = async (idx: number, field: string, value: any) => {
     const updated = [...items]
     updated[idx] = { ...updated[idx], [field]: value }
@@ -361,35 +404,14 @@ export default function NewBillPage() {
     if (field === "activity_id" && updated[idx].activity_id && updated[idx].account_id) {
       const actId = Number(updated[idx].activity_id)
       const locId = updated[idx].location_id ? Number(updated[idx].location_id) : null
-      // Fetch project / donor
-      if (!activityProjectDonor[actId]) {
-        const { data: actData } = await supabase.from("activities")
-          .select("project_id, projects(name, donor_id)")
-          .eq("id", actId)
-          .single()
-        if (actData) {
-          const proj: any = actData.projects
-          const projectName = proj?.name || ""
-          let donorName: string | null = null
-          if (proj?.donor_id) {
-            const { data: donor } = await supabase.from("donors")
-              .select("name")
-              .eq("id", proj.donor_id)
-              .single()
-            donorName = donor?.name || null
-          }
-          setActivityProjectDonor(prev => ({
-            ...prev,
-            [actId]: { projectName, donorName },
-          }))
-        }
-      }
+      fetchProjectDonor(actId)                          // ✅ fetch project/donor
       fetchBudget(actId, Number(updated[idx].account_id), locId)
     }
 
     if ((field === "account_id" || field === "location_id") && updated[idx].activity_id && updated[idx].account_id) {
       const actId = Number(updated[idx].activity_id)
       const locId = updated[idx].location_id ? Number(updated[idx].location_id) : null
+      fetchProjectDonor(actId)
       fetchBudget(actId, Number(updated[idx].account_id), locId)
     }
 
