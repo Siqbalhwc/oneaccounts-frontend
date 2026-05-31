@@ -45,29 +45,34 @@ export default function ProductLedgerPage() {
     setProduct(prod)
     if (!prod) { setLoading(false); return }
 
-    // 2. Invoice items (purchases & sales)
-    const { data: items } = await supabase
-      .from("invoice_items")
-      .select(`
-        id,
-        qty,
-        invoices!inner(
-          invoice_no,
-          date,
-          type
-        )
-      `)
-      .eq("product_id", productId)
-      .order("id", { ascending: true })
+    // 2. Fetch movements from all three sources
+    const [
+      { data: items },
+      { data: adjustments },
+      { data: stockMoves },
+    ] = await Promise.all([
+      // Invoice items (purchases & sales)
+      supabase
+        .from("invoice_items")
+        .select(`id, qty, invoices!inner(invoice_no, date, type)`)
+        .eq("product_id", productId)
+        .order("id", { ascending: true }),
 
-    // 3. Inventory transactions (adjustments, stock-ins, etc.)
-    const { data: adjustments } = await supabase
-      .from("inventory_transactions")
-      .select("*")
-      .eq("product_id", productId)
-      .order("date", { ascending: true })
+      // Inventory transactions
+      supabase
+        .from("inventory_transactions")
+        .select("*")
+        .eq("product_id", productId)
+        .order("date", { ascending: true }),
 
-    // Combine both sources
+      // Stock moves (adjustments from the dedicated page)
+      supabase
+        .from("stock_moves")
+        .select("*")
+        .eq("product_id", productId)
+        .order("date", { ascending: true }),
+    ])
+
     const allLines: any[] = []
 
     // Invoice items
@@ -77,7 +82,6 @@ export default function ProductLedgerPage() {
         if (!inv || !inv.date) return
         const isPurchase = inv.type === "purchase"
         const isSale = inv.type === "sale"
-
         allLines.push({
           id: `inv-${item.id}`,
           date: inv.date,
@@ -101,6 +105,21 @@ export default function ProductLedgerPage() {
           invoice_no: adj.notes || adj.reference_type || "",
           qty_in: isInflow ? qty : 0,
           qty_out: isInflow ? 0 : Math.abs(qty),
+        })
+      })
+    }
+
+    // Stock moves (the actual adjustment entries)
+    if (stockMoves) {
+      stockMoves.forEach((move: any) => {
+        const qty = move.qty || 0
+        allLines.push({
+          id: `move-${move.id}`,
+          date: move.date,
+          type: move.move_type || "Stock Move",
+          invoice_no: move.reason || move.ref || "",
+          qty_in: qty > 0 ? qty : 0,
+          qty_out: qty < 0 ? Math.abs(qty) : 0,
         })
       })
     }
