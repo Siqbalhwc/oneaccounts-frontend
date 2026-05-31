@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { Plus, ArrowUpDown, ArrowUp, ArrowDown, Search, Edit, Trash2, X, CheckCircle } from "lucide-react"
+import { Plus, ArrowUpDown, ArrowUp, ArrowDown, Search, Edit, Trash2, X } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 
 // Predefined categories (same as New Account page)
@@ -226,7 +226,6 @@ export default function AccountsPage() {
     } else {
       setFlash("Account updated!")
       setShowEditModal(false)
-      // Refresh list
       supabase.from("accounts").select("*").order("code", { ascending: true }).then(({ data }) => {
         if (data) setAccounts(data)
       })
@@ -266,9 +265,17 @@ export default function AccountsPage() {
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .ac-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
+        .table-wrapper {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+        .table-grid {
+          min-width: 700px; /* ensures enough room for all columns */
+        }
         .ac-header {
           display: grid;
-          grid-template-columns: 80px 1fr 100px 130px 110px 50px;
+          grid-template-columns: 80px 1fr 100px 130px 110px 65px;
+          gap: 8px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
@@ -276,7 +283,8 @@ export default function AccountsPage() {
         }
         .ac-row {
           display: grid;
-          grid-template-columns: 80px 1fr 100px 130px 110px 50px;
+          grid-template-columns: 80px 1fr 100px 130px 110px 65px;
+          gap: 8px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
@@ -322,19 +330,16 @@ export default function AccountsPage() {
         .pr-modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
 
         @media (max-width: 640px) {
-          .ac-header, .ac-row { grid-template-columns: 60px 1fr 80px 90px 80px 40px; }
           .ac-search { width: 100%; }
         }
       `}</style>
 
-      {/* Flash message */}
       {flash && (
         <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
           {flash}
         </div>
       )}
 
-      {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📋 Chart of Accounts</h1>
@@ -347,7 +352,6 @@ export default function AccountsPage() {
         )}
       </div>
 
-      {/* Summary Cards */}
       <div className="summary-grid">
         <div className="summary-item">
           <div className="summary-label">Total Accounts</div>
@@ -367,48 +371,50 @@ export default function AccountsPage() {
         </div>
       </div>
 
-      {/* Search */}
       <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
         <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
         <input className="ac-search" placeholder="Filter by code, name, type..." value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
-      {/* Table */}
-      {loading ? (
-        <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading accounts…</div>
-      ) : filteredAccounts.length === 0 ? (
-        <div className="ac-card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
-          No accounts found. {canEdit && "Add a new account to get started."}
-        </div>
-      ) : (
-        <div className="ac-card">
-          <div className="ac-header">
-            <button className="ac-sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
-            <button className="ac-sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
-            <button className="ac-sort-btn" onClick={() => handleSort("type")}>Type {getSortIcon("type")}</button>
-            <button className="ac-sort-btn" onClick={() => handleSort("category")}>Category {getSortIcon("category")}</button>
-            <button className="ac-sort-btn" onClick={() => handleSort("balance")} style={{ justifyContent: "flex-end" }}>Balance {getSortIcon("balance")}</button>
-            <span></span> {/* actions column */}
+      <div className="ac-card">
+        {loading ? (
+          <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading accounts…</div>
+        ) : filteredAccounts.length === 0 ? (
+          <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
+            No accounts found. {canEdit && "Add a new account to get started."}
           </div>
-          {filteredAccounts.map(a => (
-            <div key={a.id} className="ac-row">
-              <span style={{ fontWeight: 600, color: "var(--primary)" }}>{a.code}</span>
-              <span style={{ color: "var(--text)" }}>{a.name}</span>
-              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{a.type}</span>
-              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{a.category || "—"}</span>
-              <span style={{ textAlign: "right", fontWeight: 600, color: a.balance >= 0 ? "#10B981" : "#EF4444" }}>
-                PKR {(a.balance || 0).toLocaleString()}
-              </span>
-              {canEdit && (
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button className="btn-icon" onClick={() => openEdit(a)}><Edit size={14} /></button>
-                  <button className="btn-icon" onClick={() => setDeleteId(a.id)} style={{ color: "#EF4444" }}><Trash2 size={14} /></button>
+        ) : (
+          <div className="table-wrapper">
+            <div className="table-grid">
+              <div className="ac-header">
+                <button className="ac-sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
+                <button className="ac-sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
+                <button className="ac-sort-btn" onClick={() => handleSort("type")}>Type {getSortIcon("type")}</button>
+                <button className="ac-sort-btn" onClick={() => handleSort("category")}>Category {getSortIcon("category")}</button>
+                <button className="ac-sort-btn" onClick={() => handleSort("balance")} style={{ justifyContent: "flex-end" }}>Balance {getSortIcon("balance")}</button>
+                <span></span>
+              </div>
+              {filteredAccounts.map(a => (
+                <div key={a.id} className="ac-row">
+                  <span style={{ fontWeight: 600, color: "var(--primary)" }}>{a.code}</span>
+                  <span style={{ color: "var(--text)" }}>{a.name}</span>
+                  <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{a.type}</span>
+                  <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{a.category || "—"}</span>
+                  <span style={{ textAlign: "right", fontWeight: 600, color: a.balance >= 0 ? "#10B981" : "#EF4444" }}>
+                    PKR {(a.balance || 0).toLocaleString()}
+                  </span>
+                  {canEdit && (
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button className="btn-icon" onClick={() => openEdit(a)}><Edit size={14} /></button>
+                      <button className="btn-icon" onClick={() => setDeleteId(a.id)} style={{ color: "#EF4444" }}><Trash2 size={14} /></button>
+                    </div>
+                  )}
                 </div>
-              )}
+              ))}
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
       {/* Edit Modal */}
       {showEditModal && editingAccount && (
