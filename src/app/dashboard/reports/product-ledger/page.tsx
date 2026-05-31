@@ -46,10 +46,11 @@ export default function ProductLedgerPage() {
 
     // Fetch ALL stock_moves for this product
     const { data: moves } = await supabase
-      .from("stock_moves")
-      .select("*")
-      .eq("product_id", productId)
-      .order("date", { ascending: true })
+  .from("stock_moves")
+  .select("*")
+  .eq("product_id", productId)
+  .eq("company_id", prod.company_id)   // ← add this line
+  .order("date", { ascending: true })
 
     const allLines: any[] = []
     if (moves) {
