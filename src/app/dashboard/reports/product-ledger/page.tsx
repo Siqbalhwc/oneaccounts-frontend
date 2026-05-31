@@ -45,7 +45,7 @@ export default function ProductLedgerPage() {
     setProduct(prod)
     if (!prod) { setLoading(false); return }
 
-    // 2. All invoice items for this product (both purchases and sales)
+    // 2. Invoice items (sales & purchases)
     const { data: items } = await supabase
       .from("invoice_items")
       .select(`
@@ -60,10 +60,17 @@ export default function ProductLedgerPage() {
       .eq("product_id", productId)
       .order("id", { ascending: true })
 
-    // 3. Build chronological list of movements
-    const allLines: any[] = []
-    const opening = prod.opening_qty || 0
+    // 3. Inventory transactions (adjustments, stock-ins, etc.)
+    const { data: adjustments } = await supabase
+      .from("inventory_transactions")
+      .select("*")
+      .eq("product_id", productId)
+      .order("date", { ascending: true })
 
+    // Build combined list
+    const allLines: any[] = []
+
+    // Invoice items
     if (items) {
       items.forEach((item: any) => {
         const inv = item.invoices
@@ -72,9 +79,9 @@ export default function ProductLedgerPage() {
         const isSale = inv.type === "sale"
 
         allLines.push({
-          id: item.id,
+          id: `inv-${item.id}`,
           date: inv.date,
-          type: inv.type,
+          type: isPurchase ? "Purchase" : "Sale",
           invoice_no: inv.invoice_no || "",
           qty_in: isPurchase ? item.qty : 0,
           qty_out: isSale ? item.qty : 0,
@@ -82,11 +89,30 @@ export default function ProductLedgerPage() {
       })
     }
 
-    // 4. Compute opening balance (before start date) and period lines
-    const runningLines: any[] = []
+    // Adjustments from inventory_transactions
+    if (adjustments) {
+      adjustments.forEach((adj: any) => {
+        const qty = adj.qty || 0
+        const isInflow = qty >= 0
+        allLines.push({
+          id: `adj-${adj.id}`,
+          date: adj.date,
+          type: adj.transaction_type || "Adjustment",
+          invoice_no: adj.notes || adj.reference_type || "",
+          qty_in: isInflow ? qty : 0,
+          qty_out: isInflow ? 0 : Math.abs(qty),
+        })
+      })
+    }
+
+    // 4. Sort all lines by date (ascending for computing opening)
+    allLines.sort((a, b) => a.date.localeCompare(b.date))
+
+    // 5. Compute opening balance before start date
+    const opening = prod.opening_qty || 0
     let runningQty = opening
 
-    // Net movement before start date
+    const periodLines: any[] = []
     for (const line of allLines) {
       if (line.date < startDate) {
         runningQty = runningQty + line.qty_in - line.qty_out
@@ -94,24 +120,24 @@ export default function ProductLedgerPage() {
     }
     const openingBalanceQty = runningQty
 
-    // Opening balance row – shown as a debit (inflow)
-    runningLines.push({
+    // Opening balance row
+    periodLines.push({
       id: "opening",
       date: startDate,
       type: "Opening",
       invoice_no: "",
-      qty_in: openingBalanceQty,   // displayed as debit
+      qty_in: openingBalanceQty,
       qty_out: 0,
       balance: openingBalanceQty,
       isOpening: true,
     })
 
     // Period lines with running balance
-    runningQty = openingBalanceQty   // reset for period
+    runningQty = openingBalanceQty
     for (const line of allLines) {
       if (line.date >= startDate && line.date <= endDate) {
         runningQty = runningQty + line.qty_in - line.qty_out
-        runningLines.push({
+        periodLines.push({
           ...line,
           balance: runningQty,
           isOpening: false,
@@ -119,13 +145,13 @@ export default function ProductLedgerPage() {
       }
     }
 
-    setLedgerLines(runningLines)
+    setLedgerLines(periodLines)
     setLoading(false)
   }
 
   useEffect(() => { if (productId) fetchLedger() }, [productId, startDate, endDate])
 
-  // Sorting – opening row always first, now includes invoice_no
+  // Sorting – opening row always first
   const sortedLines = [...ledgerLines].sort((a, b) => {
     if (a.isOpening && !b.isOpening) return -1
     if (!a.isOpening && b.isOpening) return 1
@@ -157,24 +183,14 @@ export default function ProductLedgerPage() {
 
   const handlePrintPDF = async () => {
     if (!product || sortedLines.length === 0) return
-
     const pdfData = {
-      companyName:    companyName || "",
-      companyAddress: "",
-      companyPhone:   "",
-      companyEmail:   "",
-      companyTagline: companyTagline || "",
-      logoUrl:        logoUrl,
-      productName:    product.name,
-      productCode:    product.code,
-      startDate:      startDate,
-      endDate:        endDate,
-      totalInflow:    totalInflow,
-      totalOutflow:   totalOutflow,
-      closingBalance: closingBalance,
-      ledgerLines:    sortedLines,
+      companyName, companyAddress: "", companyPhone: "", companyEmail: "",
+      companyTagline: companyTagline || "", logoUrl,
+      productName: product.name, productCode: product.code,
+      startDate, endDate,
+      totalInflow, totalOutflow, closingBalance,
+      ledgerLines: sortedLines,
     }
-
     const doc = await generateProductLedgerPDF(pdfData)
     doc.save(`Product_Ledger_${product.code}.pdf`)
   }
@@ -277,7 +293,7 @@ export default function ProductLedgerPage() {
           <div className="ledger-header">
             <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
             <button className="sort-btn" onClick={() => handleSort("type")}>Type {getSortIcon("type")}</button>
-            <button className="sort-btn" onClick={() => handleSort("invoice_no")}>Invoice # {getSortIcon("invoice_no")}</button>
+            <button className="sort-btn" onClick={() => handleSort("invoice_no")}>Ref # {getSortIcon("invoice_no")}</button>
             <button className="sort-btn" onClick={() => handleSort("qty_in")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Inflow {getSortIcon("qty_in")}</button>
             <button className="sort-btn" onClick={() => handleSort("qty_out")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Outflow {getSortIcon("qty_out")}</button>
             <button className="sort-btn" onClick={() => handleSort("balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("balance")}</button>
@@ -285,8 +301,10 @@ export default function ProductLedgerPage() {
           {sortedLines.map((line, idx) => (
             <div key={line.id || idx} className={`ledger-row ${line.isOpening ? "opening-row" : ""}`}>
               <span style={{ fontSize: 12 }}>{line.isOpening ? "" : line.date}</span>
-              <span>{line.type === "purchase" ? "Purchase" : line.type === "sale" ? "Sale" : "Opening"}</span>
-              <span style={{ color: line.invoice_no ? "var(--primary)" : "var(--text-muted)" }}>{line.invoice_no || "Opening Balance"}</span>
+              <span>{line.type}</span>
+              <span style={{ color: line.invoice_no ? "var(--primary)" : "var(--text-muted)" }}>
+                {line.invoice_no || "Opening Balance"}
+              </span>
               <span style={{ textAlign: "right", color: line.qty_in > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.qty_in > 0 ? 600 : 400 }}>
                 {line.qty_in > 0 ? line.qty_in.toLocaleString() : "—"}
               </span>
