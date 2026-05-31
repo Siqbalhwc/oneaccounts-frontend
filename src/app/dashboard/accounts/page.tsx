@@ -264,13 +264,22 @@ export default function AccountsPage() {
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .ac-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
+        .ac-card { 
+          background: var(--card); 
+          border: 1px solid var(--border); 
+          border-radius: 12px; 
+          padding: 0; 
+          box-shadow: var(--shadow-sm); 
+          /* overflow:hidden removed to allow table scroll without clipping */
+        }
         .table-wrapper {
+          width: 100%;
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
+          border-radius: 0 0 12px 12px; /* keep rounded bottom corners for scroll container */
         }
         .table-grid {
-          min-width: 800px; /* ensures enough room for all columns */
+          min-width: 800px;
         }
         .ac-header {
           display: grid;
