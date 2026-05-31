@@ -270,11 +270,11 @@ export default function AccountsPage() {
           -webkit-overflow-scrolling: touch;
         }
         .table-grid {
-          min-width: 760px; /* ensures enough room for all columns */
+          min-width: 800px; /* ensures enough room for all columns */
         }
         .ac-header {
           display: grid;
-          grid-template-columns: 80px 1fr 100px 130px 110px 70px;
+          grid-template-columns: 80px 1fr 100px 130px 110px 80px;
           gap: 8px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
@@ -283,7 +283,7 @@ export default function AccountsPage() {
         }
         .ac-row {
           display: grid;
-          grid-template-columns: 80px 1fr 100px 130px 110px 70px;
+          grid-template-columns: 80px 1fr 100px 130px 110px 80px;
           gap: 8px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
