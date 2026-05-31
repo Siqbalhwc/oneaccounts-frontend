@@ -305,7 +305,7 @@ export async function POST(request: NextRequest) {
 
   if (!bill) return NextResponse.json({ error: 'Could not generate unique bill number' }, { status: 500 })
 
-  // Insert items and calculate total
+  // Insert items and calculate total (FIXED: include product_id, account_id, location_id, activity_id)
   const itemRowsForDb = items.map((item: any) => {
     const qty = Number(item.qty || 0)
     const unit_price = Number(item.unit_price || 0)
@@ -313,10 +313,14 @@ export async function POST(request: NextRequest) {
     total += lineTotal
     return {
       invoice_id: bill.id,
+      product_id: item.product_id || null,
       description: item.description,
       qty,
       unit_price,
       total: lineTotal,
+      account_id: item.account_id || null,
+      location_id: item.location_id || null,
+      activity_id: item.activity_id || null,
       company_id: companyId,
     }
   })
@@ -477,7 +481,7 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  // Delete old items and insert new
+  // Delete old items and insert new (FIXED: include product_id, account_id, location_id, activity_id)
   await supabase.from('invoice_items').delete().eq('invoice_id', id)
 
   let total = 0
@@ -488,10 +492,14 @@ export async function PUT(request: NextRequest) {
     total += lineTotal
     return {
       invoice_id: id,
+      product_id: item.product_id || null,
       description: item.description,
       qty,
       unit_price,
       total: lineTotal,
+      account_id: item.account_id || null,
+      location_id: item.location_id || null,
+      activity_id: item.activity_id || null,
       company_id: companyId,
     }
   })
