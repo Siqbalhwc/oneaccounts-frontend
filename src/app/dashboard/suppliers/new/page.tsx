@@ -20,20 +20,10 @@ const COUNTRY_CODES = [
   { code: "+27", label: "🇿🇦 +27" },
 ]
 
-// ── Digits required per country code for WhatsApp ──
 const PHONE_LENGTHS: Record<string, number> = {
-  "+92": 10,   // Pakistan
-  "+1":  10,   // USA
-  "+44": 10,   // UK
-  "+971": 9,   // UAE
-  "+966": 9,   // Saudi
-  "+91": 10,   // India
-  "+86": 11,   // China
-  "+81": 10,   // Japan
-  "+49": 10,   // Germany
-  "+33": 9,    // France
-  "+61": 9,    // Australia
-  "+27": 9,    // South Africa
+  "+92": 10, "+1": 10, "+44": 10, "+971": 9,
+  "+966": 9, "+91": 10, "+86": 11, "+81": 10,
+  "+49": 10, "+33": 9, "+61": 9, "+27": 9,
 }
 
 const PAYMENT_TERMS = [
@@ -64,11 +54,9 @@ export default function NewSupplierPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  // For summary on the right
   const [totalSuppliers, setTotalSuppliers] = useState(0)
   const [totalPayables, setTotalPayables] = useState(0)
 
-  // Optional default assignments
   const [projects, setProjects] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
   const [activities, setActivities] = useState<any[]>([])
@@ -76,7 +64,6 @@ export default function NewSupplierPage() {
   const [defaultLocationId, setDefaultLocationId] = useState<number | null>(null)
   const [defaultActivityId, setDefaultActivityId] = useState<number | null>(null)
 
-  // Initialize company, generate code, load master data and summary
   useEffect(() => {
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -84,7 +71,6 @@ export default function NewSupplierPage() {
       if (!cid) return
       setCompanyId(cid)
 
-      // Generate next SUP-xxx code
       supabase
         .from("suppliers")
         .select("code")
@@ -101,7 +87,6 @@ export default function NewSupplierPage() {
           setSupplierCode(`SUP-${String(nextNum).padStart(3, "0")}`)
         })
 
-      // Summary
       supabase
         .from("suppliers")
         .select("id, balance")
@@ -114,7 +99,6 @@ export default function NewSupplierPage() {
           }
         })
 
-      // Master data (optional)
       supabase.from("projects").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
         .then(r => r.data && setProjects(r.data))
       supabase.from("locations").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
@@ -129,23 +113,21 @@ export default function NewSupplierPage() {
     if (!companyId) { setError("Company not loaded"); return }
     if (!supplierName.trim()) { setError("Supplier name is required"); return }
 
-    // ── Phone validation ──
+    // Validate phone BEFORE showing the spinner
     if (phoneNumber.trim()) {
       const digitsOnly = phoneNumber.trim().replace(/\D/g, "")
       const expectedLength = PHONE_LENGTHS[countryCode]
       if (expectedLength && digitsOnly.length !== expectedLength) {
         setError(`Phone number must be ${expectedLength} digits for ${countryCode}. Current: ${digitsOnly.length} digits.`)
-        setLoading(false)
         return
       }
     }
 
-    // Get current user email
-    const { data: { user } } = await supabase.auth.getUser()
-    const userEmail = user?.email || "system"
-
     setLoading(true)
     setError("")
+
+    const { data: { user } } = await supabase.auth.getUser()
+    const userEmail = user?.email || "system"
 
     const balance = parseFloat(openingBalance || "0")
     const fullPhone = countryCode + (phoneNumber.trim().replace(/\D/g, ""))
@@ -272,7 +254,6 @@ export default function NewSupplierPage() {
                 <input className="input" value={supplierName} onChange={e => setSupplierName(e.target.value)} placeholder="e.g. Tech Distributors" />
               </div>
 
-              {/* Phone with country code */}
               <div style={{ marginBottom: 16 }}>
                 <label className="label">Phone</label>
                 <div className="phone-row">
@@ -307,7 +288,6 @@ export default function NewSupplierPage() {
                 </div>
               </div>
 
-              {/* Optional default project / location / activity */}
               <div className="inline-group" style={{ marginBottom: 16 }}>
                 <div>
                   <label className="label">Default Project</label>
@@ -334,7 +314,6 @@ export default function NewSupplierPage() {
             </div>
           </div>
 
-          {/* Right side summary */}
           <div className="summary-side">
             <div className="summary-card">
               <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 16 }}>📊 Suppliers Summary</h2>

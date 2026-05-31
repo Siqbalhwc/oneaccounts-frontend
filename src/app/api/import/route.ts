@@ -3,7 +3,6 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { createClient } from "@supabase/supabase-js"
 
-// Admin client for generating codes and inserting
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -16,7 +15,6 @@ const TABLE_COLUMNS: Record<string, string[]> = {
   products: ["code", "name", "sale_price", "cost_price", "qty_on_hand", "reorder_level", "description", "image_path"],
 }
 
-// Phone length rules per country (must match frontend)
 const PHONE_LENGTHS: Record<string, number> = {
   "+92": 10, "+1": 10, "+44": 10, "+971": 9,
   "+966": 9, "+91": 10, "+86": 11, "+81": 10,
@@ -70,8 +68,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 2. If customers table, get the latest code to generate new ones
-    let lastCodeNum = 0
+    // 2. Auto‑generate codes for customers and suppliers
+    let lastCustNum = 0
     if (table === "customers") {
       const { data: codes } = await supabaseAdmin
         .from("customers")
@@ -82,7 +80,22 @@ export async function POST(request: NextRequest) {
         .limit(1)
       if (codes && codes.length > 0) {
         const match = codes[0].code.match(/CUST-(\d+)/)
-        if (match) lastCodeNum = parseInt(match[1], 10)
+        if (match) lastCustNum = parseInt(match[1], 10)
+      }
+    }
+
+    let lastSupNum = 0
+    if (table === "suppliers") {
+      const { data: supCodes } = await supabaseAdmin
+        .from("suppliers")
+        .select("code")
+        .eq("company_id", companyId)
+        .ilike("code", "SUP-%")
+        .order("code", { ascending: false })
+        .limit(1)
+      if (supCodes && supCodes.length > 0) {
+        const match = supCodes[0].code.match(/SUP-(\d+)/)
+        if (match) lastSupNum = parseInt(match[1], 10)
       }
     }
 
@@ -105,16 +118,21 @@ export async function POST(request: NextRequest) {
         row[h] = val
       })
 
-      // Auto-generate customer code if empty
+      // Auto‑generate customer code if empty
       if (table === "customers" && (!row.code || row.code === "")) {
-        lastCodeNum++
-        row.code = `CUST-${String(lastCodeNum).padStart(3, "0")}`
+        lastCustNum++
+        row.code = `CUST-${String(lastCustNum).padStart(3, "0")}`
+      }
+
+      // Auto‑generate supplier code if empty
+      if (table === "suppliers" && (!row.code || row.code === "")) {
+        lastSupNum++
+        row.code = `SUP-${String(lastSupNum).padStart(3, "0")}`
       }
 
       // Phone validation for customers
       if (table === "customers" && row.phone) {
         const phoneStr = String(row.phone)
-        // Must include a country code and digits
         const match = phoneStr.match(/^(\+\d{1,3})(\d+)$/)
         if (!match) {
           errors.push(`Row ${i}: phone must start with + and country code, e.g. +923001234567`)
@@ -127,9 +145,28 @@ export async function POST(request: NextRequest) {
           errors.push(`Row ${i}: phone for ${country} must be ${expected} digits, got ${digits.length}`)
           continue
         }
-        // Standardise: keep as full international string
         row.phone = country + digits
       } else if (table === "customers") {
+        row.phone = null
+      }
+
+      // Phone validation for suppliers
+      if (table === "suppliers" && row.phone) {
+        const phoneStr = String(row.phone)
+        const match = phoneStr.match(/^(\+\d{1,3})(\d+)$/)
+        if (!match) {
+          errors.push(`Row ${i}: phone must start with + and country code, e.g. +923001234567`)
+          continue
+        }
+        const country = match[1]
+        const digits = match[2]
+        const expected = PHONE_LENGTHS[country]
+        if (expected && digits.length !== expected) {
+          errors.push(`Row ${i}: phone for ${country} must be ${expected} digits, got ${digits.length}`)
+          continue
+        }
+        row.phone = country + digits
+      } else if (table === "suppliers") {
         row.phone = null
       }
 
