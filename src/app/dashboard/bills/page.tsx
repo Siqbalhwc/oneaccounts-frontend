@@ -142,25 +142,24 @@ export default function BillsPage() {
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
+        .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         .header-row {
           display: grid;
-          grid-template-columns: 140px 100px 200px 110px 80px 130px 60px 60px 60px;
+          grid-template-columns: minmax(120px, 1fr) minmax(90px, 1fr) minmax(150px, 2fr) minmax(90px, 1fr) minmax(70px, 1fr) minmax(110px, 1fr) 60px 60px 60px;
           column-gap: 8px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
           background: var(--card);
-          min-width: 880px;
         }
         .data-row {
           display: grid;
-          grid-template-columns: 140px 100px 200px 110px 80px 130px 60px 60px 60px;
+          grid-template-columns: minmax(120px, 1fr) minmax(90px, 1fr) minmax(150px, 2fr) minmax(90px, 1fr) minmax(70px, 1fr) minmax(110px, 1fr) 60px 60px 60px;
           column-gap: 8px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
           transition: background 0.15s;
-          min-width: 880px;
         }
         .data-row:hover { background: var(--card-hover); }
         .data-row:last-child { border-bottom: none; }
@@ -198,10 +197,6 @@ export default function BillsPage() {
           color: var(--text-muted);
           line-height: 1.3;
           word-wrap: break-word;
-        }
-        .table-scroll {
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
         }
         @media (max-width: 640px) {
           .header-row, .data-row { padding: 10px 12px; column-gap: 4px; }

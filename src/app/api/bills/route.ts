@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { logDataChange } from '@/lib/audit'
 
-// ── Helpers ───────────────────────────────────────────────────────────
+// Helper: get the Accounts Payable account (or create it)
 async function getPayableAccount(supabase: any, companyId: string) {
   let { data: acc } = await supabase.from('accounts')
     .select('id,balance').eq('code','2000').eq('company_id', companyId).maybeSingle()
@@ -56,6 +56,7 @@ async function applyStockChanges(supabase: any, companyId: string, items: any[],
   }
 }
 
+// ── Create the journal entry for a purchase bill ─────────────────
 async function createBillJournalEntry(
   supabase: any,
   bill: any,
@@ -152,12 +153,19 @@ async function createBillJournalEntry(
 
   await supabase.from('journal_lines').insert(lineRows)
 
-  for (const l of debitLines) {
-    const { data: acc } = await supabase.from('accounts').select('balance').eq('id', l.account_id).eq('company_id', companyId).single()
-    if (acc) {
-      const newBal = acc.balance + (l.debit || 0) - (l.credit || 0)
-      await supabase.from('accounts').update({ balance: newBal }).eq('id', l.account_id).eq('company_id', companyId)
+  // ⚡ Batch update account balances (faster than loop)
+  const accountUpdates = debitLines.reduce((acc, l) => {
+    const existing = acc.find((u: any) => u.account_id === l.account_id)
+    if (existing) {
+      existing.delta += (l.debit || 0) - (l.credit || 0)
+    } else {
+      acc.push({ account_id: l.account_id, delta: (l.debit || 0) - (l.credit || 0) })
     }
+    return acc
+  }, [] as { account_id: number; delta: number }[])
+
+  if (accountUpdates.length > 0) {
+    await supabase.rpc('bulk_update_account_balances', { data: accountUpdates })
   }
 
   await applyStockChanges(supabase, companyId, items, 'add')
@@ -165,7 +173,7 @@ async function createBillJournalEntry(
   return entry.id
 }
 
-// ── Generate sequential bill number: PB/YYYYMM/0001 ────────────────────
+// ── Generate sequential bill number: PB/YYYYMM/0001 ──────────────────
 async function generateBillNo(supabase: any, companyId: string): Promise<string> {
   const now = new Date()
   const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`
@@ -219,6 +227,45 @@ export async function POST(request: NextRequest) {
     .select('business_type').eq('id', companyId).single()
   const businessType = company?.business_type || ''
 
+  // ── Budget validation for NGO ─────────────────────────────────────
+  if (businessType === 'ngo') {
+    const today = new Date()
+    const fiscalYear = today.getFullYear()
+    for (const item of items) {
+      if (!item.activity_id || !item.account_id) continue
+      const amount = (item.qty || 0) * (item.unit_price || 0)
+      const locId = item.location_id || null
+
+      let budgetQuery = supabase
+        .from('budgets')
+        .select('budgeted_amount')
+        .eq('company_id', companyId)
+        .eq('activity_id', item.activity_id)
+        .eq('account_id', item.account_id)
+        .eq('fiscal_year', fiscalYear)
+        .is('month', null)
+      if (locId) budgetQuery = budgetQuery.eq('location_id', locId)
+      const { data: budgetRow } = await budgetQuery.maybeSingle()
+      const budget = budgetRow?.budgeted_amount || 0
+
+      let spentQuery = supabase
+        .from('journal_lines')
+        .select('debit, credit')
+        .eq('company_id', companyId)
+        .eq('activity_id', item.activity_id)
+        .eq('account_id', item.account_id)
+      if (locId) spentQuery = spentQuery.eq('location_id', locId)
+      const { data: spentRows } = await spentQuery
+      const spent = (spentRows || []).reduce((s: number, l: any) => s + (l.debit || 0) - (l.credit || 0), 0)
+
+      if (budgetRow && amount > (budget - spent)) {
+        return NextResponse.json({
+          error: `Budget exceeded for activity ${item.activity_id} – available: ${(budget - spent).toFixed(2)}, requested: ${amount.toFixed(2)}`
+        }, { status: 400 })
+      }
+    }
+  }
+
   // ── Generate unique bill number with retry ──
   let billNo = ''
   let bill: any = null
@@ -243,7 +290,7 @@ export async function POST(request: NextRequest) {
         company_id: companyId,
         created_by: userEmail,
         updated_by: userEmail,
-        po_id: po_id || null,          // store PO link
+        po_id: po_id || null,
       })
       .select('*')
       .single()
@@ -348,14 +395,51 @@ export async function PUT(request: NextRequest) {
     .select('business_type').eq('id', companyId).single()
   const businessType = company?.business_type || ''
 
+  // ── Budget validation (same as POST) ─────────────────────────────
+  if (businessType === 'ngo') {
+    const today = new Date()
+    const fiscalYear = today.getFullYear()
+    for (const item of items) {
+      if (!item.activity_id || !item.account_id) continue
+      const amount = (item.qty || 0) * (item.unit_price || 0)
+      const locId = item.location_id || null
+
+      let budgetQuery = supabase
+        .from('budgets')
+        .select('budgeted_amount')
+        .eq('company_id', companyId)
+        .eq('activity_id', item.activity_id)
+        .eq('account_id', item.account_id)
+        .eq('fiscal_year', fiscalYear)
+        .is('month', null)
+      if (locId) budgetQuery = budgetQuery.eq('location_id', locId)
+      const { data: budgetRow } = await budgetQuery.maybeSingle()
+      const budget = budgetRow?.budgeted_amount || 0
+
+      let spentQuery = supabase
+        .from('journal_lines')
+        .select('debit, credit')
+        .eq('company_id', companyId)
+        .eq('activity_id', item.activity_id)
+        .eq('account_id', item.account_id)
+      if (locId) spentQuery = spentQuery.eq('location_id', locId)
+      const { data: spentRows } = await spentQuery
+      const spent = (spentRows || []).reduce((s: number, l: any) => s + (l.debit || 0) - (l.credit || 0), 0)
+
+      if (budgetRow && amount > (budget - spent)) {
+        return NextResponse.json({
+          error: `Budget exceeded for activity ${item.activity_id} – available: ${(budget - spent).toFixed(2)}, requested: ${amount.toFixed(2)}`
+        }, { status: 400 })
+      }
+    }
+  }
+
   const { data: oldBill } = await supabase.from('invoices')
     .select('*').eq('id', id).eq('company_id', companyId).single()
   if (!oldBill) return NextResponse.json({ error: 'Bill not found' }, { status: 404 })
 
-  // Fetch old items for reversal
+  // Reverse old stock changes
   const { data: oldItems } = await supabase.from('invoice_items').select('*').eq('invoice_id', id)
-
-  // ── Reverse old stock changes (remove inflow) ──
   if (oldItems) {
     await applyStockChanges(supabase, companyId, oldItems, 'remove')
   }
@@ -426,7 +510,7 @@ export async function PUT(request: NextRequest) {
       reference,
       notes,
       updated_by: userEmail,
-      po_id: po_id || null,          // store updated PO link
+      po_id: po_id || null,
     })
     .eq('id', id)
     .select('*')
@@ -436,7 +520,6 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: updateError?.message || 'Update failed' }, { status: 500 })
   }
 
-  // ── Create new journal entry ──
   try {
     await createBillJournalEntry(supabase, updatedBill, items, companyId, businessType)
   } catch (e: any) {

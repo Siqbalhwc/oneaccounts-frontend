@@ -63,9 +63,7 @@ export default function NewBillPage() {
   const [budgetInfo, setBudgetInfo] = useState<Record<string, { budget: number; spent: number; available: number; hasBudget: boolean }>>({})
   const [budgetError, setBudgetError] = useState("")
 
-  // ── Location → activities mapping (from budgets) ──
   const [locationActivitiesMap, setLocationActivitiesMap] = useState<Record<number, number[]>>({})
-  // ── Activity → project / donor cache ──
   const [activityProjectDonor, setActivityProjectDonor] = useState<Record<number, { projectName: string; donorName: string | null }>>({})
 
   const fiscalYear = new Date().getFullYear()
@@ -95,7 +93,6 @@ export default function NewBillPage() {
         .order("code")
         .then(r => r.data && setAllAccounts(r.data))
 
-      // Load locations and activities (always, for NGO features)
       supabase.from("locations").select("id,name")
         .eq("company_id", cid).order("name")
         .then(r => r.data && setLocations(r.data))
@@ -104,7 +101,6 @@ export default function NewBillPage() {
         .eq("company_id", cid).order("name")
         .then(r => r.data && setActivities(r.data))
 
-      // Build location → activity map from budgets
       supabase.from("budgets")
         .select("location_id, activity_id")
         .eq("company_id", cid)
@@ -137,7 +133,7 @@ export default function NewBillPage() {
     const targetId = cid || companyId
     if (!targetId) return
     supabase.from("suppliers")
-      .select("id,code,name,phone,balance,default_project_id,default_location_id,default_activity_id")
+      .select("id,code,name,phone,balance,payment_terms,default_project_id,default_location_id,default_activity_id")
       .eq("company_id", targetId)
       .order("name")
       .then(r => { if (r.data) setSuppliers(r.data) })
@@ -154,7 +150,7 @@ export default function NewBillPage() {
       .then(r => r.data && setProducts(r.data))
   }
 
-  // PO logic (unchanged)
+  // PO logic
   useEffect(() => {
     if (!companyId || !supplierId || !showPO) {
       setOpenPOs([])
@@ -196,7 +192,7 @@ export default function NewBillPage() {
       })
   }, [companyId, supplierId, showPO])
 
-  // Load existing bill for editing (unchanged)
+  // Load existing bill for editing
   useEffect(() => {
     if (!editId || !companyId) return
     supabase.from("invoices")
@@ -236,6 +232,21 @@ export default function NewBillPage() {
       })
   }, [editId, companyId, suppliers])
 
+  // ── AUTO‑COMPUTE DUE DATE based on supplier payment terms ──
+  useEffect(() => {
+    if (!selectedSupplier || !billDate) return
+    const term = (selectedSupplier.payment_terms || "").toLowerCase()
+    let days = 30
+    if (term.includes("receipt")) days = 0
+    else if (term.includes("net 7")) days = 7
+    else if (term.includes("net 15")) days = 15
+    else if (term.includes("net 30")) days = 30
+    else if (term.includes("net 60")) days = 60
+    const dt = new Date(billDate)
+    dt.setDate(dt.getDate() + days)
+    setDueDate(dt.toISOString().split("T")[0])
+  }, [selectedSupplier, billDate])
+
   const filteredSuppliers = suppliers.filter(s =>
     s.name.toLowerCase().includes(supplierSearch.toLowerCase()) ||
     s.code.toLowerCase().includes(supplierSearch.toLowerCase()) ||
@@ -264,7 +275,7 @@ export default function NewBillPage() {
     if (!companyId) return
     setRefreshingSuppliers(true)
     supabase.from("suppliers")
-      .select("id,code,name,phone,balance,default_project_id,default_location_id,default_activity_id")
+      .select("id,code,name,phone,balance,payment_terms,default_project_id,default_location_id,default_activity_id")
       .eq("company_id", companyId)
       .order("name")
       .then(r => {
@@ -329,10 +340,8 @@ export default function NewBillPage() {
     }])
   }
 
-  // ── removeItem – was missing in the previous version ──
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
 
-  // ── Updated updateItem ──────────────────────────────────────────────
   const updateItem = async (idx: number, field: string, value: any) => {
     const updated = [...items]
     updated[idx] = { ...updated[idx], [field]: value }
@@ -388,7 +397,6 @@ export default function NewBillPage() {
     checkBudgetOverrun(updated)
   }
 
-  // ── Budget fetch now includes location ──────────────────────────────
   const fetchBudget = async (activityId: number, accountId: number, locationId: number | null) => {
     const key = `${activityId}_${locationId || 'any'}_${accountId}`
     if (budgetInfo[key]) return
@@ -422,7 +430,6 @@ export default function NewBillPage() {
     setBudgetInfo(prev => ({ ...prev, [key]: { budget, spent, available, hasBudget: budgetRow !== null } }))
   }
 
-  // ── Budget overrun check ────────────────────────────────────────────
   const checkBudgetOverrun = (currentItems: any[]) => {
     let overBudget = false
     for (const item of currentItems) {
@@ -605,7 +612,7 @@ export default function NewBillPage() {
 
         <div className="header-grid">
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {/* Supplier selection card (unchanged) */}
+            {/* Supplier selection card */}
             <div className="inv-card">
               <label className="inv-label">Supplier *</label>
               <div className="cust-wrap" ref={supplierRef}>
@@ -643,7 +650,7 @@ export default function NewBillPage() {
                 )}
               </div>
 
-              {/* PO linking (unchanged) */}
+              {/* PO linking */}
               {showPO && selectedSupplier && openPOs.length > 0 && (
                 <div style={{ marginTop: 14 }}>
                   <label className="inv-label">Link to Purchase Order (optional)</label>
@@ -668,7 +675,7 @@ export default function NewBillPage() {
                 <div><label className="inv-label">Notes</label><input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" /></div>
               </div>
 
-              {/* Add Item area (unchanged) */}
+              {/* Add Item area */}
               {showProducts ? (
                 <div style={{ marginTop: 14 }}>
                   <label className="inv-label">Add Item</label>
