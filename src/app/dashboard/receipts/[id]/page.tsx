@@ -142,16 +142,9 @@ export default function ReceiptDetailPage() {
     return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
   }
 
-  // ✅ REPLACED – now uses the professional PDF generator
+  // ✅ PDF handler – passes actual journal lines to the new generator
   const handlePDF = async () => {
     if (!receipt) return
-
-    const journalSum = journalLines.length > 0
-      ? {
-          debit: journalLines.reduce((s, l) => s + l.debit, 0),
-          credit: journalLines.reduce((s, l) => s + l.credit, 0),
-        }
-      : null
 
     const pdfData: any = {
       companyName:    companyName || "OneAccounts",
@@ -167,13 +160,17 @@ export default function ReceiptDetailPage() {
       customerPhone:   customer?.phone || "",
       customerEmail:   "",
       paymentMethod:   receipt.payment_method,
-      bankName:        bank?.bank_name || null,
       amount:          receipt.amount || 0,
       reference:       receipt.reference || "",
       notes:           receipt.notes || "",
       status:          "Active",
-      allocations:     allocations.length > 0 ? allocations : undefined,
-      journalSummary:  journalSum,
+      journalLines:    journalLines.map(l => ({
+        account_code: l.account_code || "",
+        account_name: l.account_name || "",
+        description:   l.description || "",
+        debit:         l.debit,
+        credit:        l.credit,
+      })),
     }
 
     const doc = await generateReceiptPDF(pdfData)
