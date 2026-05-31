@@ -42,6 +42,7 @@ interface JournalLine {
   account_id: number
   account_code?: string
   account_name?: string
+  description?: string
   debit: number
   credit: number
 }
@@ -105,12 +106,13 @@ export default function ReceiptDetailPage() {
         .eq("source_id", id)
       if (lines) {
         const formatted = lines.map((l: any) => ({
-          account_id: l.account_id,
-          account_code: l.accounts?.code || "",
-          account_name: l.accounts?.name || "",
-          debit: l.debit || 0,
-          credit: l.credit || 0,
-        }))
+  account_id: l.account_id,
+  account_code: l.accounts?.code || "",
+  account_name: l.accounts?.name || "",
+  description: l.description || "",
+  debit: l.debit || 0,
+  credit: l.credit || 0,
+}))
         setJournalLines(formatted)
       }
 
