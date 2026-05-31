@@ -826,23 +826,23 @@ export default function NewBillPage() {
                       <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>PKR {item.total.toLocaleString()}</span>
                       <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
                     </div>
-                    {/* Project / Donor info */}
-                    {projDonor && (
-                      <div className="project-donor-info" style={{ marginLeft: 8 }}>
-                        Project: {projDonor.projectName}
-                        {projDonor.donorName && ` · Donor: ${projDonor.donorName}`}
-                      </div>
-                    )}
-                    {/* Budget info */}
-                    {budgetData && (
-                      <div style={{ fontSize: 10, color: "var(--text-muted)", marginLeft: 8, display: "flex", gap: 12, padding: "2px 0" }}>
-                        <span>Budget: PKR {budgetData.budget.toLocaleString()}</span>
-                        <span>Spent: PKR {budgetData.spent.toLocaleString()}</span>
-                        <span style={{ color: budgetData.available < (item.total || 0) ? "#EF4444" : "#10B981" }}>
-                          Available: PKR {budgetData.available.toLocaleString()}
-                        </span>
-                      </div>
-                    )}
+                    {/* Combined info row */}
+{(projDonor || budgetData) && (
+  <div style={{ fontSize: 10, color: "var(--text-muted)", marginLeft: 8, display: "flex", gap: 16, padding: "2px 0", flexWrap: "wrap" }}>
+    {projDonor && (
+      <span>Project: {projDonor.projectName}{projDonor.donorName ? ` · Donor: ${projDonor.donorName}` : ""}</span>
+    )}
+    {budgetData && (
+      <>
+        <span>Budget: PKR {budgetData.budget.toLocaleString()}</span>
+        <span>Spent: PKR {budgetData.spent.toLocaleString()}</span>
+        <span style={{ color: budgetData.available < (item.total || 0) ? "#EF4444" : "#10B981" }}>
+          Available: PKR {budgetData.available.toLocaleString()}
+        </span>
+      </>
+    )}
+  </div>
+)}
                   </div>
                 )
               })}
