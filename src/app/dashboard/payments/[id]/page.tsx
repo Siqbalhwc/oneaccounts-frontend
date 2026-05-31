@@ -8,6 +8,7 @@ import { generatePaymentPDF } from "@/lib/pdf/paymentPDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
 import { useCompany } from "@/contexts/CompanyContext"
+import { getWhatsAppLink } from "@/lib/whatsapp"
 
 interface Payment {
   id: number
@@ -135,13 +136,13 @@ export default function PaymentDetailPage() {
       })
   }, [companyId, paymentId])
 
-  const getWhatsAppLink = () => {
-    if (!payment || !payment.supplier) return ""
-    const phone = (payment.supplier.phone || "").replace(/\D/g, "")
-    if (!phone) return ""
-    const msg = `Dear ${payment.supplier.name},\n\nYour payment ${payment.payment_no} for PKR ${payment.amount?.toLocaleString()} has been processed.\nDate: ${payment.payment_date}\nMethod: ${payment.payment_method}\n${payment.notes ? "Notes: " + payment.notes : ""}\n\nThank you.\n— OneAccounts`
-    return `https://wa.me/92${phone}?text=${encodeURIComponent(msg)}`
-  }
+  // WhatsApp link using the safe helper
+  const waLink = payment && payment.supplier
+    ? getWhatsAppLink(
+        payment.supplier.phone || "",
+        `Dear ${payment.supplier.name},\n\nYour payment ${payment.payment_no} for PKR ${payment.amount?.toLocaleString()} has been processed.\nDate: ${payment.payment_date}\nMethod: ${payment.payment_method}\n${payment.notes ? "Notes: " + payment.notes : ""}\n\nThank you.\n— OneAccounts`
+      )
+    : ""
 
   const handlePrintPDF = async () => {
     if (!payment) return
@@ -176,7 +177,6 @@ export default function PaymentDetailPage() {
   if (loading) return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", color: "var(--text-muted)" }}>Loading…</div>
   if (!payment) return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", color: "var(--text-muted)" }}>Payment not found</div>
 
-  const waLink = getWhatsAppLink()
   const totalDebit = journalLines.reduce((s, l) => s + l.debit, 0)
   const totalCredit = journalLines.reduce((s, l) => s + l.credit, 0)
 
@@ -187,7 +187,7 @@ export default function PaymentDetailPage() {
         .row { display: flex; margin-bottom: 10px; font-size: 14px; align-items: center; }
         .label { width: 130px; color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
         .value { color: var(--text); font-weight: 500; }
-        table { width: 100%; border-collapse: collapse; margin-top: 12px; min-width: 600px; } /* min-width ensures table won't shrink too much */
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; min-width: 600px; }
         th { text-align: left; padding: 10px 12px; background: var(--card-hover); font-weight: 700; color: var(--text-muted); font-size: 10px; text-transform: uppercase; border-bottom: 1px solid var(--border); }
         td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); }
         tr:hover td { background: var(--card-hover); }

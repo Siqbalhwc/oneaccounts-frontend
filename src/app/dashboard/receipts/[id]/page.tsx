@@ -9,6 +9,7 @@ import { usePlan } from "@/contexts/PlanContext"
 import { generateReceiptPDF } from "@/lib/pdf/receiptPDF"
 import { useCompany } from "@/contexts/CompanyContext"
 import RecordHistory from "@/components/RecordHistory"
+import { getWhatsAppLink } from "@/lib/whatsapp"
 
 interface Receipt {
   id: number
@@ -62,7 +63,7 @@ export default function ReceiptDetailPage() {
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [bank, setBank] = useState<Bank | null>(null)
   const [journalLines, setJournalLines] = useState<JournalLine[]>([])
-  const [allocations, setAllocations] = useState<any[]>([])   // ✅ NEW
+  const [allocations, setAllocations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -88,7 +89,7 @@ export default function ReceiptDetailPage() {
         setCustomer(cust)
       }
 
-      // 3. Bank – simple query, no nested join
+      // 3. Bank
       if (rec.bank_account_id) {
         const { data: bk } = await supabase
           .from("bank_accounts")
@@ -106,17 +107,17 @@ export default function ReceiptDetailPage() {
         .eq("source_id", id)
       if (lines) {
         const formatted = lines.map((l: any) => ({
-  account_id: l.account_id,
-  account_code: l.accounts?.code || "",
-  account_name: l.accounts?.name || "",
-  description: l.description || "",
-  debit: l.debit || 0,
-  credit: l.credit || 0,
-}))
+          account_id: l.account_id,
+          account_code: l.accounts?.code || "",
+          account_name: l.accounts?.name || "",
+          description: l.description || "",
+          debit: l.debit || 0,
+          credit: l.credit || 0,
+        }))
         setJournalLines(formatted)
       }
 
-      // 5. Allocations ✅ NEW
+      // 5. Allocations
       supabase
         .from("receipt_allocations")
         .select("amount, invoices(invoice_no)")
@@ -136,15 +137,14 @@ export default function ReceiptDetailPage() {
     fetchData()
   }, [role, id])
 
-  const getWhatsAppLink = () => {
-    if (!customer?.phone) return ""
-    const code = (customer.country_code || "+92").replace(/\D/g, "")
-    const phone = customer.phone.replace(/\D/g, "")
-    const msg = `Dear ${customer.name},\n\nYour receipt ${receipt?.receipt_no} for PKR ${receipt?.amount?.toLocaleString()} has been recorded.\n\nThank you for your business.\n— OneAccounts`
-    return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
-  }
+  // Safe WhatsApp link using the helper (fixes double‑92)
+  const waLink = customer?.phone
+    ? getWhatsAppLink(
+        customer.phone,
+        `Dear ${customer.name},\n\nYour receipt ${receipt?.receipt_no} for PKR ${receipt?.amount?.toLocaleString()} has been recorded.\n\nThank you for your business.\n— OneAccounts`
+      )
+    : ""
 
-  // ✅ PDF handler – passes actual journal lines to the new generator
   const handlePDF = async () => {
     if (!receipt) return
 
@@ -223,8 +223,8 @@ export default function ReceiptDetailPage() {
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn" onClick={handlePDF}><Printer size={14} /> PDF</button>
-          {getWhatsAppLink() && hasFeature("whatsapp_invoice") && (
-            <a href={getWhatsAppLink()} target="_blank" rel="noopener noreferrer" className="btn btn-success">
+          {waLink && hasFeature("whatsapp_invoice") && (
+            <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success">
               <Send size={14} /> WhatsApp
             </a>
           )}
@@ -269,7 +269,7 @@ export default function ReceiptDetailPage() {
         </div>
       </div>
 
-      {/* Allocations (if any) */}
+      {/* Allocations */}
       {allocations.length > 0 && (
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>Applied to Invoices</h3>
@@ -292,7 +292,7 @@ export default function ReceiptDetailPage() {
         </div>
       )}
 
-      {/* Journal Entry (if exists) */}
+      {/* Journal Entry */}
       {journalLines.length > 0 && (
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#F1F5F9", marginBottom: 12 }}>📒 Journal Entry</h3>

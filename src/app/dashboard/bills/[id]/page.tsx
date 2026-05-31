@@ -8,6 +8,7 @@ import { generateBillPDF } from "@/lib/pdf/billPDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
 import { useCompany } from "@/contexts/CompanyContext"
+import { getWhatsAppLink } from "@/lib/whatsapp"
 
 interface BillItem {
   id: number
@@ -35,7 +36,7 @@ interface Bill {
     phone?: string
     address?: string
     email?: string
-    payment_terms?: string   // ✅ added
+    payment_terms?: string
   }
   created_by?: string
   updated_by?: string
@@ -84,7 +85,6 @@ export default function BillDetailPage() {
         const b: Bill = data
 
         if (b.party_id) {
-          // ✅ Also fetch supplier's payment terms
           supabase
             .from("suppliers")
             .select("name, code, phone, address, email, payment_terms")
@@ -120,13 +120,13 @@ export default function BillDetailPage() {
       })
   }, [companyId, billId])
 
-  const getWhatsAppLink = () => {
-    if (!bill || !bill.supplier) return ""
-    const phone = (bill.supplier.phone || "").replace(/\D/g, "")
-    if (!phone) return ""
-    const msg = `Dear ${bill.supplier.name},\n\nYour purchase bill ${bill.invoice_no} for PKR ${bill.total?.toLocaleString()} is ready.\nDate: ${bill.date}\nDue: ${bill.due_date}\n\nThank you for your business.\n— OneAccounts`
-    return `https://wa.me/92${phone}?text=${encodeURIComponent(msg)}`
-  }
+  // Safe WhatsApp link via the helper
+  const waLink = bill && bill.supplier
+    ? getWhatsAppLink(
+        bill.supplier.phone || "",
+        `Dear ${bill.supplier.name},\n\nYour purchase bill ${bill.invoice_no} for PKR ${bill.total?.toLocaleString()} is ready.\nDate: ${bill.date}\nDue: ${bill.due_date}\n\nThank you for your business.\n— OneAccounts`
+      )
+    : ""
 
   const handlePrintPDF = async () => {
     if (!bill) return
@@ -147,7 +147,7 @@ export default function BillDetailPage() {
       supplierAddress: supplier?.address || "",
       supplierPhone:   supplier?.phone || "",
       supplierEmail:   supplier?.email || "",
-      paymentTerms:    supplier?.payment_terms || null,   // ✅ pass actual terms
+      paymentTerms:    supplier?.payment_terms || null,
       notes:          bill.notes || null,
       status:         bill.status,
       items: (bill.items || []).map(item => ({
@@ -170,7 +170,6 @@ export default function BillDetailPage() {
   if (!bill) return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>Bill not found</div>
 
   const balanceDue = bill.total - (bill.paid || 0)
-  const waLink = getWhatsAppLink()
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -220,7 +219,6 @@ export default function BillDetailPage() {
         </div>
       </div>
 
-      {/* ── Two‑column Bill Details Card ── */}
       <div className="card">
         <div className="grid-2col">
           <div>

@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { logDataChange } from '@/lib/audit'
+import { generateNextCode } from '@/lib/generate-code'
 
 // ── Helper: extract user + company_id (same as your other routes) ──────
 async function getCompanyId(supabase: ReturnType<typeof createServerClient>): Promise<string> {
@@ -56,33 +57,17 @@ export async function POST(request: NextRequest) {
   const costPrice = Number(cost_price || 0)
   const openingQty = Number(opening_qty || 0)
 
+  // Auto‑generate code if missing (ignores soft‑deleted rows)
   let productCode = code?.trim() || ""
   if (!productCode) {
-    // ✅ Scoped to company
-    const { data: existing } = await supabase
-      .from('products')
-      .select('code')
-      .eq('company_id', companyId)          // ← company filter
-      .like('code', 'PROD-%')
-      .order('code', { ascending: false })
-      .limit(1)
-
-    let maxNum = 0
-    if (existing && existing.length > 0) {
-      const parts = existing[0].code.split('-')
-      if (parts.length === 2) {
-        const n = parseInt(parts[1])
-        if (!isNaN(n)) maxNum = n
-      }
-    }
-    productCode = `PROD-${String(maxNum + 1).padStart(3, '0')}`
+    productCode = await generateNextCode('products', 'PROD-', companyId)
   }
 
   // Create product – ✅ includes company_id
   const { data: product, error: insertErr } = await supabase
     .from('products')
     .insert({
-      company_id: companyId,               // ← company stamp
+      company_id: companyId,
       code: productCode,
       name,
       sale_price: salePrice,
@@ -144,7 +129,7 @@ export async function PUT(request: NextRequest) {
     .from('products')
     .select('*')
     .eq('id', id)
-    .eq('company_id', companyId)           // ← company filter
+    .eq('company_id', companyId)
     .single()
 
   if (!oldProduct) return NextResponse.json({ error: 'Product not found' }, { status: 404 })

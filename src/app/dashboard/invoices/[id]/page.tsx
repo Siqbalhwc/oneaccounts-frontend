@@ -8,6 +8,7 @@ import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
 import { useCompany } from "@/contexts/CompanyContext"
+import { getWhatsAppLink } from "@/lib/whatsapp"
 
 interface InvoiceItem {
   id: number
@@ -32,7 +33,7 @@ interface Invoice {
   reference?: string
   notes?: string
   party_id: number
-  created_by?: string   // ✅ new
+  created_by?: string
   items?: InvoiceItem[]
   customer?: {
     name: string
@@ -41,7 +42,7 @@ interface Invoice {
     country_code?: string
     address?: string
     email?: string
-    payment_terms?: string   // ✅ new
+    payment_terms?: string
   }
 }
 
@@ -173,23 +174,20 @@ export default function InvoiceDetailPage() {
       })
   }, [companyId, invoiceId])
 
-  const getWhatsAppLink = () => {
-    if (!invoice || !invoice.customer) return ""
-    const code  = (invoice.customer.country_code || "+92").replace(/\D/g, "")
-    const phone = (invoice.customer.phone || "").replace(/\D/g, "")
-    if (!phone) return ""
-    const msg = `Dear ${invoice.customer.name},\n\nYour invoice ${invoice.invoice_no} for PKR ${invoice.total?.toLocaleString()} is ready.\nDate: ${invoice.date}\nDue: ${invoice.due_date}\n\nThank you for your business.\n— OneAccounts`
-    return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
-  }
+  // WhatsApp links using the safe helper (fixes double‑92)
+  const waLink = invoice && invoice.customer
+    ? getWhatsAppLink(
+        invoice.customer.phone || "",
+        `Dear ${invoice.customer.name},\n\nYour invoice ${invoice.invoice_no} for PKR ${invoice.total?.toLocaleString()} is ready.\nDate: ${invoice.date}\nDue: ${invoice.due_date}\n\nThank you for your business.\n— OneAccounts`
+      )
+    : ""
 
-  const getReminderLink = () => {
-    if (!invoice || !invoice.customer) return ""
-    const code  = (invoice.customer.country_code || "+92").replace(/\D/g, "")
-    const phone = (invoice.customer.phone || "").replace(/\D/g, "")
-    if (!phone) return ""
-    const msg = `Reminder: Your invoice ${invoice.invoice_no} for PKR ${invoice.total?.toLocaleString()} is overdue. Please pay at your earliest convenience.`
-    return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
-  }
+  const reminderLink = invoice && invoice.customer
+    ? getWhatsAppLink(
+        invoice.customer.phone || "",
+        `Reminder: Your invoice ${invoice.invoice_no} for PKR ${invoice.total?.toLocaleString()} is overdue. Please pay at your earliest convenience.`
+      )
+    : ""
 
   const handlePrintPDF = async () => {
     if (!invoice) return
@@ -212,8 +210,8 @@ export default function InvoiceDetailPage() {
       customerAddress: customer?.address || "",
       customerPhone:   customer?.phone   || "",
       customerEmail:   customer?.email   || "",
-      paymentTerms:    customer?.payment_terms || null,   // ✅ actual terms
-      createdBy:       invoice.created_by || "—",         // ✅ preparer
+      paymentTerms:    customer?.payment_terms || null,
+      createdBy:       invoice.created_by || "—",
       status:          invoice.status,
       items: (invoice.items || []).map(item => ({
         description:  item.description   || "",
@@ -238,8 +236,6 @@ export default function InvoiceDetailPage() {
   if (!invoice)  return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>Invoice not found</div>
 
   const balanceDue    = invoice.total - (invoice.paid || 0)
-  const waLink        = getWhatsAppLink()
-  const reminderLink  = getReminderLink()
   const isOverdue     = invoice.status !== "Paid" && new Date(invoice.due_date) < new Date()
 
   const totalDebit  = journalLines.reduce((s, l) => s + l.debit,  0)
