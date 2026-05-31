@@ -35,6 +35,7 @@ interface Bill {
     phone?: string
     address?: string
     email?: string
+    payment_terms?: string   // ✅ added
   }
   created_by?: string
   updated_by?: string
@@ -83,9 +84,10 @@ export default function BillDetailPage() {
         const b: Bill = data
 
         if (b.party_id) {
+          // ✅ Also fetch supplier's payment terms
           supabase
             .from("suppliers")
-            .select("name, code, phone, address, email")
+            .select("name, code, phone, address, email, payment_terms")
             .eq("id", b.party_id)
             .single()
             .then(({ data: supp }) => {
@@ -133,7 +135,7 @@ export default function BillDetailPage() {
 
     const pdfData = {
       companyName:    companyName || "",
-      companyAddress: "",   // can be extended later
+      companyAddress: "",
       companyPhone:   "",
       companyEmail:   "",
       companyTagline: companyTagline || "",
@@ -145,6 +147,7 @@ export default function BillDetailPage() {
       supplierAddress: supplier?.address || "",
       supplierPhone:   supplier?.phone || "",
       supplierEmail:   supplier?.email || "",
+      paymentTerms:    supplier?.payment_terms || null,   // ✅ pass actual terms
       notes:          bill.notes || null,
       status:         bill.status,
       items: (bill.items || []).map(item => ({
@@ -173,9 +176,9 @@ export default function BillDetailPage() {
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: var(--shadow-sm); }
-        .row { display: flex; margin-bottom: 10px; font-size: 14px; align-items: center; }
-        .label { width: 130px; color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
-        .value { color: var(--text); font-weight: 500; }
+        .grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+        .value { font-size: 14px; font-weight: 500; color: var(--text); }
         table { width: 100%; border-collapse: collapse; margin-top: 12px; }
         th { text-align: left; padding: 10px 12px; background: var(--card-hover); font-weight: 700; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); }
         td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); }
@@ -188,8 +191,7 @@ export default function BillDetailPage() {
         .btn-success:hover { background: #22C55E; }
         .record-history { background: var(--bg-soft); border-radius: 8px; padding: 8px; }
         @media (max-width: 640px) {
-          .row { flex-direction: column; align-items: flex-start; }
-          .label { margin-bottom: 2px; }
+          .grid-2col { grid-template-columns: 1fr; }
         }
       `}</style>
 
@@ -218,23 +220,42 @@ export default function BillDetailPage() {
         </div>
       </div>
 
+      {/* ── Two‑column Bill Details Card ── */}
       <div className="card">
-        <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>Bill Details</h3>
-        <div className="row"><span className="label">Date</span><span className="value">{bill.date}</span></div>
-        <div className="row"><span className="label">Due Date</span><span className="value">{bill.due_date}</span></div>
-        <div className="row"><span className="label">Supplier</span><span className="value">{bill.supplier?.code} – {bill.supplier?.name || "Unknown"}</span></div>
-        <div className="row"><span className="label">Total</span><span className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B" }}>PKR {bill.total?.toLocaleString()}</span></div>
-        <div className="row"><span className="label">Paid</span><span className="value">PKR {bill.paid?.toLocaleString()}</span></div>
-        <div className="row"><span className="label">Due</span><span className="value" style={{ color: balanceDue > 0 ? "#EF4444" : "#10B981", fontWeight: 600 }}>PKR {balanceDue.toLocaleString()}</span></div>
-        <div className="row"><span className="label">Status</span><span className="value">{bill.status}</span></div>
-        {bill.reference && <div className="row"><span className="label">Reference</span><span className="value">{bill.reference}</span></div>}
-        {bill.notes && <div className="row"><span className="label">Notes</span><span className="value">{bill.notes}</span></div>}
-        {bill.created_by && (
-          <div className="row"><span className="label">Created by</span><span className="value">{bill.created_by}</span></div>
-        )}
-        {bill.updated_by && (
-          <div className="row"><span className="label">Last updated by</span><span className="value">{bill.updated_by}</span></div>
-        )}
+        <div className="grid-2col">
+          <div>
+            <div className="label">Date</div>
+            <div className="value">{bill.date}</div>
+          </div>
+          <div>
+            <div className="label">Due Date</div>
+            <div className="value">{bill.due_date}</div>
+          </div>
+          <div>
+            <div className="label">Supplier</div>
+            <div className="value">{bill.supplier?.code} – {bill.supplier?.name || "Unknown"}</div>
+          </div>
+          <div>
+            <div className="label">Total</div>
+            <div className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B" }}>PKR {bill.total?.toLocaleString()}</div>
+          </div>
+          <div>
+            <div className="label">Paid</div>
+            <div className="value">PKR {bill.paid?.toLocaleString()}</div>
+          </div>
+          <div>
+            <div className="label">Due</div>
+            <div className="value" style={{ color: balanceDue > 0 ? "#EF4444" : "#10B981", fontWeight: 600 }}>PKR {balanceDue.toLocaleString()}</div>
+          </div>
+          <div>
+            <div className="label">Status</div>
+            <span style={{ padding: "2px 10px", borderRadius: 12, fontSize: 12, fontWeight: 700, background: bill.status === "Paid" ? "#065F46" : "#7C2D12", color: bill.status === "Paid" ? "#6EE7B7" : "#FCA5A5" }}>{bill.status}</span>
+          </div>
+          {bill.reference && <div><div className="label">Reference</div><div className="value">{bill.reference}</div></div>}
+          {bill.notes && <div><div className="label">Notes</div><div className="value">{bill.notes}</div></div>}
+          {bill.created_by && <div><div className="label">Created by</div><div className="value">{bill.created_by}</div></div>}
+          {bill.updated_by && <div><div className="label">Last updated by</div><div className="value">{bill.updated_by}</div></div>}
+        </div>
       </div>
 
       {bill.items && bill.items.length > 0 && (
