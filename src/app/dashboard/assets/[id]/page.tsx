@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Truck, DollarSign } from "lucide-react"
+import RecordHistory from "@/components/RecordHistory"
 
 export default function AssetDetailPage() {
   const router = useRouter()
@@ -62,6 +63,7 @@ export default function AssetDetailPage() {
           transition: all 0.15s;
         }
         .btn:hover { background: var(--card-hover); }
+        .record-history { background: var(--bg-soft); border-radius: 8px; padding: 8px; }
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
@@ -99,6 +101,18 @@ export default function AssetDetailPage() {
           {asset.notes && <div className="row"><span className="label">Notes</span><span className="value">{asset.notes}</span></div>}
           <div className="row"><span className="label">Created by</span><span className="value">{asset.created_by || "—"}</span></div>
           <div className="row"><span className="label">Updated by</span><span className="value">{asset.updated_by || "—"}</span></div>
+        </div>
+      </div>
+
+      {/* Change History */}
+      <div style={{ maxWidth: 900, marginTop: 16 }}>
+        <div className="card">
+          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>
+            📝 Change History
+          </h3>
+          <div className="record-history">
+            <RecordHistory tableName="assets" recordId={String(asset.id)} />
+          </div>
         </div>
       </div>
     </div>

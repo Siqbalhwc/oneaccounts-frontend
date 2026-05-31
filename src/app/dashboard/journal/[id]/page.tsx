@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft } from "lucide-react"
 import RoleGuard from "@/components/RoleGuard"
+import RecordHistory from "@/components/RecordHistory"
 
 interface JournalLine {
   id: number
@@ -129,6 +130,14 @@ export default function JournalDetailPage() {
           ) : (
             <p style={{ color: "#94A3B8" }}>No lines found for this entry.</p>
           )}
+        </div>
+
+        {/* Change History */}
+        <div className="jd-card">
+          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "#1E293B", marginBottom: 12 }}>
+            📝 Change History
+          </h3>
+          <RecordHistory tableName="journal_entries" recordId={String(entry.id)} />
         </div>
       </div>
     </RoleGuard>

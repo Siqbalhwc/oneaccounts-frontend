@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
+import { logDataChange } from '@/lib/audit'
 
 export async function POST(request: NextRequest) {
   // 1. Authenticate
@@ -124,8 +125,8 @@ export async function POST(request: NextRequest) {
     .from('bank_transfers')
     .insert({
       company_id: companyId,
-      from_account_id: fromGL.id,   // GL account ID
-      to_account_id:   toGL.id,     // GL account ID
+      from_account_id: fromGL.id,
+      to_account_id:   toGL.id,
       amount,
       transfer_date: transferDate,
       notes,
@@ -162,6 +163,23 @@ export async function POST(request: NextRequest) {
     ]
     await supabaseAdmin.from('journal_lines').insert(lines)
   }
+
+  // 9. Audit log
+  await logDataChange(
+    'bank_transfers',
+    String(transfer.id),
+    'INSERT',
+    undefined,
+    {
+      id: transfer.id,
+      company_id: companyId,
+      from_account_id: fromGL.id,
+      to_account_id: toGL.id,
+      amount,
+      transfer_date: transferDate,
+      notes,
+    }
+  )
 
   return NextResponse.json({ success: true, transfer_id: transfer.id })
 }
