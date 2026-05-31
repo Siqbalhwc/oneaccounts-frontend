@@ -56,6 +56,35 @@ async function applyStockChanges(supabase: any, companyId: string, items: any[],
   }
 }
 
+// ── NEW: Record product‑line stock movements into stock_moves ────────
+async function recordStockMoves(
+  supabase: any,
+  companyId: string,
+  items: any[],
+  sourceType: string,
+  sourceId: number,
+  direction: 'in' | 'out'
+) {
+  const moves = items
+    .filter((item: any) => item.product_id)            // only product lines
+    .map((item: any) => ({
+      company_id: companyId,
+      product_id: item.product_id,
+      move_type: sourceType === 'purchase' ? 'purchase' : 'sale',
+      qty: direction === 'in' ? item.qty : -item.qty,
+      date: new Date().toISOString(),
+      ref: sourceType === 'purchase' ? `PB-${sourceId}` : `SI-${sourceId}`,
+      reason: `${sourceType} invoice`,
+      source_type: 'invoice',
+      source_id: sourceId,
+    }))
+
+  if (moves.length > 0) {
+    const { error } = await supabase.from('stock_moves').insert(moves)
+    if (error) console.error('Failed to insert stock_moves:', error)
+  }
+}
+
 // ── Create the journal entry for a purchase bill ─────────────────
 async function createBillJournalEntry(
   supabase: any,
@@ -153,7 +182,7 @@ async function createBillJournalEntry(
 
   await supabase.from('journal_lines').insert(lineRows)
 
-  // ⚡ Batch update account balances (faster than loop)
+  // ⚡ Batch update account balances
   const accountUpdates = debitLines.reduce((acc, l) => {
     const existing = acc.find((u: any) => u.account_id === l.account_id)
     if (existing) {
@@ -305,7 +334,7 @@ export async function POST(request: NextRequest) {
 
   if (!bill) return NextResponse.json({ error: 'Could not generate unique bill number' }, { status: 500 })
 
-  // Insert items and calculate total (FIXED: include product_id, account_id, location_id, activity_id)
+  // Insert items (INCLUDES product_id, account_id, location_id, activity_id)
   const itemRowsForDb = items.map((item: any) => {
     const qty = Number(item.qty || 0)
     const unit_price = Number(item.unit_price || 0)
@@ -332,6 +361,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: itemsError.message }, { status: 500 })
     }
   }
+
+  // ── INSERT STOCK MOVES (inflow) ──
+  await recordStockMoves(supabase, companyId, items, 'purchase', bill.id, 'in')
 
   const { data: updatedBill, error: updateError } = await supabase
     .from('invoices')
@@ -481,7 +513,7 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  // Delete old items and insert new (FIXED: include product_id, account_id, location_id, activity_id)
+  // Delete old items and insert new (INCLUDES product_id, account_id, location_id, activity_id)
   await supabase.from('invoice_items').delete().eq('invoice_id', id)
 
   let total = 0
@@ -507,6 +539,9 @@ export async function PUT(request: NextRequest) {
   if (itemRows.length > 0) {
     await supabase.from('invoice_items').insert(itemRows)
   }
+
+  // ── INSERT STOCK MOVES (inflow, new items) ──
+  await recordStockMoves(supabase, companyId, items, 'purchase', id, 'in')
 
   const { data: updatedBill, error: updateError } = await supabase
     .from('invoices')

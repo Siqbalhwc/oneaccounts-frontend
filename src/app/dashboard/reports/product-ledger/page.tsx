@@ -7,7 +7,7 @@ import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, Printer } from "lucide-reac
 import { useCompany } from "@/contexts/CompanyContext"
 import { generateProductLedgerPDF } from "@/lib/pdf/productLedgerPDF"
 
-type SortField = "date" | "type" | "invoice_no" | "qty_in" | "qty_out" | "balance"
+type SortField = "date" | "type" | "ref" | "qty_in" | "qty_out" | "balance"
 type SortDir = "asc" | "desc"
 
 export default function ProductLedgerPage() {
@@ -36,7 +36,6 @@ export default function ProductLedgerPage() {
     if (!productId) return
     setLoading(true)
 
-    // 1. Product details
     const { data: prod } = await supabase
       .from("products")
       .select("*")
@@ -45,92 +44,33 @@ export default function ProductLedgerPage() {
     setProduct(prod)
     if (!prod) { setLoading(false); return }
 
-    // 2. Fetch movements from all three sources
-    const [
-      { data: items },
-      { data: adjustments },
-      { data: stockMoves },
-    ] = await Promise.all([
-      // Invoice items (purchases & sales)
-      supabase
-        .from("invoice_items")
-        .select(`id, qty, invoices!inner(invoice_no, date, type)`)
-        .eq("product_id", productId)
-        .order("id", { ascending: true }),
-
-      // Inventory transactions
-      supabase
-        .from("inventory_transactions")
-        .select("*")
-        .eq("product_id", productId)
-        .order("date", { ascending: true }),
-
-      // Stock moves (adjustments from the dedicated page)
-      supabase
-        .from("stock_moves")
-        .select("*")
-        .eq("product_id", productId)
-        .order("date", { ascending: true }),
-    ])
+    // Fetch ALL stock_moves for this product
+    const { data: moves } = await supabase
+      .from("stock_moves")
+      .select("*")
+      .eq("product_id", productId)
+      .order("date", { ascending: true })
 
     const allLines: any[] = []
-
-    // Invoice items
-    if (items) {
-      items.forEach((item: any) => {
-        const inv = item.invoices
-        if (!inv || !inv.date) return
-        const isPurchase = inv.type === "purchase"
-        const isSale = inv.type === "sale"
-        allLines.push({
-          id: `inv-${item.id}`,
-          date: inv.date,
-          type: isPurchase ? "Purchase" : "Sale",
-          invoice_no: inv.invoice_no || "",
-          qty_in: isPurchase ? item.qty : 0,
-          qty_out: isSale ? item.qty : 0,
-        })
-      })
-    }
-
-    // Inventory transactions
-    if (adjustments) {
-      adjustments.forEach((adj: any) => {
-        const qty = adj.qty || 0
-        const isInflow = qty >= 0
-        allLines.push({
-          id: `adj-${adj.id}`,
-          date: adj.date,
-          type: adj.transaction_type || "Adjustment",
-          invoice_no: adj.notes || adj.reference_type || "",
-          qty_in: isInflow ? qty : 0,
-          qty_out: isInflow ? 0 : Math.abs(qty),
-        })
-      })
-    }
-
-    // Stock moves (the actual adjustment entries)
-    if (stockMoves) {
-      stockMoves.forEach((move: any) => {
+    if (moves) {
+      moves.forEach((move: any) => {
         const qty = move.qty || 0
         allLines.push({
           id: `move-${move.id}`,
           date: move.date,
-          type: move.move_type || "Stock Move",
-          invoice_no: move.reason || move.ref || "",
+          type: move.move_type || "Movement",
+          ref: move.ref || move.reason || "",
           qty_in: qty > 0 ? qty : 0,
-          qty_out: qty < 0 ? Math.abs(qty) : 0,
+          qty_out: qty < 0 ? -qty : 0,
         })
       })
     }
 
-    // Sort all movements by date
     allLines.sort((a, b) => a.date.localeCompare(b.date))
 
-    // Compute opening balance before start date
+    // Opening balance before start date
     const opening = prod.opening_qty || 0
     let runningQty = opening
-
     for (const line of allLines) {
       if (line.date < startDate) {
         runningQty = runningQty + line.qty_in - line.qty_out
@@ -139,29 +79,22 @@ export default function ProductLedgerPage() {
     const openingBalanceQty = runningQty
 
     const periodLines: any[] = []
-
-    // Opening balance row
     periodLines.push({
       id: "opening",
       date: startDate,
       type: "Opening",
-      invoice_no: "",
+      ref: "",
       qty_in: openingBalanceQty,
       qty_out: 0,
       balance: openingBalanceQty,
       isOpening: true,
     })
 
-    // Period lines with running balance
     runningQty = openingBalanceQty
     for (const line of allLines) {
       if (line.date >= startDate && line.date <= endDate) {
         runningQty = runningQty + line.qty_in - line.qty_out
-        periodLines.push({
-          ...line,
-          balance: runningQty,
-          isOpening: false,
-        })
+        periodLines.push({ ...line, balance: runningQty, isOpening: false })
       }
     }
 
@@ -312,7 +245,7 @@ export default function ProductLedgerPage() {
           <div className="ledger-header">
             <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
             <button className="sort-btn" onClick={() => handleSort("type")}>Type {getSortIcon("type")}</button>
-            <button className="sort-btn" onClick={() => handleSort("invoice_no")}>Ref # {getSortIcon("invoice_no")}</button>
+            <button className="sort-btn" onClick={() => handleSort("ref")}>Ref # {getSortIcon("ref")}</button>
             <button className="sort-btn" onClick={() => handleSort("qty_in")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Inflow {getSortIcon("qty_in")}</button>
             <button className="sort-btn" onClick={() => handleSort("qty_out")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Outflow {getSortIcon("qty_out")}</button>
             <button className="sort-btn" onClick={() => handleSort("balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("balance")}</button>
@@ -323,8 +256,8 @@ export default function ProductLedgerPage() {
                 {line.isOpening ? "" : new Date(line.date).toLocaleDateString()}
               </span>
               <span>{line.type}</span>
-              <span style={{ color: line.invoice_no ? "var(--primary)" : "var(--text-muted)" }}>
-                {line.invoice_no || "Opening Balance"}
+              <span style={{ color: line.ref ? "var(--primary)" : "var(--text-muted)" }}>
+                {line.ref || "Opening Balance"}
               </span>
               <span style={{ textAlign: "right", color: line.qty_in > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.qty_in > 0 ? 600 : 400 }}>
                 {line.qty_in > 0 ? line.qty_in.toLocaleString() : "—"}

@@ -36,7 +36,7 @@ async function createJE(
   }))
   await supabase.from('journal_lines').insert(lineRows)
 
-  // ⚡ Batch update account balances using a single SQL call
+  // ⚡ Batch update account balances
   const accountUpdates = lines.reduce((acc, l) => {
     const key = l.account_id
     const existing = acc.find((u: any) => u.account_id === key)
@@ -49,18 +49,11 @@ async function createJE(
   }, [] as { account_id: number; delta: number }[])
 
   if (accountUpdates.length > 0) {
-    const sqlParts = accountUpdates.map((u: any, i: number) =>
-      `($${i * 2 + 1}::int, $${i * 2 + 2}::numeric)`
-    ).join(', ')
-    const values = accountUpdates.flatMap((u: any) => [u.account_id, u.delta])
-    // Use a single UPDATE with a VALUES clause to update all accounts at once
-    await supabase.rpc('bulk_update_account_balances', {
-      data: accountUpdates,
-    }).or(
-      // If RPC doesn't exist, fall back to a raw query (but we'll create the RPC below)
-      supabase.rpc('bulk_update_account_balances', { data: accountUpdates })
-    )
-    // For safety, if the RPC isn't created yet, we'll fall back to individual updates – but we'll create the RPC now.
+    try {
+      await supabase.rpc('bulk_update_account_balances', { data: accountUpdates })
+    } catch {
+      // RPC may not exist – ignore
+    }
   }
 }
 
@@ -100,6 +93,35 @@ async function validateStock(supabase: any, companyId: string, items: any[]) {
     }
   }
   return null
+}
+
+// ── NEW: Record product‑line stock movements into stock_moves ────────
+async function recordStockMoves(
+  supabase: any,
+  companyId: string,
+  items: any[],
+  sourceType: string,
+  sourceId: number,
+  direction: 'in' | 'out'
+) {
+  const moves = items
+    .filter((item: any) => item.product_id)
+    .map((item: any) => ({
+      company_id: companyId,
+      product_id: item.product_id,
+      move_type: sourceType === 'purchase' ? 'purchase' : 'sale',
+      qty: direction === 'in' ? item.qty : -item.qty,
+      date: new Date().toISOString(),
+      ref: sourceType === 'purchase' ? `PB-${sourceId}` : `SI-${sourceId}`,
+      reason: `${sourceType} invoice`,
+      source_type: 'invoice',
+      source_id: sourceId,
+    }))
+
+  if (moves.length > 0) {
+    const { error } = await supabase.from('stock_moves').insert(moves)
+    if (error) console.error('Failed to insert stock_moves:', error)
+  }
 }
 
 // ═══════════════════ POST ══════════════════════════════════════════════
@@ -226,6 +248,9 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ── INSERT STOCK MOVES (outflow) ──
+  await recordStockMoves(supabase, companyId, items, 'sale', invoice.id, 'out')
+
   const totalSalesAmount = itemRows.reduce((s: number, i: any) => s + (i.total || 0), 0)
   const { data: updatedInv } = await supabase
     .from('invoices')
@@ -322,7 +347,7 @@ export async function POST(request: NextRequest) {
 
     await createJE(supabase, companyId, invoice_date, `Sales Invoice ${invoiceNo}`, jeLines, 'sale_invoice', updatedInv.id)
 
-    // Update product stock (outflow)
+    // Update product stock (outflow) – keep for consistency, stock_moves is the new source of truth
     for (const item of items) {
       if (!item.product_id) continue
       const qty = Number(item.qty || 0)
@@ -468,6 +493,9 @@ export async function PUT(request: NextRequest) {
     }
   })
   if (itemRows.length > 0) await supabase.from('invoice_items').insert(itemRows)
+
+  // ── INSERT STOCK MOVES (outflow, new items) ──
+  await recordStockMoves(supabase, companyId, items, 'sale', id, 'out')
 
   const totalSalesAmount = itemRows.reduce((s: number, i: any) => s + (i.total || 0), 0)
 
