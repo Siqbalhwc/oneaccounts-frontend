@@ -6,6 +6,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import { Plus, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
+import { getWhatsAppLink } from "@/lib/whatsapp"
 
 type SortField = "invoice_no" | "date" | "customer" | "total" | "status" | "created_by"
 type SortDir = "asc" | "desc"
@@ -116,18 +117,21 @@ export default function InvoicesPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
+  // Safe WhatsApp links via helper (fixes double‑92)
   const sendWhatsApp = (inv: any) => {
     const cust = customerMap[inv.party_id]
     if (!cust?.phone) { alert("No phone number."); return }
     const message = `Dear ${cust.name}, your invoice ${inv.invoice_no} of PKR ${inv.total?.toLocaleString()} is ready.`
-    window.open(`https://wa.me/${cust.phone.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`, "_blank")
+    const link = getWhatsAppLink(cust.phone, message)
+    if (link) window.open(link, "_blank")
   }
 
   const sendReminder = (inv: any) => {
     const cust = customerMap[inv.party_id]
     if (!cust?.phone) { alert("No phone number."); return }
     const message = `Reminder: Your invoice ${inv.invoice_no} for PKR ${inv.total?.toLocaleString()} is overdue. Please pay.`
-    window.open(`https://wa.me/${cust.phone.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`, "_blank")
+    const link = getWhatsAppLink(cust.phone, message)
+    if (link) window.open(link, "_blank")
   }
 
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>

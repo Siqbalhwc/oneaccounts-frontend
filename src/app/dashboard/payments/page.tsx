@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { Plus, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
+import { getWhatsAppLink } from "@/lib/whatsapp"
 
 type SortField = "payment_no" | "payment_date" | "supplier" | "amount" | "payment_method"
 type SortDir = "asc" | "desc"
@@ -114,8 +115,8 @@ export default function PaymentsPage() {
       return
     }
     const message = `Dear ${supp.name}, your payment ${pay.payment_no} of PKR ${pay.amount?.toLocaleString()} has been recorded.`
-    const url = `https://wa.me/${supp.phone.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`
-    window.open(url, "_blank")
+    const link = getWhatsAppLink(supp.phone, message)
+    if (link) window.open(link, "_blank")
   }
 
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
@@ -131,7 +132,7 @@ export default function PaymentsPage() {
           margin: 0;
         }
         .table-grid {
-          min-width: 900px; /* prevents squishing on small screens */
+          min-width: 900px;
         }
         .header-row {
           display: grid;

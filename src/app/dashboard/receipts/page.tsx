@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { Plus, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
+import { getWhatsAppLink } from "@/lib/whatsapp"
 
 type SortField = "receipt_no" | "date" | "customer" | "amount" | "method"
 type SortDir = "asc" | "desc"
@@ -111,6 +112,7 @@ export default function ReceiptsPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
+  // Safe WhatsApp link via helper (fixes double‑92)
   const sendWhatsApp = (rec: any) => {
     const cust = customerMap[rec.party_id]
     if (!cust?.phone) {
@@ -118,8 +120,8 @@ export default function ReceiptsPage() {
       return
     }
     const message = `Dear ${cust.name}, your receipt ${rec.receipt_no} for PKR ${rec.amount?.toLocaleString()} has been recorded.`
-    const url = `https://wa.me/${cust.phone.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`
-    window.open(url, "_blank")
+    const link = getWhatsAppLink(cust.phone, message)
+    if (link) window.open(link, "_blank")
   }
 
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>

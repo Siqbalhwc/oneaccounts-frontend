@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { Plus, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
+import { getWhatsAppLink } from "@/lib/whatsapp"
 
 type SortField = "invoice_no" | "date" | "supplier" | "total" | "status"
 type SortDir = "asc" | "desc"
@@ -113,6 +114,7 @@ export default function BillsPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
+  // Safe WhatsApp links via helper (fixes double‑92)
   const sendWhatsApp = (bill: any) => {
     const supp = supplierMap[bill.party_id]
     if (!supp?.phone) {
@@ -120,8 +122,8 @@ export default function BillsPage() {
       return
     }
     const message = `Dear ${supp.name}, your bill ${bill.invoice_no} of PKR ${bill.total?.toLocaleString()} is ready.`
-    const url = `https://wa.me/${supp.phone.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`
-    window.open(url, "_blank")
+    const link = getWhatsAppLink(supp.phone, message)
+    if (link) window.open(link, "_blank")
   }
 
   const sendReminder = (bill: any) => {
@@ -131,8 +133,8 @@ export default function BillsPage() {
       return
     }
     const message = `Reminder: Your bill ${bill.invoice_no} for PKR ${bill.total?.toLocaleString()} is overdue. Please make payment at your earliest convenience.`
-    const url = `https://wa.me/${supp.phone.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`
-    window.open(url, "_blank")
+    const link = getWhatsAppLink(supp.phone, message)
+    if (link) window.open(link, "_blank")
   }
 
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
