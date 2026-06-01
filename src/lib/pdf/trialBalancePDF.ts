@@ -2,12 +2,12 @@ import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
 // ─── Brand colours ────────────────────────────────────────────────
-const NAVY  = [7,   8,  91]  as [number,number,number]
-const DARK  = [17,  24,  39]  as [number,number,number]
-const MUTED = [107,114, 128]  as [number,number,number]
-const BORDER = [229,231, 235]  as [number,number,number]
-const WHITE = [255,255, 255]  as [number,number,number]
-const ROW_ALT = [248,249, 252]  as [number,number,number]
+const NAVY   = [7,8,91]  as [number,number,number]
+const DARK   = [17,24,39]  as [number,number,number]
+const MUTED  = [107,114,128]  as [number,number,number]
+const BORDER = [229,231,235]  as [number,number,number]
+const WHITE  = [255,255,255]  as [number,number,number]
+const ROW_ALT = [248,249,252]  as [number,number,number]
 
 async function loadImage(url: string): Promise<string | null> {
   try {
@@ -32,6 +32,7 @@ export interface TrialBalanceRow {
   code: string
   name: string
   type: string
+  category: string     // ✅ added
   debit: number
   credit: number
 }
@@ -95,7 +96,6 @@ export async function generateTrialBalancePDF(data: TrialBalancePDFData): Promis
   doc.setTextColor(...NAVY)
   doc.text("TRIAL BALANCE", PW - MR, LOGO_Y + 9, { align: "right" })
 
-  // Single‑line date
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8)
   doc.setTextColor(...MUTED)
@@ -106,55 +106,56 @@ export async function generateTrialBalancePDF(data: TrialBalancePDFData): Promis
   doc.setLineWidth(0.4)
   doc.line(ML, HEADER_H, PW - MR, HEADER_H)
 
-  // ── TABLE COLUMN WIDTHS ──────────────────────────────────────────
-  const codeColW  = 14
-  const typeColW  = 24
-  const debitColW = 32
-  const creditColW = 34
-  const nameColW  = CW - codeColW - typeColW - debitColW - creditColW
+  // ── COLUMN WIDTHS – added Category column ────────────────────────
+  const codeColW  = 12
+  const typeColW  = 18
+  const catColW   = 24
+  const debitColW = 30
+  const creditColW = 30
+  const nameColW  = CW - codeColW - typeColW - catColW - debitColW - creditColW
 
-  // ── TABLE HEADER (same height as data rows) ──────────────────────
-  // We'll use a compact row height of 6 mm (matches data rows after reduced padding)
   const ROW_HEIGHT = 6
   let Y = HEADER_H + 10
   const HEADER_ROW_H = ROW_HEIGHT
 
-  // Square navy header
   doc.setFillColor(...NAVY)
   doc.rect(ML, Y, CW, HEADER_ROW_H, "F")
 
   const headerTextY = Y + HEADER_ROW_H / 2 + 1.5
   doc.setFont("helvetica", "bold")
-  doc.setFontSize(8)
+  doc.setFontSize(7.5)
   doc.setTextColor(...WHITE)
 
   const codeX = ML + codeColW / 2
   const nameX = ML + codeColW + 2
   const typeX = ML + codeColW + nameColW + typeColW / 2
-  const debitX = ML + codeColW + nameColW + typeColW + debitColW / 2
-  const creditX = ML + codeColW + nameColW + typeColW + debitColW + creditColW / 2
+  const catX  = typeX + typeColW/2 + catColW/2
+  const debitX  = catX + catColW/2 + debitColW/2
+  const creditX = debitX + debitColW/2 + creditColW/2
 
   doc.text("Code", codeX, headerTextY, { align: "center" })
   doc.text("Account Name", nameX + 3, headerTextY, { align: "left" })
   doc.text("Type", typeX, headerTextY, { align: "center" })
+  doc.text("Category", catX, headerTextY, { align: "center" })
   doc.text("Debit", debitX, headerTextY, { align: "center" })
   doc.text("Credit", creditX, headerTextY, { align: "center" })
 
-  // ── TABLE BODY ───────────────────────────────────────────────────
   const tableStartY = Y + HEADER_ROW_H
 
   const tableRows: any[] = data.rows.map(row => [
     row.code,
     row.name,
     row.type,
+    row.category || "",
     row.debit > 0 ? pkr(row.debit) : "",
     row.credit > 0 ? pkr(row.credit) : "",
   ])
 
-  // Totals row (same height as others)
+  // Totals row
   tableRows.push([
     "",
     "Total",
+    "",
     "",
     pkr(data.totalDebit),
     pkr(data.totalCredit),
@@ -167,19 +168,20 @@ export async function generateTrialBalancePDF(data: TrialBalancePDFData): Promis
     showHead: false,
     styles: {
       fontSize: 8,
-      cellPadding: { top: 1, bottom: 1, left: 3, right: 3 },   // reduced padding
+      cellPadding: { top: 1, bottom: 1, left: 3, right: 3 },
       textColor: DARK,
       lineColor: BORDER,
       lineWidth: 0.2,
-      minCellHeight: ROW_HEIGHT,   // force all rows exactly 6 mm
+      minCellHeight: ROW_HEIGHT,
     },
     alternateRowStyles: { fillColor: ROW_ALT },
     columnStyles: {
       0: { cellWidth: codeColW, halign: "center" },
       1: { cellWidth: nameColW, halign: "left" },
       2: { cellWidth: typeColW, halign: "center" },
-      3: { cellWidth: debitColW, halign: "right" },
-      4: { cellWidth: creditColW, halign: "right" },
+      3: { cellWidth: catColW, halign: "center" },
+      4: { cellWidth: debitColW, halign: "right" },
+      5: { cellWidth: creditColW, halign: "right" },
     },
     didParseCell: (hookData) => {
       if (hookData.row.index === tableRows.length - 1 && hookData.row.section === 'body') {
@@ -192,7 +194,6 @@ export async function generateTrialBalancePDF(data: TrialBalancePDFData): Promis
 
   const afterTable = (doc as any).lastAutoTable.finalY as number
 
-  // ── Simple border around the entire table (including header) ─────
   doc.setDrawColor(...BORDER)
   doc.setLineWidth(0.3)
   doc.rect(ML, Y, CW, afterTable - Y, "S")

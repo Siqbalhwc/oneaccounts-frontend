@@ -29,7 +29,6 @@ function getFallbackCategory(code?: string): string {
   return "Other"
 }
 
-// ── Consistent 2‑decimal format ────────────────────────────────────
 function fmt(n: number) {
   return n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
@@ -54,10 +53,9 @@ export default function TrialBalancePage() {
   const { companyName, companyTagline, logoUrl } = useCompany()
   const { theme: themeMode } = useTheme()
 
-  // ── Theme helpers ─────────────────────────────────────────────────
   const isDarkTheme = themeMode === "dark" || themeMode === "system"
   const isOneAccounts = themeMode === "oneaccounts"
-  const isLightStyle = themeMode === "light" || isOneAccounts   // OneAccounts uses light visual style
+  const isLightStyle = themeMode === "light" || isOneAccounts
 
   const fetchTrial = async () => {
     setLoading(true)
@@ -154,6 +152,7 @@ export default function TrialBalancePage() {
         code: r.code,
         name: r.name,
         type: r.type,
+        category: r.category,
         debit: r.debit,
         credit: r.credit,
       })),
@@ -165,14 +164,11 @@ export default function TrialBalancePage() {
     doc.save(`Trial_Balance_${startDate}_to_${endDate}.pdf`)
   }
 
-  // ── Theme‑sensitive colours ───────────────────────────────────────
   const headerBg = isOneAccounts ? "#07085B" : (isDarkTheme ? "#000000" : "#07085B")
-  // Row backgrounds: light style = white/grey, dark style = slate shades
   const rowLight = isLightStyle ? "#FFFFFF" : "#1E293B"
   const rowDark  = isLightStyle ? "#F8F9FC" : "#111827"
   const totalBg  = headerBg
   const textMuted = isLightStyle ? "#64748B" : "#94A3B8"
-  // Override text color on OneAccounts so it's always readable (dark text on light rows)
   const reportTextColor = isOneAccounts ? "#1E293B" : "var(--text)"
   const reportMutedColor = isOneAccounts ? "#64748B" : "var(--text-muted)"
 
@@ -265,14 +261,14 @@ export default function TrialBalancePage() {
         }
         .table-header {
           display: grid;
-          grid-template-columns: 90px 1fr 90px 140px 140px;
+          grid-template-columns: 90px 1fr 90px 100px 140px 140px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700;
           text-transform: uppercase; color: white;
         }
         .table-row {
           display: grid;
-          grid-template-columns: 90px 1fr 90px 140px 140px;
+          grid-template-columns: 90px 1fr 90px 100px 140px 140px;
           padding: 12px 24px;
           font-size: 13px; align-items: center;
           cursor: pointer; transition: background 0.15s;
@@ -280,7 +276,7 @@ export default function TrialBalancePage() {
         .table-row:hover { background: var(--card-hover); }
         .totals-row {
           display: grid;
-          grid-template-columns: 90px 1fr 90px 140px 140px;
+          grid-template-columns: 90px 1fr 90px 100px 140px 140px;
           padding: 14px 24px;
           color: white; font-weight: 700; font-size: 13px;
         }
@@ -295,7 +291,7 @@ export default function TrialBalancePage() {
 
         @media (max-width: 640px) {
           .table-header, .table-row, .totals-row {
-            grid-template-columns: 70px 1fr 80px 100px 100px;
+            grid-template-columns: 70px 1fr 80px 90px 100px 100px;
           }
         }
       `}</style>
@@ -303,6 +299,10 @@ export default function TrialBalancePage() {
       {/* ── Report Header ── */}
       <div className="report-header">
         <div className="report-header-left">
+          {/* ⬅ Back button */}
+          <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}>
+            <ArrowLeft size={16} />
+          </button>
           {logoUrl ? (
             <img src={logoUrl} alt={companyName} className="report-logo" width={34} height={34} />
           ) : (
@@ -330,7 +330,7 @@ export default function TrialBalancePage() {
         </div>
       </div>
 
-      {/* ── KPI cards ── */}
+      {/* rest of the component unchanged */}
       <div className="kpi-row">
         <div className="kpi-card">
           <div className="kpi-label">Total Debits</div>
@@ -352,7 +352,6 @@ export default function TrialBalancePage() {
         </div>
       </div>
 
-      {/* ── Filters ── */}
       <div className="filter-bar">
         <input type="date" className="date-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
         <span style={{ color: "var(--text-muted)", fontSize: 12 }}>to</span>
@@ -382,6 +381,7 @@ export default function TrialBalancePage() {
             <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
             <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
             <button className="sort-btn" onClick={() => handleSort("type")}>Type {getSortIcon("type")}</button>
+            <button className="sort-btn" onClick={() => handleSort("credit")} style={{ textAlign: "center" }}>Category {getSortIcon("credit")}</button>
             <button className="sort-btn" onClick={() => handleSort("debit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
             <button className="sort-btn" onClick={() => handleSort("credit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
           </div>
@@ -398,6 +398,7 @@ export default function TrialBalancePage() {
               <span style={{ fontWeight: 600, color: "var(--primary)" }}>{a.code}</span>
               <span>{a.name}</span>
               <span style={{ fontSize: 11, color: textMuted }}>{a.type}</span>
+              <span style={{ fontSize: 11, color: textMuted, textAlign: "center" }}>{a.category || "—"}</span>
               <span style={{
                 textAlign: "right",
                 color: a.debit > 0 ? "#EF4444" : textMuted,
@@ -417,6 +418,7 @@ export default function TrialBalancePage() {
           <div className="totals-row" style={{ background: totalBg }}>
             <span></span>
             <span>Total</span>
+            <span></span>
             <span></span>
             <span style={{ textAlign: "right", color: "#FFA7A7" }}>PKR {fmt(totalDebit)}</span>
             <span style={{ textAlign: "right", color: "#A7F3D0" }}>PKR {fmt(totalCredit)}</span>
