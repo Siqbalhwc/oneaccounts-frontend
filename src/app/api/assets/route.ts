@@ -21,6 +21,24 @@ async function generateAssetNo(supabase: any, companyId: string): Promise<string
   return `${prefix}${String(nextNum).padStart(4, "0")}`
 }
 
+// ── Helper: get or create a default Owner Equity account ──────────
+async function getOrCreateEquityAccount(supabase: any, companyId: string) {
+  const { data: eq } = await supabase.from('accounts')
+    .select('id,balance')
+    .eq('code', '3000')
+    .eq('company_id', companyId)
+    .maybeSingle()
+  if (eq) return eq
+  const { data: created } = await supabase.from('accounts').insert({
+    company_id: companyId,
+    code: '3000',
+    name: 'Owner Equity',
+    type: 'Equity',
+    balance: 0,
+  }).select('id,balance').single()
+  return created
+}
+
 export async function GET(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -116,6 +134,58 @@ export async function POST(request: NextRequest) {
   }).select().single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // ── Create journal entry for asset acquisition ─────────────────
+  try {
+    if (gl_asset_account_id && cost_price > 0) {
+      const equityAccount = await getOrCreateEquityAccount(supabase, companyId)
+      if (!equityAccount) throw new Error('Could not find or create Owner Equity account')
+
+      const entryNo = `JE-AST-${assetNo}`
+      const { data: entry, error: entryErr } = await supabase
+        .from('journal_entries')
+        .insert({
+          company_id: companyId,
+          entry_no: entryNo,
+          date: purchase_date,
+          description: `Acquisition of asset ${assetNo} - ${name}`,
+        })
+        .select('id')
+        .single()
+
+      if (entryErr) throw new Error('Journal entry creation failed: ' + entryErr.message)
+
+      const lines = [
+        { account_id: gl_asset_account_id, debit: cost_price, credit: 0 },
+        { account_id: equityAccount.id, debit: 0, credit: cost_price },
+      ]
+
+      const lineRows = lines.map(l => ({
+        company_id: companyId,
+        entry_id: entry.id,
+        account_id: l.account_id,
+        debit: l.debit,
+        credit: l.credit,
+        source_type: 'asset_acquisition',
+        source_id: asset.id,
+      }))
+
+      await supabase.from('journal_lines').insert(lineRows)
+
+      // Update account balances
+      for (const l of lines) {
+        const { data: acc } = await supabase.from('accounts').select('balance').eq('id', l.account_id).single()
+        if (acc) {
+          const newBal = acc.balance + (l.debit || 0) - (l.credit || 0)
+          await supabase.from('accounts').update({ balance: newBal }).eq('id', l.account_id)
+        }
+      }
+    }
+  } catch (jeError: any) {
+    // Rollback asset creation if journal entry fails
+    await supabase.from('assets').delete().eq('id', asset.id)
+    return NextResponse.json({ error: 'Journal entry failed: ' + jeError.message }, { status: 500 })
+  }
 
   await logDataChange('assets', String(asset.id), 'INSERT', undefined, asset)
 
