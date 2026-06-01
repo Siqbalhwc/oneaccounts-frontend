@@ -39,9 +39,9 @@ function getSourceLink(sourceType: string, sourceId: number): string {
     case "payment":
       return `/dashboard/payments/${sourceId}`
     case "bank_transfer":
-      return `/dashboard/banking/bank-transfers`  // no detail page; list with highlight maybe
+      return `/dashboard/banking/bank-transfers`
     case "inventory_adjustment":
-      return `/dashboard/inventory/adjustments`   // list page
+      return `/dashboard/inventory/adjustments`
     default:
       return ""
   }
@@ -61,32 +61,43 @@ export default function JournalDetailPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!entryId) return
-    supabase
-      .from("journal_entries")
-      .select("*")
-      .eq("id", entryId)
-      .single()
-      .then(({ data }) => {
-        if (data) {
-          setEntry(data)
-          supabase
-            .from("journal_lines")
-            .select("*, account:accounts(code, name), source_type, source_id")
-            .eq("entry_id", data.id)
-            .then(({ data: lines }) => {
-              setEntry(prev => prev ? { ...prev, lines: lines || [] } : null)
-              setLoading(false)
-            })
-        } else {
+    async function loadEntry() {
+      if (!entryId) return
+      try {
+        const { data, error: entryErr } = await supabase
+          .from("journal_entries")
+          .select("*")
+          .eq("id", entryId)
+          .single()
+
+        if (entryErr || !data) {
           setError("Journal entry not found")
           setLoading(false)
+          return
         }
-      })
-      .catch(() => {
+
+        setEntry(data)
+
+        const { data: lines, error: linesErr } = await supabase
+          .from("journal_lines")
+          .select("*, account:accounts(code, name), source_type, source_id")
+          .eq("entry_id", data.id)
+
+        if (linesErr) {
+          setError("Failed to load lines")
+          setLoading(false)
+          return
+        }
+
+        setEntry(prev => prev ? { ...prev, lines: lines || [] } : null)
+        setLoading(false)
+      } catch {
         setError("Failed to load entry")
         setLoading(false)
-      })
+      }
+    }
+
+    loadEntry()
   }, [entryId])
 
   if (loading) return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
