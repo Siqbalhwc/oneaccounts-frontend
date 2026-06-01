@@ -1,12 +1,12 @@
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
-// ─── Brand colours ────────────────────────────────────────────────
-const NAVY  = [7,   8,  91]  as [number,number,number]
-const DARK  = [17,  24,  39]  as [number,number,number]
-const MUTED = [107,114, 128]  as [number,number,number]
+// ─── Brand colours (matching Trial Balance) ──────────────────────
+const NAVY   = [7,   8,  91]  as [number,number,number]
+const DARK   = [17,  24,  39]  as [number,number,number]
+const MUTED  = [107,114, 128]  as [number,number,number]
 const BORDER = [229,231, 235]  as [number,number,number]
-const WHITE = [255,255, 255]  as [number,number,number]
+const WHITE  = [255,255, 255]  as [number,number,number]
 const ROW_ALT = [248,249, 252]  as [number,number,number]
 
 async function loadImage(url: string): Promise<string | null> {
@@ -124,7 +124,6 @@ export async function generateProfitLossPDF(data: ProfitLossPDFData): Promise<js
   doc.setTextColor(...NAVY)
   doc.text("PROFIT & LOSS", PW - MR, LOGO_Y + 9, { align: "right" })
 
-  // Single‑line date
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8)
   doc.setTextColor(...MUTED)
@@ -135,155 +134,155 @@ export async function generateProfitLossPDF(data: ProfitLossPDFData): Promise<js
   doc.setLineWidth(0.4)
   doc.line(ML, HEADER_H, PW - MR, HEADER_H)
 
-  let Y = HEADER_H + 10
-  const ROW_HEIGHT = 6
+  // ── HELPER: build a section with rows ──────────────────────────
+  const addSection = (rows: any[], title: string, items: any[], total: number, color: [number,number,number]) => {
+    if (!items || items.length === 0) return
+    rows.push([{ content: title, styles: { fontStyle: "bold", fillColor: [240,240,245], textColor: color } },
+               { content: pkr(total), styles: { fontStyle: "bold", fillColor: [240,240,245], textColor: color, halign: "right" } }])
+    items.forEach((item: any) => {
+      rows.push([{ content: `${item.code} – ${item.name}`, styles: { textColor: DARK } },
+                 { content: pkr(item.amount), styles: { textColor: DARK, halign: "right" } }])
+    })
+  }
 
   if (data.mode === "overall") {
-    // ── PORTRAIT MODE (unchanged, works) ──────────────────────────
-    const addSection = (title: string, accounts: PnLAccount[], total: number) => {
-      doc.setFont("helvetica", "bold")
-      doc.setFontSize(9)
-      doc.setTextColor(...DARK)
-      doc.text(title, ML + 2, Y + 4)
-      doc.text(pkr(total), PW - MR - 2, Y + 4, { align: "right" })
-      Y += ROW_HEIGHT
+    const rows: any[] = []
 
-      accounts.forEach(acc => {
-        doc.setFont("helvetica", "normal")
-        doc.setFontSize(8)
-        doc.setTextColor(...DARK)
-        doc.text(`${acc.code} - ${acc.name}`, ML + 5, Y + 4)
-        doc.text(pkr(acc.amount), PW - MR - 2, Y + 4, { align: "right" })
-        Y += ROW_HEIGHT
-      })
-      Y += 2
+    // Header
+    rows.push([{ content: "Account", styles: { fontStyle: "bold", fillColor: NAVY, textColor: WHITE } },
+               { content: "Amount (PKR)", styles: { fontStyle: "bold", fillColor: NAVY, textColor: WHITE, halign: "right" } }])
+
+    addSection(rows, "Income / Revenue", data.revenueAccounts || [], data.totalRevenue || 0, [16,185,129])
+
+    if (data.directExpenses && data.directExpenses.length > 0) {
+      addSection(rows, "Cost of Goods Sold / Direct Expenses", data.directExpenses, data.totalDirect || 0, [239,68,68])
+      rows.push([{ content: "Gross Profit", styles: { fontStyle: "bold", fillColor: NAVY, textColor: WHITE } },
+                 { content: pkr(data.grossProfit || 0), styles: { fontStyle: "bold", fillColor: NAVY, textColor: WHITE, halign: "right" } }])
     }
 
-    addSection("Income / Revenue", data.revenueAccounts || [], data.totalRevenue || 0)
-    if (data.directExpenses?.length) {
-      addSection("Cost of Goods Sold / Direct Expenses", data.directExpenses, data.totalDirect || 0)
+    if (data.operatingExpenses && data.operatingExpenses.length > 0) {
+      addSection(rows, "Operating Expenses", data.operatingExpenses, data.totalOpEx || 0, [245,158,11])
     }
 
-    // Gross Profit
-    doc.setFont("helvetica", "bold")
-    doc.setFontSize(10)
-    doc.setTextColor(...NAVY)
-    doc.text("Gross Profit", ML + 2, Y + 4)
-    doc.text(pkr(data.grossProfit || 0), PW - MR - 2, Y + 4, { align: "right" })
-    Y += ROW_HEIGHT + 2
-
-    if (data.operatingExpenses?.length) {
-      addSection("Operating Expenses", data.operatingExpenses, data.totalOpEx || 0)
-    }
-    if (data.otherExpenses?.length) {
-      addSection("Other Expenses", data.otherExpenses, data.totalOther || 0)
+    if (data.otherExpenses && data.otherExpenses.length > 0) {
+      addSection(rows, "Other Expenses", data.otherExpenses, data.totalOther || 0, [139,92,246])
     }
 
-    // Net Profit
-    doc.setFont("helvetica", "bold")
-    doc.setFontSize(11)
-    doc.setTextColor(...NAVY)
-    doc.text("Net Profit / Loss", ML + 2, Y + 4)
-    doc.text(pkr(data.netProfit || 0), PW - MR - 2, Y + 4, { align: "right" })
+    rows.push([{ content: "Net Profit / Loss", styles: { fontStyle: "bold", fillColor: NAVY, textColor: WHITE } },
+               { content: pkr(data.netProfit || 0), styles: { fontStyle: "bold", fillColor: NAVY, textColor: WHITE, halign: "right" } }])
+
+    autoTable(doc, {
+      startY: HEADER_H + 10,
+      margin: { left: ML, right: MR },
+      body: rows,
+      theme: "plain",
+      styles: { fontSize: 9, cellPadding: { top: 1.5, bottom: 1.5, left: 3, right: 3 }, textColor: DARK },
+      alternateRowStyles: { fillColor: ROW_ALT },
+      columnStyles: {
+        0: { cellWidth: CW * 0.65 },
+        1: { cellWidth: CW * 0.35, halign: "right" },
+      },
+    })
+
+    const finalY = (doc as any).lastAutoTable.finalY
+    doc.setDrawColor(...BORDER)
+    doc.setLineWidth(0.3)
+    doc.rect(ML, HEADER_H + 10, CW, finalY - HEADER_H - 10, "S")
   } else {
-    // ── LANDSCAPE MODE – using autoTable for perfect alignment ────
+    // ── COMPARE MODE ───────────────────────────────────────────────
     const projects = data.projects || []
     const rows = data.compareRows || []
 
-    // Build column headers
     const headers = ["Account", ...projects.map(p => p.name), "Unallocated", "Total"]
-    // Build data rows
     const tableRows: any[] = []
+    tableRows.push(headers.map(h => ({ content: h, styles: { fontStyle: "bold", fillColor: NAVY, textColor: WHITE, halign: h === "Account" ? "left" : "right" } })))
 
-    // Helper to add a section
-    const addSectionRows = (title: string, filter: (r: PnLCompareRow) => boolean) => {
-      // Section header row (bold, no background – autoTable will style it)
-      tableRows.push([title, ...projects.map(() => ""), "", ""])
-      rows.filter(filter).forEach(row => {
-        const projVals = projects.map(p => {
-          const val = row.amounts[p.id] || 0
-          return val > 0 ? pkr(val) : "–"
-        })
-        tableRows.push([
-          `${row.code} - ${row.name}`,
-          ...projVals,
-          row.unallocated > 0 ? pkr(row.unallocated) : "–",
-          pkr(row.total),
-        ])
+    const addCompareSection = (title: string, filter: (r: any) => boolean, color: [number,number,number]) => {
+      const sectionRows = rows.filter(filter)
+      if (sectionRows.length === 0) return
+      tableRows.push([{ content: title, styles: { fontStyle: "bold", fillColor: [240,240,245], textColor: color, halign: "left" } },
+                      ...projects.map(() => ""), "", ""])
+
+      sectionRows.forEach((row: any) => {
+        const projVals = projects.map(p => row.amounts[p.id] ? pkr(row.amounts[p.id]) : "–")
+        tableRows.push([{ content: `${row.code} – ${row.name}`, styles: { halign: "left" } },
+                        ...projVals.map(v => ({ content: v, styles: { halign: "right" } })),
+                        { content: row.unallocated ? pkr(row.unallocated) : "–", styles: { halign: "right" } },
+                        { content: pkr(row.total), styles: { halign: "right", fontStyle: "bold" } }])
       })
+
+      // Subtotal
+      const subTotalVals = projects.map(p => {
+        const sum = sectionRows.reduce((s: number, r: any) => s + (r.amounts[p.id] || 0), 0)
+        return sum ? pkr(sum) : "–"
+      })
+      const unallocSum = sectionRows.reduce((s: number, r: any) => s + r.unallocated, 0)
+      const totalSum = sectionRows.reduce((s: number, r: any) => s + r.total, 0)
+      tableRows.push([{ content: `Total ${title}`, styles: { fontStyle: "bold", halign: "left" } },
+                      ...subTotalVals.map(v => ({ content: v, styles: { halign: "right", fontStyle: "bold" } })),
+                      { content: unallocSum ? pkr(unallocSum) : "–", styles: { halign: "right", fontStyle: "bold" } },
+                      { content: pkr(totalSum), styles: { halign: "right", fontStyle: "bold" } }])
     }
 
-    addSectionRows("Income / Revenue", r => r.type === "Revenue")
-    addSectionRows("Cost of Goods Sold / Direct Expenses", r => r.category === "Direct Expenses")
+    // Revenue
+    addCompareSection("Income / Revenue", (r: any) => r.type === "Revenue", [16,185,129])
 
-    // Gross Profit row
-    const gpRow = ["Gross Profit"]
-    projects.forEach(p => {
+    // Direct Expenses
+    addCompareSection("Direct Expenses", (r: any) => r.category === "Direct Expenses", [239,68,68])
+
+    // Gross Profit
+    const gpVals = projects.map(p => {
       const rev = rows.filter(r => r.type === "Revenue").reduce((s, r) => s + (r.amounts[p.id] || 0), 0)
       const exp = rows.filter(r => r.category === "Direct Expenses").reduce((s, r) => s + (r.amounts[p.id] || 0), 0)
       const gp = rev - exp
-      gpRow.push(gp !== 0 ? pkr(gp) : "–")
+      return gp !== 0 ? pkr(gp) : "–"
     })
-    gpRow.push("–", pkr(data.compareGrossProfit || 0))
-    tableRows.push(gpRow)
+    tableRows.push([{ content: "Gross Profit", styles: { fontStyle: "bold", fillColor: NAVY, textColor: WHITE, halign: "left" } },
+                    ...gpVals.map(v => ({ content: v, styles: { halign: "right", fillColor: NAVY, textColor: WHITE } })),
+                    { content: "–", styles: { fillColor: NAVY, textColor: WHITE, halign: "right" } },
+                    { content: pkr(data.compareGrossProfit || 0), styles: { fillColor: NAVY, textColor: WHITE, halign: "right", fontStyle: "bold" } }])
 
-    addSectionRows("Operating Expenses", r => r.category === "Operating Expenses")
-    addSectionRows("Other Expenses", r => r.category === "Other" && r.type === "Expense")
+    // Operating Expenses
+    addCompareSection("Operating Expenses", (r: any) => r.category === "Operating Expenses", [245,158,11])
 
-    // Net Profit row
-    const netRow = ["Net Profit / Loss"]
-    projects.forEach(p => {
+    // Other Expenses
+    addCompareSection("Other Expenses", (r: any) => r.category === "Other" && r.type === "Expense", [139,92,246])
+
+    // Net Profit
+    const netVals = projects.map(p => {
       const rev = rows.filter(r => r.type === "Revenue").reduce((s, r) => s + (r.amounts[p.id] || 0), 0)
       const exp = rows.filter(r => r.type === "Expense").reduce((s, r) => s + (r.amounts[p.id] || 0), 0)
       const net = rev - exp
-      netRow.push(net !== 0 ? pkr(net) : "–")
+      return net !== 0 ? pkr(net) : "–"
     })
-    netRow.push("–", pkr(data.compareNetProfit || 0))
-    tableRows.push(netRow)
+    tableRows.push([{ content: "Net Profit / Loss", styles: { fontStyle: "bold", fillColor: NAVY, textColor: WHITE, halign: "left" } },
+                    ...netVals.map(v => ({ content: v, styles: { halign: "right", fillColor: NAVY, textColor: WHITE } })),
+                    { content: "–", styles: { fillColor: NAVY, textColor: WHITE, halign: "right" } },
+                    { content: pkr(data.compareNetProfit || 0), styles: { fillColor: NAVY, textColor: WHITE, halign: "right", fontStyle: "bold" } }])
 
-    // Generate table with autoTable
     autoTable(doc, {
-      startY: Y,
+      startY: HEADER_H + 10,
       margin: { left: ML, right: MR },
-      head: [headers],
+      head: [],
       body: tableRows,
+      theme: "plain",
       styles: {
         fontSize: 7,
-        cellPadding: { top: 2, bottom: 2, left: 2, right: 2 },
+        cellPadding: { top: 1.5, bottom: 1.5, left: 2, right: 2 },
         textColor: DARK,
         lineColor: BORDER,
         lineWidth: 0.2,
       },
-      headStyles: {
-        fillColor: NAVY,
-        textColor: WHITE,
-        fontStyle: "bold",
-        fontSize: 8,
-      },
       alternateRowStyles: { fillColor: ROW_ALT },
-      // Style section headers and totals
-      didParseCell: (hookData) => {
-        const rowData = hookData.row.raw as string[]
-        if (rowData && ["Income / Revenue", "Cost of Goods Sold / Direct Expenses", "Operating Expenses", "Other Expenses"].includes(rowData[0])) {
-          hookData.cell.styles.fontStyle = "bold"
-          hookData.cell.styles.textColor = DARK
-          hookData.cell.styles.fillColor = [240, 240, 245]
-        }
-        if (rowData && rowData[0] === "Gross Profit") {
-          hookData.cell.styles.fontStyle = "bold"
-          hookData.cell.styles.textColor = NAVY
-          hookData.cell.styles.fillColor = [230, 235, 250]
-        }
-        if (rowData && rowData[0] === "Net Profit / Loss") {
-          hookData.cell.styles.fontStyle = "bold"
-          hookData.cell.styles.textColor = WHITE
-          hookData.cell.styles.fillColor = NAVY
-        }
-      },
       columnStyles: {
-        0: { cellWidth: 60, halign: "left" },
+        0: { cellWidth: 55, halign: "left" },
       },
     })
+
+    const finalY = (doc as any).lastAutoTable.finalY
+    doc.setDrawColor(...BORDER)
+    doc.setLineWidth(0.3)
+    doc.rect(ML, HEADER_H + 10, CW, finalY - HEADER_H - 10, "S")
   }
 
   // ── FOOTER ───────────────────────────────────────────────────────
