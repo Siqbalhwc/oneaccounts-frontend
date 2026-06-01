@@ -180,10 +180,8 @@ function BalanceSheetContent() {
 
   const totalCurrentLiabilities = Math.abs(LIABILITY_CATS.reduce((s, c) => s + catTotal(c), 0))
   const totalEquityAccounts = Math.abs(accounts.filter(a => a.type === "Equity").reduce((s, a) => s + getBalance(a), 0))
-  const revenue = accounts.filter(a => a.type === "Revenue").reduce((s, a) => s + Math.abs(getBalance(a)), 0)
-  const expenses = accounts.filter(a => a.type === "Expense").reduce((s, a) => s + Math.abs(getBalance(a)), 0)
-  const netProfit = revenue - expenses
-  const totalEquity = totalEquityAccounts + Math.abs(netProfit)
+  // Equity is taken directly from equity accounts – no extra net profit addition
+  const totalEquity = totalEquityAccounts
   const totalLiabEquity = totalCurrentLiabilities + totalEquity
   const isBalanced = Math.abs(totalAssets - totalLiabEquity) < 1
 
@@ -198,7 +196,7 @@ function BalanceSheetContent() {
     router.push(`/dashboard/reports/ledger?accountId=${id}&startDate=${now.getFullYear()}-01-01&endDate=${asOfDate}`)
   }
 
-  // ── Build PDF data ──────────────────────────────────────────────
+  // ── Build PDF data (no fabricated R/E row) ──────────────────────
   const handleExportPDF = async () => {
     const buildSections = (cats: string[], showAbsolute: boolean) => {
       const sections: any[] = []
@@ -226,11 +224,13 @@ function BalanceSheetContent() {
       totalAssets,
       liabilitySections: buildSections(LIABILITY_CATS, true),
       totalLiabilities: totalCurrentLiabilities,
-      equitySections: [
-        ...(grouped["Equity"] || []).map((a: any) => ({ text: `${a.code} – ${a.name}`, amount: getBalance(a), isHeader: false, indent: 8 })),
-        { text: "Retained Earnings (Net P&L)", amount: netProfit, isHeader: false, indent: 8 },
-      ],
-      netProfit,
+      equitySections: (grouped["Equity"] || []).map((a: any) => ({
+        text: `${a.code} – ${a.name}`,
+        amount: getBalance(a),
+        isHeader: false,
+        indent: 8,
+      })),
+      netProfit: 0,   // required by the PDF type but not displayed
       totalEquity,
       totalLiabEquity,
     }
@@ -277,7 +277,6 @@ function BalanceSheetContent() {
     for (const a of eqItems) {
       sheetData.push([`  ${a.code} - ${a.name}`, "", `PKR ${fmtPos(getBalance(a))}`])
     }
-    sheetData.push(["  Retained Earnings", "", `PKR ${fmtPos(netProfit)}`])
     sheetData.push(["Total Equity", "", `PKR ${fmtPos(totalEquity)}`])
     sheetData.push(["", "", ""])
     sheetData.push(["TOTAL LIABILITIES + EQUITY", "", `PKR ${fmtPos(totalLiabEquity)}`])
@@ -287,7 +286,7 @@ function BalanceSheetContent() {
     XLSX.writeFile(wb, `Balance_Sheet_${asOfDate}.xlsx`)
   }
 
-  // ── Build rows for UI (same as before) ──────────────────────────
+  // ── Build rows for UI ────────────────────────────────────────────
   const currentAssetRows: React.ReactElement[] = [
     <h3 key="h3ca" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>Current Assets</h3>
   ]
@@ -359,6 +358,7 @@ function BalanceSheetContent() {
     })
   })
 
+  // Equity section – only real accounts, no fabricated R/E row
   const equityRows: React.ReactElement[] = [
     <h3 key="h3eq" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>Equity</h3>
   ]
@@ -367,15 +367,6 @@ function BalanceSheetContent() {
       <AccountRow key={a.id} account={a} showAbsolute={true} getBalance={getBalance} onClick={openLedger} />
     )
   })
-  equityRows.push(
-    <div key="re" className="acc-row" style={{ cursor: "default" }}>
-      <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 50 }}>R/E</span>
-      <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 8 }}>Retained Earnings (Net P&amp;L)</span>
-      <span style={{ fontSize: 12, color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
-        PKR {fmtPos(netProfit)}
-      </span>
-    </div>
-  )
 
   const fixedVsEquitySection = buildSection(
     fixedAssetRows, equityRows,
@@ -583,7 +574,7 @@ function BalanceSheetContent() {
         <div className="kpi-card">
           <div className="kpi-label">Total Equity</div>
           <div className="kpi-value" style={{ color: "#A78BFA" }}>PKR {fmtPos(totalEquity)}</div>
-          <div className="kpi-sub">Incl. retained earnings</div>
+          <div className="kpi-sub">All equity accounts</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Balanced?</div>
