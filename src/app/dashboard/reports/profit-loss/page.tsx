@@ -18,7 +18,6 @@ function getCategory(account: any): string {
   return "Other"
 }
 
-// ── Consistent 2‑decimal formatting ──────────────────────────────
 function fmt(n: number) { return Math.abs(n).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
 function fmtOrDash(n: number) { return n === 0 ? "–" : fmt(n) }
 
@@ -54,10 +53,14 @@ export default function ProfitLossPage() {
   const reportTextColor = isOneAccounts ? "#1E293B" : "var(--text)"
   const reportMutedColor = isOneAccounts ? "#64748B" : "var(--text-muted)"
 
+  // ── Fetch accounts (overall or filtered by project) ──
   const fetchAccounts = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/profit-loss?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`)
+      let url = `/api/profit-loss?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`
+      if (selectedProjectId) url += `&projectId=${encodeURIComponent(selectedProjectId)}`
+
+      const res = await fetch(url)
       if (!res.ok) throw new Error(await res.text())
       const json = await res.json()
       const mapped = (json || []).map((row: any) => ({
@@ -84,7 +87,7 @@ export default function ProfitLossPage() {
   useEffect(() => {
     fetchAccounts()
     fetchProjects()
-  }, [startDate, endDate])
+  }, [startDate, endDate, selectedProjectId])
 
   const revenueAccounts = accounts.filter(a => a.type === "Revenue")
   const expenseAccounts = accounts.filter(a => a.type === "Expense")
@@ -324,7 +327,6 @@ export default function ProfitLossPage() {
     </div>
   )
 
-  // Helper functions for compare view
   const projSubtotal = (filter: (r: any) => boolean, pid: string) =>
     compareRows.filter(filter).reduce((s, r) => s + (r.projectAmounts[pid] || 0), 0)
   const projUnallocatedSubtotal = (filter: (r: any) => boolean) =>
@@ -377,8 +379,7 @@ export default function ProfitLossPage() {
         .compare-table th.col-account { text-align: left; }
         .compare-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; text-align: right; white-space: nowrap; }
         .compare-table td.td-account { text-align: left; font-weight: 500; white-space: nowrap; }
-.compare-table tr.section-head td { font-weight: 700; font-size: 11px; text-transform: uppercase; padding-top: 18px; padding-bottom: 6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
-        .compare-table tr.section-head td { font-weight: 700; font-size: 11px; text-transform: uppercase; padding-top: 18px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+        .compare-table tr.section-head td { font-weight: 700; font-size: 11px; text-transform: uppercase; padding-top: 18px; padding-bottom: 6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
         .compare-table tr.subtotal td { font-weight: 700; font-size: 13px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
         .compare-table tr.bold td { font-weight: 700; font-size: 13px; border-top: 2px solid var(--border-strong); border-bottom: 2px solid var(--border-strong); }
 
@@ -391,6 +392,10 @@ export default function ProfitLossPage() {
       {/* Report Header */}
       <div className="report-header">
         <div className="report-header-left">
+          {/* ⬅ Back button */}
+          <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}>
+            <ArrowLeft size={16} />
+          </button>
           {logoUrl ? (
             <img src={logoUrl} alt={companyName} className="report-logo" width={34} height={34} />
           ) : (
@@ -409,7 +414,7 @@ export default function ProfitLossPage() {
         </div>
       </div>
 
-      {/* KPI Cards – only 3 */}
+      {/* KPI Cards */}
       <div className="kpi-row">
         <div className="kpi-card">
           <div className="kpi-label">Total Income</div>
@@ -433,7 +438,8 @@ export default function ProfitLossPage() {
         <input type="date" className="date-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
         <span style={{ color: "var(--text-muted)", fontSize: 12 }}>to</span>
         <input type="date" className="date-input" value={endDate} onChange={e => setEndDate(e.target.value)} />
-        <select className="project-select" style={{ width: 160 }} value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
+        {/* Project filter – now affects overall view */}
+        <select className="project-select" style={{ width: 180 }} value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
           <option value="">All Projects</option>
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
@@ -550,7 +556,7 @@ export default function ProfitLossPage() {
           </div>
         </>
       ) : (
-        /* ── PROJECT COMPARISON VIEW ── */
+        /* ── PROJECT COMPARISON VIEW (unchanged) ── */
         <div className="compare-wrap">
           {compareLoading ? (
             <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading project comparison…</div>
