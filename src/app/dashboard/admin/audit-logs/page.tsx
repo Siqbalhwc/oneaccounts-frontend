@@ -3,12 +3,37 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 
+async function resolveUserEmails(userIds: string[]): Promise<Record<string, string>> {
+  const unique = [...new Set(userIds.filter(id => id && id.includes("-")))]
+  const result: Record<string, string> = {}
+  await Promise.all(
+    unique.map(async (id) => {
+      try {
+        const res = await fetch("/api/admin/user-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: id }),
+        })
+        const data = await res.json()
+        result[id] = data.email || id
+      } catch {
+        result[id] = id
+      }
+    })
+  )
+  return result
+}
+
 export default function AuditLogsPage() {
-  const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
   const [tab, setTab] = useState<"activity" | "login" | "data">("data")
   const [activityLogs, setActivityLogs] = useState<any[]>([])
   const [loginLogs, setLoginLogs] = useState<any[]>([])
   const [dataLogs, setDataLogs] = useState<any[]>([])
+  const [userEmails, setUserEmails] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
@@ -39,7 +64,13 @@ export default function AuditLogsPage() {
           .order("changed_at", { ascending: false })
           .limit(200)
         if (err) throw err
-        setDataLogs(data || [])
+        const logs = data || []
+        setDataLogs(logs)
+
+        // Resolve user emails for the "Who" column
+        const ids = logs.map((l: any) => l.changed_by).filter(Boolean)
+        const emails = await resolveUserEmails(ids)
+        setUserEmails(emails)
       }
     } catch (e: any) {
       setError(e.message)
@@ -53,13 +84,11 @@ export default function AuditLogsPage() {
 
   // Helper: extract a friendly summary from the new_data JSON
   const summarize = (log: any) => {
-    // Pick the correct column (old_data / old_values)
     let newObj: any = log.new_data || log.new_values || {}
     if (typeof newObj === "string") {
       try { newObj = JSON.parse(newObj) } catch {}
     }
     if (!newObj || Object.keys(newObj).length === 0) return "—"
-    // Show up to 4 key: value pills
     const entries = Object.entries(newObj).filter(
       ([k]) => !["id","company_id","created_at","updated_at","deleted_at","changed_at","changed_by"].includes(k)
     )
@@ -157,11 +186,12 @@ export default function AuditLogsPage() {
           ) : (
             dataLogs.map(log => {
               const summary = summarize(log)
+              const who = userEmails[log.changed_by] || log.changed_by || "—"
               return (
                 <div key={log.id} className="log-row data-row">
                   <span style={{ fontWeight: 600 }}>{log.table_name}</span>
                   <span className={`badge-action badge-${log.action?.toLowerCase() || "update"}`}>{log.action}</span>
-                  <span style={{ fontSize: 11, color: "#94A3B8" }}>{log.changed_by || "—"}</span>
+                  <span style={{ fontSize: 11, color: "#E2E8F0" }}>{who}</span>
                   <span style={{ fontSize: 11, color: "#E2E8F0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={summary}>{summary}</span>
                   <span style={{ color: "#94A3B8" }}>{new Date(log.changed_at).toLocaleString()}</span>
                 </div>
