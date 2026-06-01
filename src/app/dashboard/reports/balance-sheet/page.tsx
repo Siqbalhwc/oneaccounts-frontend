@@ -21,7 +21,7 @@ function getCategory(account: any): string {
   if (num >= 1500 && num <= 1599) return "Vehicles"
   if (num >= 2000 && num <= 2099) return "Accounts Payable"
   if (num >= 2100 && num <= 2199) return "Other Current Liabilities"
-  if (num >= 3000 && num <= 3099) return "Equity"
+  if (num >= 3000 && num <= 3999) return "Equity"
   return "Other"
 }
 
@@ -33,12 +33,10 @@ const CURRENT_ASSET_CATS = ["Cash & Bank", "Accounts Receivable", "Inventory", "
 const FIXED_ASSET_CATS = ["Fixed Assets", "Vehicles"]
 const LIABILITY_CATS = ["Accounts Payable", "Other Current Liabilities"]
 
-// ── Placeholder row component ─────────────────────────────────────
 function PlaceholderRow() {
   return <div style={{ height: 40, opacity: 0, pointerEvents: "none" }}>&nbsp;</div>
 }
 
-// ── Account row ────────────────────────────────────────────────────
 function AccountRow({ account, showAbsolute, getBalance, onClick }: {
   account: any
   showAbsolute: boolean
@@ -58,7 +56,6 @@ function AccountRow({ account, showAbsolute, getBalance, onClick }: {
   )
 }
 
-// ── Category header ────────────────────────────────────────────────
 function CategoryHeader({ cat, total, showAbsolute, onClick }: {
   cat: string
   total: number
@@ -76,7 +73,6 @@ function CategoryHeader({ cat, total, showAbsolute, onClick }: {
   )
 }
 
-// ── Subtotal band ──────────────────────────────────────────────────
 function SubtotalBand({ label, value, showAbsolute }: { label: string; value: number; showAbsolute: boolean }) {
   const rounded = Math.round(value)
   return (
@@ -87,7 +83,6 @@ function SubtotalBand({ label, value, showAbsolute }: { label: string; value: nu
   )
 }
 
-// ── Total band ─────────────────────────────────────────────────────
 function TotalBand({ label, value, showAbsolute }: { label: string; value: number; showAbsolute: boolean }) {
   const rounded = Math.round(value)
   return (
@@ -98,7 +93,6 @@ function TotalBand({ label, value, showAbsolute }: { label: string; value: numbe
   )
 }
 
-// ── Section builder ────────────────────────────────────────────────
 function buildSection(
   leftMainRows: React.ReactElement[],
   rightMainRows: React.ReactElement[],
@@ -174,15 +168,35 @@ function BalanceSheetContent() {
 
   const catTotal = (cat: string) => (grouped[cat] || []).reduce((s, a) => s + getBalance(a), 0)
 
+  // ── Include ALL asset accounts for totals ─────────────────────
   const totalCurrentAssets = CURRENT_ASSET_CATS.reduce((s, c) => s + catTotal(c), 0)
   const totalFixedAssets = FIXED_ASSET_CATS.reduce((s, c) => s + catTotal(c), 0)
-  const totalAssets = totalCurrentAssets + totalFixedAssets
+  // Catch‑all for asset accounts not in the above categories (e.g. Plant & Machinery)
+  const otherAssetAccounts = accounts.filter(a => a.type === "Asset" && ![...CURRENT_ASSET_CATS, ...FIXED_ASSET_CATS].includes(getCategory(a)))
+  const totalOtherAssets = otherAssetAccounts.reduce((s, a) => s + getBalance(a), 0)
+  const totalAssets = totalCurrentAssets + totalFixedAssets + totalOtherAssets
 
+  // Liabilities – include all liability accounts
   const totalCurrentLiabilities = Math.abs(LIABILITY_CATS.reduce((s, c) => s + catTotal(c), 0))
-  const totalEquityAccounts = Math.abs(accounts.filter(a => a.type === "Equity").reduce((s, a) => s + getBalance(a), 0))
-  // Equity is taken directly from equity accounts – no extra net profit addition
-  const totalEquity = totalEquityAccounts
-  const totalLiabEquity = totalCurrentLiabilities + totalEquity
+  const otherLiabilityAccounts = accounts.filter(a => a.type === "Liability" && !LIABILITY_CATS.includes(getCategory(a)))
+  const totalOtherLiabilities = Math.abs(otherLiabilityAccounts.reduce((s, a) => s + getBalance(a), 0))
+  const totalLiabilities = totalCurrentLiabilities + totalOtherLiabilities
+
+  // ── Equity = sum of equity accounts EXCEPT Retained Earnings (3100) + Net Profit from P&L ──
+  const equityAccounts = accounts.filter(a => a.type === "Equity")
+  const retainedEarningsAccount = equityAccounts.find(a => a.code === "3100")
+  const retainedEarningsBalance = retainedEarningsAccount ? Math.abs(getBalance(retainedEarningsAccount)) : 0
+  const otherEquity = equityAccounts.filter(a => a.code !== "3100")
+  const totalOtherEquity = Math.abs(otherEquity.reduce((s, a) => s + getBalance(a), 0))
+
+  const revenue = accounts.filter(a => a.type === "Revenue").reduce((s, a) => s + Math.abs(getBalance(a)), 0)
+  const expenses = accounts.filter(a => a.type === "Expense").reduce((s, a) => s + Math.abs(getBalance(a)), 0)
+  const netProfit = revenue - expenses
+
+  // Retained Earnings displayed = net profit from P&L
+  // Total Equity = other equity accounts + net profit
+  const totalEquity = totalOtherEquity + Math.abs(netProfit)
+  const totalLiabEquity = totalLiabilities + totalEquity
   const isBalanced = Math.abs(totalAssets - totalLiabEquity) < 1
 
   const navigateToTrialBalance = (type: string, category?: string) => {
@@ -196,7 +210,7 @@ function BalanceSheetContent() {
     router.push(`/dashboard/reports/ledger?accountId=${id}&startDate=${now.getFullYear()}-01-01&endDate=${asOfDate}`)
   }
 
-  // ── Build PDF data (no fabricated R/E row) ──────────────────────
+  // ── PDF data (unchanged from previous fix, includes netProfit) ──
   const handleExportPDF = async () => {
     const buildSections = (cats: string[], showAbsolute: boolean) => {
       const sections: any[] = []
@@ -223,14 +237,12 @@ function BalanceSheetContent() {
       totalFixedAssets,
       totalAssets,
       liabilitySections: buildSections(LIABILITY_CATS, true),
-      totalLiabilities: totalCurrentLiabilities,
-      equitySections: (grouped["Equity"] || []).map((a: any) => ({
-        text: `${a.code} – ${a.name}`,
-        amount: getBalance(a),
-        isHeader: false,
-        indent: 8,
-      })),
-      netProfit: 0,   // required by the PDF type but not displayed
+      totalLiabilities,
+      equitySections: [
+        ...otherEquity.map(a => ({ text: `${a.code} – ${a.name}`, amount: getBalance(a), isHeader: false, indent: 8 })),
+        { text: "Retained Earnings (Net P&L)", amount: netProfit, isHeader: false, indent: 8 },
+      ],
+      netProfit,
       totalEquity,
       totalLiabEquity,
     }
@@ -239,7 +251,7 @@ function BalanceSheetContent() {
     doc.save(`Balance_Sheet_${asOfDate}.pdf`)
   }
 
-  // Excel export (unchanged)
+  // Excel export (adjusted for new totals)
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new()
     const sheetData: any[][] = [
@@ -261,6 +273,12 @@ function BalanceSheetContent() {
       }
     }
     addSection("Current Assets", CURRENT_ASSET_CATS, false)
+    if (otherAssetAccounts.length > 0) {
+      sheetData.push(["Other Assets", "", ""])
+      otherAssetAccounts.forEach(a => {
+        sheetData.push([`  ${a.code} - ${a.name}`, "", `${sign(getBalance(a))}PKR ${fmt(getBalance(a))}`])
+      })
+    }
     sheetData.push(["Total Current Assets", "", `${sign(totalCurrentAssets)}PKR ${fmt(totalCurrentAssets)}`])
     sheetData.push(["", "", ""])
     addSection("Fixed Assets", FIXED_ASSET_CATS, false)
@@ -270,16 +288,23 @@ function BalanceSheetContent() {
     sheetData.push(["", "", ""])
     sheetData.push(["LIABILITIES & EQUITY", "", ""])
     addSection("Current Liabilities", LIABILITY_CATS, true)
-    sheetData.push(["Total Current Liabilities", "", `PKR ${fmtPos(totalCurrentLiabilities)}`])
+    if (otherLiabilityAccounts.length > 0) {
+      sheetData.push(["Other Liabilities", "", ""])
+      otherLiabilityAccounts.forEach(a => {
+        sheetData.push([`  ${a.code} - ${a.name}`, "", `PKR ${fmtPos(getBalance(a))}`])
+      })
+    }
+    sheetData.push(["Total Liabilities", "", `PKR ${fmtPos(totalLiabilities)}`])
     sheetData.push(["", "", ""])
     sheetData.push(["Equity", "", ""])
-    const eqItems = grouped["Equity"] || []
-    for (const a of eqItems) {
+    otherEquity.forEach(a => {
       sheetData.push([`  ${a.code} - ${a.name}`, "", `PKR ${fmtPos(getBalance(a))}`])
-    }
+    })
+    sheetData.push(["  Retained Earnings (Net P&L)", "", `PKR ${fmtPos(netProfit)}`])
     sheetData.push(["Total Equity", "", `PKR ${fmtPos(totalEquity)}`])
     sheetData.push(["", "", ""])
     sheetData.push(["TOTAL LIABILITIES + EQUITY", "", `PKR ${fmtPos(totalLiabEquity)}`])
+
     const ws = XLSX.utils.aoa_to_sheet(sheetData)
     ws["!cols"] = [{ wch: 40 }, { wch: 5 }, { wch: 20 }]
     XLSX.utils.book_append_sheet(wb, ws, "Balance Sheet")
@@ -303,6 +328,17 @@ function BalanceSheetContent() {
       )
     })
   })
+  // Include other assets in the UI (if any)
+  if (otherAssetAccounts.length > 0) {
+    currentAssetRows.push(
+      <CategoryHeader key="other-assets" cat="Other Assets" total={totalOtherAssets} showAbsolute={false} onClick={() => navigateToTrialBalance("Asset")} />
+    )
+    otherAssetAccounts.forEach(a => {
+      currentAssetRows.push(
+        <AccountRow key={a.id} account={a} showAbsolute={false} getBalance={getBalance} onClick={openLedger} />
+      )
+    })
+  }
 
   const currentLiabilityRows: React.ReactElement[] = [
     <h3 key="h3cl" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>Current Liabilities</h3>
@@ -320,6 +356,16 @@ function BalanceSheetContent() {
       )
     })
   })
+  if (otherLiabilityAccounts.length > 0) {
+    currentLiabilityRows.push(
+      <CategoryHeader key="other-liab" cat="Other Liabilities" total={totalOtherLiabilities} showAbsolute={true} onClick={() => navigateToTrialBalance("Liability")} />
+    )
+    otherLiabilityAccounts.forEach(a => {
+      currentLiabilityRows.push(
+        <AccountRow key={a.id} account={a} showAbsolute={true} getBalance={getBalance} onClick={openLedger} />
+      )
+    })
+  }
 
   const otherAssetIdx = currentAssetRows.findIndex(el => el.type === CategoryHeader && (el.props as any)?.cat === "Other Current Assets")
   const otherLiabilityIdx = currentLiabilityRows.findIndex(el => el.type === CategoryHeader && (el.props as any)?.cat === "Other Current Liabilities")
@@ -358,15 +404,24 @@ function BalanceSheetContent() {
     })
   })
 
-  // Equity section – only real accounts, no fabricated R/E row
+  // Equity section – other equity accounts + Retained Earnings (Net P&L)
   const equityRows: React.ReactElement[] = [
     <h3 key="h3eq" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>Equity</h3>
   ]
-  ;(grouped["Equity"] || []).forEach(a => {
+  otherEquity.forEach(a => {
     equityRows.push(
       <AccountRow key={a.id} account={a} showAbsolute={true} getBalance={getBalance} onClick={openLedger} />
     )
   })
+  equityRows.push(
+    <div key="re" className="acc-row" style={{ cursor: "default" }}>
+      <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 50 }}>R/E</span>
+      <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 8 }}>Retained Earnings (Net P&amp;L)</span>
+      <span style={{ fontSize: 12, color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
+        PKR {fmtPos(netProfit)}
+      </span>
+    </div>
+  )
 
   const fixedVsEquitySection = buildSection(
     fixedAssetRows, equityRows,
@@ -564,17 +619,17 @@ function BalanceSheetContent() {
         <div className="kpi-card">
           <div className="kpi-label">Total Assets</div>
           <div className="kpi-value" style={{ color: "#3B82F6" }}>PKR {fmt(totalAssets)}</div>
-          <div className="kpi-sub">Current + Fixed</div>
+          <div className="kpi-sub">Current + Fixed + Other</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Total Liabilities</div>
-          <div className="kpi-value" style={{ color: "#EF4444" }}>PKR {fmtPos(totalCurrentLiabilities)}</div>
-          <div className="kpi-sub">AP + Other</div>
+          <div className="kpi-value" style={{ color: "#EF4444" }}>PKR {fmtPos(totalLiabilities)}</div>
+          <div className="kpi-sub">Current + Other</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Total Equity</div>
           <div className="kpi-value" style={{ color: "#A78BFA" }}>PKR {fmtPos(totalEquity)}</div>
-          <div className="kpi-sub">All equity accounts</div>
+          <div className="kpi-sub">Incl. Net P&L</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Balanced?</div>
