@@ -139,14 +139,6 @@ export async function generateBalanceSheetPDF(data: BalanceSheetPDFData): Promis
   Y += COL_HDR_H + 1
 
   // ── Draw helpers ──────────────────────────────────────────────────
-  /**
-   * Draws a section group header + its rows, returns new Y.
-   * x        = left edge of column
-   * label    = section header text  (e.g. "Cash & Bank")
-   * amount   = section total shown on the header row
-   * rows     = child rows (accounts)
-   * startY   = top Y to start drawing
-   */
   const drawSection = (
     x: number,
     label: string,
@@ -186,9 +178,6 @@ export async function generateBalanceSheetPDF(data: BalanceSheetPDFData): Promis
     return cy
   }
 
-  /**
-   * Draws a subtotal bar (e.g. "Total Current Assets") and returns new Y.
-   */
   const drawSubtotal = (
     x: number,
     label: string,
@@ -213,10 +202,8 @@ export async function generateBalanceSheetPDF(data: BalanceSheetPDFData): Promis
   }
 
   // ── LEFT COLUMN — Assets ─────────────────────────────────────────
-  // Collect sections so we can alternate shading
   interface ColSection { label: string; amount: number; rows: SectionRow[] }
 
-  // Group currentAssetSections into sub-sections by isHeader flag
   const groupSections = (flatRows: SectionRow[]): ColSection[] => {
     const groups: ColSection[] = []
     let current: ColSection | null = null
