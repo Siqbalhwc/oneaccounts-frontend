@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, ExternalLink } from "lucide-react"
 import RoleGuard from "@/components/RoleGuard"
 import RecordHistory from "@/components/RecordHistory"
 
@@ -12,6 +12,8 @@ interface JournalLine {
   account_id: number
   debit: number
   credit: number
+  source_type?: string
+  source_id?: number
   account?: { code: string; name: string }
 }
 
@@ -21,6 +23,28 @@ interface Entry {
   date: string
   description: string
   lines?: JournalLine[]
+}
+
+// Map source_type to a route
+function getSourceLink(sourceType: string, sourceId: number): string {
+  switch (sourceType) {
+    case "sale_invoice":
+    case "invoice":
+      return `/dashboard/invoices/${sourceId}`
+    case "purchase_bill":
+    case "bill":
+      return `/dashboard/bills/${sourceId}`
+    case "receipt":
+      return `/dashboard/receipts/${sourceId}`
+    case "payment":
+      return `/dashboard/payments/${sourceId}`
+    case "bank_transfer":
+      return `/dashboard/banking/bank-transfers`  // no detail page; list with highlight maybe
+    case "inventory_adjustment":
+      return `/dashboard/inventory/adjustments`   // list page
+    default:
+      return ""
+  }
 }
 
 export default function JournalDetailPage() {
@@ -43,33 +67,35 @@ export default function JournalDetailPage() {
       .select("*")
       .eq("id", entryId)
       .single()
-      .then(
-        ({ data }) => {
-          if (data) {
-            setEntry(data)
-            supabase
-              .from("journal_lines")
-              .select("*, account:accounts(code, name)")
-              .eq("entry_id", data.id)
-              .then(({ data: lines }) => {
-                setEntry(prev => prev ? { ...prev, lines: lines || [] } : null)
-                setLoading(false)
-              })
-          } else {
-            setError("Journal entry not found")
-            setLoading(false)
-          }
-        },
-        () => {
-          setError("Failed to load entry")
+      .then(({ data }) => {
+        if (data) {
+          setEntry(data)
+          supabase
+            .from("journal_lines")
+            .select("*, account:accounts(code, name), source_type, source_id")
+            .eq("entry_id", data.id)
+            .then(({ data: lines }) => {
+              setEntry(prev => prev ? { ...prev, lines: lines || [] } : null)
+              setLoading(false)
+            })
+        } else {
+          setError("Journal entry not found")
           setLoading(false)
         }
-      )
+      })
+      .catch(() => {
+        setError("Failed to load entry")
+        setLoading(false)
+      })
   }, [entryId])
 
   if (loading) return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
   if (error) return <div style={{ padding: 24, textAlign: "center" }}><h2>Error</h2><p>{error}</p></div>
   if (!entry) return <div style={{ padding: 24, textAlign: "center" }}>Entry not found</div>
+
+  // Find the first line that has a source
+  const sourceLine = entry.lines?.find(l => l.source_type && l.source_id)
+  const sourceLink = sourceLine ? getSourceLink(sourceLine.source_type!, sourceLine.source_id!) : ""
 
   const totalDebit = entry.lines?.reduce((s, l) => s + l.debit, 0) || 0
   const totalCredit = entry.lines?.reduce((s, l) => s + l.credit, 0) || 0
@@ -86,6 +112,13 @@ export default function JournalDetailPage() {
           .jd-table th { text-align: left; padding: 8px 12px; border-bottom: 1px solid #E2E8F0; background: #F8FAFC; font-weight: 600; color: #475569; }
           .jd-table td { padding: 8px 12px; border-bottom: 1px solid #F1F5F9; }
           .jd-total { font-weight: 700; }
+          .btn-outline {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 6px 12px; border-radius: 6px; border: 1px solid #D1D5DB;
+            background: white; color: #1F2937; font-size: 12px; font-weight: 600;
+            cursor: pointer; text-decoration: none;
+          }
+          .btn-outline:hover { background: #F3F4F6; }
         `}</style>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
@@ -99,6 +132,13 @@ export default function JournalDetailPage() {
           <div className="jd-row"><span className="jd-label">Entry No</span><span className="jd-value">{entry.entry_no}</span></div>
           <div className="jd-row"><span className="jd-label">Date</span><span className="jd-value">{new Date(entry.date).toLocaleDateString()}</span></div>
           <div className="jd-row"><span className="jd-label">Description</span><span className="jd-value">{entry.description || "—"}</span></div>
+          {sourceLink && (
+            <div style={{ marginTop: 10 }}>
+              <a href={sourceLink} target="_blank" rel="noopener noreferrer" className="btn-outline">
+                <ExternalLink size={14} /> View Source Document
+              </a>
+            </div>
+          )}
         </div>
 
         <div className="jd-card">
