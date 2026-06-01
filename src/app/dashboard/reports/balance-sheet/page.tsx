@@ -260,7 +260,7 @@ function BalanceSheetContent() {
     }))
 
     // Retained earnings – always positive for display
-    const retainedAmount = Math.abs(netProfit)
+    const retainedAmount = netProfit
     equityItems.push({
       text: retainedEarningsAccount
         ? `${retainedEarningsAccount.code} – ${retainedEarningsAccount.name}`
