@@ -7,6 +7,7 @@ import PremiumGuard from "@/components/PremiumGuard"
 import * as XLSX from "xlsx"
 import { generateBalanceSheetPDF } from "@/lib/pdf/balanceSheetPDF"
 import { useCompany } from "@/contexts/CompanyContext"
+import { useTheme } from "@/contexts/ThemeContext"
 
 // ── helpers ────────────────────────────────────────────────────────
 function getCategory(account: any): string {
@@ -131,6 +132,16 @@ function BalanceSheetContent() {
   const asOfDate = now.toISOString().split("T")[0]
 
   const { companyName, companyTagline, logoUrl } = useCompany()
+  const { theme: themeMode } = useTheme()
+  const isDarkTheme = themeMode === "dark"
+  const isOneAccounts = themeMode === "oneaccounts"
+  const isLightStyle = themeMode === "light" || isOneAccounts
+  const headerBg = isOneAccounts ? "#07085B" : (isDarkTheme ? "#000000" : "#07085B")
+  const rowLight = isLightStyle ? "#FFFFFF" : "#1E293B"
+  const rowDark  = isLightStyle ? "#F8F9FC" : "#111827"
+  const textMuted = isLightStyle ? "#64748B" : "#94A3B8"
+  const reportTextColor = isOneAccounts ? "#1E293B" : "var(--text)"
+  const reportMutedColor = isOneAccounts ? "#64748B" : "var(--text-muted)"
 
   const fetchBalanceSheet = async () => {
     setLoading(true)
@@ -169,20 +180,17 @@ function BalanceSheetContent() {
 
   const catTotal = (cat: string) => (grouped[cat] || []).reduce((s, a) => s + getBalance(a), 0)
 
-  // ── Assets ─────────────────────────────────────────────────────
   const totalCurrentAssets = CURRENT_ASSET_CATS.reduce((s, c) => s + catTotal(c), 0)
   const totalFixedAssets = FIXED_ASSET_CATS.reduce((s, c) => s + catTotal(c), 0)
   const otherAssetAccounts = accounts.filter(a => a.type === "Asset" && ![...CURRENT_ASSET_CATS, ...FIXED_ASSET_CATS].includes(getCategory(a)))
   const totalOtherAssets = otherAssetAccounts.reduce((s, a) => s + getBalance(a), 0)
   const totalAssets = totalCurrentAssets + totalFixedAssets + totalOtherAssets
 
-  // ── Liabilities ────────────────────────────────────────────────
   const totalCurrentLiabilities = Math.abs(LIABILITY_CATS.reduce((s, c) => s + catTotal(c), 0))
   const otherLiabilityAccounts = accounts.filter(a => a.type === "Liability" && !LIABILITY_CATS.includes(getCategory(a)))
   const totalOtherLiabilities = Math.abs(otherLiabilityAccounts.reduce((s, a) => s + getBalance(a), 0))
   const totalLiabilities = totalCurrentLiabilities + totalOtherLiabilities
 
-  // ── Equity & Net Profit ───────────────────────────────────────
   const equityAccounts = accounts.filter(a => a.type === "Equity")
   const retainedEarningsAccount = equityAccounts.find(a => a.code === "3100")
   const otherEquityAccounts = equityAccounts.filter(a => a.code !== "3100")
@@ -191,8 +199,7 @@ function BalanceSheetContent() {
   const revenue = accounts.filter(a => a.type === "Revenue").reduce((s, a) => s + Math.abs(getBalance(a)), 0)
   const expenses = accounts.filter(a => a.type === "Expense").reduce((s, a) => s + Math.abs(getBalance(a)), 0)
   const netProfit = revenue - expenses
-  // Total Equity = other equity accounts + net profit (positive profit adds to equity, loss subtracts)
-  const totalEquity = totalOtherEquity + netProfit    // keep signed
+  const totalEquity = totalOtherEquity + netProfit
   const totalEquityAbs = Math.abs(totalEquity)
   const totalLiabEquity = totalLiabilities + totalEquityAbs
   const isBalanced = Math.abs(totalAssets - totalLiabEquity) < 1
@@ -212,7 +219,6 @@ function BalanceSheetContent() {
     router.push(`/dashboard/reports/profit-loss?startDate=${now.getFullYear()}-01-01&endDate=${asOfDate}`)
   }
 
-  // ── PDF export ─────────────────────────────────────────────────
   const handleExportPDF = async () => {
     const buildSections = (cats: string[], showAbsolute: boolean) => {
       const sections: any[] = []
@@ -253,10 +259,66 @@ function BalanceSheetContent() {
     doc.save(`Balance_Sheet_${asOfDate}.pdf`)
   }
 
-  // Excel export (unchanged)
-  const handleExportExcel = () => { /* ... same as before ... */ }
+  const handleExportExcel = () => {
+    const wb = XLSX.utils.book_new()
+    const sheetData: any[][] = [
+      ["Balance Sheet", "", ""],
+      ["As at", asOfDate, ""],
+      ["", "", ""],
+      ["ASSETS", "", ""],
+    ]
+    const addSection = (title: string, cats: string[], showAbsolute: boolean) => {
+      sheetData.push([title, "", ""])
+      for (const cat of cats) {
+        const items = grouped[cat] || []
+        if (items.length === 0) continue
+        sheetData.push([`  ${cat}`, "", `PKR ${fmt(catTotal(cat))}`])
+        for (const a of items) {
+          const bal = getBalance(a)
+          sheetData.push([`    ${a.code} - ${a.name}`, "", `${sign(bal)}PKR ${fmt(bal)}`])
+        }
+      }
+    }
+    addSection("Current Assets", CURRENT_ASSET_CATS, false)
+    if (otherAssetAccounts.length > 0) {
+      sheetData.push(["Other Assets", "", ""])
+      otherAssetAccounts.forEach(a => {
+        sheetData.push([`  ${a.code} - ${a.name}`, "", `${sign(getBalance(a))}PKR ${fmt(getBalance(a))}`])
+      })
+    }
+    sheetData.push(["Total Current Assets", "", `${sign(totalCurrentAssets)}PKR ${fmt(totalCurrentAssets)}`])
+    sheetData.push(["", "", ""])
+    addSection("Fixed Assets", FIXED_ASSET_CATS, false)
+    sheetData.push(["Total Fixed Assets", "", `${sign(totalFixedAssets)}PKR ${fmt(totalFixedAssets)}`])
+    sheetData.push(["", "", ""])
+    sheetData.push(["TOTAL ASSETS", "", `${sign(totalAssets)}PKR ${fmt(totalAssets)}`])
+    sheetData.push(["", "", ""])
+    sheetData.push(["LIABILITIES & EQUITY", "", ""])
+    addSection("Current Liabilities", LIABILITY_CATS, true)
+    if (otherLiabilityAccounts.length > 0) {
+      sheetData.push(["Other Liabilities", "", ""])
+      otherLiabilityAccounts.forEach(a => {
+        sheetData.push([`  ${a.code} - ${a.name}`, "", `PKR ${fmtPos(getBalance(a))}`])
+      })
+    }
+    sheetData.push(["Total Liabilities", "", `PKR ${fmtPos(totalLiabilities)}`])
+    sheetData.push(["", "", ""])
+    sheetData.push(["Equity", "", ""])
+    otherEquityAccounts.forEach(a => {
+      sheetData.push([`  ${a.code} - ${a.name}`, "", `PKR ${fmtPos(getBalance(a))}`])
+    })
+    sheetData.push([retainedEarningsAccount ? `  ${retainedEarningsAccount.code} - ${retainedEarningsAccount.name}` : "  Retained Earnings (Net P&L)", "", `PKR ${fmtPos(netProfit)}`])
+    sheetData.push(["Total Equity", "", `PKR ${fmtPos(totalEquityAbs)}`])
+    sheetData.push(["", "", ""])
+    sheetData.push(["TOTAL LIABILITIES + EQUITY", "", `PKR ${fmtPos(totalLiabEquity)}`])
 
-  // ── Build rows for UI with full drill‑down ─────────────────────
+    const ws = XLSX.utils.aoa_to_sheet(sheetData)
+    ws["!cols"] = [{ wch: 40 }, { wch: 5 }, { wch: 20 }]
+    XLSX.utils.book_append_sheet(wb, ws, "Balance Sheet")
+    XLSX.writeFile(wb, `Balance_Sheet_${asOfDate}.xlsx`)
+  }
+
+  // ── Build rows for UI ──────────────────────────────────────────
   const currentAssetRows: React.ReactElement[] = [
     <h3 key="h3ca" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>Current Assets</h3>
   ]
@@ -273,7 +335,6 @@ function BalanceSheetContent() {
       )
     })
   })
-  // Other Assets – drill‑down to trial balance for all assets
   if (otherAssetAccounts.length > 0) {
     currentAssetRows.push(
       <CategoryHeader key="other-assets" cat="Other Assets" total={totalOtherAssets} showAbsolute={false} onClick={() => navigateToTrialBalance("Asset")} />
@@ -312,7 +373,6 @@ function BalanceSheetContent() {
     })
   }
 
-  // Align "Other" categories
   const otherAssetIdx = currentAssetRows.findIndex(el => el.type === CategoryHeader && (el.props as any)?.cat === "Other Current Assets")
   const otherLiabilityIdx = currentLiabilityRows.findIndex(el => el.type === CategoryHeader && (el.props as any)?.cat === "Other Current Liabilities")
   if (otherAssetIdx !== -1 && otherLiabilityIdx !== -1) {
@@ -350,7 +410,6 @@ function BalanceSheetContent() {
     })
   })
 
-  // Equity rows – all clickable
   const equityRows: React.ReactElement[] = [
     <h3 key="h3eq" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>Equity</h3>
   ]
@@ -359,7 +418,6 @@ function BalanceSheetContent() {
       <AccountRow key={a.id} account={a} showAbsolute={true} getBalance={getBalance} onClick={openLedger} />
     )
   })
-  // Retained Earnings row – clickable, goes to P&L report
   equityRows.push(
     <div key="re" className="acc-row" onClick={openProfitLoss} style={{ cursor: "pointer" }}>
       <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 50 }}>
@@ -402,78 +460,121 @@ function BalanceSheetContent() {
   )
 
   return (
-    <div style={{ background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+    <div style={{ background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)", transition: "background 0.3s, color 0.3s" }}>
       <style>{`
         * { box-sizing: border-box; }
-        .bs-header {
-          background: var(--topbar-bg);
+
+        /* ── Report Header (same as Trial Balance / P&L) ── */
+        .report-header {
+          background: var(--card);
           border-bottom: 1px solid var(--border);
-          padding: 0 32px;
+          padding: 20px 32px;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          height: 64px;
-          position: sticky;
-          top: 0;
-          z-index: 10;
+          flex-wrap: wrap;
+          gap: 16px;
         }
-        .back-btn {
-          background: transparent;
-          border: 1px solid var(--border);
-          border-radius: 8px;
-          padding: 7px 10px;
-          cursor: pointer;
-          color: var(--text-muted);
-          display: inline-flex;
+        .report-header-left {
+          display: flex;
           align-items: center;
-          transition: all 0.15s;
+          gap: 14px;
         }
-        .back-btn:hover { border-color: var(--border-strong); color: var(--text); background: var(--card-hover); }
-        .action-btn {
-          background: var(--card);
-          border: 1px solid var(--border);
-          border-radius: 8px;
-          padding: 7px 14px;
-          cursor: pointer;
-          color: var(--text-muted);
+        .report-logo {
+          width: 34px; height: 34px;
+          border-radius: 9px; object-fit: contain;
+        }
+        .report-company-name {
+          font-size: 16px; font-weight: 700;
+        }
+        .report-company-tagline {
+          font-size: 11px;
+        }
+        .report-header-right {
+          text-align: right;
+        }
+        .report-title {
+          font-size: 24px; font-weight: 800;
+        }
+        .report-period {
           font-size: 12px;
-          font-weight: 500;
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          font-family: inherit;
-          transition: all 0.15s;
         }
-        .action-btn:hover { border-color: var(--border-strong); color: var(--text); background: var(--card-hover); }
 
-        .kpi-strip {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 12px;
-          padding: 24px 32px;
-          border-bottom: 1px solid var(--border);
+        /* ── KPI cards ── */
+        .kpi-row {
+          display: flex; gap: 16px;
+          padding: 24px 32px; flex-wrap: wrap;
         }
         .kpi-card {
           background: var(--card);
           border: 1px solid var(--border);
-          border-radius: 12px;
-          padding: 20px;
-          box-shadow: var(--shadow-sm);
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
+          border-radius: 12px; padding: 18px 24px;
+          min-width: 170px; box-shadow: var(--shadow-sm); flex: 1;
         }
         .kpi-label {
-          font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em;
-          color: var(--text-muted);
+          font-size: 10px; font-weight: 700;
+          text-transform: uppercase; letter-spacing: 0.08em;
+          color: var(--text-muted); margin-bottom: 6px;
         }
-        .kpi-value {
-          font-size: 24px; font-weight: 700; letter-spacing: -0.03em; font-family: 'Inter', sans-serif;
+        .kpi-value { font-size: 26px; font-weight: 800; }
+
+        /* ── Filter bar ── */
+        .filter-bar {
+          display: flex; align-items: center; gap: 12px;
+          padding: 0 32px 20px; flex-wrap: wrap;
         }
-        .kpi-sub {
-          font-size: 11px; color: var(--text-soft); margin-top: 4px;
+        .btn {
+          padding: 8px 16px; border-radius: 8px;
+          border: 1.5px solid var(--border); font-weight: 600;
+          font-size: 13px; cursor: pointer;
+          display: inline-flex; align-items: center; gap: 6px;
+          font-family: inherit;
+        }
+        .btn-outline {
+          background: transparent; color: var(--text-muted);
+          border-color: var(--border);
+        }
+        .btn-outline:hover { background: var(--card-hover); }
+        .date-input {
+          height: 34px; border: 1.5px solid var(--border);
+          border-radius: 8px; padding: 0 10px; font-size: 12px;
+          background: var(--card); color: var(--text);
+          outline: none; font-family: inherit; width: 140px;
+        }
+        .date-input:focus { border-color: var(--primary); }
+
+        /* ── Report body (same as P&L) ── */
+        .section { margin: 0 32px 16px; }
+        .section-head {
+          display: flex; align-items: center; gap: 8px;
+          margin-bottom: 4px; padding: 8px 0; cursor: pointer;
+        }
+        .section-head:hover .section-title-text { color: var(--primary); }
+        .section-title-text {
+          font-size: 12px; font-weight: 700; text-transform: uppercase;
+          letter-spacing: 0.08em; color: var(--text-muted);
+          transition: color 0.15s;
+        }
+        .acc-row {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 10px 12px; border-bottom: 1px solid var(--border);
+          cursor: pointer; transition: background 0.1s;
+        }
+        .acc-row:hover { background: var(--card-hover); }
+        .subtotal-band {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 14px 12px; border-radius: 6px; margin: 8px 0;
+          font-size: 13px; font-weight: 600;
+          background: var(--card-hover); color: var(--text);
+        }
+        .total-band {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 14px 16px; border-radius: 8px; margin-top: 16px;
+          font-size: 15px; font-weight: 700;
+          background: var(--card-hover); color: var(--text);
         }
 
+        /* ── Grid for paired sections ── */
         .bs-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
@@ -481,55 +582,8 @@ function BalanceSheetContent() {
           padding: 0 32px;
         }
 
-        .cat-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 6px 0;
-          cursor: pointer;
-          border-bottom: 1px solid var(--border);
-          transition: background 0.1s;
-        }
-        .cat-header:hover { background: var(--card-hover); }
-        .acc-row {
-          display: flex;
-          align-items: center;
-          padding: 5px 0 5px 12px;
-          border-bottom: 1px solid var(--border);
-          cursor: pointer;
-          transition: background 0.1s;
-        }
-        .acc-row:hover { background: var(--card-hover); }
-
-        .subtotal-band {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 10px 12px;
-          border-radius: 6px;
-          margin: 8px 0;
-          font-size: 13px;
-          font-weight: 600;
-          background: var(--card-hover);
-          color: var(--text);
-        }
-        .total-band {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 14px 16px;
-          border-radius: 8px;
-          margin-top: 16px;
-          font-size: 15px;
-          font-weight: 700;
-          background: var(--card-hover);
-          color: var(--text);
-        }
-
         @media print {
-          .bs-header, .back-btn, .action-btn { display: none !important; }
-          .kpi-strip { grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 16px; }
-          .bs-grid { padding: 0 16px; }
+          .report-header, .kpi-row, .filter-bar { display: none !important; }
           body { background: white !important; color: black !important; }
           .kpi-card, .subtotal-band, .total-band {
             box-shadow: none !important;
@@ -537,63 +591,76 @@ function BalanceSheetContent() {
           }
         }
         @media (max-width: 900px) {
-          .kpi-strip { grid-template-columns: repeat(2, 1fr); padding: 16px; }
           .bs-grid { grid-template-columns: 1fr; padding: 0 16px; }
-          .bs-header { padding: 0 16px; }
+          .report-header, .kpi-row, .filter-bar { padding-left: 16px; padding-right: 16px; }
+          .section { margin-left: 16px; margin-right: 16px; }
         }
       `}</style>
 
-      {/* Header */}
-      <div className="bs-header">
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <button className="back-btn" onClick={() => router.push("/dashboard/reports")}>
-            <ArrowLeft size={15} />
+      {/* ── Report Header (same as Trial Balance / P&L) ── */}
+      <div className="report-header">
+        <div className="report-header-left">
+          <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}>
+            <ArrowLeft size={16} />
           </button>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", display: "flex", alignItems: "center", gap: 8 }}>
-              Balance Sheet
-              <span style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", background: "var(--card-hover)", padding: "2px 8px", borderRadius: 4 }}>
-                As at {now.toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })}
-              </span>
+          {logoUrl ? (
+            <img src={logoUrl} alt={companyName} className="report-logo" width={34} height={34} />
+          ) : (
+            <div style={{
+              width: 34, height: 34, borderRadius: 9,
+              background: "var(--primary)", display: "flex",
+              alignItems: "center", justifyContent: "center",
+              color: "white", fontWeight: 700,
+            }}>
+              {(companyName || "O")[0]}
             </div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Shahid Iqbal &amp; Co · Click any row to drill down</div>
+          )}
+          <div>
+            <div className="report-company-name" style={{ color: reportTextColor }}>
+              {companyName || "OneAccounts"}
+            </div>
+            <div className="report-company-tagline" style={{ color: reportMutedColor }}>
+              {companyTagline || ""}
+            </div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="action-btn" onClick={handleExportExcel}><Download size={13} /> Export</button>
-          <button className="action-btn" onClick={handleExportPDF}><Download size={13} /> PDF</button>
+        <div className="report-header-right">
+          <div className="report-title" style={{ color: reportTextColor }}>Balance Sheet</div>
+          <div className="report-period" style={{ color: reportMutedColor }}>As at {now.toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })}</div>
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="kpi-strip">
+      {/* ── KPI cards ── */}
+      <div className="kpi-row">
         <div className="kpi-card">
           <div className="kpi-label">Total Assets</div>
           <div className="kpi-value" style={{ color: "#3B82F6" }}>PKR {fmt(totalAssets)}</div>
-          <div className="kpi-sub">Current + Fixed + Other</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Total Liabilities</div>
           <div className="kpi-value" style={{ color: "#EF4444" }}>PKR {fmtPos(totalLiabilities)}</div>
-          <div className="kpi-sub">Current + Other</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Total Equity</div>
           <div className="kpi-value" style={{ color: "#A78BFA" }}>PKR {fmtPos(totalEquityAbs)}</div>
-          <div className="kpi-sub">Incl. Net P&L</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Balanced?</div>
           <div className="kpi-value" style={{ color: isBalanced ? "#10B981" : "#EF4444", fontSize: 20 }}>
             {isBalanced ? "✓ In Balance" : "✗ Imbalance"}
           </div>
-          <div className="kpi-sub" style={{ color: isBalanced ? "#10B981" : "#EF4444" }}>
-            {isBalanced ? "Assets = Liabilities + Equity" : `Diff: PKR ${fmt(Math.abs(totalAssets - totalLiabEquity))}`}
-          </div>
         </div>
       </div>
 
-      {/* Synchronized Report Body */}
+      {/* ── Filter bar (just buttons) ── */}
+      <div className="filter-bar">
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+          <button className="btn btn-outline" onClick={handleExportExcel}><Download size={13} /> Excel</button>
+          <button className="btn btn-outline" onClick={handleExportPDF}><Download size={13} /> PDF</button>
+        </div>
+      </div>
+
+      {/* ── Synchronized Report Body ── */}
       <div className="bs-grid">
         {syncedRows}
       </div>
