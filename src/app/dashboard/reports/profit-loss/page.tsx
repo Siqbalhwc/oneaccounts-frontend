@@ -372,15 +372,15 @@ export default function ProfitLossPage() {
         .subtotal-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 12px; font-weight: 700; font-size: 14px; border-top: 2px solid var(--border); }
         .net-row { background: var(--card-hover); border: 1px solid var(--primary); border-radius: 10px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; margin: 0 32px 24px; }
 
-        /* compare table – zero gap between account and first project */
+        /* compare table */
         .compare-wrap { padding: 0 32px 32px; overflow-x: auto; }
         .compare-table { width: 100%; border-collapse: collapse; }
         .compare-table th { background: ${headerBg}; color: white; padding: 10px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; text-align: right; white-space: nowrap; }
-        .compare-table th.col-account { text-align: left; padding-right: 0; }
-        .compare-table th.col-account + th { padding-left: 0; }
+        .compare-table th.col-account { text-align: left; padding-right: 4px; }
+        .compare-table th.col-account + th { padding-left: 4px; }
         .compare-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; text-align: right; white-space: nowrap; }
-        .compare-table td.td-account { text-align: left; font-weight: 500; white-space: nowrap; padding-right: 0; }
-        .compare-table td.td-account + td { padding-left: 0; }
+        .compare-table td.td-account { text-align: left; font-weight: 500; white-space: nowrap; padding-right: 4px; }
+        .compare-table td.td-account + td { padding-left: 4px; }
 
         .compare-table tr.section-head td { font-weight: 700; font-size: 11px; text-transform: uppercase; padding-top: 18px; padding-bottom: 6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
         .compare-table tr.subtotal td { font-weight: 700; font-size: 13px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }

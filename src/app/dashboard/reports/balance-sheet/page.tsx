@@ -21,7 +21,7 @@ function getCategory(account: any): string {
   if (num >= 1500 && num <= 1599) return "Vehicles"
   if (num >= 2000 && num <= 2099) return "Accounts Payable"
   if (num >= 2100 && num <= 2199) return "Other Current Liabilities"
-  if (num >= 3000 && num <= 3099) return "Equity"
+  if (num >= 3000 && num <= 3999) return "Equity"   // <-- widened to include all equity codes
   return "Other"
 }
 
@@ -179,11 +179,11 @@ function BalanceSheetContent() {
   const totalAssets = totalCurrentAssets + totalFixedAssets
 
   const totalCurrentLiabilities = Math.abs(LIABILITY_CATS.reduce((s, c) => s + catTotal(c), 0))
-  const totalEquityAccounts = Math.abs(accounts.filter(a => a.type === "Equity").reduce((s, a) => s + getBalance(a), 0))
-  const revenue = accounts.filter(a => a.type === "Revenue").reduce((s, a) => s + Math.abs(getBalance(a)), 0)
-  const expenses = accounts.filter(a => a.type === "Expense").reduce((s, a) => s + Math.abs(getBalance(a)), 0)
-  const netProfit = revenue - expenses
-  const totalEquity = totalEquityAccounts + Math.abs(netProfit)
+
+  // ── FIXED: Equity = sum of ALL equity‑type accounts (already includes retained earnings) ──
+  const equityAccounts = accounts.filter(a => a.type === "Equity")
+  const totalEquity = Math.abs(equityAccounts.reduce((s, a) => s + getBalance(a), 0))
+
   const totalLiabEquity = totalCurrentLiabilities + totalEquity
   const isBalanced = Math.abs(totalAssets - totalLiabEquity) < 1
 
@@ -226,11 +226,12 @@ function BalanceSheetContent() {
       totalAssets,
       liabilitySections: buildSections(LIABILITY_CATS, true),
       totalLiabilities: totalCurrentLiabilities,
-      equitySections: [
-        ...(grouped["Equity"] || []).map((a: any) => ({ text: `${a.code} – ${a.name}`, amount: getBalance(a), isHeader: false, indent: 8 })),
-        { text: "Retained Earnings (Net P&L)", amount: netProfit, isHeader: false, indent: 8 },
-      ],
-      netProfit,
+      equitySections: equityAccounts.map(a => ({
+        text: `${a.code} – ${a.name}`,
+        amount: getBalance(a),
+        isHeader: false,
+        indent: 8,
+      })),
       totalEquity,
       totalLiabEquity,
     }
@@ -273,11 +274,9 @@ function BalanceSheetContent() {
     sheetData.push(["Total Current Liabilities", "", `PKR ${fmtPos(totalCurrentLiabilities)}`])
     sheetData.push(["", "", ""])
     sheetData.push(["Equity", "", ""])
-    const eqItems = grouped["Equity"] || []
-    for (const a of eqItems) {
+    equityAccounts.forEach(a => {
       sheetData.push([`  ${a.code} - ${a.name}`, "", `PKR ${fmtPos(getBalance(a))}`])
-    }
-    sheetData.push(["  Retained Earnings", "", `PKR ${fmtPos(netProfit)}`])
+    })
     sheetData.push(["Total Equity", "", `PKR ${fmtPos(totalEquity)}`])
     sheetData.push(["", "", ""])
     sheetData.push(["TOTAL LIABILITIES + EQUITY", "", `PKR ${fmtPos(totalLiabEquity)}`])
@@ -287,7 +286,7 @@ function BalanceSheetContent() {
     XLSX.writeFile(wb, `Balance_Sheet_${asOfDate}.xlsx`)
   }
 
-  // ── Build rows for UI (same as before) ──────────────────────────
+  // ── Build rows for UI ────────────────────────────────────────────
   const currentAssetRows: React.ReactElement[] = [
     <h3 key="h3ca" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>Current Assets</h3>
   ]
@@ -322,6 +321,7 @@ function BalanceSheetContent() {
     })
   })
 
+  // Align "Other" categories in current section
   const otherAssetIdx = currentAssetRows.findIndex(el => el.type === CategoryHeader && (el.props as any)?.cat === "Other Current Assets")
   const otherLiabilityIdx = currentLiabilityRows.findIndex(el => el.type === CategoryHeader && (el.props as any)?.cat === "Other Current Liabilities")
   if (otherAssetIdx !== -1 && otherLiabilityIdx !== -1) {
@@ -359,23 +359,15 @@ function BalanceSheetContent() {
     })
   })
 
+  // ── FIXED: Show ALL equity accounts directly (not just category "Equity") ──
   const equityRows: React.ReactElement[] = [
     <h3 key="h3eq" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>Equity</h3>
   ]
-  ;(grouped["Equity"] || []).forEach(a => {
+  equityAccounts.forEach(a => {
     equityRows.push(
       <AccountRow key={a.id} account={a} showAbsolute={true} getBalance={getBalance} onClick={openLedger} />
     )
   })
-  equityRows.push(
-    <div key="re" className="acc-row" style={{ cursor: "default" }}>
-      <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 50 }}>R/E</span>
-      <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 8 }}>Retained Earnings (Net P&amp;L)</span>
-      <span style={{ fontSize: 12, color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
-        PKR {fmtPos(netProfit)}
-      </span>
-    </div>
-  )
 
   const fixedVsEquitySection = buildSection(
     fixedAssetRows, equityRows,
