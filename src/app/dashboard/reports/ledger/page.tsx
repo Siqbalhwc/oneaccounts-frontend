@@ -106,7 +106,6 @@ export default function LedgerPage() {
         valA = a[sortField] || 0
         valB = b[sortField] || 0
       } else {
-        // entry_no, description, date are strings
         valA = (a[sortField] || "").toString().toLowerCase()
         valB = (b[sortField] || "").toString().toLowerCase()
       }
@@ -158,8 +157,8 @@ export default function LedgerPage() {
         .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
-        .ledger-header { display: grid; grid-template-columns: 90px 100px 1fr 110px 110px 130px; padding: 14px 24px; background: var(--card); font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border); }
-        .ledger-row { display: grid; grid-template-columns: 90px 100px 1fr 110px 110px 130px; padding: 12px 24px; border-bottom: 1px solid var(--border); font-size: 13px; align-items: center; transition: background 0.15s; cursor: pointer; }
+        .ledger-header { display: grid; grid-template-columns: 90px 130px 1fr 110px 110px 130px; padding: 14px 24px; background: var(--card); font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+        .ledger-row { display: grid; grid-template-columns: 90px 130px 1fr 110px 110px 130px; padding: 12px 24px; border-bottom: 1px solid var(--border); font-size: 13px; align-items: center; transition: background 0.15s; cursor: pointer; }
         .ledger-row:hover { background: var(--card-hover); }
         .ledger-row:last-child { border-bottom: none; }
         .opening-row { background: var(--bg-soft); font-weight: 600; cursor: default; }
@@ -172,7 +171,7 @@ export default function LedgerPage() {
         .btn-outline:hover { background: var(--card-hover); }
         .account-select { height: 34px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text); outline: none; font-family: inherit; min-width: 200px; }
         .account-select:focus { border-color: var(--primary); }
-        @media (max-width: 640px) { .ledger-header, .ledger-row { grid-template-columns: 70px 80px 1fr 80px 80px 100px; } }
+        @media (max-width: 640px) { .ledger-header, .ledger-row { grid-template-columns: 70px 90px 1fr 80px 80px 100px; } }
       `}</style>
 
       {/* ── Toolbar ── */}

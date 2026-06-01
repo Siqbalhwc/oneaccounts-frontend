@@ -107,7 +107,6 @@ export default function CustomerLedgerPage() {
       // Process invoices (debit side – customer owes you)
       for (const inv of allInvoices || []) {
         if (inv.date < startDate) {
-          // Invoices increase what the customer owes (debit)
           openingBalance += (inv.total || 0)
         } else if (inv.date >= startDate && inv.date <= endDate) {
           periodLines.push({
@@ -117,7 +116,7 @@ export default function CustomerLedgerPage() {
             description: `Sales Invoice ${inv.invoice_no}`,
             debit: inv.total || 0,
             credit: 0,
-            running_balance: 0, // filled later
+            running_balance: 0,
           })
         }
       }
@@ -125,7 +124,6 @@ export default function CustomerLedgerPage() {
       // Process receipts (credit side – customer pays you)
       for (const rec of allReceipts || []) {
         if (rec.date < startDate) {
-          // Receipts decrease what the customer owes (credit)
           openingBalance -= (rec.amount || 0)
         } else if (rec.date >= startDate && rec.date <= endDate) {
           periodLines.push({
@@ -247,7 +245,7 @@ export default function CustomerLedgerPage() {
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
         .ledger-header {
           display: grid;
-          grid-template-columns: 90px 100px 1fr 110px 110px 130px;
+          grid-template-columns: 90px 130px 1fr 110px 110px 130px;
           padding: 14px 24px;
           background: var(--card);
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
@@ -255,7 +253,7 @@ export default function CustomerLedgerPage() {
         }
         .ledger-row {
           display: grid;
-          grid-template-columns: 90px 100px 1fr 110px 110px 130px;
+          grid-template-columns: 90px 130px 1fr 110px 110px 130px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
@@ -286,7 +284,7 @@ export default function CustomerLedgerPage() {
         }
         .customer-select:focus { border-color: var(--primary); }
         @media (max-width: 640px) {
-          .ledger-header, .ledger-row { grid-template-columns: 70px 80px 1fr 80px 80px 100px; }
+          .ledger-header, .ledger-row { grid-template-columns: 70px 90px 1fr 80px 80px 100px; }
         }
       `}</style>
 
@@ -370,8 +368,8 @@ export default function CustomerLedgerPage() {
             <div className="ledger-card">
               <div className="ledger-header">
                 <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
-                <button className="sort-btn" onClick={() => handleSort("description")}>Entry #{getSortIcon("description")}</button>
-                <span>Description</span>
+                <button className="sort-btn" onClick={() => handleSort("description")} style={{ textAlign: "left", justifyContent: "flex-start" }}>Entry # {getSortIcon("description")}</button>
+                <button className="sort-btn" onClick={() => handleSort("description")} style={{ textAlign: "left", justifyContent: "flex-start" }}>Description {getSortIcon("description")}</button>
                 <button className="sort-btn" onClick={() => handleSort("debit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
                 <button className="sort-btn" onClick={() => handleSort("credit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
                 <button className="sort-btn" onClick={() => handleSort("running_balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("running_balance")}</button>
