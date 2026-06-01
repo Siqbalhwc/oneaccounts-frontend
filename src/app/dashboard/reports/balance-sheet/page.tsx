@@ -247,9 +247,10 @@ function BalanceSheetContent() {
       liabilitySections: buildSections(LIABILITY_CATS, true),
       totalLiabilities,
       equitySections: [
-        ...otherEquityAccounts.map(a => ({ text: `${a.code} – ${a.name}`, amount: getBalance(a), isHeader: false, indent: 8 })),
-        { text: retainedEarningsAccount ? `${retainedEarningsAccount.code} – ${retainedEarningsAccount.name}` : "Retained Earnings (Net P&L)", amount: netProfit, isHeader: false, indent: 8 },
-      ],
+  { text: "Equity", amount: totalEquityAbs, isHeader: true, indent: 0 },
+  ...otherEquityAccounts.map(a => ({ text: `${a.code} – ${a.name}`, amount: getBalance(a), isHeader: false, indent: 8 })),
+  { text: retainedEarningsAccount ? `${retainedEarningsAccount.code} – ${retainedEarningsAccount.name}` : "Retained Earnings (Net P&L)", amount: netProfit, isHeader: false, indent: 8 },
+],
       netProfit,
       totalEquity,
       totalLiabEquity,
