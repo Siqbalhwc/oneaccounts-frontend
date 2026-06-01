@@ -219,8 +219,10 @@ function BalanceSheetContent() {
     router.push(`/dashboard/reports/profit-loss?startDate=${now.getFullYear()}-01-01&endDate=${asOfDate}`)
   }
 
+  // ── PDF export with correct signs for liabilities & equity ──────
   const handleExportPDF = async () => {
-    const buildSections = (cats: string[], showAbsolute: boolean) => {
+    // Assets: keep raw values (debit balances are positive)
+    const buildAssetSections = (cats: string[]) => {
       const sections: any[] = []
       cats.forEach(cat => {
         const items = grouped[cat] || []
@@ -234,25 +236,58 @@ function BalanceSheetContent() {
       return sections
     }
 
+    // Liabilities & Equity: flip sign (credit balances → positive)
+    const buildCreditSections = (cats: string[]) => {
+      const sections: any[] = []
+      cats.forEach(cat => {
+        const items = grouped[cat] || []
+        if (items.length === 0) return
+        const total = -catTotal(cat)   // positive total
+        sections.push({ text: cat, amount: total, isHeader: true, indent: 0 })
+        items.forEach(a => {
+          sections.push({ text: `${a.code} – ${a.name}`, amount: -getBalance(a), isHeader: false, indent: 8 })
+        })
+      })
+      return sections
+    }
+
+    // Equity items (including retained earnings) – also positive
+    const equityItems = otherEquityAccounts.map(a => ({
+      text: `${a.code} – ${a.name}`,
+      amount: -getBalance(a),
+      isHeader: false,
+      indent: 8,
+    }))
+
+    // Retained earnings – always positive for display
+    const retainedAmount = Math.abs(netProfit)
+    equityItems.push({
+      text: retainedEarningsAccount
+        ? `${retainedEarningsAccount.code} – ${retainedEarningsAccount.name}`
+        : "Retained Earnings (Net P&L)",
+      amount: retainedAmount,
+      isHeader: false,
+      indent: 8,
+    })
+
     const pdfData = {
       companyName: companyName || "OneAccounts",
       companyTagline: companyTagline || "",
       logoUrl: logoUrl || null,
       asOfDate,
-      currentAssetSections: buildSections(CURRENT_ASSET_CATS, false),
+      currentAssetSections: buildAssetSections(CURRENT_ASSET_CATS),
       totalCurrentAssets,
-      fixedAssetSections: buildSections(FIXED_ASSET_CATS, false),
+      fixedAssetSections: buildAssetSections(FIXED_ASSET_CATS),
       totalFixedAssets,
       totalAssets,
-      liabilitySections: buildSections(LIABILITY_CATS, true),
-      totalLiabilities,
+      liabilitySections: buildCreditSections(LIABILITY_CATS),
+      totalLiabilities,                     // already positive
       equitySections: [
-  { text: "Equity", amount: totalEquityAbs, isHeader: true, indent: 0 },
-  ...otherEquityAccounts.map(a => ({ text: `${a.code} – ${a.name}`, amount: getBalance(a), isHeader: false, indent: 8 })),
-  { text: retainedEarningsAccount ? `${retainedEarningsAccount.code} – ${retainedEarningsAccount.name}` : "Retained Earnings (Net P&L)", amount: netProfit, isHeader: false, indent: 8 },
-],
+        { text: "Equity", amount: totalEquityAbs, isHeader: true, indent: 0 },
+        ...equityItems,
+      ],
       netProfit,
-      totalEquity,
+      totalEquity: totalEquityAbs,
       totalLiabEquity,
     }
 
