@@ -10,7 +10,7 @@ import {
   FileText, Receipt, CreditCard, DollarSign, Users, Truck,
   Package, Monitor, ArrowRightLeft, Briefcase, FolderOpen,
   BarChart3, BookOpen, ClipboardList, Scale, TrendingUp, PieChart,
-  PlusCircle, Plus,
+  Plus,
 } from "lucide-react"
 
 export default function AccountantDashboard({ role }: { role: string }) {
@@ -84,18 +84,21 @@ export default function AccountantDashboard({ role }: { role: string }) {
           align-items: center;
           gap: 14px;
           cursor: pointer;
-          color: white;
           transition: transform 0.15s, box-shadow 0.15s;
         }
         .hero-action:hover {
           transform: translateY(-2px);
           box-shadow: 0 8px 20px rgba(0,0,0,0.15);
         }
+        /* Theme‑aware hero cards */
         .hero-action.invoice {
-          background: linear-gradient(135deg, #2563eb, #1d4ed8);
+          background: var(--primary);
+          color: var(--primary-text, #ffffff);
         }
         .hero-action.bill {
-          background: linear-gradient(135deg, #0f172a, #1e293b);
+          background: var(--card);
+          border: 1px solid var(--border);
+          color: var(--text);
         }
         .hero-action h3 {
           margin: 0;
@@ -176,18 +179,18 @@ export default function AccountantDashboard({ role }: { role: string }) {
           border-color: var(--primary);
         }
 
-        /* Floating action button */
+        /* Floating action button – smaller, theme‑aware */
         .fab {
           position: fixed;
-          right: 20px;
-          bottom: 20px;
-          width: 60px;
-          height: 60px;
+          right: 16px;
+          bottom: 16px;
+          width: 48px;
+          height: 48px;
           border-radius: 50%;
           border: none;
-          background: #2563eb;
-          color: white;
-          box-shadow: 0 10px 30px rgba(37,99,235,0.4);
+          background: var(--primary);
+          color: var(--primary-text, #ffffff);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.25);
           cursor: pointer;
           display: flex;
           align-items: center;
@@ -197,7 +200,7 @@ export default function AccountantDashboard({ role }: { role: string }) {
         }
         .fab:hover {
           transform: translateY(-2px);
-          box-shadow: 0 12px 35px rgba(37,99,235,0.55);
+          box-shadow: 0 10px 28px rgba(0,0,0,0.35);
         }
 
         /* ── Desktop / tablet overrides ── */
@@ -213,12 +216,6 @@ export default function AccountantDashboard({ role }: { role: string }) {
           }
           .fab {
             display: none;           /* FAB only on mobile */
-          }
-          .reports-details {
-            /* Expand reports by default on desktop */
-          }
-          .reports-details[open] > summary {
-            /* keep it open */
           }
         }
         @media (min-width: 1024px) {
