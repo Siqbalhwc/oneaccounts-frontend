@@ -65,6 +65,9 @@ export default function NewInvoicePage() {
 
   const [savedInvoiceId, setSavedInvoiceId] = useState<number | null>(null)
 
+  // … all the existing useEffect blocks, helpers, and event handlers are identical to the previous version …
+  // (they have been omitted here for brevity but must be kept exactly as they were)
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -455,7 +458,7 @@ export default function NewInvoicePage() {
           font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box;
         }
         input[type="date"].inv-input {
-          color-scheme: dark;            /* calendar icon visible in dark themes */
+          color-scheme: dark;
         }
         .inv-input:focus, .inv-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
         .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -470,25 +473,26 @@ export default function NewInvoicePage() {
         .inv-btn-success { background: #25D366; color: white; border-color: #25D366; }
         .inv-btn-success:hover { background: #22C55E; }
 
-        /* Items table – scroll horizontally on mobile */
+        /* ── Items table with fixed horizontal scroll ── */
         .inv-items-wrapper {
-          overflow-x: auto;
+          width: 100%;
+          overflow-x: scroll;
           -webkit-overflow-scrolling: touch;
-        }
-        .inv-item-row {
-          display: grid;
-          grid-template-columns: 30px 120px 2fr 70px 100px 100px 90px 30px;
-          gap: 6px; align-items: center; padding: 6px 0;
-          border-bottom: 1px solid var(--border);
-          min-width: 650px;   /* force horizontal scroll when screen is too narrow */
         }
         .inv-item-header {
           display: grid;
-          grid-template-columns: 30px 120px 2fr 70px 100px 100px 90px 30px;
+          grid-template-columns: 30px 120px 200px 70px 90px 100px 80px 30px;
           gap: 6px; font-size: 9px; font-weight: 700;
           text-transform: uppercase; color: var(--text-muted);
           padding-bottom: 6px;
-          min-width: 650px;
+          min-width: 760px;
+        }
+        .inv-item-row {
+          display: grid;
+          grid-template-columns: 30px 120px 200px 70px 90px 100px 80px 30px;
+          gap: 6px; align-items: center; padding: 6px 0;
+          border-bottom: 1px solid var(--border);
+          min-width: 760px;
         }
 
         .inv-cell {
@@ -540,15 +544,6 @@ export default function NewInvoicePage() {
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
-
-        @media (max-width: 480px) {
-          .inv-item-row {
-            grid-template-columns: 30px 100px 1fr 60px 80px 80px 70px 30px;
-          }
-          .inv-item-header {
-            grid-template-columns: 30px 100px 1fr 60px 80px 80px 70px 30px;
-          }
-        }
       `}</style>
 
       <div className="inv-shell">
@@ -578,9 +573,9 @@ export default function NewInvoicePage() {
         )}
 
         <div className="header-grid">
-          {/* Left column: invoice details + items */}
+          {/* Left column: details + items */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {/* Invoice details card */}
+            {/* Invoice details card – unchanged */}
             <div className="inv-card">
               <label className="inv-label">Customer *</label>
               <div className="cust-wrap" ref={customerRef}>
@@ -719,7 +714,7 @@ export default function NewInvoicePage() {
               )}
             </div>
 
-            {/* ── Items table (scrollable on mobile) ── */}
+            {/* ── Items table (scrollable) ── */}
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
@@ -774,7 +769,7 @@ export default function NewInvoicePage() {
               )}
             </div>
 
-            {/* Change History – moved below items */}
+            {/* Change History */}
             {editId && (
               <div className="inv-card" style={{ marginTop: 4 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
@@ -783,7 +778,7 @@ export default function NewInvoicePage() {
             )}
           </div>
 
-          {/* Right column: Summary and Post button */}
+          {/* Right column: Summary + Post button */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="inv-card">
               <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
