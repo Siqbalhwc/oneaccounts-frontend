@@ -95,6 +95,7 @@ export default function CompanySettingsPage() {
 
     let newLogoUrl = settings.logo_url
 
+    // Upload logo if a new file was selected
     if (logoFile) {
       const fileExt = logoFile.name.split(".").pop()
       const fileName = `logo-${Date.now()}.${fileExt}`
@@ -112,19 +113,46 @@ export default function CompanySettingsPage() {
       newLogoUrl = publicUrlData?.publicUrl || ""
     }
 
-    // Update ONLY the current company's settings (never the seed)
-    const { error } = await supabase
+    // Determine whether to insert or update
+    const { data: existing } = await supabase
       .from("company_settings")
-      .upsert({
-        company_id: companyId,
-        business_name: settings.business_name,
-        tagline: settings.tagline,
-        address: settings.address,
-        phone: settings.phone,
-        email: settings.email,
-        logo_url: newLogoUrl,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'company_id' })
+      .select("id, company_id")
+      .eq("company_id", companyId)
+      .maybeSingle()
+
+    let error = null
+
+    if (existing) {
+      // UPDATE the current company's settings
+      const result = await supabase
+        .from("company_settings")
+        .update({
+          business_name: settings.business_name,
+          tagline: settings.tagline,
+          address: settings.address,
+          phone: settings.phone,
+          email: settings.email,
+          logo_url: newLogoUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("company_id", companyId)
+      error = result.error
+    } else {
+      // INSERT a new row for this company
+      const result = await supabase
+        .from("company_settings")
+        .insert({
+          company_id: companyId,
+          business_name: settings.business_name,
+          tagline: settings.tagline,
+          address: settings.address,
+          phone: settings.phone,
+          email: settings.email,
+          logo_url: newLogoUrl,
+          updated_at: new Date().toISOString(),
+        })
+      error = result.error
+    }
 
     if (error) {
       setMessage("Error saving settings: " + error.message)
@@ -139,7 +167,6 @@ export default function CompanySettingsPage() {
       setSettings(prev => ({ ...prev, logo_url: newLogoUrl }))
       setLogoFile(null)
 
-      // Reload the page after a short delay so the sidebar & dashboard reflect the new name
       setTimeout(() => {
         window.location.reload()
       }, 1500)
