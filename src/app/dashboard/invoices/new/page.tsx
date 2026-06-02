@@ -65,6 +65,9 @@ export default function NewInvoicePage() {
 
   const [savedInvoiceId, setSavedInvoiceId] = useState<number | null>(null)
 
+  // … all the existing useEffect blocks, helpers, and event handlers are identical to the previous version …
+  // (they have been omitted here for brevity but must be kept exactly as they were)
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -516,7 +519,18 @@ export default function NewInvoicePage() {
         }
 
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
-        @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
+
+        /* ── Mobile reorder: items section appears before header grid ── */
+        .inv-content-wrapper { display: flex; flex-direction: column; }
+
+        @media (max-width: 900px) {
+          .header-grid { grid-template-columns: 1fr; }
+          .inv-items-section { order: -1; }   /* move items above the header grid */
+          .inv-item-row, .inv-item-header {
+            /* keep horizontal scroll if needed */
+            overflow-x: auto;
+          }
+        }
 
         .price-history {
           background: var(--card); border-radius: 8px; padding: 10px 14px;
@@ -558,232 +572,237 @@ export default function NewInvoicePage() {
           </div>
         )}
 
-        <div className="header-grid">
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {/* Invoice details card */}
-            <div className="inv-card">
-              <label className="inv-label">Customer *</label>
-              <div className="cust-wrap" ref={customerRef}>
-                {selectedCustomer ? (
-                  <div className="cust-selected-badge" onClick={clearCustomer}>
-                    <span>👤</span><span style={{ flex: 1 }}>{selectedCustomer.code} — {selectedCustomer.name}</span>
-                    <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
-                    <button
-                      style={{ marginLeft: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
-                      onClick={(e) => { e.stopPropagation(); clearCustomer(); }}
-                    >
-                      <X size={14} />
-                    </button>
-                    <button
-                      style={{ marginLeft: 2, background: "none", border: "none", color: "var(--primary)", cursor: "pointer" }}
-                      onClick={(e) => { e.stopPropagation(); refreshCustomers(); }}
-                      title="Refresh"
-                    >
-                      <RefreshCw size={13} />
+        {/* ── Wrapper to allow reordering on mobile ── */}
+        <div className="inv-content-wrapper">
+
+          {/* Items table – appears ABOVE the header grid on mobile due to order:-1 */}
+          <div className="inv-items-section" style={{ marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
+            </div>
+            {items.length > 0 && (
+              <div className="inv-card" style={{ overflowX: "auto", padding: "16px 12px" }}>
+                <div className="inv-item-header">
+                  <span></span>
+                  <span>Product</span>
+                  <span>Description</span>
+                  <span>Qty</span>
+                  <span>Price</span>
+                  <span style={{ textAlign: "right" }}>Total</span>
+                  <span style={{ textAlign: "right" }}>Cost</span>
+                  <span></span>
+                </div>
+                {items.map((item, idx) => (
+                  <div key={idx} className="inv-item-row">
+                    <div style={{ display: "flex", justifyContent: "center" }}>
+                      {item.product_image ? (
+                        <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
+                      ) : (
+                        <ImageIcon size={14} color="var(--text-muted)" />
+                      )}
+                    </div>
+                    <div className="inv-cell" style={{ paddingLeft: 12 }}>
+                      {item.product_name || "—"}
+                    </div>
+                    <input
+                      className="inv-input"
+                      style={{ height: 34, fontSize: 12 }}
+                      value={item.description}
+                      onChange={e => updateItem(idx, "description", e.target.value)}
+                      placeholder="Description"
+                    />
+                    <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                    <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                    <div className="inv-cell" style={{ justifyContent: "flex-end", fontWeight: 600 }}>
+                      PKR {item.total.toLocaleString()}
+                    </div>
+                    <div className="inv-cell" style={{ justifyContent: "flex-end", color: "var(--text-muted)" }}>
+                      {item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}
+                    </div>
+                    <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}>
+                      <Trash2 size={12} />
                     </button>
                   </div>
-                ) : (
-                  <>
-                    <div className="cust-input-row">
-                      <Search size={14} style={{ position: "absolute", left: 10, color: "var(--text-muted)" }} />
-                      <input
-                        className="inv-input"
-                        style={{ paddingLeft: 32, paddingRight: 32 }}
-                        placeholder="Search by name, code or phone..."
-                        value={customerSearch}
-                        onChange={e => { setCustomerSearch(e.target.value); setShowCustomerList(true) }}
-                        onFocus={() => setShowCustomerList(true)}
-                        onClick={() => setShowCustomerList(true)}
-                        autoComplete="off"
-                      />
-                      {customerSearch && <button onClick={() => setCustomerSearch("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}><X size={13} /></button>}
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Header grid (customer + summary) */}
+          <div className="header-grid">
+            {/* Left column: customer details */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div className="inv-card">
+                <label className="inv-label">Customer *</label>
+                <div className="cust-wrap" ref={customerRef}>
+                  {selectedCustomer ? (
+                    <div className="cust-selected-badge" onClick={clearCustomer}>
+                      <span>👤</span><span style={{ flex: 1 }}>{selectedCustomer.code} — {selectedCustomer.name}</span>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
+                      <button
+                        style={{ marginLeft: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
+                        onClick={(e) => { e.stopPropagation(); clearCustomer(); }}
+                      >
+                        <X size={14} />
+                      </button>
+                      <button
+                        style={{ marginLeft: 2, background: "none", border: "none", color: "var(--primary)", cursor: "pointer" }}
+                        onClick={(e) => { e.stopPropagation(); refreshCustomers(); }}
+                        title="Refresh"
+                      >
+                        <RefreshCw size={13} />
+                      </button>
                     </div>
-                    {showCustomerList && (
-                      <div className="cust-dropdown">
-                        {filteredCustomers.length === 0 ? (
-                          <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: 13 }}>No customers found</div>
-                        ) : (
-                          filteredCustomers.map(c => (
-                            <div key={c.id} className="cust-option" onMouseDown={() => selectCustomer(c)}>
-                              <div>
-                                <div className="cust-option-name">{c.name}</div>
-                                <div className="cust-option-meta">{c.code}{c.phone ? ` · ${c.phone}` : ""}</div>
-                              </div>
-                              <div className="cust-option-bal">PKR {(c.balance || 0).toLocaleString()}</div>
-                            </div>
-                          ))
-                        )}
+                  ) : (
+                    <>
+                      <div className="cust-input-row">
+                        <Search size={14} style={{ position: "absolute", left: 10, color: "var(--text-muted)" }} />
+                        <input
+                          className="inv-input"
+                          style={{ paddingLeft: 32, paddingRight: 32 }}
+                          placeholder="Search by name, code or phone..."
+                          value={customerSearch}
+                          onChange={e => { setCustomerSearch(e.target.value); setShowCustomerList(true) }}
+                          onFocus={() => setShowCustomerList(true)}
+                          onClick={() => setShowCustomerList(true)}
+                          autoComplete="off"
+                        />
+                        {customerSearch && <button onClick={() => setCustomerSearch("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}><X size={13} /></button>}
                       </div>
-                    )}
-                  </>
-                )}
-              </div>
-
-              <div className="inv-row" style={{ marginTop: 14 }}>
-                <div><label className="inv-label">Invoice Date *</label><input className="inv-input" type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} /></div>
-                <div><label className="inv-label">Due Date</label><input className="inv-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} /></div>
-              </div>
-              <div className="inv-row" style={{ marginTop: 10 }}>
-                <div><label className="inv-label">Reference</label><input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="Customer PO #" /></div>
-                <div><label className="inv-label">Notes</label><input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" /></div>
-              </div>
-
-              {showProducts ? (
-                <div style={{ marginTop: 14 }}>
-                  <label className="inv-label">Add Product</label>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <div style={{ position: "relative", flex: 1 }}>
-                      <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "var(--text-muted)" }} />
-                      <input
-                        className="inv-input"
-                        style={{ paddingLeft: 36 }}
-                        placeholder="Search product..."
-                        value={productSearch}
-                        onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
-                        onFocus={() => setShowProductList(true)}
-                        onBlur={() => setTimeout(() => setShowProductList(false), 200)}
-                      />
-                      {showProductList && (
-                        <div className="cust-dropdown" style={{ marginTop: 4 }}>
-                          {filteredProducts.map((p: any) => (
-                            <div key={p.id} className="cust-option" onMouseDown={() => addProductItem(p)}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                {p.image_path && <img src={p.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />}
+                      {showCustomerList && (
+                        <div className="cust-dropdown">
+                          {filteredCustomers.length === 0 ? (
+                            <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: 13 }}>No customers found</div>
+                          ) : (
+                            filteredCustomers.map(c => (
+                              <div key={c.id} className="cust-option" onMouseDown={() => selectCustomer(c)}>
                                 <div>
-                                  <div className="cust-option-name">{p.code} - {p.name}</div>
-                                  <div className="cust-option-meta">PKR {p.sale_price} | Stock: {p.qty_on_hand}</div>
+                                  <div className="cust-option-name">{c.name}</div>
+                                  <div className="cust-option-meta">{c.code}{c.phone ? ` · ${c.phone}` : ""}</div>
                                 </div>
+                                <div className="cust-option-bal">PKR {(c.balance || 0).toLocaleString()}</div>
                               </div>
-                            </div>
-                          ))}
-                          {filteredProducts.length === 0 && (
-                            <div style={{ padding: 12, color: "var(--text-muted)", fontSize: 12 }}>No products found</div>
+                            ))
                           )}
                         </div>
                       )}
-                    </div>
-                    <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ marginTop: 14 }}>
-                  <label className="inv-label">Add Item</label>
-                  <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
-                </div>
-              )}
-
-              {showHistory && lastSelectedProduct && (
-                <div className="price-history">
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                    {lastSelectedProduct.image_path && (
-                      <img src={lastSelectedProduct.image_path} alt="" style={{ width: 28, height: 28, objectFit: "cover", borderRadius: 4 }} />
-                    )}
-                    <span style={{ fontWeight: 600, fontSize: 12, color: "var(--text)" }}>
-                      📋 Price history for {lastSelectedProduct.name}
-                    </span>
-                    <button style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }} onClick={() => setShowHistory(false)}>
-                      <X size={14} />
-                    </button>
-                  </div>
-                  {priceHistory.length > 0 ? (
-                    priceHistory.map((h: any, i: number) => (
-                      <div key={i} className="price-history-item">
-                        <span>{h.invoice_no} - {h.date}</span>
-                        <span style={{ fontWeight: 600 }}>PKR {h.unit_price.toLocaleString()}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <div style={{ color: "var(--text-muted)", fontSize: 12 }}>No previous sales to this customer</div>
+                    </>
                   )}
                 </div>
-              )}
-            </div>
-          </div>
 
-          {/* Right column: Summary + Post button */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div className="inv-card">
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
-                <span>Total</span><span>PKR {totalAmount.toLocaleString()}</span>
-              </div>
-            </div>
-            <div className="inv-card">
-              <button className="inv-btn" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={saving}>
-                {saving ? "Posting..." : editId ? "💾 UPDATE Invoice" : "💾 POST Invoice"}
-              </button>
-              <button className="inv-btn" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleBeforeSavePdf}>
-                <Download size={14} /> PDF Preview
-              </button>
-              {selectedCustomer && hasFeature("whatsapp_invoice") && (
-                <button className="inv-btn inv-btn-success" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleWhatsAppWithPDF}>
-                  <Send size={14} /> WhatsApp (PDF)
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+                <div className="inv-row" style={{ marginTop: 14 }}>
+                  <div><label className="inv-label">Invoice Date *</label><input className="inv-input" type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} /></div>
+                  <div><label className="inv-label">Due Date</label><input className="inv-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} /></div>
+                </div>
+                <div className="inv-row" style={{ marginTop: 10 }}>
+                  <div><label className="inv-label">Reference</label><input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="Customer PO #" /></div>
+                  <div><label className="inv-label">Notes</label><input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" /></div>
+                </div>
 
-        {/* Items table – full width, outside the two-column grid */}
-        <div style={{ marginTop: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
-          </div>
-          {items.length > 0 && (
-            <div className="inv-card" style={{ overflowX: "auto", padding: "16px 12px" }}>
-              <div className="inv-item-header">
-                <span></span>
-                <span>Product</span>
-                <span>Description</span>
-                <span>Qty</span>
-                <span>Price</span>
-                <span style={{ textAlign: "right" }}>Total</span>
-                <span style={{ textAlign: "right" }}>Cost</span>
-                <span></span>
-              </div>
-              {items.map((item, idx) => (
-                <div key={idx} className="inv-item-row">
-                  <div style={{ display: "flex", justifyContent: "center" }}>
-                    {item.product_image ? (
-                      <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
+                {showProducts ? (
+                  <div style={{ marginTop: 14 }}>
+                    <label className="inv-label">Add Product</label>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <div style={{ position: "relative", flex: 1 }}>
+                        <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "var(--text-muted)" }} />
+                        <input
+                          className="inv-input"
+                          style={{ paddingLeft: 36 }}
+                          placeholder="Search product..."
+                          value={productSearch}
+                          onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
+                          onFocus={() => setShowProductList(true)}
+                          onBlur={() => setTimeout(() => setShowProductList(false), 200)}
+                        />
+                        {showProductList && (
+                          <div className="cust-dropdown" style={{ marginTop: 4 }}>
+                            {filteredProducts.map((p: any) => (
+                              <div key={p.id} className="cust-option" onMouseDown={() => addProductItem(p)}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                  {p.image_path && <img src={p.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />}
+                                  <div>
+                                    <div className="cust-option-name">{p.code} - {p.name}</div>
+                                    <div className="cust-option-meta">PKR {p.sale_price} | Stock: {p.qty_on_hand}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            {filteredProducts.length === 0 && (
+                              <div style={{ padding: 12, color: "var(--text-muted)", fontSize: 12 }}>No products found</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 14 }}>
+                    <label className="inv-label">Add Item</label>
+                    <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
+                  </div>
+                )}
+
+                {showHistory && lastSelectedProduct && (
+                  <div className="price-history">
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                      {lastSelectedProduct.image_path && (
+                        <img src={lastSelectedProduct.image_path} alt="" style={{ width: 28, height: 28, objectFit: "cover", borderRadius: 4 }} />
+                      )}
+                      <span style={{ fontWeight: 600, fontSize: 12, color: "var(--text)" }}>
+                        📋 Price history for {lastSelectedProduct.name}
+                      </span>
+                      <button style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }} onClick={() => setShowHistory(false)}>
+                        <X size={14} />
+                      </button>
+                    </div>
+                    {priceHistory.length > 0 ? (
+                      priceHistory.map((h: any, i: number) => (
+                        <div key={i} className="price-history-item">
+                          <span>{h.invoice_no} - {h.date}</span>
+                          <span style={{ fontWeight: 600 }}>PKR {h.unit_price.toLocaleString()}</span>
+                        </div>
+                      ))
                     ) : (
-                      <ImageIcon size={14} color="var(--text-muted)" />
+                      <div style={{ color: "var(--text-muted)", fontSize: 12 }}>No previous sales to this customer</div>
                     )}
                   </div>
-                  <div className="inv-cell" style={{ paddingLeft: 12 }}>
-                    {item.product_name || "—"}
-                  </div>
-                  <input
-                    className="inv-input"
-                    style={{ height: 34, fontSize: 12 }}
-                    value={item.description}
-                    onChange={e => updateItem(idx, "description", e.target.value)}
-                    placeholder="Description"
-                  />
-                  <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                  <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                  <div className="inv-cell" style={{ justifyContent: "flex-end", fontWeight: 600 }}>
-                    PKR {item.total.toLocaleString()}
-                  </div>
-                  <div className="inv-cell" style={{ justifyContent: "flex-end", color: "var(--text-muted)" }}>
-                    {item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}
-                  </div>
-                  <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}>
-                    <Trash2 size={12} />
-                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Right column: Summary + Post button */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div className="inv-card">
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
+                  <span>Total</span><span>PKR {totalAmount.toLocaleString()}</span>
                 </div>
-              ))}
+              </div>
+              <div className="inv-card">
+                <button className="inv-btn" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={saving}>
+                  {saving ? "Posting..." : editId ? "💾 UPDATE Invoice" : "💾 POST Invoice"}
+                </button>
+                <button className="inv-btn" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleBeforeSavePdf}>
+                  <Download size={14} /> PDF Preview
+                </button>
+                {selectedCustomer && hasFeature("whatsapp_invoice") && (
+                  <button className="inv-btn inv-btn-success" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleWhatsAppWithPDF}>
+                    <Send size={14} /> WhatsApp (PDF)
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Change History – below everything */}
+          {editId && (
+            <div className="inv-card" style={{ marginTop: 16 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
+              <RecordHistory tableName="invoices" recordId={editId} />
             </div>
           )}
         </div>
-
-        {/* Change History – moved below items */}
-        {editId && (
-          <div className="inv-card" style={{ marginTop: 16 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
-            <RecordHistory tableName="invoices" recordId={editId} />
-          </div>
-        )}
       </div>
     </div>
   )
