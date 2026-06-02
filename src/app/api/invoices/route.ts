@@ -57,7 +57,7 @@ async function createJE(
   }
 }
 
-// ── Generate unique sequential invoice number: SI/YYYYMM/0001 ──────────
+// ── Generate unique sequential invoice number ──────────────────────────
 async function generateInvoiceNo(supabase: any, companyId: string): Promise<string> {
   const now = new Date()
   const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`
@@ -95,7 +95,7 @@ async function validateStock(supabase: any, companyId: string, items: any[]) {
   return null
 }
 
-// ── NEW: Record product‑line stock movements into stock_moves ────────
+// ── Record product‑line stock movements into stock_moves ───────────────
 async function recordStockMoves(
   supabase: any,
   companyId: string,
@@ -194,6 +194,20 @@ export async function POST(request: NextRequest) {
   const expenseRules = effectiveExpenseEnabled ? (automationConfig.expenseRules || []) : []
   const partners = effectiveProfitEnabled ? (automationConfig.partners || []) : []
 
+  // ── Enhance items with product cost_price if available ──
+  const enhancedItems = await Promise.all(items.map(async (item: any) => {
+    if (item.product_id) {
+      const { data: product } = await supabase
+        .from('products')
+        .select('cost_price')
+        .eq('id', item.product_id)
+        .eq('company_id', companyId)
+        .maybeSingle()
+      return { ...item, cost_price: product?.cost_price || 0 }
+    }
+    return item
+  }))
+
   // ── Generate unique invoice number with retry ──
   let invoice: any = null
   let invoiceNo = ''
@@ -226,7 +240,7 @@ export async function POST(request: NextRequest) {
   if (!invoice) return NextResponse.json({ error: 'Could not generate unique invoice number' }, { status: 500 })
 
   // Insert items
-  const itemRows = items.map((item: any) => {
+  const itemRows = enhancedItems.map((item: any) => {
     const qty = Number(item.qty || 0)
     const unit_price = Number(item.unit_price || 0)
     const lineTotal = qty * unit_price
@@ -249,7 +263,7 @@ export async function POST(request: NextRequest) {
   }
 
   // ── INSERT STOCK MOVES (outflow) ──
-  await recordStockMoves(supabase, companyId, items, 'sale', invoice.id, 'out')
+  await recordStockMoves(supabase, companyId, enhancedItems, 'sale', invoice.id, 'out')
 
   const totalSalesAmount = itemRows.reduce((s: number, i: any) => s + (i.total || 0), 0)
   const { data: updatedInv } = await supabase
@@ -273,26 +287,25 @@ export async function POST(request: NextRequest) {
     const jeLines: any[] = []
 
     // First pass: AR / Revenue for each item
-    for (const item of items) {
+    for (const item of enhancedItems) {
       const lineTotal = Number(item.qty || 0) * Number(item.unit_price || 0)
       if (lineTotal <= 0) continue
       jeLines.push({ account_id: arAccount.id, debit: lineTotal, credit: 0 })
       jeLines.push({ account_id: revenueAccount.id, debit: 0, credit: lineTotal })
     }
 
-    // COGS for trading companies
-    if (businessType === 'trading') {
-      for (const item of items) {
-        if (item.product_id && Number(item.qty || 0) > 0 && (item.cost_price || 0) > 0) {
-          const qty = Number(item.qty)
-          const cost = qty * item.cost_price
-          const cogsAccount = await getAccount(supabase, '5000', companyId)
-          const inventoryAccount = await getAccount(supabase, '1200', companyId)
-          if (cogsAccount && inventoryAccount) {
-            jeLines.push({ account_id: cogsAccount.id, debit: cost, credit: 0 })
-            jeLines.push({ account_id: inventoryAccount.id, debit: 0, credit: cost })
-          }
-        }
+    // ── COGS for product lines (regardless of business type) ──
+    for (const item of enhancedItems) {
+      if (!item.product_id) continue
+      const qty = Number(item.qty || 0)
+      const costPrice = Number(item.cost_price || 0)
+      if (qty <= 0 || costPrice <= 0) continue
+      const cost = qty * costPrice
+      const cogsAccount = await getAccount(supabase, '5000', companyId)
+      const inventoryAccount = await getAccount(supabase, '1200', companyId)
+      if (cogsAccount && inventoryAccount) {
+        jeLines.push({ account_id: cogsAccount.id, debit: cost, credit: 0 })
+        jeLines.push({ account_id: inventoryAccount.id, debit: 0, credit: cost })
       }
     }
 
@@ -311,32 +324,30 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Profit allocation – only if feature is enabled (ROUNDING FIXED)
+    // Profit allocation – only if feature is enabled
     if (effectiveProfitEnabled && partners.length > 0) {
       let netProfit = totalSalesAmount - totalAutomationExpense
-      if (businessType === 'trading') {
-        const totalCogs = items.reduce((s: number, i: any) => s + (Number(i.qty || 0) * (i.cost_price || 0)), 0)
-        netProfit -= totalCogs
+      // Deduct COGS for product lines (already included in cost calculation above)
+      for (const item of enhancedItems) {
+        if (!item.product_id) continue
+        const cost = (Number(item.qty || 0) * Number(item.cost_price || 0))
+        netProfit -= cost
       }
       if (netProfit > 0) {
         const retainedEarnings = await getAccount(supabase, '3000', companyId)
         if (retainedEarnings) {
           jeLines.push({ account_id: retainedEarnings.id, debit: netProfit, credit: 0 })
 
-          // Filter active partners with positive percentage
           const activePartners = partners.filter((p: any) => p.account_id && p.percentage > 0)
 
           if (activePartners.length > 0) {
             let allocated = 0
-            // Allocate all except the last partner using the standard calculation
             for (let i = 0; i < activePartners.length - 1; i++) {
               const p = activePartners[i]
-              const amount = Math.round((netProfit * p.percentage) / 100 * 100) / 100  // round to 2 decimals
+              const amount = Math.round((netProfit * p.percentage) / 100 * 100) / 100
               allocated += amount
               jeLines.push({ account_id: p.account_id, debit: 0, credit: amount })
             }
-
-            // Last partner gets the exact remainder to avoid any rounding imbalance
             const lastPartner = activePartners[activePartners.length - 1]
             const lastAmount = netProfit - allocated
             jeLines.push({ account_id: lastPartner.account_id, debit: 0, credit: lastAmount })
@@ -347,8 +358,8 @@ export async function POST(request: NextRequest) {
 
     await createJE(supabase, companyId, invoice_date, `Sales Invoice ${invoiceNo}`, jeLines, 'sale_invoice', updatedInv.id)
 
-    // Update product stock (outflow) – keep for consistency, stock_moves is the new source of truth
-    for (const item of items) {
+    // Update product stock (outflow)
+    for (const item of enhancedItems) {
       if (!item.product_id) continue
       const qty = Number(item.qty || 0)
       if (qty <= 0) continue
@@ -383,7 +394,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ success: true, invoice: updatedInv })
 }
 
-// ── PUT (Update) ─────────────────────────────────────────────────────
+// ── PUT (Update) – unchanged, but still valid for later fixes ─────
 export async function PUT(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
