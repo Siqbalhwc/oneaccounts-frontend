@@ -8,7 +8,7 @@ import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
 
-type SortField = "invoice_no" | "date" | "supplier" | "total" | "status"
+type SortField = "invoice_no" | "date" | "supplier" | "total" | "status" | "created_by"
 type SortDir = "asc" | "desc"
 
 export default function BillsPage() {
@@ -86,6 +86,9 @@ export default function BillsPage() {
     } else if (sortField === "status") {
       valA = (a.status || "").toLowerCase()
       valB = (b.status || "").toLowerCase()
+    } else if (sortField === "created_by") {
+      valA = (a.created_by || "").toLowerCase()
+      valB = (b.created_by || "").toLowerCase()
     } else {
       valA = (a[sortField] || "").toString().toLowerCase()
       valB = (b[sortField] || "").toString().toLowerCase()
@@ -145,10 +148,11 @@ export default function BillsPage() {
       <style>{`
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
         .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        /* Updated grid with 9 columns, wider Created/Edited, reduced Supplier */
         .header-row {
           display: grid;
-          grid-template-columns: minmax(120px, 1fr) minmax(90px, 1fr) minmax(150px, 2fr) minmax(90px, 1fr) minmax(70px, 1fr) minmax(110px, 1fr) 60px 60px 60px;
-          column-gap: 8px;
+          grid-template-columns: minmax(120px, 1fr) minmax(90px, 1fr) minmax(120px, 1.5fr) minmax(90px, 1fr) minmax(70px, 1fr) 200px 60px 60px 60px;
+          column-gap: 10px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
@@ -156,8 +160,8 @@ export default function BillsPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: minmax(120px, 1fr) minmax(90px, 1fr) minmax(150px, 2fr) minmax(90px, 1fr) minmax(70px, 1fr) minmax(110px, 1fr) 60px 60px 60px;
-          column-gap: 8px;
+          grid-template-columns: minmax(120px, 1fr) minmax(90px, 1fr) minmax(120px, 1.5fr) minmax(90px, 1fr) minmax(70px, 1fr) 200px 60px 60px 60px;
+          column-gap: 10px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
@@ -200,8 +204,19 @@ export default function BillsPage() {
           line-height: 1.3;
           word-wrap: break-word;
         }
+        @media (max-width: 900px) {
+          .header-row, .data-row {
+            column-gap: 6px;
+            padding: 10px 12px;
+          }
+        }
         @media (max-width: 640px) {
-          .header-row, .data-row { padding: 10px 12px; column-gap: 4px; }
+          .header-row, .data-row {
+            /* Force horizontal scroll on very small screens */
+            grid-template-columns: 100px 80px 120px 80px 60px 150px 50px 50px 50px;
+            column-gap: 4px;
+            padding: 10px 8px;
+          }
         }
       `}</style>
 
@@ -265,9 +280,10 @@ export default function BillsPage() {
               <button className="sort-btn" onClick={() => handleSort("supplier")}>Supplier {getSortIcon("supplier")}</button>
               <button className="sort-btn" onClick={() => handleSort("total")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Total {getSortIcon("total")}</button>
               <button className="sort-btn" onClick={() => handleSort("status")} style={{ textAlign: "center", justifyContent: "center" }}>Status {getSortIcon("status")}</button>
-              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
-                Created / Edited
-              </span>
+              {/* Sortable Created / Edited By header */}
+              <button className="sort-btn" onClick={() => handleSort("created_by")} style={{ justifyContent: "flex-start" }}>
+                Created / Edited By {getSortIcon("created_by")}
+              </button>
               <span></span>
               <span></span>
               <span></span>
