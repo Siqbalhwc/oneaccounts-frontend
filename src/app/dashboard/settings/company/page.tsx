@@ -14,40 +14,70 @@ interface CompanySettings {
 }
 
 export default function CompanySettingsPage() {
-  const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
   const fileInputRef = useRef<HTMLInputElement>(null)
+
   const [settings, setSettings] = useState<CompanySettings>({
-    business_name: "OneAccounts",
-    tagline: "Smart Accounting, Stronger Business",
+    business_name: "",
+    tagline: "",
     address: "",
     phone: "",
     email: "",
     logo_url: "",
   })
+  const [companyId, setCompanyId] = useState("")
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState("")
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
 
+  // Get the current company ID from the JWT
   useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id
+      if (cid) setCompanyId(cid)
+    })
+  }, [])
+
+  // Fetch settings for the CURRENT company only
+  useEffect(() => {
+    if (!companyId) return
     const fetchSettings = async () => {
-      const { data } = await supabase.from("company_settings").select("*").single()
+      const { data } = await supabase
+        .from("company_settings")
+        .select("*")
+        .eq("company_id", companyId)
+        .maybeSingle()
+
       if (data) {
         setSettings({
-          business_name: data.business_name || "OneAccounts",
-          tagline: data.tagline || "Smart Accounting, Stronger Business",
+          business_name: data.business_name || "",
+          tagline: data.tagline || "",
           address: data.address || "",
           phone: data.phone || "",
           email: data.email || "",
           logo_url: data.logo_url || "",
         })
         if (data.logo_url) setLogoPreview(data.logo_url)
+      } else {
+        // If no settings row exists yet, fetch the company name from the companies table
+        const { data: company } = await supabase
+          .from("companies")
+          .select("name")
+          .eq("id", companyId)
+          .single()
+        if (company) {
+          setSettings(prev => ({ ...prev, business_name: company.name }))
+        }
       }
       setLoading(false)
     }
     fetchSettings()
-  }, [])
+  }, [companyId])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -82,10 +112,11 @@ export default function CompanySettingsPage() {
       newLogoUrl = publicUrlData?.publicUrl || ""
     }
 
+    // Update ONLY the current company's settings (never the seed)
     const { error } = await supabase
       .from("company_settings")
       .upsert({
-        id: 1,
+        company_id: companyId,
         business_name: settings.business_name,
         tagline: settings.tagline,
         address: settings.address,
@@ -93,109 +124,124 @@ export default function CompanySettingsPage() {
         email: settings.email,
         logo_url: newLogoUrl,
         updated_at: new Date().toISOString(),
-      })
+      }, { onConflict: 'company_id' })
 
     if (error) {
-      setMessage("Error saving settings.")
+      setMessage("Error saving settings: " + error.message)
     } else {
-      setMessage("✅ Settings saved successfully!")
-      setSettings({ ...settings, logo_url: newLogoUrl })
+      // Also update the company name in the companies table
+      await supabase
+        .from("companies")
+        .update({ name: settings.business_name })
+        .eq("id", companyId)
+
+      setMessage("✅ Settings saved! Refreshing page…")
+      setSettings(prev => ({ ...prev, logo_url: newLogoUrl }))
       setLogoFile(null)
+
+      // Reload the page after a short delay so the sidebar & dashboard reflect the new name
+      setTimeout(() => {
+        window.location.reload()
+      }, 1500)
     }
     setSaving(false)
-    setTimeout(() => setMessage(""), 3000)
   }
 
-  if (loading) return <div style={{ padding: 24, textAlign: "center", color: "#94A3B8" }}>Loading...</div>
+  if (loading) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>Loading…</div>
 
   return (
-    <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <div style={{ maxWidth: 700, margin: "0 auto" }}>
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 800, color: "#1E293B", marginBottom: 4 }}>🏢 Company Settings</h1>
-          <p style={{ color: "#94A3B8", fontSize: 14 }}>Manage your business details, logo, and contact information.</p>
+          <h1 style={{ fontSize: 24, fontWeight: 800, color: "var(--text)", marginBottom: 4 }}>🏢 Company Settings</h1>
+          <p style={{ color: "var(--text-muted)", fontSize: 14 }}>Manage your business details, logo, and contact information.</p>
         </div>
 
         {message && (
           <div style={{
-            background: message.startsWith("✅") ? "#F0FDF4" : "#FEF2F2",
-            border: `1px solid ${message.startsWith("✅") ? "#BBF7D0" : "#FECACA"}`,
-            color: message.startsWith("✅") ? "#15803D" : "#B91C1C",
+            background: message.startsWith("✅") ? "var(--card)" : "var(--card)",
+            border: `1px solid ${message.startsWith("✅") ? "var(--primary)" : "#EF4444"}`,
+            color: message.startsWith("✅") ? "var(--primary)" : "#FCA5A5",
             padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13
           }}>
             {message}
           </div>
         )}
 
-        <div style={{ background: "white", borderRadius: 12, border: "1px solid #E2E8F0", padding: 24, marginBottom: 16 }}>
+        <div style={{
+          background: "var(--card)", borderRadius: 12, border: "1px solid var(--border)",
+          padding: 24, marginBottom: 16
+        }}>
           <div style={{ marginBottom: 20 }}>
-            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 6, textTransform: "uppercase" }}>Business Name</label>
+            <label className="inv-label">Business Name</label>
             <input
+              className="inv-input"
               value={settings.business_name}
               onChange={e => setSettings({ ...settings, business_name: e.target.value })}
-              style={{ width: "100%", height: 42, border: "1.5px solid #E2E8F0", borderRadius: 9, padding: "0 14px", fontSize: 14, outline: "none" }}
             />
           </div>
           <div style={{ marginBottom: 20 }}>
-            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 6, textTransform: "uppercase" }}>Tagline / Slogan</label>
+            <label className="inv-label">Tagline / Slogan</label>
             <input
+              className="inv-input"
               value={settings.tagline}
               onChange={e => setSettings({ ...settings, tagline: e.target.value })}
-              style={{ width: "100%", height: 42, border: "1.5px solid #E2E8F0", borderRadius: 9, padding: "0 14px", fontSize: 14, outline: "none" }}
             />
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 6, textTransform: "uppercase" }}>Phone</label>
+              <label className="inv-label">Phone</label>
               <input
+                className="inv-input"
                 value={settings.phone}
                 onChange={e => setSettings({ ...settings, phone: e.target.value })}
-                style={{ width: "100%", height: 42, border: "1.5px solid #E2E8F0", borderRadius: 9, padding: "0 14px", fontSize: 14, outline: "none" }}
               />
             </div>
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 6, textTransform: "uppercase" }}>Email</label>
+              <label className="inv-label">Email</label>
               <input
+                className="inv-input"
                 value={settings.email}
                 onChange={e => setSettings({ ...settings, email: e.target.value })}
-                style={{ width: "100%", height: 42, border: "1.5px solid #E2E8F0", borderRadius: 9, padding: "0 14px", fontSize: 14, outline: "none" }}
               />
             </div>
           </div>
           <div style={{ marginBottom: 20 }}>
-            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 6, textTransform: "uppercase" }}>Address</label>
+            <label className="inv-label">Address</label>
             <textarea
+              className="inv-input"
               value={settings.address}
               onChange={e => setSettings({ ...settings, address: e.target.value })}
               rows={2}
-              style={{ width: "100%", border: "1.5px solid #E2E8F0", borderRadius: 9, padding: "10px 14px", fontSize: 14, outline: "none", resize: "vertical" }}
+              style={{ resize: "vertical" }}
             />
           </div>
 
           <div style={{ marginBottom: 20 }}>
-            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 6, textTransform: "uppercase" }}>Company Logo</label>
+            <label className="inv-label">Company Logo</label>
             <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
               <div
                 onClick={() => fileInputRef.current?.click()}
                 style={{
-                  width: 100, height: 100, borderRadius: 12, border: "2px dashed #E2E8F0",
+                  width: 100, height: 100, borderRadius: 12,
+                  border: "2px dashed var(--border)",
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  cursor: "pointer", overflow: "hidden", background: "#F8FAFC"
+                  cursor: "pointer", overflow: "hidden", background: "var(--bg)"
                 }}
               >
                 {logoPreview ? (
                   <img src={logoPreview} alt="Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
                 ) : (
-                  <div style={{ textAlign: "center", color: "#94A3B8" }}>
+                  <div style={{ textAlign: "center", color: "var(--text-muted)" }}>
                     <Upload size={20} />
                     <div style={{ fontSize: 10, marginTop: 4 }}>Upload</div>
                   </div>
                 )}
               </div>
               <div>
-                <p style={{ fontSize: 12, color: "#64748B", margin: 0 }}>Click to upload a new logo</p>
-                <p style={{ fontSize: 11, color: "#94A3B8", margin: 0 }}>PNG, JPG or SVG. Best size: 200x200px</p>
+                <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>Click to upload a new logo</p>
+                <p style={{ fontSize: 11, color: "var(--text-muted)", margin: 0 }}>PNG, JPG or SVG. Best size: 200×200px</p>
               </div>
               <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} hidden />
             </div>
@@ -204,17 +250,44 @@ export default function CompanySettingsPage() {
           <button
             onClick={handleSave}
             disabled={saving}
+            className="inv-btn"
             style={{
-              display: "inline-flex", alignItems: "center", gap: 8,
-              padding: "12px 24px", background: saving ? "#94A3B8" : "linear-gradient(135deg, #1740C8, #071352)",
-              color: "white", border: "none", borderRadius: 9, fontSize: 14, fontWeight: 600,
-              cursor: "pointer", transition: "all 0.15s"
+              justifyContent: "center",
+              width: "100%",
+              background: saving ? "var(--text-muted)" : "var(--primary)",
+              color: "var(--primary-text)",
+              borderColor: "var(--primary)",
             }}
           >
-            <Save size={16} /> {saving ? "Saving..." : "Save Settings"}
+            <Save size={16} /> {saving ? "Saving…" : "Save Settings"}
           </button>
         </div>
       </div>
+
+      {/* Re‑use styles from other forms */}
+      <style>{`
+        .inv-label {
+          font-size: 10px; font-weight: 600; color: var(--text-muted);
+          text-transform: uppercase; letter-spacing: 0.06em;
+          margin-bottom: 4px; display: block;
+        }
+        .inv-input {
+          width: 100%; height: 42px; border: 1.5px solid var(--border);
+          border-radius: 9px; padding: 0 14px; font-size: 14px;
+          font-family: inherit; background: var(--bg); color: var(--text);
+          outline: none; box-sizing: border-box;
+        }
+        .inv-input:focus { border-color: var(--primary); }
+        textarea.inv-input {
+          height: auto; padding: 10px 14px;
+        }
+        .inv-btn {
+          display: inline-flex; align-items: center; gap: 8px;
+          padding: 12px 24px; border-radius: 9px; font-size: 14px;
+          font-weight: 600; border: none; cursor: pointer;
+          font-family: inherit; transition: all 0.15s;
+        }
+      `}</style>
     </div>
   )
 }
