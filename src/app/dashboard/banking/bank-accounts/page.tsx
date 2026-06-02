@@ -242,11 +242,11 @@ export default function BankAccountsPage() {
           -webkit-overflow-scrolling: touch;
         }
         .table-grid {
-          min-width: 1050px; /* ensures columns never shrink below this width */
+          min-width: 1050px;
         }
         .header-row {
           display: grid;
-          grid-template-columns: 1fr 200px 150px 100px 150px 200px 55px 55px;
+          grid-template-columns: 200px 200px 150px 100px 150px 200px 55px 55px;
           column-gap: 10px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
@@ -255,7 +255,7 @@ export default function BankAccountsPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: 1fr 200px 150px 100px 150px 200px 55px 55px;
+          grid-template-columns: 200px 200px 150px 100px 150px 200px 55px 55px;
           column-gap: 10px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
@@ -307,17 +307,11 @@ export default function BankAccountsPage() {
         .pr-modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
 
         @media (max-width: 800px) {
-          .header-row, .data-row {
-            column-gap: 6px;
-            padding: 10px 12px;
-          }
+          .header-row, .data-row { column-gap: 6px; padding: 10px 12px; }
           .table-grid { min-width: 950px; }
         }
         @media (max-width: 600px) {
-          .header-row, .data-row {
-            column-gap: 4px;
-            padding: 10px 8px;
-          }
+          .header-row, .data-row { column-gap: 4px; padding: 10px 8px; }
           .table-grid { min-width: 850px; }
         }
       `}</style>
@@ -380,12 +374,12 @@ export default function BankAccountsPage() {
           <div className="table-wrapper">
             <div className="table-grid">
               <div className="header-row">
-                <button className="sort-btn" onClick={() => handleSort("account")}>Account {getSortIcon("account")}</button>
-                <button className="sort-btn" onClick={() => handleSort("bank_name")}>Bank Name {getSortIcon("bank_name")}</button>
-                <button className="sort-btn" onClick={() => handleSort("account_number")}>Account # {getSortIcon("account_number")}</button>
-                <button className="sort-btn" onClick={() => handleSort("branch")}>Branch {getSortIcon("branch")}</button>
-                <button className="sort-btn" onClick={() => handleSort("balance")}>Balance {getSortIcon("balance")}</button>
-                <button className="sort-btn" onClick={() => handleSort("created_by")}>Created / Edited By {getSortIcon("created_by")}</button>
+                <button className="sort-btn" onClick={() => handleSort("account")} style={{ justifyContent: "flex-start" }}>Account {getSortIcon("account")}</button>
+                <button className="sort-btn" onClick={() => handleSort("bank_name")} style={{ justifyContent: "flex-start" }}>Bank Name {getSortIcon("bank_name")}</button>
+                <button className="sort-btn" onClick={() => handleSort("account_number")} style={{ justifyContent: "center" }}>Account # {getSortIcon("account_number")}</button>
+                <button className="sort-btn" onClick={() => handleSort("branch")} style={{ justifyContent: "center" }}>Branch {getSortIcon("branch")}</button>
+                <button className="sort-btn" onClick={() => handleSort("balance")} style={{ justifyContent: "flex-end", textAlign: "right" }}>Balance {getSortIcon("balance")}</button>
+                <button className="sort-btn" onClick={() => handleSort("created_by")} style={{ justifyContent: "flex-start" }}>Created / Edited By {getSortIcon("created_by")}</button>
                 <span></span>
                 <span></span>
               </div>
@@ -393,9 +387,9 @@ export default function BankAccountsPage() {
                 <div key={b.id} className="data-row">
                   <span style={{ fontWeight: 600, color: "var(--primary)" }}>{b.code} - {b.name}</span>
                   <span>{b.bank_name}</span>
-                  <span style={{ color: "var(--text-muted)" }}>{b.account_number || "—"}</span>
-                  <span style={{ color: "var(--text-muted)" }}>{b.branch || "—"}</span>
-                  <span style={{ fontWeight: 600 }}>PKR {(b.balance || 0).toLocaleString()}</span>
+                  <span style={{ color: "var(--text-muted)", textAlign: "center" }}>{b.account_number || "—"}</span>
+                  <span style={{ color: "var(--text-muted)", textAlign: "center" }}>{b.branch || "—"}</span>
+                  <span style={{ fontWeight: 600, textAlign: "right" }}>PKR {(b.balance || 0).toLocaleString()}</span>
                   <div className="creator-editor-cell">
                     <span>Created: {b.created_by || "—"}</span>
                     <span>Edited: {b.updated_by || "—"}</span>
