@@ -29,34 +29,7 @@ async function getDefaultExpenseAccount(supabase: any, companyId: string, type: 
   return null
 }
 
-async function applyStockChanges(supabase: any, companyId: string, items: any[], direction: 'add' | 'remove') {
-  for (const item of items) {
-    if (!item.product_id) continue
-    const qty = Number(item.qty || 0)
-    if (qty <= 0) continue
-
-    const { data: product } = await supabase
-      .from('products')
-      .select('qty_on_hand, total_inflow')
-      .eq('id', item.product_id)
-      .eq('company_id', companyId)
-      .single()
-
-    if (!product) continue
-
-    const multiplier = direction === 'add' ? 1 : -1
-    const newQtyOnHand = (product.qty_on_hand || 0) + qty * multiplier
-    const newTotalInflow = (product.total_inflow || 0) + qty * multiplier
-
-    await supabase
-      .from('products')
-      .update({ qty_on_hand: newQtyOnHand, total_inflow: newTotalInflow })
-      .eq('id', item.product_id)
-      .eq('company_id', companyId)
-  }
-}
-
-// ── NEW: Record product‑line stock movements into stock_moves ────────
+// ── Record product‑line stock movements into stock_moves ────────
 async function recordStockMoves(
   supabase: any,
   companyId: string,
@@ -66,7 +39,7 @@ async function recordStockMoves(
   direction: 'in' | 'out'
 ) {
   const moves = items
-    .filter((item: any) => item.product_id)            // only product lines
+    .filter((item: any) => item.product_id)
     .map((item: any) => ({
       company_id: companyId,
       product_id: item.product_id,
@@ -196,8 +169,6 @@ async function createBillJournalEntry(
   if (accountUpdates.length > 0) {
     await supabase.rpc('bulk_update_account_balances', { data: accountUpdates })
   }
-
-  await applyStockChanges(supabase, companyId, items, 'add')
 
   return entry.id
 }
@@ -474,12 +445,6 @@ export async function PUT(request: NextRequest) {
     .select('*').eq('id', id).eq('company_id', companyId).single()
   if (!oldBill) return NextResponse.json({ error: 'Bill not found' }, { status: 404 })
 
-  // Reverse old stock changes
-  const { data: oldItems } = await supabase.from('invoice_items').select('*').eq('invoice_id', id)
-  if (oldItems) {
-    await applyStockChanges(supabase, companyId, oldItems, 'remove')
-  }
-
   // Reverse old journal entry
   const { data: oldEntries } = await supabase.from('journal_entries')
     .select('id')
@@ -610,12 +575,6 @@ export async function DELETE(request: NextRequest) {
   if (!id) return NextResponse.json({ error: 'Bill ID required' }, { status: 400 })
 
   const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
-
-  // Reverse stock
-  const { data: oldItems } = await supabase.from('invoice_items').select('*').eq('invoice_id', id)
-  if (oldItems) {
-    await applyStockChanges(supabase, companyId, oldItems, 'remove')
-  }
 
   // Reverse JE
   const { data: entries } = await supabase.from('journal_entries')

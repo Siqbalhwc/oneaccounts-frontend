@@ -294,16 +294,16 @@ export async function POST(request: NextRequest) {
       jeLines.push({ account_id: revenueAccount.id, debit: 0, credit: lineTotal })
     }
 
-    // ── COGS for product lines (regardless of business type) ──
-    for (const item of enhancedItems) {
-      if (!item.product_id) continue
-      const qty = Number(item.qty || 0)
-      const costPrice = Number(item.cost_price || 0)
-      if (qty <= 0 || costPrice <= 0) continue
-      const cost = qty * costPrice
-      const cogsAccount = await getAccount(supabase, '5000', companyId)
-      const inventoryAccount = await getAccount(supabase, '1200', companyId)
-      if (cogsAccount && inventoryAccount) {
+    // ── COGS for product lines (fetch accounts once) ──
+    const cogsAccount = await getAccount(supabase, '5000', companyId)
+    const inventoryAccount = await getAccount(supabase, '1200', companyId)
+    if (cogsAccount && inventoryAccount) {
+      for (const item of enhancedItems) {
+        if (!item.product_id) continue
+        const qty = Number(item.qty || 0)
+        const costPrice = Number(item.cost_price || 0)
+        if (qty <= 0 || costPrice <= 0) continue
+        const cost = qty * costPrice
         jeLines.push({ account_id: cogsAccount.id, debit: cost, credit: 0 })
         jeLines.push({ account_id: inventoryAccount.id, debit: 0, credit: cost })
       }
@@ -327,7 +327,6 @@ export async function POST(request: NextRequest) {
     // Profit allocation – only if feature is enabled
     if (effectiveProfitEnabled && partners.length > 0) {
       let netProfit = totalSalesAmount - totalAutomationExpense
-      // Deduct COGS for product lines (already included in cost calculation above)
       for (const item of enhancedItems) {
         if (!item.product_id) continue
         const cost = (Number(item.qty || 0) * Number(item.cost_price || 0))
@@ -358,28 +357,7 @@ export async function POST(request: NextRequest) {
 
     await createJE(supabase, companyId, invoice_date, `Sales Invoice ${invoiceNo}`, jeLines, 'sale_invoice', updatedInv.id)
 
-    // Update product stock (outflow)
-    for (const item of enhancedItems) {
-      if (!item.product_id) continue
-      const qty = Number(item.qty || 0)
-      if (qty <= 0) continue
-      const { data: product } = await supabase
-        .from('products')
-        .select('qty_on_hand, total_outflow')
-        .eq('id', item.product_id)
-        .eq('company_id', companyId)
-        .single()
-      if (product) {
-        const newQtyOnHand = (product.qty_on_hand || 0) - qty
-        const newTotalOutflow = (product.total_outflow || 0) + qty
-        await supabase
-          .from('products')
-          .update({ qty_on_hand: newQtyOnHand, total_outflow: newTotalOutflow })
-          .eq('id', item.product_id)
-          .eq('company_id', companyId)
-      }
-    }
-
+    // ── Per‑product stock update REMOVED – stock_moves is the single source of truth ──
   } catch (e: any) {
     await supabase.from('invoice_items').delete().eq('invoice_id', invoice.id)
     await supabase.from('invoices').delete().eq('id', invoice.id)
@@ -394,7 +372,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ success: true, invoice: updatedInv })
 }
 
-// ── PUT (Update) – unchanged, but still valid for later fixes ─────
+// ── PUT (Update) – unchanged, except stock updates removed ──────────
 export async function PUT(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -432,30 +410,8 @@ export async function PUT(request: NextRequest) {
     .select('*').eq('id', id).eq('company_id', companyId).single()
   if (!oldInv) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
 
-  // Reverse old stock outflow
+  // Reverse old stock outflow – not needed, stock_moves is the truth
   const { data: oldItems } = await supabase.from('invoice_items').select('*').eq('invoice_id', id)
-  if (oldItems) {
-    for (const item of oldItems) {
-      if (!item.product_id) continue
-      const qty = Number(item.qty || 0)
-      if (qty <= 0) continue
-      const { data: product } = await supabase
-        .from('products')
-        .select('qty_on_hand, total_outflow')
-        .eq('id', item.product_id)
-        .eq('company_id', companyId)
-        .single()
-      if (product) {
-        const newQtyOnHand = (product.qty_on_hand || 0) + qty
-        const newTotalOutflow = (product.total_outflow || 0) - qty
-        await supabase
-          .from('products')
-          .update({ qty_on_hand: newQtyOnHand, total_outflow: newTotalOutflow })
-          .eq('id', item.product_id)
-          .eq('company_id', companyId)
-      }
-    }
-  }
 
   // Reverse old JE
   const { data: oldEntries } = await supabase.from('journal_entries')
@@ -534,27 +490,7 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  // Apply new stock outflow
-  for (const item of items) {
-    if (!item.product_id) continue
-    const qty = Number(item.qty || 0)
-    if (qty <= 0) continue
-    const { data: product } = await supabase
-      .from('products')
-      .select('qty_on_hand, total_outflow')
-      .eq('id', item.product_id)
-      .eq('company_id', companyId)
-      .single()
-    if (product) {
-      const newQtyOnHand = (product.qty_on_hand || 0) - qty
-      const newTotalOutflow = (product.total_outflow || 0) + qty
-      await supabase
-        .from('products')
-        .update({ qty_on_hand: newQtyOnHand, total_outflow: newTotalOutflow })
-        .eq('id', item.product_id)
-        .eq('company_id', companyId)
-    }
-  }
+  // ── Per‑product stock update REMOVED – stock_moves is the single source of truth ──
 
   await logDataChange('invoices', String(id), 'UPDATE', oldInv, updatedInv)
 
