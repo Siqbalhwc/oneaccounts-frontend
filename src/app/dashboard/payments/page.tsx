@@ -8,7 +8,7 @@ import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
 
-type SortField = "payment_no" | "payment_date" | "supplier" | "amount" | "payment_method"
+type SortField = "payment_no" | "payment_date" | "supplier" | "amount" | "payment_method" | "created_by"
 type SortDir = "asc" | "desc"
 
 export default function PaymentsPage() {
@@ -82,6 +82,9 @@ export default function PaymentsPage() {
     } else if (sortField === "amount") {
       valA = Number(a.amount) || 0
       valB = Number(b.amount) || 0
+    } else if (sortField === "created_by") {
+      valA = (a.created_by || "").toLowerCase()
+      valB = (b.created_by || "").toLowerCase()
     } else {
       valA = (a[sortField] || "").toString().toLowerCase()
       valB = (b[sortField] || "").toString().toLowerCase()
@@ -132,12 +135,12 @@ export default function PaymentsPage() {
           margin: 0;
         }
         .table-grid {
-          min-width: 900px;
+          min-width: 960px;
         }
         .header-row {
           display: grid;
-          grid-template-columns: 140px 100px 1fr 120px 130px 130px 55px 55px;
-          column-gap: 8px;
+          grid-template-columns: 140px 100px minmax(140px, 1fr) 120px 110px 200px 55px 55px;
+          column-gap: 10px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
@@ -145,8 +148,8 @@ export default function PaymentsPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: 140px 100px 1fr 120px 130px 130px 55px 55px;
-          column-gap: 8px;
+          grid-template-columns: 140px 100px minmax(140px, 1fr) 120px 110px 200px 55px 55px;
+          column-gap: 10px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
@@ -188,6 +191,14 @@ export default function PaymentsPage() {
           color: var(--text-muted);
           line-height: 1.3;
           word-wrap: break-word;
+        }
+        @media (max-width: 900px) {
+          .header-row, .data-row { column-gap: 6px; padding: 10px 12px; }
+          .table-grid { min-width: 880px; }
+        }
+        @media (max-width: 640px) {
+          .header-row, .data-row { column-gap: 4px; padding: 10px 8px; }
+          .table-grid { min-width: 780px; }
         }
       `}</style>
 
@@ -244,9 +255,10 @@ export default function PaymentsPage() {
                 <button className="sort-btn" onClick={() => handleSort("supplier")}>Supplier {getSortIcon("supplier")}</button>
                 <button className="sort-btn" onClick={() => handleSort("amount")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Amount {getSortIcon("amount")}</button>
                 <button className="sort-btn" onClick={() => handleSort("payment_method")} style={{ textAlign: "center", justifyContent: "center" }}>Method {getSortIcon("payment_method")}</button>
-                <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
-                  Created / Edited By
-                </span>
+                {/* Sortable Created / Edited By header */}
+                <button className="sort-btn" onClick={() => handleSort("created_by")} style={{ justifyContent: "flex-start" }}>
+                  Created / Edited By {getSortIcon("created_by")}
+                </button>
                 <span></span>
                 <span></span>
               </div>
