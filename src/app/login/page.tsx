@@ -71,48 +71,164 @@ export default function LoginPage() {
         }
 
         /* ═══════════════════════════════════════
-           SHELL
+           WATER WAVE BACKGROUND
         ═══════════════════════════════════════ */
         .oa-shell {
           display: flex;
           min-height: 100vh;
           min-height: 100dvh;
-          background: #EEF2FB;
+          align-items: center;
+          justify-content: center;
+          padding: 24px 20px;
+          position: relative;
+          overflow: hidden;
+          background: #0B1E5B;
+        }
+
+        /* Animated water background */
+        .oa-water-bg {
+          position: fixed;
+          inset: 0;
+          z-index: 0;
+          background:
+            linear-gradient(180deg,
+              #0B1E5B 0%,
+              #0F2A7A 25%,
+              #0D3B9E 50%,
+              #0B2E80 75%,
+              #091A54 100%);
+        }
+
+        /* Water shimmer layers */
+        .oa-water-bg::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background:
+            radial-gradient(ellipse 80% 40% at 20% 60%, rgba(30,85,232,0.25) 0%, transparent 60%),
+            radial-gradient(ellipse 60% 30% at 80% 40%, rgba(23,64,200,0.20) 0%, transparent 55%),
+            radial-gradient(ellipse 100% 50% at 50% 80%, rgba(15,34,128,0.30) 0%, transparent 65%);
+          animation: waterShimmer 8s ease-in-out infinite alternate;
+        }
+
+        .oa-water-bg::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background-image:
+            repeating-linear-gradient(
+              0deg,
+              transparent,
+              transparent 60px,
+              rgba(255,255,255,0.018) 60px,
+              rgba(255,255,255,0.018) 61px
+            ),
+            repeating-linear-gradient(
+              90deg,
+              transparent,
+              transparent 80px,
+              rgba(255,255,255,0.012) 80px,
+              rgba(255,255,255,0.012) 81px
+            );
+          animation: waterRipple 12s linear infinite;
+        }
+
+        /* SVG wave overlays */
+        .oa-waves {
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          width: 100%;
+          z-index: 0;
+          opacity: 0.18;
+        }
+        .oa-waves .wave1 { animation: waveMove 7s linear infinite; }
+        .oa-waves .wave2 { animation: waveMove 10s linear infinite reverse; opacity: 0.6; }
+        .oa-waves .wave3 { animation: waveMove 13s linear infinite; opacity: 0.4; }
+
+        @keyframes waterShimmer {
+          0%   { opacity: 0.6; transform: scale(1); }
+          100% { opacity: 1;   transform: scale(1.04); }
+        }
+        @keyframes waterRipple {
+          0%   { transform: translateY(0); }
+          100% { transform: translateY(61px); }
+        }
+        @keyframes waveMove {
+          0%   { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+
+        /* Floating light particles */
+        .oa-particle {
+          position: fixed;
+          border-radius: 50%;
+          background: rgba(147, 197, 253, 0.12);
+          animation: particleFloat linear infinite;
+          z-index: 0;
+          pointer-events: none;
+        }
+        @keyframes particleFloat {
+          0%   { transform: translateY(100vh) scale(0); opacity: 0; }
+          10%  { opacity: 1; }
+          90%  { opacity: 0.6; }
+          100% { transform: translateY(-10vh) scale(1); opacity: 0; }
         }
 
         /* ═══════════════════════════════════════
-           LEFT PANEL
+           COLUMNS CONTAINER
+        ═══════════════════════════════════════ */
+        .oa-columns {
+          position: relative;
+          z-index: 2;
+          display: flex;
+          align-items: stretch;
+          gap: 5px;
+          width: 100%;
+          max-width: 1100px;
+          /* equal height: stretch both panels to the taller one */
+        }
+
+        /* ═══════════════════════════════════════
+           LEFT PANEL — floating, 2× width of right
         ═══════════════════════════════════════ */
         .oa-left {
-          width: 52%;
-          flex-shrink: 0;
-          background: linear-gradient(155deg,
-            #04092E 0%, #071352 18%, #0F2280 42%, #1740C8 74%, #1E55E8 100%);
+          flex: 2;
+          background: rgba(7, 19, 82, 0.82);
+          backdrop-filter: blur(18px) saturate(1.4);
+          -webkit-backdrop-filter: blur(18px) saturate(1.4);
+          border: 1px solid rgba(255,255,255,0.13);
+          border-radius: 20px;
+          box-shadow:
+            0 8px 32px rgba(0,0,0,0.45),
+            0 2px 8px rgba(0,0,0,0.3),
+            inset 0 1px 0 rgba(255,255,255,0.08);
           display: flex;
           flex-direction: column;
           justify-content: space-between;
-          padding: 28px 52px 24px;
+          padding: 32px 44px 28px;
           position: relative;
           overflow: hidden;
         }
 
-        /* background texture */
+        /* Left panel inner glow */
         .oa-dots {
           position: absolute; inset: 0;
-          background-image: radial-gradient(rgba(255,255,255,0.055) 1.2px, transparent 1.2px);
+          background-image: radial-gradient(rgba(255,255,255,0.04) 1.2px, transparent 1.2px);
           background-size: 28px 28px;
           pointer-events: none; z-index: 0;
+          border-radius: 20px;
         }
         .oa-glow {
-          position: absolute; top: -130px; right: -130px;
-          width: 420px; height: 420px; border-radius: 50%;
-          background: radial-gradient(circle, rgba(100,149,255,0.22) 0%, transparent 68%);
+          position: absolute; top: -100px; right: -100px;
+          width: 380px; height: 380px; border-radius: 50%;
+          background: radial-gradient(circle, rgba(100,149,255,0.16) 0%, transparent 68%);
           pointer-events: none; z-index: 0;
         }
         .oa-glow2 {
-          position: absolute; bottom: -100px; left: -60px;
-          width: 300px; height: 300px; border-radius: 50%;
-          background: radial-gradient(circle, rgba(55,80,200,0.18) 0%, transparent 68%);
+          position: absolute; bottom: -80px; left: -50px;
+          width: 280px; height: 280px; border-radius: 50%;
+          background: radial-gradient(circle, rgba(55,80,200,0.14) 0%, transparent 68%);
           pointer-events: none; z-index: 0;
         }
 
@@ -210,26 +326,30 @@ export default function LoginPage() {
         }
 
         /* ═══════════════════════════════════════
-           RIGHT PANEL
+           RIGHT PANEL — floating, 1× width
         ═══════════════════════════════════════ */
         .oa-right {
           flex: 1;
-          display: flex; align-items: center; justify-content: center;
-          padding: 24px 40px;
-          background: #EEF2FB;
-          overflow-y: auto;
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
-        .oa-form-wrap { width: 100%; max-width: 400px; }
+
+        .oa-form-wrap {
+          width: 100%;
+        }
 
         /* ═══════════════════════════════════════
-           CARD
+           CARD — floating glass card
         ═══════════════════════════════════════ */
         .oa-card {
-          background: white; border-radius: 18px;
-          border: 1px solid #DDE4F2;
+          background: rgba(255, 255, 255, 0.97);
+          border-radius: 18px;
+          border: 1px solid rgba(255,255,255,0.5);
           box-shadow:
-            0 20px 60px rgba(15,35,120,0.13),
-            0 6px 18px rgba(0,0,0,0.06);
+            0 8px 32px rgba(0,0,0,0.40),
+            0 2px 8px rgba(0,0,0,0.25),
+            inset 0 1px 0 rgba(255,255,255,0.9);
           overflow: hidden;
         }
         .oa-card-head {
@@ -405,26 +525,26 @@ export default function LoginPage() {
            RESPONSIVE — Tablet (768–1023px)
         ═══════════════════════════════════════ */
         @media (max-width: 1023px) and (min-width: 768px) {
-          .oa-left { width: 46%; padding: 32px 32px; }
-          .oa-headline { font-size: 30px; }
-          .oa-glow { width: 280px; height: 280px; }
-          .oa-right { padding: 32px 24px; }
+          .oa-columns { max-width: 900px; }
+          .oa-left { padding: 28px 28px; }
+          .oa-headline { font-size: 28px; }
+          .oa-glow { width: 240px; height: 240px; }
         }
 
         /* ═══════════════════════════════════════
            RESPONSIVE — Mobile (<768px)
-           Left panel collapses to a top bar
         ═══════════════════════════════════════ */
         @media (max-width: 767px) {
-          .oa-shell { flex-direction: column; }
+          .oa-shell { padding: 0; align-items: flex-start; }
+          .oa-columns { flex-direction: column; gap: 0; max-width: 100%; border-radius: 0; }
 
+          /* left collapses to a top bar */
           .oa-left {
-            width: 100%; flex-shrink: 0;
+            border-radius: 0;
             flex-direction: row; align-items: center;
             padding: 14px 18px; gap: 12px;
-            min-height: unset;
+            flex: unset; width: 100%;
           }
-          /* hide hero, stats, footer on mobile */
           .oa-hero, .oa-stats, .oa-footer-txt,
           .oa-glow, .oa-glow2, .oa-dots { display: none; }
           .oa-brand { margin: 0; }
@@ -434,50 +554,33 @@ export default function LoginPage() {
 
           .oa-right {
             padding: 20px 14px;
-            align-items: flex-start;
-            background: #EEF2FB;
+            background: rgba(11,30,91,0.6);
           }
+          .oa-card { border-radius: 14px; }
           .oa-card-head, .oa-card-body, .oa-card-foot {
             padding-left: 18px; padding-right: 18px;
           }
-          .oa-headline { font-size: 26px; }
-        }
-
-        /* ═══════════════════════════════════════
-           RESPONSIVE — Small mobile (<400px)
-        ═══════════════════════════════════════ */
-        @media (max-width: 400px) {
-          .oa-right { padding: 14px 10px; }
-          .oa-card { border-radius: 14px; }
-          .oa-card-head, .oa-card-body, .oa-card-foot {
-            padding-left: 14px; padding-right: 14px;
-          }
-          .oa-title { font-size: 18px; }
-          .oa-support-links { flex-direction: column; align-items: stretch; }
-          .oa-support-link { justify-content: center; }
         }
 
         /* ═══════════════════════════════════════
            RESPONSIVE — Large (1400px+)
         ═══════════════════════════════════════ */
         @media (min-width: 1400px) {
-          .oa-left { padding: 56px 68px; }
-          .oa-right { padding: 48px 72px; }
-          .oa-headline { font-size: 48px; }
+          .oa-columns { max-width: 1260px; }
+          .oa-left { padding: 44px 56px; }
+          .oa-headline { font-size: 46px; }
           .oa-desc { font-size: 14.5px; }
-          .oa-form-wrap { max-width: 420px; }
         }
 
         /* ═══════════════════════════════════════
-           RESPONSIVE — 4K / Ultra-wide (1920px+)
+           RESPONSIVE — 4K (1920px+)
         ═══════════════════════════════════════ */
         @media (min-width: 1920px) {
-          .oa-left { padding: 72px 88px; }
-          .oa-right { padding: 60px 96px; }
+          .oa-columns { max-width: 1600px; }
+          .oa-left { padding: 60px 72px; }
           .oa-headline { font-size: 56px; }
           .oa-brand-name { font-size: 26px; }
           .oa-brand-logo { width: 58px; height: 58px; }
-          .oa-form-wrap { max-width: 460px; }
           .oa-title { font-size: 24px; }
           .oa-btn, .oa-trial-btn { height: 50px; font-size: 15px; }
           .oa-input { height: 48px; font-size: 14px; }
@@ -485,163 +588,198 @@ export default function LoginPage() {
         }
       `}</style>
 
+      {/* ══ WATER BACKGROUND ══ */}
+      <div className="oa-water-bg" />
+
+      {/* Floating particles */}
+      {[
+        { left: "10%", size: 4, duration: "12s", delay: "0s" },
+        { left: "25%", size: 6, duration: "16s", delay: "3s" },
+        { left: "42%", size: 3, duration: "10s", delay: "6s" },
+        { left: "60%", size: 5, duration: "14s", delay: "1s" },
+        { left: "75%", size: 4, duration: "18s", delay: "4s" },
+        { left: "88%", size: 6, duration: "11s", delay: "8s" },
+      ].map((p, i) => (
+        <div
+          key={i}
+          className="oa-particle"
+          style={{
+            left: p.left,
+            width: p.size,
+            height: p.size,
+            animationDuration: p.duration,
+            animationDelay: p.delay,
+          }}
+        />
+      ))}
+
+      {/* Water wave SVG */}
+      <svg className="oa-waves" viewBox="0 0 1440 160" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <path className="wave1" d="M0,80 C240,20 480,140 720,80 C960,20 1200,140 1440,80 L1440,80 C1200,140 960,20 720,80 C480,140 240,20 0,80 Z M1440,80 C1680,20 1920,140 2160,80 C2400,20 2640,140 2880,80 L2880,80 C2640,140 2400,20 2160,80 C1920,140 1680,20 1440,80 Z" fill="rgba(100,160,255,0.4)" />
+        <path className="wave2" d="M0,100 C360,40 720,160 1080,100 C1440,40 1800,160 2160,100 L2160,160 L0,160 Z M2160,100 C2520,40 2880,160 3240,100 L3240,160 L2160,160 Z" fill="rgba(70,130,220,0.3)" />
+        <path className="wave3" d="M0,120 C480,80 960,160 1440,120 C1920,80 2400,160 2880,120 L2880,160 L0,160 Z" fill="rgba(50,100,200,0.25)" />
+      </svg>
+
+      {/* ══ MAIN LAYOUT ══ */}
       <div className="oa-shell">
+        <div className="oa-columns">
 
-        {/* ══ LEFT PANEL ══ */}
-        <div className="oa-left">
-          <div className="oa-dots" />
-          <div className="oa-glow" />
-          <div className="oa-glow2" />
+          {/* ══ LEFT PANEL ══ */}
+          <div className="oa-left">
+            <div className="oa-dots" />
+            <div className="oa-glow" />
+            <div className="oa-glow2" />
 
-          {/* Brand */}
-          <div className="oa-brand">
-            <img src="/logo.png" alt="OneAccounts" className="oa-brand-logo" />
-            <div>
-              <div className="oa-brand-name">OneAccounts</div>
-              <div className="oa-brand-sub">by Siqbal · PKR Suite</div>
-            </div>
-          </div>
-
-          {/* Hero */}
-          <div className="oa-hero">
-            <div className="oa-badge">
-              <div className="oa-badge-dot" />
-              <span className="oa-badge-txt">Cloud Accounting Platform</span>
-            </div>
-            <div className="oa-headline">
-              Smart Accounting,<br />
-              <span className="oa-headline-grad">Stronger Business.</span>
-            </div>
-            <div className="oa-desc">
-              Complete double-entry accounting, invoicing, inventory &amp; financial
-              reporting — purpose-built for Pakistani businesses.
-            </div>
-            <div className="oa-pills">
-              {PILLS.map(p => <span key={p} className="oa-pill">{p}</span>)}
-            </div>
-          </div>
-
-          {/* Stats + Footer */}
-          <div>
-            <div className="oa-stats">
-              {STATS.map(s => (
-                <div key={s.label} className="oa-stat">
-                  <div className="oa-stat-val">{s.value}</div>
-                  <div className="oa-stat-lbl">{s.label}</div>
-                </div>
-              ))}
-            </div>
-            <div className="oa-footer-txt">© 2025 OneAccounts by Siqbal. All rights reserved.</div>
-          </div>
-        </div>
-
-        {/* ══ RIGHT PANEL ══ */}
-        <div className="oa-right">
-          <div className="oa-form-wrap">
-            <div className="oa-card">
-
-              {/* Card Head */}
-              <div className="oa-card-head">
-                <img src="/logo.png" alt="OneAccounts" className="oa-card-logo" />
-                <div className="oa-secure-badge">🔒 SECURE LOGIN</div>
-                <div className="oa-title">{isSignUp ? "Create Account" : "Welcome back 👋"}</div>
-                <div className="oa-subtitle">
-                  {isSignUp ? "Sign up for your " : "Sign in to your "}
-                  <strong>OneAccounts</strong> workspace
-                </div>
+            {/* Brand */}
+            <div className="oa-brand">
+              <img src="/logo.png" alt="OneAccounts" className="oa-brand-logo" />
+              <div>
+                <div className="oa-brand-name">OneAccounts</div>
+                <div className="oa-brand-sub">by Siqbal · PKR Suite</div>
               </div>
+            </div>
 
-              {/* Card Body */}
-              <div className="oa-card-body">
+            {/* Hero */}
+            <div className="oa-hero">
+              <div className="oa-badge">
+                <div className="oa-badge-dot" />
+                <span className="oa-badge-txt">Cloud Accounting Platform</span>
+              </div>
+              <div className="oa-headline">
+                Smart Accounting,<br />
+                <span className="oa-headline-grad">Stronger Business.</span>
+              </div>
+              <div className="oa-desc">
+                Complete double-entry accounting, invoicing, inventory &amp; financial
+                reporting — purpose-built for Pakistani businesses.
+              </div>
+              <div className="oa-pills">
+                {PILLS.map(p => <span key={p} className="oa-pill">{p}</span>)}
+              </div>
+            </div>
 
-                {error && (
-                  <div className={error.startsWith("✅") ? "oa-success" : "oa-error"}>
-                    {error}
+            {/* Stats + Footer */}
+            <div>
+              <div className="oa-stats">
+                {STATS.map(s => (
+                  <div key={s.label} className="oa-stat">
+                    <div className="oa-stat-val">{s.value}</div>
+                    <div className="oa-stat-lbl">{s.label}</div>
                   </div>
-                )}
+                ))}
+              </div>
+              <div className="oa-footer-txt">© 2025 OneAccounts by Siqbal. All rights reserved.</div>
+            </div>
+          </div>
 
-                <form onSubmit={handleAuth} noValidate>
-                  <label className="oa-label" htmlFor="email">Email Address</label>
-                  <div className="oa-input-wrap">
-                    <input
-                      id="email" type="email" className="oa-input"
-                      placeholder="you@company.com"
-                      value={email} onChange={e => setEmail(e.target.value)}
-                      autoComplete="email" autoFocus required
-                    />
+          {/* ══ RIGHT PANEL ══ */}
+          <div className="oa-right">
+            <div className="oa-form-wrap">
+              <div className="oa-card">
+
+                {/* Card Head */}
+                <div className="oa-card-head">
+                  <img src="/logo.png" alt="OneAccounts" className="oa-card-logo" />
+                  <div className="oa-secure-badge">🔒 SECURE LOGIN</div>
+                  <div className="oa-title">{isSignUp ? "Create Account" : "Welcome back 👋"}</div>
+                  <div className="oa-subtitle">
+                    {isSignUp ? "Sign up for your " : "Sign in to your "}
+                    <strong>OneAccounts</strong> workspace
                   </div>
+                </div>
 
-                  <label className="oa-label" htmlFor="password">Password</label>
-                  <div className="oa-input-wrap">
-                    <input
-                      id="password"
-                      type={showPassword ? "text" : "password"}
-                      className="oa-input"
-                      placeholder={isSignUp ? "Create a strong password" : "Enter your password"}
-                      value={password} onChange={e => setPassword(e.target.value)}
-                      autoComplete={isSignUp ? "new-password" : "current-password"} required
-                    />
-                    <button
-                      type="button" className="oa-eye"
-                      onClick={() => setShowPassword(p => !p)} tabIndex={-1}
-                    >
-                      {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
-                  </div>
+                {/* Card Body */}
+                <div className="oa-card-body">
 
-                  {!isSignUp && (
-                    <div className="oa-forgot-row">
-                      <a href="/forgot-password" className="oa-forgot">Forgot password?</a>
+                  {error && (
+                    <div className={error.startsWith("✅") ? "oa-success" : "oa-error"}>
+                      {error}
                     </div>
                   )}
 
-                  <button type="submit" className="oa-btn" disabled={loading}>
-                    {loading
-                      ? <><div className="oa-spinner" /> Please wait…</>
-                      : isSignUp ? "Create Account →" : "Sign In →"
-                    }
-                  </button>
+                  <form onSubmit={handleAuth} noValidate>
+                    <label className="oa-label" htmlFor="email">Email Address</label>
+                    <div className="oa-input-wrap">
+                      <input
+                        id="email" type="email" className="oa-input"
+                        placeholder="you@company.com"
+                        value={email} onChange={e => setEmail(e.target.value)}
+                        autoComplete="email" autoFocus required
+                      />
+                    </div>
 
-                  <div className="oa-ssl">🔒 256-bit SSL encrypted · Your data is safe</div>
-                </form>
+                    <label className="oa-label" htmlFor="password">Password</label>
+                    <div className="oa-input-wrap">
+                      <input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        className="oa-input"
+                        placeholder={isSignUp ? "Create a strong password" : "Enter your password"}
+                        value={password} onChange={e => setPassword(e.target.value)}
+                        autoComplete={isSignUp ? "new-password" : "current-password"} required
+                      />
+                      <button
+                        type="button" className="oa-eye"
+                        onClick={() => setShowPassword(p => !p)} tabIndex={-1}
+                      >
+                        {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
 
-                <div className="oa-switch-row">
-                  <button
-                    className="oa-switch"
-                    onClick={() => { setIsSignUp(s => !s); setError("") }}
-                  >
-                    {isSignUp
-                      ? "Already have an account? Sign in"
-                      : "Don't have an account? Sign up"}
-                  </button>
+                    {!isSignUp && (
+                      <div className="oa-forgot-row">
+                        <a href="/forgot-password" className="oa-forgot">Forgot password?</a>
+                      </div>
+                    )}
+
+                    <button type="submit" className="oa-btn" disabled={loading}>
+                      {loading
+                        ? <><div className="oa-spinner" /> Please wait…</>
+                        : isSignUp ? "Create Account →" : "Sign In →"
+                      }
+                    </button>
+
+                    <div className="oa-ssl">🔒 256-bit SSL encrypted · Your data is safe</div>
+                  </form>
+
+                  <div className="oa-switch-row">
+                    <button
+                      className="oa-switch"
+                      onClick={() => { setIsSignUp(s => !s); setError("") }}
+                    >
+                      {isSignUp
+                        ? "Already have an account? Sign in"
+                        : "Don't have an account? Sign up"}
+                    </button>
+                  </div>
+
+                  <div className="oa-divider">
+                    <div className="oa-div-line" />
+                    <span className="oa-div-txt">or</span>
+                    <div className="oa-div-line" />
+                  </div>
+
+                  <a href="/signup" className="oa-trial-btn">
+                    🚀 Start Free Trial (10 days · Professional Plan)
+                  </a>
+                  <p className="oa-trial-note">No credit card required. Create your company in seconds.</p>
+
                 </div>
 
-                <div className="oa-divider">
-                  <div className="oa-div-line" />
-                  <span className="oa-div-txt">or</span>
-                  <div className="oa-div-line" />
+                {/* Card Foot */}
+                <div className="oa-card-foot">
+                  <div className="oa-support-lbl">Need help? We're here for you.</div>
+                  <div className="oa-support-links">
+                    <a href="tel:03117798157"            className="oa-support-link">📞 0311-7798157</a>
+                    <a href="mailto:siqbalhwc@gmail.com" className="oa-support-link">✉ siqbalhwc@gmail.com</a>
+                  </div>
                 </div>
-
-                <a href="/signup" className="oa-trial-btn">
-                  🚀 Start Free Trial (14 days · Professional Plan)
-                </a>
-                <p className="oa-trial-note">No credit card required. Create your company in seconds.</p>
 
               </div>
-
-              {/* Card Foot */}
-              <div className="oa-card-foot">
-                <div className="oa-support-lbl">Need help? We're here for you.</div>
-                <div className="oa-support-links">
-                  <a href="tel:03117798157"            className="oa-support-link">📞 0311-7798157</a>
-                  <a href="mailto:siqbalhwc@gmail.com" className="oa-support-link">✉ siqbalhwc@gmail.com</a>
-                </div>
-              </div>
-
             </div>
           </div>
-        </div>
 
+        </div>
       </div>
     </>
   )
