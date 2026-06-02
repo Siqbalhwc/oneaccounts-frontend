@@ -137,7 +137,7 @@ export default function ReceiptsPage() {
         .rec-table { width: 100%; }
         .header-row {
           display: grid;
-          grid-template-columns: minmax(120px, 1fr) minmax(90px, 1fr) minmax(140px, 2fr) minmax(90px, 1fr) minmax(90px, 1fr) minmax(130px, 1.2fr) 55px 55px;
+          grid-template-columns: minmax(120px, 1fr) minmax(90px, 1fr) minmax(120px, 1.5fr) minmax(90px, 1fr) minmax(90px, 1fr) 200px 55px 55px;
           column-gap: 10px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
@@ -146,7 +146,7 @@ export default function ReceiptsPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: minmax(120px, 1fr) minmax(90px, 1fr) minmax(140px, 2fr) minmax(90px, 1fr) minmax(90px, 1fr) minmax(130px, 1.2fr) 55px 55px;
+          grid-template-columns: minmax(120px, 1fr) minmax(90px, 1fr) minmax(120px, 1.5fr) minmax(90px, 1fr) minmax(90px, 1fr) 200px 55px 55px;
           column-gap: 10px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
@@ -194,7 +194,7 @@ export default function ReceiptsPage() {
         @media (max-width: 900px) {
           .rec-table { overflow-x: auto; }
           .header-row, .data-row {
-            grid-template-columns: 100px 80px 130px 80px 80px 110px 45px 45px;
+            grid-template-columns: 100px 80px 110px 80px 80px 150px 45px 45px;
             column-gap: 6px;
             padding: 10px 12px;
           }
