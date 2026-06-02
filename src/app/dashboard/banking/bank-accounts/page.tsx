@@ -237,10 +237,17 @@ export default function BankAccountsPage() {
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
+        .table-wrapper {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+        .table-grid {
+          min-width: 900px; /* ensures columns never shrink below this width */
+        }
         .header-row {
           display: grid;
-          grid-template-columns: 1fr 120px 100px 100px 100px 130px 55px 55px;
-          column-gap: 8px;
+          grid-template-columns: 1fr 100px 100px 100px 100px 200px 55px 55px;
+          column-gap: 10px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
@@ -248,8 +255,8 @@ export default function BankAccountsPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: 1fr 120px 100px 100px 100px 130px 55px 55px;
-          column-gap: 8px;
+          grid-template-columns: 1fr 100px 100px 100px 100px 200px 55px 55px;
+          column-gap: 10px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
@@ -298,6 +305,21 @@ export default function BankAccountsPage() {
         .pr-field-input, .pr-field-select { width: 100%; height: 40px; border: 1.5px solid var(--border); border-radius: 9px; padding: 0 14px; font-size: 13px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; }
         .pr-field-input:focus, .pr-field-select:focus { border-color: var(--primary); }
         .pr-modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+
+        @media (max-width: 800px) {
+          .header-row, .data-row {
+            column-gap: 6px;
+            padding: 10px 12px;
+          }
+          .table-grid { min-width: 800px; }
+        }
+        @media (max-width: 600px) {
+          .header-row, .data-row {
+            column-gap: 4px;
+            padding: 10px 8px;
+          }
+          .table-grid { min-width: 720px; }
+        }
       `}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
@@ -355,33 +377,35 @@ export default function BankAccountsPage() {
             No bank accounts found. {canEdit && 'Use "Add Bank Account" to link a Cash & Bank account, or create a new GL account first.'}
           </div>
         ) : (
-          <>
-            <div className="header-row">
-              <button className="sort-btn" onClick={() => handleSort("account")}>Account {getSortIcon("account")}</button>
-              <button className="sort-btn" onClick={() => handleSort("bank_name")}>Bank Name {getSortIcon("bank_name")}</button>
-              <button className="sort-btn" onClick={() => handleSort("account_number")}>Account # {getSortIcon("account_number")}</button>
-              <button className="sort-btn" onClick={() => handleSort("branch")}>Branch {getSortIcon("branch")}</button>
-              <button className="sort-btn" onClick={() => handleSort("balance")}>Balance {getSortIcon("balance")}</button>
-              <button className="sort-btn" onClick={() => handleSort("created_by")}>Created / Edited By {getSortIcon("created_by")}</button>
-              <span></span>
-              <span></span>
-            </div>
-            {sortedFiltered.map((b) => (
-              <div key={b.id} className="data-row">
-                <span style={{ fontWeight: 600, color: "var(--primary)" }}>{b.code} - {b.name}</span>
-                <span>{b.bank_name}</span>
-                <span style={{ color: "var(--text-muted)" }}>{b.account_number || "—"}</span>
-                <span style={{ color: "var(--text-muted)" }}>{b.branch || "—"}</span>
-                <span style={{ fontWeight: 600 }}>PKR {(b.balance || 0).toLocaleString()}</span>
-                <div className="creator-editor-cell">
-                  <span>Created: {b.created_by || "—"}</span>
-                  <span>Edited: {b.updated_by || "—"}</span>
-                </div>
-                <button className="btn-icon" onClick={() => openEdit(b)}><Edit size={14} /></button>
-                <button className="btn-icon" onClick={() => setDeleteId(b.id)} style={{ color: "#EF4444" }}><Trash2 size={14} /></button>
+          <div className="table-wrapper">
+            <div className="table-grid">
+              <div className="header-row">
+                <button className="sort-btn" onClick={() => handleSort("account")}>Account {getSortIcon("account")}</button>
+                <button className="sort-btn" onClick={() => handleSort("bank_name")}>Bank Name {getSortIcon("bank_name")}</button>
+                <button className="sort-btn" onClick={() => handleSort("account_number")}>Account # {getSortIcon("account_number")}</button>
+                <button className="sort-btn" onClick={() => handleSort("branch")}>Branch {getSortIcon("branch")}</button>
+                <button className="sort-btn" onClick={() => handleSort("balance")}>Balance {getSortIcon("balance")}</button>
+                <button className="sort-btn" onClick={() => handleSort("created_by")}>Created / Edited By {getSortIcon("created_by")}</button>
+                <span></span>
+                <span></span>
               </div>
-            ))}
-          </>
+              {sortedFiltered.map((b) => (
+                <div key={b.id} className="data-row">
+                  <span style={{ fontWeight: 600, color: "var(--primary)" }}>{b.code} - {b.name}</span>
+                  <span>{b.bank_name}</span>
+                  <span style={{ color: "var(--text-muted)" }}>{b.account_number || "—"}</span>
+                  <span style={{ color: "var(--text-muted)" }}>{b.branch || "—"}</span>
+                  <span style={{ fontWeight: 600 }}>PKR {(b.balance || 0).toLocaleString()}</span>
+                  <div className="creator-editor-cell">
+                    <span>Created: {b.created_by || "—"}</span>
+                    <span>Edited: {b.updated_by || "—"}</span>
+                  </div>
+                  <button className="btn-icon" onClick={() => openEdit(b)}><Edit size={14} /></button>
+                  <button className="btn-icon" onClick={() => setDeleteId(b.id)} style={{ color: "#EF4444" }}><Trash2 size={14} /></button>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 
