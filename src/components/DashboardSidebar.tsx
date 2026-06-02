@@ -7,6 +7,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import { usePlan } from "@/contexts/PlanContext"
 import { useRole } from "@/contexts/RoleContext"
 import { useTheme } from "@/contexts/ThemeContext"
+import { useCompany } from "@/contexts/CompanyContext"
 import ThemeToggleButton from "@/components/ThemeToggleButton"
 import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react"
 
@@ -15,8 +16,9 @@ interface NavItem { label: string; icon: string; href: string; feature?: string;
 interface NavGroup { groupLabel: string; items: NavItem[] }
 interface NavSection { section: string; feature?: string; items?: NavItem[]; groups?: NavGroup[] }
 
-// ── Navigation data (unchanged) ──
-const navSections: NavSection[] = [
+// ── Navigation data (updated) ──
+// The "Projects" item will be conditionally added inside the component.
+const baseNavSections: NavSection[] = [
   { section: 'MAIN', items: [{ label: 'Dashboard', icon: '📊', href: '/dashboard' }] },
   { section: 'CRM', items: [
     { label: 'Customers',      icon: '👥', href: '/dashboard/customers' },
@@ -52,14 +54,8 @@ const navSections: NavSection[] = [
     ]},
   ]},
   { section: 'SYSTEM', items: [
-    { label: 'Admin Panel',     icon: '👑', href: '/dashboard/admin/users',      adminOnly: true },
-    { label: 'Feature Manager', icon: '⚙️', href: '/dashboard/admin/features',   adminOnly: true },
-    { label: 'Audit Logs',      icon: '📋', href: '/dashboard/admin/audit-logs', adminOnly: true },
     { label: 'Settings',        icon: '⚙️', href: '/dashboard/settings' },
-    { label: 'New Company',     icon: '🏢', href: '/dashboard/companies/new' },
     { label: 'Upgrade Plan',    icon: '⭐', href: '/dashboard/upgrade' },
-    { label: 'Super Admin',     icon: '🛡️', href: '/dashboard/super-admin',      adminOnly: true },
-    { label: 'Projects',        icon: '📁', href: '/dashboard/projects' },
   ]},
 ]
 
@@ -67,9 +63,8 @@ const navSections: NavSection[] = [
 const matchesItem = (item: NavItem, path: string): boolean =>
   item.href === "/dashboard" ? path === item.href : path.startsWith(item.href)
 
-// Helper to find which section a path belongs to
 function getSectionForPath(path: string): string {
-  for (const sec of navSections) {
+  for (const sec of baseNavSections) {
     if (sec.items?.some(item => matchesItem(item, path))) return sec.section
     if (sec.groups) {
       for (const grp of sec.groups) {
@@ -88,11 +83,19 @@ export default function DashboardSidebar({
   const { hasFeature } = usePlan()
   const { role } = useRole()
   const { theme } = useTheme()
+  const { businessType } = useCompany()
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
+
+  // Add Projects for NGO only
+  const navSections = [...baseNavSections]
+  const systemSection = navSections.find(s => s.section === 'SYSTEM')!
+  if (businessType === 'ngo') {
+    systemSection.items!.push({ label: 'Projects', icon: '📁', href: '/dashboard/projects' })
+  }
 
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window !== "undefined") return localStorage.getItem("sidebarCollapsed") === "true"
@@ -101,7 +104,6 @@ export default function DashboardSidebar({
 
   const GAP = 6
 
-  // ✅ Initialise with the correct section based on current URL
   const [openSection, setOpenSection] = useState<string>(() => getSectionForPath(pathname))
 
   useEffect(() => {
@@ -113,12 +115,10 @@ export default function DashboardSidebar({
     }
   }, [collapsed])
 
-  // ✅ Keep the active section in sync with the URL
   useEffect(() => {
     setOpenSection(getSectionForPath(pathname))
   }, [pathname])
 
-  // ✅ Clicking a section header opens that one (never closes)
   const handleSectionClick = (section: string) => {
     setOpenSection(section)
   }
@@ -134,14 +134,23 @@ export default function DashboardSidebar({
     return !visitedFeatures[item.feature]
   }
 
-  const isVisible = (item: NavItem) => !(item.adminOnly && role !== "admin") && (!item.feature || hasFeature(item.feature))
+  // Visibility: hide admin-only items unless user has role 'admin' AND is platform admin (we'll use a simple check: role==='admin' and feature flags)
+  const isVisible = (item: NavItem) => {
+    if (item.adminOnly && role !== 'admin') return false
+    if (item.feature && !hasFeature(item.feature)) return false
+    // Hide certain items for non‑super admins
+    if (['Admin Panel', 'Feature Manager', 'Audit Logs', 'Super Admin', 'New Company'].includes(item.label) && role !== 'super_admin') {
+      // For now, these are only for super admins – we don't have that role; we'll hide them for all unless user is super admin.
+      // Since super admin is not a tenant role, we can hide them entirely for now.
+      return false
+    }
+    return true
+  }
 
-  // ── Background for each theme ──
   const bg = theme === "oneaccounts"
     ? "linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%)"
     : "var(--main-bg)"
 
-  // ── Text colours: OneAccounts always white (dark gradient), light/dark follow system ──
   const isDarkText = theme === "light" || (theme === "system" && typeof window !== "undefined" && !window.matchMedia("(prefers-color-scheme: dark)").matches)
   const textColor      = theme === "oneaccounts" ? "rgba(255,255,255,0.9)" : (isDarkText ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.85)")
   const mutedTextColor  = theme === "oneaccounts" ? "rgba(255,255,255,0.6)" : (isDarkText ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.5)")
@@ -150,7 +159,6 @@ export default function DashboardSidebar({
     ? "0 25px 50px -12px rgba(0,0,0,0.6)"
     : (isDarkText ? "0 25px 50px -12px rgba(0,0,0,0.15)" : "0 25px 50px -12px rgba(0,0,0,0.5)")
 
-  // ── Handle sign out ──
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     router.push('/login')
@@ -264,7 +272,7 @@ export default function DashboardSidebar({
   )
 }
 
-// ── NavLink (client‑side navigation) ──
+// ── NavLink (unchanged) ──
 function NavLink({ item, collapsed, isNew, markVisited, isActive, textColor, mutedTextColor, router }: {
   item: NavItem; collapsed: boolean; isNew: boolean; markVisited: (c: string) => void; isActive: boolean; textColor: string; mutedTextColor: string; router: ReturnType<typeof useRouter>
 }) {

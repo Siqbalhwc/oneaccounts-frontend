@@ -50,6 +50,7 @@ export default function CustomersPage() {
     supabase
       .from("customers")
       .select("*")
+      .eq("company_id", companyId)         // ← restrict to current company
       .is("deleted_at", null)
       .order("name", { ascending: true })
       .then(({ data }) => {
@@ -161,8 +162,13 @@ export default function CustomersPage() {
       const result = await res.json()
       if (result.success) {
         setImportMessage(`✅ Imported ${result.count} customers successfully`)
-        // Refresh list
-        const { data } = await supabase.from("customers").select("*").is("deleted_at", null).order("name")
+        // Refresh list – also filtered by company
+        const { data } = await supabase
+          .from("customers")
+          .select("*")
+          .eq("company_id", companyId)
+          .is("deleted_at", null)
+          .order("name")
         setCustomers(data || [])
       } else {
         setImportMessage(`❌ Error: ${result.error}`)
