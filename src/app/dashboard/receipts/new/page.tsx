@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Search, X, CheckCircle, RefreshCw } from "lucide-react"
+import { useTheme } from "@/contexts/ThemeContext"
 
 export default function NewReceiptPage() {
   const router = useRouter()
@@ -11,6 +12,9 @@ export default function NewReceiptPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
+
+  const { theme: themeMode } = useTheme()
+  const isDark = themeMode === "dark" || themeMode === "oneaccounts"   // both have dark backgrounds
 
   const [companyId, setCompanyId] = useState("")
   const [customers, setCustomers] = useState<any[]>([])
@@ -192,9 +196,19 @@ export default function NewReceiptPage() {
       }
 
       setFlash(`✅ Receipt ${result.receipt_no} saved!`)
-      setCustomerId(null); setSelectedCustomer(null); setCustomerSearch("")
-      setSelectedBankId(null); setSelectedIncomeAccountId(null); setIsDonation(false)
-      setInvoices([]); setAllocations({}); setReceiptAmount(""); setNotes(""); setReference("")
+      // Reset form but stay on page
+      setCustomerId(null)
+      setSelectedCustomer(null)
+      setCustomerSearch("")
+      setShowCustomerList(false)           // ← force close dropdown
+      setSelectedBankId(null)
+      setSelectedIncomeAccountId(null)
+      setIsDonation(false)
+      setInvoices([])
+      setAllocations({})
+      setReceiptAmount("")
+      setNotes("")
+      setReference("")
       setLoading(false)
       setTimeout(() => loadCustomers(), 500)
       setTimeout(() => setFlash(null), 4000)
@@ -260,6 +274,11 @@ export default function NewReceiptPage() {
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
         th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
         td { padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+
+        /* Theme‑aware date picker */
+        input[type="date"].inv-input {
+          color-scheme: ${isDark ? 'dark' : 'light'};
+        }
       `}</style>
 
       <div className="inv-shell">
