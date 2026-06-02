@@ -113,33 +113,31 @@ export default function CompanySettingsPage() {
       newLogoUrl = publicUrlData?.publicUrl || ""
     }
 
-    // Determine whether to insert or update
-    const { data: existing } = await supabase
+    // Try to update the existing row first
+    const { data: updatedRow, error: updateError } = await supabase
       .from("company_settings")
-      .select("id, company_id")
+      .update({
+        business_name: settings.business_name,
+        tagline: settings.tagline,
+        address: settings.address,
+        phone: settings.phone,
+        email: settings.email,
+        logo_url: newLogoUrl,
+        updated_at: new Date().toISOString(),
+      })
       .eq("company_id", companyId)
+      .select("id")
       .maybeSingle()
 
-    let error = null
+    if (updateError) {
+      setMessage("Error saving settings: " + updateError.message)
+      setSaving(false)
+      return
+    }
 
-    if (existing) {
-      // UPDATE the current company's settings
-      const result = await supabase
-        .from("company_settings")
-        .update({
-          business_name: settings.business_name,
-          tagline: settings.tagline,
-          address: settings.address,
-          phone: settings.phone,
-          email: settings.email,
-          logo_url: newLogoUrl,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("company_id", companyId)
-      error = result.error
-    } else {
-      // INSERT a new row for this company
-      const result = await supabase
+    // If no row was updated, insert a new one (id will be auto‑generated)
+    if (!updatedRow) {
+      const { error: insertError } = await supabase
         .from("company_settings")
         .insert({
           company_id: companyId,
@@ -151,26 +149,27 @@ export default function CompanySettingsPage() {
           logo_url: newLogoUrl,
           updated_at: new Date().toISOString(),
         })
-      error = result.error
+
+      if (insertError) {
+        setMessage("Error saving settings: " + insertError.message)
+        setSaving(false)
+        return
+      }
     }
 
-    if (error) {
-      setMessage("Error saving settings: " + error.message)
-    } else {
-      // Also update the company name in the companies table
-      await supabase
-        .from("companies")
-        .update({ name: settings.business_name })
-        .eq("id", companyId)
+    // Also update the company name in the companies table
+    await supabase
+      .from("companies")
+      .update({ name: settings.business_name })
+      .eq("id", companyId)
 
-      setMessage("✅ Settings saved! Refreshing page…")
-      setSettings(prev => ({ ...prev, logo_url: newLogoUrl }))
-      setLogoFile(null)
+    setMessage("✅ Settings saved! Refreshing page…")
+    setSettings(prev => ({ ...prev, logo_url: newLogoUrl }))
+    setLogoFile(null)
 
-      setTimeout(() => {
-        window.location.reload()
-      }, 1500)
-    }
+    setTimeout(() => {
+      window.location.reload()
+    }, 1500)
     setSaving(false)
   }
 
