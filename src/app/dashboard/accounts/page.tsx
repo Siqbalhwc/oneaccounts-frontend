@@ -71,6 +71,7 @@ export default function AccountsPage() {
   const [search, setSearch] = useState("")
   const [sortField, setSortField] = useState<SortField>("code")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
+  const [companyId, setCompanyId] = useState("")  // NEW
 
   // Edit modal state
   const [showEditModal, setShowEditModal] = useState(false)
@@ -112,18 +113,28 @@ export default function AccountsPage() {
 
   const availablePredefined = PREDEFINED_CATEGORIES.filter(c => c.type === editType)
 
+  // Fetch companyId from JWT
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id
+      if (cid) setCompanyId(cid)
+    })
+  }, [])
+
+  // Fetch accounts – now filtered by companyId
   useEffect(() => {
     if (!role) return
-    if (!canView) { setLoading(false); return }
+    if (!canView || !companyId) { setLoading(false); return }
     supabase
       .from("accounts")
       .select("*")
+      .eq("company_id", companyId)
       .order("code", { ascending: true })
       .then(({ data }) => {
         setAccounts(data || [])
         setLoading(false)
       })
-  }, [role, canView])
+  }, [role, canView, companyId])
 
   const filteredAccounts = useMemo(() => {
     let list = accounts.map(a => ({
@@ -226,7 +237,7 @@ export default function AccountsPage() {
     } else {
       setFlash("Account updated!")
       setShowEditModal(false)
-      supabase.from("accounts").select("*").order("code", { ascending: true }).then(({ data }) => {
+      supabase.from("accounts").select("*").eq("company_id", companyId).order("code", { ascending: true }).then(({ data }) => {
         if (data) setAccounts(data)
       })
     }
@@ -270,13 +281,12 @@ export default function AccountsPage() {
           border-radius: 12px; 
           padding: 0; 
           box-shadow: var(--shadow-sm); 
-          /* overflow:hidden removed to allow table scroll without clipping */
         }
         .table-wrapper {
           width: 100%;
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
-          border-radius: 0 0 12px 12px; /* keep rounded bottom corners for scroll container */
+          border-radius: 0 0 12px 12px;
         }
         .table-grid {
           min-width: 800px;
