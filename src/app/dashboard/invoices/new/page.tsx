@@ -559,7 +559,9 @@ export default function NewInvoicePage() {
         )}
 
         <div className="header-grid">
+          {/* Left column: invoice details + items */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {/* Invoice details card */}
             <div className="inv-card">
               <label className="inv-label">Customer *</label>
               <div className="cust-wrap" ref={customerRef}>
@@ -697,8 +699,70 @@ export default function NewInvoicePage() {
                 </div>
               )}
             </div>
+
+            {/* ── Items table moved here (inside left column) ── */}
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
+              </div>
+              {items.length > 0 && (
+                <div className="inv-card" style={{ overflowX: "auto", padding: "16px 12px" }}>
+                  <div className="inv-item-header">
+                    <span></span>
+                    <span>Product</span>
+                    <span>Description</span>
+                    <span>Qty</span>
+                    <span>Price</span>
+                    <span style={{ textAlign: "right" }}>Total</span>
+                    <span style={{ textAlign: "right" }}>Cost</span>
+                    <span></span>
+                  </div>
+                  {items.map((item, idx) => (
+                    <div key={idx} className="inv-item-row">
+                      <div style={{ display: "flex", justifyContent: "center" }}>
+                        {item.product_image ? (
+                          <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
+                        ) : (
+                          <ImageIcon size={14} color="var(--text-muted)" />
+                        )}
+                      </div>
+                      <div className="inv-cell" style={{ paddingLeft: 12 }}>
+                        {item.product_name || "—"}
+                      </div>
+                      <input
+                        className="inv-input"
+                        style={{ height: 34, fontSize: 12 }}
+                        value={item.description}
+                        onChange={e => updateItem(idx, "description", e.target.value)}
+                        placeholder="Description"
+                      />
+                      <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                      <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                      <div className="inv-cell" style={{ justifyContent: "flex-end", fontWeight: 600 }}>
+                        PKR {item.total.toLocaleString()}
+                      </div>
+                      <div className="inv-cell" style={{ justifyContent: "flex-end", color: "var(--text-muted)" }}>
+                        {item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}
+                      </div>
+                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}>
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Change History – moved below items */}
+            {editId && (
+              <div className="inv-card" style={{ marginTop: 4 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
+                <RecordHistory tableName="invoices" recordId={editId} />
+              </div>
+            )}
           </div>
 
+          {/* Right column: Summary and Post button */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="inv-card">
               <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
@@ -721,67 +785,6 @@ export default function NewInvoicePage() {
             </div>
           </div>
         </div>
-
-        {/* Items table */}
-        <div style={{ marginTop: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
-          </div>
-          {items.length > 0 && (
-            <div className="inv-card" style={{ overflowX: "auto", padding: "16px 12px" }}>
-              <div className="inv-item-header">
-                <span></span>
-                <span>Product</span>
-                <span>Description</span>
-                <span>Qty</span>
-                <span>Price</span>
-                <span style={{ textAlign: "right" }}>Total</span>
-                <span style={{ textAlign: "right" }}>Cost</span>
-                <span></span>
-              </div>
-              {items.map((item, idx) => (
-                <div key={idx} className="inv-item-row">
-                  <div style={{ display: "flex", justifyContent: "center" }}>
-                    {item.product_image ? (
-                      <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
-                    ) : (
-                      <ImageIcon size={14} color="var(--text-muted)" />
-                    )}
-                  </div>
-                  <div className="inv-cell" style={{ paddingLeft: 12 }}>
-                    {item.product_name || "—"}
-                  </div>
-                  <input
-                    className="inv-input"
-                    style={{ height: 34, fontSize: 12 }}
-                    value={item.description}
-                    onChange={e => updateItem(idx, "description", e.target.value)}
-                    placeholder="Description"
-                  />
-                  <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                  <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                  <div className="inv-cell" style={{ justifyContent: "flex-end", fontWeight: 600 }}>
-                    PKR {item.total.toLocaleString()}
-                  </div>
-                  <div className="inv-cell" style={{ justifyContent: "flex-end", color: "var(--text-muted)" }}>
-                    {item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}
-                  </div>
-                  <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}>
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Change History – moved below items */}
-        {editId && (
-          <div className="inv-card" style={{ marginTop: 16 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
-            <RecordHistory tableName="invoices" recordId={editId} />
-          </div>
-        )}
       </div>
     </div>
   )
