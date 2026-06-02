@@ -214,53 +214,66 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setLineWidth(0.3)
   doc.line(ML, divY, PW - MR, divY)
 
-  // ── TABLE HEADER (6 mm, white separators) ───────────────────────
+  // ── TABLE HEADER (6 mm, white separators, includes image column) ──
   const tableY = divY + 4
   const ROW_H = 6
   const HEADER_ROW_H = ROW_H
 
-  // Precise column widths that sum to CW = 182 mm
-  const COL_NUM_W  = 14
+  // Precise column widths: image (14) + number (8) + description (78) + qty (16) + price (32) + amount (34) = 182
+  const COL_IMG_W  = 14
+  const COL_NUM_W  = 8
   const COL_QTY_W  = 16
   const COL_PRICE_W = 32
   const COL_AMT_W  = 34
-  const COL_DESC_W = CW - COL_NUM_W - COL_QTY_W - COL_PRICE_W - COL_AMT_W  // 86 mm
+  const COL_DESC_W = CW - COL_IMG_W - COL_NUM_W - COL_QTY_W - COL_PRICE_W - COL_AMT_W  // 78 mm
 
-  // Draw navy background
+  // Navy background
   filledRect(doc, ML, tableY, CW, HEADER_ROW_H, NAVY)
 
   // White vertical separators
-  doc.setDrawColor(...WHITE)
-  doc.setLineWidth(0.2)
-  let x = ML + COL_NUM_W
-  doc.line(x, tableY, x, tableY + HEADER_ROW_H)
-  x += COL_DESC_W
-  doc.line(x, tableY, x, tableY + HEADER_ROW_H)
-  x += COL_QTY_W
-  doc.line(x, tableY, x, tableY + HEADER_ROW_H)
-  x += COL_PRICE_W
-  doc.line(x, tableY, x, tableY + HEADER_ROW_H)
+  doc.setDrawColor(...WHITE).setLineWidth(0.2)
+  let sepX = ML + COL_IMG_W
+  doc.line(sepX, tableY, sepX, tableY + HEADER_ROW_H)
+  sepX += COL_NUM_W
+  doc.line(sepX, tableY, sepX, tableY + HEADER_ROW_H)
+  sepX += COL_DESC_W
+  doc.line(sepX, tableY, sepX, tableY + HEADER_ROW_H)
+  sepX += COL_QTY_W
+  doc.line(sepX, tableY, sepX, tableY + HEADER_ROW_H)
+  sepX += COL_PRICE_W
+  doc.line(sepX, tableY, sepX, tableY + HEADER_ROW_H)
 
   // Header text
   const headerTextY = tableY + HEADER_ROW_H / 2 + 1.5
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(7.5)
-  doc.setTextColor(...WHITE)
+  doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...WHITE)
 
-  const centerX1 = ML + COL_NUM_W / 2
-  const leftX2   = ML + COL_NUM_W + 2
-  const centerX3 = ML + COL_NUM_W + COL_DESC_W + COL_QTY_W / 2
-  const centerX4 = ML + COL_NUM_W + COL_DESC_W + COL_QTY_W + COL_PRICE_W / 2
-  const centerX5 = ML + COL_NUM_W + COL_DESC_W + COL_QTY_W + COL_PRICE_W + COL_AMT_W / 2
+  const imgCenterX  = ML + COL_IMG_W / 2
+  const numCenterX  = ML + COL_IMG_W + COL_NUM_W / 2
+  const descLeftX   = ML + COL_IMG_W + COL_NUM_W + 2
+  const qtyCenterX  = ML + COL_IMG_W + COL_NUM_W + COL_DESC_W + COL_QTY_W / 2
+  const priceCenterX = ML + COL_IMG_W + COL_NUM_W + COL_DESC_W + COL_QTY_W + COL_PRICE_W / 2
+  const amtCenterX  = ML + COL_IMG_W + COL_NUM_W + COL_DESC_W + COL_QTY_W + COL_PRICE_W + COL_AMT_W / 2
 
-  doc.text("#",          centerX1, headerTextY, { align: "center" })
-  doc.text("Description", leftX2,   headerTextY, { align: "left" })
-  doc.text("Qty",        centerX3, headerTextY, { align: "center" })
-  doc.text("Unit Price", centerX4, headerTextY, { align: "center" })
-  doc.text("Amount",     centerX5, headerTextY, { align: "center" })
+  doc.text("Img",        imgCenterX, headerTextY, { align: "center" })
+  doc.text("#",          numCenterX, headerTextY, { align: "center" })
+  doc.text("Description", descLeftX,  headerTextY, { align: "left" })
+  doc.text("Qty",        qtyCenterX, headerTextY, { align: "center" })
+  doc.text("Unit Price", priceCenterX, headerTextY, { align: "center" })
+  doc.text("Amount",     amtCenterX, headerTextY, { align: "center" })
 
   // ── TABLE BODY ───────────────────────────────────────────────────
   const bodyStartY = tableY + HEADER_ROW_H
+
+  // Preload all product images
+  const imageCache: Record<number, string> = {}
+  await Promise.all(data.items.map(async (item, i) => {
+    if (item.image_path) {
+      try {
+        const img = await loadImage(item.image_path)
+        if (img) imageCache[i] = img
+      } catch {}
+    }
+  }))
 
   const tableRows = data.items.map((item, i) => {
     const productIdStr = String(item.product_id ?? "")
@@ -280,7 +293,9 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
       desc = (item.description ?? "").trim()
     }
 
+    // Return 6-element array: image index, row number, description, qty, unit price, amount
     return [
+      i,               // image index
       i + 1,
       desc,
       item.qty.toString(),
@@ -304,11 +319,24 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     },
     alternateRowStyles: { fillColor: ROW_ALT },
     columnStyles: {
-      0: { cellWidth: COL_NUM_W,  halign: "center" },
-      1: { cellWidth: COL_DESC_W, halign: "left" },
-      2: { cellWidth: COL_QTY_W,  halign: "center" },
-      3: { cellWidth: COL_PRICE_W, halign: "right" },
-      4: { cellWidth: COL_AMT_W,  halign: "right", fontStyle: "bold" },
+      0: { cellWidth: COL_IMG_W,  halign: "center" },
+      1: { cellWidth: COL_NUM_W,  halign: "center" },
+      2: { cellWidth: COL_DESC_W, halign: "left" },
+      3: { cellWidth: COL_QTY_W,  halign: "center" },
+      4: { cellWidth: COL_PRICE_W, halign: "right" },
+      5: { cellWidth: COL_AMT_W,  halign: "right", fontStyle: "bold" },
+    },
+    didDrawCell(hookData) {
+      // Draw product image in the first column
+      if (hookData.section === "body" && hookData.column.index === 0) {
+        const imgData = imageCache[hookData.row.index]
+        if (imgData) {
+          const { x, y, width, height } = hookData.cell
+          const pad = 2
+          const size = Math.min(width, height) - pad * 2
+          doc.addImage(imgData, "JPEG", x + (width - size) / 2, y + (height - size) / 2, size, size)
+        }
+      }
     },
   })
 
