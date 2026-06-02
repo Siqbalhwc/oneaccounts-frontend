@@ -49,7 +49,7 @@ export default function AccountantDashboard({ role }: { role: string }) {
     { label: "Project", icon: <Briefcase size={20} />, link: "/dashboard/projects/new", show: businessType === "ngo" },
     { label: "Activity", icon: <FolderOpen size={20} />, link: "/dashboard/activities/new", show: businessType === "ngo" },
     { label: "Budget", icon: <BarChart3 size={20} />, link: "/dashboard/budgets/new", show: businessType === "ngo" },
-  ].filter(a => a.show !== false)   // remove hidden actions
+  ].filter(a => a.show !== false)
 
   // ── Report links ──
   const reports = [
@@ -90,10 +90,10 @@ export default function AccountantDashboard({ role }: { role: string }) {
           transform: translateY(-2px);
           box-shadow: 0 8px 20px rgba(0,0,0,0.15);
         }
-        /* Theme‑aware hero cards */
+        /* Invoice – gradient blending primary with a dark slate for readability */
         .hero-action.invoice {
-          background: var(--primary);
-          color: var(--primary-text, #ffffff);
+          background: linear-gradient(135deg, var(--primary), #1e293b);
+          color: #ffffff;
         }
         .hero-action.bill {
           background: var(--card);
@@ -215,7 +215,7 @@ export default function AccountantDashboard({ role }: { role: string }) {
             grid-template-columns: repeat(4, 1fr);
           }
           .fab {
-            display: none;           /* FAB only on mobile */
+            display: none;
           }
         }
         @media (min-width: 1024px) {
