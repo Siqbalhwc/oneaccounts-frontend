@@ -242,11 +242,11 @@ export default function BankAccountsPage() {
           -webkit-overflow-scrolling: touch;
         }
         .table-grid {
-          min-width: 900px; /* ensures columns never shrink below this width */
+          min-width: 1050px; /* ensures columns never shrink below this width */
         }
         .header-row {
           display: grid;
-          grid-template-columns: 1fr 100px 100px 100px 100px 200px 55px 55px;
+          grid-template-columns: 1fr 200px 150px 100px 150px 200px 55px 55px;
           column-gap: 10px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
@@ -255,7 +255,7 @@ export default function BankAccountsPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: 1fr 100px 100px 100px 100px 200px 55px 55px;
+          grid-template-columns: 1fr 200px 150px 100px 150px 200px 55px 55px;
           column-gap: 10px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
@@ -311,14 +311,14 @@ export default function BankAccountsPage() {
             column-gap: 6px;
             padding: 10px 12px;
           }
-          .table-grid { min-width: 800px; }
+          .table-grid { min-width: 950px; }
         }
         @media (max-width: 600px) {
           .header-row, .data-row {
             column-gap: 4px;
             padding: 10px 8px;
           }
-          .table-grid { min-width: 720px; }
+          .table-grid { min-width: 850px; }
         }
       `}</style>
 
