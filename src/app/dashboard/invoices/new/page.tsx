@@ -65,9 +65,6 @@ export default function NewInvoicePage() {
 
   const [savedInvoiceId, setSavedInvoiceId] = useState<number | null>(null)
 
-  // … all the existing useEffect blocks, helpers, and event handlers are identical to the previous version …
-  // (they have been omitted here for brevity but must be kept exactly as they were)
-
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -457,9 +454,7 @@ export default function NewInvoicePage() {
           border-radius: 8px; padding: 0 12px; font-size: 13px;
           font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box;
         }
-        input[type="date"].inv-input {
-          color-scheme: dark;
-        }
+        input[type="date"] { color-scheme: dark; }
         .inv-input:focus, .inv-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
         .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .inv-btn {
@@ -473,31 +468,22 @@ export default function NewInvoicePage() {
         .inv-btn-success { background: #25D366; color: white; border-color: #25D366; }
         .inv-btn-success:hover { background: #22C55E; }
 
-        /* ── Items table with fixed horizontal scroll ── */
-        .inv-items-wrapper {
-          width: 100%;
-          overflow-x: scroll;
-          -webkit-overflow-scrolling: touch;
+        .inv-item-row {
+          display: grid;
+          grid-template-columns: 30px 150px 3fr 80px 110px 110px 110px 30px;
+          gap: 6px; align-items: center; padding: 6px 0;
+          border-bottom: 1px solid var(--border);
         }
         .inv-item-header {
           display: grid;
-          grid-template-columns: 30px 120px 200px 70px 90px 100px 80px 30px;
+          grid-template-columns: 30px 150px 3fr 80px 110px 110px 110px 30px;
           gap: 6px; font-size: 9px; font-weight: 700;
-          text-transform: uppercase; color: var(--text-muted);
-          padding-bottom: 6px;
-          min-width: 760px;
-        }
-        .inv-item-row {
-          display: grid;
-          grid-template-columns: 30px 120px 200px 70px 90px 100px 80px 30px;
-          gap: 6px; align-items: center; padding: 6px 0;
-          border-bottom: 1px solid var(--border);
-          min-width: 760px;
+          text-transform: uppercase; color: var(--text-muted); padding-bottom: 6px;
         }
 
         .inv-cell {
           height: 38px; border: 1.5px solid var(--border);
-          border-radius: 8px; padding: 0 8px; font-size: 13px;
+          border-radius: 8px; padding: 0 12px; font-size: 13px;
           font-family: inherit; background: var(--bg); color: var(--text);
           display: flex; align-items: center; box-sizing: border-box;
           overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
@@ -573,9 +559,8 @@ export default function NewInvoicePage() {
         )}
 
         <div className="header-grid">
-          {/* Left column: details + items */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {/* Invoice details card – unchanged */}
+            {/* Invoice details card */}
             <div className="inv-card">
               <label className="inv-label">Customer *</label>
               <div className="cust-wrap" ref={customerRef}>
@@ -713,69 +698,6 @@ export default function NewInvoicePage() {
                 </div>
               )}
             </div>
-
-            {/* ── Items table (scrollable) ── */}
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
-              </div>
-              {items.length > 0 && (
-                <div className="inv-card" style={{ padding: "16px 12px" }}>
-                  <div className="inv-items-wrapper">
-                    <div className="inv-item-header">
-                      <span></span>
-                      <span>Product</span>
-                      <span>Description</span>
-                      <span>Qty</span>
-                      <span>Price</span>
-                      <span style={{ textAlign: "right" }}>Total</span>
-                      <span style={{ textAlign: "right" }}>Cost</span>
-                      <span></span>
-                    </div>
-                    {items.map((item, idx) => (
-                      <div key={idx} className="inv-item-row">
-                        <div style={{ display: "flex", justifyContent: "center" }}>
-                          {item.product_image ? (
-                            <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
-                          ) : (
-                            <ImageIcon size={14} color="var(--text-muted)" />
-                          )}
-                        </div>
-                        <div className="inv-cell">
-                          {item.product_name || "—"}
-                        </div>
-                        <input
-                          className="inv-input"
-                          style={{ height: 34, fontSize: 12 }}
-                          value={item.description}
-                          onChange={e => updateItem(idx, "description", e.target.value)}
-                          placeholder="Description"
-                        />
-                        <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                        <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                        <div className="inv-cell" style={{ justifyContent: "flex-end", fontWeight: 600 }}>
-                          PKR {item.total.toLocaleString()}
-                        </div>
-                        <div className="inv-cell" style={{ justifyContent: "flex-end", color: "var(--text-muted)" }}>
-                          {item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}
-                        </div>
-                        <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}>
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Change History */}
-            {editId && (
-              <div className="inv-card" style={{ marginTop: 4 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
-                <RecordHistory tableName="invoices" recordId={editId} />
-              </div>
-            )}
           </div>
 
           {/* Right column: Summary + Post button */}
@@ -801,6 +723,67 @@ export default function NewInvoicePage() {
             </div>
           </div>
         </div>
+
+        {/* Items table – full width, outside the two-column grid */}
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
+          </div>
+          {items.length > 0 && (
+            <div className="inv-card" style={{ overflowX: "auto", padding: "16px 12px" }}>
+              <div className="inv-item-header">
+                <span></span>
+                <span>Product</span>
+                <span>Description</span>
+                <span>Qty</span>
+                <span>Price</span>
+                <span style={{ textAlign: "right" }}>Total</span>
+                <span style={{ textAlign: "right" }}>Cost</span>
+                <span></span>
+              </div>
+              {items.map((item, idx) => (
+                <div key={idx} className="inv-item-row">
+                  <div style={{ display: "flex", justifyContent: "center" }}>
+                    {item.product_image ? (
+                      <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
+                    ) : (
+                      <ImageIcon size={14} color="var(--text-muted)" />
+                    )}
+                  </div>
+                  <div className="inv-cell" style={{ paddingLeft: 12 }}>
+                    {item.product_name || "—"}
+                  </div>
+                  <input
+                    className="inv-input"
+                    style={{ height: 34, fontSize: 12 }}
+                    value={item.description}
+                    onChange={e => updateItem(idx, "description", e.target.value)}
+                    placeholder="Description"
+                  />
+                  <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                  <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                  <div className="inv-cell" style={{ justifyContent: "flex-end", fontWeight: 600 }}>
+                    PKR {item.total.toLocaleString()}
+                  </div>
+                  <div className="inv-cell" style={{ justifyContent: "flex-end", color: "var(--text-muted)" }}>
+                    {item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}
+                  </div>
+                  <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}>
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Change History – moved below items */}
+        {editId && (
+          <div className="inv-card" style={{ marginTop: 16 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
+            <RecordHistory tableName="invoices" recordId={editId} />
+          </div>
+        )}
       </div>
     </div>
   )
