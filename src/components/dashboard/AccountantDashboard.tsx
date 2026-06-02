@@ -1,234 +1,212 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { motion } from "framer-motion"
-import { FileText, Receipt, Wallet, Plus, Sun, Moon } from "lucide-react"
+import { createBrowserClient } from "@supabase/ssr"
+import { useRole } from "@/contexts/RoleContext"
+import { usePlan } from "@/contexts/PlanContext"
+import { useCompany } from "@/contexts/CompanyContext"
+import {
+  PlusCircle, Users, Truck, FileText, Receipt, CreditCard, Briefcase, FolderOpen,
+  DollarSign, Package, Monitor, BarChart3, BookOpen, TrendingUp, TrendingDown,
+  ArrowRightLeft, ClipboardList, PieChart, Scale,
+} from "lucide-react"
 
 export default function AccountantDashboard({ role }: { role: string }) {
+  const router = useRouter()
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const router = useRouter()
+  const { hasFeature } = usePlan()
+  const { companyId } = useCompany()
+  const [businessType, setBusinessType] = useState<string>("")
 
-  const [darkMode, setDarkMode] = useState(true)
-  const [companyId, setCompanyId] = useState<string | null>(null)
-  const [pendingBills, setPendingBills] = useState<any[]>([])
-  const [todayCounts, setTodayCounts] = useState({ bills: 0, receipts: 0, payments: 0 })
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(false)
-
-  // Theme tokens
-  const t = {
-    bg: darkMode ? "#071018" : "#F8FAFC",
-    card: darkMode ? "rgba(255,255,255,0.03)" : "#FFFFFF",
-    cardBorder: darkMode ? "rgba(255,255,255,0.06)" : "#E2E8F0",
-    cardShadow: darkMode ? "0 8px 32px rgba(0,0,0,0.2)" : "0 2px 8px rgba(0,0,0,0.06)",
-    text: darkMode ? "#F1F5F9" : "#1E293B",
-    textMuted: darkMode ? "#94A3B8" : "#64748B",
-    rowBorder: darkMode ? "rgba(255,255,255,0.05)" : "#E2E8F0",
-    rowHover: darkMode ? "rgba(255,255,255,0.03)" : "#F8FAFC",
-    btnBg: darkMode ? "rgba(255,255,255,0.05)" : "#F1F5F9",
-    btnBorder: darkMode ? "rgba(255,255,255,0.08)" : "#E2E8F0",
-    inputBg: darkMode ? "#1E293B" : "#F1F5F9",
-    inputBorder: darkMode ? "#334155" : "#CBD5E1",
-    inputText: darkMode ? "#F1F5F9" : "#1E293B",
-    dot1: darkMode ? "rgba(34,211,238,0.5)" : "rgba(14,165,233,0.3)",
-  }
-
+  // Fetch company business type
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true)
-      try {
-        const { data: { user }, error } = await supabase.auth.getUser()
-        if (error || !user) {
-          setLoadError(true)
-          return
-        }
+    if (!companyId) return
+    supabase
+      .from("companies")
+      .select("business_type")
+      .eq("id", companyId)
+      .single()
+      .then(({ data }) => {
+        if (data) setBusinessType(data.business_type || "")
+      })
+  }, [companyId])
 
-        const cid = (user.app_metadata as any)?.company_id
-        if (!cid) {
-          setLoadError(true)
-          return
-        }
-        setCompanyId(cid)
+  // Quick actions – conditionally shown
+  const quickActions = [
+    { label: "New Customer", icon: <Users size={18} />, link: "/dashboard/customers/new" },
+    { label: "New Supplier", icon: <Truck size={18} />, link: "/dashboard/suppliers/new" },
+    { label: "New Invoice", icon: <FileText size={18} />, link: "/dashboard/invoices/new" },
+    { label: "New Bill", icon: <Receipt size={18} />, link: "/dashboard/bills/new" },
+    { label: "New Receipt", icon: <CreditCard size={18} />, link: "/dashboard/receipts/new" },
+    { label: "New Payment", icon: <DollarSign size={18} />, link: "/dashboard/payments/new" },
+    {
+      label: "New Project",
+      icon: <Briefcase size={18} />,
+      link: "/dashboard/projects/new",
+      show: businessType === "ngo",
+    },
+    {
+      label: "New Activity",
+      icon: <FolderOpen size={18} />,
+      link: "/dashboard/activities/new",
+      show: businessType === "ngo",
+    },
+    {
+      label: "New Budget",
+      icon: <BarChart3 size={18} />,
+      link: "/dashboard/budgets/new",
+      show: businessType === "ngo",
+    },
+    {
+      label: "New Product",
+      icon: <Package size={18} />,
+      link: "/dashboard/products/new",
+      show: hasFeature("inventory"),
+    },
+    { label: "New Asset", icon: <Monitor size={18} />, link: "/dashboard/assets/new" },
+    { label: "New Bank Account", icon: <ArrowRightLeft size={18} />, link: "/dashboard/banking/bank-accounts/new" },
+    { label: "Bank Transfer", icon: <ArrowRightLeft size={18} />, link: "/dashboard/banking/bank-transfers/new" },
+  ]
 
-        // Pending bills (unpaid purchase invoices)
-        const { data: bills } = await supabase
-          .from("invoices")
-          .select("id, invoice_no, party_id, date, total, suppliers(name)")
-          .eq("company_id", cid)
-          .eq("type", "purchase")
-          .eq("status", "Unpaid")
-          .order("date", { ascending: false })
-          .limit(6)
-        setPendingBills(bills || [])
+  // Report links
+  const reports = [
+    { label: "Sales Invoices", icon: <FileText size={18} />, link: "/dashboard/invoices" },
+    { label: "Purchase Bills", icon: <Receipt size={18} />, link: "/dashboard/bills" },
+    { label: "Receipts", icon: <CreditCard size={18} />, link: "/dashboard/receipts" },
+    { label: "Payments", icon: <DollarSign size={18} />, link: "/dashboard/payments" },
+    { label: "Customer Ledger", icon: <BookOpen size={18} />, link: "/dashboard/reports/customer-ledger" },
+    { label: "Vendor Ledger", icon: <BookOpen size={18} />, link: "/dashboard/reports/vendor-ledger" },
+    { label: "General Ledger", icon: <BookOpen size={18} />, link: "/dashboard/reports/ledger" },
+    { label: "Product Ledger", icon: <Package size={18} />, link: "/dashboard/reports/product-ledger" },
+    { label: "Chart of Accounts", icon: <ClipboardList size={18} />, link: "/dashboard/accounts" },
+    { label: "Trial Balance", icon: <Scale size={18} />, link: "/dashboard/reports/trial-balance" },
+    { label: "Profit & Loss", icon: <TrendingUp size={18} />, link: "/dashboard/reports/profit-loss" },
+    { label: "Balance Sheet", icon: <PieChart size={18} />, link: "/dashboard/reports/balance-sheet" },
+  ]
 
-        // Today's counts
-        const today = new Date().toISOString().split("T")[0]
-        const [{ count: billCount }, { count: receiptCount }, { count: paymentCount }] = await Promise.all([
-          supabase.from("invoices").select("*", { count: "exact", head: true }).eq("company_id", cid).eq("type", "purchase").gte("created_at", today),
-          supabase.from("receipts").select("*", { count: "exact", head: true }).eq("company_id", cid).gte("created_at", today),
-          supabase.from("payments").select("*", { count: "exact", head: true }).eq("company_id", cid).gte("created_at", today),
-        ])
-        setTodayCounts({ bills: billCount || 0, receipts: receiptCount || 0, payments: paymentCount || 0 })
-
-      } catch (err) {
-        console.error("Accountant dashboard fetch error:", err)
-        setLoadError(true)
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchData()
-  }, [])
-
-  const formatPKR = (v: number) => {
-    if (Math.abs(v) >= 1_000_000) return `PKR ${(v / 1_000_000).toFixed(1)}M`
-    return `PKR ${v.toLocaleString()}`
-  }
-
-  const cardVariant = {
-    hidden: { opacity: 0, y: 20 },
-    visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.08, duration: 0.45 } }),
-  }
-
-  if (loadError) {
-    return (
-      <div style={{ padding: 40, textAlign: "center", background: t.bg, minHeight: "100vh", color: t.textMuted }}>
-        <div style={{ fontSize: "1.2rem", marginBottom: 8, color: "#F87171" }}>Could not load dashboard</div>
-        <div style={{ fontSize: "0.85rem" }}>Your account may not be linked to a company. Please contact your administrator.</div>
-      </div>
-    )
-  }
-
-  if (loading) {
-    return (
-      <div style={{ padding: 40, textAlign: "center", background: t.bg, minHeight: "100vh", color: t.textMuted, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
-          style={{ width: 36, height: 36, borderRadius: "50%", border: `3px solid ${t.cardBorder}`, borderTop: "3px solid #22D3EE" }}
-        />
-        <div style={{ fontSize: "0.9rem" }}>Loading accountant workspace…</div>
-      </div>
-    )
-  }
+  // Filter out actions that shouldn't be shown
+  const visibleActions = quickActions.filter(action => action.show !== false) // show by default if undefined
+  // For reports, all are visible to accountants, but we could also filter based on features
 
   return (
-    <div style={{ background: t.bg, minHeight: "100vh", fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: t.text, position: "relative", overflow: "hidden", transition: "background 0.3s, color 0.3s" }}>
-      {/* Ambient dots */}
-      <div style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none" }}>
-        {[[{ top: "10%", left: "5%", dur: "10s", del: "0s" }], [{ top: "40%", right: "10%", dur: "12s", del: "2s" }], [{ bottom: "20%", left: "50%", dur: "14s", del: "4s" }]].flat().map((pos, i) => (
-          <div key={i} style={{ position: "absolute", width: 6, height: 6, background: t.dot1, borderRadius: "50%", animation: `float_acc ${pos.dur} infinite ease-in-out ${pos.del}`, ...pos } as any} />
-        ))}
-      </div>
-
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        @keyframes float_acc {
-          0% { transform: translateY(0px); opacity: 0.4; }
-          50% { transform: translateY(-25px); opacity: 1; }
-          100% { transform: translateY(0px); opacity: 0.4; }
+        .dashboard-section {
+          margin-bottom: 32px;
         }
-        .glass-card {
-          background: ${t.card};
-          backdrop-filter: blur(12px);
-          border: 1px solid ${t.cardBorder};
-          border-radius: 24px;
-          padding: 24px;
-          box-shadow: ${t.cardShadow};
-          transition: all 0.3s ease;
+        .section-title {
+          font-size: 14px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: var(--text-muted);
+          margin-bottom: 16px;
         }
-        .glass-card:hover { transform: translateY(-4px); }
-        .kpi-label { text-transform: uppercase; font-size: 0.7rem; font-weight: 700; color: ${t.textMuted}; letter-spacing: 0.04em; }
-        .kpi-value { font-size: 2rem; font-weight: 800; line-height: 1.2; margin: 8px 0; }
+        .action-grid, .report-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+          gap: 12px;
+        }
+        .action-card, .report-card {
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 16px;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          cursor: pointer;
+          transition: all 0.15s;
+          text-decoration: none;
+          color: var(--text);
+        }
+        .action-card:hover, .report-card:hover {
+          background: var(--card-hover);
+          border-color: var(--primary);
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .action-icon, .report-icon {
+          color: var(--primary);
+          flex-shrink: 0;
+        }
+        .action-label, .report-label {
+          font-size: 13px;
+          font-weight: 600;
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+          .action-grid, .report-grid {
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+          }
+          .action-card, .report-card {
+            padding: 12px;
+          }
+        }
       `}</style>
 
-      <div style={{ position: "relative", zIndex: 1, padding: 24 }}>
-
-        {/* Hero */}
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
-          <div>
-            <h1 style={{ fontSize: 32, fontWeight: 800, color: t.text, margin: 0 }}>Accountant Workspace</h1>
-            <p style={{ color: t.textMuted, fontSize: 14, margin: 0 }}>Daily operations &amp; quick actions</p>
-          </div>
-          <button
-            onClick={() => setDarkMode(d => !d)}
-            style={{ background: t.inputBg, border: `1px solid ${t.inputBorder}`, borderRadius: 20, padding: "0.35rem 0.9rem", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, color: t.inputText, fontSize: "0.8rem", fontWeight: 500, fontFamily: "inherit", transition: "all 0.2s" }}
-          >
-            {darkMode ? <Sun size={14} /> : <Moon size={14} />}
-            {darkMode ? "Light mode" : "Dark mode"}
-          </button>
-        </motion.div>
-
-        {/* Today's counters */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 20, marginBottom: 24 }}>
-          {[
-            { label: "Bills Entered Today", value: todayCounts.bills, color: "#F97316", icon: <FileText size={24} /> },
-            { label: "Receipts Today", value: todayCounts.receipts, color: "#10B981", icon: <Receipt size={24} /> },
-            { label: "Payments Today", value: todayCounts.payments, color: "#3B82F6", icon: <Wallet size={24} /> },
-          ].map((item, i) => (
-            <motion.div key={item.label} className="glass-card" custom={i} initial="hidden" animate="visible" variants={cardVariant} whileHover={{ y: -4 }} style={{ textAlign: "center" }}>
-              <div style={{ marginBottom: 12, color: item.color, opacity: 0.9, display: "flex", justifyContent: "center" }}>{item.icon}</div>
-              <div className="kpi-value" style={{ color: item.color }}>{item.value}</div>
-              <div className="kpi-label">{item.label}</div>
-            </motion.div>
+      {/* Quick Actions Section */}
+      <div className="dashboard-section">
+        <h2 className="section-title">⚡ Quick Actions</h2>
+        <div className="action-grid">
+          {visibleActions.map((action, idx) => (
+            <div
+              key={idx}
+              className="action-card"
+              onClick={() => router.push(action.link)}
+              title={action.label}
+            >
+              <span className="action-icon">{action.icon}</span>
+              <span className="action-label">{action.label}</span>
+            </div>
           ))}
         </div>
+      </div>
 
-        {/* Quick Actions */}
-        <motion.div className="glass-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{ marginBottom: 24 }}>
-          <h3 style={{ fontWeight: 700, fontSize: 18, marginBottom: 20, color: t.text }}>Quick Actions</h3>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-            {[
-              { label: "New Purchase Bill", link: "/dashboard/bills/new", color: "#F97316" },
-              { label: "New Invoice", link: "/dashboard/invoices/new", color: "#3B82F6" },
-              { label: "New Receipt", link: "/dashboard/receipts/new", color: "#10B981" },
-              { label: "New Payment", link: "/dashboard/payments/new", color: "#8B5CF6" },
-              { label: "Budget Entry", link: "/dashboard/settings/budgets", color: "#EC4899" },
-              { label: "Journal Entry", link: "/dashboard/journal/new", color: "#F59E0B" },
-            ].map((action) => (
-              <motion.button
-                key={action.label}
-                onClick={() => router.push(action.link)}
-                style={{ padding: "10px 18px", borderRadius: 12, background: t.btnBg, border: `1px solid ${t.btnBorder}`, color: t.text, cursor: "pointer", fontWeight: 600, fontSize: 13, fontFamily: "inherit", display: "flex", alignItems: "center", gap: 6, transition: "all 0.2s" }}
-                whileHover={{ background: `${action.color}20`, borderColor: `${action.color}40`, scale: 1.03 }}
-              >
-                <Plus size={14} style={{ color: action.color }} />
-                {action.label}
-              </motion.button>
-            ))}
+      {/* Reports Section */}
+      <div className="dashboard-section">
+        <h2 className="section-title">📊 Reports</h2>
+        <div className="report-grid">
+          {reports.map((report, idx) => (
+            <div
+              key={idx}
+              className="report-card"
+              onClick={() => router.push(report.link)}
+              title={report.label}
+            >
+              <span className="report-icon">{report.icon}</span>
+              <span className="report-label">{report.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Optional: Summary Row – just a placeholder for now, can be expanded */}
+      <div className="dashboard-section">
+        <h2 className="section-title">📈 This Month (coming soon)</h2>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <div className="action-card" style={{ flex: 1, minWidth: 160 }}>
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Invoices</span>
+            <strong style={{ fontSize: 20 }}>—</strong>
           </div>
-        </motion.div>
-
-        {/* Pending Bills */}
-        <motion.div className="glass-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-          <h3 style={{ fontWeight: 700, fontSize: 18, marginBottom: 20, color: t.text }}>Pending Supplier Bills</h3>
-          {pendingBills.length === 0
-            ? <div style={{ color: t.textMuted, fontSize: 14, padding: "12px 0" }}>No pending bills — you're all caught up!</div>
-            : pendingBills.map((bill) => (
-              <motion.div
-                key={bill.id}
-                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 8px", borderBottom: `1px solid ${t.rowBorder}`, fontSize: 14, cursor: "pointer", borderRadius: 8 }}
-                onClick={() => router.push(`/dashboard/bills/${bill.id}`)}
-                whileHover={{ background: t.rowHover, paddingLeft: 16, paddingRight: 16 }}
-                transition={{ duration: 0.15 }}
-              >
-                <div>
-                  <span style={{ color: "#93C5FD", fontWeight: 600 }}>{bill.invoice_no}</span>
-                  <span style={{ color: t.textMuted, marginLeft: 14 }}>{bill.suppliers?.name || "—"}</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-                  <span style={{ color: t.textMuted }}>{bill.date}</span>
-                  <span style={{ fontWeight: 700, color: "#F97316" }}>PKR {bill.total?.toLocaleString()}</span>
-                  <span style={{ padding: "3px 10px", borderRadius: 12, fontSize: 11, fontWeight: 700, background: "#7C2D12", color: "#FCA5A5" }}>Unpaid</span>
-                </div>
-              </motion.div>
-            ))
-          }
-        </motion.div>
+          <div className="action-card" style={{ flex: 1, minWidth: 160 }}>
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Bills</span>
+            <strong style={{ fontSize: 20 }}>—</strong>
+          </div>
+          <div className="action-card" style={{ flex: 1, minWidth: 160 }}>
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Receipts</span>
+            <strong style={{ fontSize: 20 }}>—</strong>
+          </div>
+          <div className="action-card" style={{ flex: 1, minWidth: 160 }}>
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Payments</span>
+            <strong style={{ fontSize: 20 }}>—</strong>
+          </div>
+        </div>
       </div>
     </div>
   )
