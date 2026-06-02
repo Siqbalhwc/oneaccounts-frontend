@@ -8,7 +8,7 @@ import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
 
-type SortField = "receipt_no" | "date" | "customer" | "amount" | "method"
+type SortField = "receipt_no" | "date" | "customer" | "amount" | "method" | "created_by"
 type SortDir = "asc" | "desc"
 
 export default function ReceiptsPage() {
@@ -79,6 +79,9 @@ export default function ReceiptsPage() {
     if (sortField === "customer") {
       valA = (customerMap[a.party_id]?.name || "").toLowerCase()
       valB = (customerMap[b.party_id]?.name || "").toLowerCase()
+    } else if (sortField === "created_by") {
+      valA = (a.created_by || "").toLowerCase()
+      valB = (b.created_by || "").toLowerCase()
     } else {
       valA = a[sortField] ?? ""
       valB = b[sortField] ?? ""
@@ -135,6 +138,7 @@ export default function ReceiptsPage() {
         .header-row {
           display: grid;
           grid-template-columns: minmax(120px, 1fr) minmax(90px, 1fr) minmax(140px, 2fr) minmax(90px, 1fr) minmax(90px, 1fr) minmax(130px, 1.2fr) 55px 55px;
+          column-gap: 10px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
@@ -143,6 +147,7 @@ export default function ReceiptsPage() {
         .data-row {
           display: grid;
           grid-template-columns: minmax(120px, 1fr) minmax(90px, 1fr) minmax(140px, 2fr) minmax(90px, 1fr) minmax(90px, 1fr) minmax(130px, 1.2fr) 55px 55px;
+          column-gap: 10px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
@@ -190,6 +195,7 @@ export default function ReceiptsPage() {
           .rec-table { overflow-x: auto; }
           .header-row, .data-row {
             grid-template-columns: 100px 80px 130px 80px 80px 110px 45px 45px;
+            column-gap: 6px;
             padding: 10px 12px;
           }
         }
@@ -246,7 +252,10 @@ export default function ReceiptsPage() {
             <button className="sort-btn" onClick={() => handleSort("customer")}>Customer {getSortIcon("customer")}</button>
             <button className="sort-btn" onClick={() => handleSort("amount")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Amount {getSortIcon("amount")}</button>
             <button className="sort-btn" onClick={() => handleSort("method")} style={{ justifyContent: "center", textAlign: "center" }}>Method {getSortIcon("method")}</button>
-            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", textAlign: "center" }}>Created / Edited By</span>
+            {/* Sortable Created / Edited By header */}
+            <button className="sort-btn" onClick={() => handleSort("created_by")} style={{ justifyContent: "center", textAlign: "center" }}>
+              Created / Edited By {getSortIcon("created_by")}
+            </button>
             <span></span>
             <span></span>
           </div>
