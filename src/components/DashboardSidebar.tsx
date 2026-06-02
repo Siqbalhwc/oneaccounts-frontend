@@ -7,7 +7,6 @@ import { createBrowserClient } from "@supabase/ssr"
 import { usePlan } from "@/contexts/PlanContext"
 import { useRole } from "@/contexts/RoleContext"
 import { useTheme } from "@/contexts/ThemeContext"
-import { useCompany } from "@/contexts/CompanyContext"
 import ThemeToggleButton from "@/components/ThemeToggleButton"
 import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react"
 
@@ -16,8 +15,7 @@ interface NavItem { label: string; icon: string; href: string; feature?: string;
 interface NavGroup { groupLabel: string; items: NavItem[] }
 interface NavSection { section: string; feature?: string; items?: NavItem[]; groups?: NavGroup[] }
 
-// ── Navigation data (updated) ──
-// The "Projects" item will be conditionally added inside the component.
+// ── Navigation data (without Projects – we’ll add it conditionally) ──
 const baseNavSections: NavSection[] = [
   { section: 'MAIN', items: [{ label: 'Dashboard', icon: '📊', href: '/dashboard' }] },
   { section: 'CRM', items: [
@@ -83,24 +81,41 @@ export default function DashboardSidebar({
   const { hasFeature } = usePlan()
   const { role } = useRole()
   const { theme } = useTheme()
-  const { businessType } = useCompany()
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  // Add Projects for NGO only
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window !== "undefined") return localStorage.getItem("sidebarCollapsed") === "true"
+    return false
+  })
+
+  // Fetch business type directly from the database
+  const [businessType, setBusinessType] = useState<string>("")
+  useEffect(() => {
+    const getCompany = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const cid = (user?.app_metadata as any)?.company_id
+      if (!cid) return
+      const { data } = await supabase
+        .from("companies")
+        .select("business_type")
+        .eq("id", cid)
+        .single()
+      if (data) setBusinessType(data.business_type || "")
+    }
+    getCompany()
+  }, [])
+
+  // Build final nav sections – add Projects only for NGO
   const navSections = [...baseNavSections]
   const systemSection = navSections.find(s => s.section === 'SYSTEM')!
   if (businessType === 'ngo') {
     systemSection.items!.push({ label: 'Projects', icon: '📁', href: '/dashboard/projects' })
   }
-
-  const [collapsed, setCollapsed] = useState(() => {
-    if (typeof window !== "undefined") return localStorage.getItem("sidebarCollapsed") === "true"
-    return false
-  })
 
   const GAP = 6
 
@@ -140,8 +155,6 @@ export default function DashboardSidebar({
     if (item.feature && !hasFeature(item.feature)) return false
     // Hide certain items for non‑super admins
     if (['Admin Panel', 'Feature Manager', 'Audit Logs', 'Super Admin', 'New Company'].includes(item.label) && role !== 'super_admin') {
-      // For now, these are only for super admins – we don't have that role; we'll hide them for all unless user is super admin.
-      // Since super admin is not a tenant role, we can hide them entirely for now.
       return false
     }
     return true
