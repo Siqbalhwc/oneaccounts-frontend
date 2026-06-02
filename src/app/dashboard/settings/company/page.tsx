@@ -35,7 +35,7 @@ export default function CompanySettingsPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
 
-  // Get the current company ID from the JWT
+  // 1. Get company ID from JWT
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
@@ -43,7 +43,7 @@ export default function CompanySettingsPage() {
     })
   }, [])
 
-  // Fetch settings for the CURRENT company only
+  // 2. Load settings for THIS company only
   useEffect(() => {
     if (!companyId) return
     const fetchSettings = async () => {
@@ -64,7 +64,7 @@ export default function CompanySettingsPage() {
         })
         if (data.logo_url) setLogoPreview(data.logo_url)
       } else {
-        // If no settings row exists yet, fetch the company name from the companies table
+        // No settings yet – grab the company name from the companies table
         const { data: company } = await supabase
           .from("companies")
           .select("name")
@@ -95,7 +95,7 @@ export default function CompanySettingsPage() {
 
     let newLogoUrl = settings.logo_url
 
-    // Upload logo if a new file was selected
+    // Upload new logo if provided
     if (logoFile) {
       const fileExt = logoFile.name.split(".").pop()
       const fileName = `logo-${Date.now()}.${fileExt}`
@@ -113,31 +113,34 @@ export default function CompanySettingsPage() {
       newLogoUrl = publicUrlData?.publicUrl || ""
     }
 
-    // Try to update the existing row first
-    const { data: updatedRow, error: updateError } = await supabase
+    // ---- SAFE UPDATE‑OR‑INSERT WITHOUT ON CONFLICT ----
+    // First, check if a settings row already exists for this company
+    const { data: existingRow } = await supabase
       .from("company_settings")
-      .update({
-        business_name: settings.business_name,
-        tagline: settings.tagline,
-        address: settings.address,
-        phone: settings.phone,
-        email: settings.email,
-        logo_url: newLogoUrl,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("company_id", companyId)
       .select("id")
+      .eq("company_id", companyId)
       .maybeSingle()
 
-    if (updateError) {
-      setMessage("Error saving settings: " + updateError.message)
-      setSaving(false)
-      return
-    }
+    let error = null
 
-    // If no row was updated, insert a new one (id will be auto‑generated)
-    if (!updatedRow) {
-      const { error: insertError } = await supabase
+    if (existingRow) {
+      // Row exists → update it (id remains unchanged)
+      const result = await supabase
+        .from("company_settings")
+        .update({
+          business_name: settings.business_name,
+          tagline: settings.tagline,
+          address: settings.address,
+          phone: settings.phone,
+          email: settings.email,
+          logo_url: newLogoUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("company_id", companyId)
+      error = result.error
+    } else {
+      // No row → insert a new one (id will be auto‑generated)
+      const result = await supabase
         .from("company_settings")
         .insert({
           company_id: companyId,
@@ -149,15 +152,16 @@ export default function CompanySettingsPage() {
           logo_url: newLogoUrl,
           updated_at: new Date().toISOString(),
         })
-
-      if (insertError) {
-        setMessage("Error saving settings: " + insertError.message)
-        setSaving(false)
-        return
-      }
+      error = result.error
     }
 
-    // Also update the company name in the companies table
+    if (error) {
+      setMessage("Error saving settings: " + error.message)
+      setSaving(false)
+      return
+    }
+
+    // Update the company name in the companies table as well
     await supabase
       .from("companies")
       .update({ name: settings.business_name })
@@ -167,6 +171,7 @@ export default function CompanySettingsPage() {
     setSettings(prev => ({ ...prev, logo_url: newLogoUrl }))
     setLogoFile(null)
 
+    // Reload so sidebar/dashboard reflect the new name
     setTimeout(() => {
       window.location.reload()
     }, 1500)
@@ -290,7 +295,6 @@ export default function CompanySettingsPage() {
         </div>
       </div>
 
-      {/* Re‑use styles from other forms */}
       <style>{`
         .inv-label {
           font-size: 10px; font-weight: 600; color: var(--text-muted);
