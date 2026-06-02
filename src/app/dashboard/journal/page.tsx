@@ -51,21 +51,31 @@ export default function JournalPage() {
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [expandedLines, setExpandedLines] = useState<any[]>([])
   const [loadingLines, setLoadingLines] = useState(false)
+  const [companyId, setCompanyId] = useState("")
 
   // Sorting state
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
 
-  // Fetch journal entries (exclude soft-deleted) and their lines
+  // Grab companyId from JWT
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id
+      if (cid) setCompanyId(cid)
+    })
+  }, [])
+
+  // Fetch journal entries (exclude soft-deleted) and their lines – scoped to company
   useEffect(() => {
     if (!role) return
-    if (!canView) {
+    if (!canView || !companyId) {
       setLoading(false)
       return
     }
     supabase
       .from("journal_entries")
       .select("id, entry_no, date, description, reference")
+      .eq("company_id", companyId)
       .is("deleted_at", null)
       .order("date", { ascending: false })
       .then(async ({ data }) => {
@@ -106,7 +116,7 @@ export default function JournalPage() {
           setLoading(false)
         }
       })
-  }, [role, canView])
+  }, [role, canView, companyId])
 
   // Toggle expand – fetch lines when opening
   const toggleExpand = async (id: number) => {
@@ -196,8 +206,6 @@ export default function JournalPage() {
         }
         .btn-icon:hover { background: var(--card-hover); }
 
-        /* ── Grid columns ── */
-        /* col order: chevron | date | entry# | description | source | debit | credit | eye */
         .journal-header,
         .journal-row {
           display: grid;
@@ -228,7 +236,6 @@ export default function JournalPage() {
         }
         .sort-btn:hover { color: var(--primary); }
 
-        /* entry# cell: never wrap, truncate if truly tiny screen */
         .entry-no-cell {
           white-space: nowrap;
           overflow: hidden;
@@ -262,7 +269,6 @@ export default function JournalPage() {
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
 
-        /* ── Tablet ── */
         @media (max-width: 900px) {
           .journal-header,
           .journal-row {
@@ -272,11 +278,9 @@ export default function JournalPage() {
           }
         }
 
-        /* ── Small tablet / large phone ── */
         @media (max-width: 700px) {
           .journal-header,
           .journal-row {
-            /* hide Source column on small screens */
             grid-template-columns: 28px 90px 140px 1fr 100px 100px 32px;
             column-gap: 6px;
             padding-left: 12px; padding-right: 12px;
@@ -284,11 +288,9 @@ export default function JournalPage() {
           .hide-sm { display: none; }
         }
 
-        /* ── Mobile ── */
         @media (max-width: 480px) {
           .journal-header,
           .journal-row {
-            /* show: chevron | date | entry# | description | debit | eye */
             grid-template-columns: 24px 80px 110px 1fr 80px 28px;
             column-gap: 4px;
             padding-left: 10px; padding-right: 10px;
