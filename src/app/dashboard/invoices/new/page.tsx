@@ -454,7 +454,9 @@ export default function NewInvoicePage() {
           border-radius: 8px; padding: 0 12px; font-size: 13px;
           font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box;
         }
-        input[type="date"] { color-scheme: dark; }
+        input[type="date"].inv-input {
+          color-scheme: dark;            /* calendar icon visible in dark themes */
+        }
         .inv-input:focus, .inv-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
         .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .inv-btn {
@@ -468,22 +470,30 @@ export default function NewInvoicePage() {
         .inv-btn-success { background: #25D366; color: white; border-color: #25D366; }
         .inv-btn-success:hover { background: #22C55E; }
 
+        /* Items table – scroll horizontally on mobile */
+        .inv-items-wrapper {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+        }
         .inv-item-row {
           display: grid;
-          grid-template-columns: 30px 150px 3fr 80px 110px 110px 110px 30px;
+          grid-template-columns: 30px 120px 2fr 70px 100px 100px 90px 30px;
           gap: 6px; align-items: center; padding: 6px 0;
           border-bottom: 1px solid var(--border);
+          min-width: 650px;   /* force horizontal scroll when screen is too narrow */
         }
         .inv-item-header {
           display: grid;
-          grid-template-columns: 30px 150px 3fr 80px 110px 110px 110px 30px;
+          grid-template-columns: 30px 120px 2fr 70px 100px 100px 90px 30px;
           gap: 6px; font-size: 9px; font-weight: 700;
-          text-transform: uppercase; color: var(--text-muted); padding-bottom: 6px;
+          text-transform: uppercase; color: var(--text-muted);
+          padding-bottom: 6px;
+          min-width: 650px;
         }
 
         .inv-cell {
           height: 38px; border: 1.5px solid var(--border);
-          border-radius: 8px; padding: 0 12px; font-size: 13px;
+          border-radius: 8px; padding: 0 8px; font-size: 13px;
           font-family: inherit; background: var(--bg); color: var(--text);
           display: flex; align-items: center; box-sizing: border-box;
           overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
@@ -530,6 +540,15 @@ export default function NewInvoicePage() {
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
+
+        @media (max-width: 480px) {
+          .inv-item-row {
+            grid-template-columns: 30px 100px 1fr 60px 80px 80px 70px 30px;
+          }
+          .inv-item-header {
+            grid-template-columns: 30px 100px 1fr 60px 80px 80px 70px 30px;
+          }
+        }
       `}</style>
 
       <div className="inv-shell">
@@ -700,55 +719,57 @@ export default function NewInvoicePage() {
               )}
             </div>
 
-            {/* ── Items table moved here (inside left column) ── */}
+            {/* ── Items table (scrollable on mobile) ── */}
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
               </div>
               {items.length > 0 && (
-                <div className="inv-card" style={{ overflowX: "auto", padding: "16px 12px" }}>
-                  <div className="inv-item-header">
-                    <span></span>
-                    <span>Product</span>
-                    <span>Description</span>
-                    <span>Qty</span>
-                    <span>Price</span>
-                    <span style={{ textAlign: "right" }}>Total</span>
-                    <span style={{ textAlign: "right" }}>Cost</span>
-                    <span></span>
-                  </div>
-                  {items.map((item, idx) => (
-                    <div key={idx} className="inv-item-row">
-                      <div style={{ display: "flex", justifyContent: "center" }}>
-                        {item.product_image ? (
-                          <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
-                        ) : (
-                          <ImageIcon size={14} color="var(--text-muted)" />
-                        )}
-                      </div>
-                      <div className="inv-cell" style={{ paddingLeft: 12 }}>
-                        {item.product_name || "—"}
-                      </div>
-                      <input
-                        className="inv-input"
-                        style={{ height: 34, fontSize: 12 }}
-                        value={item.description}
-                        onChange={e => updateItem(idx, "description", e.target.value)}
-                        placeholder="Description"
-                      />
-                      <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                      <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                      <div className="inv-cell" style={{ justifyContent: "flex-end", fontWeight: 600 }}>
-                        PKR {item.total.toLocaleString()}
-                      </div>
-                      <div className="inv-cell" style={{ justifyContent: "flex-end", color: "var(--text-muted)" }}>
-                        {item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}
-                      </div>
-                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}>
-                        <Trash2 size={12} />
-                      </button>
+                <div className="inv-card" style={{ padding: "16px 12px" }}>
+                  <div className="inv-items-wrapper">
+                    <div className="inv-item-header">
+                      <span></span>
+                      <span>Product</span>
+                      <span>Description</span>
+                      <span>Qty</span>
+                      <span>Price</span>
+                      <span style={{ textAlign: "right" }}>Total</span>
+                      <span style={{ textAlign: "right" }}>Cost</span>
+                      <span></span>
                     </div>
-                  ))}
+                    {items.map((item, idx) => (
+                      <div key={idx} className="inv-item-row">
+                        <div style={{ display: "flex", justifyContent: "center" }}>
+                          {item.product_image ? (
+                            <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
+                          ) : (
+                            <ImageIcon size={14} color="var(--text-muted)" />
+                          )}
+                        </div>
+                        <div className="inv-cell">
+                          {item.product_name || "—"}
+                        </div>
+                        <input
+                          className="inv-input"
+                          style={{ height: 34, fontSize: 12 }}
+                          value={item.description}
+                          onChange={e => updateItem(idx, "description", e.target.value)}
+                          placeholder="Description"
+                        />
+                        <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                        <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                        <div className="inv-cell" style={{ justifyContent: "flex-end", fontWeight: 600 }}>
+                          PKR {item.total.toLocaleString()}
+                        </div>
+                        <div className="inv-cell" style={{ justifyContent: "flex-end", color: "var(--text-muted)" }}>
+                          {item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}
+                        </div>
+                        <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}>
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
