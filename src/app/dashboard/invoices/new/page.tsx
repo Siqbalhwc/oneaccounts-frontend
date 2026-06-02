@@ -65,9 +65,7 @@ export default function NewInvoicePage() {
 
   const [savedInvoiceId, setSavedInvoiceId] = useState<number | null>(null)
 
-  // … all the existing useEffect blocks, helpers, and event handlers are identical to the previous version …
-  // (they have been omitted here for brevity but must be kept exactly as they were)
-
+  // … all useEffect, event handlers, helpers are identical to previous version …
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -518,16 +516,19 @@ export default function NewInvoicePage() {
           position: relative;
         }
 
+        /* ── Desktop layout: customer (left) + summary (right) side‑by‑side ── */
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
 
-        /* ── Mobile reorder: items section appears before header grid ── */
+        /* ── Mobile: everything stacks, items after customer, before summary ── */
         .inv-content-wrapper { display: flex; flex-direction: column; }
 
         @media (max-width: 900px) {
           .header-grid { grid-template-columns: 1fr; }
-          .inv-items-section { order: -1; }   /* move items above the header grid */
+          /* move items between customer details and summary */
+          .inv-items-section { order: 2; }      /* items come second */
+          .inv-customer-section { order: 1; }   /* customer first */
+          .inv-summary-section { order: 3; }    /* summary last */
           .inv-item-row, .inv-item-header {
-            /* keep horizontal scroll if needed */
             overflow-x: auto;
           }
         }
@@ -572,64 +573,9 @@ export default function NewInvoicePage() {
           </div>
         )}
 
-        {/* ── Wrapper to allow reordering on mobile ── */}
         <div className="inv-content-wrapper">
-
-          {/* Items table – appears ABOVE the header grid on mobile due to order:-1 */}
-          <div className="inv-items-section" style={{ marginBottom: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
-            </div>
-            {items.length > 0 && (
-              <div className="inv-card" style={{ overflowX: "auto", padding: "16px 12px" }}>
-                <div className="inv-item-header">
-                  <span></span>
-                  <span>Product</span>
-                  <span>Description</span>
-                  <span>Qty</span>
-                  <span>Price</span>
-                  <span style={{ textAlign: "right" }}>Total</span>
-                  <span style={{ textAlign: "right" }}>Cost</span>
-                  <span></span>
-                </div>
-                {items.map((item, idx) => (
-                  <div key={idx} className="inv-item-row">
-                    <div style={{ display: "flex", justifyContent: "center" }}>
-                      {item.product_image ? (
-                        <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
-                      ) : (
-                        <ImageIcon size={14} color="var(--text-muted)" />
-                      )}
-                    </div>
-                    <div className="inv-cell" style={{ paddingLeft: 12 }}>
-                      {item.product_name || "—"}
-                    </div>
-                    <input
-                      className="inv-input"
-                      style={{ height: 34, fontSize: 12 }}
-                      value={item.description}
-                      onChange={e => updateItem(idx, "description", e.target.value)}
-                      placeholder="Description"
-                    />
-                    <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                    <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                    <div className="inv-cell" style={{ justifyContent: "flex-end", fontWeight: 600 }}>
-                      PKR {item.total.toLocaleString()}
-                    </div>
-                    <div className="inv-cell" style={{ justifyContent: "flex-end", color: "var(--text-muted)" }}>
-                      {item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}
-                    </div>
-                    <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}>
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Header grid (customer + summary) */}
-          <div className="header-grid">
+          {/* Customer details (order 1 on mobile) */}
+          <div className="header-grid inv-customer-section">
             {/* Left column: customer details */}
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div className="inv-card">
@@ -771,8 +717,8 @@ export default function NewInvoicePage() {
               </div>
             </div>
 
-            {/* Right column: Summary + Post button */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {/* Right column: Summary + Post button (order 3 on mobile) */}
+            <div className="inv-summary-section" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div className="inv-card">
                 <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
@@ -795,14 +741,67 @@ export default function NewInvoicePage() {
             </div>
           </div>
 
-          {/* Change History – below everything */}
-          {editId && (
-            <div className="inv-card" style={{ marginTop: 16 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
-              <RecordHistory tableName="invoices" recordId={editId} />
+          {/* Items table – order 2 on mobile, appears between customer and summary */}
+          <div className="inv-items-section" style={{ marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
             </div>
-          )}
+            {items.length > 0 && (
+              <div className="inv-card" style={{ overflowX: "auto", padding: "16px 12px" }}>
+                <div className="inv-item-header">
+                  <span></span>
+                  <span>Product</span>
+                  <span>Description</span>
+                  <span>Qty</span>
+                  <span>Price</span>
+                  <span style={{ textAlign: "right" }}>Total</span>
+                  <span style={{ textAlign: "right" }}>Cost</span>
+                  <span></span>
+                </div>
+                {items.map((item, idx) => (
+                  <div key={idx} className="inv-item-row">
+                    <div style={{ display: "flex", justifyContent: "center" }}>
+                      {item.product_image ? (
+                        <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
+                      ) : (
+                        <ImageIcon size={14} color="var(--text-muted)" />
+                      )}
+                    </div>
+                    <div className="inv-cell" style={{ paddingLeft: 12 }}>
+                      {item.product_name || "—"}
+                    </div>
+                    <input
+                      className="inv-input"
+                      style={{ height: 34, fontSize: 12 }}
+                      value={item.description}
+                      onChange={e => updateItem(idx, "description", e.target.value)}
+                      placeholder="Description"
+                    />
+                    <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                    <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                    <div className="inv-cell" style={{ justifyContent: "flex-end", fontWeight: 600 }}>
+                      PKR {item.total.toLocaleString()}
+                    </div>
+                    <div className="inv-cell" style={{ justifyContent: "flex-end", color: "var(--text-muted)" }}>
+                      {item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}
+                    </div>
+                    <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}>
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Change History – below everything */}
+        {editId && (
+          <div className="inv-card" style={{ marginTop: 16 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
+            <RecordHistory tableName="invoices" recordId={editId} />
+          </div>
+        )}
       </div>
     </div>
   )
