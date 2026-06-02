@@ -28,17 +28,28 @@ export default function InvoicesPage() {
   const [search, setSearch] = useState("")
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
+  const [companyId, setCompanyId] = useState("")
 
   const statusFilter = searchParams.get("status") || ""
   const overdueFilter = searchParams.get("overdue") === "true"
 
   const [customerMap, setCustomerMap] = useState<Record<number, { name: string; phone: string }>>({})
 
+  // Grab companyId from JWT
   useEffect(() => {
-    if (!role) return
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id
+      if (cid) setCompanyId(cid)
+    })
+  }, [])
+
+  // Fetch customers for the current company
+  useEffect(() => {
+    if (!companyId) return
     supabase
       .from("customers")
       .select("id, name, phone")
+      .eq("company_id", companyId)
       .is("deleted_at", null)
       .then(({ data }) => {
         if (data) {
@@ -47,8 +58,9 @@ export default function InvoicesPage() {
           setCustomerMap(map)
         }
       })
-  }, [role])
+  }, [companyId])
 
+  // Fetch invoices – scoped to current company
   useEffect(() => {
     if (!role) return
     if (!canView) { setLoading(false); return }
@@ -56,6 +68,7 @@ export default function InvoicesPage() {
     supabase
       .from("invoices")
       .select("*")
+      .eq("company_id", companyId)
       .eq("type", "sale")
       .is("deleted_at", null)
       .order(sortField === "customer" ? "party_id" : sortField, { ascending: sortDir === "asc" })
@@ -63,7 +76,7 @@ export default function InvoicesPage() {
         setInvoices(data || [])
         setLoading(false)
       })
-  }, [role, canView, sortField, sortDir])
+  }, [role, canView, companyId, sortField, sortDir])
 
   const todayISO = new Date().toISOString().split("T")[0]
 
