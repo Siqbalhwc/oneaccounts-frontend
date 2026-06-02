@@ -27,14 +27,25 @@ export default function BillsPage() {
   const [search, setSearch] = useState("")
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
+  const [companyId, setCompanyId] = useState("")
 
   const [supplierMap, setSupplierMap] = useState<Record<number, { name: string; phone: string }>>({})
 
+  // Grab companyId from JWT
   useEffect(() => {
-    if (!role) return
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id
+      if (cid) setCompanyId(cid)
+    })
+  }, [])
+
+  // Fetch suppliers for the current company
+  useEffect(() => {
+    if (!companyId) return
     supabase
       .from("suppliers")
       .select("id, name, phone")
+      .eq("company_id", companyId)
       .then(({ data }) => {
         if (data) {
           const map: Record<number, { name: string; phone: string }> = {}
@@ -44,8 +55,9 @@ export default function BillsPage() {
           setSupplierMap(map)
         }
       })
-  }, [role])
+  }, [companyId])
 
+  // Fetch bills – scoped to current company
   useEffect(() => {
     if (!role) return
     if (!canView) {
@@ -55,6 +67,7 @@ export default function BillsPage() {
     supabase
       .from("invoices")
       .select("*")
+      .eq("company_id", companyId)
       .eq("type", "purchase")
       .is("deleted_at", null)
       .order(sortField === "supplier" ? "party_id" : sortField, { ascending: sortDir === "asc" })
@@ -62,7 +75,7 @@ export default function BillsPage() {
         setBills(data || [])
         setLoading(false)
       })
-  }, [role, canView, sortField, sortDir])
+  }, [role, canView, companyId, sortField, sortDir])
 
   const filtered = search.trim()
     ? bills.filter((bill) => {
