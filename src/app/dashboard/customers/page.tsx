@@ -79,7 +79,6 @@ export default function CustomersPage() {
         const valB = parseFloat(b.balance || 0)
         return sortDir === "asc" ? valA - valB : valB - valA
       }
-      // default string comparison
       const valA = (a[sortField] || "").toString().toLowerCase()
       const valB = (b[sortField] || "").toString().toLowerCase()
       if (valA < valB) return sortDir === "asc" ? -1 : 1
@@ -187,7 +186,8 @@ export default function CustomersPage() {
           .cust-table { width: 100%; }
           .header-row {
             display: grid;
-            grid-template-columns: minmax(80px, 1fr) minmax(150px, 2fr) minmax(100px, 1fr) minmax(100px, 1fr) minmax(140px, 1.5fr) 55px 55px 55px;
+            grid-template-columns: minmax(80px, 1fr) minmax(150px, 2fr) minmax(100px, 1fr) minmax(120px, 1fr) minmax(160px, 1.5fr) 55px 55px 55px;
+            column-gap: 12px;
             padding: 14px 24px;
             background: var(--card-hover);
             font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
@@ -195,7 +195,8 @@ export default function CustomersPage() {
           }
           .data-row {
             display: grid;
-            grid-template-columns: minmax(80px, 1fr) minmax(150px, 2fr) minmax(100px, 1fr) minmax(100px, 1fr) minmax(140px, 1.5fr) 55px 55px 55px;
+            grid-template-columns: minmax(80px, 1fr) minmax(150px, 2fr) minmax(100px, 1fr) minmax(120px, 1fr) minmax(160px, 1.5fr) 55px 55px 55px;
+            column-gap: 12px;
             padding: 12px 24px;
             border-bottom: 1px solid var(--border);
             font-size: 13px; align-items: center;
@@ -253,15 +254,16 @@ export default function CustomersPage() {
           .message { padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
           @media (max-width: 900px) {
             .header-row, .data-row {
-              grid-template-columns: minmax(80px, 1fr) minmax(150px, 2fr) minmax(100px, 1fr) minmax(100px, 1fr) minmax(140px, 1.5fr) 55px 55px 55px;
+              grid-template-columns: minmax(80px, 1fr) minmax(150px, 2fr) minmax(100px, 1fr) minmax(120px, 1fr) minmax(160px, 1.5fr) 55px 55px 55px;
+              column-gap: 10px;
               padding: 10px 16px;
             }
             .cust-table { overflow-x: auto; }
           }
           @media (max-width: 640px) {
             .header-row, .data-row {
-              grid-template-columns: 80px 150px 100px 100px 140px 55px 55px 55px;
-              column-gap: 4px;
+              grid-template-columns: 80px 150px 100px 120px 160px 55px 55px 55px;
+              column-gap: 6px;
               padding: 10px 12px;
               font-size: 11px;
             }
