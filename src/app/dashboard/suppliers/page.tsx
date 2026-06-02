@@ -42,7 +42,7 @@ interface Supplier {
   updated_by?: string | null
 }
 
-type SortField = "code" | "name" | "phone" | "balance"
+type SortField = "code" | "name" | "phone" | "balance" | "created_by"
 type SortDir = "asc" | "desc"
 
 export default function SuppliersPage() {
@@ -150,7 +150,7 @@ export default function SuppliersPage() {
   }
 
   const getSortIcon = (field: SortField) => {
-    if (sortField !== field) return <ArrowUpDown size={12} />
+    if (sortField !== field) return <ArrowUpDown size={12} style={{ opacity: 0.5 }} />
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
@@ -339,8 +339,8 @@ export default function SuppliersPage() {
         .table-wrap { width: 100%; }
         .header-row {
           display: grid;
-          grid-template-columns: minmax(100px, 1fr) minmax(150px, 2fr) minmax(100px, 1fr) minmax(90px, 1fr) minmax(110px, 1.2fr) 55px 55px 50px;
-          column-gap: 8px;
+          grid-template-columns: minmax(100px, 1fr) minmax(150px, 2fr) minmax(100px, 1fr) minmax(90px, 1fr) minmax(130px, 1.3fr) 55px 55px 50px;
+          column-gap: 10px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
@@ -349,8 +349,8 @@ export default function SuppliersPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: minmax(100px, 1fr) minmax(150px, 2fr) minmax(100px, 1fr) minmax(90px, 1fr) minmax(110px, 1.2fr) 55px 55px 50px;
-          column-gap: 8px;
+          grid-template-columns: minmax(100px, 1fr) minmax(150px, 2fr) minmax(100px, 1fr) minmax(90px, 1fr) minmax(130px, 1.3fr) 55px 55px 50px;
+          column-gap: 10px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
@@ -409,13 +409,13 @@ export default function SuppliersPage() {
         @media (max-width: 900px) {
           .table-wrap { overflow-x: auto; }
           .header-row, .data-row {
-            grid-template-columns: 90px 130px 90px 70px 100px 45px 45px 45px;
-            column-gap: 4px;
+            grid-template-columns: 90px 130px 90px 70px 110px 45px 45px 45px;
+            column-gap: 6px;
             padding: 10px 12px;
           }
         }
         @media (max-width: 640px) {
-          .header-row, .data-row { grid-template-columns: 70px 110px 70px 60px 80px 40px 40px 40px; padding: 10px 8px; }
+          .header-row, .data-row { grid-template-columns: 70px 110px 70px 60px 90px 40px 40px 40px; column-gap: 4px; padding: 10px 8px; }
           .search-input { width: 100%; }
         }
       `}</style>
@@ -497,9 +497,10 @@ export default function SuppliersPage() {
               <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
               <button className="sort-btn" onClick={() => handleSort("phone")}>Phone {getSortIcon("phone")}</button>
               <button className="sort-btn" onClick={() => handleSort("balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("balance")}</button>
-              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
-                Created / Edited By
-              </span>
+              {/* Sortable Created / Edited By header */}
+              <button className="sort-btn" onClick={() => handleSort("created_by")} style={{ justifyContent: "flex-start" }}>
+                Created / Edited By {getSortIcon("created_by")}
+              </button>
               <span></span>
               <span></span>
               <span></span>
@@ -593,7 +594,8 @@ export default function SuppliersPage() {
               {editingSupplier && (
                 <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 4 }}>
                   <h4 style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>📝 Change History</h4>
-                  <RecordHistory tableName="suppliers" recordId={String(editingSupplier.id)} />                </div>
+                  <RecordHistory tableName="suppliers" recordId={String(editingSupplier.id)} />
+                </div>
               )}
             </div>
             <div style={{ padding: "16px 24px", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
