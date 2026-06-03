@@ -27,14 +27,25 @@ export default function PaymentsPage() {
   const [search, setSearch] = useState("")
   const [sortField, setSortField] = useState<SortField>("payment_date")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
+  const [companyId, setCompanyId] = useState("") // ✅ NEW
 
   const [supplierMap, setSupplierMap] = useState<Record<number, { name: string; phone: string }>>({})
 
+  // ✅ Grab companyId from JWT
   useEffect(() => {
-    if (!role) return
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id
+      if (cid) setCompanyId(cid)
+    })
+  }, [])
+
+  // ✅ Fetch suppliers scoped to the current company
+  useEffect(() => {
+    if (!companyId) return
     supabase
       .from("suppliers")
       .select("id, name, phone")
+      .eq("company_id", companyId) // ✅ FILTER ADDED
       .then(({ data }) => {
         if (data) {
           const map: Record<number, { name: string; phone: string }> = {}
@@ -44,23 +55,25 @@ export default function PaymentsPage() {
           setSupplierMap(map)
         }
       })
-  }, [role])
+  }, [companyId])
 
+  // ✅ Fetch payments scoped to the current company
   useEffect(() => {
     if (!role) return
-    if (!canView) {
+    if (!canView || !companyId) {
       setLoading(false)
       return
     }
     supabase
       .from("payments")
       .select("*")
+      .eq("company_id", companyId) // ✅ FILTER ADDED
       .order(sortField === "supplier" ? "party_id" : sortField, { ascending: sortDir === "asc" })
       .then(({ data }) => {
         setPayments(data || [])
         setLoading(false)
       })
-  }, [role, canView, sortField, sortDir])
+  }, [role, canView, companyId, sortField, sortDir])
 
   const filtered = search.trim()
     ? payments.filter((pay) => {
