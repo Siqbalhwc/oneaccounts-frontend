@@ -92,7 +92,7 @@ export default function DashboardSidebar({
     return false
   })
 
-  // Fetch business type directly from the database
+  // Fetch business type
   const [businessType, setBusinessType] = useState<string>("")
   useEffect(() => {
     const getCompany = async () => {
@@ -110,7 +110,7 @@ export default function DashboardSidebar({
     getCompany()
   }, [])
 
-  // Platform admin check (using platform_admins table)
+  // Platform admin check
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
   useEffect(() => {
     const check = async () => {
@@ -126,14 +126,17 @@ export default function DashboardSidebar({
     check()
   }, [])
 
-  // Super admin check – hardcoded for you, Shahid
+  // Super admin check – hardcoded + log for debugging
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   useEffect(() => {
     const checkSuper = async () => {
       const { data: { user } } = await supabase.auth.getUser()
+      console.log("Super Admin check for", user?.email)       // ← DEBUG LOG
       if (user?.email === 'siqbalhwc@gmail.com') {
+        console.log("→ Super Admin: true")
         setIsSuperAdmin(true)
       } else {
+        console.log("→ Super Admin: false")
         setIsSuperAdmin(false)
       }
     }
@@ -195,11 +198,12 @@ export default function DashboardSidebar({
     return !visitedFeatures[item.feature]
   }
 
-  // Visibility: hide admin-only items unless user has role 'admin'
+  // ── UPDATED isVisible function ──
   const isVisible = (item: NavItem) => {
     if (item.adminOnly && role !== 'admin') return false
     if (item.feature && !hasFeature(item.feature)) return false
-    if (['Admin Panel', 'Feature Manager', 'Audit Logs', 'Super Admin', 'New Company'].includes(item.label) && role !== 'super_admin') {
+    // 'Super Admin' removed from the blocklist because it's guarded by the email check above
+    if (['Admin Panel', 'Feature Manager', 'Audit Logs', 'New Company'].includes(item.label) && role !== 'super_admin') {
       return false
     }
     return true
