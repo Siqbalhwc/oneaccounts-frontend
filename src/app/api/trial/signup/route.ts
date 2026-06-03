@@ -1,316 +1,147 @@
-"use client"
+import { createClient as createSupabaseClient } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
+import { NextResponse } from 'next/server'
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { createBrowserClient } from "@supabase/ssr"
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  { auth: { persistSession: false, autoRefreshToken: false } }
+)
 
-export default function SignupPage() {
-  const router = useRouter()
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+function getPlanCode(businessType: string): string {
+  switch (businessType) {
+    case 'trading': return 'basic-trading'
+    case 'service': return 'basic-service'
+    case 'ngo':
+    default:        return 'basic-ngo'
+  }
+}
 
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [companyName, setCompanyName] = useState("")
-  const [businessType, setBusinessType] = useState("ngo")
-  const [loading, setLoading] = useState(false)
-  const [errorMsg, setErrorMsg] = useState("")
-  const [hasExistingSession, setHasExistingSession] = useState(false)
+export async function POST(request: Request) {
+  const supabase = await createSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setHasExistingSession(!!user)
+  const { companyName, businessType } = await request.json()
+  if (!companyName?.trim()) {
+    return NextResponse.json({ error: 'Company name is required' }, { status: 400 })
+  }
+
+  // ── Prevent duplicate trials – only count ACTIVE companies ──
+  const { count } = await supabaseAdmin
+    .from('user_roles')
+    .select('*, companies!inner(deleted_at)', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .is('companies.deleted_at', null)
+
+  if (count && count > 0) {
+    return NextResponse.json(
+      { error: 'You already belong to an active company.' },
+      { status: 400 }
+    )
+  }
+
+  const type = businessType || 'ngo'
+  const planCode = getPlanCode(type)
+
+  const { data: plan } = await supabaseAdmin
+    .from('plans')
+    .select('id, trial_days')
+    .eq('code', planCode)
+    .single()
+
+  if (!plan) {
+    return NextResponse.json({ error: `Plan "${planCode}" not found` }, { status: 500 })
+  }
+
+  // Create company
+  const trialEnd = new Date(
+    Date.now() + (plan.trial_days || 10) * 24 * 60 * 60 * 1000
+  ).toISOString()
+  const { data: company, error: companyError } = await supabaseAdmin
+    .from('companies')
+    .insert({
+      name: companyName.trim(),
+      plan_id: plan.id,
+      trial_ends_at: trialEnd,
+      is_trial: true,
+      business_type: type,
     })
-  }, [])
+    .select('id')
+    .single()
 
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setErrorMsg("")
+  if (companyError || !company) {
+    return NextResponse.json(
+      { error: companyError?.message || 'Could not create company' },
+      { status: 500 }
+    )
+  }
 
-    if (hasExistingSession) {
-      setErrorMsg("You are already logged in. Please sign out or use an incognito window to create a separate trial company.")
-      setLoading(false)
-      return
-    }
+  // Seed chart of accounts
+  await supabaseAdmin.rpc('seed_accounts_for_company', {
+    target_company_id: company.id,
+    business_type: type,
+  })
 
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email,
-      password,
-    })
+  // Insert subscription
+  await supabaseAdmin.from('subscriptions').insert({
+    company_id: company.id,
+    plan_type: planCode,
+    status: 'trial',
+    start_date: new Date().toISOString().split('T')[0],
+    end_date: trialEnd.split('T')[0],
+    max_users: 1,
+    trial_count: 1,
+    payment_status: 'pending',
+  })
 
-    if (authError) {
-      setErrorMsg(authError.message)
-      setLoading(false)
-      return
-    }
+  // Assign admin role to the creator
+  await supabaseAdmin.from('user_roles').insert({
+    user_id: user.id,
+    company_id: company.id,
+    role: 'admin',
+    is_active: true,
+  })
 
-    if (!authData.session) {
-      setErrorMsg("✅ Account created! Please check your email to confirm, then sign in to create your company.")
-      setLoading(false)
-      return
-    }
+  // ✅ Enable default features per business type
+  if (type === 'trading') {
+    const { data: feature } = await supabaseAdmin
+      .from('features')
+      .select('id')
+      .eq('code', 'inventory')
+      .single()
 
-    try {
-      const res = await fetch("/api/trial/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyName, businessType }),
-      })
-      const data = await res.json()
-      if (!data.success) {
-        setErrorMsg(data.error || "Failed to create company.")
-        setLoading(false)
-        return
-      }
-
-      await supabase.auth.refreshSession()
-      router.push("/dashboard")
-    } catch (e) {
-      setErrorMsg("Network error. Please try again.")
-      setLoading(false)
+    if (feature) {
+      await supabaseAdmin.from('company_features').upsert(
+        { company_id: company.id, feature_id: feature.id, enabled: true },
+        { onConflict: 'company_id,feature_id' }
+      )
     }
   }
 
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 50%, #e0f7fa 100%)",
-        fontFamily: "Arial",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      {/* Wave background */}
-      <div style={{
-        position: "absolute",
-        bottom: 0,
-        left: 0,
-        width: "100%",
-        height: "100%",
-        overflow: "hidden",
-        pointerEvents: "none",
-      }}>
-        <svg
-          viewBox="0 0 1440 320"
-          preserveAspectRatio="none"
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            opacity: 0.4,
-          }}
-        >
-          <path
-            fill="#ffffff"
-            fillOpacity="0.3"
-            d="M0,192L48,197.3C96,203,192,213,288,229.3C384,245,480,267,576,250.7C672,235,768,181,864,181.3C960,181,1056,235,1152,234.7C1248,235,1344,181,1392,154.7L1440,128L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"
-          />
-        </svg>
-        <svg
-          viewBox="0 0 1440 320"
-          preserveAspectRatio="none"
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            opacity: 0.2,
-            animation: "waveMove 8s infinite alternate ease-in-out",
-          }}
-        >
-          <path
-            fill="#ffffff"
-            fillOpacity="0.2"
-            d="M0,288L48,272C96,256,192,224,288,213.3C384,203,480,213,576,224C672,235,768,245,864,234.7C960,224,1056,192,1152,176C1248,160,1344,160,1392,160L1440,160L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"
-          />
-        </svg>
-        <style>{`
-          @keyframes waveMove {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-20px); }
-          }
-        `}</style>
-      </div>
-
-      <div
-        style={{
-          background: "rgba(255,255,255,0.85)",
-          backdropFilter: "blur(12px)",
-          padding: 32,
-          borderRadius: 12,
-          border: "1px solid rgba(255,255,255,0.6)",
-          width: "100%",
-          maxWidth: 400,
-          position: "relative",
-          zIndex: 1,
-          boxShadow: "0 12px 24px rgba(0,0,0,0.05)",
-        }}
-      >
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", marginBottom: 4 }}>
-          🚀 Start your free trial
-        </h1>
-        <p style={{ fontSize: 13, color: "#64748B", marginBottom: 24 }}>
-          14‑day Professional plan. No credit card required.
-        </p>
-
-        {hasExistingSession && (
-          <div
-            style={{
-              background: "#FEF3C7",
-              border: "1px solid #F59E0B",
-              color: "#92400E",
-              padding: "12px 14px",
-              borderRadius: 8,
-              marginBottom: 16,
-              fontSize: 13,
-            }}
-          >
-            <strong>⚠️ You are already logged in</strong><br />
-            Creating a new trial here will <strong>sign you out</strong> of your current company in all open tabs.
-            <br />
-            <strong>Recommendation:</strong> Use a separate browser profile (Incognito / Guest) for each company to keep them completely isolated.
-          </div>
-        )}
-
-        {errorMsg && (
-          <div
-            style={{
-              background: errorMsg.startsWith("✅") ? "#F0FDF4" : "#FEF2F2",
-              color: errorMsg.startsWith("✅") ? "#15803D" : "#B91C1C",
-              padding: "8px 12px",
-              borderRadius: 6,
-              fontSize: 13,
-              marginBottom: 16,
-            }}
-          >
-            {errorMsg}
-          </div>
-        )}
-
-        <form onSubmit={handleSignup}>
-          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>
-            Company Name
-          </label>
-          <input
-            type="text"
-            placeholder="Your Business Name"
-            value={companyName}
-            onChange={(e) => setCompanyName(e.target.value)}
-            required
-            style={{
-              width: "100%",
-              padding: "8px 12px",
-              border: "1px solid #E2E8F0",
-              borderRadius: 6,
-              fontSize: 13,
-              marginBottom: 12,
-              boxSizing: "border-box",
-            }}
-          />
-
-          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>
-            Business Type
-          </label>
-          <select
-            value={businessType}
-            onChange={(e) => setBusinessType(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "8px 12px",
-              border: "1px solid #E2E8F0",
-              borderRadius: 6,
-              fontSize: 13,
-              marginBottom: 12,
-              boxSizing: "border-box",
-              background: "white",
-            }}
-          >
-            <option value="ngo">NGO</option>
-            <option value="service">Service Business</option>
-            <option value="trading">Trading Business</option>
-          </select>
-
-          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>
-            Email
-          </label>
-          <input
-            type="email"
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{
-              width: "100%",
-              padding: "8px 12px",
-              border: "1px solid #E2E8F0",
-              borderRadius: 6,
-              fontSize: 13,
-              marginBottom: 12,
-              boxSizing: "border-box",
-            }}
-          />
-
-          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>
-            Password
-          </label>
-          <input
-            type="password"
-            placeholder="Min. 8 characters"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={8}
-            style={{
-              width: "100%",
-              padding: "8px 12px",
-              border: "1px solid #E2E8F0",
-              borderRadius: 6,
-              fontSize: 13,
-              marginBottom: 18,
-              boxSizing: "border-box",
-            }}
-          />
-
-          <button
-            type="submit"
-            disabled={loading || hasExistingSession}
-            style={{
-              width: "100%",
-              padding: 10,
-              background: hasExistingSession ? "#94A3B8" : "#1D4ED8",
-              color: "white",
-              border: "none",
-              borderRadius: 8,
-              fontWeight: 600,
-              fontSize: 14,
-              cursor: hasExistingSession ? "not-allowed" : "pointer",
-            }}
-          >
-            {loading
-              ? "Creating..."
-              : hasExistingSession
-              ? "Sign out first or use incognito"
-              : "Start Free 14‑Day Trial"}
-          </button>
-        </form>
-
-        <p style={{ textAlign: "center", marginTop: 16, fontSize: 13, color: "#64748B" }}>
-          Already have an account?{" "}
-          <a href="/login" style={{ color: "#1D4ED8", fontWeight: 600 }}>
-            Log in
-          </a>
-        </p>
-      </div>
-    </div>
+  // ✅ DIRECTLY UPDATE USER'S app_metadata – no Edge Function needed
+  const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+    user.id,
+    {
+      app_metadata: {
+        company_id: company.id,
+        role: 'admin',
+      },
+    }
   )
+
+  if (updateError) {
+    console.error('Failed to update JWT claims:', updateError)
+  }
+
+  return NextResponse.json({
+    success: true,
+    companyId: company.id,
+    companyName: companyName.trim(),
+    message: `${companyName.trim()} is ready with a ${
+      plan.trial_days || 10
+    }-day trial.`,
+  })
 }
