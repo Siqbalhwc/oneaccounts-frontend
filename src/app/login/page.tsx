@@ -71,7 +71,7 @@ export default function LoginPage() {
         }
 
         /* ═══════════════════════════════════════
-           WATER WAVE BACKGROUND
+           LIGHT WATER WAVE BACKGROUND
         ═══════════════════════════════════════ */
         .oa-shell {
           display: flex;
@@ -82,35 +82,26 @@ export default function LoginPage() {
           padding: 24px 20px;
           position: relative;
           overflow: hidden;
-          background: #0B1E5B;
+          background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 50%, #e0f7fa 100%);
         }
 
-        /* Animated water background */
+        /* Water shimmer overlay */
         .oa-water-bg {
           position: fixed;
           inset: 0;
           z-index: 0;
-          background:
-            linear-gradient(180deg,
-              #0B1E5B 0%,
-              #0F2A7A 25%,
-              #0D3B9E 50%,
-              #0B2E80 75%,
-              #091A54 100%);
+          pointer-events: none;
         }
-
-        /* Water shimmer layers */
         .oa-water-bg::before {
           content: '';
           position: absolute;
           inset: 0;
           background:
-            radial-gradient(ellipse 80% 40% at 20% 60%, rgba(30,85,232,0.25) 0%, transparent 60%),
-            radial-gradient(ellipse 60% 30% at 80% 40%, rgba(23,64,200,0.20) 0%, transparent 55%),
-            radial-gradient(ellipse 100% 50% at 50% 80%, rgba(15,34,128,0.30) 0%, transparent 65%);
+            radial-gradient(ellipse 80% 40% at 20% 60%, rgba(255,255,255,0.25) 0%, transparent 60%),
+            radial-gradient(ellipse 60% 30% at 80% 40%, rgba(255,255,255,0.20) 0%, transparent 55%),
+            radial-gradient(ellipse 100% 50% at 50% 80%, rgba(173,216,230,0.30) 0%, transparent 65%);
           animation: waterShimmer 8s ease-in-out infinite alternate;
         }
-
         .oa-water-bg::after {
           content: '';
           position: absolute;
@@ -120,15 +111,15 @@ export default function LoginPage() {
               0deg,
               transparent,
               transparent 60px,
-              rgba(255,255,255,0.018) 60px,
-              rgba(255,255,255,0.018) 61px
+              rgba(255,255,255,0.04) 60px,
+              rgba(255,255,255,0.04) 61px
             ),
             repeating-linear-gradient(
               90deg,
               transparent,
               transparent 80px,
-              rgba(255,255,255,0.012) 80px,
-              rgba(255,255,255,0.012) 81px
+              rgba(255,255,255,0.03) 80px,
+              rgba(255,255,255,0.03) 81px
             );
           animation: waterRipple 12s linear infinite;
         }
@@ -140,7 +131,8 @@ export default function LoginPage() {
           left: 0;
           width: 100%;
           z-index: 0;
-          opacity: 0.18;
+          opacity: 0.3;
+          pointer-events: none;
         }
         .oa-waves .wave1 { animation: waveMove 7s linear infinite; }
         .oa-waves .wave2 { animation: waveMove 10s linear infinite reverse; opacity: 0.6; }
@@ -159,11 +151,11 @@ export default function LoginPage() {
           100% { transform: translateX(-50%); }
         }
 
-        /* Floating light particles */
+        /* Floating light particles (white) */
         .oa-particle {
           position: fixed;
           border-radius: 50%;
-          background: rgba(147, 197, 253, 0.12);
+          background: rgba(255,255,255,0.3);
           animation: particleFloat linear infinite;
           z-index: 0;
           pointer-events: none;
@@ -186,23 +178,22 @@ export default function LoginPage() {
           gap: 5px;
           width: 100%;
           max-width: 1100px;
-          /* equal height: stretch both panels to the taller one */
         }
 
         /* ═══════════════════════════════════════
-           LEFT PANEL — floating, 2× width of right
+           LEFT PANEL — light glass
         ═══════════════════════════════════════ */
         .oa-left {
           flex: 2;
-          background: rgba(7, 19, 82, 0.82);
+          background: rgba(255, 255, 255, 0.5);
           backdrop-filter: blur(18px) saturate(1.4);
           -webkit-backdrop-filter: blur(18px) saturate(1.4);
-          border: 1px solid rgba(255,255,255,0.13);
+          border: 1px solid rgba(255,255,255,0.5);
           border-radius: 20px;
           box-shadow:
-            0 8px 32px rgba(0,0,0,0.45),
-            0 2px 8px rgba(0,0,0,0.3),
-            inset 0 1px 0 rgba(255,255,255,0.08);
+            0 8px 32px rgba(0,0,0,0.1),
+            0 2px 8px rgba(0,0,0,0.05),
+            inset 0 1px 0 rgba(255,255,255,0.8);
           display: flex;
           flex-direction: column;
           justify-content: space-between;
@@ -211,28 +202,15 @@ export default function LoginPage() {
           overflow: hidden;
         }
 
-        /* Left panel inner glow */
         .oa-dots {
           position: absolute; inset: 0;
-          background-image: radial-gradient(rgba(255,255,255,0.04) 1.2px, transparent 1.2px);
+          background-image: radial-gradient(rgba(0,0,0,0.02) 1.2px, transparent 1.2px);
           background-size: 28px 28px;
           pointer-events: none; z-index: 0;
           border-radius: 20px;
         }
-        .oa-glow {
-          position: absolute; top: -100px; right: -100px;
-          width: 380px; height: 380px; border-radius: 50%;
-          background: radial-gradient(circle, rgba(100,149,255,0.16) 0%, transparent 68%);
-          pointer-events: none; z-index: 0;
-        }
-        .oa-glow2 {
-          position: absolute; bottom: -80px; left: -50px;
-          width: 280px; height: 280px; border-radius: 50%;
-          background: radial-gradient(circle, rgba(55,80,200,0.14) 0%, transparent 68%);
-          pointer-events: none; z-index: 0;
-        }
+        .oa-glow, .oa-glow2 { display: none; } /* not needed on light theme */
 
-        /* brand */
         .oa-brand {
           display: flex; align-items: center; gap: 14px;
           position: relative; z-index: 2;
@@ -240,70 +218,67 @@ export default function LoginPage() {
         .oa-brand-logo {
           width: 48px; height: 48px;
           border-radius: 12px; object-fit: contain; flex-shrink: 0;
-          box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+          box-shadow: 0 4px 16px rgba(0,0,0,0.1);
         }
         .oa-brand-name {
-          font-size: 22px; font-weight: 800; color: white; line-height: 1.2;
+          font-size: 22px; font-weight: 800; color: #1E293B; line-height: 1.2;
         }
         .oa-brand-sub {
-          font-size: 11px; color: rgba(255,255,255,0.42); margin-top: 2px;
+          font-size: 11px; color: rgba(0,0,0,0.5); margin-top: 2px;
         }
 
-        /* badge */
         .oa-badge {
           display: inline-flex; align-items: center; gap: 7px;
-          background: rgba(255,255,255,0.10);
-          border: 1px solid rgba(255,255,255,0.20);
+          background: rgba(23, 64, 200, 0.1);
+          border: 1px solid rgba(23, 64, 200, 0.2);
           border-radius: 100px; padding: 4px 13px;
           margin-bottom: 12px; width: fit-content;
         }
         .oa-badge-dot {
-          width: 6px; height: 6px; border-radius: 50%; background: #60A5FA;
-          box-shadow: 0 0 0 3px rgba(96,165,250,0.28);
+          width: 6px; height: 6px; border-radius: 50%; background: #1740C8;
+          box-shadow: 0 0 0 3px rgba(23,64,200,0.2);
           flex-shrink: 0;
           animation: badgePulse 2.4s ease-in-out infinite;
         }
         @keyframes badgePulse {
-          0%,100% { box-shadow: 0 0 0 3px rgba(96,165,250,0.28); }
-          50%      { box-shadow: 0 0 0 6px rgba(96,165,250,0.10); }
+          0%,100% { box-shadow: 0 0 0 3px rgba(23,64,200,0.2); }
+          50%      { box-shadow: 0 0 0 6px rgba(23,64,200,0.1); }
         }
         .oa-badge-txt {
           font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
-          text-transform: uppercase; color: rgba(255,255,255,0.82);
+          text-transform: uppercase; color: #1740C8;
         }
 
-        /* hero */
         .oa-hero {
           position: relative; z-index: 2;
           flex: 1; display: flex; flex-direction: column;
           justify-content: center; padding: 20px 0;
         }
         .oa-headline {
-          font-size: 38px; font-weight: 800; color: white;
+          font-size: 38px; font-weight: 800; color: #0F172A;
           line-height: 1.10; letter-spacing: -0.8px;
           margin-bottom: 10px;
         }
         .oa-headline-grad {
-          background: linear-gradient(90deg, #93C5FD, #818CF8);
+          background: linear-gradient(90deg, #1740C8, #4F6EF7);
           -webkit-background-clip: text; -webkit-text-fill-color: transparent;
           background-clip: text;
         }
         .oa-desc {
-          font-size: 13px; color: rgba(255,255,255,0.56);
+          font-size: 13px; color: rgba(0,0,0,0.6);
           line-height: 1.62; max-width: 400px; margin-bottom: 16px; font-weight: 400;
         }
         .oa-pills { display: flex; flex-wrap: wrap; gap: 8px; }
         .oa-pill {
-          background: rgba(255,255,255,0.09);
-          border: 1px solid rgba(255,255,255,0.16);
+          background: rgba(23, 64, 200, 0.07);
+          border: 1px solid rgba(23, 64, 200, 0.15);
           border-radius: 8px; padding: 5px 11px;
-          font-size: 11px; color: rgba(255,255,255,0.82); font-weight: 500;
+          font-size: 11px; color: #1740C8; font-weight: 500;
         }
 
-        /* stats */
         .oa-stats {
           position: relative; z-index: 2;
-          border-top: 1px solid rgba(255,255,255,0.12);
+          border-top: 1px solid rgba(0,0,0,0.08);
           padding-top: 14px;
           display: grid; grid-template-columns: repeat(4, 1fr);
           gap: 0;
@@ -311,22 +286,22 @@ export default function LoginPage() {
         .oa-stat { padding-right: 16px; }
         .oa-stat + .oa-stat {
           padding-left: 16px;
-          border-left: 1px solid rgba(255,255,255,0.10);
+          border-left: 1px solid rgba(0,0,0,0.06);
         }
         .oa-stat-val {
-          font-size: 22px; font-weight: 800; color: white; line-height: 1;
+          font-size: 22px; font-weight: 800; color: #0F172A; line-height: 1;
         }
         .oa-stat-lbl {
-          font-size: 9.5px; color: rgba(255,255,255,0.36);
+          font-size: 9.5px; color: rgba(0,0,0,0.4);
           text-transform: uppercase; letter-spacing: 0.10em; margin-top: 4px;
         }
         .oa-footer-txt {
-          font-size: 10px; color: rgba(255,255,255,0.18);
+          font-size: 10px; color: rgba(0,0,0,0.3);
           position: relative; z-index: 2; margin-top: 10px;
         }
 
         /* ═══════════════════════════════════════
-           RIGHT PANEL — floating, 1× width
+           RIGHT PANEL
         ═══════════════════════════════════════ */
         .oa-right {
           flex: 1;
@@ -334,38 +309,35 @@ export default function LoginPage() {
           align-items: center;
           justify-content: center;
         }
-
-        .oa-form-wrap {
-          width: 100%;
-        }
+        .oa-form-wrap { width: 100%; }
 
         /* ═══════════════════════════════════════
-           CARD — floating glass card
+           LOGIN CARD
         ═══════════════════════════════════════ */
         .oa-card {
-          background: rgba(255, 255, 255, 0.97);
+          background: rgba(255, 255, 255, 0.92);
+          backdrop-filter: blur(10px);
           border-radius: 18px;
-          border: 1px solid rgba(255,255,255,0.5);
+          border: 1px solid rgba(255,255,255,0.6);
           box-shadow:
-            0 8px 32px rgba(0,0,0,0.40),
-            0 2px 8px rgba(0,0,0,0.25),
+            0 8px 32px rgba(0,0,0,0.1),
+            0 2px 8px rgba(0,0,0,0.05),
             inset 0 1px 0 rgba(255,255,255,0.9);
           overflow: hidden;
         }
         .oa-card-head {
           padding: 18px 28px 14px;
-          border-bottom: 1px solid #F0F2F9;
+          border-bottom: 1px solid #EDF2F7;
           text-align: center;
         }
         .oa-card-body { padding: 16px 28px 18px; }
         .oa-card-foot {
           padding: 12px 28px 14px;
-          border-top: 1px solid #F0F2F9;
+          border-top: 1px solid #EDF2F7;
           background: #F8FAFF;
           text-align: center;
         }
 
-        /* card head content */
         .oa-card-logo {
           width: 48px; height: 48px; border-radius: 12px;
           object-fit: contain; margin: 0 auto 8px; display: block;
@@ -385,7 +357,7 @@ export default function LoginPage() {
         .oa-subtitle strong { color: #1E3A8A; font-weight: 700; }
 
         /* ═══════════════════════════════════════
-           FORM FIELDS
+           FORM FIELDS (unchanged)
         ═══════════════════════════════════════ */
         .oa-label {
           display: block; font-size: 10px; font-weight: 600;
@@ -415,7 +387,6 @@ export default function LoginPage() {
         }
         .oa-eye:hover { color: #64748B; }
 
-        /* forgot */
         .oa-forgot-row {
           display: flex; justify-content: flex-end;
           margin-top: -6px; margin-bottom: 12px;
@@ -427,9 +398,6 @@ export default function LoginPage() {
         }
         .oa-forgot:hover { text-decoration: underline; }
 
-        /* ═══════════════════════════════════════
-           BUTTONS
-        ═══════════════════════════════════════ */
         .oa-btn {
           width: 100%; height: 41px;
           background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
@@ -460,7 +428,6 @@ export default function LoginPage() {
           padding: 5px 0 0; text-align: center;
         }
 
-        /* divider */
         .oa-divider {
           display: flex; align-items: center; gap: 10px;
           margin: 10px 0;
@@ -468,7 +435,6 @@ export default function LoginPage() {
         .oa-div-line { flex: 1; height: 1px; background: #E8EDF5; }
         .oa-div-txt  { font-size: 10.5px; color: #A0AEC0; font-weight: 500; }
 
-        /* trial button */
         .oa-trial-btn {
           display: flex; align-items: center; justify-content: center;
           width: 100%; height: 41px;
@@ -488,7 +454,6 @@ export default function LoginPage() {
           margin-top: 5px; text-align: center;
         }
 
-        /* switch + alerts */
         .oa-switch-row { text-align: center; margin-top: 9px; }
         .oa-switch {
           background: none; border: none;
@@ -506,7 +471,6 @@ export default function LoginPage() {
           font-size: 12px; color: #15803D; margin-bottom: 11px;
         }
 
-        /* support links */
         .oa-support-lbl { font-size: 10.5px; color: #9CA3AF; margin-bottom: 6px; }
         .oa-support-links {
           display: flex; align-items: center; justify-content: center;
@@ -522,31 +486,24 @@ export default function LoginPage() {
         .oa-support-link:hover { background: #EEF2FF; }
 
         /* ═══════════════════════════════════════
-           RESPONSIVE — Tablet (768–1023px)
+           RESPONSIVE — keep existing breakpoints
         ═══════════════════════════════════════ */
         @media (max-width: 1023px) and (min-width: 768px) {
           .oa-columns { max-width: 900px; }
           .oa-left { padding: 28px 28px; }
           .oa-headline { font-size: 28px; }
-          .oa-glow { width: 240px; height: 240px; }
         }
 
-        /* ═══════════════════════════════════════
-           RESPONSIVE — Mobile (<768px)
-        ═══════════════════════════════════════ */
         @media (max-width: 767px) {
           .oa-shell { padding: 0; align-items: flex-start; }
           .oa-columns { flex-direction: column; gap: 0; max-width: 100%; border-radius: 0; }
-
-          /* left collapses to a top bar */
           .oa-left {
             border-radius: 0;
             flex-direction: row; align-items: center;
             padding: 14px 18px; gap: 12px;
             flex: unset; width: 100%;
           }
-          .oa-hero, .oa-stats, .oa-footer-txt,
-          .oa-glow, .oa-glow2, .oa-dots { display: none; }
+          .oa-hero, .oa-stats, .oa-footer-txt { display: none; }
           .oa-brand { margin: 0; }
           .oa-brand-logo { width: 36px; height: 36px; }
           .oa-brand-name { font-size: 16px; }
@@ -554,7 +511,7 @@ export default function LoginPage() {
 
           .oa-right {
             padding: 20px 14px;
-            background: rgba(11,30,91,0.6);
+            background: rgba(255,255,255,0.5);
           }
           .oa-card { border-radius: 14px; }
           .oa-card-head, .oa-card-body, .oa-card-foot {
@@ -562,9 +519,6 @@ export default function LoginPage() {
           }
         }
 
-        /* ═══════════════════════════════════════
-           RESPONSIVE — Large (1400px+)
-        ═══════════════════════════════════════ */
         @media (min-width: 1400px) {
           .oa-columns { max-width: 1260px; }
           .oa-left { padding: 44px 56px; }
@@ -572,9 +526,6 @@ export default function LoginPage() {
           .oa-desc { font-size: 14.5px; }
         }
 
-        /* ═══════════════════════════════════════
-           RESPONSIVE — 4K (1920px+)
-        ═══════════════════════════════════════ */
         @media (min-width: 1920px) {
           .oa-columns { max-width: 1600px; }
           .oa-left { padding: 60px 72px; }
@@ -588,7 +539,7 @@ export default function LoginPage() {
         }
       `}</style>
 
-      {/* ══ WATER BACKGROUND ══ */}
+      {/* ══ LIGHT WATER BACKGROUND ══ */}
       <div className="oa-water-bg" />
 
       {/* Floating particles */}
@@ -615,9 +566,9 @@ export default function LoginPage() {
 
       {/* Water wave SVG */}
       <svg className="oa-waves" viewBox="0 0 1440 160" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-        <path className="wave1" d="M0,80 C240,20 480,140 720,80 C960,20 1200,140 1440,80 L1440,80 C1200,140 960,20 720,80 C480,140 240,20 0,80 Z M1440,80 C1680,20 1920,140 2160,80 C2400,20 2640,140 2880,80 L2880,80 C2640,140 2400,20 2160,80 C1920,140 1680,20 1440,80 Z" fill="rgba(100,160,255,0.4)" />
-        <path className="wave2" d="M0,100 C360,40 720,160 1080,100 C1440,40 1800,160 2160,100 L2160,160 L0,160 Z M2160,100 C2520,40 2880,160 3240,100 L3240,160 L2160,160 Z" fill="rgba(70,130,220,0.3)" />
-        <path className="wave3" d="M0,120 C480,80 960,160 1440,120 C1920,80 2400,160 2880,120 L2880,160 L0,160 Z" fill="rgba(50,100,200,0.25)" />
+        <path className="wave1" d="M0,80 C240,20 480,140 720,80 C960,20 1200,140 1440,80 L1440,80 C1200,140 960,20 720,80 C480,140 240,20 0,80 Z M1440,80 C1680,20 1920,140 2160,80 C2400,20 2640,140 2880,80 L2880,80 C2640,140 2400,20 2160,80 C1920,140 1680,20 1440,80 Z" fill="rgba(255,255,255,0.5)" />
+        <path className="wave2" d="M0,100 C360,40 720,160 1080,100 C1440,40 1800,160 2160,100 L2160,160 L0,160 Z M2160,100 C2520,40 2880,160 3240,100 L3240,160 L2160,160 Z" fill="rgba(255,255,255,0.4)" />
+        <path className="wave3" d="M0,120 C480,80 960,160 1440,120 C1920,80 2400,160 2880,120 L2880,160 L0,160 Z" fill="rgba(255,255,255,0.3)" />
       </svg>
 
       {/* ══ MAIN LAYOUT ══ */}
@@ -627,10 +578,7 @@ export default function LoginPage() {
           {/* ══ LEFT PANEL ══ */}
           <div className="oa-left">
             <div className="oa-dots" />
-            <div className="oa-glow" />
-            <div className="oa-glow2" />
 
-            {/* Brand */}
             <div className="oa-brand">
               <img src="/logo.png" alt="OneAccounts" className="oa-brand-logo" />
               <div>
@@ -639,7 +587,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Hero */}
             <div className="oa-hero">
               <div className="oa-badge">
                 <div className="oa-badge-dot" />
@@ -658,7 +605,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Stats + Footer */}
             <div>
               <div className="oa-stats">
                 {STATS.map(s => (
@@ -676,8 +622,6 @@ export default function LoginPage() {
           <div className="oa-right">
             <div className="oa-form-wrap">
               <div className="oa-card">
-
-                {/* Card Head */}
                 <div className="oa-card-head">
                   <img src="/logo.png" alt="OneAccounts" className="oa-card-logo" />
                   <div className="oa-secure-badge">🔒 SECURE LOGIN</div>
@@ -688,9 +632,7 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                {/* Card Body */}
                 <div className="oa-card-body">
-
                   {error && (
                     <div className={error.startsWith("✅") ? "oa-success" : "oa-error"}>
                       {error}
@@ -763,10 +705,8 @@ export default function LoginPage() {
                     🚀 Start Free Trial (10 days · Professional Plan)
                   </a>
                   <p className="oa-trial-note">No credit card required. Create your company in seconds.</p>
-
                 </div>
 
-                {/* Card Foot */}
                 <div className="oa-card-foot">
                   <div className="oa-support-lbl">Need help? We're here for you.</div>
                   <div className="oa-support-links">
@@ -774,7 +714,6 @@ export default function LoginPage() {
                     <a href="mailto:siqbalhwc@gmail.com" className="oa-support-link">✉ siqbalhwc@gmail.com</a>
                   </div>
                 </div>
-
               </div>
             </div>
           </div>
