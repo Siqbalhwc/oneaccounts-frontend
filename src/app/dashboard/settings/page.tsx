@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Settings, Database, Cog, Shield, Bell, CreditCard, ArrowRight, Briefcase, Wallet, Users } from "lucide-react"
 import { createBrowserClient } from "@supabase/ssr"
+import { useRole } from "@/contexts/RoleContext"
 
 export default function SettingsHubPage() {
   const router = useRouter()
@@ -11,6 +12,7 @@ export default function SettingsHubPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
+  const { role } = useRole()
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
 
   useEffect(() => {
@@ -98,7 +100,10 @@ export default function SettingsHubPage() {
     },
   ]
 
-  const cards = allCards.filter(c => !c.adminOnly || isPlatformAdmin)
+  // ✅ Show admin cards if user is a company admin OR a platform admin
+  const showAdminCards = role === "admin" || isPlatformAdmin
+
+  const cards = allCards.filter(c => !c.adminOnly || showAdminCards)
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
