@@ -205,6 +205,7 @@ function AssetsContent() {
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
+        /* ----- Global buttons & inputs ----- */
         .btn { display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-family:inherit;transition:all 0.15s;white-space:nowrap; }
         .btn:hover { background:var(--card-hover); }
         .btn-primary { background:var(--primary);color:var(--primary-text);border-color:var(--primary); }
@@ -220,18 +221,46 @@ function AssetsContent() {
         .summary-label { font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px; }
         .summary-value { font-size:22px; font-weight:800; color:var(--text); }
 
-        .table-scroll { overflow-x:auto; }
-        .asset-table { width:auto; border-collapse:collapse; font-size:13px; }
-        .asset-table th, .asset-table td { padding:4px 2px !important; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; }
-        .asset-table th:last-child, .asset-table td:last-child { padding-right:0 !important; }
-        .asset-table tr:hover td { background:var(--card-hover); }
+        /* ----- Table wrapper with fade effect on right to indicate scrolling ----- */
+        .table-scroll {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          position: relative;
+          border-radius: 12px;
+          background: var(--card);
+          border: 1px solid var(--border);
+        }
+        .table-scroll::after {
+          content: "";
+          position: absolute;
+          top: 0;
+          right: 0;
+          width: 30px;
+          height: 100%;
+          background: linear-gradient(to right, transparent, var(--card));
+          pointer-events: none;
+        }
+        .asset-table {
+          width: max-content;
+          min-width: 100%;
+          border-collapse: collapse;
+          font-size: 13px;
+          white-space: nowrap;
+        }
+        .asset-table th, .asset-table td {
+          padding: 4px 2px !important;
+          text-align: left;
+          border-bottom: 1px solid var(--border);
+        }
+        .asset-table th:last-child, .asset-table td:last-child { padding-right: 12px !important; }
+        .asset-table tr:hover td { background: var(--card-hover); }
 
         .asset-table .num-header,
-        .asset-table .num-cell { text-align:right !important; }
+        .asset-table .num-cell { text-align: right !important; }
         .asset-table .center-header,
-        .asset-table .center-cell { text-align:center !important; }
+        .asset-table .center-cell { text-align: center !important; }
 
-        /* Modal */
+        /* ----- Modal (unchanged) ----- */
         .modal-overlay {
           position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200;
           display: flex; align-items: center; justify-content: center; padding: 20px;
@@ -247,6 +276,19 @@ function AssetsContent() {
         .asset-row label { display:flex; align-items:center; gap:8px; flex:1; }
         .month-badge { font-size:11px; color: var(--text-muted); margin-left: auto; }
         .checkbox { width:16px; height:16px; accent-color: var(--primary); }
+
+        /* ----- Responsive adjustments ----- */
+        @media (max-width: 768px) {
+          .btn { font-size: 12px; padding: 6px 10px; }
+          .input { font-size: 12px; }
+          .summary-value { font-size: 20px; }
+        }
+        @media (max-width: 480px) {
+          .btn { font-size: 11px; padding: 5px 8px; gap: 4px; }
+          .input { height: 34px; font-size: 12px; }
+          .summary-grid { grid-template-columns: 1fr; }
+          .table-scroll::after { width: 20px; }
+        }
       `}</style>
 
       {/* Header */}
@@ -282,14 +324,14 @@ function AssetsContent() {
       </div>
 
       {/* Search */}
-      <div style={{ display:"flex", gap:12, marginBottom:16, alignItems:"center" }}>
-        <div style={{ position:"relative", flex:1, maxWidth:320 }}>
+      <div style={{ display:"flex", gap:12, marginBottom:16, alignItems:"center", flexWrap:"wrap" }}>
+        <div style={{ position:"relative", flex:1, minWidth:200, maxWidth:320 }}>
           <Search size={16} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--text-muted)" }} />
           <input className="input" placeholder="Search assets..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
       </div>
 
-      {/* Table */}
+      {/* Table with scroll hint */}
       {loading ? (
         <div style={{ textAlign:"center", padding:40, color:"var(--text-muted)" }}>Loading assets…</div>
       ) : sorted.length === 0 ? (
