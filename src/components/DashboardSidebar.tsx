@@ -110,11 +110,14 @@ export default function DashboardSidebar({
     getCompany()
   }, [])
 
-  // Build final nav sections – add Projects only for NGO
+  // Build final nav sections – add Projects only for NGO, but only once
   const navSections = [...baseNavSections]
   const systemSection = navSections.find(s => s.section === 'SYSTEM')!
   if (businessType === 'ngo') {
-    systemSection.items!.push({ label: 'Projects', icon: '📁', href: '/dashboard/projects' })
+    // Ensure we don't add duplicates if this effect runs again
+    if (!systemSection.items!.some(item => item.href === '/dashboard/projects')) {
+      systemSection.items!.push({ label: 'Projects', icon: '📁', href: '/dashboard/projects' })
+    }
   }
 
   const GAP = 6
@@ -149,11 +152,10 @@ export default function DashboardSidebar({
     return !visitedFeatures[item.feature]
   }
 
-  // Visibility: hide admin-only items unless user has role 'admin' AND is platform admin (we'll use a simple check: role==='admin' and feature flags)
+  // Visibility: hide admin-only items unless user has role 'admin'
   const isVisible = (item: NavItem) => {
     if (item.adminOnly && role !== 'admin') return false
     if (item.feature && !hasFeature(item.feature)) return false
-    // Hide certain items for non‑super admins
     if (['Admin Panel', 'Feature Manager', 'Audit Logs', 'Super Admin', 'New Company'].includes(item.label) && role !== 'super_admin') {
       return false
     }
