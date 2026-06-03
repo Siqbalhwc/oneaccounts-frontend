@@ -11,6 +11,23 @@ import { getWhatsAppLink } from "@/lib/whatsapp"
 type SortField = "invoice_no" | "date" | "supplier" | "total" | "status" | "created_by"
 type SortDir = "asc" | "desc"
 
+// ── Skeleton row component ──
+function SkeletonRow() {
+  return (
+    <div className="data-row skeleton-row">
+      <div className="skeleton-block" style={{ width: "60%", height: 12 }} />
+      <div className="skeleton-block" style={{ width: "50%", height: 12 }} />
+      <div className="skeleton-block" style={{ width: "80%", height: 12 }} />
+      <div className="skeleton-block" style={{ width: "40%", height: 12 }} />
+      <div className="skeleton-block" style={{ width: "50%", height: 12 }} />
+      <div className="skeleton-block" style={{ width: "90%", height: 12 }} />
+      <div className="skeleton-block" style={{ width: 24, height: 24, borderRadius: 4 }} />
+      <div className="skeleton-block" style={{ width: 24, height: 24, borderRadius: 4 }} />
+      <div className="skeleton-block" style={{ width: 24, height: 24, borderRadius: 4 }} />
+    </div>
+  )
+}
+
 export default function BillsPage() {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -57,13 +74,16 @@ export default function BillsPage() {
       })
   }, [companyId])
 
-  // Fetch bills – scoped to current company
+  // Fetch bills – scoped to current company, only when companyId ready
   useEffect(() => {
     if (!role) return
     if (!canView) {
       setLoading(false)
       return
     }
+    if (!companyId) return    // ✅ guard against empty ID
+
+    setLoading(true)           // ✅ ensure loading state
     supabase
       .from("invoices")
       .select("*")
@@ -130,7 +150,6 @@ export default function BillsPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  // Safe WhatsApp links via helper (fixes double‑92)
   const sendWhatsApp = (bill: any) => {
     const supp = supplierMap[bill.party_id]
     if (!supp?.phone) {
@@ -161,7 +180,6 @@ export default function BillsPage() {
       <style>{`
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
         .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-        /* Updated grid with 9 columns, wider Created/Edited, reduced Supplier */
         .header-row {
           display: grid;
           grid-template-columns: minmax(120px, 1fr) minmax(90px, 1fr) minmax(120px, 1.5fr) minmax(90px, 1fr) minmax(70px, 1fr) 200px 60px 60px 60px;
@@ -182,6 +200,16 @@ export default function BillsPage() {
         }
         .data-row:hover { background: var(--card-hover); }
         .data-row:last-child { border-bottom: none; }
+        .skeleton-row .skeleton-block {
+          background: var(--bg-soft);
+          border-radius: 4px;
+          animation: shimmer 1.5s ease-in-out infinite;
+        }
+        @keyframes shimmer {
+          0% { opacity: 0.4; }
+          50% { opacity: 0.8; }
+          100% { opacity: 0.4; }
+        }
         .btn {
           padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
           cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
@@ -225,7 +253,6 @@ export default function BillsPage() {
         }
         @media (max-width: 640px) {
           .header-row, .data-row {
-            /* Force horizontal scroll on very small screens */
             grid-template-columns: 100px 80px 120px 80px 60px 150px 50px 50px 50px;
             column-gap: 4px;
             padding: 10px 8px;
@@ -233,7 +260,6 @@ export default function BillsPage() {
         }
       `}</style>
 
-      {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📦 Purchase Bills</h1>
@@ -246,7 +272,6 @@ export default function BillsPage() {
         )}
       </div>
 
-      {/* Summary Cards */}
       <div className="summary-grid">
         <div className="summary-item">
           <div className="summary-label">Total Bills</div>
@@ -266,7 +291,6 @@ export default function BillsPage() {
         </div>
       </div>
 
-      {/* Search */}
       <div style={{ position: "relative", marginBottom: 16 }}>
         <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
         <input
@@ -277,9 +301,22 @@ export default function BillsPage() {
         />
       </div>
 
-      {/* Table with horizontal scroll */}
+      {/* Bills Table or Skeleton */}
       {loading ? (
-        <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading bills…</div>
+        <div className="card">
+          <div className="table-scroll">
+            <div className="header-row">
+              <span style={{ fontWeight: 700 }}>Bill #</span>
+              <span style={{ fontWeight: 700 }}>Date</span>
+              <span style={{ fontWeight: 700 }}>Supplier</span>
+              <span style={{ fontWeight: 700, textAlign: "right" }}>Total</span>
+              <span style={{ fontWeight: 700, textAlign: "center" }}>Status</span>
+              <span style={{ fontWeight: 700 }}>Created / Edited By</span>
+              <span></span><span></span><span></span>
+            </div>
+            {[1, 2, 3, 4, 5].map((i) => <SkeletonRow key={i} />)}
+          </div>
+        </div>
       ) : sortedFiltered.length === 0 ? (
         <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
           No bills found.
@@ -293,13 +330,10 @@ export default function BillsPage() {
               <button className="sort-btn" onClick={() => handleSort("supplier")}>Supplier {getSortIcon("supplier")}</button>
               <button className="sort-btn" onClick={() => handleSort("total")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Total {getSortIcon("total")}</button>
               <button className="sort-btn" onClick={() => handleSort("status")} style={{ textAlign: "center", justifyContent: "center" }}>Status {getSortIcon("status")}</button>
-              {/* Sortable Created / Edited By header */}
               <button className="sort-btn" onClick={() => handleSort("created_by")} style={{ justifyContent: "flex-start" }}>
                 Created / Edited By {getSortIcon("created_by")}
               </button>
-              <span></span>
-              <span></span>
-              <span></span>
+              <span></span><span></span><span></span>
             </div>
             {sortedFiltered.map((bill) => {
               const supp = supplierMap[bill.party_id]
