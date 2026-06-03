@@ -21,6 +21,7 @@ export default function ProductLedgerPage() {
 
   const { companyName, companyTagline, logoUrl } = useCompany()
 
+  const [companyId, setCompanyId] = useState<string>("") // ✅ NEW
   const [product, setProduct] = useState<any>(null)
   const [ledgerLines, setLedgerLines] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -32,19 +33,29 @@ export default function ProductLedgerPage() {
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
+  // ✅ Get company ID from JWT
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id
+      if (cid) setCompanyId(cid)
+    })
+  }, [])
+
   const fetchLedger = async () => {
-    if (!productId) return
+    if (!productId || !companyId) return // ✅ wait for companyId
     setLoading(true)
 
+    // ✅ Fetch product scoped to current company
     const { data: prod } = await supabase
       .from("products")
       .select("*")
       .eq("id", productId)
+      .eq("company_id", companyId) // ✅ FILTER ADDED
       .single()
     setProduct(prod)
     if (!prod) { setLoading(false); return }
 
-    // Fetch ALL stock_moves for this product
+    // Fetch ALL stock_moves for this product (already scoped via prod.company_id)
     const { data: moves } = await supabase
       .from("stock_moves")
       .select("*")
@@ -108,7 +119,7 @@ export default function ProductLedgerPage() {
     setLoading(false)
   }
 
-  useEffect(() => { if (productId) fetchLedger() }, [productId, startDate, endDate])
+  useEffect(() => { if (productId && companyId) fetchLedger() }, [productId, startDate, endDate, companyId])
 
   const sortedLines = [...ledgerLines].sort((a, b) => {
     if (a.isOpening && !b.isOpening) return -1
@@ -153,6 +164,7 @@ export default function ProductLedgerPage() {
   }
 
   if (!productId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>No product selected.</div>
+  if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div> // ✅ guard
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
