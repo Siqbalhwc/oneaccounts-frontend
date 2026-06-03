@@ -1,23 +1,37 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Settings, Users, ArrowRight } from "lucide-react"
-import { useRole } from "@/contexts/RoleContext"
+import { Settings, Database, Cog, Shield, Bell, CreditCard, ArrowRight, Briefcase, Wallet, Users } from "lucide-react"
+import { createBrowserClient } from "@supabase/ssr"
 
 export default function SettingsHubPage() {
   const router = useRouter()
-  const { role } = useRole()
-  const isAdmin = role === "admin" || role === "accountant"
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
 
-  // Only the cards a normal tenant admin should see
-  const cards = [
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user?.email) return
+      supabase
+        .from("platform_admins")
+        .select("id")
+        .eq("email", user.email)
+        .maybeSingle()
+        .then(({ data }) => setIsPlatformAdmin(!!data))
+    })
+  }, [])
+
+  const allCards = [
     {
       title: "Company Settings",
       desc: "Business name, logo, contact details",
       icon: <Settings size={22} />,
       href: "/dashboard/settings/company",
       color: "#3B82F6",
-      show: isAdmin,
     },
     {
       title: "Users & Roles",
@@ -25,9 +39,66 @@ export default function SettingsHubPage() {
       icon: <Users size={22} />,
       href: "/dashboard/admin/users",
       color: "#10B981",
-      show: isAdmin,
     },
-  ].filter(c => c.show)
+    {
+      title: "Data Management",
+      desc: "Clean, import, export, backup & restore",
+      icon: <Database size={22} />,
+      href: "/dashboard/settings/data-tools",
+      color: "#0EA5E9",
+      adminOnly: true,
+    },
+    {
+      title: "Invoice Automation",
+      desc: "Configure expense rules and profit allocation",
+      icon: <Cog size={22} />,
+      href: "/dashboard/settings/invoice-automation",
+      color: "#F59E0B",
+      adminOnly: true,
+    },
+    {
+      title: "Projects & Activities",
+      desc: "Manage projects, locations, and activities for budgeting",
+      icon: <Briefcase size={22} />,
+      href: "/dashboard/settings/projects",
+      color: "#8B5CF6",
+      adminOnly: true,
+    },
+    {
+      title: "Budget Entry",
+      desc: "Set annual expense budgets per account",
+      icon: <Wallet size={22} />,
+      href: "/dashboard/settings/budgets",
+      color: "#F59E0B",
+      adminOnly: true,
+    },
+    {
+      title: "Payment Settings",
+      desc: "JazzCash merchant credentials and gateway config",
+      icon: <CreditCard size={22} />,
+      href: "/dashboard/settings/payments",
+      color: "#10B981",
+      adminOnly: true,
+    },
+    {
+      title: "Permissions Reference",
+      desc: "View role‑based access matrix",
+      icon: <Shield size={22} />,
+      href: "/dashboard/settings/permissions",
+      color: "#8B5CF6",
+      adminOnly: true,
+    },
+    {
+      title: "Notification Settings",
+      desc: "Configure reminders and alerts",
+      icon: <Bell size={22} />,
+      href: "/dashboard/settings/notifications",
+      color: "#EF4444",
+      adminOnly: true,
+    },
+  ]
+
+  const cards = allCards.filter(c => !c.adminOnly || isPlatformAdmin)
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
