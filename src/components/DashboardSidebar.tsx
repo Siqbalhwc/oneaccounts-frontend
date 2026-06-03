@@ -110,13 +110,35 @@ export default function DashboardSidebar({
     getCompany()
   }, [])
 
+  // ---------- NEW: Fetch platform admin status ----------
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
+  useEffect(() => {
+    const check = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user?.email) return
+      const { data } = await supabase
+        .from("platform_admins")
+        .select("id")
+        .eq("email", user.email)
+        .maybeSingle()
+      setIsPlatformAdmin(!!data)
+    }
+    check()
+  }, [])
+
   // Build final nav sections – add Projects only for NGO, but only once
   const navSections = [...baseNavSections]
   const systemSection = navSections.find(s => s.section === 'SYSTEM')!
   if (businessType === 'ngo') {
-    // Ensure we don't add duplicates if this effect runs again
     if (!systemSection.items!.some(item => item.href === '/dashboard/projects')) {
       systemSection.items!.push({ label: 'Projects', icon: '📁', href: '/dashboard/projects' })
+    }
+  }
+
+  // ---------- NEW: Add Platform Admin link for platform admins ----------
+  if (isPlatformAdmin) {
+    if (!systemSection.items!.some(item => item.href === '/dashboard/admin')) {
+      systemSection.items!.push({ label: 'Platform Admin', icon: '🛡️', href: '/dashboard/admin' })
     }
   }
 
