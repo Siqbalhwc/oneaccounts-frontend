@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { createBrowserClient } from "@supabase/ssr"
@@ -110,7 +110,7 @@ export default function DashboardSidebar({
     getCompany()
   }, [])
 
-  // ---------- NEW: Fetch platform admin status ----------
+  // Fetch platform admin status (for /dashboard/admin link)
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
   useEffect(() => {
     const check = async () => {
@@ -126,6 +126,22 @@ export default function DashboardSidebar({
     check()
   }, [])
 
+  // Fetch super admin status (for /admin link)
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
+  useEffect(() => {
+    const checkSuper = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase
+        .from("super_admins")
+        .select("user_id")
+        .eq("user_id", user.id)
+        .maybeSingle()
+      setIsSuperAdmin(!!data)
+    }
+    checkSuper()
+  }, [])
+
   // Build final nav sections – add Projects only for NGO, but only once
   const navSections = [...baseNavSections]
   const systemSection = navSections.find(s => s.section === 'SYSTEM')!
@@ -135,10 +151,17 @@ export default function DashboardSidebar({
     }
   }
 
-  // ---------- NEW: Add Platform Admin link for platform admins ----------
+  // Add Platform Admin link if user is a platform admin
   if (isPlatformAdmin) {
     if (!systemSection.items!.some(item => item.href === '/dashboard/admin')) {
       systemSection.items!.push({ label: 'Platform Admin', icon: '🛡️', href: '/dashboard/admin' })
+    }
+  }
+
+  // Add Super Admin link if user is a super admin
+  if (isSuperAdmin) {
+    if (!systemSection.items!.some(item => item.href === '/admin')) {
+      systemSection.items!.push({ label: 'Super Admin', icon: '🏢', href: '/admin' })
     }
   }
 
