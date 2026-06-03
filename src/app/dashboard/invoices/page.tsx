@@ -11,6 +11,21 @@ import { getWhatsAppLink } from "@/lib/whatsapp"
 type SortField = "invoice_no" | "date" | "customer" | "total" | "status" | "created_by"
 type SortDir = "asc" | "desc"
 
+// ── Skeleton row component ──
+function SkeletonRow() {
+  return (
+    <div className="data-row skeleton-row">
+      <div className="skeleton-block" style={{ width: "60%", height: 12 }} />
+      <div className="skeleton-block" style={{ width: "50%", height: 12 }} />
+      <div className="skeleton-block" style={{ width: "80%", height: 12 }} />
+      <div className="skeleton-block" style={{ width: "40%", height: 12 }} />
+      <div className="skeleton-block" style={{ width: "50%", height: 12 }} />
+      <div className="skeleton-block" style={{ width: "90%", height: 12 }} />
+      <div className="skeleton-block" style={{ width: 80, height: 24, borderRadius: 4 }} />
+    </div>
+  )
+}
+
 export default function InvoicesPage() {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -60,11 +75,13 @@ export default function InvoicesPage() {
       })
   }, [companyId])
 
-  // Fetch invoices – scoped to current company
+  // Fetch invoices – scoped to current company, only when companyId ready
   useEffect(() => {
     if (!role) return
     if (!canView) { setLoading(false); return }
+    if (!companyId) return    // ✅ keep loading until companyId is available
 
+    setLoading(true)           // ✅ ensure loading is true on re-fetch
     supabase
       .from("invoices")
       .select("*")
@@ -130,7 +147,6 @@ export default function InvoicesPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  // Safe WhatsApp links via helper (fixes double‑92)
   const sendWhatsApp = (inv: any) => {
     const cust = customerMap[inv.party_id]
     if (!cust?.phone) { alert("No phone number."); return }
@@ -172,6 +188,16 @@ export default function InvoicesPage() {
           transition: background 0.15s;
         }
         .data-row:hover { background: var(--card-hover); }
+        .skeleton-row .skeleton-block {
+          background: var(--bg-soft);
+          border-radius: 4px;
+          animation: shimmer 1.5s ease-in-out infinite;
+        }
+        @keyframes shimmer {
+          0% { opacity: 0.4; }
+          50% { opacity: 0.8; }
+          100% { opacity: 0.4; }
+        }
         .btn {
           padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
           display: inline-flex; align-items: center; gap: 6px;
@@ -230,8 +256,20 @@ export default function InvoicesPage() {
         <input className="input" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
+      {/* Invoices Table or Skeleton */}
       {loading ? (
-        <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading invoices…</div>
+        <div className="card inv-table">
+          <div className="header-row">
+            <span style={{ fontWeight: 700 }}>Invoice #</span>
+            <span style={{ fontWeight: 700 }}>Date</span>
+            <span style={{ fontWeight: 700 }}>Customer</span>
+            <span style={{ fontWeight: 700, textAlign: "right" }}>Total</span>
+            <span style={{ fontWeight: 700 }}>Status</span>
+            <span style={{ fontWeight: 700 }}>Created / Edited By</span>
+            <span></span>
+          </div>
+          {[1, 2, 3, 4, 5].map((i) => <SkeletonRow key={i} />)}
+        </div>
       ) : sortedFiltered.length === 0 ? (
         <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>No invoices found.</div>
       ) : (
