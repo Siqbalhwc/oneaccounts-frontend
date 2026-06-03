@@ -110,7 +110,7 @@ export default function DashboardSidebar({
     getCompany()
   }, [])
 
-  // Fetch platform admin status (for /dashboard/admin link)
+  // Platform admin check (using platform_admins table)
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
   useEffect(() => {
     const check = async () => {
@@ -126,18 +126,16 @@ export default function DashboardSidebar({
     check()
   }, [])
 
-  // Fetch super admin status (for /admin link)
+  // Super admin check – hardcoded for you, Shahid
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   useEffect(() => {
     const checkSuper = async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const { data } = await supabase
-        .from("super_admins")
-        .select("user_id")
-        .eq("user_id", user.id)
-        .maybeSingle()
-      setIsSuperAdmin(!!data)
+      if (user?.email === 'siqbalhwc@gmail.com') {
+        setIsSuperAdmin(true)
+      } else {
+        setIsSuperAdmin(false)
+      }
     }
     checkSuper()
   }, [])
@@ -151,14 +149,14 @@ export default function DashboardSidebar({
     }
   }
 
-  // Add Platform Admin link if user is a platform admin
+  // Add Platform Admin link for platform admins
   if (isPlatformAdmin) {
     if (!systemSection.items!.some(item => item.href === '/dashboard/admin')) {
       systemSection.items!.push({ label: 'Platform Admin', icon: '🛡️', href: '/dashboard/admin' })
     }
   }
 
-  // Add Super Admin link if user is a super admin
+  // Add Super Admin link for you (Shahid)
   if (isSuperAdmin) {
     if (!systemSection.items!.some(item => item.href === '/admin')) {
       systemSection.items!.push({ label: 'Super Admin', icon: '🏢', href: '/admin' })
