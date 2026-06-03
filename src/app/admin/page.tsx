@@ -187,28 +187,23 @@ export default function SuperAdminPage() {
   const expiredTrials = companies.filter(c => c.is_trial && c.trial_ends_at && new Date(c.trial_ends_at) <= new Date())
   const activeClients = companies.filter(c => !c.is_trial)
 
-  const kpiStyle = (bg: string) => ({
-    background: bg, borderRadius: 8, padding: "12px 14px", color: "white",
-    minWidth: 120, textAlign: "center" as const, fontWeight: 700,
-  })
-
-  if (loading) return <div style={{ padding: 24, textAlign: "center" }}>Loading platform...</div>
+  if (loading) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading platform...</div>
 
   return (
-    <div style={{ padding: 24, background: "#EFF4FB", minHeight: "100vh", fontFamily: "Arial" }}>
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .sa-header { margin-bottom: 20px; }
-        .sa-title { font-size: 22px; font-weight: 800; color: #1E293B; }
-        .sa-subtitle { font-size: 13px; color: #94A3B8; }
+        .sa-title { font-size: 22px; font-weight: 800; color: var(--text); }
+        .sa-subtitle { font-size: 13px; color: var(--text-muted); }
         .sa-section { margin-bottom: 24px; }
-        .sa-section-title { font-size: 14px; font-weight: 700; color: #334155; margin-bottom: 10px; }
+        .sa-section-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
         .sa-company-card {
-          background: white; border: 1px solid #E2E8F0; border-radius: 10px;
+          background: var(--card); border: 1px solid var(--border); border-radius: 10px;
           padding: 12px 16px; margin-bottom: 8px;
           display: flex; justify-content: space-between; align-items: center; gap: 10px;
           flex-wrap: wrap;
         }
-        .sa-company-card:hover { background: #FAFBFF; }
+        .sa-company-card:hover { background: var(--card-hover); }
         .sa-badge {
           padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600;
           display: inline-block;
@@ -216,24 +211,35 @@ export default function SuperAdminPage() {
         .sa-btn {
           display: inline-flex; align-items: center; gap: 5px;
           padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 600;
-          border: none; cursor: pointer; font-family: inherit;
+          border: 1px solid var(--border); cursor: pointer; font-family: inherit;
+          background: transparent; color: var(--text-muted);
         }
-        .sa-btn-outline { background: white; border: 1px solid #E2E8F0; color: #475569; }
-        .sa-btn-primary { background: #1D4ED8; color: white; }
-        .sa-btn-danger { background: #EF4444; color: white; }
+        .sa-btn:hover { background: var(--card-hover); }
+        .sa-btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+        .sa-btn-danger { background: #EF4444; color: white; border-color: #EF4444; }
         .modal-overlay {
           position: fixed; inset: 0; background: rgba(0,0,0,0.5);
           display: flex; align-items: center; justify-content: center; z-index: 1000;
         }
         .modal-box {
-          background: white; border-radius: 12px; padding: 24px;
-          max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;
+          background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px;
+          max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; color: var(--text);
         }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-        .input-field { width: 100%; padding: 6px 10px; border: 1px solid #E2E8F0; border-radius: 6px; font-size: 12px; margin-bottom: 10px; }
+        .input-field { width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; margin-bottom: 10px; background: var(--bg); color: var(--text); }
         .pay-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        .pay-table th { text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 700; color: #64748B; border-bottom: 2px solid #E2E8F0; }
-        .pay-table td { padding: 8px 12px; font-size: 12px; color: #334155; border-bottom: 1px solid #E2E8F0; }
+        .pay-table th { text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 700; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+        .pay-table td { padding: 8px 12px; font-size: 12px; color: var(--text); border-bottom: 1px solid var(--border); }
+        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; text-align: center; }
+        .kpi-value { font-size: 22px; font-weight: 800; }
+        .kpi-label { font-size: 10px; text-transform: uppercase; color: var(--text-muted); margin-top: 2px; }
+        .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+        @media (max-width: 640px) {
+          .sa-company-card { flex-direction: column; align-items: flex-start; }
+          .sa-btn { font-size: 10px; padding: 4px 8px; }
+          .kpi-grid { grid-template-columns: 1fr 1fr; }
+        }
       `}</style>
 
       <div className="sa-header">
@@ -243,30 +249,30 @@ export default function SuperAdminPage() {
 
       {message && (
         <div style={{
-          background: message.startsWith("✅") ? "#F0FDF4" : "#FEF2F2",
-          color: message.startsWith("✅") ? "#15803D" : "#B91C1C",
+          background: message.startsWith("✅") ? "#065F46" : "#7F1D1D",
+          color: "white",
           padding: "8px 12px", borderRadius: 6, marginBottom: 16, fontSize: 13,
         }}>
           {message}
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-        <div style={kpiStyle("#1E3A8A")}>
-          <div style={{ fontSize: 20 }}>{companies.length}</div>
-          <div style={{ fontSize: 10 }}>Total Companies</div>
+      <div className="kpi-grid">
+        <div className="kpi-card">
+          <div className="kpi-value" style={{ color: "#3B82F6" }}>{companies.length}</div>
+          <div className="kpi-label">Total Companies</div>
         </div>
-        <div style={kpiStyle("#10B981")}>
-          <div style={{ fontSize: 20 }}>{activeTrials.length}</div>
-          <div style={{ fontSize: 10 }}>Active Trials</div>
+        <div className="kpi-card">
+          <div className="kpi-value" style={{ color: "#10B981" }}>{activeTrials.length}</div>
+          <div className="kpi-label">Active Trials</div>
         </div>
-        <div style={kpiStyle("#EF4444")}>
-          <div style={{ fontSize: 20 }}>{expiredTrials.length}</div>
-          <div style={{ fontSize: 10 }}>Expired Trials</div>
+        <div className="kpi-card">
+          <div className="kpi-value" style={{ color: "#EF4444" }}>{expiredTrials.length}</div>
+          <div className="kpi-label">Expired Trials</div>
         </div>
-        <div style={kpiStyle("#0EA5E9")}>
-          <div style={{ fontSize: 20 }}>{activeClients.length}</div>
-          <div style={{ fontSize: 10 }}>Active Clients</div>
+        <div className="kpi-card">
+          <div className="kpi-value" style={{ color: "#0EA5E9" }}>{activeClients.length}</div>
+          <div className="kpi-label">Active Clients</div>
         </div>
       </div>
 
@@ -277,15 +283,15 @@ export default function SuperAdminPage() {
             <div key={c.id} className="sa-company-card">
               <div>
                 <div style={{ fontWeight: 700 }}>{c.name}</div>
-                <div style={{ fontSize: 11, color: "#64748B" }}>
+                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
                   {c.admin_email} · Users: {c.user_count} · Plan: {c.plan}
                 </div>
                 {c.trial_ends_at && <div style={{ fontSize: 10, color: "#10B981" }}>Ends {new Date(c.trial_ends_at).toLocaleDateString()}</div>}
               </div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <button className="sa-btn sa-btn-outline" onClick={() => openFeatureModal(c)}>⚙️ Features</button>
+                <button className="sa-btn" onClick={() => openFeatureModal(c)}>⚙️ Features</button>
                 <button className="sa-btn sa-btn-primary" onClick={() => openSubscriptionModal(c)}><CreditCard size={12}/> Subscribe</button>
-                <button className="sa-btn sa-btn-outline" onClick={() => impersonate(c)}><LogIn size={12}/> Login</button>
+                <button className="sa-btn" onClick={() => impersonate(c)}><LogIn size={12}/> Login</button>
                 <button className="sa-btn sa-btn-danger" onClick={() => deleteCompany(c)}><Trash2 size={12}/> Delete</button>
               </div>
             </div>
@@ -300,7 +306,7 @@ export default function SuperAdminPage() {
             <div key={c.id} className="sa-company-card">
               <div>
                 <div style={{ fontWeight: 700 }}>{c.name}</div>
-                <div style={{ fontSize: 11, color: "#64748B" }}>
+                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
                   {c.admin_email} · Users: {c.user_count} · Plan: {c.plan}
                 </div>
                 {c.trial_ends_at && <div style={{ fontSize: 10, color: "#EF4444" }}>Expired {new Date(c.trial_ends_at).toLocaleDateString()}</div>}
@@ -321,15 +327,15 @@ export default function SuperAdminPage() {
             <div key={c.id} className="sa-company-card">
               <div>
                 <div style={{ fontWeight: 700 }}>{c.name}</div>
-                <div style={{ fontSize: 11, color: "#64748B" }}>
+                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
                   {c.admin_email} · Users: {c.user_count} · Plan: {c.plan}
                   {c.subscription && <span> · Last payment: {c.subscription.amount ? `PKR ${c.subscription.amount}` : "—"}</span>}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
-                <button className="sa-btn sa-btn-outline" onClick={() => openFeatureModal(c)}>Features</button>
+                <button className="sa-btn" onClick={() => openFeatureModal(c)}>Features</button>
                 <button className="sa-btn sa-btn-primary" onClick={() => openSubscriptionModal(c)}>Update</button>
-                <button className="sa-btn sa-btn-outline" onClick={() => impersonate(c)}>Login</button>
+                <button className="sa-btn" onClick={() => impersonate(c)}>Login</button>
                 <button className="sa-btn sa-btn-danger" onClick={() => deleteCompany(c)}>Delete</button>
               </div>
             </div>
@@ -340,11 +346,11 @@ export default function SuperAdminPage() {
       <div className="sa-section">
         <div className="sa-section-title">📬 Payment Notifications ({payments.length})</div>
         {payments.length === 0 ? (
-          <div style={{ background: "white", borderRadius: 8, padding: 16, textAlign: "center", color: "#94A3B8", border: "1px solid #E2E8F0" }}>
+          <div style={{ background: "var(--card)", borderRadius: 8, padding: 16, textAlign: "center", color: "var(--text-muted)", border: "1px solid var(--border)" }}>
             No payment notifications yet.
           </div>
         ) : (
-          <div style={{ background: "white", borderRadius: 8, border: "1px solid #E2E8F0", overflow: "hidden" }}>
+          <div className="table-wrap">
             <table className="pay-table">
               <thead>
                 <tr>
@@ -385,15 +391,15 @@ export default function SuperAdminPage() {
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{selectedCompanyForFeatures.name}</h2>
-              <button className="sa-btn sa-btn-outline" onClick={() => setShowFeatureModal(false)}><X size={16}/></button>
+              <button className="sa-btn" onClick={() => setShowFeatureModal(false)}><X size={16}/></button>
             </div>
             {FEATURE_CODES.map(code => (
-              <div key={code} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #eee" }}>
+              <div key={code} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
                 <span style={{ fontSize: 13 }}>{FEATURE_LABELS[code] || code}</span>
                 <button onClick={() => toggleFeature(code)} style={{ background: "none", border: "none", cursor: "pointer" }}>
                   {featureStates[code]
                     ? <ToggleRight size={22} color="#10B981" />
-                    : <ToggleLeft size={22} color="#CBD5E1" />}
+                    : <ToggleLeft size={22} color="var(--text-muted)" />}
                 </button>
               </div>
             ))}
@@ -406,7 +412,7 @@ export default function SuperAdminPage() {
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Record Payment</h2>
-              <button className="sa-btn sa-btn-outline" onClick={() => setShowSubscriptionModal(false)}><X size={16}/></button>
+              <button className="sa-btn" onClick={() => setShowSubscriptionModal(false)}><X size={16}/></button>
             </div>
             <select className="input-field" value={subscriptionForm.planType} onChange={e => setSubscriptionForm({...subscriptionForm, planType: e.target.value})}>
               <option value="basic">Basic</option>
