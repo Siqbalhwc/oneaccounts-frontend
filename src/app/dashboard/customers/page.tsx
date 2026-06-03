@@ -11,6 +11,22 @@ import { usePlan } from "@/contexts/PlanContext"
 type SortField = "code" | "name" | "phone" | "balance" | "created_by"
 type SortDir = "asc" | "desc"
 
+// ── Skeleton row component ──
+function SkeletonRow() {
+  return (
+    <div className="data-row skeleton-row">
+      <div className="skeleton-block" style={{ width: "60%", height: 12 }} />
+      <div className="skeleton-block" style={{ width: "80%", height: 12 }} />
+      <div className="skeleton-block" style={{ width: "70%", height: 12 }} />
+      <div className="skeleton-block" style={{ width: "50%", height: 12 }} />
+      <div className="skeleton-block" style={{ width: "90%", height: 12 }} />
+      <div className="skeleton-block" style={{ width: 24, height: 24, borderRadius: 4 }} />
+      <div className="skeleton-block" style={{ width: 24, height: 24, borderRadius: 4 }} />
+      <div className="skeleton-block" style={{ width: 24, height: 24, borderRadius: 4 }} />
+    </div>
+  )
+}
+
 export default function CustomersPage() {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -34,6 +50,7 @@ export default function CustomersPage() {
   const [importing, setImporting] = useState(false)
   const [importMessage, setImportMessage] = useState("")
 
+  // Fetch company ID from JWT
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
@@ -41,23 +58,27 @@ export default function CustomersPage() {
     })
   }, [])
 
+  // Fetch customers – waits for companyId
   useEffect(() => {
     if (!role) return
     if (!canView) {
       setLoading(false)
       return
     }
+    if (!companyId) return     // keep loading until we have the ID
+
+    setLoading(true)
     supabase
       .from("customers")
       .select("*")
-      .eq("company_id", companyId)         // ← restrict to current company
+      .eq("company_id", companyId)
       .is("deleted_at", null)
       .order("name", { ascending: true })
       .then(({ data }) => {
         setCustomers(data || [])
         setLoading(false)
       })
-  }, [role, canView])
+  }, [role, canView, companyId])
 
   // Sorting & filtering
   const filteredCustomers = (() => {
@@ -162,7 +183,6 @@ export default function CustomersPage() {
       const result = await res.json()
       if (result.success) {
         setImportMessage(`✅ Imported ${result.count} customers successfully`)
-        // Refresh list – also filtered by company
         const { data } = await supabase
           .from("customers")
           .select("*")
@@ -210,6 +230,16 @@ export default function CustomersPage() {
           }
           .data-row:hover { background: var(--card-hover); }
           .data-row:last-child { border-bottom: none; }
+          .skeleton-row .skeleton-block {
+            background: var(--bg-soft);
+            border-radius: 4px;
+            animation: shimmer 1.5s ease-in-out infinite;
+          }
+          @keyframes shimmer {
+            0% { opacity: 0.4; }
+            50% { opacity: 0.8; }
+            100% { opacity: 0.4; }
+          }
           .sort-btn {
             background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
             display: inline-flex; align-items: center; gap: 4px; padding: 0;
@@ -305,7 +335,6 @@ export default function CustomersPage() {
           </div>
         </div>
 
-        {/* Import/export message */}
         {importMessage && (
           <div className="message" style={{ background: importMessage.startsWith("✅") ? "#065F46" : "#7C2D12", color: "white" }}>
             {importMessage}
@@ -341,9 +370,21 @@ export default function CustomersPage() {
           />
         </div>
 
-        {/* Customers Table */}
+        {/* Customers Table or Skeleton */}
         {loading ? (
-          <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading customers…</div>
+          <div className="card cust-table">
+            <div className="header-row">
+              <span style={{ fontWeight: 700 }}>Code</span>
+              <span style={{ fontWeight: 700 }}>Name</span>
+              <span style={{ fontWeight: 700 }}>Phone</span>
+              <span style={{ fontWeight: 700, textAlign: "right" }}>Balance</span>
+              <span style={{ fontWeight: 700 }}>Created / Edited By</span>
+              <span></span><span></span><span></span>
+            </div>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <SkeletonRow key={i} />
+            ))}
+          </div>
         ) : filteredCustomers.length === 0 ? (
           <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
             No customers found. {canEdit && "Add a customer to get started."}
