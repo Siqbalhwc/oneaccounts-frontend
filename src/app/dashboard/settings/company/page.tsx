@@ -126,7 +126,7 @@ export default function CompanySettingsPage() {
         updated_at: new Date().toISOString(),
       })
       .eq("company_id", companyId)
-      .select()
+      .select() as { data: any[] | null, error: any }
 
     if (!updated || updated.length === 0) {
       // No row yet – insert a new one
