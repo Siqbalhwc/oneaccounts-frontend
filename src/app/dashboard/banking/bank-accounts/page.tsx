@@ -79,7 +79,7 @@ export default function BankAccountsPage() {
       .select("id, code, name, balance")
       .eq("type", "Asset")
       .like("code", "10%")
-      .eq("category", "Cash & Bank")   // ← only Cash & Bank accounts
+      .eq("category", "Cash & Bank")
       .eq("company_id", companyId)
       .order("code")
 
@@ -236,26 +236,28 @@ export default function BankAccountsPage() {
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; width: 100%; }
         .table-wrapper {
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
+          width: 100%;
         }
         .table-grid {
-          min-width: 1050px;
+          width: 100%;
         }
         .header-row {
           display: grid;
-          grid-template-columns: 200px 200px 150px 100px 150px 200px 55px 55px;
+          grid-template-columns: 200px minmax(200px, 1fr) minmax(120px, 1fr) minmax(100px, 1fr) minmax(120px, 1fr) minmax(200px, 1fr) 55px 55px;
           column-gap: 10px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
           background: var(--card);
+          width: 100%;
         }
         .data-row {
           display: grid;
-          grid-template-columns: 200px 200px 150px 100px 150px 200px 55px 55px;
+          grid-template-columns: 200px minmax(200px, 1fr) minmax(120px, 1fr) minmax(100px, 1fr) minmax(120px, 1fr) minmax(200px, 1fr) 55px 55px;
           column-gap: 10px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
@@ -307,12 +309,16 @@ export default function BankAccountsPage() {
         .pr-modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
 
         @media (max-width: 800px) {
-          .header-row, .data-row { column-gap: 6px; padding: 10px 12px; }
-          .table-grid { min-width: 950px; }
+          .header-row, .data-row {
+            grid-template-columns: 200px minmax(200px, 1fr) minmax(120px, 1fr) minmax(100px, 1fr) minmax(120px, 1fr) minmax(200px, 1fr) 55px 55px;
+            column-gap: 6px; padding: 10px 12px;
+          }
         }
         @media (max-width: 600px) {
-          .header-row, .data-row { column-gap: 4px; padding: 10px 8px; }
-          .table-grid { min-width: 850px; }
+          .header-row, .data-row {
+            grid-template-columns: 150px minmax(150px, 1fr) minmax(100px, 1fr) minmax(80px, 1fr) minmax(100px, 1fr) minmax(150px, 1fr) 45px 45px;
+            column-gap: 4px; padding: 10px 8px;
+          }
         }
       `}</style>
 
@@ -328,7 +334,6 @@ export default function BankAccountsPage() {
             <button className="btn btn-primary" onClick={() => router.push("/dashboard/banking/bank-accounts/new")}>
               <Plus size={16} /> Add Bank Account
             </button>
-            {/* Open the proper New Account page for chart-of-accounts */}
             <button className="btn btn-outline" onClick={() => router.push("/dashboard/accounts/new")}>
               <Plus size={16} /> New GL Account
             </button>
