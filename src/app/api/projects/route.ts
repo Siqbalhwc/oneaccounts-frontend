@@ -1,17 +1,40 @@
-import { createClient } from '@supabase/supabase-js'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false, autoRefreshToken: false } }
-)
-
 export async function GET() {
-  // 1. Get all projects with donor name
-  const { data: projects, error } = await supabaseAdmin
+  const cookieStore = await cookies()
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll() },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
+
+  // Get authenticated user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const companyId = user.app_metadata?.company_id
+  if (!companyId) {
+    return NextResponse.json({ error: 'No company linked' }, { status: 400 })
+  }
+
+  // Fetch projects only for the current company
+  const { data: projects, error } = await supabase
     .from("projects")
     .select("*, donors(name)")
+    .eq("company_id", companyId)
     .order("name")
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -20,13 +43,13 @@ export async function GET() {
     return NextResponse.json([])
   }
 
-  // 2. Get total budget per project (annual only)
-  const { data: budgets } = await supabaseAdmin
+  // Get total budget per project (annual only) – also scoped to company
+  const { data: budgets } = await supabase
     .from("budgets")
     .select("project_id, budgeted_amount")
-    .is("month", null)   // only annual budgets
+    .eq("company_id", companyId)
+    .is("month", null)
 
-  // 3. Build a map of project_id → total budget
   const budgetMap: Record<string, number> = {}
   if (budgets) {
     budgets.forEach((b: any) => {
@@ -35,7 +58,6 @@ export async function GET() {
     })
   }
 
-  // 4. Enrich projects with totalBudget
   const enriched = projects.map((p: any) => ({
     id: p.id,
     name: p.name,
