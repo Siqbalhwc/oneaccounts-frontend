@@ -93,7 +93,6 @@ export default function NewReceiptPage() {
     }
 
     const fetchInvoicesWithPaid = async () => {
-      // fetch unpaid/partial invoices
       const { data: invs } = await supabase
         .from("invoices")
         .select("id, invoice_no, date, due_date, total, paid, status")
@@ -108,14 +107,12 @@ export default function NewReceiptPage() {
         return
       }
 
-      // fetch sum of allocations for these invoices
       const invoiceIds = invs.map(inv => inv.id)
       const { data: allocationsData } = await supabase
         .from("receipt_allocations")
         .select("invoice_id, amount")
         .in("invoice_id", invoiceIds)
 
-      // create a map of total allocated per invoice
       const paidMap: Record<number, number> = {}
       if (allocationsData) {
         allocationsData.forEach((a: any) => {
@@ -123,16 +120,19 @@ export default function NewReceiptPage() {
         })
       }
 
-      // enrich invoices with computed paid
+      // Use the higher of invoices.paid and the sum of receipt_allocations
       const enriched = invs.map(inv => ({
         ...inv,
-        paid: paidMap[inv.id] || 0,
+        paid: Math.max(inv.paid || 0, paidMap[inv.id] || 0),
       }))
 
-      setInvoices(enriched)
+      // Filter out invoices that are already fully paid (safety net)
+      const stillDue = enriched.filter(inv => inv.total - inv.paid > 0.001)
+
+      setInvoices(stillDue)
 
       const initAlloc: Record<number, number> = {}
-      enriched.forEach(inv => { initAlloc[inv.id] = 0 })
+      stillDue.forEach(inv => { initAlloc[inv.id] = 0 })
       setAllocations(initAlloc)
     }
 

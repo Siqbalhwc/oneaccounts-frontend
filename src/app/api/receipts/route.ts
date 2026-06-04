@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Amount is required' }, { status: 400 })
   }
 
-  // ── Validate allocations BEFORE inserting anything ──────────────────
+  // ── Validate allocations ────────────────────────────────────────────
   const allocList: { invoice_id: number; amount: number }[] = []
   if (!income_account_id && party_id && allocations && Array.isArray(allocations)) {
     for (const alloc of allocations) {
@@ -74,8 +74,8 @@ export async function POST(request: NextRequest) {
       const allocAmt = parseFloat(alloc.amount) || 0
       if (allocAmt <= 0) continue
 
-      // Fetch invoice to check remaining due
-      const { data: inv, error: invErr } = await supabase
+      // Fetch invoice basic info
+      const { data: inv } = await supabase
         .from('invoices')
         .select('id, total, paid, status')
         .eq('id', invId)
@@ -83,18 +83,37 @@ export async function POST(request: NextRequest) {
         .eq('type', 'sale')
         .single()
 
-      if (invErr || !inv) {
-        return NextResponse.json({ error: `Invoice ${invId} not found or access denied.` }, { status: 400 })
+      if (!inv) {
+        return NextResponse.json({ error: `Invoice ${invId} not found` }, { status: 400 })
       }
 
-      const remaining = (inv.total || 0) - (inv.paid || 0)
-      if (allocAmt > remaining) {
+      // Source of truth: sum of existing receipt_allocations for this invoice
+      const { data: existingAllocs } = await supabase
+        .from('receipt_allocations')
+        .select('amount')
+        .eq('invoice_id', invId)
+
+      const alreadyPaid = existingAllocs
+        ? existingAllocs.reduce((sum: number, a: any) => sum + (a.amount || 0), 0)
+        : 0
+
+      // Use the higher of the two possible paid values
+      const effectivePaid = Math.max(inv.paid || 0, alreadyPaid)
+      const remaining = (inv.total || 0) - effectivePaid
+
+      if (remaining <= 0.001) {
         return NextResponse.json({
-          error: `Allocation amount PKR ${allocAmt} exceeds remaining due PKR ${remaining} for invoice ${invId}`
+          error: `Invoice ${invId} is already fully paid`
         }, { status: 400 })
       }
 
-      allocList.push({ invoice_id: invId, amount: allocAmt })
+      if (allocAmt > remaining + 0.001) {
+        return NextResponse.json({
+          error: `Allocation PKR ${allocAmt.toLocaleString()} exceeds remaining due PKR ${remaining.toLocaleString()} for invoice ${invId}`
+        }, { status: 400 })
+      }
+
+      allocList.push({ invoice_id: invId, amount: Math.min(allocAmt, remaining) })
     }
   }
 
@@ -135,46 +154,47 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to create receipt after multiple attempts.' }, { status: 500 })
   }
 
-  // ── Process valid allocations with error checking ────────────────────
+  // ── Process valid allocations (source of truth: receipt_allocations) ──
   for (const alloc of allocList) {
     const invId = alloc.invoice_id
     const allocAmt = alloc.amount
 
-    // Update invoice paid & status
-    const { data: invoice, error: fetchErr } = await supabase
+    // Fetch invoice total (do not trust invoices.paid)
+    const { data: invoice } = await supabase
       .from('invoices')
-      .select('paid, total')
+      .select('total')
       .eq('id', invId)
       .eq('company_id', companyId)
       .single()
 
-    if (fetchErr || !invoice) {
-      return NextResponse.json({ error: `Could not read invoice ${invId}` }, { status: 500 })
-    }
+    if (!invoice) continue
 
-    const newPaid = (invoice.paid || 0) + allocAmt
+    // Recompute paid from receipt_allocations
+    const { data: prevAllocs } = await supabase
+      .from('receipt_allocations')
+      .select('amount')
+      .eq('invoice_id', invId)
+
+    const prevPaid = prevAllocs
+      ? prevAllocs.reduce((sum: number, a: any) => sum + (a.amount || 0), 0)
+      : 0
+
+    const newPaid = prevPaid + allocAmt
     const newStatus = newPaid >= invoice.total ? 'Paid' : 'Partial'
 
-    const { error: updateErr } = await supabase.from('invoices')
+    // Update invoice with correct paid amount
+    await supabase.from('invoices')
       .update({ paid: newPaid, status: newStatus })
       .eq('id', invId)
       .eq('company_id', companyId)
 
-    if (updateErr) {
-      return NextResponse.json({ error: `Failed to update invoice ${invId}: ${updateErr.message}` }, { status: 500 })
-    }
-
-    // Insert allocation record
-    const { error: insertErr } = await supabase.from('receipt_allocations').insert({
+    // Insert the allocation record
+    await supabase.from('receipt_allocations').insert({
       receipt_id: receipt.id,
       invoice_id: invId,
       amount: allocAmt,
       company_id: companyId,
     })
-
-    if (insertErr) {
-      return NextResponse.json({ error: `Failed to save allocation for invoice ${invId}: ${insertErr.message}` }, { status: 500 })
-    }
   }
 
   // ── Update customer balance ────────────────────────────────────────
