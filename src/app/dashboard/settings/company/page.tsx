@@ -113,36 +113,11 @@ export default function CompanySettingsPage() {
       newLogoUrl = publicUrlData?.publicUrl || ""
     }
 
-    // ---- SAFE UPDATE‑OR‑INSERT WITHOUT ON CONFLICT ----
-    // First, check if a settings row already exists for this company
-    const { data: existingRow } = await supabase
+    // ✅ Use upsert to either create or update the settings row
+    const { error: upsertError } = await supabase
       .from("company_settings")
-      .select("id")
-      .eq("company_id", companyId)
-      .maybeSingle()
-
-    let error = null
-
-    if (existingRow) {
-      // Row exists → update it (id remains unchanged)
-      const result = await supabase
-        .from("company_settings")
-        .update({
-          business_name: settings.business_name,
-          tagline: settings.tagline,
-          address: settings.address,
-          phone: settings.phone,
-          email: settings.email,
-          logo_url: newLogoUrl,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("company_id", companyId)
-      error = result.error
-    } else {
-      // No row → insert a new one (id will be auto‑generated)
-      const result = await supabase
-        .from("company_settings")
-        .insert({
+      .upsert(
+        {
           company_id: companyId,
           business_name: settings.business_name,
           tagline: settings.tagline,
@@ -151,12 +126,12 @@ export default function CompanySettingsPage() {
           email: settings.email,
           logo_url: newLogoUrl,
           updated_at: new Date().toISOString(),
-        })
-      error = result.error
-    }
+        },
+        { onConflict: "company_id" }   // ← unique constraint column
+      )
 
-    if (error) {
-      setMessage("Error saving settings: " + error.message)
+    if (upsertError) {
+      setMessage("Error saving settings: " + upsertError.message)
       setSaving(false)
       return
     }
