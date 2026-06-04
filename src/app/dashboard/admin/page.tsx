@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Database, Cog, Shield, Bell, CreditCard, ArrowRight, Briefcase, Wallet } from "lucide-react"
+import { Database, Cog, Shield, Bell, CreditCard, ArrowRight } from "lucide-react"
 import { createBrowserClient } from "@supabase/ssr"
 
 export default function PlatformAdminPage() {
@@ -58,20 +58,6 @@ export default function PlatformAdminPage() {
       desc: "Configure expense rules and profit allocation",
       icon: <Cog size={22} />,
       href: "/dashboard/settings/invoice-automation",
-      color: "#F59E0B",
-    },
-    {
-      title: "Projects & Activities",
-      desc: "Manage projects, locations, and activities for budgeting",
-      icon: <Briefcase size={22} />,
-      href: "/dashboard/settings/projects",
-      color: "#8B5CF6",
-    },
-    {
-      title: "Budget Entry",
-      desc: "Set annual expense budgets per account",
-      icon: <Wallet size={22} />,
-      href: "/dashboard/settings/budgets",
       color: "#F59E0B",
     },
     {
