@@ -15,7 +15,7 @@ interface NavItem { label: string; icon: string; href: string; feature?: string;
 interface NavGroup { groupLabel: string; items: NavItem[] }
 interface NavSection { section: string; feature?: string; items?: NavItem[]; groups?: NavGroup[] }
 
-// ── Navigation data (without Projects – we’ll add it conditionally) ──
+// ── Base navigation (without Projects – we'll add it as a separate section for NGO) ──
 const baseNavSections: NavSection[] = [
   { section: 'MAIN', items: [{ label: 'Dashboard', icon: '📊', href: '/dashboard' }] },
   { section: 'CRM', items: [
@@ -70,6 +70,7 @@ function getSectionForPath(path: string): string {
       }
     }
   }
+  // Also check the dynamic PROJECTS section if present
   return "MAIN"
 }
 
@@ -140,16 +141,23 @@ export default function DashboardSidebar({
     checkSuper()
   }, [])
 
-  // Build final nav sections – add Projects only for NGO, but only once
+  // Build final nav sections
   const navSections = [...baseNavSections]
-  const systemSection = navSections.find(s => s.section === 'SYSTEM')!
+
+  // ── Add "Project & Budgets" section ONLY for NGO companies ──
   if (businessType === 'ngo') {
-    if (!systemSection.items!.some(item => item.href === '/dashboard/projects')) {
-      systemSection.items!.push({ label: 'Projects', icon: '📁', href: '/dashboard/projects' })
-    }
+    navSections.push({
+      section: 'Project & Budgets',
+      items: [
+        { label: 'Projects',            icon: '📁', href: '/dashboard/projects'            },
+        { label: 'Activities & Locations', icon: '📍', href: '/dashboard/settings/projects' },
+        { label: 'Budgets',             icon: '💰', href: '/dashboard/settings/budgets'    },
+      ],
+    })
   }
 
   // Add Platform Admin link for platform admins
+  const systemSection = navSections.find(s => s.section === 'SYSTEM')!
   if (isPlatformAdmin) {
     if (!systemSection.items!.some(item => item.href === '/dashboard/admin')) {
       systemSection.items!.push({ label: 'Platform Admin', icon: '🛡️', href: '/dashboard/admin' })
@@ -177,8 +185,11 @@ export default function DashboardSidebar({
   }, [collapsed])
 
   useEffect(() => {
-    setOpenSection(getSectionForPath(pathname))
-  }, [pathname])
+    // Re‑evaluate open section based on current path
+    const sec = navSections.find(s => s.items?.some(item => matchesItem(item, pathname)))
+    if (sec) setOpenSection(sec.section)
+    else if (navSections.some(s => s.section === pathname)) setOpenSection(pathname)
+  }, [pathname, navSections])
 
   const handleSectionClick = (section: string) => {
     setOpenSection(section)
@@ -195,7 +206,7 @@ export default function DashboardSidebar({
     return !visitedFeatures[item.feature]
   }
 
-  // ── UPDATED isVisible function ──
+  // Visibility rules
   const isVisible = (item: NavItem) => {
     if (item.adminOnly && role !== 'admin') return false
     if (item.feature && !hasFeature(item.feature)) return false
@@ -277,17 +288,15 @@ export default function DashboardSidebar({
           if (sec.feature && !hasFeature(sec.feature)) return null
           const isOpen = openSection === sec.section
 
-          // ✅ Hide groups that contain no visible items
+          // Hide groups that contain no visible items
           const visibleGroups = sec.groups
             ? sec.groups.filter(group => group.items.some(item => isVisible(item)))
             : []
 
-          // ✅ For sections with items, only render if there is at least one visible item
+          // Only render if there is at least one visible item
           const visibleItems = sec.items?.filter(item => isVisible(item)) ?? []
 
-          // If a section has no groups and no visible items, hide the whole section
           if (!sec.groups && visibleItems.length === 0) return null
-          // If a section has groups but no visible groups, hide the whole section
           if (sec.groups && visibleGroups.length === 0) return null
 
           return (
