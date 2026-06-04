@@ -35,6 +35,9 @@ export default function CompanySettingsPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
 
+  // ✅ NEW: Fiscal year start month
+  const [fiscalStartMonth, setFiscalStartMonth] = useState(1) // default January
+
   // 1. Get company ID from JWT
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -63,6 +66,13 @@ export default function CompanySettingsPage() {
           logo_url: data.logo_url || "",
         })
         if (data.logo_url) setLogoPreview(data.logo_url)
+
+        // ✅ Load fiscal year start month
+        if (data.fiscal_year_start_month) {
+          setFiscalStartMonth(data.fiscal_year_start_month)
+        } else {
+          setFiscalStartMonth(1)
+        }
       } else {
         // No settings yet – grab the company name from the companies table
         const { data: company } = await supabase
@@ -113,7 +123,7 @@ export default function CompanySettingsPage() {
       newLogoUrl = publicUrlData?.publicUrl || ""
     }
 
-    // ✅ Upsert using the unique company_id constraint
+    // ✅ Upsert using the unique company_id constraint, now with fiscal year start month
     const { error: upsertError } = await supabase
       .from("company_settings")
       .upsert(
@@ -125,6 +135,7 @@ export default function CompanySettingsPage() {
           phone: settings.phone,
           email: settings.email,
           logo_url: newLogoUrl,
+          fiscal_year_start_month: fiscalStartMonth,   // ✅ NEW
           updated_at: new Date().toISOString(),
         },
         { onConflict: "company_id" }
@@ -222,6 +233,32 @@ export default function CompanySettingsPage() {
               rows={2}
               style={{ resize: "vertical" }}
             />
+          </div>
+
+          {/* ✅ Fiscal Year Start Month – NEW FIELD */}
+          <div style={{ marginBottom: 20 }}>
+            <label className="inv-label">Fiscal Year Start Month</label>
+            <select
+              className="inv-input"
+              value={fiscalStartMonth}
+              onChange={e => setFiscalStartMonth(parseInt(e.target.value))}
+            >
+              <option value={1}>January</option>
+              <option value={2}>February</option>
+              <option value={3}>March</option>
+              <option value={4}>April</option>
+              <option value={5}>May</option>
+              <option value={6}>June</option>
+              <option value={7}>July</option>
+              <option value={8}>August</option>
+              <option value={9}>September</option>
+              <option value={10}>October</option>
+              <option value={11}>November</option>
+              <option value={12}>December</option>
+            </select>
+            <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
+              This determines the default reporting period. For example, if your fiscal year starts in July, all reports will default to July–June.
+            </p>
           </div>
 
           <div style={{ marginBottom: 20 }}>
