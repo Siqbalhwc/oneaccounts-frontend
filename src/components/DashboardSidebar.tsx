@@ -15,7 +15,7 @@ interface NavItem { label: string; icon: string; href: string; feature?: string;
 interface NavGroup { groupLabel: string; items: NavItem[] }
 interface NavSection { section: string; feature?: string; items?: NavItem[]; groups?: NavGroup[] }
 
-// ── Base navigation (without Projects – we'll add it as a separate section for NGO) ──
+// ── Base navigation (without Projects – we’ll add it conditionally) ──
 const baseNavSections: NavSection[] = [
   { section: 'MAIN', items: [{ label: 'Dashboard', icon: '📊', href: '/dashboard' }] },
   { section: 'CRM', items: [
@@ -61,8 +61,9 @@ const baseNavSections: NavSection[] = [
 const matchesItem = (item: NavItem, path: string): boolean =>
   item.href === "/dashboard" ? path === item.href : path.startsWith(item.href)
 
-function getSectionForPath(path: string): string {
-  for (const sec of baseNavSections) {
+// ✅ Now takes the full sections array (including dynamic ones)
+function getSectionForPath(sections: NavSection[], path: string): string {
+  for (const sec of sections) {
     if (sec.items?.some(item => matchesItem(item, path))) return sec.section
     if (sec.groups) {
       for (const grp of sec.groups) {
@@ -70,7 +71,6 @@ function getSectionForPath(path: string): string {
       }
     }
   }
-  // Also check the dynamic PROJECTS section if present
   return "MAIN"
 }
 
@@ -173,7 +173,8 @@ export default function DashboardSidebar({
 
   const GAP = 6
 
-  const [openSection, setOpenSection] = useState<string>(() => getSectionForPath(pathname))
+  // ✅ Use the dynamic sections to determine the initially open section
+  const [openSection, setOpenSection] = useState<string>(() => getSectionForPath(navSections, pathname))
 
   useEffect(() => {
     localStorage.setItem("sidebarCollapsed", String(collapsed))
@@ -185,10 +186,7 @@ export default function DashboardSidebar({
   }, [collapsed])
 
   useEffect(() => {
-    // Re‑evaluate open section based on current path
-    const sec = navSections.find(s => s.items?.some(item => matchesItem(item, pathname)))
-    if (sec) setOpenSection(sec.section)
-    else if (navSections.some(s => s.section === pathname)) setOpenSection(pathname)
+    setOpenSection(getSectionForPath(navSections, pathname))
   }, [pathname, navSections])
 
   const handleSectionClick = (section: string) => {
