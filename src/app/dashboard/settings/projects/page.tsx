@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { Plus, Edit, Trash2, X, Upload } from "lucide-react"
+import { Plus, Edit, Trash2, X, Upload, Search, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import * as XLSX from "xlsx"
 
@@ -18,11 +18,7 @@ interface Entity {
   donor_name?: string | null
 }
 
-// ── Helper to auto‑generate donor codes ──────────────────────────────
-async function getNextDonorCode(
-  supabase: any,
-  companyId: string
-): Promise<string> {
+async function getNextDonorCode(supabase: any, companyId: string): Promise<string> {
   const { data } = await supabase
     .from("donors")
     .select("code")
@@ -71,6 +67,11 @@ export default function ProjectsPage() {
   const [locations, setLocations] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
 
+  // Search & sorting
+  const [search, setSearch] = useState("")
+  const [sortField, setSortField] = useState<string>("name")
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
+
   const [activityProjectFilter, setActivityProjectFilter] = useState<string>("")
 
   const [showImportModal, setShowImportModal] = useState(false)
@@ -78,7 +79,7 @@ export default function ProjectsPage() {
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importing, setImporting] = useState(false)
 
-  // ✅ Extracted donor fetch function so we can call it after a save
+  // ── Refetch donors (dropdown) ────────────────────────────────────
   const fetchDonors = async () => {
     if (!companyId) return
     const { data } = await supabase
@@ -89,6 +90,7 @@ export default function ProjectsPage() {
     if (data) setDonors(data)
   }
 
+  // ── Initial load ─────────────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -97,10 +99,11 @@ export default function ProjectsPage() {
         .then(r => r.data && setProjects(r.data))
       supabase.from("locations").select("id,name").eq("company_id", cid).order("name")
         .then(r => r.data && setLocations(r.data))
-      fetchDonors() // ← use the new function
+      fetchDonors()
     })
   }, [])
 
+  // ── Fetch items for active tab ───────────────────────────────────
   const fetchData = async () => {
     if (!companyId) return
     setLoading(true)
@@ -154,6 +157,66 @@ export default function ProjectsPage() {
   if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center" }}><h2>Access Denied</h2></div>
 
+  // ── Filtering & sorting ──────────────────────────────────────────
+  const filtered = search.trim()
+    ? items.filter(item => {
+        const name = item.name.toLowerCase()
+        const code = (item.code || "").toLowerCase()
+        const desc = (item.description || "").toLowerCase()
+        const s = search.toLowerCase()
+        return name.includes(s) || code.includes(s) || desc.includes(s)
+      })
+    : items
+
+  const sorted = [...filtered].sort((a, b) => {
+    let valA: any, valB: any
+    switch (sortField) {
+      case "name":
+        valA = a.name.toLowerCase()
+        valB = b.name.toLowerCase()
+        break
+      case "code":
+        valA = (a.code || "").toLowerCase()
+        valB = (b.code || "").toLowerCase()
+        break
+      case "description":
+        valA = (a.description || "").toLowerCase()
+        valB = (b.description || "").toLowerCase()
+        break
+      case "active":
+        valA = a.is_active ? 1 : 0
+        valB = b.is_active ? 1 : 0
+        break
+      case "project":
+        valA = (a.project_name || "").toLowerCase()
+        valB = (b.project_name || "").toLowerCase()
+        break
+      case "donor":
+        valA = (a.donor_name || "").toLowerCase()
+        valB = (b.donor_name || "").toLowerCase()
+        break
+      default:
+        return 0
+    }
+    if (valA < valB) return sortDir === "asc" ? -1 : 1
+    if (valA > valB) return sortDir === "asc" ? 1 : -1
+    return 0
+  })
+
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === "asc" ? "desc" : "asc")
+    } else {
+      setSortField(field)
+      setSortDir("asc")
+    }
+  }
+
+  const getSortIcon = (field: string) => {
+    if (sortField !== field) return <ArrowUpDown size={12} />
+    return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+  }
+
   const openNew = () => {
     setEditingItem(null)
     setFormName("")
@@ -193,7 +256,6 @@ export default function ProjectsPage() {
       payload.description = formDesc.trim()
       payload.donor_id = formDonorId
     } else if (activeTab === "donors") {
-      // Auto‑generate code if left empty
       if (formCode.trim()) {
         payload.code = formCode.trim()
       } else {
@@ -214,7 +276,7 @@ export default function ProjectsPage() {
       setFlash("✅ Created!")
     }
 
-    // ✅ If we just saved a donor, reload the donor list so the dropdown updates instantly
+    // Refresh donor dropdown if we just saved a donor
     if (activeTab === "donors") {
       await fetchDonors()
     }
@@ -295,7 +357,6 @@ export default function ProjectsPage() {
           }
         }
         setFlash(`✅ Imported ${successCount} ${importType}s successfully!`)
-        // ✅ Reload donors after donor import
         if (importType === "donor") await fetchDonors()
       } catch (err) {
         setFlash("Import failed: " + (err as any).message)
@@ -338,8 +399,17 @@ export default function ProjectsPage() {
         .pr-tab { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid #334155; background: transparent; color: #CBD5E1; }
         .pr-tab.active { background: #1E3A8A; color: white; border-color: #1E3A8A; }
         .pr-table { background: #111827; border: 1px solid #1E293B; border-radius: 10px; overflow: hidden; }
-        .pr-table-header { display: grid; grid-template-columns: ${activeTab === "activities" ? "1fr 120px 60px 60px 60px" : activeTab === "donors" ? "1fr 80px 60px 60px 60px" : activeTab === "projects" ? "1fr 120px 100px 60px 60px 60px" : "1fr 100px 60px 60px"}; padding: 10px 16px; border-bottom: 2px solid #1E293B; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #94A3B8; align-items: center; }
-        .pr-table-row { display: grid; grid-template-columns: ${activeTab === "activities" ? "1fr 120px 60px 60px 60px" : activeTab === "donors" ? "1fr 80px 60px 60px 60px" : activeTab === "projects" ? "1fr 120px 100px 60px 60px 60px" : "1fr 100px 60px 60px"}; padding: 10px 16px; border-bottom: 1px solid #1E293B; align-items: center; font-size: 13px; }
+        .pr-table-header {
+          display: grid;
+          padding: 10px 16px;
+          border-bottom: 2px solid #1E293B;
+          font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #94A3B8; align-items: center;
+        }
+        .pr-table-row {
+          display: grid;
+          padding: 10px 16px;
+          border-bottom: 1px solid #1E293B; align-items: center; font-size: 13px;
+        }
         .pr-table-row:hover { background: #1E293B; }
         .pr-icon-btn { background: none; border: none; cursor: pointer; padding: 6px; border-radius: 6px; color: #94A3B8; display: inline-flex; }
         .pr-icon-btn:hover { background: #1E293B; color: white; }
@@ -347,6 +417,10 @@ export default function ProjectsPage() {
         .pr-empty { padding: 40px; textAlign: center; color: #94A3B8; }
         .filter-row { margin-bottom: 12px; display: flex; gap: 10px; align-items: center; }
         .filter-select { padding: 6px 12px; border: 1px solid #334155; border-radius: 6px; font-size: 12px; background: #1E293B; color: #F1F5F9; }
+        .search-box { position: relative; max-width: 300px; }
+        .search-input { height: 38px; border: 1.5px solid #334155; border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px; width: 100%; background: #1E293B; color: #F1F5F9; outline: none; }
+        .search-input:focus { border-color: #64748B; }
+        .sort-btn { background: none; border: none; cursor: pointer; font: inherit; color: white; display: inline-flex; align-items: center; gap: 4px; padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px; }
         .pr-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
         .pr-modal { background: #111827; border: 1px solid #1E293B; border-radius: 14px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; color: #E2E8F0; }
         .pr-modal-header { padding: 20px 24px; border-bottom: 1px solid #1E293B; display: flex; justify-content: space-between; align-items: center; }
@@ -373,18 +447,23 @@ export default function ProjectsPage() {
         ))}
       </div>
 
-      {activeTab === "activities" && (
-        <div className="filter-row">
-          <select
-            className="filter-select"
-            value={activityProjectFilter}
-            onChange={e => setActivityProjectFilter(e.target.value)}
-          >
+      <div className="filter-row">
+        {activeTab === "activities" && (
+          <select className="filter-select" value={activityProjectFilter} onChange={e => setActivityProjectFilter(e.target.value)}>
             <option value="">All Projects</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
+        )}
+        <div className="search-box">
+          <Search size={14} style={{ position: "absolute", left: 12, top: 10, color: "#94A3B8" }} />
+          <input
+            className="search-input"
+            placeholder={`Search ${getEntityLabel().toLowerCase()}...`}
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
         </div>
-      )}
+      </div>
 
       {flash && (
         <div style={{ background: flash.startsWith("Error") ? "#1E293B" : "#064E3B", border: flash.startsWith("Error") ? "1px solid #EF4444" : "1px solid #065F46", color: flash.startsWith("Error") ? "#FCA5A5" : "#6EE7B7", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
@@ -406,23 +485,39 @@ export default function ProjectsPage() {
       </div>
 
       <div className="pr-table">
-        <div className="pr-table-header">
-          <span>Name</span>
-          {activeTab === "activities" && <span>Project</span>}
-          {activeTab === "projects" && <span>Description</span>}
-          {activeTab === "projects" && <span>Donor</span>}
-          {activeTab === "donors" && <span>Code</span>}
-          <span>Active</span>
+        {/* Dynamic header based on active tab */}
+        <div className="pr-table-header" style={{
+          gridTemplateColumns:
+            activeTab === "activities" ? "minmax(150px, 2fr) 120px 60px 60px 60px" :
+            activeTab === "donors" ? "minmax(150px, 2fr) 80px 60px 60px 60px" :
+            activeTab === "projects" ? "minmax(150px, 2fr) 120px 100px 60px 60px 60px" :
+            "minmax(150px, 2fr) 100px 60px 60px"
+        }}>
+          <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
+          {activeTab === "activities" && <button className="sort-btn" onClick={() => handleSort("project")}>Project {getSortIcon("project")}</button>}
+          {activeTab === "projects" && <button className="sort-btn" onClick={() => handleSort("description")}>Description {getSortIcon("description")}</button>}
+          {activeTab === "projects" && <button className="sort-btn" onClick={() => handleSort("donor")}>Donor {getSortIcon("donor")}</button>}
+          {activeTab === "donors" && <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>}
+          <button className="sort-btn" onClick={() => handleSort("active")}>Active {getSortIcon("active")}</button>
           <span></span>
           <span></span>
         </div>
+
         {loading ? (
           <div className="pr-empty">Loading...</div>
-        ) : items.length === 0 ? (
-          <div className="pr-empty">No {getEntityLabel().toLowerCase()} found. Create one above.</div>
+        ) : sorted.length === 0 ? (
+          <div className="pr-empty">
+            {search ? "No matching records found." : `No ${getEntityLabel().toLowerCase()} found.`}
+          </div>
         ) : (
-          items.map((item) => (
-            <div key={item.id} className="pr-table-row">
+          sorted.map((item) => (
+            <div key={item.id} className="pr-table-row" style={{
+              gridTemplateColumns:
+                activeTab === "activities" ? "minmax(150px, 2fr) 120px 60px 60px 60px" :
+                activeTab === "donors" ? "minmax(150px, 2fr) 80px 60px 60px 60px" :
+                activeTab === "projects" ? "minmax(150px, 2fr) 120px 100px 60px 60px 60px" :
+                "minmax(150px, 2fr) 100px 60px 60px"
+            }}>
               <span style={{ fontWeight: 600 }}>{item.name}{item.description ? <span style={{ fontSize: 11, color: "#64748B", marginLeft: 8 }}>({item.description})</span> : ""}</span>
               {activeTab === "activities" && <span>{item.project_name}</span>}
               {activeTab === "projects" && <span style={{ fontSize: 12, color: "#94A3B8" }}>{(item as any).description || "—"}</span>}
@@ -436,7 +531,7 @@ export default function ProjectsPage() {
         )}
       </div>
 
-      {/* Add/Edit Modal */}
+      {/* ── Modals (Add/Edit, Delete, Import) unchanged ── */}
       {showModal && canEdit && (
         <div className="pr-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="pr-modal" onClick={e => e.stopPropagation()}>
@@ -503,7 +598,6 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* Delete Confirmation */}
       {deleteId && canEdit && (
         <div className="pr-modal-overlay">
           <div className="pr-modal" style={{ maxWidth: 400 }}>
@@ -517,7 +611,6 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* Import Modal */}
       {showImportModal && (
         <div className="pr-modal-overlay" onClick={() => setShowImportModal(false)}>
           <div className="pr-modal" onClick={e => e.stopPropagation()}>
@@ -537,12 +630,7 @@ export default function ProjectsPage() {
               </div>
               <div>
                 <label className="pr-field-label">Excel File (*.xlsx, *.xls)</label>
-                <input
-                  type="file"
-                  accept=".xlsx, .xls"
-                  onChange={e => setImportFile(e.target.files ? e.target.files[0] : null)}
-                  style={{ padding: "8px 0" }}
-                />
+                <input type="file" accept=".xlsx, .xls" onChange={e => setImportFile(e.target.files ? e.target.files[0] : null)} style={{ padding: "8px 0" }} />
                 <p style={{ fontSize: 10, color: "#64748B", marginTop: 4 }}>
                   {importType === "donor" && "Columns: Name, Code (optional)"}
                   {importType === "project" && "Columns: Name, Description (optional), DonorCode"}
