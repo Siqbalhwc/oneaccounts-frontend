@@ -78,6 +78,17 @@ export default function ProjectsPage() {
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importing, setImporting] = useState(false)
 
+  // ✅ Extracted donor fetch function so we can call it after a save
+  const fetchDonors = async () => {
+    if (!companyId) return
+    const { data } = await supabase
+      .from("donors")
+      .select("id,name")
+      .eq("company_id", companyId)
+      .order("name")
+    if (data) setDonors(data)
+  }
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -86,8 +97,7 @@ export default function ProjectsPage() {
         .then(r => r.data && setProjects(r.data))
       supabase.from("locations").select("id,name").eq("company_id", cid).order("name")
         .then(r => r.data && setLocations(r.data))
-      supabase.from("donors").select("id,name").eq("company_id", cid).order("name")
-        .then(r => r.data && setDonors(r.data))
+      fetchDonors() // ← use the new function
     })
   }, [])
 
@@ -204,6 +214,11 @@ export default function ProjectsPage() {
       setFlash("✅ Created!")
     }
 
+    // ✅ If we just saved a donor, reload the donor list so the dropdown updates instantly
+    if (activeTab === "donors") {
+      await fetchDonors()
+    }
+
     setSaving(false)
     setShowModal(false)
     fetchData()
@@ -280,6 +295,8 @@ export default function ProjectsPage() {
           }
         }
         setFlash(`✅ Imported ${successCount} ${importType}s successfully!`)
+        // ✅ Reload donors after donor import
+        if (importType === "donor") await fetchDonors()
       } catch (err) {
         setFlash("Import failed: " + (err as any).message)
       }
