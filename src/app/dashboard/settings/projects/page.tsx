@@ -79,31 +79,24 @@ export default function ProjectsPage() {
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importing, setImporting] = useState(false)
 
-  // ── Refetch donors (dropdown) ────────────────────────────────────
-  const fetchDonors = async () => {
-    if (!companyId) return
-    const { data } = await supabase
-      .from("donors")
-      .select("id,name")
-      .eq("company_id", companyId)
-      .order("name")
-    if (data) setDonors(data)
-  }
-
-  // ── Initial load ─────────────────────────────────────────────────
+  // ── Initial data load (donors, projects, locations for dropdowns) ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
+      // Load projects for activity filter and project dropdown
       supabase.from("projects").select("id,name").eq("company_id", cid).order("name")
         .then(r => r.data && setProjects(r.data))
+      // Load locations for activity filter (if needed later)
       supabase.from("locations").select("id,name").eq("company_id", cid).order("name")
         .then(r => r.data && setLocations(r.data))
-      fetchDonors()
+      // Load donors for project donor dropdown
+      supabase.from("donors").select("id,name").eq("company_id", cid).order("name")
+        .then(r => r.data && setDonors(r.data))
     })
   }, [])
 
-  // ── Fetch items for active tab ───────────────────────────────────
+  // ── Fetch items for the active tab (projects, locations, activities, donors) ──
   const fetchData = async () => {
     if (!companyId) return
     setLoading(true)
@@ -157,7 +150,7 @@ export default function ProjectsPage() {
   if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center" }}><h2>Access Denied</h2></div>
 
-  // ── Filtering & sorting ──────────────────────────────────────────
+  // ── Filtering & sorting ──
   const filtered = search.trim()
     ? items.filter(item => {
         const name = item.name.toLowerCase()
@@ -217,6 +210,7 @@ export default function ProjectsPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
+  // ── CRUD handlers ──
   const openNew = () => {
     setEditingItem(null)
     setFormName("")
@@ -256,6 +250,7 @@ export default function ProjectsPage() {
       payload.description = formDesc.trim()
       payload.donor_id = formDonorId
     } else if (activeTab === "donors") {
+      // Auto‑generate code if left empty
       if (formCode.trim()) {
         payload.code = formCode.trim()
       } else {
@@ -274,11 +269,6 @@ export default function ProjectsPage() {
       const { error } = await supabase.from(table).insert(payload)
       if (error) { setFlash("Error: " + error.message); setSaving(false); return }
       setFlash("✅ Created!")
-    }
-
-    // Refresh donor dropdown if we just saved a donor
-    if (activeTab === "donors") {
-      await fetchDonors()
     }
 
     setSaving(false)
@@ -357,7 +347,6 @@ export default function ProjectsPage() {
           }
         }
         setFlash(`✅ Imported ${successCount} ${importType}s successfully!`)
-        if (importType === "donor") await fetchDonors()
       } catch (err) {
         setFlash("Import failed: " + (err as any).message)
       }
@@ -415,7 +404,7 @@ export default function ProjectsPage() {
         .pr-icon-btn:hover { background: #1E293B; color: white; }
         .pr-icon-btn.danger:hover { background: #FEE2E2; color: #EF4444; }
         .pr-empty { padding: 40px; textAlign: center; color: #94A3B8; }
-        .filter-row { margin-bottom: 12px; display: flex; gap: 10px; align-items: center; }
+        .filter-row { margin-bottom: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
         .filter-select { padding: 6px 12px; border: 1px solid #334155; border-radius: 6px; font-size: 12px; background: #1E293B; color: #F1F5F9; }
         .search-box { position: relative; max-width: 300px; }
         .search-input { height: 38px; border: 1.5px solid #334155; border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px; width: 100%; background: #1E293B; color: #F1F5F9; outline: none; }
@@ -485,7 +474,6 @@ export default function ProjectsPage() {
       </div>
 
       <div className="pr-table">
-        {/* Dynamic header based on active tab */}
         <div className="pr-table-header" style={{
           gridTemplateColumns:
             activeTab === "activities" ? "minmax(150px, 2fr) 120px 60px 60px 60px" :
@@ -531,7 +519,7 @@ export default function ProjectsPage() {
         )}
       </div>
 
-      {/* ── Modals (Add/Edit, Delete, Import) unchanged ── */}
+      {/* Add/Edit Modal */}
       {showModal && canEdit && (
         <div className="pr-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="pr-modal" onClick={e => e.stopPropagation()}>
@@ -598,6 +586,7 @@ export default function ProjectsPage() {
         </div>
       )}
 
+      {/* Delete Confirmation */}
       {deleteId && canEdit && (
         <div className="pr-modal-overlay">
           <div className="pr-modal" style={{ maxWidth: 400 }}>
@@ -611,6 +600,7 @@ export default function ProjectsPage() {
         </div>
       )}
 
+      {/* Import Modal */}
       {showImportModal && (
         <div className="pr-modal-overlay" onClick={() => setShowImportModal(false)}>
           <div className="pr-modal" onClick={e => e.stopPropagation()}>
