@@ -3,14 +3,12 @@ import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { logDataChange } from '@/lib/audit'
 
-// ── Helpers ───────────────────────────────────────────────────────────
 async function getAccount(supabase: any, code: string, companyId: string) {
   const { data } = await supabase.from('accounts')
     .select('id,balance').eq('code', code).eq('company_id', companyId).maybeSingle()
   return data
 }
 
-// ── Generate sequential receipt number: REC/YYYYMM/0001 ───────────────
 async function generateReceiptNo(supabase: any, companyId: string): Promise<string> {
   const now = new Date()
   const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`
@@ -30,7 +28,6 @@ async function generateReceiptNo(supabase: any, companyId: string): Promise<stri
   return `${prefix}${String(nextNum).padStart(4, "0")}`
 }
 
-// ═══════════════════ POST – Create Receipt ═══════════════════
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -59,13 +56,46 @@ export async function POST(request: NextRequest) {
   if (!roleData?.company_id) return NextResponse.json({ error: 'No company found' }, { status: 400 })
   const companyId = roleData.company_id
 
+  const body = await request.json()
   const {
     party_id, amount, payment_method, bank_account_id,
     income_account_id, date, reference, notes, allocations
-  } = await request.json()
+  } = body
 
   if (!amount || amount <= 0) {
     return NextResponse.json({ error: 'Amount is required' }, { status: 400 })
+  }
+
+  // ── Validate allocations BEFORE inserting anything ──────────────────
+  const allocList: { invoice_id: number; amount: number }[] = []
+  if (!income_account_id && party_id && allocations && Array.isArray(allocations)) {
+    for (const alloc of allocations) {
+      const invId = alloc.invoice_id
+      const allocAmt = parseFloat(alloc.amount) || 0
+      if (allocAmt <= 0) continue
+
+      // Fetch invoice to check remaining due
+      const { data: inv } = await supabase
+        .from('invoices')
+        .select('id, total, paid, status')
+        .eq('id', invId)
+        .eq('company_id', companyId)
+        .eq('type', 'sale')
+        .single()
+
+      if (!inv) {
+        return NextResponse.json({ error: `Invoice ${invId} not found` }, { status: 400 })
+      }
+
+      const remaining = (inv.total || 0) - (inv.paid || 0)
+      if (allocAmt > remaining) {
+        return NextResponse.json({
+          error: `Allocation amount PKR ${allocAmt} exceeds remaining due PKR ${remaining} for invoice ${invId}`
+        }, { status: 400 })
+      }
+
+      allocList.push({ invoice_id: invId, amount: allocAmt })
+    }
   }
 
   // ── Generate unique receipt number with retry ────────────────────────
@@ -105,39 +135,35 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to create receipt after multiple attempts.' }, { status: 500 })
   }
 
-  // ── Process allocations to invoices (NEW – mirrors payment logic) ─────
-  if (!income_account_id && party_id && allocations && Array.isArray(allocations) && allocations.length > 0) {
-    for (const alloc of allocations) {
-      const invId = alloc.invoice_id
-      const allocAmount = parseFloat(alloc.amount) || 0
-      if (allocAmount <= 0) continue
+  // ── Process valid allocations – now guaranteed not to overpay ────────
+  for (const alloc of allocList) {
+    const invId = alloc.invoice_id
+    const allocAmt = alloc.amount
 
-      // Fetch the invoice
-      const { data: invoice } = await supabase
-        .from('invoices')
-        .select('paid, total, status')
+    // Update invoice paid & status
+    const { data: invoice } = await supabase
+      .from('invoices')
+      .select('paid, total')
+      .eq('id', invId)
+      .eq('company_id', companyId)
+      .single()
+
+    if (invoice) {
+      const newPaid = (invoice.paid || 0) + allocAmt
+      const newStatus = newPaid >= invoice.total ? 'Paid' : 'Partial'
+      await supabase.from('invoices')
+        .update({ paid: newPaid, status: newStatus })
         .eq('id', invId)
         .eq('company_id', companyId)
-        .eq('type', 'sale')
-        .single()
-
-      if (invoice) {
-        const newPaid = (invoice.paid || 0) + allocAmount
-        const newStatus = newPaid >= invoice.total ? 'Paid' : 'Partial'
-        await supabase.from('invoices')
-          .update({ paid: newPaid, status: newStatus })
-          .eq('id', invId)
-          .eq('company_id', companyId)
-      }
-
-      // Insert allocation record
-      await supabase.from('receipt_allocations').insert({
-        receipt_id: receipt.id,
-        invoice_id: invId,
-        amount: allocAmount,
-        company_id: companyId,
-      })
     }
+
+    // Insert into receipt_allocations
+    await supabase.from('receipt_allocations').insert({
+      receipt_id: receipt.id,
+      invoice_id: invId,
+      amount: allocAmt,
+      company_id: companyId,
+    })
   }
 
   // ── Update customer balance ────────────────────────────────────────
@@ -151,7 +177,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // ── Determine the bank's GL account ────────────────────────────────
+  // ── Determine bank GL account ───────────────────────────────────────
   let bankGlAccountId: number | null = null
   if (bank_account_id) {
     const { data: bank } = await supabase.from('bank_accounts')
@@ -171,19 +197,15 @@ export async function POST(request: NextRequest) {
 
   // ── Journal Entry ──────────────────────────────────────────────────
   const jeLines: any[] = []
-  // Always Debit Bank, Credit AR (or specific income account)
   jeLines.push({ account_id: bankGlAccountId, debit: amount, credit: 0 })
 
   if (income_account_id) {
-    // Direct income receipt
     jeLines.push({ account_id: income_account_id, debit: 0, credit: amount })
   } else if (party_id) {
-    // Customer receipt: Credit AR (code 1100 or first receivable)
     const arAcc = await getAccount(supabase, '1100', companyId)
     if (arAcc) {
       jeLines.push({ account_id: arAcc.id, debit: 0, credit: amount })
     } else {
-      // Fallback to any receivable account
       const { data: anyRec } = await supabase.from('accounts')
         .select('id').eq('type', 'Asset').like('code', '11%')
         .eq('company_id', companyId).limit(1).maybeSingle()
@@ -194,7 +216,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Either customer or income account required' }, { status: 400 })
   }
 
-  // Insert journal entry
   const { data: entry, error: entryErr } = await supabase.from('journal_entries').insert({
     company_id: companyId,
     entry_no: `JE-REC-${recNo}`,
@@ -215,7 +236,6 @@ export async function POST(request: NextRequest) {
   }))
   await supabase.from('journal_lines').insert(lineRows)
 
-  // Update account balances
   for (const l of jeLines) {
     const { data: acc } = await supabase.from('accounts')
       .select('balance').eq('id', l.account_id).eq('company_id', companyId).single()
@@ -225,7 +245,6 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Audit log
   await supabase.from("data_change_logs").insert({
     table_name: "receipts",
     record_id: String(receipt.id),
