@@ -254,16 +254,9 @@ export default function CustomersPage() {
           }
           .search-input:focus { border-color: var(--primary); }
           .btn {
-            padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px;
+            padding: 8px 16px; border-radius: 8px; font-weight: 600; font-size: 13px;
             cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-            background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
-            color: white;
             transition: all 0.2s;
-          }
-          .btn:hover {
-            background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
-            transform: translateY(-1px);
-            box-shadow: 0 6px 20px rgba(7,19,82,0.45);
           }
           .btn-outline {
             background: transparent; color: var(--text-muted); border: 1.5px solid var(--border);
@@ -315,20 +308,20 @@ export default function CustomersPage() {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {showImportExport && (
               <>
-                <button className="btn" onClick={downloadTemplate} title="Download CSV template">
+                <button className="btn btn-outline" onClick={downloadTemplate} title="Download CSV template">
                   <FileText size={14} /> Template
                 </button>
-                <label className="btn" style={{ cursor: "pointer" }}>
+                <label className="btn btn-outline" style={{ cursor: "pointer" }}>
                   <Upload size={14} /> Import
                   <input type="file" accept=".csv" onChange={handleImport} ref={fileInputRef} style={{ display: "none" }} />
                 </label>
-                <button className="btn" onClick={handleExport} title="Export to CSV">
+                <button className="btn btn-outline" onClick={handleExport} title="Export to CSV">
                   <Download size={14} /> Export
                 </button>
               </>
             )}
             {canEdit && (
-              <button className="btn" onClick={() => router.push("/dashboard/customers/new")}>
+              <button className="btn btn-outline" onClick={() => router.push("/dashboard/customers/new")}>
                 <Plus size={16} /> Add Customer
               </button>
             )}
