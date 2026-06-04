@@ -109,21 +109,42 @@ export default function ProjectsPage() {
       const { data } = await supabase.from("donors").select("*").eq("company_id", companyId).order("name")
       setItems(data || [])
     } else { // activities
+      // Fetch both old project_id and junction project links
       const { data: activities } = await supabase
         .from("activities")
-        .select(`id, name, is_active, description, activity_projects ( project_id, projects ( name ) )`)
+        .select(`
+          id, name, is_active, description, project_id,
+          activity_projects ( project_id, projects ( name ) )
+        `)
         .eq("company_id", companyId)
         .order("name")
+
       if (activities) {
-        const enriched = activities.map((a: any) => ({
-          id: a.id,
-          name: a.name,
-          is_active: a.is_active,
-          description: a.description,
-          project_name: a.activity_projects?.map((ap: any) => ap.projects?.name).filter(Boolean).join(", ") || "—",
-        }))
+        const enriched = activities.map((a: any) => {
+          // Build list of project names from junction
+          const junctionNames = (a.activity_projects || [])
+            .map((ap: any) => ap.projects?.name)
+            .filter(Boolean)
+
+          // If no junction data yet, fallback to old project_id name
+          let displayNames = junctionNames.join(", ")
+          if (!displayNames && a.project_id) {
+            const oldProject = projects.find(p => p.id === a.project_id)
+            displayNames = oldProject?.name || `Project #${a.project_id}`
+          }
+
+          return {
+            id: a.id,
+            name: a.name,
+            is_active: a.is_active,
+            description: a.description,
+            project_name: displayNames || "—",
+          }
+        })
         setItems(enriched)
-      } else setItems([])
+      } else {
+        setItems([])
+      }
     }
     setLoading(false)
   }
@@ -190,11 +211,18 @@ export default function ProjectsPage() {
     setFormDonorId((item as any).donor_id || null)
 
     if (activeTab === "activities") {
+      // Load junction project ids
       const { data: links } = await supabase
         .from("activity_projects")
         .select("project_id")
         .eq("activity_id", item.id)
-      setFormProjectIds(links?.map((l: any) => l.project_id) || [])
+      const junctionIds = links?.map((l: any) => l.project_id) || []
+
+      // If no junction rows yet (old activity), use the old project_id as initial selection
+      if (junctionIds.length === 0 && (item as any).project_id) {
+        junctionIds.push((item as any).project_id)
+      }
+      setFormProjectIds(junctionIds)
     }
     setShowModal(true)
   }
@@ -223,6 +251,7 @@ export default function ProjectsPage() {
     let recordId = editingItem?.id
 
     if (editingItem) {
+      // For activities, we never update project_id (it's now nullable)
       await supabase.from(table).update(payload).eq("id", editingItem.id).eq("company_id", companyId)
       setFlash("✅ Updated!")
     } else {
@@ -233,6 +262,7 @@ export default function ProjectsPage() {
     }
 
     if (activeTab === "activities" && recordId) {
+      // Clear old links and insert new ones
       await supabase.from("activity_projects").delete().eq("activity_id", recordId)
       const newLinks = formProjectIds.map(pid => ({ activity_id: recordId, project_id: pid }))
       if (newLinks.length > 0) {
@@ -257,8 +287,8 @@ export default function ProjectsPage() {
   }
 
   const handleImport = async () => {
-    // Keep existing import logic exactly as it was before (if you need the original import code, let me know)
-    setFlash("Import not yet updated for multi‑project. You can edit activities manually to assign projects.")
+    // Import logic is unchanged for now – you can manually assign projects later.
+    setFlash("Import not yet updated for multi‑project. Use the form to edit activities.")
   }
 
   const tabs: { key: typeof activeTab; label: string }[] = [
