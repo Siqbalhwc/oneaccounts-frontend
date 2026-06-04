@@ -15,7 +15,7 @@ interface NavItem { label: string; icon: string; href: string; feature?: string;
 interface NavGroup { groupLabel: string; items: NavItem[] }
 interface NavSection { section: string; feature?: string; items?: NavItem[]; groups?: NavGroup[] }
 
-// ── Base navigation (without Projects – we’ll add it conditionally) ──
+// ── Base navigation (no projects section) ──
 const baseNavSections: NavSection[] = [
   { section: 'MAIN', items: [{ label: 'Dashboard', icon: '📊', href: '/dashboard' }] },
   { section: 'CRM', items: [
@@ -57,13 +57,12 @@ const baseNavSections: NavSection[] = [
   ]},
 ]
 
-// ── Helper: exact match for /dashboard, startsWith for all other routes ──
+// ── Helper (unchanged) ──
 const matchesItem = (item: NavItem, path: string): boolean =>
   item.href === "/dashboard" ? path === item.href : path.startsWith(item.href)
 
-// ✅ Now takes the full sections array (including dynamic ones)
-function getSectionForPath(sections: NavSection[], path: string): string {
-  for (const sec of sections) {
+function getSectionForPath(path: string): string {
+  for (const sec of baseNavSections) {
     if (sec.items?.some(item => matchesItem(item, path))) return sec.section
     if (sec.groups) {
       for (const grp of sec.groups) {
@@ -144,9 +143,11 @@ export default function DashboardSidebar({
   // Build final nav sections
   const navSections = [...baseNavSections]
 
-  // ── Add "Project & Budgets" section ONLY for NGO companies ──
+  // ── Insert "Project & Budgets" section right after INVENTORY (i.e. before ACCOUNTING) ──
   if (businessType === 'ngo') {
-    navSections.push({
+    const invIndex = navSections.findIndex(s => s.section === 'INVENTORY')
+    const insertAt = invIndex >= 0 ? invIndex + 1 : navSections.length - 1 // fallback before SYSTEM
+    navSections.splice(insertAt, 0, {
       section: 'Project & Budgets',
       items: [
         { label: 'Projects',            icon: '📁', href: '/dashboard/projects'            },
@@ -156,15 +157,13 @@ export default function DashboardSidebar({
     })
   }
 
-  // Add Platform Admin link for platform admins
+  // Add Platform Admin & Super Admin links under SYSTEM
   const systemSection = navSections.find(s => s.section === 'SYSTEM')!
   if (isPlatformAdmin) {
     if (!systemSection.items!.some(item => item.href === '/dashboard/admin')) {
       systemSection.items!.push({ label: 'Platform Admin', icon: '🛡️', href: '/dashboard/admin' })
     }
   }
-
-  // Add Super Admin link for you (Shahid)
   if (isSuperAdmin) {
     if (!systemSection.items!.some(item => item.href === '/admin')) {
       systemSection.items!.push({ label: 'Super Admin', icon: '🏢', href: '/admin' })
@@ -173,8 +172,8 @@ export default function DashboardSidebar({
 
   const GAP = 6
 
-  // ✅ Use the dynamic sections to determine the initially open section
-  const [openSection, setOpenSection] = useState<string>(() => getSectionForPath(navSections, pathname))
+  // ✅ Use original getSectionForPath (based on base sections) – works perfectly for all core sections
+  const [openSection, setOpenSection] = useState<string>(() => getSectionForPath(pathname))
 
   useEffect(() => {
     localStorage.setItem("sidebarCollapsed", String(collapsed))
@@ -185,9 +184,10 @@ export default function DashboardSidebar({
     }
   }, [collapsed])
 
+  // Update open section when path changes
   useEffect(() => {
-    setOpenSection(getSectionForPath(navSections, pathname))
-  }, [pathname, navSections])
+    setOpenSection(getSectionForPath(pathname))
+  }, [pathname])
 
   const handleSectionClick = (section: string) => {
     setOpenSection(section)
