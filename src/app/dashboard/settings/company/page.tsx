@@ -113,26 +113,11 @@ export default function CompanySettingsPage() {
       newLogoUrl = publicUrlData?.publicUrl || ""
     }
 
-    // Try to update existing row for this company
-    const { data: updated, error: updateError } = await supabase
+    // ✅ Upsert using the unique company_id constraint
+    const { error: upsertError } = await supabase
       .from("company_settings")
-      .update({
-        business_name: settings.business_name,
-        tagline: settings.tagline,
-        address: settings.address,
-        phone: settings.phone,
-        email: settings.email,
-        logo_url: newLogoUrl,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("company_id", companyId)
-      .select() as { data: any[] | null, error: any }
-
-    if (!updated || updated.length === 0) {
-      // No row yet – insert a new one
-      const { error: insertError } = await supabase
-        .from("company_settings")
-        .insert({
+      .upsert(
+        {
           company_id: companyId,
           business_name: settings.business_name,
           tagline: settings.tagline,
@@ -141,15 +126,12 @@ export default function CompanySettingsPage() {
           email: settings.email,
           logo_url: newLogoUrl,
           updated_at: new Date().toISOString(),
-        })
+        },
+        { onConflict: "company_id" }
+      )
 
-      if (insertError) {
-        setMessage("Error saving settings: " + insertError.message)
-        setSaving(false)
-        return
-      }
-    } else if (updateError) {
-      setMessage("Error saving settings: " + updateError.message)
+    if (upsertError) {
+      setMessage("Error saving settings: " + upsertError.message)
       setSaving(false)
       return
     }
