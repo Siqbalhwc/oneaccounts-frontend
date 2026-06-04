@@ -404,7 +404,7 @@ export default function ProjectsPage() {
       <div className="pr-table">
         <div className="pr-table-header" style={{
           gridTemplateColumns:
-            activeTab === "activities" ? "minmax(150px, 2fr) 120px 60px 60px 60px" :
+            activeTab === "activities" ? "minmax(150px, 2fr) minmax(150px, 1fr) 60px 60px 60px" :
             activeTab === "donors" ? "minmax(150px, 2fr) 80px 60px 60px 60px" :
             activeTab === "projects" ? "minmax(150px, 2fr) 120px 100px 60px 60px 60px" :
             "minmax(150px, 2fr) 100px 60px 60px"
@@ -427,7 +427,7 @@ export default function ProjectsPage() {
           sorted.map((item) => (
             <div key={item.id} className="pr-table-row" style={{
               gridTemplateColumns:
-                activeTab === "activities" ? "minmax(150px, 2fr) 120px 60px 60px 60px" :
+                activeTab === "activities" ? "minmax(150px, 2fr) minmax(150px, 1fr) 60px 60px 60px" :
                 activeTab === "donors" ? "minmax(150px, 2fr) 80px 60px 60px 60px" :
                 activeTab === "projects" ? "minmax(150px, 2fr) 120px 100px 60px 60px 60px" :
                 "minmax(150px, 2fr) 100px 60px 60px"
