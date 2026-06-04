@@ -14,7 +14,7 @@ export default function NewReceiptPage() {
   )
 
   const { theme: themeMode } = useTheme()
-  const isDark = themeMode === "dark" || themeMode === "oneaccounts"   // both have dark backgrounds
+  const isDark = themeMode === "dark" || themeMode === "oneaccounts"
 
   const [companyId, setCompanyId] = useState("")
   const [customers, setCustomers] = useState<any[]>([])
@@ -55,7 +55,7 @@ export default function NewReceiptPage() {
     if (!companyId) return
     setRefreshingCustomers(true)
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("customers")
         .select("id, code, name, phone, balance, country_code")
         .eq("company_id", companyId)
@@ -91,18 +91,52 @@ export default function NewReceiptPage() {
       setAllocations({})
       return
     }
-    supabase.from("invoices")
-      .select("id, invoice_no, date, due_date, total, paid, status")
-      .eq("company_id", companyId).eq("party_id", customerId)
-      .in("status", ["Unpaid","Partial"])
-      .order("date")
-      .then(r => {
-        const invs = r.data || []
-        setInvoices(invs)
-        const initAlloc: Record<number, number> = {}
-        invs.forEach(inv => { initAlloc[inv.id] = 0 })
-        setAllocations(initAlloc)
-      })
+
+    const fetchInvoicesWithPaid = async () => {
+      // fetch unpaid/partial invoices
+      const { data: invs } = await supabase
+        .from("invoices")
+        .select("id, invoice_no, date, due_date, total, paid, status")
+        .eq("company_id", companyId)
+        .eq("party_id", customerId)
+        .in("status", ["Unpaid", "Partial"])
+        .order("date")
+
+      if (!invs || invs.length === 0) {
+        setInvoices([])
+        setAllocations({})
+        return
+      }
+
+      // fetch sum of allocations for these invoices
+      const invoiceIds = invs.map(inv => inv.id)
+      const { data: allocationsData } = await supabase
+        .from("receipt_allocations")
+        .select("invoice_id, amount")
+        .in("invoice_id", invoiceIds)
+
+      // create a map of total allocated per invoice
+      const paidMap: Record<number, number> = {}
+      if (allocationsData) {
+        allocationsData.forEach((a: any) => {
+          paidMap[a.invoice_id] = (paidMap[a.invoice_id] || 0) + (a.amount || 0)
+        })
+      }
+
+      // enrich invoices with computed paid
+      const enriched = invs.map(inv => ({
+        ...inv,
+        paid: paidMap[inv.id] || 0,
+      }))
+
+      setInvoices(enriched)
+
+      const initAlloc: Record<number, number> = {}
+      enriched.forEach(inv => { initAlloc[inv.id] = 0 })
+      setAllocations(initAlloc)
+    }
+
+    fetchInvoicesWithPaid()
   }, [companyId, customerId, isDonation])
 
   useEffect(() => {
@@ -196,11 +230,10 @@ export default function NewReceiptPage() {
       }
 
       setFlash(`✅ Receipt ${result.receipt_no} saved!`)
-      // Reset form but stay on page
       setCustomerId(null)
       setSelectedCustomer(null)
       setCustomerSearch("")
-      setShowCustomerList(false)           // ← force close dropdown
+      setShowCustomerList(false)
       setSelectedBankId(null)
       setSelectedIncomeAccountId(null)
       setIsDonation(false)
@@ -274,11 +307,7 @@ export default function NewReceiptPage() {
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
         th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
         td { padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-
-        /* Theme‑aware date picker */
-        input[type="date"].inv-input {
-          color-scheme: ${isDark ? 'dark' : 'light'};
-        }
+        input[type="date"].inv-input { color-scheme: ${isDark ? 'dark' : 'light'}; }
       `}</style>
 
       <div className="inv-shell">
