@@ -108,7 +108,7 @@ export default function SignupPage() {
           🚀 Start your free trial
         </h1>
         <p style={{ fontSize: 13, color: "#64748B", marginBottom: 24 }}>
-          14‑day Professional plan. No credit card required.
+          10‑day Professional plan. No credit card required.
         </p>
 
         {/* Warning banner for existing session */}
