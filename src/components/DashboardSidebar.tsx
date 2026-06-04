@@ -126,17 +126,14 @@ export default function DashboardSidebar({
     check()
   }, [])
 
-  // Super admin check – hardcoded + log for debugging
+  // Super admin check – hardcoded for siqbalhwc@gmail.com
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   useEffect(() => {
     const checkSuper = async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      console.log("Super Admin check for", user?.email)       // ← DEBUG LOG
       if (user?.email === 'siqbalhwc@gmail.com') {
-        console.log("→ Super Admin: true")
         setIsSuperAdmin(true)
       } else {
-        console.log("→ Super Admin: false")
         setIsSuperAdmin(false)
       }
     }
@@ -202,7 +199,6 @@ export default function DashboardSidebar({
   const isVisible = (item: NavItem) => {
     if (item.adminOnly && role !== 'admin') return false
     if (item.feature && !hasFeature(item.feature)) return false
-    // 'Super Admin' removed from the blocklist because it's guarded by the email check above
     if (['Admin Panel', 'Feature Manager', 'Audit Logs', 'New Company'].includes(item.label) && role !== 'super_admin') {
       return false
     }
@@ -280,6 +276,20 @@ export default function DashboardSidebar({
         {navSections.map(sec => {
           if (sec.feature && !hasFeature(sec.feature)) return null
           const isOpen = openSection === sec.section
+
+          // ✅ Hide groups that contain no visible items
+          const visibleGroups = sec.groups
+            ? sec.groups.filter(group => group.items.some(item => isVisible(item)))
+            : []
+
+          // ✅ For sections with items, only render if there is at least one visible item
+          const visibleItems = sec.items?.filter(item => isVisible(item)) ?? []
+
+          // If a section has no groups and no visible items, hide the whole section
+          if (!sec.groups && visibleItems.length === 0) return null
+          // If a section has groups but no visible groups, hide the whole section
+          if (sec.groups && visibleGroups.length === 0) return null
+
           return (
             <div key={sec.section} style={{ marginBottom: 4 }}>
               {!collapsed && (
@@ -295,13 +305,15 @@ export default function DashboardSidebar({
               <AnimatePresence initial={false}>
                 {(collapsed || isOpen) && (
                   <motion.div key="content" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3, ease: "easeInOut" }} style={{ overflow: "hidden" }}>
-                    {sec.groups?.map(group => (
+                    {/* Visible groups */}
+                    {visibleGroups.map(group => (
                       <div key={group.groupLabel}>
                         {!collapsed && <div style={{ padding: "6px 14px 2px", color: mutedTextColor, fontSize: 8, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{group.groupLabel}</div>}
                         {group.items.map(item => isVisible(item) && <NavLink key={item.href} {...{ item, collapsed, isNew: isNew(item), markVisited, isActive: matchesItem(item, pathname), textColor, mutedTextColor, router }} />)}
                       </div>
                     ))}
-                    {sec.items?.map(item => isVisible(item) && <NavLink key={item.href} {...{ item, collapsed, isNew: isNew(item), markVisited, isActive: matchesItem(item, pathname), textColor, mutedTextColor, router }} />)}
+                    {/* Visible direct items */}
+                    {visibleItems.map(item => isVisible(item) && <NavLink key={item.href} {...{ item, collapsed, isNew: isNew(item), markVisited, isActive: matchesItem(item, pathname), textColor, mutedTextColor, router }} />)}
                   </motion.div>
                 )}
               </AnimatePresence>
