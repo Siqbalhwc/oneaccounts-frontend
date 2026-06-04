@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 
   const {
     party_id, amount, payment_method, bank_account_id,
-    income_account_id, date, reference, notes
+    income_account_id, date, reference, notes, allocations
   } = await request.json()
 
   if (!amount || amount <= 0) {
@@ -103,6 +103,41 @@ export async function POST(request: NextRequest) {
 
   if (!receipt) {
     return NextResponse.json({ error: 'Failed to create receipt after multiple attempts.' }, { status: 500 })
+  }
+
+  // ── Process allocations to invoices (NEW – mirrors payment logic) ─────
+  if (!income_account_id && party_id && allocations && Array.isArray(allocations) && allocations.length > 0) {
+    for (const alloc of allocations) {
+      const invId = alloc.invoice_id
+      const allocAmount = parseFloat(alloc.amount) || 0
+      if (allocAmount <= 0) continue
+
+      // Fetch the invoice
+      const { data: invoice } = await supabase
+        .from('invoices')
+        .select('paid, total, status')
+        .eq('id', invId)
+        .eq('company_id', companyId)
+        .eq('type', 'sale')
+        .single()
+
+      if (invoice) {
+        const newPaid = (invoice.paid || 0) + allocAmount
+        const newStatus = newPaid >= invoice.total ? 'Paid' : 'Partial'
+        await supabase.from('invoices')
+          .update({ paid: newPaid, status: newStatus })
+          .eq('id', invId)
+          .eq('company_id', companyId)
+      }
+
+      // Insert allocation record
+      await supabase.from('receipt_allocations').insert({
+        receipt_id: receipt.id,
+        invoice_id: invId,
+        amount: allocAmount,
+        company_id: companyId,
+      })
+    }
   }
 
   // ── Update customer balance ────────────────────────────────────────
