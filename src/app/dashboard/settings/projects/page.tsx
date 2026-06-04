@@ -109,27 +109,27 @@ export default function ProjectsPage() {
       const { data } = await supabase.from("donors").select("*").eq("company_id", companyId).order("name")
       setItems(data || [])
     } else { // activities
-      // 1. Fetch all activities for this company
+      // ✅ No "description" column exists in activities table
       const { data: activities, error: actErr } = await supabase
         .from("activities")
-        .select("id, name, is_active, description, project_id")
+        .select("id, name, is_active, project_id")
         .eq("company_id", companyId)
+        .is("deleted_at", null)
         .order("name")
 
       if (actErr || !activities) {
+        console.error("Activities fetch error:", actErr)
         setItems([])
         setLoading(false)
         return
       }
 
-      // 2. Fetch all project links for these activities
       const activityIds = activities.map(a => a.id)
       const { data: links } = await supabase
         .from("activity_projects")
         .select("activity_id, project_id, projects(name)")
         .in("activity_id", activityIds)
 
-      // Build a map: activity_id → array of project names
       const projectMap: Record<number, string[]> = {}
       if (links) {
         for (const link of links) {
@@ -141,20 +141,18 @@ export default function ProjectsPage() {
         }
       }
 
-      // 3. Combine
       const enriched = activities.map(a => {
         const names = projectMap[a.id] || []
         let displayNames = names.join(", ")
         if (!displayNames && a.project_id) {
-          // fallback for legacy activities
-          const oldProject = projects.find(p => p.id === a.project_id)
+          const oldProject = projects.find((p: any) => p.id === a.project_id)
           displayNames = oldProject?.name || `Project #${a.project_id}`
         }
         return {
           id: a.id,
           name: a.name,
           is_active: a.is_active,
-          description: a.description,
+          description: undefined,
           project_name: displayNames || "—",
         }
       })
@@ -272,11 +270,16 @@ export default function ProjectsPage() {
       setFlash("✅ Created!")
     }
 
+    // ✅ Save activity‑project links (no company_id in junction table)
     if (activeTab === "activities" && recordId) {
       await supabase.from("activity_projects").delete().eq("activity_id", recordId)
-      const newLinks = formProjectIds.map(pid => ({ activity_id: recordId, project_id: pid }))
+      const newLinks = formProjectIds.map(pid => ({
+        activity_id: recordId,
+        project_id: pid,
+      }))
       if (newLinks.length > 0) {
-        await supabase.from("activity_projects").insert(newLinks)
+        const { error: linkErr } = await supabase.from("activity_projects").insert(newLinks)
+        if (linkErr) console.error("Link insert error:", linkErr)
       }
     }
 
@@ -340,9 +343,9 @@ export default function ProjectsPage() {
         .pr-icon-btn:hover { background: #1E293B; color: white; }
         .pr-icon-btn.danger:hover { background: #FEE2E2; color: #EF4444; }
         .pr-empty { padding: 40px; textAlign: center; color: #94A3B8; }
-        .filter-row { margin-bottom: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .filter-row { margin-bottom: 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
         .filter-select { padding: 6px 12px; border: 1px solid #334155; border-radius: 6px; font-size: 12px; background: #1E293B; color: #F1F5F9; }
-        .search-box { position: relative; max-width: 300px; }
+        .search-box { position: relative; flex: 1; min-width: 200px; }
         .search-input { height: 38px; border: 1.5px solid #334155; border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px; width: 100%; background: #1E293B; color: #F1F5F9; outline: none; }
         .search-input:focus { border-color: #64748B; }
         .sort-btn { background: none; border: none; cursor: pointer; font: inherit; color: white; display: inline-flex; align-items: center; gap: 4px; padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px; }
@@ -372,6 +375,7 @@ export default function ProjectsPage() {
         ))}
       </div>
 
+      {/* Combined filter row: project filter + search + actions */}
       <div className="filter-row">
         {activeTab === "activities" && (
           <select className="filter-select" value={activityProjectFilter} onChange={e => setActivityProjectFilter(e.target.value)}>
@@ -383,20 +387,19 @@ export default function ProjectsPage() {
           <Search size={14} style={{ position: "absolute", left: 12, top: 10, color: "#94A3B8" }} />
           <input className="search-input" placeholder={`Search ${getEntityLabel().toLowerCase()}...`} value={search} onChange={e => setSearch(e.target.value)} />
         </div>
+        <div style={{ display: "flex", gap: 10, marginLeft: "auto" }}>
+          {canEdit && (
+            <>
+              <button className="pr-btn" onClick={openNew}><Plus size={16} /> Add {getEntityLabel().slice(0, -1)}</button>
+              <button className="pr-btn" onClick={() => setShowImportModal(true)}><Upload size={16} /> Import</button>
+            </>
+          )}
+        </div>
       </div>
 
       {flash && (
         <div style={{ background: flash.startsWith("Error") ? "#1E293B" : "#064E3B", border: flash.startsWith("Error") ? "1px solid #EF4444" : "1px solid #065F46", color: flash.startsWith("Error") ? "#FCA5A5" : "#6EE7B7", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{flash}</div>
       )}
-
-      <div style={{ marginBottom: 12, display: "flex", gap: 10 }}>
-        {canEdit && (
-          <>
-            <button className="pr-btn" onClick={openNew}><Plus size={16} /> Add {getEntityLabel().slice(0, -1)}</button>
-            <button className="pr-btn" onClick={() => setShowImportModal(true)}><Upload size={16} /> Import {getEntityLabel()}</button>
-          </>
-        )}
-      </div>
 
       <div className="pr-table">
         <div className="pr-table-header" style={{
