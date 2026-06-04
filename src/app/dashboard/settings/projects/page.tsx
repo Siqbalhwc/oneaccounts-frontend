@@ -18,6 +18,31 @@ interface Entity {
   donor_name?: string | null
 }
 
+// ── Helper to auto‑generate donor codes ──────────────────────────────
+async function getNextDonorCode(
+  supabase: any,
+  companyId: string
+): Promise<string> {
+  const { data } = await supabase
+    .from("donors")
+    .select("code")
+    .eq("company_id", companyId)
+    .order("code", { ascending: false })
+    .limit(50)
+
+  let maxNum = 0
+  if (data) {
+    for (const row of data) {
+      const match = row.code?.match(/^DON-(\d+)$/)
+      if (match) {
+        const n = parseInt(match[1], 10)
+        if (!isNaN(n) && n > maxNum) maxNum = n
+      }
+    }
+  }
+  return `DON-${String(maxNum + 1).padStart(3, "0")}`
+}
+
 export default function ProjectsPage() {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -39,17 +64,15 @@ export default function ProjectsPage() {
   const [formCode, setFormCode] = useState("")
   const [formActive, setFormActive] = useState(true)
   const [formProjectId, setFormProjectId] = useState<number | null>(null)
-  const [formDonorId, setFormDonorId] = useState<number | null>(null)   // NEW
+  const [formDonorId, setFormDonorId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [companyId, setCompanyId] = useState<string>("")
   const [projects, setProjects] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
-  const [donors, setDonors] = useState<any[]>([])                       // NEW
+  const [donors, setDonors] = useState<any[]>([])
 
-  // Activity project filter
   const [activityProjectFilter, setActivityProjectFilter] = useState<string>("")
 
-  // Import state
   const [showImportModal, setShowImportModal] = useState(false)
   const [importType, setImportType] = useState<"donor" | "project" | "location" | "activity">("donor")
   const [importFile, setImportFile] = useState<File | null>(null)
@@ -63,7 +86,7 @@ export default function ProjectsPage() {
         .then(r => r.data && setProjects(r.data))
       supabase.from("locations").select("id,name").eq("company_id", cid).order("name")
         .then(r => r.data && setLocations(r.data))
-      supabase.from("donors").select("id,name").eq("company_id", cid).order("name")   // NEW
+      supabase.from("donors").select("id,name").eq("company_id", cid).order("name")
         .then(r => r.data && setDonors(r.data))
     })
   }, [])
@@ -73,7 +96,6 @@ export default function ProjectsPage() {
     setLoading(true)
     let query: any
     if (activeTab === "projects") {
-      // Join donors to show donor name
       const { data } = await supabase
         .from("projects")
         .select("*, donors(name)")
@@ -129,7 +151,7 @@ export default function ProjectsPage() {
     setFormCode("")
     setFormActive(true)
     setFormProjectId(activeTab === "activities" && activityProjectFilter ? Number(activityProjectFilter) : null)
-    setFormDonorId(null)   // reset donor
+    setFormDonorId(null)
     setShowModal(true)
   }
 
@@ -140,7 +162,7 @@ export default function ProjectsPage() {
     setFormCode((item as any).code || "")
     setFormActive(item.is_active)
     setFormProjectId((item as any).project_id || null)
-    setFormDonorId((item as any).donor_id || null)   // set donor
+    setFormDonorId((item as any).donor_id || null)
     setShowModal(true)
   }
 
@@ -159,9 +181,14 @@ export default function ProjectsPage() {
     }
     if (activeTab === "projects") {
       payload.description = formDesc.trim()
-      payload.donor_id = formDonorId   // include donor
+      payload.donor_id = formDonorId
     } else if (activeTab === "donors") {
-      payload.code = formCode.trim() || null
+      // Auto‑generate code if left empty
+      if (formCode.trim()) {
+        payload.code = formCode.trim()
+      } else {
+        payload.code = await getNextDonorCode(supabase, companyId)
+      }
     } else if (activeTab === "activities") {
       payload.project_id = formProjectId
     }
@@ -208,8 +235,9 @@ export default function ProjectsPage() {
           if (importType === "donor") {
             const { Name, Code } = row
             if (Name) {
+              const code = Code || await getNextDonorCode(supabase, companyId)
               const { error } = await supabase.from("donors").upsert(
-                { company_id: companyId, name: Name, code: Code || null, is_active: true },
+                { company_id: companyId, name: Name, code, is_active: true },
                 { onConflict: "company_id, name" }
               )
               if (!error) successCount++
@@ -217,7 +245,6 @@ export default function ProjectsPage() {
           } else if (importType === "project") {
             const { Name, Description, DonorCode } = row
             if (Name) {
-              // If DonorCode is provided, find the donor
               let donorId = null
               if (DonorCode) {
                 const { data: donor } = await supabase.from("donors").select("id").eq("company_id", companyId).eq("code", DonorCode).maybeSingle()
@@ -427,7 +454,12 @@ export default function ProjectsPage() {
               {activeTab === "donors" && (
                 <div>
                   <label className="pr-field-label">Code (optional)</label>
-                  <input className="pr-field-input" value={formCode} onChange={e => setFormCode(e.target.value)} placeholder="e.g., UNICEF, GIZ" />
+                  <input
+                    className="pr-field-input"
+                    value={formCode}
+                    onChange={e => setFormCode(e.target.value)}
+                    placeholder="e.g., UNICEF, GIZ — leave blank for auto code"
+                  />
                 </div>
               )}
               {activeTab === "activities" && (
