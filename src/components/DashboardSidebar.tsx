@@ -61,9 +61,9 @@ const baseNavSections: NavSection[] = [
 const matchesItem = (item: NavItem, path: string): boolean =>
   item.href === "/dashboard" ? path === item.href : path.startsWith(item.href)
 
-// ✅ Now accepts the full sections array so it can match dynamic sections
-function getSectionForPath(sections: NavSection[], path: string): string {
-  for (const sec of sections) {
+// ✅ Original function – only checks base sections
+function getSectionForPath(path: string): string {
+  for (const sec of baseNavSections) {
     if (sec.items?.some(item => matchesItem(item, path))) return sec.section
     if (sec.groups) {
       for (const grp of sec.groups) {
@@ -141,7 +141,7 @@ export default function DashboardSidebar({
     checkSuper()
   }, [])
 
-  // Build final nav sections – this is used everywhere
+  // Build final nav sections
   const navSections = [...baseNavSections]
 
   // ── Insert "Project & Budgets" section right after INVENTORY ──
@@ -173,8 +173,22 @@ export default function DashboardSidebar({
 
   const GAP = 6
 
-  // ✅ Use the dynamic sections to determine the initially open section
-  const [openSection, setOpenSection] = useState<string>(() => getSectionForPath(navSections, pathname))
+  // ✅ Use original function for core sections, then manually check for the dynamic one
+  const [openSection, setOpenSection] = useState<string>(() => {
+    const base = getSectionForPath(pathname)
+    // If path matches one of the NGO pages, override to the new section
+    if (businessType === 'ngo') {
+      const ngoPaths = [
+        '/dashboard/projects',
+        '/dashboard/settings/projects',
+        '/dashboard/settings/budgets',
+      ]
+      if (ngoPaths.some(p => pathname.startsWith(p))) {
+        return 'Project & Budgets'
+      }
+    }
+    return base
+  })
 
   useEffect(() => {
     localStorage.setItem("sidebarCollapsed", String(collapsed))
@@ -185,10 +199,22 @@ export default function DashboardSidebar({
     }
   }, [collapsed])
 
-  // Update open section when path changes (now uses the latest navSections)
+  // Update open section when path changes
   useEffect(() => {
-    setOpenSection(getSectionForPath(navSections, pathname))
-  }, [pathname, navSections])
+    const base = getSectionForPath(pathname)
+    if (businessType === 'ngo') {
+      const ngoPaths = [
+        '/dashboard/projects',
+        '/dashboard/settings/projects',
+        '/dashboard/settings/budgets',
+      ]
+      if (ngoPaths.some(p => pathname.startsWith(p))) {
+        setOpenSection('Project & Budgets')
+        return
+      }
+    }
+    setOpenSection(base)
+  }, [pathname, businessType])
 
   const handleSectionClick = (section: string) => {
     setOpenSection(section)
