@@ -57,12 +57,13 @@ const baseNavSections: NavSection[] = [
   ]},
 ]
 
-// ── Helper (unchanged) ──
+// ── Helper: exact match for /dashboard, startsWith for all other routes ──
 const matchesItem = (item: NavItem, path: string): boolean =>
   item.href === "/dashboard" ? path === item.href : path.startsWith(item.href)
 
-function getSectionForPath(path: string): string {
-  for (const sec of baseNavSections) {
+// ✅ Now accepts the full sections array so it can match dynamic sections
+function getSectionForPath(sections: NavSection[], path: string): string {
+  for (const sec of sections) {
     if (sec.items?.some(item => matchesItem(item, path))) return sec.section
     if (sec.groups) {
       for (const grp of sec.groups) {
@@ -140,13 +141,13 @@ export default function DashboardSidebar({
     checkSuper()
   }, [])
 
-  // Build final nav sections
+  // Build final nav sections – this is used everywhere
   const navSections = [...baseNavSections]
 
-  // ── Insert "Project & Budgets" section right after INVENTORY (i.e. before ACCOUNTING) ──
+  // ── Insert "Project & Budgets" section right after INVENTORY ──
   if (businessType === 'ngo') {
     const invIndex = navSections.findIndex(s => s.section === 'INVENTORY')
-    const insertAt = invIndex >= 0 ? invIndex + 1 : navSections.length - 1 // fallback before SYSTEM
+    const insertAt = invIndex >= 0 ? invIndex + 1 : navSections.length - 1
     navSections.splice(insertAt, 0, {
       section: 'Project & Budgets',
       items: [
@@ -172,8 +173,8 @@ export default function DashboardSidebar({
 
   const GAP = 6
 
-  // ✅ Use original getSectionForPath (based on base sections) – works perfectly for all core sections
-  const [openSection, setOpenSection] = useState<string>(() => getSectionForPath(pathname))
+  // ✅ Use the dynamic sections to determine the initially open section
+  const [openSection, setOpenSection] = useState<string>(() => getSectionForPath(navSections, pathname))
 
   useEffect(() => {
     localStorage.setItem("sidebarCollapsed", String(collapsed))
@@ -184,10 +185,10 @@ export default function DashboardSidebar({
     }
   }, [collapsed])
 
-  // Update open section when path changes
+  // Update open section when path changes (now uses the latest navSections)
   useEffect(() => {
-    setOpenSection(getSectionForPath(pathname))
-  }, [pathname])
+    setOpenSection(getSectionForPath(navSections, pathname))
+  }, [pathname, navSections])
 
   const handleSectionClick = (section: string) => {
     setOpenSection(section)
@@ -242,18 +243,30 @@ export default function DashboardSidebar({
         margin: GAP,
         marginRight: 0,
         borderRadius: 24,
-        background: bg,
+        background: "transparent",                     // ✅ transparent – blur is on child
         boxShadow: shadow,
         border: `1px solid ${borderColor}`,
         position: "fixed",
         top: 0, left: 0, bottom: GAP,
         zIndex: 40,
         display: "flex", flexDirection: "column",
-        backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
       }}
       animate={{ width: collapsed ? 68 : 240 }}
       transition={{ duration: 0.35, ease: [0.25, 0.8, 0.25, 1] }}
     >
+      {/* ✅ Blurred background – separate layer, does NOT affect content */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: -1,
+          borderRadius: 24,
+          background: bg,
+          backdropFilter: "blur(24px)",
+          WebkitBackdropFilter: "blur(24px)",
+        }}
+      />
+
       {/* ── Header ── */}
       <div style={{
         display: "flex", alignItems: "center",
@@ -262,7 +275,10 @@ export default function DashboardSidebar({
         borderBottom: `1px solid ${borderColor}`, transition: "padding 0.3s",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, overflow: "hidden", flex: 1, minWidth: 0 }}>
-          <img src={logoUrl} alt={companyName} className="dl-sidebar-logo-img" width={34} height={34} />
+          <img src={logoUrl} alt={companyName} style={{
+            width: 34, height: 34, borderRadius: 9, objectFit: "contain",
+            flexShrink: 0, imageRendering: "auto",
+          }} />
           {!collapsed && (
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ color: textColor, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{companyName}</div>
