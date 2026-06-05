@@ -62,12 +62,16 @@ async function generateInvoiceNo(supabase: any, companyId: string): Promise<stri
   const now = new Date()
   const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`
   const prefix = `SI/${ym}/`
+
+  // ✅ FIX: scope by company_id so each company starts at 0001
   const { data: lastInv } = await supabase
     .from("invoices")
     .select("invoice_no")
+    .eq("company_id", companyId)          // ← added this line
     .like("invoice_no", `${prefix}%`)
     .order("invoice_no", { ascending: false })
     .limit(1)
+
   let nextNum = 1
   if (lastInv && lastInv.length > 0) {
     const last = lastInv[0].invoice_no
