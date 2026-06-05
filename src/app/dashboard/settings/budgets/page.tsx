@@ -115,7 +115,6 @@ export default function BudgetsPage() {
       return
     }
 
-    // Get activity IDs from activity_projects for this project
     const fetchActivities = async () => {
       const { data: junctionRows } = await supabase
         .from("activity_projects")
@@ -126,7 +125,6 @@ export default function BudgetsPage() {
 
       // Also include activities that still have the old project_id (backward compatibility)
       let allActivityIds = [...junctionIds]
-      // Fetch activities with old project_id
       const { data: legacyActivities } = await supabase
         .from("activities")
         .select("id")
@@ -145,7 +143,7 @@ export default function BudgetsPage() {
         return
       }
 
-      // Now fetch the actual activity names
+      // Fetch actual activity names
       const { data: activities } = await supabase
         .from("activities")
         .select("id, name")
@@ -180,7 +178,7 @@ export default function BudgetsPage() {
     }
   }, [selectedProjectId, projects, businessType, initialDonor, companyId])
 
-  // ── 5. Load budgets + actuals (unchanged) ──
+  // ── 5. Load budgets + actuals ──
   useEffect(() => {
     if (!companyId) { setData({}); setLoading(false); return }
 
@@ -234,7 +232,7 @@ export default function BudgetsPage() {
     })
   }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, filterLocationId, businessType])
 
-  // ── 6. Monthly actuals (unchanged) ──
+  // ── 6. Monthly actuals ──
   useEffect(() => {
     if (viewMode !== "month" || !companyId) return
     if (businessType === "ngo" && !selectedDonorId && !selectedProjectId) return
@@ -279,7 +277,7 @@ export default function BudgetsPage() {
     ? accounts
     : accounts.filter(a => usedAccountIds.has(String(a.id)))
 
-  // ── Helpers (unchanged) ──
+  // ── Helpers ──
   const rowTotalBudget = (actId: string, locId: string) => {
     let total = 0
     relevantAccounts.forEach(acc => {
@@ -322,13 +320,16 @@ export default function BudgetsPage() {
     return sum
   }
 
+  // ✅ Fixed TypeScript error – always spread an object
   const updateCell = (accountId: string, activityId: string, locationId: string, amount: number) => {
     setData(prev => {
       const updated = { ...prev }
       if (!updated[activityId]) updated[activityId] = {}
       if (!updated[activityId][locationId]) updated[activityId][locationId] = {}
+      const existing = updated[activityId][locationId][accountId] || { budget: 0, actual: 0 }
       updated[activityId][locationId] = {
-        ...updated[activityId][locationId][accountId] || { actual: 0 }, budget: amount,
+        ...updated[activityId][locationId],
+        [accountId]: { ...existing, budget: amount },
       }
       return updated
     })
@@ -344,7 +345,7 @@ export default function BudgetsPage() {
     })
   }
 
-  // ── Save budgets (unchanged) ──
+  // ── Save budgets ──
   const handleSave = async () => {
     if (!companyId || !canEdit) return
     if (!selectedProjectId && !selectedDonorId) { setFlash("Please select a Project or Donor first."); return }
@@ -405,7 +406,7 @@ export default function BudgetsPage() {
     setTimeout(() => setFlash(""), 4000)
   }
 
-  // ── Export (unchanged) ──
+  // ── Export ──
   const exportExcel = () => {
     const rows: any[] = []
     for (const actId of Object.keys(data)) {
@@ -464,7 +465,7 @@ export default function BudgetsPage() {
     doc.save(`budget_vs_actual_${fiscalYear}.pdf`)
   }
 
-  // ── Import (now uses junction-aware activity lookup) ──
+  // ── Import ──
   const handleBudgetImport = async () => {
     if (!budgetImportFile || !selectedProjectId || (businessType === "ngo" && !selectedDonorId)) {
       setFlash("Please select a project and donor (if NGO) before importing.")
@@ -481,7 +482,6 @@ export default function BudgetsPage() {
       for (const row of rows as any[]) {
         const { Activity, Location, AccountCode, BudgetAmount } = row
         if (Activity && Location && AccountCode && BudgetAmount) {
-          // Find activity by name and verify it's linked to the selected project (via junction or old project_id)
           const { data: act } = await supabase
             .from("activities")
             .select("id, project_id")
@@ -491,7 +491,6 @@ export default function BudgetsPage() {
 
           if (!act) continue
 
-          // Verify the activity is linked to the selected project
           let isLinked = false
           if (act.project_id == selectedProjectId) {
             isLinked = true
@@ -561,7 +560,7 @@ export default function BudgetsPage() {
           background: var(--card); color: var(--text);
         }
         .table { border-collapse: collapse; width: 100%; font-size: 11px; background: var(--card); }
-        .table th, .table td { border: 1px solid var(--border); padding: 4px 6px; text-align: center; }
+        .table th, .table td { border: 1px solid var(--border); padding: 4px 6px; text-align: center; color: var(--text); }
         .table th { background: var(--card-hover); color: var(--text-muted); }
         .act-header td { background: var(--card-hover); font-weight: 700; text-align: left; padding: 6px; color: var(--text); }
         .sub-header th { background: var(--card-hover); font-weight: 600; font-size: 9px; color: var(--text-muted); }
