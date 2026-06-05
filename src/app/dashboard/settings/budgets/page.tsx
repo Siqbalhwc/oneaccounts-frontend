@@ -108,22 +108,62 @@ export default function BudgetsPage() {
       })
   }, [initialActivity, companyId])
 
-  // ── 3. Activities of selected project ──
+  // ── 3. Activities of selected project – NOW USES JUNCTION TABLE ──
   useEffect(() => {
     if (!companyId || !selectedProjectId) {
       if (!selectedDonorId) setAllActivities([])
       return
     }
-    supabase.from("activities").select("id, name")
-      .eq("company_id", companyId).eq("project_id", selectedProjectId)
-      .is("deleted_at", null).order("name")
-      .then(r => r.data && setAllActivities(r.data))
+
+    // Get activity IDs from activity_projects for this project
+    const fetchActivities = async () => {
+      const { data: junctionRows } = await supabase
+        .from("activity_projects")
+        .select("activity_id")
+        .eq("project_id", selectedProjectId)
+
+      const junctionIds = junctionRows?.map((j: any) => j.activity_id) || []
+
+      // Also include activities that still have the old project_id (backward compatibility)
+      let allActivityIds = [...junctionIds]
+      // Fetch activities with old project_id
+      const { data: legacyActivities } = await supabase
+        .from("activities")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("project_id", selectedProjectId)
+        .is("deleted_at", null)
+
+      if (legacyActivities) {
+        legacyActivities.forEach((a: any) => {
+          if (!allActivityIds.includes(a.id)) allActivityIds.push(a.id)
+        })
+      }
+
+      if (allActivityIds.length === 0) {
+        setAllActivities([])
+        return
+      }
+
+      // Now fetch the actual activity names
+      const { data: activities } = await supabase
+        .from("activities")
+        .select("id, name")
+        .in("id", allActivityIds)
+        .eq("company_id", companyId)
+        .is("deleted_at", null)
+        .order("name")
+
+      setAllActivities(activities || [])
+    }
+
+    fetchActivities()
   }, [companyId, selectedProjectId])
 
   // ── 4. Auto‑select donor for the selected project ──
   useEffect(() => {
     if (!selectedProjectId || businessType !== "ngo") return
-    if (initialDonor) return // already have donor
+    if (initialDonor) return
 
     const project = projects.find(p => p.id == selectedProjectId)
     if (project?.donor_id) {
@@ -140,11 +180,10 @@ export default function BudgetsPage() {
     }
   }, [selectedProjectId, projects, businessType, initialDonor, companyId])
 
-  // ── 5. Load budgets + actuals ──
+  // ── 5. Load budgets + actuals (unchanged) ──
   useEffect(() => {
     if (!companyId) { setData({}); setLoading(false); return }
 
-    // Allow donor-only (no project) for NGO
     const canLoad = businessType !== "ngo" || selectedDonorId || selectedProjectId
     if (!canLoad) { setData({}); setLoading(false); return }
 
@@ -195,7 +234,7 @@ export default function BudgetsPage() {
     })
   }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, filterLocationId, businessType])
 
-  // ── 6. Monthly actuals ──
+  // ── 6. Monthly actuals (unchanged) ──
   useEffect(() => {
     if (viewMode !== "month" || !companyId) return
     if (businessType === "ngo" && !selectedDonorId && !selectedProjectId) return
@@ -240,7 +279,7 @@ export default function BudgetsPage() {
     ? accounts
     : accounts.filter(a => usedAccountIds.has(String(a.id)))
 
-  // ── Helpers ──
+  // ── Helpers (unchanged) ──
   const rowTotalBudget = (actId: string, locId: string) => {
     let total = 0
     relevantAccounts.forEach(acc => {
@@ -289,8 +328,7 @@ export default function BudgetsPage() {
       if (!updated[activityId]) updated[activityId] = {}
       if (!updated[activityId][locationId]) updated[activityId][locationId] = {}
       updated[activityId][locationId] = {
-        ...updated[activityId][locationId],
-        [accountId]: { ...updated[activityId][locationId][accountId] || { actual: 0 }, budget: amount },
+        ...updated[activityId][locationId][accountId] || { actual: 0 }, budget: amount,
       }
       return updated
     })
@@ -306,7 +344,7 @@ export default function BudgetsPage() {
     })
   }
 
-  // ── Save budgets ──
+  // ── Save budgets (unchanged) ──
   const handleSave = async () => {
     if (!companyId || !canEdit) return
     if (!selectedProjectId && !selectedDonorId) { setFlash("Please select a Project or Donor first."); return }
@@ -367,7 +405,7 @@ export default function BudgetsPage() {
     setTimeout(() => setFlash(""), 4000)
   }
 
-  // ── Export functions ──
+  // ── Export (unchanged) ──
   const exportExcel = () => {
     const rows: any[] = []
     for (const actId of Object.keys(data)) {
@@ -426,6 +464,7 @@ export default function BudgetsPage() {
     doc.save(`budget_vs_actual_${fiscalYear}.pdf`)
   }
 
+  // ── Import (now uses junction-aware activity lookup) ──
   const handleBudgetImport = async () => {
     if (!budgetImportFile || !selectedProjectId || (businessType === "ngo" && !selectedDonorId)) {
       setFlash("Please select a project and donor (if NGO) before importing.")
@@ -442,7 +481,32 @@ export default function BudgetsPage() {
       for (const row of rows as any[]) {
         const { Activity, Location, AccountCode, BudgetAmount } = row
         if (Activity && Location && AccountCode && BudgetAmount) {
-          const { data: act } = await supabase.from("activities").select("id").eq("company_id", companyId).eq("project_id", selectedProjectId).ilike("name", Activity).maybeSingle()
+          // Find activity by name and verify it's linked to the selected project (via junction or old project_id)
+          const { data: act } = await supabase
+            .from("activities")
+            .select("id, project_id")
+            .eq("company_id", companyId)
+            .ilike("name", Activity)
+            .maybeSingle()
+
+          if (!act) continue
+
+          // Verify the activity is linked to the selected project
+          let isLinked = false
+          if (act.project_id == selectedProjectId) {
+            isLinked = true
+          } else {
+            const { data: junction } = await supabase
+              .from("activity_projects")
+              .select("id")
+              .eq("activity_id", act.id)
+              .eq("project_id", selectedProjectId)
+              .maybeSingle()
+            if (junction) isLinked = true
+          }
+
+          if (!isLinked) continue
+
           const { data: loc } = await supabase.from("locations").select("id").eq("company_id", companyId).ilike("name", Location).maybeSingle()
           const { data: acc } = await supabase.from("accounts").select("id").eq("company_id", companyId).eq("code", AccountCode).single()
           if (act && loc && acc) {
