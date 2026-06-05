@@ -74,7 +74,6 @@ export async function POST(request: NextRequest) {
       const allocAmt = parseFloat(alloc.amount) || 0
       if (allocAmt <= 0) continue
 
-      // Fetch invoice basic info
       const { data: inv } = await supabase
         .from('invoices')
         .select('id, total, paid, status')
@@ -87,7 +86,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: `Invoice ${invId} not found` }, { status: 400 })
       }
 
-      // Source of truth: sum of existing receipt_allocations for this invoice
       const { data: existingAllocs } = await supabase
         .from('receipt_allocations')
         .select('amount')
@@ -97,7 +95,6 @@ export async function POST(request: NextRequest) {
         ? existingAllocs.reduce((sum: number, a: any) => sum + (a.amount || 0), 0)
         : 0
 
-      // Use the higher of the two possible paid values
       const effectivePaid = Math.max(inv.paid || 0, alreadyPaid)
       const remaining = (inv.total || 0) - effectivePaid
 
@@ -159,7 +156,6 @@ export async function POST(request: NextRequest) {
     const invId = alloc.invoice_id
     const allocAmt = alloc.amount
 
-    // Fetch invoice total (do not trust invoices.paid)
     const { data: invoice } = await supabase
       .from('invoices')
       .select('total')
@@ -169,7 +165,6 @@ export async function POST(request: NextRequest) {
 
     if (!invoice) continue
 
-    // Recompute paid from receipt_allocations
     const { data: prevAllocs } = await supabase
       .from('receipt_allocations')
       .select('amount')
@@ -182,13 +177,11 @@ export async function POST(request: NextRequest) {
     const newPaid = prevPaid + allocAmt
     const newStatus = newPaid >= invoice.total ? 'Paid' : 'Partial'
 
-    // Update invoice with correct paid amount
     await supabase.from('invoices')
       .update({ paid: newPaid, status: newStatus })
       .eq('id', invId)
       .eq('company_id', companyId)
 
-    // Insert the allocation record
     await supabase.from('receipt_allocations').insert({
       receipt_id: receipt.id,
       invoice_id: invId,
@@ -247,9 +240,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Either customer or income account required' }, { status: 400 })
   }
 
+  // ✅ FIX: globally unique journal entry number
   const { data: entry, error: entryErr } = await supabase.from('journal_entries').insert({
     company_id: companyId,
-    entry_no: `JE-REC-${recNo}`,
+    entry_no: `JE-REC-${Date.now()}-${receipt.id}`,
     date: date || new Date().toISOString().split('T')[0],
     description: `Receipt - ${recNo}`,
   }).select('id').single()
