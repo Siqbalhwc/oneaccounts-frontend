@@ -46,6 +46,10 @@ export default function BudgetsPage() {
   const [viewMode, setViewMode] = useState<"gl" | "month">("gl")
   const [projectDuration, setProjectDuration] = useState<number>(12)
 
+  // ✅ New: project start/end dates (loaded from DB)
+  const [projectStartDate, setProjectStartDate] = useState<string>("")
+  const [projectEndDate, setProjectEndDate] = useState<string>("")
+
   const [data, setData] = useState<Record<string, Record<string, Record<string, { budget: number; actual: number }>>>>({})
   const [loading, setLoading] = useState(true)
 
@@ -88,8 +92,14 @@ export default function BudgetsPage() {
             })
         })
 
-      supabase.from("projects").select("id, name, donor_id").eq("company_id", cid).is("deleted_at", null).order("name")
+      // ✅ Also fetch start_date & end_date for projects
+      supabase.from("projects")
+        .select("id, name, donor_id, start_date, end_date")
+        .eq("company_id", cid)
+        .is("deleted_at", null)
+        .order("name")
         .then(r => r.data && setProjects(r.data))
+
       supabase.from("donors").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
         .then(r => r.data && setDonors(r.data))
       supabase.from("locations").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
@@ -175,6 +185,38 @@ export default function BudgetsPage() {
         })
     }
   }, [selectedProjectId, projects, businessType, initialDonor, companyId])
+
+  // ✅ NEW: when project changes, compute duration from its start/end dates
+  useEffect(() => {
+    if (!selectedProjectId) {
+      setProjectStartDate("")
+      setProjectEndDate("")
+      return
+    }
+    const project = projects.find(p => p.id == selectedProjectId)
+    if (!project) return
+
+    setProjectStartDate(project.start_date || "")
+    setProjectEndDate(project.end_date || "")
+
+    if (project.start_date) {
+      const start = new Date(project.start_date)
+      if (isNaN(start.getTime())) return
+
+      let end: Date
+      if (project.end_date) {
+        end = new Date(project.end_date)
+        if (isNaN(end.getTime())) return
+      } else {
+        // default to end of fiscal year (assuming fiscal year starts in January)
+        end = new Date(fiscalYear, 11, 31) // 31 Dec of the selected fiscal year
+      }
+
+      // months between start and end inclusive
+      const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1
+      if (months > 0) setProjectDuration(months)
+    }
+  }, [selectedProjectId, projects, fiscalYear])
 
   // ── 5. Load budgets + actuals ──
   useEffect(() => {
@@ -622,6 +664,15 @@ export default function BudgetsPage() {
           <button className="btn-outline btn-sm" onClick={exportExcel}><Download size={14} /> Excel</button>
           <button className="btn-outline btn-sm" onClick={exportPDF}><Download size={14} /> PDF</button>
         </div>
+
+        {/* ✅ Project date info */}
+        {projectStartDate && (
+          <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>
+            📅 Project: <strong>{projects.find(p => p.id == selectedProjectId)?.name}</strong> &nbsp;|&nbsp;
+            Start: <strong>{new Date(projectStartDate).toLocaleDateString()}</strong>
+            {projectEndDate && <> &nbsp;|&nbsp; End: <strong>{new Date(projectEndDate).toLocaleDateString()}</strong></>}
+          </div>
+        )}
 
         {flash && (
           <div className={`message-bar ${flash.startsWith("Error") ? "error" : "success"}`}>
