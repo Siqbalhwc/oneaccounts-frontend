@@ -46,7 +46,7 @@ export default function BudgetsPage() {
   const [viewMode, setViewMode] = useState<"gl" | "month">("gl")
   const [projectDuration, setProjectDuration] = useState<number>(12)
 
-  // ✅ New: project start/end dates (loaded from DB)
+  // ✅ Editable project start/end dates
   const [projectStartDate, setProjectStartDate] = useState<string>("")
   const [projectEndDate, setProjectEndDate] = useState<string>("")
 
@@ -92,7 +92,6 @@ export default function BudgetsPage() {
             })
         })
 
-      // ✅ Also fetch start_date & end_date for projects
       supabase.from("projects")
         .select("id, name, donor_id, start_date, end_date")
         .eq("company_id", cid)
@@ -118,7 +117,7 @@ export default function BudgetsPage() {
       })
   }, [initialActivity, companyId])
 
-  // ── 3. Activities of selected project – NOW USES JUNCTION TABLE ──
+  // ── 3. Activities of selected project – junction table ──
   useEffect(() => {
     if (!companyId || !selectedProjectId) {
       if (!selectedDonorId) setAllActivities([])
@@ -186,7 +185,7 @@ export default function BudgetsPage() {
     }
   }, [selectedProjectId, projects, businessType, initialDonor, companyId])
 
-  // ✅ NEW: when project changes, compute duration from its start/end dates
+  // ✅ NEW: when project changes, load its dates and calculate duration
   useEffect(() => {
     if (!selectedProjectId) {
       setProjectStartDate("")
@@ -208,15 +207,34 @@ export default function BudgetsPage() {
         end = new Date(project.end_date)
         if (isNaN(end.getTime())) return
       } else {
-        // default to end of fiscal year (assuming fiscal year starts in January)
-        end = new Date(fiscalYear, 11, 31) // 31 Dec of the selected fiscal year
+        end = new Date(fiscalYear, 11, 31) // 31 Dec of selected fiscal year
       }
 
-      // months between start and end inclusive
       const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1
       if (months > 0) setProjectDuration(months)
     }
   }, [selectedProjectId, projects, fiscalYear])
+
+  // ✅ Save project dates when they change
+  const saveProjectDates = async (field: "start_date" | "end_date", value: string) => {
+    if (!selectedProjectId || !companyId) return
+    if (field === "start_date") {
+      setProjectStartDate(value)
+    } else {
+      setProjectEndDate(value)
+    }
+
+    await supabase
+      .from("projects")
+      .update({ [field]: value || null })
+      .eq("id", selectedProjectId)
+      .eq("company_id", companyId)
+
+    // Refresh the project in local list
+    setProjects(prev =>
+      prev.map(p => (p.id == selectedProjectId ? { ...p, [field]: value || null } : p))
+    )
+  }
 
   // ── 5. Load budgets + actuals ──
   useEffect(() => {
@@ -302,7 +320,7 @@ export default function BudgetsPage() {
     })
   }, [viewMode, companyId, selectedProjectId, selectedDonorId, filterLocationId, fiscalYear, businessType])
 
-  // ── ALWAYS show all eligible accounts – no hiding ──
+  // ── Always show all eligible accounts ──
   const relevantAccounts = accounts
 
   // ── Helpers ──
@@ -665,12 +683,34 @@ export default function BudgetsPage() {
           <button className="btn-outline btn-sm" onClick={exportPDF}><Download size={14} /> PDF</button>
         </div>
 
-        {/* ✅ Project date info */}
-        {projectStartDate && (
-          <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>
-            📅 Project: <strong>{projects.find(p => p.id == selectedProjectId)?.name}</strong> &nbsp;|&nbsp;
-            Start: <strong>{new Date(projectStartDate).toLocaleDateString()}</strong>
-            {projectEndDate && <> &nbsp;|&nbsp; End: <strong>{new Date(projectEndDate).toLocaleDateString()}</strong></>}
+        {/* ✅ Editable project dates */}
+        {selectedProjectId && (
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <label style={{ fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" }}>Start Date:</label>
+              <input
+                type="date"
+                className="filter-select"
+                style={{ width: 140 }}
+                value={projectStartDate}
+                onChange={e => saveProjectDates("start_date", e.target.value)}
+              />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <label style={{ fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" }}>End Date:</label>
+              <input
+                type="date"
+                className="filter-select"
+                style={{ width: 140 }}
+                value={projectEndDate}
+                onChange={e => saveProjectDates("end_date", e.target.value)}
+              />
+            </div>
+            {(projectStartDate || projectEndDate) && (
+              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                ({projectDuration} month{projectDuration !== 1 ? "s" : ""})
+              </span>
+            )}
           </div>
         )}
 
