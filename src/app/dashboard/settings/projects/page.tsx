@@ -109,7 +109,6 @@ export default function ProjectsPage() {
       const { data } = await supabase.from("donors").select("*").eq("company_id", companyId).order("name")
       setItems(data || [])
     } else { // activities
-      // ✅ No "description" column exists in activities table
       const { data: activities, error: actErr } = await supabase
         .from("activities")
         .select("id, name, is_active, project_id")
@@ -118,7 +117,6 @@ export default function ProjectsPage() {
         .order("name")
 
       if (actErr || !activities) {
-        console.error("Activities fetch error:", actErr)
         setItems([])
         setLoading(false)
         return
@@ -164,9 +162,9 @@ export default function ProjectsPage() {
 
   useEffect(() => { fetchData() }, [companyId, activeTab, activityProjectFilter])
 
-  if (!companyId) return <div style={{ padding: 24, textAlign: "center" }}>Loading...</div>
-  if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
-  if (!canView) return <div style={{ padding: 24, textAlign: "center" }}><h2>Access Denied</h2></div>
+  if (!companyId) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
+  if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
+  if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
   const filtered = search.trim()
     ? items.filter(item => {
@@ -270,16 +268,11 @@ export default function ProjectsPage() {
       setFlash("✅ Created!")
     }
 
-    // ✅ Save activity‑project links (no company_id in junction table)
     if (activeTab === "activities" && recordId) {
       await supabase.from("activity_projects").delete().eq("activity_id", recordId)
-      const newLinks = formProjectIds.map(pid => ({
-        activity_id: recordId,
-        project_id: pid,
-      }))
+      const newLinks = formProjectIds.map(pid => ({ activity_id: recordId, project_id: pid }))
       if (newLinks.length > 0) {
-        const { error: linkErr } = await supabase.from("activity_projects").insert(newLinks)
-        if (linkErr) console.error("Link insert error:", linkErr)
+        await supabase.from("activity_projects").insert(newLinks)
       }
     }
 
@@ -313,51 +306,51 @@ export default function ProjectsPage() {
   const getEntityLabel = () => activeTab.charAt(0).toUpperCase() + activeTab.slice(1)
 
   return (
-    <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .pr-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
-        .pr-title { font-size: 22px; font-weight: 800; color: #F1F5F9; }
-        .pr-subtitle { font-size: 13px; color: #94A3B8; margin-top: 2px; }
-        .pr-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid #334155; font-family: inherit; background: transparent; color: white; }
-        .pr-btn:hover { background: #1E293B; }
-        .pr-btn-primary { background: #1E3A8A; border-color: #1E3A8A; color: white; }
-        .pr-btn-primary:hover { background: #1E40AF; }
-        .pr-btn-outline { background: transparent; border: 1.5px solid #334155; color: #CBD5E1; }
+        .pr-title { font-size: 22px; font-weight: 800; color: var(--text); }
+        .pr-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+        .pr-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); font-family: inherit; background: transparent; color: var(--text-muted); }
+        .pr-btn:hover { background: var(--card-hover); }
+        .pr-btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+        .pr-btn-primary:hover { background: var(--primary-hover); }
         .pr-tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
-        .pr-tab { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid #334155; background: transparent; color: #CBD5E1; }
-        .pr-tab.active { background: #1E3A8A; color: white; border-color: #1E3A8A; }
-        .pr-table { background: #111827; border: 1px solid #1E293B; border-radius: 10px; overflow: hidden; }
+        .pr-tab { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); }
+        .pr-tab.active { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+        .pr-table { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
         .pr-table-header {
           display: grid;
           padding: 10px 16px;
-          border-bottom: 2px solid #1E293B;
-          font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #94A3B8; align-items: center;
+          border-bottom: 2px solid var(--border);
+          font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); align-items: center;
         }
         .pr-table-row {
           display: grid;
           padding: 10px 16px;
-          border-bottom: 1px solid #1E293B; align-items: center; font-size: 13px;
+          border-bottom: 1px solid var(--border); align-items: center; font-size: 13px; color: var(--text);
         }
-        .pr-table-row:hover { background: #1E293B; }
-        .pr-icon-btn { background: none; border: none; cursor: pointer; padding: 6px; border-radius: 6px; color: #94A3B8; display: inline-flex; }
-        .pr-icon-btn:hover { background: #1E293B; color: white; }
+        .pr-table-row:hover { background: var(--card-hover); }
+        .pr-icon-btn { background: none; border: none; cursor: pointer; padding: 6px; border-radius: 6px; color: var(--text-muted); display: inline-flex; }
+        .pr-icon-btn:hover { background: var(--card-hover); color: var(--text); }
         .pr-icon-btn.danger:hover { background: #FEE2E2; color: #EF4444; }
-        .pr-empty { padding: 40px; textAlign: center; color: #94A3B8; }
+        .pr-empty { padding: 40px; textAlign: center; color: var(--text-muted); }
         .filter-row { margin-bottom: 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-        .filter-select { padding: 6px 12px; border: 1px solid #334155; border-radius: 6px; font-size: 12px; background: #1E293B; color: #F1F5F9; }
+        .filter-select { padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; background: var(--card); color: var(--text); }
         .search-box { position: relative; flex: 1; min-width: 200px; }
-        .search-input { height: 38px; border: 1.5px solid #334155; border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px; width: 100%; background: #1E293B; color: #F1F5F9; outline: none; }
-        .search-input:focus { border-color: #64748B; }
-        .sort-btn { background: none; border: none; cursor: pointer; font: inherit; color: white; display: inline-flex; align-items: center; gap: 4px; padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px; }
+        .search-input { height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px; width: 100%; background: var(--card); color: var(--text); outline: none; }
+        .search-input:focus { border-color: var(--primary); }
+        .sort-btn { background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted); display: inline-flex; align-items: center; gap: 4px; padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px; }
+        .sort-btn:hover { color: var(--primary); }
         .pr-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
-        .pr-modal { background: #111827; border: 1px solid #1E293B; border-radius: 14px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; color: #E2E8F0; }
-        .pr-modal-header { padding: 20px 24px; border-bottom: 1px solid #1E293B; display: flex; justify-content: space-between; align-items: center; }
-        .pr-modal-title { font-size: 18px; font-weight: 700; color: #F1F5F9; }
+        .pr-modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; color: var(--text); }
+        .pr-modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .pr-modal-title { font-size: 18px; font-weight: 700; color: var(--text); }
         .pr-modal-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
-        .pr-field-label { font-size: 11px; font-weight: 600; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; }
-        .pr-field-input { width: 100%; height: 40px; border: 1.5px solid #334155; border-radius: 9px; padding: 0 14px; font-size: 13px; font-family: inherit; background: #1E293B; color: #F1F5F9; outline: none; }
-        .pr-field-input:focus { border-color: #64748B; }
-        .pr-modal-footer { padding: 16px 24px; border-top: 1px solid #1E293B; display: flex; justify-content: flex-end; gap: 8px; }
+        .pr-field-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .pr-field-input { width: 100%; height: 40px; border: 1.5px solid var(--border); border-radius: 9px; padding: 0 14px; font-size: 13px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; }
+        .pr-field-input:focus { border-color: var(--primary); }
+        .pr-modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
       `}</style>
 
       <div className="pr-header">
@@ -375,7 +368,6 @@ export default function ProjectsPage() {
         ))}
       </div>
 
-      {/* Combined filter row: project filter + search + actions */}
       <div className="filter-row">
         {activeTab === "activities" && (
           <select className="filter-select" value={activityProjectFilter} onChange={e => setActivityProjectFilter(e.target.value)}>
@@ -384,7 +376,7 @@ export default function ProjectsPage() {
           </select>
         )}
         <div className="search-box">
-          <Search size={14} style={{ position: "absolute", left: 12, top: 10, color: "#94A3B8" }} />
+          <Search size={14} style={{ position: "absolute", left: 12, top: 10, color: "var(--text-muted)" }} />
           <input className="search-input" placeholder={`Search ${getEntityLabel().toLowerCase()}...`} value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <div style={{ display: "flex", gap: 10, marginLeft: "auto" }}>
@@ -398,13 +390,13 @@ export default function ProjectsPage() {
       </div>
 
       {flash && (
-        <div style={{ background: flash.startsWith("Error") ? "#1E293B" : "#064E3B", border: flash.startsWith("Error") ? "1px solid #EF4444" : "1px solid #065F46", color: flash.startsWith("Error") ? "#FCA5A5" : "#6EE7B7", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{flash}</div>
+        <div style={{ background: flash.startsWith("Error") ? "var(--card)" : "var(--card)", border: `1px solid ${flash.startsWith("Error") ? "#EF4444" : "#065F46"}`, color: flash.startsWith("Error") ? "#FCA5A5" : "#6EE7B7", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{flash}</div>
       )}
 
       <div className="pr-table">
         <div className="pr-table-header" style={{
           gridTemplateColumns:
-            activeTab === "activities" ? "minmax(150px, 2fr) minmax(150px, 1fr) 60px 60px 60px" :
+            activeTab === "activities" ? "minmax(150px, 2fr) 120px 60px 60px 60px" :
             activeTab === "donors" ? "minmax(150px, 2fr) 80px 60px 60px 60px" :
             activeTab === "projects" ? "minmax(150px, 2fr) 120px 100px 60px 60px 60px" :
             "minmax(150px, 2fr) 100px 60px 60px"
@@ -427,15 +419,15 @@ export default function ProjectsPage() {
           sorted.map((item) => (
             <div key={item.id} className="pr-table-row" style={{
               gridTemplateColumns:
-                activeTab === "activities" ? "minmax(150px, 2fr) minmax(150px, 1fr) 60px 60px 60px" :
+                activeTab === "activities" ? "minmax(150px, 2fr) 120px 60px 60px 60px" :
                 activeTab === "donors" ? "minmax(150px, 2fr) 80px 60px 60px 60px" :
                 activeTab === "projects" ? "minmax(150px, 2fr) 120px 100px 60px 60px 60px" :
                 "minmax(150px, 2fr) 100px 60px 60px"
             }}>
-              <span style={{ fontWeight: 600 }}>{item.name}{item.description ? <span style={{ fontSize: 11, color: "#64748B", marginLeft: 8 }}>({item.description})</span> : ""}</span>
+              <span style={{ fontWeight: 600 }}>{item.name}{item.description ? <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: 8 }}>({item.description})</span> : ""}</span>
               {activeTab === "activities" && <span>{item.project_name}</span>}
-              {activeTab === "projects" && <span style={{ fontSize: 12, color: "#94A3B8" }}>{(item as any).description || "—"}</span>}
-              {activeTab === "projects" && <span style={{ color: "#93C5FD" }}>{item.donor_name || "—"}</span>}
+              {activeTab === "projects" && <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{(item as any).description || "—"}</span>}
+              {activeTab === "projects" && <span style={{ color: "var(--primary)" }}>{item.donor_name || "—"}</span>}
               {activeTab === "donors" && <span style={{ fontFamily: "monospace", fontSize: 12 }}>{(item as any).code || "—"}</span>}
               <span>{item.is_active ? "✅" : "❌"}</span>
               <button className="pr-icon-btn" onClick={() => openEdit(item)}><Edit size={14} /></button>
@@ -482,9 +474,9 @@ export default function ProjectsPage() {
               {activeTab === "activities" && (
                 <div>
                   <label className="pr-field-label">Projects *</label>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 200, overflowY: "auto", border: "1px solid #334155", borderRadius: 8, padding: 10 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 200, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 8, padding: 10 }}>
                     {projects.map(p => (
-                      <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#E2E8F0", cursor: "pointer" }}>
+                      <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text)", cursor: "pointer" }}>
                         <input
                           type="checkbox"
                           checked={formProjectIds.includes(p.id)}
@@ -492,12 +484,12 @@ export default function ProjectsPage() {
                             if (e.target.checked) setFormProjectIds(prev => [...prev, p.id])
                             else setFormProjectIds(prev => prev.filter(id => id !== p.id))
                           }}
-                          style={{ accentColor: "#3B82F6" }}
+                          style={{ accentColor: "var(--primary)" }}
                         />
                         {p.name}
                       </label>
                     ))}
-                    {projects.length === 0 && <span style={{ color: "#94A3B8" }}>No projects available. Add a project first.</span>}
+                    {projects.length === 0 && <span style={{ color: "var(--text-muted)" }}>No projects available. Add a project first.</span>}
                   </div>
                 </div>
               )}
@@ -520,7 +512,7 @@ export default function ProjectsPage() {
       {deleteId && canEdit && (
         <div className="pr-modal-overlay">
           <div className="pr-modal" style={{ maxWidth: 400 }}>
-            <div className="pr-modal-header"><div className="pr-modal-title">⚠️ Delete?</div></div>
+            <div className="pr-modal-header"><div className="pr-modal-title" style={{ color: "var(--text)" }}>⚠️ Delete?</div></div>
             <div className="pr-modal-body" style={{ textAlign: "center" }}><p style={{ color: "#EF4444" }}>This cannot be undone.</p></div>
             <div className="pr-modal-footer" style={{ justifyContent: "center" }}>
               <button className="pr-btn" onClick={() => setDeleteId(null)}>Cancel</button>
@@ -535,7 +527,7 @@ export default function ProjectsPage() {
         <div className="pr-modal-overlay" onClick={() => setShowImportModal(false)}>
           <div className="pr-modal" onClick={e => e.stopPropagation()}>
             <div className="pr-modal-header">
-              <h3>Import {importType}</h3>
+              <h3 style={{ color: "var(--text)" }}>Import {importType}</h3>
               <button className="pr-icon-btn" onClick={() => setShowImportModal(false)}><X size={18} /></button>
             </div>
             <div className="pr-modal-body">
@@ -551,7 +543,7 @@ export default function ProjectsPage() {
               <div>
                 <label className="pr-field-label">Excel File (*.xlsx, *.xls)</label>
                 <input type="file" accept=".xlsx, .xls" onChange={e => setImportFile(e.target.files ? e.target.files[0] : null)} style={{ padding: "8px 0" }} />
-                <p style={{ fontSize: 10, color: "#64748B", marginTop: 4 }}>
+                <p style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 4 }}>
                   {importType === "donor" && "Columns: Name, Code (optional)"}
                   {importType === "project" && "Columns: Name, Description (optional), DonorCode"}
                   {importType === "location" && "Columns: Name"}
