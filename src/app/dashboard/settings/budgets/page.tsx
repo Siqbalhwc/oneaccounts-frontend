@@ -123,7 +123,6 @@ export default function BudgetsPage() {
 
       const junctionIds = junctionRows?.map((j: any) => j.activity_id) || []
 
-      // Also include activities that still have the old project_id (backward compatibility)
       let allActivityIds = [...junctionIds]
       const { data: legacyActivities } = await supabase
         .from("activities")
@@ -143,7 +142,6 @@ export default function BudgetsPage() {
         return
       }
 
-      // Fetch actual activity names
       const { data: activities } = await supabase
         .from("activities")
         .select("id, name")
@@ -262,20 +260,8 @@ export default function BudgetsPage() {
     })
   }, [viewMode, companyId, selectedProjectId, selectedDonorId, filterLocationId, fiscalYear, businessType])
 
-  // ── Determine which accounts to display ──
-  const usedAccountIds = new Set<string>()
-  for (const actId of Object.keys(data)) {
-    for (const locId of Object.keys(data[actId])) {
-      for (const accId of Object.keys(data[actId][locId])) {
-        const cell = data[actId][locId][accId]
-        if (cell.budget > 0 || cell.actual !== 0) usedAccountIds.add(accId)
-      }
-    }
-  }
-
-  const relevantAccounts = editMode || usedAccountIds.size === 0
-    ? accounts
-    : accounts.filter(a => usedAccountIds.has(String(a.id)))
+  // ── ALWAYS show all eligible accounts – no hiding ──
+  const relevantAccounts = accounts
 
   // ── Helpers ──
   const rowTotalBudget = (actId: string, locId: string) => {
@@ -320,7 +306,6 @@ export default function BudgetsPage() {
     return sum
   }
 
-  // ✅ Fixed TypeScript error – always spread an object
   const updateCell = (accountId: string, activityId: string, locationId: string, amount: number) => {
     setData(prev => {
       const updated = { ...prev }
