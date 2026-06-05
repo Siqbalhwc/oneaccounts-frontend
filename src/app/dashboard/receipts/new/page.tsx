@@ -1,13 +1,16 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Search, X, CheckCircle, RefreshCw } from "lucide-react"
 import { useTheme } from "@/contexts/ThemeContext"
 
 export default function NewReceiptPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const editId = searchParams.get("id")   // ✅ for editing
+
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -43,6 +46,7 @@ export default function NewReceiptPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
+  // ── Load company ID and master data ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -85,6 +89,49 @@ export default function NewReceiptPage() {
       .then(r => r.data && setIncomeAccounts(r.data))
   }, [companyId])
 
+  // ── Load existing receipt data when editing ──
+  useEffect(() => {
+    if (!editId || !companyId) return
+    supabase.from("receipts")
+      .select("*, receipt_allocations(invoice_id, amount)")
+      .eq("id", editId)
+      .eq("company_id", companyId)
+      .single()
+      .then(({ data }) => {
+        if (!data) return
+        setReceiptAmount(data.amount)
+        setReceiptDate(data.date)
+        setReference(data.reference || "")
+        setNotes(data.notes || "")
+        setSelectedBankId(data.bank_account_id)
+        setSelectedIncomeAccountId(data.income_account_id)
+        setIsDonation(!!data.income_account_id)
+
+        if (data.party_id) {
+          setCustomerId(data.party_id)
+          // fetch customer details
+          supabase.from("customers")
+            .select("id,code,name,phone,balance,country_code")
+            .eq("id", data.party_id)
+            .single()
+            .then(({ data: cust }) => {
+              if (cust) {
+                setSelectedCustomer(cust)
+                setCustomerSearch(cust.name)
+              }
+            })
+        }
+
+        // Build allocations from saved data
+        const allocs: Record<number, number> = {}
+        data.receipt_allocations?.forEach((a: any) => {
+          allocs[a.invoice_id] = a.amount
+        })
+        setAllocations(allocs)
+      })
+  }, [editId, companyId])
+
+  // ── Fetch invoices when customer is selected ──
   useEffect(() => {
     if (!companyId || !customerId || isDonation) {
       setInvoices([])
@@ -120,24 +167,25 @@ export default function NewReceiptPage() {
         })
       }
 
-      // Use the higher of invoices.paid and the sum of receipt_allocations
       const enriched = invs.map(inv => ({
         ...inv,
         paid: Math.max(inv.paid || 0, paidMap[inv.id] || 0),
       }))
 
-      // Filter out invoices that are already fully paid (safety net)
       const stillDue = enriched.filter(inv => inv.total - inv.paid > 0.001)
 
-      setInvoices(stillDue)
+      // Keep existing allocations if editing (they were already set)
+      if (!editId) {
+        const initAlloc: Record<number, number> = {}
+        stillDue.forEach(inv => { initAlloc[inv.id] = 0 })
+        setAllocations(prev => ({ ...initAlloc, ...prev }))
+      }
 
-      const initAlloc: Record<number, number> = {}
-      stillDue.forEach(inv => { initAlloc[inv.id] = 0 })
-      setAllocations(initAlloc)
+      setInvoices(stillDue)
     }
 
     fetchInvoicesWithPaid()
-  }, [companyId, customerId, isDonation])
+  }, [companyId, customerId, isDonation, editId])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -149,6 +197,7 @@ export default function NewReceiptPage() {
     return () => document.removeEventListener("mousedown", handler)
   }, [])
 
+  // ── Customer selection ──
   const filteredCustomers = customers.filter(c =>
     c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
     c.code.toLowerCase().includes(customerSearch.toLowerCase()) ||
@@ -188,6 +237,7 @@ export default function NewReceiptPage() {
   const totalAmount = Number(receiptAmount || 0)
   const unallocated = totalAmount - totalAllocated
 
+  // ── Save / Update ──
   const handleSubmit = async () => {
     if (!companyId) { setError("Company not loaded"); return }
     if (!selectedBankId) { setError("Please select a bank account"); return }
@@ -203,9 +253,12 @@ export default function NewReceiptPage() {
 
     setLoading(true); setError("")
 
+    const url = editId ? `/api/receipts?id=${editId}` : "/api/receipts"
+    const method = editId ? "PUT" : "POST"
+
     try {
-      const res = await fetch("/api/receipts", {
-        method: "POST",
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           party_id: customerId,
@@ -217,9 +270,11 @@ export default function NewReceiptPage() {
           date: receiptDate,
           reference,
           notes,
-          allocations: Object.entries(allocations).map(([invId, allocAmt]) => ({
-            invoice_id: parseInt(invId), amount: allocAmt
-          })),
+          allocations: Object.entries(allocations)
+            .filter(([_, allocAmt]) => allocAmt > 0)
+            .map(([invId, allocAmt]) => ({
+              invoice_id: parseInt(invId), amount: allocAmt
+            })),
         }),
       })
       const result = await res.json()
@@ -229,21 +284,26 @@ export default function NewReceiptPage() {
         return
       }
 
-      setFlash(`✅ Receipt ${result.receipt_no} saved!`)
-      setCustomerId(null)
-      setSelectedCustomer(null)
-      setCustomerSearch("")
-      setShowCustomerList(false)
-      setSelectedBankId(null)
-      setSelectedIncomeAccountId(null)
-      setIsDonation(false)
-      setInvoices([])
-      setAllocations({})
-      setReceiptAmount("")
-      setNotes("")
-      setReference("")
-      setLoading(false)
-      setTimeout(() => loadCustomers(), 500)
+      setFlash(`✅ Receipt ${editId ? "updated" : "saved"} successfully!`)
+      if (editId) {
+        setTimeout(() => router.push("/dashboard/receipts"), 1500)
+      } else {
+        // Reset form for new receipt
+        setCustomerId(null)
+        setSelectedCustomer(null)
+        setCustomerSearch("")
+        setShowCustomerList(false)
+        setSelectedBankId(null)
+        setSelectedIncomeAccountId(null)
+        setIsDonation(false)
+        setInvoices([])
+        setAllocations({})
+        setReceiptAmount("")
+        setNotes("")
+        setReference("")
+        setLoading(false)
+        setTimeout(() => loadCustomers(), 500)
+      }
       setTimeout(() => setFlash(null), 4000)
     } catch {
       setError("Network error")
@@ -314,8 +374,10 @@ export default function NewReceiptPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
           <button className="inv-btn" onClick={() => router.push("/dashboard/receipts")}><ArrowLeft size={16} /></button>
           <div style={{ flex: 1 }}>
-            <div className="inv-title">📥 New Receipt</div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>Record customer payment or donation</div>
+            <div className="inv-title">{editId ? "✏️ Edit Receipt" : "📥 New Receipt"}</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>
+              {editId ? "Modify receipt details and allocations" : "Record customer payment or donation"}
+            </div>
           </div>
         </div>
 
@@ -491,7 +553,7 @@ export default function NewReceiptPage() {
             </div>
             <div className="inv-card">
               <button className="inv-btn" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading}>
-                {loading ? "Posting..." : "💾 Save Receipt"}
+                {loading ? "Posting..." : editId ? "💾 Update Receipt" : "💾 Save Receipt"}
               </button>
             </div>
           </div>
