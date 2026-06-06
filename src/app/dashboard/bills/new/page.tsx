@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import {
@@ -60,13 +60,21 @@ export default function NewBillPage() {
   const [locations, setLocations] = useState<any[]>([])
   const [activities, setActivities] = useState<any[]>([])
   const [allAccounts, setAllAccounts] = useState<any[]>([])
+
+  // budgetInfo key: `${activityId}_${locationId || 'none'}_${accountId}`
   const [budgetInfo, setBudgetInfo] = useState<Record<string, { budget: number; spent: number; available: number; hasBudget: boolean }>>({})
   const [budgetError, setBudgetError] = useState("")
 
   const [locationActivitiesMap, setLocationActivitiesMap] = useState<Record<number, number[]>>({})
+
+  // activityProjectDonor: keyed by activityId
   const [activityProjectDonor, setActivityProjectDonor] = useState<Record<number, { projectName: string; donorName: string | null }>>({})
 
   const fiscalYear = new Date().getFullYear()
+
+  // ─── Build budget key consistently ───────────────────────────────────────
+  const budgetKey = (actId: number, locId: number | null, accId: number) =>
+    `${actId}_${locId ?? "none"}_${accId}`
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -74,9 +82,7 @@ export default function NewBillPage() {
       setCompanyId(cid)
 
       supabase.from("companies").select("business_type").eq("id", cid).single()
-        .then(r => {
-          if (r.data) setBusinessType(r.data.business_type || "")
-        })
+        .then(r => { if (r.data) setBusinessType(r.data.business_type || "") })
 
       loadSuppliers(cid)
 
@@ -89,7 +95,7 @@ export default function NewBillPage() {
       supabase.from("accounts")
         .select("id,code,name,type")
         .eq("company_id", cid)
-        .in("type", ["Expense","Asset"])
+        .in("type", ["Expense", "Asset"])
         .order("code")
         .then(r => r.data && setAllAccounts(r.data))
 
@@ -230,10 +236,18 @@ export default function NewBillPage() {
           }))
           setItems(loaded)
 
-          // Fetch project/donor for each line that has activity
+          // Fetch project/donor for each line that has activity (shows immediately)
           loaded.forEach(item => {
             if (item.activity_id) {
               fetchProjectDonor(Number(item.activity_id))
+            }
+          })
+
+          // Fetch budget for lines that have all three fields
+          loaded.forEach(item => {
+            if (item.activity_id && item.account_id) {
+              const locId = item.location_id ? Number(item.location_id) : null
+              fetchBudget(Number(item.activity_id), Number(item.account_id), locId)
             }
           })
         }
@@ -348,16 +362,21 @@ export default function NewBillPage() {
     }])
   }
 
-  const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
+  const removeItem = (idx: number) => {
+    const updated = items.filter((_, i) => i !== idx)
+    setItems(updated)
+    checkBudgetOverrun(updated, budgetInfo)
+  }
 
-  // ── Helper to fetch project/donor for a given activity (uses junction table) ──
+  // ── Fetch project/donor for a given activity (shows immediately on activity select) ──
   const fetchProjectDonor = async (actId: number) => {
-    if (activityProjectDonor[actId]) return   // already cached
+    if (activityProjectDonor[actId] !== undefined) return  // already cached
+
     try {
       // 1. Try junction table first
       const { data: junction } = await supabase
         .from("activity_projects")
-        .select("project_id, projects(name, donor_id), projects(donors(name))")
+        .select("project_id, projects(name, donors(name))")
         .eq("activity_id", actId)
         .maybeSingle()
 
@@ -372,10 +391,10 @@ export default function NewBillPage() {
         return
       }
 
-      // 2. Fallback to old project_id column
+      // 2. Fallback to direct project_id column on activities
       const { data: actData } = await supabase
         .from("activities")
-        .select("project_id, projects(name, donor_id), projects(donors(name))")
+        .select("project_id, projects(name, donors(name))")
         .eq("id", actId)
         .single()
 
@@ -387,43 +406,34 @@ export default function NewBillPage() {
           ...prev,
           [actId]: { projectName, donorName },
         }))
+      } else {
+        // Cache empty result so we don't retry on every render
+        setActivityProjectDonor(prev => ({
+          ...prev,
+          [actId]: { projectName: "", donorName: null },
+        }))
       }
-    } catch {}
+    } catch {
+      setActivityProjectDonor(prev => ({
+        ...prev,
+        [actId]: { projectName: "", donorName: null },
+      }))
+    }
   }
 
-  const updateItem = async (idx: number, field: string, value: any) => {
-    const updated = [...items]
-    updated[idx] = { ...updated[idx], [field]: value }
+  // ── Fetch budget scoped to location + activity + account ──
+  // Returns the fetched budget data directly so callers can use it immediately
+  const fetchBudget = useCallback(async (
+    activityId: number,
+    accountId: number,
+    locationId: number | null
+  ): Promise<{ budget: number; spent: number; available: number; hasBudget: boolean } | null> => {
+    const key = budgetKey(activityId, locationId, accountId)
 
-    if (field === "qty" || field === "unit_price") {
-      updated[idx].total = updated[idx].qty * updated[idx].unit_price
-    }
+    // Return cached immediately
+    if (budgetInfo[key]) return budgetInfo[key]
 
-    if (field === "location_id") {
-      // keep existing location filtering logic
-    }
-
-    // ✅ Fetch project/donor immediately when activity is chosen (even without account)
-    if (field === "activity_id" && updated[idx].activity_id) {
-      const actId = Number(updated[idx].activity_id)
-      fetchProjectDonor(actId)
-    }
-
-    // ✅ Fetch budget when activity + account are both present
-    if (updated[idx].activity_id && updated[idx].account_id) {
-      const actId = Number(updated[idx].activity_id)
-      const locId = updated[idx].location_id ? Number(updated[idx].location_id) : null
-      fetchBudget(actId, Number(updated[idx].account_id), locId)
-    }
-
-    setItems(updated)
-    checkBudgetOverrun(updated)
-  }
-
-  const fetchBudget = async (activityId: number, accountId: number, locationId: number | null) => {
-    const key = `${activityId}_${locationId || 'any'}_${accountId}`
-    if (budgetInfo[key]) return
-
+    // ── Budget amount: scoped to location + activity + account ──
     let budgetQuery = supabase.from("budgets")
       .select("budgeted_amount")
       .eq("company_id", companyId)
@@ -432,34 +442,52 @@ export default function NewBillPage() {
       .eq("fiscal_year", fiscalYear)
       .is("month", null)
 
-    if (locationId) budgetQuery = budgetQuery.eq("location_id", locationId)
+    if (locationId) {
+      budgetQuery = budgetQuery.eq("location_id", locationId)
+    } else {
+      budgetQuery = budgetQuery.is("location_id", null)
+    }
 
     const { data: budgetRow } = await budgetQuery.maybeSingle()
 
+    // ── Spent amount: journal lines scoped to same location + activity + account ──
     let spentQuery = supabase.from("journal_lines")
       .select("debit, credit")
       .eq("company_id", companyId)
       .eq("activity_id", activityId)
       .eq("account_id", accountId)
 
-    if (locationId) spentQuery = spentQuery.eq("location_id", locationId)
+    if (locationId) {
+      spentQuery = spentQuery.eq("location_id", locationId)
+    } else {
+      spentQuery = spentQuery.is("location_id", null)
+    }
 
     const { data: spentRows } = await spentQuery
 
-    const spent = (spentRows || []).reduce((sum, line) => sum + (line.debit || 0) - (line.credit || 0), 0)
+    const spent = (spentRows || []).reduce(
+      (sum: number, line: any) => sum + (line.debit || 0) - (line.credit || 0),
+      0
+    )
     const budget = budgetRow?.budgeted_amount || 0
     const available = budget - spent
+    const result = { budget, spent, available, hasBudget: budgetRow !== null }
 
-    setBudgetInfo(prev => ({ ...prev, [key]: { budget, spent, available, hasBudget: budgetRow !== null } }))
-  }
+    setBudgetInfo(prev => ({ ...prev, [key]: result }))
+    return result
+  }, [companyId, budgetInfo, fiscalYear])
 
-  const checkBudgetOverrun = (currentItems: any[]) => {
+  // ── Check if any line exceeds its available budget ──
+  const checkBudgetOverrun = (
+    currentItems: any[],
+    currentBudgetInfo: Record<string, { budget: number; spent: number; available: number; hasBudget: boolean }>
+  ) => {
     let overBudget = false
     for (const item of currentItems) {
       if (!item.product_id && item.activity_id && item.account_id) {
         const locId = item.location_id ? Number(item.location_id) : null
-        const key = `${item.activity_id}_${locId || 'any'}_${item.account_id}`
-        const info = budgetInfo[key]
+        const key = budgetKey(Number(item.activity_id), locId, Number(item.account_id))
+        const info = currentBudgetInfo[key]
         if (info && info.hasBudget && item.total > info.available) {
           overBudget = true
           break
@@ -468,6 +496,55 @@ export default function NewBillPage() {
     }
     setBudgetError(overBudget ? "⚠️ Some lines exceed the available budget" : "")
   }
+
+  // ── Core item update handler ──
+  const updateItem = async (idx: number, field: string, value: any) => {
+    const updated = [...items]
+    updated[idx] = { ...updated[idx], [field]: value }
+
+    if (field === "qty" || field === "unit_price") {
+      updated[idx].total = updated[idx].qty * updated[idx].unit_price
+    }
+
+    // When location changes, clear activity (since filtered list changes) and clear budget
+    if (field === "location_id") {
+      updated[idx].activity_id = ""
+      updated[idx].account_id = null
+    }
+
+    // ✅ FIX 1: Fetch project/donor IMMEDIATELY when activity is chosen (before GL is picked)
+    if (field === "activity_id") {
+      if (updated[idx].activity_id) {
+        fetchProjectDonor(Number(updated[idx].activity_id))
+      }
+      // Clear account when activity changes so budget is re-fetched fresh
+      updated[idx].account_id = null
+    }
+
+    setItems(updated)
+
+    // ✅ FIX 2: Fetch budget when all three (activity + account + location) are present
+    const actId = updated[idx].activity_id ? Number(updated[idx].activity_id) : null
+    const accId = updated[idx].account_id ? Number(updated[idx].account_id) : null
+    const locId = updated[idx].location_id ? Number(updated[idx].location_id) : null
+
+    if (actId && accId) {
+      const freshBudget = await fetchBudget(actId, accId, locId)
+      // Merge fresh result into budgetInfo for overrun check
+      const key = budgetKey(actId, locId, accId)
+      const merged = freshBudget
+        ? { ...budgetInfo, [key]: freshBudget }
+        : budgetInfo
+      checkBudgetOverrun(updated, merged)
+    } else {
+      checkBudgetOverrun(updated, budgetInfo)
+    }
+  }
+
+  // Re-run overrun check whenever budgetInfo updates (covers async loads completing)
+  useEffect(() => {
+    checkBudgetOverrun(items, budgetInfo)
+  }, [budgetInfo])
 
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
 
@@ -511,7 +588,16 @@ export default function NewBillPage() {
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: editId || undefined, party_id: supplierId, invoice_date: billDate, due_date: dueDate, items: payloadItems, reference, notes, po_id: poId || null }),
+        body: JSON.stringify({
+          id: editId || undefined,
+          party_id: supplierId,
+          invoice_date: billDate,
+          due_date: dueDate,
+          items: payloadItems,
+          reference,
+          notes,
+          po_id: poId || null,
+        }),
       })
       const result = await res.json()
       if (!result.success) { setError(result.error || "Failed to save bill"); setSaving(false); return }
@@ -549,7 +635,12 @@ export default function NewBillPage() {
       customerAddress: "",
       customerPhone: "",
       customerEmail: "",
-      items: items.map(i => ({ description: i.description || "", qty: i.qty || 0, unit_price: i.unit_price || 0, total: i.total || 0 })),
+      items: items.map(i => ({
+        description: i.description || "",
+        qty: i.qty || 0,
+        unit_price: i.unit_price || 0,
+        total: i.total || 0,
+      })),
       subtotal: totalAmount,
       total: totalAmount,
       status: "Unpaid",
@@ -571,7 +662,11 @@ export default function NewBillPage() {
   }, [])
 
   if (loading) {
-    return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>Loading bill form…</div>
+    return (
+      <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>
+        Loading bill form…
+      </div>
+    )
   }
 
   const getFilteredActivities = (locationId: string) => {
@@ -580,6 +675,19 @@ export default function NewBillPage() {
     const allowed = locationActivitiesMap[locNum]
     if (!allowed || allowed.length === 0) return activities
     return activities.filter(a => allowed.includes(a.id))
+  }
+
+  // ── Per-line budget status helper ──────────────────────────────────────────
+  const getLineBudgetData = (item: any) => {
+    if (!item.activity_id || !item.account_id) return null
+    const locId = item.location_id ? Number(item.location_id) : null
+    const key = budgetKey(Number(item.activity_id), locId, Number(item.account_id))
+    return budgetInfo[key] ?? null
+  }
+
+  const isLineOverBudget = (item: any, bdata: ReturnType<typeof getLineBudgetData>) => {
+    if (!bdata || !bdata.hasBudget) return false
+    return item.total > bdata.available
   }
 
   return (
@@ -594,6 +702,7 @@ export default function NewBillPage() {
         .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .inv-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; transition: all 0.15s; white-space: nowrap; }
         .inv-btn:hover { background: var(--card-hover); }
+        .inv-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .inv-item-row { display: grid; grid-template-columns: ${isNGO || locations.length > 0 || activities.length > 0 ? "2fr 70px 90px 110px 110px 80px 90px 30px" : "2fr 70px 90px 120px 90px 30px"}; gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
         .inv-item-header { display: grid; grid-template-columns: ${isNGO || locations.length > 0 || activities.length > 0 ? "2fr 70px 90px 110px 110px 80px 90px 30px" : "2fr 70px 90px 120px 90px 30px"}; gap: 6px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); padding-bottom: 6px; }
         .cust-wrap { position: relative; }
@@ -609,8 +718,12 @@ export default function NewBillPage() {
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
         @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
         .budget-warning { background: var(--card); border: 1px solid #EF4444; color: #FCA5A5; padding: 8px 12px; border-radius: 6px; font-size: 12px; display: flex; align-items: center; gap: 6px; }
-        .project-donor-info { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
-        input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .line-info-row { font-size: 10px; color: var(--text-muted); margin-left: 4px; display: flex; gap: 14px; padding: 3px 0 5px 0; flex-wrap: wrap; align-items: center; }
+        .line-info-chip { display: inline-flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 10px; }
+        .over-budget-chip { border-color: #EF4444 !important; color: #FCA5A5 !important; }
+        .ok-budget-chip { border-color: #059669 !important; color: #6EE7B7 !important; }
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
       `}</style>
 
@@ -630,7 +743,9 @@ export default function NewBillPage() {
           <div style={{ background: "var(--card)", border: "1px solid #EF4444", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>
         )}
         {flash && (
-          <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>
+          <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+            <CheckCircle size={16} /> {flash}
+          </div>
         )}
 
         <div className="header-grid">
@@ -641,19 +756,38 @@ export default function NewBillPage() {
               <div className="cust-wrap" ref={supplierRef}>
                 {selectedSupplier ? (
                   <div className="cust-selected-badge" onClick={clearSupplier}>
-                    <span>🚚</span><span style={{ flex: 1 }}>{selectedSupplier.code} — {selectedSupplier.name}</span>
+                    <span>🚚</span>
+                    <span style={{ flex: 1 }}>{selectedSupplier.code} — {selectedSupplier.name}</span>
                     <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Bal: PKR {(selectedSupplier.balance || 0).toLocaleString()}</span>
-                    <button style={{ marginLeft: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); clearSupplier(); }}><X size={14} /></button>
-                    <button style={{ marginLeft: 2, background: "none", border: "none", color: "var(--primary)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); refreshSuppliers(); }} title="Refresh"><RefreshCw size={13} /></button>
+                    <button
+                      style={{ marginLeft: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
+                      onClick={(e) => { e.stopPropagation(); clearSupplier() }}
+                    ><X size={14} /></button>
+                    <button
+                      style={{ marginLeft: 2, background: "none", border: "none", color: "var(--primary)", cursor: "pointer" }}
+                      onClick={(e) => { e.stopPropagation(); refreshSuppliers() }}
+                      title="Refresh"
+                    ><RefreshCw size={13} /></button>
                   </div>
                 ) : (
                   <>
                     <div className="cust-input-row">
                       <Search size={14} style={{ position: "absolute", left: 10, color: "var(--text-muted)" }} />
-                      <input className="inv-input" style={{ paddingLeft: 32, paddingRight: 32 }} placeholder="Search by name, code or phone..." value={supplierSearch}
+                      <input
+                        className="inv-input"
+                        style={{ paddingLeft: 32, paddingRight: 32 }}
+                        placeholder="Search by name, code or phone..."
+                        value={supplierSearch}
                         onChange={e => { setSupplierSearch(e.target.value); setShowSupplierList(true) }}
-                        onFocus={() => setShowSupplierList(true)} onClick={() => setShowSupplierList(true)} autoComplete="off" />
-                      {supplierSearch && <button onClick={() => setSupplierSearch("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}><X size={13} /></button>}
+                        onFocus={() => setShowSupplierList(true)}
+                        onClick={() => setShowSupplierList(true)}
+                        autoComplete="off"
+                      />
+                      {supplierSearch && (
+                        <button onClick={() => setSupplierSearch("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
+                          <X size={13} />
+                        </button>
+                      )}
                     </div>
                     {showSupplierList && (
                       <div className="cust-dropdown">
@@ -662,7 +796,10 @@ export default function NewBillPage() {
                         ) : (
                           filteredSuppliers.map(s => (
                             <div key={s.id} className="cust-option" onMouseDown={() => selectSupplier(s)}>
-                              <div><div className="cust-option-name">{s.name}</div><div className="cust-option-meta">{s.code}{s.phone ? ` · ${s.phone}` : ""}</div></div>
+                              <div>
+                                <div className="cust-option-name">{s.name}</div>
+                                <div className="cust-option-meta">{s.code}{s.phone ? ` · ${s.phone}` : ""}</div>
+                              </div>
                               <div className="cust-option-bal">PKR {(s.balance || 0).toLocaleString()}</div>
                             </div>
                           ))
@@ -684,18 +821,32 @@ export default function NewBillPage() {
                     ))}
                   </select>
                   {poId && poRemaining > 0 && (
-                    <div style={{ fontSize: 12, marginTop: 4, color: "var(--text-muted)" }}>PO balance remaining: PKR <strong>{poRemaining.toLocaleString()}</strong></div>
+                    <div style={{ fontSize: 12, marginTop: 4, color: "var(--text-muted)" }}>
+                      PO balance remaining: PKR <strong>{poRemaining.toLocaleString()}</strong>
+                    </div>
                   )}
                 </div>
               )}
 
               <div className="inv-row" style={{ marginTop: 14 }}>
-                <div><label className="inv-label">Bill Date *</label><input className="inv-input" type="date" value={billDate} onChange={e => setBillDate(e.target.value)} /></div>
-                <div><label className="inv-label">Due Date</label><input className="inv-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} /></div>
+                <div>
+                  <label className="inv-label">Bill Date *</label>
+                  <input className="inv-input" type="date" value={billDate} onChange={e => setBillDate(e.target.value)} />
+                </div>
+                <div>
+                  <label className="inv-label">Due Date</label>
+                  <input className="inv-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+                </div>
               </div>
               <div className="inv-row" style={{ marginTop: 10 }}>
-                <div><label className="inv-label">Reference</label><input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="Supplier Invoice #" /></div>
-                <div><label className="inv-label">Notes</label><input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" /></div>
+                <div>
+                  <label className="inv-label">Reference</label>
+                  <input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="Supplier Invoice #" />
+                </div>
+                <div>
+                  <label className="inv-label">Notes</label>
+                  <input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" />
+                </div>
               </div>
 
               {/* Add Item area */}
@@ -705,9 +856,15 @@ export default function NewBillPage() {
                   <div style={{ display: "flex", gap: 8 }}>
                     <div style={{ position: "relative", flex: 1 }}>
                       <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "var(--text-muted)" }} />
-                      <input className="inv-input" style={{ paddingLeft: 36 }} placeholder="Search product..." value={productSearch}
+                      <input
+                        className="inv-input"
+                        style={{ paddingLeft: 36 }}
+                        placeholder="Search product..."
+                        value={productSearch}
                         onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
-                        onFocus={() => setShowProductList(true)} onBlur={() => setTimeout(() => setShowProductList(false), 200)} />
+                        onFocus={() => setShowProductList(true)}
+                        onBlur={() => setTimeout(() => setShowProductList(false), 200)}
+                      />
                       {showProductList && (
                         <div className="cust-dropdown" style={{ marginTop: 4 }}>
                           {filteredProducts.map((p: any) => (
@@ -743,6 +900,7 @@ export default function NewBillPage() {
             )}
           </div>
 
+          {/* Right column: Summary + Actions */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="inv-card">
               <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px 0" }}>Summary</h3>
@@ -750,13 +908,26 @@ export default function NewBillPage() {
                 <span>Total</span>
                 <span>PKR {totalAmount.toLocaleString()}</span>
               </div>
-              {budgetError && <div className="budget-warning" style={{ marginTop: 8 }}>⚠️ {budgetError}</div>}
+              {budgetError && (
+                <div className="budget-warning" style={{ marginTop: 8 }}>⚠️ {budgetError}</div>
+              )}
             </div>
             <div className="inv-card">
-              <button className="inv-btn" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={saving || budgetError !== ""}>
+              <button
+                className="inv-btn"
+                style={{ justifyContent: "center", padding: 10, width: "100%" }}
+                onClick={handleSubmit}
+                disabled={saving || budgetError !== ""}
+              >
                 {saving ? "Posting..." : editId ? "💾 UPDATE Bill" : "💾 POST Bill"}
               </button>
-              <button className="inv-btn" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleBeforeSavePdf}><Download size={14} /> PDF Preview</button>
+              <button
+                className="inv-btn"
+                style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }}
+                onClick={handleBeforeSavePdf}
+              >
+                <Download size={14} /> PDF Preview
+              </button>
             </div>
           </div>
         </div>
@@ -778,23 +949,44 @@ export default function NewBillPage() {
                 <span style={{ textAlign: "right" }}>Total</span>
                 <span></span>
               </div>
+
               {items.map((item, idx) => {
-                const locationId = item.location_id ? Number(item.location_id) : null
-                const activityId = item.activity_id ? Number(item.activity_id) : null
-                const accountId = item.account_id ? Number(item.account_id) : null
-                const budgetKey = activityId && accountId ? `${activityId}_${locationId || 'any'}_${accountId}` : null
-                const budgetData = budgetKey ? budgetInfo[budgetKey] : null
-                const projDonor = activityId ? activityProjectDonor[activityId] : null
+                const projDonor = item.activity_id ? activityProjectDonor[Number(item.activity_id)] : null
+                const budgetData = getLineBudgetData(item)
+                const overBudget = isLineOverBudget(item, budgetData)
                 const filteredActs = getFilteredActivities(item.location_id)
+
+                // Show info row if: activity selected (project/donor) OR both activity+account selected (budget)
+                const showInfoRow = !item.product_id && (
+                  (projDonor && (projDonor.projectName || projDonor.donorName)) ||
+                  budgetData
+                )
+
                 return (
                   <div key={idx}>
-                    <div className="inv-item-row">
-                      <input className="inv-input" style={{ height: 34, fontSize: 12 }} value={item.description}
-                        onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Description" />
-                      <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty}
-                        onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                      <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price}
-                        onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                    <div className="inv-item-row" style={overBudget ? { background: "rgba(239,68,68,0.04)", borderRadius: 6 } : {}}>
+                      <input
+                        className="inv-input"
+                        style={{ height: 34, fontSize: 12 }}
+                        value={item.description}
+                        onChange={e => updateItem(idx, "description", e.target.value)}
+                        placeholder="Description"
+                      />
+                      <input
+                        className="inv-input"
+                        style={{ height: 34, fontSize: 12, textAlign: "center" }}
+                        type="number"
+                        value={item.qty}
+                        onChange={e => updateItem(idx, "qty", Number(e.target.value))}
+                      />
+                      <input
+                        className="inv-input"
+                        style={{ height: 34, fontSize: 12, textAlign: "right" }}
+                        type="number"
+                        value={item.unit_price}
+                        onChange={e => updateItem(idx, "unit_price", Number(e.target.value))}
+                      />
+
                       {item.product_id ? (
                         <>
                           {(isNGO || locations.length > 0) && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>—</span>}
@@ -804,46 +996,78 @@ export default function NewBillPage() {
                       ) : (
                         <>
                           {(isNGO || locations.length > 0) && (
-                            <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.location_id}
-                              onChange={e => updateItem(idx, "location_id", e.target.value)}>
+                            <select
+                              className="inv-select"
+                              style={{ height: 34, fontSize: 11 }}
+                              value={item.location_id}
+                              onChange={e => updateItem(idx, "location_id", e.target.value)}
+                            >
                               <option value="">—</option>
                               {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                             </select>
                           )}
                           {(isNGO || activities.length > 0) && (
-                            <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.activity_id}
-                              onChange={e => updateItem(idx, "activity_id", e.target.value)}>
+                            <select
+                              className="inv-select"
+                              style={{ height: 34, fontSize: 11 }}
+                              value={item.activity_id}
+                              onChange={e => updateItem(idx, "activity_id", e.target.value)}
+                            >
                               <option value="">—</option>
                               {filteredActs.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                             </select>
                           )}
-                          <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.account_id ?? ""}
-                            onChange={e => updateItem(idx, "account_id", e.target.value ? Number(e.target.value) : null)}>
+                          <select
+                            className="inv-select"
+                            style={{ height: 34, fontSize: 11, borderColor: overBudget ? "#EF4444" : undefined }}
+                            value={item.account_id ?? ""}
+                            onChange={e => updateItem(idx, "account_id", e.target.value ? Number(e.target.value) : null)}
+                          >
                             <option value="">—</option>
                             {allAccounts.map(a => <option key={a.id} value={a.id}>{a.code}</option>)}
                           </select>
                         </>
                       )}
-                      <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>PKR {item.total.toLocaleString()}</span>
-                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
+
+                      <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13, whiteSpace: "nowrap", color: overBudget ? "#FCA5A5" : undefined }}>
+                        PKR {item.total.toLocaleString()}
+                      </span>
+                      <button
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }}
+                        onClick={() => removeItem(idx)}
+                      ><Trash2 size={12} /></button>
                     </div>
-                    {/* Combined info row */}
-{(projDonor || budgetData) && (
-  <div style={{ fontSize: 10, color: "var(--text-muted)", marginLeft: 8, display: "flex", gap: 16, padding: "2px 0", flexWrap: "wrap" }}>
-    {projDonor && (
-      <span>Project: {projDonor.projectName}{projDonor.donorName ? ` · Donor: ${projDonor.donorName}` : ""}</span>
-    )}
-    {budgetData && (
-      <>
-        <span>Budget: PKR {budgetData.budget.toLocaleString()}</span>
-        <span>Spent: PKR {budgetData.spent.toLocaleString()}</span>
-        <span style={{ color: budgetData.available < (item.total || 0) ? "#EF4444" : "#10B981" }}>
-          Available: PKR {budgetData.available.toLocaleString()}
-        </span>
-      </>
-    )}
-  </div>
-)}
+
+                    {/* ✅ FIX 1: Info row — project/donor shown immediately on activity select;
+                         budget shown once GL account is also picked */}
+                    {showInfoRow && (
+                      <div className="line-info-row">
+                        {/* Project / Donor — shows as soon as activity is chosen */}
+                        {projDonor && projDonor.projectName && (
+                          <span className="line-info-chip">
+                            📁 {projDonor.projectName}
+                            {projDonor.donorName && (
+                              <span style={{ color: "var(--primary)", marginLeft: 4 }}>· 🤝 {projDonor.donorName}</span>
+                            )}
+                          </span>
+                        )}
+
+                        {/* Budget info — shows once activity + account are both selected */}
+                        {budgetData && (
+                          <>
+                            <span className="line-info-chip">
+                              Budget: PKR {budgetData.budget.toLocaleString()}
+                            </span>
+                            <span className="line-info-chip">
+                              Spent: PKR {budgetData.spent.toLocaleString()}
+                            </span>
+                            <span className={`line-info-chip ${overBudget ? "over-budget-chip" : "ok-budget-chip"}`}>
+                              {overBudget ? "⚠️ Over by PKR " + (item.total - budgetData.available).toLocaleString() : "✓ Available: PKR " + budgetData.available.toLocaleString()}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )
               })}
