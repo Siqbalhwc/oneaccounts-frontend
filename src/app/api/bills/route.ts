@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { logDataChange } from '@/lib/audit'
 
-// Helper: get the Accounts Payable account (or create it)
+// Helper: get the Accounts Payable account (or create it) – unchanged
 async function getPayableAccount(supabase: any, companyId: string) {
   let { data: acc } = await supabase.from('accounts')
     .select('id,balance').eq('code','2000').eq('company_id', companyId).maybeSingle()
@@ -17,12 +17,16 @@ async function getPayableAccount(supabase: any, companyId: string) {
   return created
 }
 
+// ✅ Correct default expense account lookup – NO AUTO‑CREATE
 async function getDefaultExpenseAccount(supabase: any, companyId: string, type: string) {
   if (type === 'trading') {
     const { data: inv } = await supabase.from('accounts')
       .select('id').eq('code','1200').eq('company_id', companyId).maybeSingle()
     if (inv) return inv.id
+    // fallback: if Inventory not found, we could use General Expenses? No, better to error.
+    return null
   }
+  // NGO / Service
   const { data: exp } = await supabase.from('accounts')
     .select('id').eq('code','5000').eq('company_id', companyId).maybeSingle()
   if (exp) return exp.id
@@ -75,15 +79,28 @@ async function createBillJournalEntry(
     if (amount <= 0) continue
 
     let accountId = item.account_id || null
+
+    // product items without explicit account → use default based on company type
     if (!accountId && item.product_id) {
-      const invAcc = await supabase.from('accounts')
-        .select('id').eq('code','1200').eq('company_id', companyId).maybeSingle()
-      accountId = invAcc?.id || null
+      accountId = await getDefaultExpenseAccount(supabase, companyId, businessType)
+      if (!accountId) {
+        throw new Error(
+          `No default expense account found for product item "${item.description}". ` +
+          `Please create account code ${businessType === 'trading' ? '1200 (Inventory)' : '5000 (General Expenses)'}.`
+        )
+      }
     }
+
+    // manual items without account → use general expenses (code 5000)
     if (!accountId) {
       accountId = await getDefaultExpenseAccount(supabase, companyId, businessType)
+      if (!accountId) {
+        throw new Error(
+          `No default expense account found for item "${item.description}". ` +
+          `Please create account code ${businessType === 'trading' ? '1200 (Inventory)' : '5000 (General Expenses)'}.`
+        )
+      }
     }
-    if (!accountId) continue
 
     totalDebit += amount
 
@@ -97,7 +114,7 @@ async function createBillJournalEntry(
       donor_id: null,
     }
 
-    // NGO‑only logic: fetch project_id from activity, donor from budgets
+    // NGO‑only: fetch project_id from activity, donor from budgets
     if (isNGO && item.activity_id) {
       const { data: actData } = await supabase.from('activities')
         .select('project_id')
@@ -118,7 +135,10 @@ async function createBillJournalEntry(
     debitLines.push(line)
   }
 
-  if (debitLines.length === 0) return null
+  // ✅ Now we must have at least one debit line – if not, error
+  if (debitLines.length === 0) {
+    throw new Error('No valid journal lines could be created from the bill items.')
+  }
 
   const payableAccount = await getPayableAccount(supabase, companyId)
   debitLines.push({
@@ -306,7 +326,7 @@ export async function POST(request: NextRequest) {
 
   if (!bill) return NextResponse.json({ error: 'Could not generate unique bill number' }, { status: 500 })
 
-  // Insert items (INCLUDES product_id, account_id, location_id, activity_id)
+  // Insert items
   const itemRowsForDb = items.map((item: any) => {
     const qty = Number(item.qty || 0)
     const unit_price = Number(item.unit_price || 0)
@@ -334,7 +354,6 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // ── INSERT STOCK MOVES (inflow) ──
   await recordStockMoves(supabase, companyId, items, 'purchase', bill.id, 'in')
 
   const { data: updatedBill, error: updateError } = await supabase
@@ -352,6 +371,7 @@ export async function POST(request: NextRequest) {
   try {
     await createBillJournalEntry(supabase, updatedBill, items, companyId, businessType)
   } catch (e: any) {
+    // ❗ Rollback everything if journal entry fails
     await supabase.from('invoice_items').delete().eq('invoice_id', bill.id)
     await supabase.from('invoices').delete().eq('id', bill.id)
     return NextResponse.json({ error: 'Journal entry failed: ' + e.message }, { status: 500 })
@@ -403,7 +423,6 @@ export async function PUT(request: NextRequest) {
     .select('business_type').eq('id', companyId).single()
   const businessType = company?.business_type || ''
 
-  // ── Budget validation (same as POST) ─────────────────────────────
   if (businessType === 'ngo') {
     const today = new Date()
     const fiscalYear = today.getFullYear()
@@ -479,7 +498,6 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  // Delete old items and insert new (INCLUDES product_id, account_id, location_id, activity_id)
   await supabase.from('invoice_items').delete().eq('invoice_id', id)
 
   let total = 0
@@ -506,7 +524,6 @@ export async function PUT(request: NextRequest) {
     await supabase.from('invoice_items').insert(itemRows)
   }
 
-  // ── INSERT STOCK MOVES (inflow, new items) ──
   await recordStockMoves(supabase, companyId, items, 'purchase', id, 'in')
 
   const { data: updatedBill, error: updateError } = await supabase
@@ -600,7 +617,6 @@ export async function DELETE(request: NextRequest) {
   const { data: oldBill } = await supabase.from('invoices')
     .select('*').eq('id', id).eq('company_id', companyId).single()
 
-  // Reverse supplier balance
   if (oldBill?.party_id) {
     const { data: supp } = await supabase.from('suppliers')
       .select('balance').eq('id', oldBill.party_id).eq('company_id', companyId).single()
