@@ -3,12 +3,12 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, FileText, Check, X } from "lucide-react"
+import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, FileText, Check, X, Eye, EyeOff } from "lucide-react"
 import { useCompany } from "@/contexts/CompanyContext"
 import { useTheme } from "@/contexts/ThemeContext"
 import { generateProjectPDF } from "@/lib/pdf/projectPDF"
 
-type SortField = "name" | "status" | "approved" | "budget" | "donor"
+type SortField = "name" | "status" | "approved" | "budget" | "actual" | "balance" | "donor"
 type SortDir = "asc" | "desc"
 
 function fmt(n: number) {
@@ -27,6 +27,7 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showInactive, setShowInactive] = useState(false)
+  const [showFinancials, setShowFinancials] = useState(true)   // toggle for budget/actual/balance columns
 
   const [sortField, setSortField] = useState<SortField>("name")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
@@ -35,17 +36,44 @@ export default function ProjectsPage() {
     fetchProjects()
   }, [showInactive])
 
-  // ── Optimized fetch – single API call returns all projects with totalBudget ──
   const fetchProjects = async () => {
     setLoading(true)
     try {
+      // 1. Get all projects with budget from the API
       const res = await fetch("/api/projects")
       const data = await res.json()
-      if (Array.isArray(data)) {
-        // Apply inactive filter locally
-        const filtered = showInactive ? data : data.filter((p: any) => !p.deleted_at)
-        setProjects(filtered)
+      if (!Array.isArray(data)) { setLoading(false); return }
+
+      // 2. Get company ID from auth
+      const { data: { user } } = await supabase.auth.getUser()
+      const companyId = (user?.app_metadata as any)?.company_id
+
+      // 3. Fetch actual spending per project from journal_lines
+      let actualsMap: Record<number, number> = {}
+      if (companyId) {
+        const { data: actualRows, error } = await supabase
+          .from("journal_lines")
+          .select("project_id, debit, credit")
+          .eq("company_id", companyId)
+          .not("project_id", "is", null)
+
+        if (!error && actualRows) {
+          for (const row of actualRows) {
+            const pid = row.project_id
+            const net = (row.debit || 0) - (row.credit || 0)
+            actualsMap[pid] = (actualsMap[pid] || 0) + net
+          }
+        }
       }
+
+      // 4. Merge actuals and apply inactive filter
+      const enriched = data.map((p: any) => ({
+        ...p,
+        actualSpent: actualsMap[p.id] || 0,
+      }))
+
+      const filtered = showInactive ? enriched : enriched.filter((p: any) => !p.deleted_at)
+      setProjects(filtered)
     } catch (e) {
       console.error(e)
     }
@@ -107,6 +135,14 @@ export default function ProjectsPage() {
         valA = a.totalBudget || 0
         valB = b.totalBudget || 0
         break
+      case "actual":
+        valA = a.actualSpent || 0
+        valB = b.actualSpent || 0
+        break
+      case "balance":
+        valA = (a.totalBudget || 0) - (a.actualSpent || 0)
+        valB = (b.totalBudget || 0) - (b.actualSpent || 0)
+        break
       case "approved":
         valA = a.is_approved ? 1 : 0
         valB = b.is_approved ? 1 : 0
@@ -133,6 +169,11 @@ export default function ProjectsPage() {
   const rowDark  = isLightStyle ? "#F8F9FC" : "#111827"
   const headerBg = isLightStyle ? "#07085B" : "#000000"
 
+  // Determine grid columns based on showFinancials toggle
+  const gridCols = showFinancials
+    ? "minmax(200px, 2fr) minmax(100px, 1fr) minmax(80px, 100px) minmax(70px, 90px) 140px 110px 100px 80px 60px"
+    : "minmax(200px, 2fr) minmax(100px, 1fr) minmax(80px, 100px) minmax(70px, 90px) 80px 60px"
+
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
@@ -142,7 +183,7 @@ export default function ProjectsPage() {
         .btn { padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-family: inherit; }
         .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
         .btn-outline:hover { background: var(--card-hover); }
-        .filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+        .filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
         .table-wrap {
           background: var(--card);
           border: 1px solid var(--border);
@@ -151,16 +192,17 @@ export default function ProjectsPage() {
         }
         .table-header {
           display: grid;
-          grid-template-columns: minmax(200px, 2fr) minmax(100px, 1fr) minmax(80px, 100px) minmax(70px, 90px) 180px 80px 60px;
+          grid-template-columns: ${gridCols};
           padding: 14px 24px;
           color: white;
           font-size: 10px;
           font-weight: 700;
           text-transform: uppercase;
+          background: ${headerBg};
         }
         .table-row {
           display: grid;
-          grid-template-columns: minmax(200px, 2fr) minmax(100px, 1fr) minmax(80px, 100px) minmax(70px, 90px) 180px 80px 60px;
+          grid-template-columns: ${gridCols};
           padding: 12px 24px;
           font-size: 13px;
           align-items: center;
@@ -187,7 +229,9 @@ export default function ProjectsPage() {
         @media (max-width: 900px) {
           .table-wrap { overflow-x: auto; }
           .table-header, .table-row {
-            grid-template-columns: 160px 90px 80px 70px 140px 60px 50px;
+            grid-template-columns: ${showFinancials
+              ? "160px 90px 80px 70px 110px 90px 80px 60px 50px"
+              : "160px 90px 80px 70px 60px 50px"};
             padding: 10px 12px;
             font-size: 11px;
           }
@@ -200,7 +244,7 @@ export default function ProjectsPage() {
         </button>
         <div style={{ flex: 1 }}>
           <h1 className="page-title">📁 Projects</h1>
-          <p className="page-subtitle">All projects with budget, donor, and approval status</p>
+          <p className="page-subtitle">All projects with budget, actual spending, and balance</p>
         </div>
       </div>
 
@@ -209,6 +253,15 @@ export default function ProjectsPage() {
           <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} />
           Show inactive projects
         </label>
+
+        <button
+          className="btn btn-outline"
+          onClick={() => setShowFinancials(!showFinancials)}
+          style={{ marginLeft: "auto" }}
+        >
+          {showFinancials ? <EyeOff size={14} /> : <Eye size={14} />}
+          {showFinancials ? "Hide Budget Details" : "Show Budget Details"}
+        </button>
       </div>
 
       {loading ? (
@@ -224,39 +277,59 @@ export default function ProjectsPage() {
             <button className="sort-btn" onClick={() => handleSort("donor")}>Donor {getSortIcon("donor")}</button>
             <button className="sort-btn" onClick={() => handleSort("status")}>Status {getSortIcon("status")}</button>
             <button className="sort-btn" onClick={() => handleSort("approved")}>Approved {getSortIcon("approved")}</button>
-            <button className="sort-btn" onClick={() => handleSort("budget")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Budget {getSortIcon("budget")}</button>
+            {showFinancials && (
+              <>
+                <button className="sort-btn" onClick={() => handleSort("budget")} style={{ justifyContent: "flex-end" }}>Budget {getSortIcon("budget")}</button>
+                <button className="sort-btn" onClick={() => handleSort("actual")} style={{ justifyContent: "flex-end" }}>Actual {getSortIcon("actual")}</button>
+                <button className="sort-btn" onClick={() => handleSort("balance")} style={{ justifyContent: "flex-end" }}>Balance {getSortIcon("balance")}</button>
+              </>
+            )}
             <span style={{ textAlign: "center" }}>PDF</span>
             <span></span>
           </div>
-          {sorted.map((p, i) => (
-            <div
-              key={p.id}
-              className="table-row"
-              style={{ background: i % 2 === 0 ? rowLight : rowDark }}
-            >
-              <span style={{ fontWeight: 600, color: "var(--text)" }}>{p.name}</span>
-              <span style={{ fontSize: 13, color: "var(--text)" }}>{p.donors?.name || "—"}</span>
-              <span>
-                <span className={`status-badge ${p.deleted_at ? "status-inactive" : "status-active"}`}>
-                  {p.deleted_at ? "Inactive" : "Active"}
+          {sorted.map((p, i) => {
+            const balance = (p.totalBudget || 0) - (p.actualSpent || 0)
+            return (
+              <div
+                key={p.id}
+                className="table-row"
+                style={{ background: i % 2 === 0 ? rowLight : rowDark }}
+              >
+                <span style={{ fontWeight: 600, color: "var(--text)" }}>{p.name}</span>
+                <span style={{ fontSize: 13, color: "var(--text)" }}>{p.donors?.name || "—"}</span>
+                <span>
+                  <span className={`status-badge ${p.deleted_at ? "status-inactive" : "status-active"}`}>
+                    {p.deleted_at ? "Inactive" : "Active"}
+                  </span>
                 </span>
-              </span>
-              <span style={{ textAlign: "center", cursor: "pointer" }} onClick={() => toggleApproval(p)}>
-                {p.is_approved ? (
-                  <Check size={18} className="approved-icon" />
-                ) : (
-                  <X size={18} className="not-approved-icon" />
+                <span style={{ textAlign: "center", cursor: "pointer" }} onClick={() => toggleApproval(p)}>
+                  {p.is_approved ? (
+                    <Check size={18} className="approved-icon" />
+                  ) : (
+                    <X size={18} className="not-approved-icon" />
+                  )}
+                </span>
+                {showFinancials && (
+                  <>
+                    <span style={{ textAlign: "right", fontWeight: 500, whiteSpace: "nowrap" }}>{fmt(p.totalBudget || 0)}</span>
+                    <span style={{ textAlign: "right", whiteSpace: "nowrap" }}>{fmt(p.actualSpent || 0)}</span>
+                    <span style={{
+                      textAlign: "right",
+                      whiteSpace: "nowrap",
+                      fontWeight: 600,
+                      color: balance < 0 ? "#EF4444" : "#10B981"
+                    }}>{fmt(balance)}</span>
+                  </>
                 )}
-              </span>
-              <span style={{ textAlign: "right", fontWeight: 500, whiteSpace: "nowrap" }}>{fmt(p.totalBudget || 0)}</span>
-              <span style={{ textAlign: "center" }}>
-                <button className="btn btn-outline" style={{ padding: "4px 8px" }} onClick={() => handleGeneratePDF(p)}>
-                  <FileText size={12} /> PDF
-                </button>
-              </span>
-              <span></span>
-            </div>
-          ))}
+                <span style={{ textAlign: "center" }}>
+                  <button className="btn btn-outline" style={{ padding: "4px 8px" }} onClick={() => handleGeneratePDF(p)}>
+                    <FileText size={12} /> PDF
+                  </button>
+                </span>
+                <span></span>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
