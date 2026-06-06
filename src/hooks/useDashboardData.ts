@@ -24,7 +24,10 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
   const [
     budgetsRes,
     spentRes,
-    donorRes,
+    // donorRes is no longer needed – we'll compute donors manually
+    donorBudgetsRes,
+    donorActualsRes,
+    donorProjectsRes,
     projRes,
     custBalsRes,
     suppBalsRes,
@@ -34,7 +37,27 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
   ] = await Promise.all([
     supabase.from("budgets").select("budgeted_amount").eq("company_id", companyId).eq("fiscal_year", fiscalYear).is("month", null).not("activity_id", "is", null),
     supabase.rpc("total_spent", { cid: companyId, fy: fiscalYear }),
-    supabase.rpc("dashboard_donor_balances", { cid: companyId, fy: fiscalYear }),
+
+    // Fetch budgets grouped by donor
+    supabase
+      .from("budgets")
+      .select("donor_id, budgeted_amount")
+      .eq("company_id", companyId)
+      .eq("fiscal_year", fiscalYear)
+      .is("month", null)
+      .not("donor_id", "is", null),
+
+    // Fetch actual spending grouped by donor (using journal_lines with donor_id)
+    supabase.rpc("donor_actual_spending", { cid: companyId, fy: fiscalYear }),
+
+    // Fetch projects linked to donors (only those with start_date)
+    supabase
+      .from("projects")
+      .select("id, name, donor_id, start_date, end_date")
+      .eq("company_id", companyId)
+      .not("donor_id", "is", null)
+      .not("start_date", "is", null),
+
     supabase.rpc("dashboard_project_utilization", { p_company_id: companyId, p_fiscal_year: fiscalYear }),
     supabase.from("customers").select("balance").eq("company_id", companyId),
     supabase.from("suppliers").select("balance").eq("company_id", companyId),
@@ -46,22 +69,81 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
   const totalBudget = budgetsRes.data?.reduce((s: number, b: any) => s + (b.budgeted_amount || 0), 0) || 0
   const totalSpent = spentRes.data?.[0]?.total || 0
 
-  const donorBalances = donorRes.data?.map((d: any) => {
-    const percentSpent = d.budget ? (d.actual_spent / d.budget) * 100 : 0
-    const monthsPassed = now.getMonth() + 1
-    const monthsTotal = 12
+  // ── Build donor balances using real project start dates ────────────────
+  const budgetByDonor: Record<string, number> = {}
+  donorBudgetsRes.data?.forEach((b: any) => {
+    const key = String(b.donor_id)
+    budgetByDonor[key] = (budgetByDonor[key] || 0) + (b.budgeted_amount || 0)
+  })
+
+  const actualByDonor: Record<string, number> = {}
+  donorActualsRes.data?.forEach((a: any) => {
+    const key = String(a.donor_id)
+    actualByDonor[key] = (actualByDonor[key] || 0) + (a.amount || 0)
+  })
+
+  // Map donor_id → earliest project start date and latest end date
+  const donorDates: Record<string, { start: string; end: string | null }> = {}
+  donorProjectsRes.data?.forEach((p: any) => {
+    const key = String(p.donor_id)
+    if (!donorDates[key]) {
+      donorDates[key] = { start: p.start_date, end: p.end_date }
+    } else {
+      if (p.start_date < donorDates[key].start) donorDates[key].start = p.start_date
+      if (p.end_date && (!donorDates[key].end || p.end_date > donorDates[key].end)) donorDates[key].end = p.end_date
+    }
+  })
+
+  // Fetch donor names (we already have a list, but we can get them from budget rows or from a separate query)
+  // Since we need donor name, we can fetch all donors for the company.
+  const { data: allDonors } = await supabase
+    .from("donors")
+    .select("id, name")
+    .eq("company_id", companyId)
+
+  const donorNameMap: Record<string, string> = {}
+  allDonors?.forEach((d: any) => { donorNameMap[String(d.id)] = d.name })
+
+  const donorBalances = Object.keys(budgetByDonor).map((donorId) => {
+    const budget = budgetByDonor[donorId] || 0
+    const actual = actualByDonor[donorId] || 0
+    const percentSpent = budget ? (actual / budget) * 100 : 0
+
+    // Determine start date (earliest project start for this donor)
+    const dates = donorDates[donorId]
+    let monthsPassed = currentMonth   // fallback to calendar month if no dates
+    let monthsTotal = 12               // fallback to 12 months if no end date
+
+    if (dates) {
+      const start = new Date(dates.start)
+      const end = dates.end ? new Date(dates.end) : new Date(fiscalYear, 11, 31) // default to end of fiscal year
+      // Total months from start to end (inclusive)
+      const diffTotal = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1
+      if (diffTotal > 0) monthsTotal = diffTotal
+      // Months passed from start to now (cap at monthsTotal)
+      const today = new Date()
+      const diffPassed = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth()) + 1
+      monthsPassed = Math.max(0, Math.min(diffPassed, monthsTotal))
+    }
+
     const timePercent = (monthsPassed / monthsTotal) * 100
     const health = percentSpent > timePercent * 0.8 ? "on track" : percentSpent < timePercent * 0.4 ? "slow" : "ok"
+
     return {
-      donor_id: d.donor_id, name: d.donor_name,
-      budget: d.budget, actual: d.actual_spent,
-      remaining: (d.budget || 0) - (d.actual_spent || 0),
+      donor_id: donorId,
+      name: donorNameMap[donorId] || "Unknown",
+      budget,
+      actual,
+      remaining: budget - actual,
       pct: Math.round(percentSpent),
-      overspent: (d.actual_spent || 0) > (d.budget || 0),
-      monthsPassed, monthsTotal, health,
+      overspent: actual > budget,
+      monthsPassed,
+      monthsTotal,
+      health,
     }
   }) || []
 
+  // ── Rest of the code stays exactly the same ──
   const projectsArr = projRes.data?.map((p: any) => ({
     id: p.project_id, name: p.project_name,
     budget: p.budget || 0, actual: p.actual || 0,
