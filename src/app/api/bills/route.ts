@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { logDataChange } from '@/lib/audit'
 
-// Helper: get the Accounts Payable account (or create it) – unchanged
+// Helper: get the Accounts Payable account (or create it)
 async function getPayableAccount(supabase: any, companyId: string) {
   let { data: acc } = await supabase.from('accounts')
     .select('id,balance').eq('code','2000').eq('company_id', companyId).maybeSingle()
@@ -17,7 +17,6 @@ async function getPayableAccount(supabase: any, companyId: string) {
   return created
 }
 
-// Default expense account – NO AUTO‑CREATE
 async function getDefaultExpenseAccount(supabase: any, companyId: string, type: string) {
   if (type === 'trading') {
     const { data: inv } = await supabase.from('accounts')
@@ -25,7 +24,6 @@ async function getDefaultExpenseAccount(supabase: any, companyId: string, type: 
     if (inv) return inv.id
     return null
   }
-  // NGO / Service
   const { data: exp } = await supabase.from('accounts')
     .select('id').eq('code','5000').eq('company_id', companyId).maybeSingle()
   if (exp) return exp.id
@@ -461,11 +459,13 @@ export async function PUT(request: NextRequest) {
     .select('*').eq('id', id).eq('company_id', companyId).single()
   if (!oldBill) return NextResponse.json({ error: 'Bill not found' }, { status: 404 })
 
-  // Reverse old journal entry
+  // Reverse old journal entry – ONLY the one for this specific bill
+  const oldDescription = `Purchase Bill ${oldBill.invoice_no}`
   const { data: oldEntries } = await supabase.from('journal_entries')
     .select('id')
     .eq('company_id', companyId)
-    .ilike('description', `%Purchase Bill%`)
+    .eq('description', oldDescription)
+
   if (oldEntries) {
     for (const e of oldEntries) {
       const { data: lines } = await supabase.from('journal_lines').select('account_id, debit, credit').eq('entry_id', e.id)
@@ -590,9 +590,21 @@ export async function DELETE(request: NextRequest) {
 
   const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
 
-  // Reverse JE
+  // Fetch the bill first to get its invoice_no
+  const { data: oldBill } = await supabase.from('invoices')
+    .select('*').eq('id', id).eq('company_id', companyId).single()
+
+  if (!oldBill) {
+    return NextResponse.json({ error: 'Bill not found' }, { status: 404 })
+  }
+
+  // Reverse JE – only the one for this specific bill
+  const oldDescription = `Purchase Bill ${oldBill.invoice_no}`
   const { data: entries } = await supabase.from('journal_entries')
-    .select('id').eq('company_id', companyId).ilike('description', `%Purchase Bill%`)
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('description', oldDescription)
+
   if (entries) {
     for (const e of entries) {
       const { data: lines } = await supabase.from('journal_lines').select('account_id, debit, credit').eq('entry_id', e.id)
@@ -610,10 +622,8 @@ export async function DELETE(request: NextRequest) {
     }
   }
 
-  const { data: oldBill } = await supabase.from('invoices')
-    .select('*').eq('id', id).eq('company_id', companyId).single()
-
-  if (oldBill?.party_id) {
+  // Reverse supplier balance
+  if (oldBill.party_id) {
     const { data: supp } = await supabase.from('suppliers')
       .select('balance').eq('id', oldBill.party_id).eq('company_id', companyId).single()
     if (supp) {
