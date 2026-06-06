@@ -156,7 +156,7 @@ export default function ReceiptsPage() {
         .rec-table { width: 100%; }
         .header-row {
           display: grid;
-          grid-template-columns: minmax(120px, 1fr) minmax(90px, 1fr) minmax(120px, 1.5fr) minmax(90px, 1fr) minmax(90px, 1fr) 200px 40px 40px 40px;
+          grid-template-columns: minmax(120px, 1fr) minmax(90px, 1fr) minmax(120px, 1.5fr) minmax(90px, 1fr) minmax(90px, 1fr) 160px 50px 50px 50px;
           column-gap: 10px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
@@ -165,7 +165,7 @@ export default function ReceiptsPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: minmax(120px, 1fr) minmax(90px, 1fr) minmax(120px, 1.5fr) minmax(90px, 1fr) minmax(90px, 1fr) 200px 40px 40px 40px;
+          grid-template-columns: minmax(120px, 1fr) minmax(90px, 1fr) minmax(120px, 1.5fr) minmax(90px, 1fr) minmax(90px, 1fr) 160px 50px 50px 50px;
           column-gap: 10px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
@@ -182,7 +182,7 @@ export default function ReceiptsPage() {
         .btn:hover { background: var(--card-hover); }
         .btn-icon {
           background: transparent; border: 1.5px solid var(--border); color: var(--text-muted);
-          padding: 6px; border-radius: 8px; cursor: pointer;
+          padding: 8px; border-radius: 8px; cursor: pointer;
           display: inline-flex; align-items: center; justify-content: center;
         }
         .btn-icon:hover { background: var(--card-hover); }
@@ -213,7 +213,7 @@ export default function ReceiptsPage() {
         @media (max-width: 900px) {
           .rec-table { overflow-x: auto; }
           .header-row, .data-row {
-            grid-template-columns: 100px 80px 110px 80px 80px 150px 35px 35px 35px;
+            grid-template-columns: 100px 80px 110px 80px 80px 120px 45px 45px 45px;
             column-gap: 6px;
             padding: 10px 12px;
           }
@@ -293,16 +293,16 @@ export default function ReceiptsPage() {
                   <span>Edited: {rec.updated_by || "—"}</span>
                 </div>
                 <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/${rec.id}`)} title="View receipt">
-                  <Eye size={14} />
+                  <Eye size={16} />
                 </button>
                 {canEdit && (
                   <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/new?id=${rec.id}`)} title="Edit receipt">
-                    <Edit size={14} />
+                    <Edit size={16} />
                   </button>
                 )}
                 {canEdit && (
                   <button className="btn-icon" onClick={() => handleDelete(rec.id)} style={{ color: "#EF4444" }} title="Delete receipt">
-                    <Trash2 size={14} />
+                    <Trash2 size={16} />
                   </button>
                 )}
                 {hasFeature("whatsapp_invoice") && (
