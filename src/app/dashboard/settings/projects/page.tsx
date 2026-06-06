@@ -59,7 +59,7 @@ export default function ProjectsPage() {
   const [formDesc, setFormDesc] = useState("")
   const [formCode, setFormCode] = useState("")
   const [formActive, setFormActive] = useState(true)
-  const [formProjectIds, setFormProjectIds] = useState<number[]>([])
+  const [formProjectId, setFormProjectId] = useState<number | null>(null)   // single project
   const [formDonorId, setFormDonorId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [companyId, setCompanyId] = useState<string>("")
@@ -108,52 +108,32 @@ export default function ProjectsPage() {
     } else if (activeTab === "donors") {
       const { data } = await supabase.from("donors").select("*").eq("company_id", companyId).order("name")
       setItems(data || [])
-    } else { // activities
-      const { data: activities, error: actErr } = await supabase
+    } else { // activities – now uses single project_id directly
+      let query = supabase
         .from("activities")
-        .select("id, name, is_active, project_id")
+        .select("id, name, is_active, project_id, projects!inner(name)")
         .eq("company_id", companyId)
         .is("deleted_at", null)
-        .order("name")
 
-      if (actErr || !activities) {
+      if (activityProjectFilter) {
+        query = query.eq("project_id", Number(activityProjectFilter))
+      }
+
+      const { data: activities, error } = await query.order("name")
+
+      if (error || !activities) {
         setItems([])
         setLoading(false)
         return
       }
 
-      const activityIds = activities.map(a => a.id)
-      const { data: links } = await supabase
-        .from("activity_projects")
-        .select("activity_id, project_id, projects(name)")
-        .in("activity_id", activityIds)
-
-      const projectMap: Record<number, string[]> = {}
-      if (links) {
-        for (const link of links) {
-          const pName = (link as any).projects?.name
-          if (pName) {
-            if (!projectMap[link.activity_id]) projectMap[link.activity_id] = []
-            projectMap[link.activity_id].push(pName)
-          }
-        }
-      }
-
-      const enriched = activities.map(a => {
-        const names = projectMap[a.id] || []
-        let displayNames = names.join(", ")
-        if (!displayNames && a.project_id) {
-          const oldProject = projects.find((p: any) => p.id === a.project_id)
-          displayNames = oldProject?.name || `Project #${a.project_id}`
-        }
-        return {
-          id: a.id,
-          name: a.name,
-          is_active: a.is_active,
-          description: undefined,
-          project_name: displayNames || "—",
-        }
-      })
+      const enriched = activities.map((a: any) => ({
+        id: a.id,
+        name: a.name,
+        is_active: a.is_active,
+        project_id: a.project_id,
+        project_name: a.projects?.name || "—",
+      }))
 
       setItems(enriched)
     }
@@ -208,37 +188,26 @@ export default function ProjectsPage() {
     setFormDesc("")
     setFormCode("")
     setFormActive(true)
-    setFormProjectIds([])
+    setFormProjectId(null)
     setFormDonorId(null)
     setShowModal(true)
   }
 
-  const openEdit = async (item: Entity) => {
+  const openEdit = (item: Entity) => {
     setEditingItem(item)
     setFormName(item.name)
     setFormDesc((item as any).description || "")
     setFormCode((item as any).code || "")
     setFormActive(item.is_active)
     setFormDonorId((item as any).donor_id || null)
-
-    if (activeTab === "activities") {
-      const { data: links } = await supabase
-        .from("activity_projects")
-        .select("project_id")
-        .eq("activity_id", item.id)
-      const junctionIds = links?.map((l: any) => l.project_id) || []
-      if (junctionIds.length === 0 && (item as any).project_id) {
-        junctionIds.push((item as any).project_id)
-      }
-      setFormProjectIds(junctionIds)
-    }
+    setFormProjectId((item as any).project_id || null)   // single project
     setShowModal(true)
   }
 
   const handleSave = async () => {
     if (!formName.trim() || !companyId) return
-    if (activeTab === "activities" && formProjectIds.length === 0) {
-      setFlash("⚠️ Please select at least one project for the activity.")
+    if (activeTab === "activities" && !formProjectId) {
+      setFlash("⚠️ Please select a project for the activity.")
       return
     }
     setSaving(true)
@@ -254,9 +223,9 @@ export default function ProjectsPage() {
       payload.donor_id = formDonorId
     } else if (activeTab === "donors") {
       payload.code = formCode.trim() ? formCode.trim() : await getNextDonorCode(supabase, companyId)
+    } else if (activeTab === "activities") {
+      payload.project_id = formProjectId
     }
-
-    let recordId = editingItem?.id
 
     if (editingItem) {
       await supabase.from(table).update(payload).eq("id", editingItem.id).eq("company_id", companyId)
@@ -264,16 +233,7 @@ export default function ProjectsPage() {
     } else {
       const { data: inserted, error } = await supabase.from(table).insert(payload).select("id").single()
       if (error) { setFlash("Error: " + error.message); setSaving(false); return }
-      recordId = inserted?.id
       setFlash("✅ Created!")
-    }
-
-    if (activeTab === "activities" && recordId) {
-      await supabase.from("activity_projects").delete().eq("activity_id", recordId)
-      const newLinks = formProjectIds.map(pid => ({ activity_id: recordId, project_id: pid }))
-      if (newLinks.length > 0) {
-        await supabase.from("activity_projects").insert(newLinks)
-      }
     }
 
     setSaving(false)
@@ -293,7 +253,7 @@ export default function ProjectsPage() {
   }
 
   const handleImport = async () => {
-    setFlash("Import not yet updated for multi‑project. You can edit activities manually to assign projects.")
+    setFlash("Import not yet updated for single‑project. You can assign projects manually after import.")
   }
 
   const tabs: { key: typeof activeTab; label: string }[] = [
@@ -473,24 +433,17 @@ export default function ProjectsPage() {
               )}
               {activeTab === "activities" && (
                 <div>
-                  <label className="pr-field-label">Projects *</label>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 200, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 8, padding: 10 }}>
+                  <label className="pr-field-label">Project *</label>
+                  <select
+                    className="pr-field-input"
+                    value={formProjectId ?? ""}
+                    onChange={e => setFormProjectId(e.target.value ? Number(e.target.value) : null)}
+                  >
+                    <option value="">— Select Project —</option>
                     {projects.map(p => (
-                      <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text)", cursor: "pointer" }}>
-                        <input
-                          type="checkbox"
-                          checked={formProjectIds.includes(p.id)}
-                          onChange={e => {
-                            if (e.target.checked) setFormProjectIds(prev => [...prev, p.id])
-                            else setFormProjectIds(prev => prev.filter(id => id !== p.id))
-                          }}
-                          style={{ accentColor: "var(--primary)" }}
-                        />
-                        {p.name}
-                      </label>
+                      <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
-                    {projects.length === 0 && <span style={{ color: "var(--text-muted)" }}>No projects available. Add a project first.</span>}
-                  </div>
+                  </select>
                 </div>
               )}
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -500,7 +453,7 @@ export default function ProjectsPage() {
             </div>
             <div className="pr-modal-footer">
               <button className="pr-btn" onClick={() => setShowModal(false)}>Cancel</button>
-              <button className="pr-btn pr-btn-primary" onClick={handleSave} disabled={saving || !formName.trim() || (activeTab === "activities" && formProjectIds.length === 0)}>
+              <button className="pr-btn pr-btn-primary" onClick={handleSave} disabled={saving || !formName.trim() || (activeTab === "activities" && !formProjectId)}>
                 {saving ? "Saving..." : "💾 Save"}
               </button>
             </div>
