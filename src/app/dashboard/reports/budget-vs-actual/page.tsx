@@ -54,30 +54,46 @@ export default function BudgetVsActualReportPage() {
     if (businessType === "ngo" && !selectedDonorId) { setData({}); setLoading(false); return }
     setLoading(true)
 
+    // Convert string IDs to numbers for bigint columns
+    const projectId = Number(selectedProjectId)
+    const donorId = Number(selectedDonorId)
+    const activityId = selectedActivityId ? Number(selectedActivityId) : undefined
+    const locationId = selectedLocationId ? Number(selectedLocationId) : undefined
+
     let budgetQuery = supabase.from("budgets")
       .select("*")
       .eq("company_id", companyId)
       .eq("fiscal_year", fiscalYear)
-      .eq("project_id", selectedProjectId)
+      .eq("project_id", projectId)
       .is("month", null)
-    if (businessType === "ngo") budgetQuery = budgetQuery.eq("donor_id", selectedDonorId)
-    if (selectedActivityId) budgetQuery = budgetQuery.eq("activity_id", selectedActivityId)
-    if (selectedLocationId) budgetQuery = budgetQuery.eq("location_id", selectedLocationId)
+    if (businessType === "ngo") budgetQuery = budgetQuery.eq("donor_id", donorId)
+    if (activityId) budgetQuery = budgetQuery.eq("activity_id", activityId)
+    if (locationId) budgetQuery = budgetQuery.eq("location_id", locationId)
 
-    budgetQuery.then(({ data: budgetRows }) => {
+    budgetQuery.then(({ data: budgetRows, error: budgetError }) => {
+      if (budgetError) {
+        console.error("Budget query error:", budgetError)
+        setLoading(false)
+        return
+      }
       const startDate = `${fiscalYear}-01-01`
       const endDate = `${fiscalYear}-12-31`
       let actualQuery = supabase.from("journal_lines")
         .select("account_id, activity_id, location_id, debit, credit, journal_entries!inner(date)")
         .eq("company_id", companyId)
-        .eq("project_id", selectedProjectId)
+        .eq("project_id", projectId)
         .gte("journal_entries.date", startDate)
         .lte("journal_entries.date", endDate)
-      if (businessType === "ngo") actualQuery = actualQuery.eq("donor_id", selectedDonorId)
-      if (selectedActivityId) actualQuery = actualQuery.eq("activity_id", selectedActivityId)
-      if (selectedLocationId) actualQuery = actualQuery.eq("location_id", selectedLocationId)
+      if (businessType === "ngo") actualQuery = actualQuery.eq("donor_id", donorId)
+      if (activityId) actualQuery = actualQuery.eq("activity_id", activityId)
+      if (locationId) actualQuery = actualQuery.eq("location_id", locationId)
 
-      actualQuery.then(({ data: actualRows }) => {
+      actualQuery.then(({ data: actualRows, error: actualError }) => {
+        if (actualError) {
+          console.error("Actual query error:", actualError)
+          setLoading(false)
+          return
+        }
         const newData: Record<string, Record<string, Record<string, { budget: number; actual: number }>>> = {}
         budgetRows?.forEach((b: any) => {
           const { activity_id, location_id, account_id, budgeted_amount } = b
@@ -98,7 +114,13 @@ export default function BudgetVsActualReportPage() {
         })
         setData(newData)
         setLoading(false)
+      }).catch(err => {
+        console.error("Actual query promise error:", err)
+        setLoading(false)
       })
+    }).catch(err => {
+      console.error("Budget query promise error:", err)
+      setLoading(false)
     })
   }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, selectedActivityId, selectedLocationId, businessType])
 
@@ -133,12 +155,12 @@ export default function BudgetVsActualReportPage() {
     XLSX.writeFile(wb, "budget_vs_actual_report.xlsx")
   }
 
-if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
+  if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 24 }}><h2>Access Denied</h2></div>
 
   return (
     <div style={{ padding: 24, fontFamily: "Arial" }}>
-      <h2 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B" }}>ðŸ“‰ Budget vs Actual Report</h2>
+      <h2 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B" }}>📉 Budget vs Actual Report</h2>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16, marginTop: 8 }}>
         <select value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))} style={{ padding: "6px 12px" }}>
           {[2025,2026,2027,2028].map(y => <option key={y} value={y}>{y}</option>)}
@@ -162,7 +184,7 @@ if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" 
           {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
         <button onClick={handleExport} style={{ padding: "8px 16px", background: "#059669", color: "white", border: "none", borderRadius: 6, cursor: "pointer" }}>
-          ðŸ“¥ Export Excel
+          📥 Export Excel
         </button>
       </div>
 
@@ -202,7 +224,7 @@ if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" 
                         <td style={{ border: "1px solid #eee", padding: 4, textAlign: "right" }}>{budget.toLocaleString()}</td>
                         <td style={{ border: "1px solid #eee", padding: 4, textAlign: "right" }}>{actual.toLocaleString()}</td>
                         <td style={{ border: "1px solid #eee", padding: 4, textAlign: "right", color: variance < 0 ? "#EF4444" : "#10B981" }}>
-                          {variance === 0 ? "â€”" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
+                          {variance === 0 ? "—" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
                         </td>
                       </tr>
                     )
