@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import {
@@ -16,10 +16,12 @@ export default function NewBillPage() {
   const searchParams = useSearchParams()
   const editId = searchParams.get("id")
 
-  const supabase = createBrowserClient(
+  // Stable supabase client to avoid missing API key
+  const supabaseRef = useRef(createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+  ))
+  const supabase = supabaseRef.current
 
   const { hasFeature } = usePlan()
   const showProducts = hasFeature("inventory")
@@ -61,27 +63,39 @@ export default function NewBillPage() {
   const [activities, setActivities] = useState<any[]>([])
   const [allAccounts, setAllAccounts] = useState<any[]>([])
 
-  // Pre‑loaded lookups for instant project/donor name resolution
+  // Pre‑loaded lookups
   const [allProjects, setAllProjects] = useState<any[]>([])
   const [allDonors, setAllDonors] = useState<any[]>([])
 
-  // budgetInfo key: `${activityId}_${locationId || 'none'}_${accountId}`
+  // budgetInfo stores raw DB budget/spent
   const [budgetInfo, setBudgetInfo] = useState<Record<string, { budget: number; spent: number; available: number; hasBudget: boolean }>>({})
   const [budgetError, setBudgetError] = useState("")
 
   const [locationActivitiesMap, setLocationActivitiesMap] = useState<Record<number, number[]>>({})
 
-  // activityProjectDonor: cached project/donor for a given location+activity combo
+  // activityProjectDonor cache
   const [activityProjectDonor, setActivityProjectDonor] = useState<Record<string, { projectName: string; donorName: string | null }>>({})
 
   const fiscalYear = new Date().getFullYear()
 
-  // ─── Build budget key consistently ───────────────────────────────────────
   const budgetKey = (actId: number, locId: number | null, accId: number) =>
     `${actId}_${locId ?? "none"}_${accId}`
 
-  // Key for caching project/donor based on location+activity
   const projDonorKey = (locId: number, actId: number) => `${locId}_${actId}`
+
+  // Pending tracker: key -> total amount of unsaved lines (excluding current)
+  const pendingByKey = useMemo(() => {
+    const map: Record<string, number> = {}
+    items.forEach(item => {
+      if (item.activity_id && item.account_id) {
+        const locId = item.location_id ? Number(item.location_id) : null
+        const key = budgetKey(Number(item.activity_id), locId, Number(item.account_id))
+        const total = (item.qty || 0) * (item.unit_price || 0)
+        map[key] = (map[key] || 0) + total
+      }
+    })
+    return map
+  }, [items])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -99,7 +113,6 @@ export default function NewBillPage() {
         setProducts([])
       }
 
-      // Accounts, locations, activities
       supabase.from("accounts")
         .select("id,code,name,type")
         .eq("company_id", cid)
@@ -115,7 +128,6 @@ export default function NewBillPage() {
         .eq("company_id", cid).order("name")
         .then(r => r.data && setActivities(r.data))
 
-      // Pre‑load all projects and donors (id + name) for instant name resolution
       supabase.from("projects").select("id,name,donor_id")
         .eq("company_id", cid).order("name")
         .then(r => r.data && setAllProjects(r.data))
@@ -124,7 +136,6 @@ export default function NewBillPage() {
         .eq("company_id", cid).order("name")
         .then(r => r.data && setAllDonors(r.data))
 
-      // Build location‑activities map from budgets (current fiscal year)
       supabase.from("budgets")
         .select("location_id, activity_id")
         .eq("company_id", cid)
@@ -174,7 +185,7 @@ export default function NewBillPage() {
       .then(r => r.data && setProducts(r.data))
   }
 
-  // PO logic (unchanged)
+  // PO logic
   useEffect(() => {
     if (!companyId || !supplierId || !showPO) {
       setOpenPOs([])
@@ -254,7 +265,6 @@ export default function NewBillPage() {
           }))
           setItems(loaded)
 
-          // For editing: fetch project/donor for each line (if location+activity set)
           loaded.forEach(item => {
             if (item.location_id && item.activity_id) {
               lookupProjectDonorForLine(Number(item.location_id), Number(item.activity_id))
@@ -283,7 +293,7 @@ export default function NewBillPage() {
     setDueDate(dt.toISOString().split("T")[0])
   }, [selectedSupplier, billDate])
 
-  // ─── Supplier search/filter ─────────────────────────────────────
+  // Supplier search
   const filteredSuppliers = suppliers.filter(s =>
     s.name.toLowerCase().includes(supplierSearch.toLowerCase()) ||
     s.code.toLowerCase().includes(supplierSearch.toLowerCase()) ||
@@ -380,15 +390,13 @@ export default function NewBillPage() {
   const removeItem = (idx: number) => {
     const updated = items.filter((_, i) => i !== idx)
     setItems(updated)
-    checkBudgetOverrun(updated, budgetInfo)
   }
 
-  // ✅ NEW: Instant lookup of project/donor from budgets for a specific location+activity
+  // ✅ Instant project/donor lookup from budgets
   const lookupProjectDonorForLine = async (locId: number, actId: number) => {
     const key = projDonorKey(locId, actId)
     if (activityProjectDonor[key] !== undefined) return
 
-    // Placeholder while fetching
     setActivityProjectDonor(prev => ({ ...prev, [key]: { projectName: "…", donorName: null } }))
 
     const { data: budgetRow } = await supabase
@@ -411,84 +419,97 @@ export default function NewBillPage() {
     setActivityProjectDonor(prev => ({
       ...prev,
       [key]: {
-        projectName: project?.name || (projectId ? "" : ""),
+        projectName: project?.name || "",
         donorName: donor?.name || null,
       },
     }))
   }
 
-  // Fetch budget (existing logic)
+  // ✅ Budget fetch with soft allocation
   const fetchBudget = useCallback(async (
     activityId: number,
     accountId: number,
     locationId: number | null
-  ): Promise<{ budget: number; spent: number; available: number; hasBudget: boolean } | null> => {
-    const key = budgetKey(activityId, locationId, accountId)
-    if (budgetInfo[key]) return budgetInfo[key]
-
-    let budgetQuery = supabase.from("budgets")
-      .select("budgeted_amount")
-      .eq("company_id", companyId)
-      .eq("activity_id", activityId)
-      .eq("account_id", accountId)
-      .eq("fiscal_year", fiscalYear)
-      .is("month", null)
-
-    if (locationId) {
-      budgetQuery = budgetQuery.eq("location_id", locationId)
-    } else {
-      budgetQuery = budgetQuery.is("location_id", null)
-    }
-
-    const { data: budgetRow } = await budgetQuery.maybeSingle()
-
-    let spentQuery = supabase.from("journal_lines")
-      .select("debit, credit")
-      .eq("company_id", companyId)
-      .eq("activity_id", activityId)
-      .eq("account_id", accountId)
-
-    if (locationId) {
-      spentQuery = spentQuery.eq("location_id", locationId)
-    } else {
-      spentQuery = spentQuery.is("location_id", null)
-    }
-
-    const { data: spentRows } = await spentQuery
-
-    const spent = (spentRows || []).reduce(
-      (sum: number, line: any) => sum + (line.debit || 0) - (line.credit || 0),
-      0
-    )
-    const budget = budgetRow?.budgeted_amount || 0
-    const available = budget - spent
-    const result = { budget, spent, available, hasBudget: budgetRow !== null }
-
-    setBudgetInfo(prev => ({ ...prev, [key]: result }))
-    return result
-  }, [companyId, budgetInfo, fiscalYear])
-
-  const checkBudgetOverrun = (
-    currentItems: any[],
-    currentBudgetInfo: Record<string, { budget: number; spent: number; available: number; hasBudget: boolean }>
   ) => {
+    const key = budgetKey(activityId, locationId, accountId)
+
+    try {
+      let budgetQuery = supabase.from("budgets")
+        .select("budgeted_amount")
+        .eq("company_id", companyId)
+        .eq("activity_id", activityId)
+        .eq("account_id", accountId)
+        .eq("fiscal_year", fiscalYear)
+        .is("month", null)
+
+      if (locationId) {
+        budgetQuery = budgetQuery.eq("location_id", locationId)
+      } else {
+        budgetQuery = budgetQuery.is("location_id", null)
+      }
+
+      const { data: budgetRow } = await budgetQuery.maybeSingle()
+
+      let spentQuery = supabase.from("journal_lines")
+        .select("debit, credit")
+        .eq("company_id", companyId)
+        .eq("activity_id", activityId)
+        .eq("account_id", accountId)
+
+      if (locationId) {
+        spentQuery = spentQuery.eq("location_id", locationId)
+      } else {
+        spentQuery = spentQuery.is("location_id", null)
+      }
+
+      const { data: spentRows, error: spentError } = await spentQuery
+      if (spentError) console.error("Spent query error:", spentError)
+
+      const actualSpent = (spentRows || []).reduce(
+        (sum: number, line: any) => sum + (line.debit || 0) - (line.credit || 0),
+        0
+      )
+      const budget = budgetRow?.budgeted_amount || 0
+      const available = budget - actualSpent  // raw available (before pending)
+      const result = { budget, spent: actualSpent, available, hasBudget: budgetRow !== null }
+
+      setBudgetInfo(prev => ({ ...prev, [key]: result }))
+      return result
+    } catch (err) {
+      console.error("fetchBudget error:", err)
+      return null
+    }
+  }, [companyId, budgetInfo, fiscalYear, supabase])
+
+  // Soft available for a line (accounting for other pending lines)
+  const getLineSoftAvailable = (item: any, bdata: ReturnType<typeof getLineBudgetData>) => {
+    if (!bdata) return null
+    const key = budgetKey(Number(item.activity_id), item.location_id ? Number(item.location_id) : null, Number(item.account_id))
+    const totalPending = pendingByKey[key] || 0
+    const lineTotal = (item.qty || 0) * (item.unit_price || 0)
+    // Soft available = raw available - (total pending - current line's own total)
+    const softAvailable = bdata.available - (totalPending - lineTotal)
+    return softAvailable
+  }
+
+  // Updated overrun check to use soft available
+  const checkBudgetOverrun = () => {
     let overBudget = false
-    for (const item of currentItems) {
+    for (const item of items) {
       if (!item.product_id && item.activity_id && item.account_id && item.total > 0) {
-        const locId = item.location_id ? Number(item.location_id) : null
-        const key = budgetKey(Number(item.activity_id), locId, Number(item.account_id))
-        const info = currentBudgetInfo[key]
-        if (info) {
-          if (!info.hasBudget || item.total > info.available) {
-            overBudget = true
-            break
-          }
+        const bdata = getLineBudgetData(item)
+        if (!bdata) continue
+        const softAvail = getLineSoftAvailable(item, bdata)
+        if (softAvail !== null && item.total > softAvail) {
+          overBudget = true
+          break
         }
       }
     }
     setBudgetError(overBudget ? "⚠️ Some lines exceed the available budget" : "")
   }
 
+  // Update item handler with soft allocation
   const updateItem = async (idx: number, field: string, value: any) => {
     const updated = [...items]
     updated[idx] = { ...updated[idx], [field]: value }
@@ -509,7 +530,7 @@ export default function NewBillPage() {
       }
     }
 
-    // ✅ When activity changes AND location is set, fetch project/donor instantly
+    // When activity changes, fetch project/donor and budget
     if (field === "activity_id" && updated[idx].activity_id) {
       const locId = updated[idx].location_id ? Number(updated[idx].location_id) : null
       if (locId) {
@@ -519,23 +540,21 @@ export default function NewBillPage() {
 
     setItems(updated)
 
-    const actId = updated[idx].activity_id ? Number(updated[idx].activity_id) : null
-    const accId = updated[idx].account_id ? Number(updated[idx].account_id) : null
-    const locId = updated[idx].location_id ? Number(updated[idx].location_id) : null
-
-    if (actId && accId) {
-      const freshBudget = await fetchBudget(actId, accId, locId)
-      const key = budgetKey(actId, locId, accId)
-      const merged = freshBudget ? { ...budgetInfo, [key]: freshBudget } : budgetInfo
-      checkBudgetOverrun(updated, merged)
-    } else {
-      checkBudgetOverrun(updated, budgetInfo)
+    // If account changed or was just selected, fetch budget
+    if ((field === "account_id" || field === "activity_id" || field === "location_id") && updated[idx].activity_id && updated[idx].account_id) {
+      const actId = Number(updated[idx].activity_id)
+      const accId = Number(updated[idx].account_id)
+      const locId = updated[idx].location_id ? Number(updated[idx].location_id) : null
+      await fetchBudget(actId, accId, locId)
     }
+
+    // Overrun check will be handled by useEffect watching items and budgetInfo
   }
 
+  // Re-check overrun whenever items or budgetInfo change
   useEffect(() => {
-    checkBudgetOverrun(items, budgetInfo)
-  }, [budgetInfo])
+    checkBudgetOverrun()
+  }, [items, budgetInfo, pendingByKey])
 
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
 
@@ -677,15 +696,23 @@ export default function NewBillPage() {
 
   const isLineOverBudget = (item: any, bdata: ReturnType<typeof getLineBudgetData>) => {
     if (!bdata) return false
+    const softAvail = getLineSoftAvailable(item, bdata)
+    if (softAvail === null) return false
     if (!bdata.hasBudget && item.total > 0) return true
-    return bdata.hasBudget && item.total > bdata.available
+    return item.total > softAvail
   }
 
-  // Helper to get project/donor from cache for a line
   const getLineProjectDonor = (item: any) => {
     if (!item.location_id || !item.activity_id) return null
     const key = projDonorKey(Number(item.location_id), Number(item.activity_id))
     return activityProjectDonor[key] || null
+  }
+
+  // Helper to display soft available value
+  const getLineDisplayAvailable = (item: any, bdata: ReturnType<typeof getLineBudgetData>) => {
+    if (!bdata) return null
+    const softAvail = getLineSoftAvailable(item, bdata)
+    return softAvail !== null ? softAvail : bdata.available
   }
 
   return (
@@ -748,7 +775,6 @@ export default function NewBillPage() {
 
         <div className="header-grid">
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {/* Supplier selection card */}
             <div className="inv-card">
               <label className="inv-label">Supplier *</label>
               <div className="cust-wrap" ref={supplierRef}>
@@ -808,7 +834,6 @@ export default function NewBillPage() {
                 )}
               </div>
 
-              {/* PO linking */}
               {showPO && selectedSupplier && openPOs.length > 0 && (
                 <div style={{ marginTop: 14 }}>
                   <label className="inv-label">Link to Purchase Order (optional)</label>
@@ -898,7 +923,6 @@ export default function NewBillPage() {
             )}
           </div>
 
-          {/* Right column: Summary + Actions */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="inv-card">
               <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px 0" }}>Summary</h3>
@@ -953,6 +977,7 @@ export default function NewBillPage() {
                 const budgetData = getLineBudgetData(item)
                 const overBudget = isLineOverBudget(item, budgetData)
                 const filteredActs = getFilteredActivities(item.location_id)
+                const softAvail = getLineDisplayAvailable(item, budgetData)
 
                 const showInfoRow = isNGO && !item.product_id && !!item.activity_id
 
@@ -1032,10 +1057,8 @@ export default function NewBillPage() {
                       ><Trash2 size={12} /></button>
                     </div>
 
-                    {/* Info row – project/donor & budget */}
                     {showInfoRow && (
                       <div className="line-info-row">
-                        {/* Project / Donor chips */}
                         {!projDonor && (
                           <span className="line-info-chip" style={{ opacity: 0.5 }}>⏳ loading…</span>
                         )}
@@ -1057,7 +1080,6 @@ export default function NewBillPage() {
                           </>
                         )}
 
-                        {/* Budget chips (only when account selected) */}
                         {budgetData && !budgetData.hasBudget && (
                           <span className="line-info-chip over-budget-chip">🚫 No budget defined</span>
                         )}
@@ -1065,11 +1087,13 @@ export default function NewBillPage() {
                           <>
                             <span className="line-info-chip">Budget: PKR {budgetData.budget.toLocaleString()}</span>
                             <span className="line-info-chip">Spent: PKR {budgetData.spent.toLocaleString()}</span>
-                            <span className={`line-info-chip ${overBudget ? "over-budget-chip" : "ok-budget-chip"}`}>
-                              {overBudget
-                                ? "⚠️ Over by PKR " + (item.total - budgetData.available).toLocaleString()
-                                : "✓ Available: PKR " + budgetData.available.toLocaleString()}
-                            </span>
+                            {softAvail !== null && (
+                              <span className={`line-info-chip ${overBudget ? "over-budget-chip" : "ok-budget-chip"}`}>
+                                {overBudget
+                                  ? "⚠️ Over by PKR " + (item.total - softAvail).toLocaleString()
+                                  : "✓ Available: PKR " + softAvail.toLocaleString()}
+                              </span>
+                            )}
                           </>
                         )}
                       </div>
