@@ -354,29 +354,35 @@ export default function NewBillPage() {
   const fetchProjectDonor = async (actId: number) => {
     if (activityProjectDonor[actId]) return   // already cached
     try {
+      // 1. Try junction table first
+      const { data: junction } = await supabase
+        .from("activity_projects")
+        .select("project_id, projects(name, donor_id), projects(donors(name))")
+        .eq("activity_id", actId)
+        .maybeSingle()
+
+      if (junction) {
+        const proj = (junction as any).projects
+        const projectName = proj?.name || ""
+        const donorName = proj?.donors?.name || null
+        setActivityProjectDonor(prev => ({
+          ...prev,
+          [actId]: { projectName, donorName },
+        }))
+        return
+      }
+
+      // 2. Fallback to old project_id column
       const { data: actData } = await supabase
         .from("activities")
-        .select("project_id")
+        .select("project_id, projects(name, donor_id), projects(donors(name))")
         .eq("id", actId)
         .single()
 
-      if (actData?.project_id) {
-        const { data: proj } = await supabase
-          .from("projects")
-          .select("name, donor_id")
-          .eq("id", actData.project_id)
-          .single()
-
+      if (actData) {
+        const proj = (actData as any).projects
         const projectName = proj?.name || ""
-        let donorName: string | null = null
-        if (proj?.donor_id) {
-          const { data: donor } = await supabase
-            .from("donors")
-            .select("name")
-            .eq("id", proj.donor_id)
-            .single()
-          donorName = donor?.name || null
-        }
+        const donorName = proj?.donors?.name || null
         setActivityProjectDonor(prev => ({
           ...prev,
           [actId]: { projectName, donorName },
@@ -393,8 +399,12 @@ export default function NewBillPage() {
       updated[idx].total = updated[idx].qty * updated[idx].unit_price
     }
 
-        if (field === "location_id") {
-      // … keep existing location filtering code unchanged …
+    if (field === "location_id") {
+      const locId = Number(value)
+      const allowedActivities = locId ? (locationActivitiesMap[locId] || []) : activities.map(a => a.id)
+      if (updated[idx].activity_id && !allowedActivities.includes(Number(updated[idx].activity_id))) {
+        updated[idx].activity_id = ""
+      }
     }
 
     // ✅ Fetch project/donor immediately when activity is chosen (even without account)
