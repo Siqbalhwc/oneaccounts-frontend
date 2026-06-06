@@ -369,55 +369,63 @@ export default function NewBillPage() {
   }
 
   // ── Fetch project/donor for a given activity (shows immediately on activity select) ──
+  // Uses explicit two-step queries to avoid Supabase nested-join issues
   const fetchProjectDonor = async (actId: number) => {
     if (activityProjectDonor[actId] !== undefined) return  // already cached
 
+    // Optimistically mark as loading so we don't fire duplicate fetches
+    setActivityProjectDonor(prev => ({ ...prev, [actId]: { projectName: "…", donorName: null } }))
+
     try {
-      // 1. Try junction table first
+      let projectId: number | null = null
+
+      // Step 1a: Try junction table activity_projects
       const { data: junction } = await supabase
         .from("activity_projects")
-        .select("project_id, projects(name, donors(name))")
+        .select("project_id")
         .eq("activity_id", actId)
         .maybeSingle()
 
-      if (junction) {
-        const proj = (junction as any).projects
-        const projectName = proj?.name || ""
-        const donorName = proj?.donors?.name || null
-        setActivityProjectDonor(prev => ({
-          ...prev,
-          [actId]: { projectName, donorName },
-        }))
+      if (junction?.project_id) {
+        projectId = junction.project_id
+      } else {
+        // Step 1b: Fallback — check project_id directly on activities row
+        const { data: actRow } = await supabase
+          .from("activities")
+          .select("project_id")
+          .eq("id", actId)
+          .maybeSingle()
+        projectId = actRow?.project_id ?? null
+      }
+
+      if (!projectId) {
+        setActivityProjectDonor(prev => ({ ...prev, [actId]: { projectName: "", donorName: null } }))
         return
       }
 
-      // 2. Fallback to direct project_id column on activities
-      const { data: actData } = await supabase
-        .from("activities")
-        .select("project_id, projects(name, donors(name))")
-        .eq("id", actId)
-        .single()
+      // Step 2: Fetch project name
+      const { data: project } = await supabase
+        .from("projects")
+        .select("name, donor_id")
+        .eq("id", projectId)
+        .maybeSingle()
 
-      if (actData) {
-        const proj = (actData as any).projects
-        const projectName = proj?.name || ""
-        const donorName = proj?.donors?.name || null
-        setActivityProjectDonor(prev => ({
-          ...prev,
-          [actId]: { projectName, donorName },
-        }))
-      } else {
-        // Cache empty result so we don't retry on every render
-        setActivityProjectDonor(prev => ({
-          ...prev,
-          [actId]: { projectName: "", donorName: null },
-        }))
+      const projectName = project?.name || ""
+      let donorName: string | null = null
+
+      // Step 3: Fetch donor name if donor_id exists
+      if (project?.donor_id) {
+        const { data: donor } = await supabase
+          .from("donors")
+          .select("name")
+          .eq("id", project.donor_id)
+          .maybeSingle()
+        donorName = donor?.name || null
       }
+
+      setActivityProjectDonor(prev => ({ ...prev, [actId]: { projectName, donorName } }))
     } catch {
-      setActivityProjectDonor(prev => ({
-        ...prev,
-        [actId]: { projectName: "", donorName: null },
-      }))
+      setActivityProjectDonor(prev => ({ ...prev, [actId]: { projectName: "", donorName: null } }))
     }
   }
 
@@ -506,19 +514,25 @@ export default function NewBillPage() {
       updated[idx].total = updated[idx].qty * updated[idx].unit_price
     }
 
-    // When location changes, clear activity (since filtered list changes) and clear budget
+    // When location changes, only reset activity if it's no longer valid for the new location
     if (field === "location_id") {
-      updated[idx].activity_id = ""
-      updated[idx].account_id = null
+      const newLocNum = Number(value)
+      const currentActId = updated[idx].activity_id ? Number(updated[idx].activity_id) : null
+      if (currentActId && newLocNum) {
+        const allowed = locationActivitiesMap[newLocNum]
+        if (allowed && allowed.length > 0 && !allowed.includes(currentActId)) {
+          updated[idx].activity_id = ""
+          updated[idx].account_id = null
+        }
+      }
     }
 
-    // ✅ FIX 1: Fetch project/donor IMMEDIATELY when activity is chosen (before GL is picked)
+    // ✅ Fetch project/donor IMMEDIATELY when activity is chosen (before GL is picked)
+    // Do NOT wipe account_id — preserves value in edit mode and on budget re-fetch
     if (field === "activity_id") {
       if (updated[idx].activity_id) {
         fetchProjectDonor(Number(updated[idx].activity_id))
       }
-      // Clear account when activity changes so budget is re-fetched fresh
-      updated[idx].account_id = null
     }
 
     setItems(updated)
@@ -956,11 +970,9 @@ export default function NewBillPage() {
                 const overBudget = isLineOverBudget(item, budgetData)
                 const filteredActs = getFilteredActivities(item.location_id)
 
-                // Show info row if: activity selected (project/donor) OR both activity+account selected (budget)
-                const showInfoRow = !item.product_id && (
-                  (projDonor && (projDonor.projectName || projDonor.donorName)) ||
-                  budgetData
-                )
+                // Show info row as soon as activity is selected (project/donor chips)
+                // Budget chips appear once GL account is also picked
+                const showInfoRow = !item.product_id && !!item.activity_id
 
                 return (
                   <div key={idx}>
@@ -1038,12 +1050,18 @@ export default function NewBillPage() {
                       ><Trash2 size={12} /></button>
                     </div>
 
-                    {/* ✅ FIX 1: Info row — project/donor shown immediately on activity select;
+                    {/* Info row — project/donor shown immediately on activity select;
                          budget shown once GL account is also picked */}
                     {showInfoRow && (
                       <div className="line-info-row">
-                        {/* Project / Donor — shows as soon as activity is chosen */}
-                        {projDonor && projDonor.projectName && (
+                        {/* Project / Donor chips — visible as soon as activity is picked */}
+                        {!projDonor && (
+                          <span className="line-info-chip" style={{ opacity: 0.5 }}>⏳ loading…</span>
+                        )}
+                        {projDonor && projDonor.projectName === "…" && (
+                          <span className="line-info-chip" style={{ opacity: 0.5 }}>⏳ loading…</span>
+                        )}
+                        {projDonor && projDonor.projectName && projDonor.projectName !== "…" && (
                           <span className="line-info-chip">
                             📁 {projDonor.projectName}
                             {projDonor.donorName && (
@@ -1051,8 +1069,11 @@ export default function NewBillPage() {
                             )}
                           </span>
                         )}
+                        {projDonor && !projDonor.projectName && projDonor.projectName !== "…" && (
+                          <span className="line-info-chip" style={{ opacity: 0.5 }}>📁 No project linked</span>
+                        )}
 
-                        {/* Budget info — shows once activity + account are both selected */}
+                        {/* Budget chips — shown once activity + account are both selected */}
                         {budgetData && (
                           <>
                             <span className="line-info-chip">
@@ -1062,7 +1083,9 @@ export default function NewBillPage() {
                               Spent: PKR {budgetData.spent.toLocaleString()}
                             </span>
                             <span className={`line-info-chip ${overBudget ? "over-budget-chip" : "ok-budget-chip"}`}>
-                              {overBudget ? "⚠️ Over by PKR " + (item.total - budgetData.available).toLocaleString() : "✓ Available: PKR " + budgetData.available.toLocaleString()}
+                              {overBudget
+                                ? "⚠️ Over by PKR " + (item.total - budgetData.available).toLocaleString()
+                                : "✓ Available: PKR " + budgetData.available.toLocaleString()}
                             </span>
                           </>
                         )}
