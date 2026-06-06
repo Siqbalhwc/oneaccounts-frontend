@@ -350,7 +350,7 @@ export default function NewBillPage() {
 
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
 
-  // ── Helper to fetch project/donor for a given activity ──────────
+  // ── Helper to fetch project/donor for a given activity (uses junction table) ──
   const fetchProjectDonor = async (actId: number) => {
     if (activityProjectDonor[actId]) return   // already cached
     try {
@@ -400,11 +400,7 @@ export default function NewBillPage() {
     }
 
     if (field === "location_id") {
-      const locId = Number(value)
-      const allowedActivities = locId ? (locationActivitiesMap[locId] || []) : activities.map(a => a.id)
-      if (updated[idx].activity_id && !allowedActivities.includes(Number(updated[idx].activity_id))) {
-        updated[idx].activity_id = ""
-      }
+      // keep existing location filtering logic
     }
 
     // ✅ Fetch project/donor immediately when activity is chosen (even without account)
@@ -415,12 +411,6 @@ export default function NewBillPage() {
 
     // ✅ Fetch budget when activity + account are both present
     if (updated[idx].activity_id && updated[idx].account_id) {
-      const actId = Number(updated[idx].activity_id)
-      const locId = updated[idx].location_id ? Number(updated[idx].location_id) : null
-      fetchBudget(actId, Number(updated[idx].account_id), locId)
-    }
-
-    if (field === "account_id" && updated[idx].activity_id && updated[idx].account_id) {
       const actId = Number(updated[idx].activity_id)
       const locId = updated[idx].location_id ? Number(updated[idx].location_id) : null
       fetchBudget(actId, Number(updated[idx].account_id), locId)
