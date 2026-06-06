@@ -61,20 +61,27 @@ export default function NewBillPage() {
   const [activities, setActivities] = useState<any[]>([])
   const [allAccounts, setAllAccounts] = useState<any[]>([])
 
+  // Pre‑loaded lookups for instant project/donor name resolution
+  const [allProjects, setAllProjects] = useState<any[]>([])
+  const [allDonors, setAllDonors] = useState<any[]>([])
+
   // budgetInfo key: `${activityId}_${locationId || 'none'}_${accountId}`
   const [budgetInfo, setBudgetInfo] = useState<Record<string, { budget: number; spent: number; available: number; hasBudget: boolean }>>({})
   const [budgetError, setBudgetError] = useState("")
 
   const [locationActivitiesMap, setLocationActivitiesMap] = useState<Record<number, number[]>>({})
 
-  // activityProjectDonor: keyed by activityId
-  const [activityProjectDonor, setActivityProjectDonor] = useState<Record<number, { projectName: string; donorName: string | null }>>({})
+  // activityProjectDonor: cached project/donor for a given location+activity combo
+  const [activityProjectDonor, setActivityProjectDonor] = useState<Record<string, { projectName: string; donorName: string | null }>>({})
 
   const fiscalYear = new Date().getFullYear()
 
   // ─── Build budget key consistently ───────────────────────────────────────
   const budgetKey = (actId: number, locId: number | null, accId: number) =>
     `${actId}_${locId ?? "none"}_${accId}`
+
+  // Key for caching project/donor based on location+activity
+  const projDonorKey = (locId: number, actId: number) => `${locId}_${actId}`
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -92,6 +99,7 @@ export default function NewBillPage() {
         setProducts([])
       }
 
+      // Accounts, locations, activities
       supabase.from("accounts")
         .select("id,code,name,type")
         .eq("company_id", cid)
@@ -107,6 +115,16 @@ export default function NewBillPage() {
         .eq("company_id", cid).order("name")
         .then(r => r.data && setActivities(r.data))
 
+      // Pre‑load all projects and donors (id + name) for instant name resolution
+      supabase.from("projects").select("id,name,donor_id")
+        .eq("company_id", cid).order("name")
+        .then(r => r.data && setAllProjects(r.data))
+
+      supabase.from("donors").select("id,name")
+        .eq("company_id", cid).order("name")
+        .then(r => r.data && setAllDonors(r.data))
+
+      // Build location‑activities map from budgets (current fiscal year)
       supabase.from("budgets")
         .select("location_id, activity_id")
         .eq("company_id", cid)
@@ -156,7 +174,7 @@ export default function NewBillPage() {
       .then(r => r.data && setProducts(r.data))
   }
 
-  // PO logic
+  // PO logic (unchanged)
   useEffect(() => {
     if (!companyId || !supplierId || !showPO) {
       setOpenPOs([])
@@ -236,15 +254,11 @@ export default function NewBillPage() {
           }))
           setItems(loaded)
 
-          // Fetch project/donor for each line that has activity (shows immediately)
+          // For editing: fetch project/donor for each line (if location+activity set)
           loaded.forEach(item => {
-            if (item.activity_id) {
-              fetchProjectDonor(Number(item.activity_id))
+            if (item.location_id && item.activity_id) {
+              lookupProjectDonorForLine(Number(item.location_id), Number(item.activity_id))
             }
-          })
-
-          // Fetch budget for lines that have all three fields
-          loaded.forEach(item => {
             if (item.activity_id && item.account_id) {
               const locId = item.location_id ? Number(item.location_id) : null
               fetchBudget(Number(item.activity_id), Number(item.account_id), locId)
@@ -254,7 +268,7 @@ export default function NewBillPage() {
       })
   }, [editId, companyId, suppliers])
 
-  // ── AUTO‑COMPUTE DUE DATE based on supplier payment terms ──
+  // AUTO‑COMPUTE DUE DATE
   useEffect(() => {
     if (!selectedSupplier || !billDate) return
     const term = (selectedSupplier.payment_terms || "").toLowerCase()
@@ -269,6 +283,7 @@ export default function NewBillPage() {
     setDueDate(dt.toISOString().split("T")[0])
   }, [selectedSupplier, billDate])
 
+  // ─── Supplier search/filter ─────────────────────────────────────
   const filteredSuppliers = suppliers.filter(s =>
     s.name.toLowerCase().includes(supplierSearch.toLowerCase()) ||
     s.code.toLowerCase().includes(supplierSearch.toLowerCase()) ||
@@ -368,80 +383,49 @@ export default function NewBillPage() {
     checkBudgetOverrun(updated, budgetInfo)
   }
 
-  // ── Fetch project/donor for a given activity (shows immediately on activity select) ──
-  // Uses explicit two-step queries to avoid Supabase nested-join issues
-  const fetchProjectDonor = async (actId: number) => {
-    if (activityProjectDonor[actId] !== undefined) return  // already cached
+  // ✅ NEW: Instant lookup of project/donor from budgets for a specific location+activity
+  const lookupProjectDonorForLine = async (locId: number, actId: number) => {
+    const key = projDonorKey(locId, actId)
+    if (activityProjectDonor[key] !== undefined) return
 
-    // Optimistically mark as loading so we don't fire duplicate fetches
-    setActivityProjectDonor(prev => ({ ...prev, [actId]: { projectName: "…", donorName: null } }))
+    // Placeholder while fetching
+    setActivityProjectDonor(prev => ({ ...prev, [key]: { projectName: "…", donorName: null } }))
 
-    try {
-      let projectId: number | null = null
+    const { data: budgetRow } = await supabase
+      .from("budgets")
+      .select("project_id, donor_id")
+      .eq("company_id", companyId)
+      .eq("location_id", locId)
+      .eq("activity_id", actId)
+      .eq("fiscal_year", fiscalYear)
+      .is("month", null)
+      .limit(1)
+      .maybeSingle()
 
-      // Step 1a: Try junction table activity_projects
-      const { data: junction } = await supabase
-        .from("activity_projects")
-        .select("project_id")
-        .eq("activity_id", actId)
-        .maybeSingle()
+    const projectId = budgetRow?.project_id
+    const donorId = budgetRow?.donor_id
 
-      if (junction?.project_id) {
-        projectId = junction.project_id
-      } else {
-        // Step 1b: Fallback — check project_id directly on activities row
-        const { data: actRow } = await supabase
-          .from("activities")
-          .select("project_id")
-          .eq("id", actId)
-          .maybeSingle()
-        projectId = actRow?.project_id ?? null
-      }
+    const project = projectId ? allProjects.find(p => p.id === projectId) : null
+    const donor = donorId ? allDonors.find(d => d.id === donorId) : null
 
-      if (!projectId) {
-        setActivityProjectDonor(prev => ({ ...prev, [actId]: { projectName: "", donorName: null } }))
-        return
-      }
-
-      // Step 2: Fetch project name
-      const { data: project } = await supabase
-        .from("projects")
-        .select("name, donor_id")
-        .eq("id", projectId)
-        .maybeSingle()
-
-      const projectName = project?.name || ""
-      let donorName: string | null = null
-
-      // Step 3: Fetch donor name if donor_id exists
-      if (project?.donor_id) {
-        const { data: donor } = await supabase
-          .from("donors")
-          .select("name")
-          .eq("id", project.donor_id)
-          .maybeSingle()
-        donorName = donor?.name || null
-      }
-
-      setActivityProjectDonor(prev => ({ ...prev, [actId]: { projectName, donorName } }))
-    } catch {
-      setActivityProjectDonor(prev => ({ ...prev, [actId]: { projectName: "", donorName: null } }))
-    }
+    setActivityProjectDonor(prev => ({
+      ...prev,
+      [key]: {
+        projectName: project?.name || (projectId ? "" : ""),
+        donorName: donor?.name || null,
+      },
+    }))
   }
 
-  // ── Fetch budget scoped to location + activity + account ──
-  // Returns the fetched budget data directly so callers can use it immediately
+  // Fetch budget (existing logic)
   const fetchBudget = useCallback(async (
     activityId: number,
     accountId: number,
     locationId: number | null
   ): Promise<{ budget: number; spent: number; available: number; hasBudget: boolean } | null> => {
     const key = budgetKey(activityId, locationId, accountId)
-
-    // Return cached immediately
     if (budgetInfo[key]) return budgetInfo[key]
 
-    // ── Budget amount: scoped to location + activity + account ──
     let budgetQuery = supabase.from("budgets")
       .select("budgeted_amount")
       .eq("company_id", companyId)
@@ -458,7 +442,6 @@ export default function NewBillPage() {
 
     const { data: budgetRow } = await budgetQuery.maybeSingle()
 
-    // ── Spent amount: journal lines scoped to same location + activity + account ──
     let spentQuery = supabase.from("journal_lines")
       .select("debit, credit")
       .eq("company_id", companyId)
@@ -485,7 +468,6 @@ export default function NewBillPage() {
     return result
   }, [companyId, budgetInfo, fiscalYear])
 
-  // ── Check if any line exceeds its available budget ──
   const checkBudgetOverrun = (
     currentItems: any[],
     currentBudgetInfo: Record<string, { budget: number; spent: number; available: number; hasBudget: boolean }>
@@ -497,7 +479,6 @@ export default function NewBillPage() {
         const key = budgetKey(Number(item.activity_id), locId, Number(item.account_id))
         const info = currentBudgetInfo[key]
         if (info) {
-          // Block if: no budget row exists for this combination, OR item exceeds available
           if (!info.hasBudget || item.total > info.available) {
             overBudget = true
             break
@@ -508,7 +489,6 @@ export default function NewBillPage() {
     setBudgetError(overBudget ? "⚠️ Some lines exceed the available budget" : "")
   }
 
-  // ── Core item update handler ──
   const updateItem = async (idx: number, field: string, value: any) => {
     const updated = [...items]
     updated[idx] = { ...updated[idx], [field]: value }
@@ -517,7 +497,6 @@ export default function NewBillPage() {
       updated[idx].total = updated[idx].qty * updated[idx].unit_price
     }
 
-    // When location changes, only reset activity if it's no longer valid for the new location
     if (field === "location_id") {
       const newLocNum = Number(value)
       const currentActId = updated[idx].activity_id ? Number(updated[idx].activity_id) : null
@@ -530,35 +509,30 @@ export default function NewBillPage() {
       }
     }
 
-    // ✅ Fetch project/donor IMMEDIATELY when activity is chosen (before GL is picked)
-    // Do NOT wipe account_id — preserves value in edit mode and on budget re-fetch
-    if (field === "activity_id") {
-      if (updated[idx].activity_id) {
-        fetchProjectDonor(Number(updated[idx].activity_id))
+    // ✅ When activity changes AND location is set, fetch project/donor instantly
+    if (field === "activity_id" && updated[idx].activity_id) {
+      const locId = updated[idx].location_id ? Number(updated[idx].location_id) : null
+      if (locId) {
+        lookupProjectDonorForLine(locId, Number(updated[idx].activity_id))
       }
     }
 
     setItems(updated)
 
-    // ✅ FIX 2: Fetch budget when all three (activity + account + location) are present
     const actId = updated[idx].activity_id ? Number(updated[idx].activity_id) : null
     const accId = updated[idx].account_id ? Number(updated[idx].account_id) : null
     const locId = updated[idx].location_id ? Number(updated[idx].location_id) : null
 
     if (actId && accId) {
       const freshBudget = await fetchBudget(actId, accId, locId)
-      // Merge fresh result into budgetInfo for overrun check
       const key = budgetKey(actId, locId, accId)
-      const merged = freshBudget
-        ? { ...budgetInfo, [key]: freshBudget }
-        : budgetInfo
+      const merged = freshBudget ? { ...budgetInfo, [key]: freshBudget } : budgetInfo
       checkBudgetOverrun(updated, merged)
     } else {
       checkBudgetOverrun(updated, budgetInfo)
     }
   }
 
-  // Re-run overrun check whenever budgetInfo updates (covers async loads completing)
   useEffect(() => {
     checkBudgetOverrun(items, budgetInfo)
   }, [budgetInfo])
@@ -688,15 +662,12 @@ export default function NewBillPage() {
 
   const getFilteredActivities = (locationId: string) => {
     const locNum = Number(locationId)
-    // No location selected → show all activities
     if (!locNum) return activities
     const allowed = locationActivitiesMap[locNum]
-    // Location selected but no budget entries exist for it → show nothing (strict)
     if (!allowed || allowed.length === 0) return []
     return activities.filter(a => allowed.includes(a.id))
   }
 
-  // ── Per-line budget status helper ──────────────────────────────────────────
   const getLineBudgetData = (item: any) => {
     if (!item.activity_id || !item.account_id) return null
     const locId = item.location_id ? Number(item.location_id) : null
@@ -706,9 +677,15 @@ export default function NewBillPage() {
 
   const isLineOverBudget = (item: any, bdata: ReturnType<typeof getLineBudgetData>) => {
     if (!bdata) return false
-    // Over budget if: no budget row defined, OR item total exceeds available balance
     if (!bdata.hasBudget && item.total > 0) return true
     return bdata.hasBudget && item.total > bdata.available
+  }
+
+  // Helper to get project/donor from cache for a line
+  const getLineProjectDonor = (item: any) => {
+    if (!item.location_id || !item.activity_id) return null
+    const key = projDonorKey(Number(item.location_id), Number(item.activity_id))
+    return activityProjectDonor[key] || null
   }
 
   return (
@@ -972,14 +949,12 @@ export default function NewBillPage() {
               </div>
 
               {items.map((item, idx) => {
-                const projDonor = item.activity_id ? activityProjectDonor[Number(item.activity_id)] : null
+                const projDonor = getLineProjectDonor(item)
                 const budgetData = getLineBudgetData(item)
                 const overBudget = isLineOverBudget(item, budgetData)
                 const filteredActs = getFilteredActivities(item.location_id)
 
-                // Show info row as soon as activity is selected (project/donor chips)
-                // Budget chips appear once GL account is also picked
-                const showInfoRow = !item.product_id && !!item.activity_id
+                const showInfoRow = isNGO && !item.product_id && !!item.activity_id
 
                 return (
                   <div key={idx}>
@@ -1057,43 +1032,39 @@ export default function NewBillPage() {
                       ><Trash2 size={12} /></button>
                     </div>
 
-                    {/* Info row — project/donor shown immediately on activity select;
-                         budget shown once GL account is also picked */}
+                    {/* Info row – project/donor & budget */}
                     {showInfoRow && (
                       <div className="line-info-row">
-                        {/* Project / Donor chips — visible as soon as activity is picked */}
+                        {/* Project / Donor chips */}
                         {!projDonor && (
                           <span className="line-info-chip" style={{ opacity: 0.5 }}>⏳ loading…</span>
                         )}
                         {projDonor && projDonor.projectName === "…" && (
                           <span className="line-info-chip" style={{ opacity: 0.5 }}>⏳ loading…</span>
                         )}
-                        {projDonor && projDonor.projectName && projDonor.projectName !== "…" && (
-                          <span className="line-info-chip">
-                            📁 {projDonor.projectName}
-                            {projDonor.donorName && (
-                              <span style={{ color: "var(--primary)", marginLeft: 4 }}>· 🤝 {projDonor.donorName}</span>
+                        {projDonor && projDonor.projectName !== "…" && (
+                          <>
+                            {projDonor.projectName ? (
+                              <span className="line-info-chip">
+                                📁 {projDonor.projectName}
+                                {projDonor.donorName && (
+                                  <span style={{ color: "var(--primary)", marginLeft: 4 }}>· 🤝 {projDonor.donorName}</span>
+                                )}
+                              </span>
+                            ) : (
+                              <span className="line-info-chip" style={{ opacity: 0.5 }}>📁 No project linked</span>
                             )}
-                          </span>
-                        )}
-                        {projDonor && !projDonor.projectName && projDonor.projectName !== "…" && (
-                          <span className="line-info-chip" style={{ opacity: 0.5 }}>📁 No project linked</span>
+                          </>
                         )}
 
-                        {/* Budget chips — shown once activity + account are both selected */}
+                        {/* Budget chips (only when account selected) */}
                         {budgetData && !budgetData.hasBudget && (
-                          <span className="line-info-chip over-budget-chip">
-                            🚫 No budget defined for this combination
-                          </span>
+                          <span className="line-info-chip over-budget-chip">🚫 No budget defined</span>
                         )}
                         {budgetData && budgetData.hasBudget && (
                           <>
-                            <span className="line-info-chip">
-                              Budget: PKR {budgetData.budget.toLocaleString()}
-                            </span>
-                            <span className="line-info-chip">
-                              Spent: PKR {budgetData.spent.toLocaleString()}
-                            </span>
+                            <span className="line-info-chip">Budget: PKR {budgetData.budget.toLocaleString()}</span>
+                            <span className="line-info-chip">Spent: PKR {budgetData.spent.toLocaleString()}</span>
                             <span className={`line-info-chip ${overBudget ? "over-budget-chip" : "ok-budget-chip"}`}>
                               {overBudget
                                 ? "⚠️ Over by PKR " + (item.total - budgetData.available).toLocaleString()
