@@ -7,6 +7,7 @@ import { motion } from "framer-motion"
 import { useTheme } from "@/contexts/ThemeContext"
 import { useCompany } from "@/contexts/CompanyContext"
 import { useDashboardData } from "@/hooks/useDashboardData"
+import { createBrowserClient } from "@supabase/ssr"
 
 // ── Simple animated number hook ────────────────────────────────────
 function useAnimatedNumber(target: number, duration = 500) {
@@ -22,7 +23,7 @@ function useAnimatedNumber(target: number, duration = 500) {
     const tick = (now: number) => {
       const elapsed = now - startTime
       const progress = Math.min(elapsed / duration, 1)
-      const ease = 1 - Math.pow(1 - progress, 3) // easeOutCubic
+      const ease = 1 - Math.pow(1 - progress, 3)
       setDisplay(start + diff * ease)
       if (progress < 1) requestAnimationFrame(tick)
       else prev.current = target
@@ -42,12 +43,38 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const { companyId } = useCompany()
   const companyError = !companyId
 
+  // Create Supabase client
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [selectedDonorId, setSelectedDonorId] = useState<string>("")
 
+  // ✅ Load projects and donors from DB so filters work
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
+
+  useEffect(() => {
+    if (!companyId) return
+    // Load projects
+    supabase
+      .from("projects")
+      .select("id, name")
+      .eq("company_id", companyId)
+      .order("name")
+      .then(({ data }) => data && setProjects(data))
+
+    // Load donors
+    supabase
+      .from("donors")
+      .select("id, name")
+      .eq("company_id", companyId)
+      .order("name")
+      .then(({ data }) => data && setDonors(data))
+  }, [companyId])
 
   // ── React Query cached dashboard data ─────────────────────────────
   const { data: dashData, isLoading, isError } = useDashboardData(companyId, fiscalYear)
@@ -78,7 +105,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
     return `${sign}PKR ${Math.abs(valueInMillions).toFixed(1)}M`
   }
 
-  // ── Underspent activities & activity health (unchanged) ─────────────
+  // ── Underspent activities & activity health ─────────────
   const [underspentActivities, setUnderspentActivities] = useState<any[]>([])
   const [activityHealth, setActivityHealth] = useState<Record<string, { lowCount: number; threshold: number; message: string }>>({})
 
@@ -405,7 +432,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </motion.div>
         )}
 
-        {/* KPI cards – animated numbers, clean millions */}
+        {/* KPI cards – without fake trend for Total Spent */}
         <div className="dashboard-grid">
           {[
             { label: "Total Budget",   value: fmtM(animBudget),   meta: `${filteredProjectRows.length} projects`, color: "#A78BFA", link: "/dashboard/reports/budget-summary" },
@@ -430,7 +457,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
               </div>
               <div className="kpi-meta">
                 {kpi.meta}
-                {kpi.label === "Total Spent" && <Trend value={spentPct > 80 ? 5 : -2} positive={false} negative={spentPct > 80} />}
+                {/* Only show trend for Monthly Spending (if available) */}
                 {kpi.label === "📆 Monthly Spending" && monthlySpending > 0 && <Trend value={spendingTrend} positive={spendingTrend < 0} negative={spendingTrend > 0} />}
               </div>
               {kpi.label === "Total Spent" && highestProject && lowestProject && highestProject.id !== lowestProject.id && (
