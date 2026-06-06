@@ -20,17 +20,19 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
   const prevStart = new Date(Date.UTC(prevYear, prevMonth - 1, 1)).toISOString().split("T")[0]
   const prevEnd = new Date(Date.UTC(prevYear, prevMonth, 0)).toISOString().split("T")[0]
 
-  // ── 1. Fetch all necessary data in parallel ──────────────────────
+  // ── 1. Fetch everything in parallel ─────────────────────────────
   const [
     budgetsAll,
     journalLinesAll,
     donorsAll,
     projectsAll,
+    activitiesAll,
     customers,
     suppliers,
-    invoicesUnpaid,
-    monthlySpendingData,
-    prevMonthlySpendingData,
+    totalSpentRpc,
+    monthlySpendingRpc,
+    prevMonthlySpendingRpc,
+    overdueInvoices,
   ] = await Promise.all([
     // All budgets for the fiscal year (annual)
     supabase.from("budgets")
@@ -40,7 +42,7 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
       .is("month", null)
       .not("activity_id", "is", null),
 
-    // All journal lines within the fiscal year
+    // All journal lines within the fiscal year (needed for donor & project actuals)
     supabase.from("journal_lines")
       .select("debit, credit, project_id, donor_id, activity_id, account_id, location_id, journal_entries!inner(date)")
       .eq("company_id", companyId)
@@ -53,41 +55,41 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
     // Projects list (with start/end dates)
     supabase.from("projects").select("id, name, donor_id, start_date, end_date").eq("company_id", companyId),
 
+    // Activities list (for underspend names)
+    supabase.from("activities").select("id, name").eq("company_id", companyId),
+
     // Customer balances
     supabase.from("customers").select("balance").eq("company_id", companyId),
 
     // Supplier balances
     supabase.from("suppliers").select("balance").eq("company_id", companyId),
 
+    // ✅ Original RPC calls for spending (restore working figures)
+    supabase.rpc("total_spent", { cid: companyId, fy: fiscalYear }),
+    supabase.rpc("get_period_spending", { cid: companyId, start_d: startOfMonthISO, end_d: todayISO }),
+    supabase.rpc("get_period_spending", { cid: companyId, start_d: prevStart, end_d: prevEnd }),
+
     // Overdue invoices
     supabase.from("invoices")
       .select("id").eq("company_id", companyId).eq("type", "sale").eq("status", "Unpaid").lt("due_date", todayISO),
-
-    // Current month spending
-    supabase.from("journal_lines")
-      .select("debit, credit, journal_entries!inner(date)")
-      .eq("company_id", companyId)
-      .gte("journal_entries.date", startOfMonthISO)
-      .lte("journal_entries.date", todayISO),
-
-    // Previous month spending
-    supabase.from("journal_lines")
-      .select("debit, credit, journal_entries!inner(date)")
-      .eq("company_id", companyId)
-      .gte("journal_entries.date", prevStart)
-      .lte("journal_entries.date", prevEnd),
   ])
 
-  // ── Helper to sum net amount ──────────────────────────────────────
-  const sumNet = (rows: any[]) => rows.reduce((s: number, r: any) => s + (r.debit || 0) - (r.credit || 0), 0)
+  // ── 2. Totals from RPCs (restored) ──────────────────────────────
+  const totalSpent = totalSpentRpc.data?.[0]?.total || 0
+  const monthlySpending = monthlySpendingRpc.data || 0
+  const lastMonthSpending = prevMonthlySpendingRpc.data || 0
 
-  // ── 2. Compute total budget ───────────────────────────────────────
+  let spendingTrend = 0
+  if (lastMonthSpending > 0) {
+    spendingTrend = Math.round(((monthlySpending - lastMonthSpending) / lastMonthSpending) * 100)
+  } else if (monthlySpending > 0) {
+    spendingTrend = 100
+  }
+
+  // ── 3. Total budget ────────────────────────────────────────────
   const totalBudget = budgetsAll.data?.reduce((s: number, b: any) => s + (b.budgeted_amount || 0), 0) || 0
 
-  // ── 3. Compute total spent ────────────────────────────────────────
-  const totalSpent = sumNet(journalLinesAll.data || [])
-
-  // ── 4. Donor balances (from budgets and journal_lines) ────────────
+  // ── 4. Donor balances (same as before, using direct queries) ───
   const donorNameMap: Record<string, string> = {}
   donorsAll.data?.forEach((d: any) => { donorNameMap[String(d.id)] = d.name })
 
@@ -107,7 +109,6 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
     }
   })
 
-  // Project start/end dates per donor
   const donorDates: Record<string, { start: string; end: string | null }> = {}
   projectsAll.data?.forEach((p: any) => {
     if (p.donor_id) {
@@ -156,7 +157,7 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
     }
   }).sort((a, b) => b.remaining - a.remaining)
 
-  // ── 5. Project utilization ────────────────────────────────────────
+  // ── 5. Project utilization ─────────────────────────────────────
   const budgetByProject: Record<string, number> = {}
   const actualByProject: Record<string, number> = {}
 
@@ -192,60 +193,54 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
 
   const overspentCount = projectRows.filter((p) => p.actual > p.budget).length
 
-  // ── 6. Underspent activities (top 5 with lowest spent %) ──────────
-  const budgetByActivity: Record<string, { budget: number; name: string }> = {}
+  // ── 6. Underspent activities (top 5) ───────────────────────────
+  // Build map: activity_id → total budget & actual (summing across all locations/accounts)
+  const budgetByAct: Record<number, number> = {}
+  const actualByAct: Record<number, number> = {}
+  // Also track project_id for the activity (pick first budget's project_id)
+  const actProjectMap: Record<number, number> = {}
+
   budgetsAll.data?.forEach((b: any) => {
-    const key = `${b.activity_id}_${b.location_id || "none"}_${b.account_id}`
-    if (!budgetByActivity[key]) {
-      budgetByActivity[key] = { budget: 0, name: b.activity_name || `Activity ${b.activity_id}` }
+    const aid = b.activity_id
+    budgetByAct[aid] = (budgetByAct[aid] || 0) + (b.budgeted_amount || 0)
+    if (!actProjectMap[aid] && b.project_id) {
+      actProjectMap[aid] = b.project_id
     }
-    budgetByActivity[key].budget += b.budgeted_amount || 0
   })
 
-  const actualByActivityKey: Record<string, number> = {}
   journalLinesAll.data?.forEach((jl: any) => {
-    const key = `${jl.activity_id}_${jl.location_id || "none"}_${jl.account_id}`
-    actualByActivityKey[key] = (actualByActivityKey[key] || 0) + (jl.debit || 0) - (jl.credit || 0)
+    if (jl.activity_id) {
+      actualByAct[jl.activity_id] = (actualByAct[jl.activity_id] || 0) + (jl.debit || 0) - (jl.credit || 0)
+    }
   })
 
-  // We also need activity names – fetch activities separately
-  const { data: activities } = await supabase.from("activities").select("id, name").eq("company_id", companyId)
-  const activityNameMap: Record<string, string> = {}
-  activities?.forEach((a: any) => { activityNameMap[String(a.id)] = a.name })
+  const activityNameMap: Record<number, string> = {}
+  activitiesAll.data?.forEach((a: any) => { activityNameMap[a.id] = a.name })
 
-  const underspentActivities = Object.keys(budgetByActivity)
-    .map((key) => {
-      const budget = budgetByActivity[key].budget
-      const actual = actualByActivityKey[key] || 0
+  const underspentActivities = Object.keys(budgetByAct)
+    .map((aid) => {
+      const id = Number(aid)
+      const budget = budgetByAct[id] || 0
+      const actual = actualByAct[id] || 0
       const pct = budget ? Math.round((actual / budget) * 100) : 100
-      const activityId = key.split("_")[0]
       return {
-        key,
-        name: activityNameMap[activityId] || `Activity ${activityId}`,
+        id,
+        name: activityNameMap[id] || `Activity ${id}`,
         budget,
         actual,
         pct,
+        projectId: actProjectMap[id] || null,
       }
     })
     .filter((a) => a.budget > 0 && a.pct < 100)
     .sort((a, b) => a.pct - b.pct)
     .slice(0, 5)
 
-  // ── 7. Receivables / Payables ─────────────────────────────────────
+  // ── 7. Receivables / Payables ─────────────────────────────────
   const totalReceivables = customers.data?.reduce((s: number, c: any) => s + (c.balance || 0), 0) || 0
   const totalPayables = suppliers.data?.reduce((s: number, s2: any) => s + (s2.balance || 0), 0) || 0
 
-  // ── 8. Monthly spending ──────────────────────────────────────────
-  const monthlySpending = sumNet(monthlySpendingData.data || [])
-  const lastMonthSpending = sumNet(prevMonthlySpendingData.data || [])
-  let spendingTrend = 0
-  if (lastMonthSpending > 0) {
-    spendingTrend = Math.round(((monthlySpending - lastMonthSpending) / lastMonthSpending) * 100)
-  } else if (monthlySpending > 0) {
-    spendingTrend = 100
-  }
-
-  const overdueInvoicesCount = invoicesUnpaid.data?.length || 0
+  const overdueInvoicesCount = overdueInvoices.data?.length || 0
 
   return {
     totalBudget,
@@ -259,7 +254,7 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
     lastMonthSpending,
     spendingTrend,
     overdueInvoicesCount,
-    underspentActivities,       // ✅ now provided
+    underspentActivities,       // ✅ now includes id, name, projectId
     lastUpdated: new Date().toLocaleTimeString(),
   }
 }
