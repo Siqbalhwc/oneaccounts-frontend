@@ -17,13 +17,12 @@ async function getPayableAccount(supabase: any, companyId: string) {
   return created
 }
 
-// ✅ Correct default expense account lookup – NO AUTO‑CREATE
+// Default expense account – NO AUTO‑CREATE
 async function getDefaultExpenseAccount(supabase: any, companyId: string, type: string) {
   if (type === 'trading') {
     const { data: inv } = await supabase.from('accounts')
       .select('id').eq('code','1200').eq('company_id', companyId).maybeSingle()
     if (inv) return inv.id
-    // fallback: if Inventory not found, we could use General Expenses? No, better to error.
     return null
   }
   // NGO / Service
@@ -79,8 +78,6 @@ async function createBillJournalEntry(
     if (amount <= 0) continue
 
     let accountId = item.account_id || null
-
-    // product items without explicit account → use default based on company type
     if (!accountId && item.product_id) {
       accountId = await getDefaultExpenseAccount(supabase, companyId, businessType)
       if (!accountId) {
@@ -90,8 +87,6 @@ async function createBillJournalEntry(
         )
       }
     }
-
-    // manual items without account → use general expenses (code 5000)
     if (!accountId) {
       accountId = await getDefaultExpenseAccount(supabase, companyId, businessType)
       if (!accountId) {
@@ -114,7 +109,7 @@ async function createBillJournalEntry(
       donor_id: null,
     }
 
-    // NGO‑only: fetch project_id from activity, donor from budgets
+    // NGO‑only: project from activity, donor from budget
     if (isNGO && item.activity_id) {
       const { data: actData } = await supabase.from('activities')
         .select('project_id')
@@ -126,16 +121,18 @@ async function createBillJournalEntry(
         .select('donor_id')
         .eq('company_id', companyId)
         .eq('activity_id', item.activity_id)
+        .eq('account_id', accountId)
+        .eq('location_id', item.location_id || null)
+        .eq('fiscal_year', new Date().getFullYear())
         .is('month', null)
-        .order('budgeted_amount', { ascending: false })
         .limit(1)
-      line.donor_id = donorRow?.[0]?.donor_id || null
+        .maybeSingle()
+      line.donor_id = donorRow?.donor_id || null
     }
 
     debitLines.push(line)
   }
 
-  // ✅ Now we must have at least one debit line – if not, error
   if (debitLines.length === 0) {
     throw new Error('No valid journal lines could be created from the bill items.')
   }
@@ -371,7 +368,6 @@ export async function POST(request: NextRequest) {
   try {
     await createBillJournalEntry(supabase, updatedBill, items, companyId, businessType)
   } catch (e: any) {
-    // ❗ Rollback everything if journal entry fails
     await supabase.from('invoice_items').delete().eq('invoice_id', bill.id)
     await supabase.from('invoices').delete().eq('id', bill.id)
     return NextResponse.json({ error: 'Journal entry failed: ' + e.message }, { status: 500 })
