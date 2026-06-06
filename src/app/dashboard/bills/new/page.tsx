@@ -492,13 +492,16 @@ export default function NewBillPage() {
   ) => {
     let overBudget = false
     for (const item of currentItems) {
-      if (!item.product_id && item.activity_id && item.account_id) {
+      if (!item.product_id && item.activity_id && item.account_id && item.total > 0) {
         const locId = item.location_id ? Number(item.location_id) : null
         const key = budgetKey(Number(item.activity_id), locId, Number(item.account_id))
         const info = currentBudgetInfo[key]
-        if (info && info.hasBudget && item.total > info.available) {
-          overBudget = true
-          break
+        if (info) {
+          // Block if: no budget row exists for this combination, OR item exceeds available
+          if (!info.hasBudget || item.total > info.available) {
+            overBudget = true
+            break
+          }
         }
       }
     }
@@ -685,9 +688,11 @@ export default function NewBillPage() {
 
   const getFilteredActivities = (locationId: string) => {
     const locNum = Number(locationId)
+    // No location selected → show all activities
     if (!locNum) return activities
     const allowed = locationActivitiesMap[locNum]
-    if (!allowed || allowed.length === 0) return activities
+    // Location selected but no budget entries exist for it → show nothing (strict)
+    if (!allowed || allowed.length === 0) return []
     return activities.filter(a => allowed.includes(a.id))
   }
 
@@ -700,8 +705,10 @@ export default function NewBillPage() {
   }
 
   const isLineOverBudget = (item: any, bdata: ReturnType<typeof getLineBudgetData>) => {
-    if (!bdata || !bdata.hasBudget) return false
-    return item.total > bdata.available
+    if (!bdata) return false
+    // Over budget if: no budget row defined, OR item total exceeds available balance
+    if (!bdata.hasBudget && item.total > 0) return true
+    return bdata.hasBudget && item.total > bdata.available
   }
 
   return (
@@ -1074,7 +1081,12 @@ export default function NewBillPage() {
                         )}
 
                         {/* Budget chips — shown once activity + account are both selected */}
-                        {budgetData && (
+                        {budgetData && !budgetData.hasBudget && (
+                          <span className="line-info-chip over-budget-chip">
+                            🚫 No budget defined for this combination
+                          </span>
+                        )}
+                        {budgetData && budgetData.hasBudget && (
                           <>
                             <span className="line-info-chip">
                               Budget: PKR {budgetData.budget.toLocaleString()}
