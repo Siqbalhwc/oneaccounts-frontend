@@ -68,6 +68,7 @@ async function createBillJournalEntry(
 ) {
   const debitLines: any[] = []
   let totalDebit = 0
+  const isNGO = businessType === 'ngo'
 
   for (const item of items) {
     const amount = (item.qty || 0) * (item.unit_price || 0)
@@ -92,9 +93,12 @@ async function createBillJournalEntry(
       credit: 0,
       location_id: item.location_id || null,
       activity_id: item.activity_id || null,
+      project_id: null,
+      donor_id: null,
     }
 
-    if (businessType === 'ngo' && item.activity_id) {
+    // NGO‑only logic: fetch project_id from activity, donor from budgets
+    if (isNGO && item.activity_id) {
       const { data: actData } = await supabase.from('activities')
         .select('project_id')
         .eq('id', item.activity_id)
@@ -109,9 +113,6 @@ async function createBillJournalEntry(
         .order('budgeted_amount', { ascending: false })
         .limit(1)
       line.donor_id = donorRow?.[0]?.donor_id || null
-    } else {
-      line.project_id = null
-      line.donor_id = null
     }
 
     debitLines.push(line)
