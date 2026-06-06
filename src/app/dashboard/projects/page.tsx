@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, FileText, Check, X, Eye, EyeOff } from "lucide-react"
+import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, FileText, Check, X, Settings2 } from "lucide-react"
 import { useCompany } from "@/contexts/CompanyContext"
 import { useTheme } from "@/contexts/ThemeContext"
 import { generateProjectPDF } from "@/lib/pdf/projectPDF"
@@ -27,7 +27,26 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showInactive, setShowInactive] = useState(false)
-  const [showFinancials, setShowFinancials] = useState(true)   // toggle for budget/actual/balance columns
+
+  // Individual column visibility
+  const [visibleColumns, setVisibleColumns] = useState({
+    budget: true,
+    actual: true,
+    balance: true,
+  })
+  const [showColumnPicker, setShowColumnPicker] = useState(false)
+  const columnPickerRef = useRef<HTMLDivElement>(null)
+
+  // Close column picker when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (columnPickerRef.current && !columnPickerRef.current.contains(e.target as Node)) {
+        setShowColumnPicker(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
 
   const [sortField, setSortField] = useState<SortField>("name")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
@@ -39,16 +58,13 @@ export default function ProjectsPage() {
   const fetchProjects = async () => {
     setLoading(true)
     try {
-      // 1. Get all projects with budget from the API
       const res = await fetch("/api/projects")
       const data = await res.json()
       if (!Array.isArray(data)) { setLoading(false); return }
 
-      // 2. Get company ID from auth
       const { data: { user } } = await supabase.auth.getUser()
       const companyId = (user?.app_metadata as any)?.company_id
 
-      // 3. Fetch actual spending per project from journal_lines
       let actualsMap: Record<number, number> = {}
       if (companyId) {
         const { data: actualRows, error } = await supabase
@@ -66,7 +82,6 @@ export default function ProjectsPage() {
         }
       }
 
-      // 4. Merge actuals and apply inactive filter
       const enriched = data.map((p: any) => ({
         ...p,
         actualSpent: actualsMap[p.id] || 0,
@@ -116,6 +131,10 @@ export default function ProjectsPage() {
     )
   }
 
+  const toggleColumn = (col: keyof typeof visibleColumns) => {
+    setVisibleColumns(prev => ({ ...prev, [col]: !prev[col] }))
+  }
+
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDir(prev => (prev === "asc" ? "desc" : "asc"))
     else {
@@ -131,33 +150,13 @@ export default function ProjectsPage() {
   const sorted = [...projects].sort((a, b) => {
     let valA: any, valB: any
     switch (sortField) {
-      case "budget":
-        valA = a.totalBudget || 0
-        valB = b.totalBudget || 0
-        break
-      case "actual":
-        valA = a.actualSpent || 0
-        valB = b.actualSpent || 0
-        break
-      case "balance":
-        valA = (a.totalBudget || 0) - (a.actualSpent || 0)
-        valB = (b.totalBudget || 0) - (b.actualSpent || 0)
-        break
-      case "approved":
-        valA = a.is_approved ? 1 : 0
-        valB = b.is_approved ? 1 : 0
-        break
-      case "status":
-        valA = a.deleted_at ? "inactive" : "active"
-        valB = b.deleted_at ? "inactive" : "active"
-        break
-      case "donor":
-        valA = (a.donors?.name || "").toLowerCase()
-        valB = (b.donors?.name || "").toLowerCase()
-        break
-      default:
-        valA = (a[sortField] || "").toString().toLowerCase()
-        valB = (b[sortField] || "").toString().toLowerCase()
+      case "budget": valA = a.totalBudget || 0; valB = b.totalBudget || 0; break
+      case "actual": valA = a.actualSpent || 0; valB = b.actualSpent || 0; break
+      case "balance": valA = (a.totalBudget || 0) - (a.actualSpent || 0); valB = (b.totalBudget || 0) - (b.actualSpent || 0); break
+      case "approved": valA = a.is_approved ? 1 : 0; valB = b.is_approved ? 1 : 0; break
+      case "status": valA = a.deleted_at ? "inactive" : "active"; valB = b.deleted_at ? "inactive" : "active"; break
+      case "donor": valA = (a.donors?.name || "").toLowerCase(); valB = (b.donors?.name || "").toLowerCase(); break
+      default: valA = (a[sortField] || "").toString().toLowerCase(); valB = (b[sortField] || "").toString().toLowerCase()
     }
     if (valA < valB) return sortDir === "asc" ? -1 : 1
     if (valA > valB) return sortDir === "asc" ? 1 : -1
@@ -169,10 +168,21 @@ export default function ProjectsPage() {
   const rowDark  = isLightStyle ? "#F8F9FC" : "#111827"
   const headerBg = isLightStyle ? "#07085B" : "#000000"
 
-  // Determine grid columns based on showFinancials toggle
-  const gridCols = showFinancials
-    ? "minmax(200px, 2fr) minmax(100px, 1fr) minmax(80px, 100px) minmax(70px, 90px) 140px 110px 100px 80px 60px"
-    : "minmax(200px, 2fr) minmax(100px, 1fr) minmax(80px, 100px) minmax(70px, 90px) 80px 60px"
+  // Build dynamic grid columns based on visibleColumns
+  const baseCols = "minmax(200px, 2fr) minmax(100px, 1fr) 100px 90px"   // project, donor, status, approved
+  const budgetCol = " 1fr"
+  const actualCol = " 1fr"
+  const balanceCol = " 1fr"
+  const pdfCol = " 80px 60px"
+
+  let gridCols = baseCols
+  if (visibleColumns.budget) gridCols += budgetCol
+  if (visibleColumns.actual) gridCols += actualCol
+  if (visibleColumns.balance) gridCols += balanceCol
+  gridCols += pdfCol
+
+  // For mobile, we'll just use overflow-x:auto; the grid template will be defined inline in style.
+  // We'll compute inline styles for header and row templates.
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -192,22 +202,22 @@ export default function ProjectsPage() {
         }
         .table-header {
           display: grid;
-          grid-template-columns: ${gridCols};
           padding: 14px 24px;
           color: white;
           font-size: 10px;
           font-weight: 700;
           text-transform: uppercase;
           background: ${headerBg};
+          column-gap: 2px;
         }
         .table-row {
           display: grid;
-          grid-template-columns: ${gridCols};
           padding: 12px 24px;
           font-size: 13px;
           align-items: center;
           border-bottom: 1px solid var(--border);
           transition: background 0.15s;
+          column-gap: 2px;
         }
         .table-row:hover { background: var(--card-hover); }
         .sort-btn {
@@ -216,6 +226,7 @@ export default function ProjectsPage() {
           display: inline-flex; align-items: center; gap: 4px;
           padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px;
         }
+        .status-col { display: flex; justify-content: center; align-items: center; }
         .status-badge {
           display: inline-flex; align-items: center; gap: 4px;
           padding: 4px 10px; border-radius: 20px;
@@ -226,12 +237,34 @@ export default function ProjectsPage() {
         .approved-icon { color: #10B981; cursor: pointer; }
         .not-approved-icon { color: #CBD5E1; cursor: pointer; }
 
+        .column-picker {
+          position: absolute;
+          top: 100%;
+          right: 0;
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 8px;
+          z-index: 50;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          min-width: 160px;
+        }
+        .column-picker label {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 13px;
+          color: var(--text);
+          cursor: pointer;
+        }
+
         @media (max-width: 900px) {
           .table-wrap { overflow-x: auto; }
           .table-header, .table-row {
-            grid-template-columns: ${showFinancials
-              ? "160px 90px 80px 70px 110px 90px 80px 60px 50px"
-              : "160px 90px 80px 70px 60px 50px"};
+            grid-template-columns: 160px 90px 80px 70px ${visibleColumns.budget ? "100px" : ""} ${visibleColumns.actual ? "100px" : ""} ${visibleColumns.balance ? "100px" : ""} 60px 50px;
             padding: 10px 12px;
             font-size: 11px;
           }
@@ -254,14 +287,27 @@ export default function ProjectsPage() {
           Show inactive projects
         </label>
 
-        <button
-          className="btn btn-outline"
-          onClick={() => setShowFinancials(!showFinancials)}
-          style={{ marginLeft: "auto" }}
-        >
-          {showFinancials ? <EyeOff size={14} /> : <Eye size={14} />}
-          {showFinancials ? "Hide Budget Details" : "Show Budget Details"}
-        </button>
+        <div style={{ marginLeft: "auto", position: "relative" }} ref={columnPickerRef}>
+          <button className="btn btn-outline" onClick={() => setShowColumnPicker(!showColumnPicker)}>
+            <Settings2 size={14} /> Columns
+          </button>
+          {showColumnPicker && (
+            <div className="column-picker">
+              <label>
+                <input type="checkbox" checked={visibleColumns.budget} onChange={() => toggleColumn("budget")} />
+                Budget
+              </label>
+              <label>
+                <input type="checkbox" checked={visibleColumns.actual} onChange={() => toggleColumn("actual")} />
+                Actual
+              </label>
+              <label>
+                <input type="checkbox" checked={visibleColumns.balance} onChange={() => toggleColumn("balance")} />
+                Balance
+              </label>
+            </div>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -272,17 +318,19 @@ export default function ProjectsPage() {
         </div>
       ) : (
         <div className="table-wrap">
-          <div className="table-header" style={{ background: headerBg }}>
+          <div className="table-header" style={{ gridTemplateColumns: gridCols }}>
             <button className="sort-btn" onClick={() => handleSort("name")}>Project Name {getSortIcon("name")}</button>
             <button className="sort-btn" onClick={() => handleSort("donor")}>Donor {getSortIcon("donor")}</button>
-            <button className="sort-btn" onClick={() => handleSort("status")}>Status {getSortIcon("status")}</button>
+            <div className="sort-btn" style={{ justifyContent: "center", cursor: "default", color: "white" }}>Status</div>
             <button className="sort-btn" onClick={() => handleSort("approved")}>Approved {getSortIcon("approved")}</button>
-            {showFinancials && (
-              <>
-                <button className="sort-btn" onClick={() => handleSort("budget")} style={{ justifyContent: "flex-end" }}>Budget {getSortIcon("budget")}</button>
-                <button className="sort-btn" onClick={() => handleSort("actual")} style={{ justifyContent: "flex-end" }}>Actual {getSortIcon("actual")}</button>
-                <button className="sort-btn" onClick={() => handleSort("balance")} style={{ justifyContent: "flex-end" }}>Balance {getSortIcon("balance")}</button>
-              </>
+            {visibleColumns.budget && (
+              <button className="sort-btn" onClick={() => handleSort("budget")} style={{ justifyContent: "flex-end" }}>Budget {getSortIcon("budget")}</button>
+            )}
+            {visibleColumns.actual && (
+              <button className="sort-btn" onClick={() => handleSort("actual")} style={{ justifyContent: "flex-end" }}>Actual {getSortIcon("actual")}</button>
+            )}
+            {visibleColumns.balance && (
+              <button className="sort-btn" onClick={() => handleSort("balance")} style={{ justifyContent: "flex-end" }}>Balance {getSortIcon("balance")}</button>
             )}
             <span style={{ textAlign: "center" }}>PDF</span>
             <span></span>
@@ -293,15 +341,15 @@ export default function ProjectsPage() {
               <div
                 key={p.id}
                 className="table-row"
-                style={{ background: i % 2 === 0 ? rowLight : rowDark }}
+                style={{ background: i % 2 === 0 ? rowLight : rowDark, gridTemplateColumns: gridCols }}
               >
                 <span style={{ fontWeight: 600, color: "var(--text)" }}>{p.name}</span>
                 <span style={{ fontSize: 13, color: "var(--text)" }}>{p.donors?.name || "—"}</span>
-                <span>
+                <div className="status-col">
                   <span className={`status-badge ${p.deleted_at ? "status-inactive" : "status-active"}`}>
                     {p.deleted_at ? "Inactive" : "Active"}
                   </span>
-                </span>
+                </div>
                 <span style={{ textAlign: "center", cursor: "pointer" }} onClick={() => toggleApproval(p)}>
                   {p.is_approved ? (
                     <Check size={18} className="approved-icon" />
@@ -309,17 +357,19 @@ export default function ProjectsPage() {
                     <X size={18} className="not-approved-icon" />
                   )}
                 </span>
-                {showFinancials && (
-                  <>
-                    <span style={{ textAlign: "right", fontWeight: 500, whiteSpace: "nowrap" }}>{fmt(p.totalBudget || 0)}</span>
-                    <span style={{ textAlign: "right", whiteSpace: "nowrap" }}>{fmt(p.actualSpent || 0)}</span>
-                    <span style={{
-                      textAlign: "right",
-                      whiteSpace: "nowrap",
-                      fontWeight: 600,
-                      color: balance < 0 ? "#EF4444" : "#10B981"
-                    }}>{fmt(balance)}</span>
-                  </>
+                {visibleColumns.budget && (
+                  <span style={{ textAlign: "right", fontWeight: 500, whiteSpace: "nowrap" }}>{fmt(p.totalBudget || 0)}</span>
+                )}
+                {visibleColumns.actual && (
+                  <span style={{ textAlign: "right", whiteSpace: "nowrap" }}>{fmt(p.actualSpent || 0)}</span>
+                )}
+                {visibleColumns.balance && (
+                  <span style={{
+                    textAlign: "right",
+                    whiteSpace: "nowrap",
+                    fontWeight: 600,
+                    color: balance < 0 ? "#EF4444" : "#10B981"
+                  }}>{fmt(balance)}</span>
                 )}
                 <span style={{ textAlign: "center" }}>
                   <button className="btn btn-outline" style={{ padding: "4px 8px" }} onClick={() => handleGeneratePDF(p)}>
