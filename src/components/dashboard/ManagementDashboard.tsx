@@ -43,7 +43,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const { companyId } = useCompany()
   const companyError = !companyId
 
-  // Create Supabase client
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -59,7 +58,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
   useEffect(() => {
     if (!companyId) return
-    // Load projects
     supabase
       .from("projects")
       .select("id, name")
@@ -67,7 +65,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
       .order("name")
       .then(({ data }) => data && setProjects(data))
 
-    // Load donors
     supabase
       .from("donors")
       .select("id, name")
@@ -92,6 +89,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const spendingTrend: number = dashData?.spendingTrend || 0
   const overdueInvoicesCount: number = dashData?.overdueInvoicesCount || 0
   const lastUpdated: string = dashData?.lastUpdated || ""
+  const underspentActivities: any[] = dashData?.underspentActivities || []
 
   // ── Animated values – already in millions ──────────────────────────
   const animBudget = useAnimatedNumber(totalBudget / 1_000_000, 600)
@@ -105,8 +103,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
     return `${sign}PKR ${Math.abs(valueInMillions).toFixed(1)}M`
   }
 
-  // ── Underspent activities & activity health ─────────────
-  const [underspentActivities, setUnderspentActivities] = useState<any[]>([])
+  // ── Activity health (unchanged) ─────────────
   const [activityHealth, setActivityHealth] = useState<Record<string, { lowCount: number; threshold: number; message: string }>>({})
 
   // ── Top‑5 projects for the card ──
@@ -576,6 +573,12 @@ export default function ManagementDashboard({ role }: { role: string }) {
                     </div>
                   </div>
                 ))}
+                <div style={{ textAlign: "right", marginTop: "0.5rem" }}>
+                  <button className="warning-btn" style={{ background: "transparent", color: "#93C5FD", border: "1px solid #334155", padding: "4px 12px" }}
+                    onClick={() => router.push("/dashboard/reports/budget-vs-actual" + detailQuery())}>
+                    View all →
+                  </button>
+                </div>
               </>
             )}
           </motion.div>
