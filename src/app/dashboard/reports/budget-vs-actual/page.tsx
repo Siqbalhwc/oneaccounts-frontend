@@ -114,13 +114,7 @@ export default function BudgetVsActualReportPage() {
         })
         setData(newData)
         setLoading(false)
-      }).catch(err => {
-        console.error("Actual query promise error:", err)
-        setLoading(false)
       })
-    }).catch(err => {
-      console.error("Budget query promise error:", err)
-      setLoading(false)
     })
   }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, selectedActivityId, selectedLocationId, businessType])
 
