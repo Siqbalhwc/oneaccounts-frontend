@@ -64,7 +64,12 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
   const { data: dashData, isLoading, isError } = useDashboardData(companyId, fiscalYear)
 
-  // ── Raw arrays from hook ──────────────────────────────────────────
+  // ── Original aggregate values (work without filter) ─────────────────
+  const totalBudgetOrig = dashData?.totalBudget || 0
+  const totalSpentOrig = dashData?.totalSpent || 0
+  const monthlySpendingOrig = dashData?.monthlySpending || 0
+
+  // ── Raw arrays for filtered calculations ───────────────────────────
   const allBudgets = dashData?.allBudgets || []
   const allJournalLines = dashData?.allJournalLines || []
   const allDonors = dashData?.allDonors || []
@@ -73,48 +78,50 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
   const now = new Date()
   const currentMonth = now.getMonth() + 1
-  const currentYear = now.getFullYear()
-  const startOfMonthISO = new Date(Date.UTC(currentYear, currentMonth - 1, 1)).toISOString().split("T")[0]
+  const startOfMonthISO = new Date(Date.UTC(now.getFullYear(), currentMonth - 1, 1)).toISOString().split("T")[0]
   const todayISO = now.toISOString().split("T")[0]
 
   // ── Filter helpers ─────────────────────────────────────────────────
+  const isFiltered = selectedProjectId !== "" || selectedDonorId !== ""
+
   const filteredBudgets = useMemo(() => {
+    if (!isFiltered) return allBudgets
     return allBudgets.filter((b: any) => {
       if (selectedProjectId && String(b.project_id) !== selectedProjectId) return false
       if (selectedDonorId && String(b.donor_id) !== selectedDonorId) return false
       return true
     })
-  }, [allBudgets, selectedProjectId, selectedDonorId])
+  }, [allBudgets, selectedProjectId, selectedDonorId, isFiltered])
 
   const filteredJournalLines = useMemo(() => {
+    if (!isFiltered) return allJournalLines
     return allJournalLines.filter((jl: any) => {
       if (selectedProjectId && String(jl.project_id) !== selectedProjectId) return false
       if (selectedDonorId && String(jl.donor_id) !== selectedDonorId) return false
       return true
     })
-  }, [allJournalLines, selectedProjectId, selectedDonorId])
+  }, [allJournalLines, selectedProjectId, selectedDonorId, isFiltered])
 
-  // ── Computed totals from filtered data ────────────────────────────
-  const totalBudget = useMemo(() => {
-    return filteredBudgets.reduce((s: number, b: any) => s + (b.budgeted_amount || 0), 0)
-  }, [filteredBudgets])
+  // ── KPIs: use original values when unfiltered, filtered otherwise ──
+  const totalBudget = isFiltered
+    ? filteredBudgets.reduce((s: number, b: any) => s + (b.budgeted_amount || 0), 0)
+    : totalBudgetOrig
 
-  const totalSpent = useMemo(() => {
-    return filteredJournalLines.reduce((s: number, jl: any) => s + (jl.debit || 0) - (jl.credit || 0), 0)
-  }, [filteredJournalLines])
+  const totalSpent = isFiltered
+    ? filteredJournalLines.reduce((s: number, jl: any) => s + (jl.debit || 0) - (jl.credit || 0), 0)
+    : totalSpentOrig
 
-  // Monthly spending from filtered journal lines
-  const monthlySpending = useMemo(() => {
-    return filteredJournalLines
-      .filter((jl: any) => jl.journal_entries?.date >= startOfMonthISO && jl.journal_entries?.date <= todayISO)
-      .reduce((s: number, jl: any) => s + (jl.debit || 0) - (jl.credit || 0), 0)
-  }, [filteredJournalLines, startOfMonthISO, todayISO])
+  const monthlySpending = isFiltered
+    ? filteredJournalLines
+        .filter((jl: any) => jl.journal_entries?.date >= startOfMonthISO && jl.journal_entries?.date <= todayISO)
+        .reduce((s: number, jl: any) => s + (jl.debit || 0) - (jl.credit || 0), 0)
+    : monthlySpendingOrig
 
-  // Last month spending from RPC remains, but we can compute similarly if needed. For now, we'll use the RPC data from hook, but it won't respond to filters. We'll just show it as is. Better to compute it similarly from all journal lines? We'll keep the RPC for simplicity; the dashboard shows last month only as comparison, not filterable. So we'll use dashData.lastMonthSpending as is.
+  // Last month spending (unchanged, from RPC)
   const lastMonthSpending = dashData?.lastMonthSpending || 0
   const spendingTrend = dashData?.spendingTrend || 0
 
-  // ── Donor balances (filtered) ─────────────────────────────────────
+  // ── Donor balances (always from filtered data) ─────────────────────
   const donorNameMap: Record<string, string> = {}
   allDonors.forEach((d: any) => { donorNameMap[String(d.id)] = d.name })
 
@@ -184,7 +191,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
     }).sort((a, b) => b.remaining - a.remaining)
   }, [budgetByDonor, actualByDonor, donorDates, donorNameMap, currentMonth, fiscalYear])
 
-  // ── Project utilization (filtered) ────────────────────────────────
+  // ── Project utilization (always from filtered data) ────────────────
   const budgetByProject: Record<string, number> = {}
   filteredBudgets.forEach((b: any) => {
     if (b.project_id) {
@@ -218,7 +225,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
   const overspentCount = projectRows.filter((p: any) => p.actual > p.budget).length
 
-  // ── Underspent activities (filtered) ─────────────────────────────
+  // ── Underspent activities (always from filtered data) ──────────────
   const activityNameMap: Record<number, string> = {}
   allActivities.forEach((a: any) => { activityNameMap[a.id] = a.name })
 
@@ -578,7 +585,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           {[
             { label: "Total Budget", value: fmtM(animBudget), meta: `${projectRows.length} projects`, color: "#A78BFA", link: "/dashboard/reports/budget-summary" },
             { label: "Total Spent", value: fmtM(animSpent), meta: `${spentPct}% of budget`, color: "#F97316", link: "/dashboard/reports/spending-detail" },
-            { label: remainingFunds < 0 ? "Overspent" : "Remaining", value: fmtM(animRemaining), meta: `${Math.abs(Math.round((remainingFunds / totalBudget) * 100))}% ${remainingFunds < 0 ? "over" : "left"}`, color: remainingFunds >= 0 ? "#2DD4BF" : "#F87171", link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null },
+            { label: remainingFunds < 0 ? "Overspent" : "Remaining", value: fmtM(animRemaining), meta: `${Math.abs(Math.round((remainingFunds / Math.max(totalBudget, 1)) * 100))}% ${remainingFunds < 0 ? "over" : "left"}`, color: remainingFunds >= 0 ? "#2DD4BF" : "#F87171", link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null },
             { label: "Portfolio Health", value: overspentCount > 0 ? "⚠️ Needs Attention" : "Healthy", meta: `${Math.round((1 - overspentCount / Math.max(projectRows.length, 1)) * 100)}% health score`, color: overspentCount > 0 ? "#F97316" : "#2DD4BF", link: "/dashboard/reports/overspent" },
             { label: "📆 Monthly Spending", value: monthlySpending > 0 ? fmtM(animMonthly) : "—", meta: monthlySpending === 0 ? "No transactions this month" : `vs. ${formatPKR(lastMonthSpending)} last month`, color: monthlySpending > 0 ? "#F97316" : "#94A3B8", link: "/dashboard/reports/spending-detail" },
           ].map((kpi: any, i: number) => (
