@@ -52,11 +52,12 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [selectedDonorId, setSelectedDonorId] = useState<string>("")
   const [userDisplayName, setUserDisplayName] = useState("")
+  const [businessType, setBusinessType] = useState<string>("")
 
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
 
-  // Fetch user name
+  // Fetch user name and business type
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -71,6 +72,10 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
   useEffect(() => {
     if (!companyId) return
+    // Fetch business type
+    supabase.from("companies").select("business_type").eq("id", companyId).single()
+      .then(({ data }) => { if (data) setBusinessType(data.business_type || "") })
+    // Load projects/donors (only used for NGO)
     supabase.from("projects").select("id, name").eq("company_id", companyId).order("name")
       .then(({ data }) => data && setProjects(data))
     supabase.from("donors").select("id, name").eq("company_id", companyId).order("name")
@@ -79,7 +84,71 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
   const { data: dashData, isLoading, isError } = useDashboardData(companyId, fiscalYear)
 
-  // Raw arrays from hook
+  const isNGO = businessType === "ngo"
+
+  // ── Trading / Service data ──────────────────────────────────────
+  const [cashBalance, setCashBalance] = useState(0)
+  const [revenueTotal, setRevenueTotal] = useState(0)
+  const [expenseTotal, setExpenseTotal] = useState(0)
+  const [overdueBillsCount, setOverdueBillsCount] = useState(0)
+
+  useEffect(() => {
+    if (isNGO || !companyId) return
+    // Cash & bank balance
+    const fetchCash = async () => {
+      const { data: bankAccounts } = await supabase.from("bank_accounts").select("current_balance").eq("company_id", companyId)
+      const { data: cashAcc } = await supabase.from("accounts").select("balance").eq("company_id", companyId).eq("code", "1000").maybeSingle()
+      const bankCash = bankAccounts?.reduce((s: number, b: any) => s + (b.current_balance || 0), 0) || 0
+      const cash = cashAcc?.balance || 0
+      setCashBalance(bankCash + cash)
+    }
+    fetchCash()
+  }, [companyId, isNGO])
+
+  useEffect(() => {
+    if (isNGO || !companyId) return
+    const fetchPL = async () => {
+      const startDate = `${fiscalYear}-01-01`
+      const endDate = `${fiscalYear}-12-31`
+      const { data: revAccs } = await supabase.from("accounts").select("id").eq("company_id", companyId).eq("type", "Revenue")
+      const { data: expAccs } = await supabase.from("accounts").select("id").eq("company_id", companyId).eq("type", "Expense")
+      const revIds = (revAccs || []).map(a => a.id)
+      const expIds = (expAccs || []).map(a => a.id)
+
+      const { data: revLines } = await supabase.from("journal_lines")
+        .select("debit, credit, journal_entries!inner(date)")
+        .eq("company_id", companyId)
+        .in("account_id", revIds)
+        .gte("journal_entries.date", startDate)
+        .lte("journal_entries.date", endDate)
+      const rev = (revLines || []).reduce((s, l) => s + (l.credit || 0) - (l.debit || 0), 0)
+
+      const { data: expLines } = await supabase.from("journal_lines")
+        .select("debit, credit, journal_entries!inner(date)")
+        .eq("company_id", companyId)
+        .in("account_id", expIds)
+        .gte("journal_entries.date", startDate)
+        .lte("journal_entries.date", endDate)
+      const exp = (expLines || []).reduce((s, l) => s + (l.debit || 0) - (l.credit || 0), 0)
+
+      setRevenueTotal(Math.abs(rev))
+      setExpenseTotal(Math.abs(exp))
+    }
+    fetchPL()
+  }, [companyId, isNGO, fiscalYear])
+
+  useEffect(() => {
+    if (!companyId) return
+    supabase.from("invoices")
+      .select("id")
+      .eq("company_id", companyId)
+      .eq("type", "purchase")
+      .in("status", ["Unpaid", "Partial"])
+      .lt("due_date", new Date().toISOString().split("T")[0])
+      .then(({ data }) => setOverdueBillsCount(data?.length || 0))
+  }, [companyId])
+
+  // ── NGO data (from hook) ─────────────────────────────────────────
   const allBudgets = dashData?.allBudgets || []
   const allJournalLines = dashData?.allJournalLines || []
   const allDonors = dashData?.allDonors || []
@@ -92,50 +161,48 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const startOfMonthISO = new Date(Date.UTC(currentYear, currentMonth - 1, 1)).toISOString().split("T")[0]
   const todayISO = now.toISOString().split("T")[0]
 
-  const isFiltered = selectedProjectId !== "" || selectedDonorId !== ""
+  const isFiltered = isNGO && (selectedProjectId !== "" || selectedDonorId !== "")
 
   const filteredBudgets = useMemo(() => {
-    if (!isFiltered) return allBudgets
+    if (!isNGO || !isFiltered) return allBudgets
     return allBudgets.filter((b: any) => {
       if (selectedProjectId && String(b.project_id) !== selectedProjectId) return false
       if (selectedDonorId && String(b.donor_id) !== selectedDonorId) return false
       return true
     })
-  }, [allBudgets, selectedProjectId, selectedDonorId, isFiltered])
+  }, [allBudgets, selectedProjectId, selectedDonorId, isNGO, isFiltered])
 
   const filteredJournalLines = useMemo(() => {
-    if (!isFiltered) return allJournalLines
+    if (!isNGO || !isFiltered) return allJournalLines
     return allJournalLines.filter((jl: any) => {
       if (selectedProjectId && String(jl.project_id) !== selectedProjectId) return false
       if (selectedDonorId && String(jl.donor_id) !== selectedDonorId) return false
       return true
     })
-  }, [allJournalLines, selectedProjectId, selectedDonorId, isFiltered])
+  }, [allJournalLines, selectedProjectId, selectedDonorId, isNGO, isFiltered])
 
-  // Original aggregate values (unfiltered)
   const totalBudgetOrig = dashData?.totalBudget || 0
   const totalSpentOrig = dashData?.totalSpent || 0
   const monthlySpendingOrig = dashData?.monthlySpending || 0
 
-  // KPIs: use original values when unfiltered, filtered otherwise
-  const totalBudget = isFiltered
+  const totalBudget = isNGO ? (isFiltered
     ? filteredBudgets.reduce((s: number, b: any) => s + (b.budgeted_amount || 0), 0)
-    : totalBudgetOrig
+    : totalBudgetOrig) : 0
 
-  const totalSpent = isFiltered
+  const totalSpent = isNGO ? (isFiltered
     ? filteredJournalLines.reduce((s: number, jl: any) => s + (jl.debit || 0) - (jl.credit || 0), 0)
-    : totalSpentOrig
+    : totalSpentOrig) : 0
 
-  const monthlySpending = isFiltered
+  const monthlySpending = isNGO ? (isFiltered
     ? filteredJournalLines
         .filter((jl: any) => jl.journal_entries?.date >= startOfMonthISO && jl.journal_entries?.date <= todayISO)
         .reduce((s: number, jl: any) => s + (jl.debit || 0) - (jl.credit || 0), 0)
-    : monthlySpendingOrig
+    : monthlySpendingOrig) : 0
 
   const lastMonthSpending = dashData?.lastMonthSpending || 0
   const spendingTrend = dashData?.spendingTrend || 0
 
-  // ── Donor balances (filtered) ─────────────────────────────────────
+  // ── Donor balances (NGO only) ────────────────────────────────────
   const donorNameMap: Record<string, string> = {}
   allDonors.forEach((d: any) => { donorNameMap[String(d.id)] = d.name })
 
@@ -169,6 +236,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
   })
 
   const donorBalances = useMemo(() => {
+    if (!isNGO) return []
     return Object.keys(budgetByDonor).map((donorId) => {
       const budget = budgetByDonor[donorId] || 0
       const actual = actualByDonor[donorId] || 0
@@ -203,9 +271,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
         health,
       }
     }).sort((a, b) => b.remaining - a.remaining)
-  }, [budgetByDonor, actualByDonor, donorDates, donorNameMap, currentMonth, fiscalYear])
+  }, [isNGO, budgetByDonor, actualByDonor, donorDates, donorNameMap, currentMonth, fiscalYear])
 
-  // ── Project utilization (filtered) ────────────────────────────────
+  // ── Project utilization (NGO only) ────────────────────────────────
   const budgetByProject: Record<string, number> = {}
   filteredBudgets.forEach((b: any) => {
     if (b.project_id) {
@@ -226,6 +294,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
   allProjects.forEach((p: any) => { projectNameMap[String(p.id)] = p.name })
 
   const projectRows = useMemo(() => {
+    if (!isNGO) return []
     return Object.keys(budgetByProject).map((pid) => {
       const budget = budgetByProject[pid] || 0
       const actual = actualByProject[pid] || 0
@@ -235,11 +304,11 @@ export default function ManagementDashboard({ role }: { role: string }) {
       ...p,
       status: p.pct > 100 ? "Overspent" : p.pct > 80 ? "Review" : (now.getMonth() > 2 && p.pct < 10) ? "At Risk" : "On Track",
     }))
-  }, [budgetByProject, actualByProject, projectNameMap, now])
+  }, [isNGO, budgetByProject, actualByProject, projectNameMap, now])
 
   const overspentCount = projectRows.filter((p: any) => p.actual > p.budget).length
 
-  // ── Underspent activities (filtered) ─────────────────────────────
+  // ── Underspent activities (NGO only) ─────────────────────────────
   const activityNameMap: Record<number, string> = {}
   allActivities.forEach((a: any) => { activityNameMap[a.id] = a.name })
 
@@ -262,6 +331,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
   })
 
   const underspentActivities = useMemo(() => {
+    if (!isNGO) return []
     return Object.keys(budgetByAct)
       .map((aid) => {
         const id = Number(aid)
@@ -284,9 +354,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
       .filter((a) => a.budget > 0 && a.spentPct < 100)
       .sort((a, b) => a.spentPct - b.spentPct)
       .slice(0, 5)
-  }, [budgetByAct, actualByAct, activityNameMap, actProjectMap])
+  }, [isNGO, budgetByAct, actualByAct, activityNameMap, actProjectMap])
 
-  // ── Receivables / Payables ────────────────────────────────────────
+  // ── Shared data ─────────────────────────────────────────────────
   const totalReceivables = dashData?.totalReceivables || 0
   const totalPayables = dashData?.totalPayables || 0
   const overdueInvoicesCount = dashData?.overdueInvoicesCount || 0
@@ -295,9 +365,14 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const remainingFunds = totalBudget - totalSpent
   const spentPct = totalBudget ? Math.round((totalSpent / totalBudget) * 100) : 0
 
-  const projectsSorted = [...projectRows].sort((a: any, b: any) => b.pct - a.pct)
-  const highestProject = projectsSorted[0] || null
-  const lowestProject = projectsSorted[projectsSorted.length - 1] || null
+  const recentTransactions = useMemo(() => {
+    return (allJournalLines || []).slice(0, 10).map((jl: any) => ({
+      date: jl.journal_entries?.date?.split("T")[0],
+      description: jl.journal_entries?.description,
+      debit: jl.debit || 0,
+      credit: jl.credit || 0,
+    }))
+  }, [allJournalLines])
 
   const getGreeting = (): string => {
     const hour = new Date().getHours()
@@ -309,8 +384,198 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const formatPKR = (v: number): string => {
     const sign = v < 0 ? "-" : ""
     const abs = Math.abs(v)
-    return `${sign}PKR ${(abs / 1_000_000).toFixed(1)}M`
+    if (abs >= 1_000_000) return `${sign}PKR ${(abs / 1_000_000).toFixed(1)}M`
+    if (abs >= 1_000) return `${sign}PKR ${(abs / 1_000).toFixed(1)}K`
+    return `${sign}PKR ${abs.toLocaleString()}`
   }
+
+  if (companyError) {
+    return (
+      <div style={{ padding: 40, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>
+        <div style={{ fontSize: "1.2rem", marginBottom: 8, color: "#F87171" }}>Could not load dashboard</div>
+        <div style={{ fontSize: "0.85rem" }}>Your account may not be linked to a company. Please contact your administrator.</div>
+      </div>
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <div style={{ padding: 40, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
+        <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }} style={{ width: 36, height: 36, borderRadius: "50%", border: "3px solid var(--border)", borderTop: "3px solid #A78BFA" }} />
+        <div>Loading your dashboard…</div>
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div style={{ padding: 40, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>
+        <div style={{ fontSize: "1.2rem", marginBottom: 8, color: "#F87171" }}>Could not load dashboard</div>
+        <div style={{ fontSize: "0.85rem" }}>Please try refreshing the page.</div>
+      </div>
+    )
+  }
+
+  // ═══════════════════ TRADING / SERVICE DASHBOARD ═══════════════════
+  if (!isNGO) {
+    const grossProfit = revenueTotal - expenseTotal
+    return (
+      <div style={{ background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)", padding: "0.8rem 1.2rem" }}>
+        <style>{`
+          .trd * { box-sizing: border-box; }
+          .trd .card {
+            background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+            padding: 20px; box-shadow: var(--shadow-sm);
+          }
+          .trd .hero {
+            background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+            padding: 1rem 1.5rem; margin-bottom: 1.5rem; display: flex;
+            justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.8rem;
+          }
+          .trd .kpi-row {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;
+          }
+          .trd .kpi-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 6px; }
+          .trd .kpi-value { font-size: 1.7rem; font-weight: 800; }
+          .trd .two-col { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 24px; }
+          .trd table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+          .trd th { text-align: left; padding: 8px 12px; border-bottom: 2px solid var(--border); color: var(--text-muted); font-weight: 600; font-size: 0.65rem; text-transform: uppercase; }
+          .trd td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+          .trd .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+          .trd .quick-action-btn {
+            background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+            padding: 14px; text-align: center; font-size: 0.8rem; font-weight: 600;
+            color: var(--text); cursor: pointer; transition: 0.15s;
+          }
+          .trd .quick-action-btn:hover { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+          @media (max-width: 1024px) {
+            .trd .kpi-row { grid-template-columns: repeat(2, 1fr); }
+            .trd .two-col { grid-template-columns: 1fr; }
+          }
+          @media (max-width: 640px) {
+            .trd .kpi-row { grid-template-columns: 1fr; }
+            .trd .hero { flex-direction: column; align-items: flex-start; }
+          }
+        `}</style>
+
+        <div className="trd">
+          <div className="hero">
+            <div>
+              <h2 style={{ fontSize: "1.3rem", fontWeight: 700 }}>{getGreeting()}, {userDisplayName}</h2>
+              <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                {businessType === "trading" ? "Trading Dashboard" : "Service Dashboard"}
+              </p>
+            </div>
+            <div>
+              <label style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginRight: 8 }}>Period:</label>
+              <select
+                value={fiscalYear}
+                onChange={e => setFiscalYear(Number(e.target.value))}
+                style={{
+                  padding: "6px 12px", borderRadius: "20px", border: "1px solid var(--border)",
+                  background: "var(--card)", color: "var(--text)", fontFamily: "inherit"
+                }}
+              >
+                {[2024,2025,2026,2027].map(y => <option key={y} value={y}>FY {y}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="kpi-row">
+            {[
+              { label: "Total Revenue", value: formatPKR(revenueTotal), color: "#10B981" },
+              { label: "Total Expenses", value: formatPKR(expenseTotal), color: "#EF4444" },
+              { label: "Gross Profit",   value: formatPKR(grossProfit),   color: grossProfit >= 0 ? "#10B981" : "#EF4444" },
+              { label: "Cash & Bank",    value: formatPKR(cashBalance),   color: "#A78BFA" },
+              { label: "Receivables",    value: formatPKR(totalReceivables), color: "#F97316" },
+              { label: "Payables",       value: formatPKR(totalPayables),   color: "#EF4444" },
+              { label: "Overdue Inv.",   value: overdueInvoicesCount.toString(), color: "#EF4444" },
+              { label: "Overdue Bills",  value: overdueBillsCount.toString(), color: "#EF4444" },
+            ].map((kpi) => (
+              <div key={kpi.label} className="card">
+                <div className="kpi-label">{kpi.label}</div>
+                <div className="kpi-value" style={{ color: kpi.color }}>{kpi.value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="two-col">
+            <div className="card">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <span style={{ fontWeight: 700, fontSize: "1rem" }}>🔄 Recent Transactions</span>
+                <button onClick={() => router.push("/dashboard/reports/general-ledger")}
+                  style={{ background: "none", border: "none", color: "var(--primary)", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>
+                  View All →
+                </button>
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table>
+                  <thead>
+                    <tr><th>Date</th><th>Description</th><th style={{ textAlign: "right" }}>Debit</th><th style={{ textAlign: "right" }}>Credit</th></tr>
+                  </thead>
+                  <tbody>
+                    {recentTransactions.length === 0 ? (
+                      <tr><td colSpan={4} style={{ textAlign: "center", color: "var(--text-muted)" }}>No transactions</td></tr>
+                    ) : (
+                      recentTransactions.map((t: any, idx: number) => (
+                        <tr key={idx}>
+                          <td>{t.date}</td>
+                          <td>{t.description}</td>
+                          <td style={{ textAlign: "right", color: "#EF4444" }}>{t.debit > 0 ? t.debit.toLocaleString() : "—"}</td>
+                          <td style={{ textAlign: "right", color: "#10B981" }}>{t.credit > 0 ? t.credit.toLocaleString() : "—"}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+              <div className="card">
+                <div style={{ fontWeight: 700, fontSize: "1rem", marginBottom: 12 }}>⚡ Quick Actions</div>
+                <div className="quick-actions">
+                  <div className="quick-action-btn" onClick={() => router.push("/dashboard/invoices/new")}>➕ New Invoice</div>
+                  <div className="quick-action-btn" onClick={() => router.push("/dashboard/bills/new")}>📦 New Bill</div>
+                  <div className="quick-action-btn" onClick={() => router.push("/dashboard/receipts/new")}>💰 Receive Payment</div>
+                  <div className="quick-action-btn" onClick={() => router.push("/dashboard/payments/new")}>💳 Record Payment</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ═══════════════════ NGO DASHBOARD (unchanged) ═══════════════════
+  const cardVariant = {
+    hidden: { opacity: 0, y: 20 },
+    visible: (i: number) => ({
+      opacity: 1,
+      y: 0,
+      transition: { delay: i * 0.08, duration: 0.45 },
+    }),
+  }
+
+  const hoverScale = {
+    whileHover: {
+      scale: 1.03,
+      y: -6,
+      boxShadow: isDark ? "0 12px 40px rgba(0,0,0,0.6)" : "0 12px 40px rgba(0,0,0,0.12)",
+      transition: { duration: 0.25 },
+    },
+  }
+
+  const fmtM = (valueInMillions: number): string => {
+    const sign = valueInMillions < 0 ? "-" : ""
+    return `${sign}PKR ${Math.abs(valueInMillions).toFixed(1)}M`
+  }
+
+  const animBudget = useAnimatedNumber(totalBudget / 1_000_000, 600)
+  const animSpent = useAnimatedNumber(totalSpent / 1_000_000, 600)
+  const animRemaining = useAnimatedNumber(Math.abs(totalBudget - totalSpent) / 1_000_000, 600)
+  const animMonthly = useAnimatedNumber(monthlySpending / 1_000_000, 600)
 
   const detailQuery = (extra: Record<string, string> = {}): string => {
     const params = new URLSearchParams({ fy: String(fiscalYear) })
@@ -331,64 +596,8 @@ export default function ManagementDashboard({ role }: { role: string }) {
     return null
   }
 
-  const animBudget = useAnimatedNumber(totalBudget / 1_000_000, 600)
-  const animSpent = useAnimatedNumber(totalSpent / 1_000_000, 600)
-  const animRemaining = useAnimatedNumber(Math.abs(totalBudget - totalSpent) / 1_000_000, 600)
-  const animMonthly = useAnimatedNumber(monthlySpending / 1_000_000, 600)
-
-  const fmtM = (valueInMillions: number): string => {
-    const sign = valueInMillions < 0 ? "-" : ""
-    return `${sign}PKR ${Math.abs(valueInMillions).toFixed(1)}M`
-  }
-
-  const cardVariant = {
-    hidden: { opacity: 0, y: 20 },
-    visible: (i: number) => ({
-      opacity: 1,
-      y: 0,
-      transition: { delay: i * 0.08, duration: 0.45 },
-    }),
-  }
-
-  const hoverScale = {
-    whileHover: {
-      scale: 1.03,
-      y: -6,
-      boxShadow: isDark ? "0 12px 40px rgba(0,0,0,0.6)" : "0 12px 40px rgba(0,0,0,0.12)",
-      transition: { duration: 0.25 },
-    },
-  }
-
-  if (companyError) {
-    return (
-      <div style={{ padding: 40, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>
-        <div style={{ fontSize: "1.2rem", marginBottom: 8, color: "#F87171" }}>Could not load dashboard</div>
-        <div style={{ fontSize: "0.85rem" }}>Your account may not be linked to a company. Please contact your administrator.</div>
-      </div>
-    )
-  }
-
-  if (isLoading) {
-    return (
-      <div style={{ padding: 40, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
-          style={{ width: 36, height: 36, borderRadius: "50%", border: "3px solid var(--border)", borderTop: "3px solid #A78BFA" }}
-        />
-        <div style={{ fontSize: "0.9rem" }}>Loading your dashboard…</div>
-      </div>
-    )
-  }
-
-  if (isError) {
-    return (
-      <div style={{ padding: 40, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>
-        <div style={{ fontSize: "1.2rem", marginBottom: 8, color: "#F87171" }}>Could not load dashboard</div>
-        <div style={{ fontSize: "0.85rem" }}>Please try refreshing the page.</div>
-      </div>
-    )
-  }
+  const highestProject = [...projectRows].sort((a, b) => b.pct - a.pct)[0] || null
+  const lowestProject = [...projectRows].sort((a, b) => a.pct - b.pct)[projectRows.length - 1] || null
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100%", flex: 1, fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: "var(--text)", transition: "background 0.3s, color 0.3s" }}>
@@ -449,7 +658,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           padding-right: 1.6rem;
           font-family: inherit;
           max-width: 150px;
-          color-scheme: light;   /* ✅ Forces light dropdown (black text on white) */
+          color-scheme: light;
         }
         .mgmt .filter-pill:focus { outline: none; border-color: var(--border-strong); }
 
