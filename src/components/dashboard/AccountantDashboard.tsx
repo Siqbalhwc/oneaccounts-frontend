@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { motion } from "framer-motion"
 import { useTheme } from "@/contexts/ThemeContext"
 import { useCompany } from "@/contexts/CompanyContext"
 
@@ -25,7 +24,6 @@ function fmt(n: number): string {
 
 export default function AccountantDashboard({ role }: { role: string }) {
   const router = useRouter()
-  const { theme: themeMode } = useTheme()
   const { companyId } = useCompany()
 
   const supabase = createBrowserClient(
@@ -62,9 +60,7 @@ export default function AccountantDashboard({ role }: { role: string }) {
         supabase.from("customers").select("balance").eq("company_id", companyId),
         supabase.from("suppliers").select("balance").eq("company_id", companyId),
         supabase.from("bank_accounts").select("current_balance").eq("company_id", companyId),
-        // Cash account (code = '1000')
         supabase.from("accounts").select("balance").eq("company_id", companyId).eq("code", "1000").maybeSingle(),
-        // Overdue purchase bills (type = 'purchase', due date passed, not fully paid)
         supabase
           .from("invoices")
           .select("id, invoice_no, due_date, total, paid, status, suppliers(name)")
@@ -207,6 +203,7 @@ export default function AccountantDashboard({ role }: { role: string }) {
           display: grid;
           grid-template-columns: 2fr 1fr;
           gap: 24px;
+          margin-bottom: 24px;
         }
         .acct table {
           width: 100%;
@@ -260,16 +257,34 @@ export default function AccountantDashboard({ role }: { role: string }) {
           color: var(--primary-text);
           border-color: var(--primary);
         }
+
+        /* Mobile responsiveness */
         @media (max-width: 1024px) {
           .acct .kpi-row { grid-template-columns: repeat(2, 1fr); }
           .acct .two-col { grid-template-columns: 1fr; }
         }
         @media (max-width: 640px) {
-          .acct .kpi-row { grid-template-columns: 1fr; }
+          .acct .kpi-row { grid-template-columns: repeat(2, 1fr); }
           .acct .hero { flex-direction: column; align-items: flex-start; }
-          .acct .quick-actions { grid-template-columns: 1fr; }
+          .acct .two-col {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+          }
+          /* Move recent transactions to bottom */
+          .acct .recent-transactions-card {
+            order: 2;
+          }
+          .acct .right-column-card {
+            order: 1;
+          }
+          .acct .quick-actions { grid-template-columns: 1fr 1fr; }
           .acct table { font-size: 0.7rem; }
           .acct th, .acct td { padding: 6px 8px; }
+        }
+        @media (max-width: 380px) {
+          .acct .kpi-row { grid-template-columns: 1fr; }
+          .acct .quick-actions { grid-template-columns: 1fr; }
         }
       `}</style>
 
@@ -306,10 +321,10 @@ export default function AccountantDashboard({ role }: { role: string }) {
           ))}
         </div>
 
-        {/* Two-column content */}
+        {/* Two-column content with reordering on mobile */}
         <div className="two-col">
-          {/* Recent Transactions */}
-          <div className="card">
+          {/* Left column: Recent Transactions – will be last on mobile */}
+          <div className="card recent-transactions-card">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <span style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text)" }}>🔄 Recent Transactions</span>
               <button
@@ -365,8 +380,8 @@ export default function AccountantDashboard({ role }: { role: string }) {
             </div>
           </div>
 
-          {/* Unpaid Bills + Quick Actions */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          {/* Right column: Unpaid Bills + Quick Actions – first on mobile */}
+          <div className="right-column-card" style={{ display: "flex", flexDirection: "column", gap: 24 }}>
             <div className="card">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <span style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text)" }}>📦 Unpaid Bills</span>
