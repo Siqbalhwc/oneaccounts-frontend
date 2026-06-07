@@ -11,8 +11,8 @@ interface KpiData {
   totalReceivables: number
   totalPayables: number
   cashBalance: number
-  overdueInvoicesCount: number
-  overdueInvoices: any[]
+  overdueBillsCount: number
+  overdueBills: any[]
   recentTransactions: any[]
 }
 
@@ -38,8 +38,8 @@ export default function AccountantDashboard({ role }: { role: string }) {
     totalReceivables: 0,
     totalPayables: 0,
     cashBalance: 0,
-    overdueInvoicesCount: 0,
-    overdueInvoices: [],
+    overdueBillsCount: 0,
+    overdueBills: [],
     recentTransactions: [],
   })
 
@@ -55,18 +55,22 @@ export default function AccountantDashboard({ role }: { role: string }) {
         { data: customers },
         { data: suppliers },
         { data: bankAccounts },
-        { data: overdueInvs },
+        { data: cashAccount },
+        { data: overdueBills },
         { data: journalLines },
       ] = await Promise.all([
         supabase.from("customers").select("balance").eq("company_id", companyId),
         supabase.from("suppliers").select("balance").eq("company_id", companyId),
         supabase.from("bank_accounts").select("current_balance").eq("company_id", companyId),
+        // Cash account (code = '1000')
+        supabase.from("accounts").select("balance").eq("company_id", companyId).eq("code", "1000").maybeSingle(),
+        // Overdue purchase bills (type = 'purchase', due date passed, not fully paid)
         supabase
           .from("invoices")
-          .select("id, invoice_no, due_date, total, paid, status, customers(name)")
+          .select("id, invoice_no, due_date, total, paid, status, suppliers(name)")
           .eq("company_id", companyId)
-          .eq("type", "sale")
-          .eq("status", "Unpaid")
+          .eq("type", "purchase")
+          .in("status", ["Unpaid", "Partial"])
           .lt("due_date", new Date().toISOString().split("T")[0])
           .order("due_date", { ascending: true })
           .limit(5),
@@ -80,10 +84,11 @@ export default function AccountantDashboard({ role }: { role: string }) {
 
       const totalReceivables = customers?.reduce((s: number, c: any) => s + (c.balance || 0), 0) || 0
       const totalPayables = suppliers?.reduce((s: number, s2: any) => s + (s2.balance || 0), 0) || 0
-      const cashBalance = bankAccounts?.reduce((s: number, b: any) => s + (b.current_balance || 0), 0) || 0
-      const overdueInvoicesCount = overdueInvs?.length || 0
+      const bankCash = bankAccounts?.reduce((s: number, b: any) => s + (b.current_balance || 0), 0) || 0
+      const cash = cashAccount?.balance || 0
+      const cashBalance = bankCash + cash
+      const overdueBillsCount = overdueBills?.length || 0
 
-      // Process recent transactions
       const recentTransactions =
         journalLines?.map((jl: any) => ({
           date: jl.journal_entries?.date?.split("T")[0],
@@ -98,8 +103,8 @@ export default function AccountantDashboard({ role }: { role: string }) {
         totalReceivables,
         totalPayables,
         cashBalance,
-        overdueInvoicesCount,
-        overdueInvoices: overdueInvs || [],
+        overdueBillsCount,
+        overdueBills: overdueBills || [],
         recentTransactions,
       })
     } catch (err) {
@@ -122,14 +127,6 @@ export default function AccountantDashboard({ role }: { role: string }) {
         Loading accountant dashboard…
       </div>
     )
-  }
-
-  const cardStyle = {
-    background: "var(--card)",
-    borderRadius: "14px",
-    padding: "20px",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
-    border: "1px solid var(--border)",
   }
 
   return (
@@ -270,6 +267,9 @@ export default function AccountantDashboard({ role }: { role: string }) {
         @media (max-width: 640px) {
           .acct .kpi-row { grid-template-columns: 1fr; }
           .acct .hero { flex-direction: column; align-items: flex-start; }
+          .acct .quick-actions { grid-template-columns: 1fr; }
+          .acct table { font-size: 0.7rem; }
+          .acct th, .acct td { padding: 6px 8px; }
         }
       `}</style>
 
@@ -291,10 +291,10 @@ export default function AccountantDashboard({ role }: { role: string }) {
         {/* KPI Cards */}
         <div className="kpi-row">
           {[
-            { label: "💰 Total Receivables", value: fmt(data.totalReceivables), color: "#f97316", meta: `${data.overdueInvoicesCount} open invoices` },
-            { label: "📤 Total Payables",      value: fmt(data.totalPayables),    color: "#ef4444", meta: "Pending bills" },
-            { label: "🏦 Cash Balance",        value: fmt(data.cashBalance),      color: "#10b981", meta: "Across bank accounts" },
-            { label: "⚠️ Overdue Invoices",     value: data.overdueInvoicesCount.toString(), color: "#ef4444", meta: "Need attention" },
+            { label: "💰 Total Receivables", value: fmt(data.totalReceivables), color: "#f97316", meta: `${data.overdueBillsCount} overdue bills` },
+            { label: "📤 Total Payables",      value: fmt(data.totalPayables),    color: "#ef4444", meta: "Pending payments" },
+            { label: "🏦 Cash & Bank Balance", value: fmt(data.cashBalance),      color: "#10b981", meta: "Cash + Bank accounts" },
+            { label: "⚠️ Overdue Bills",        value: data.overdueBillsCount.toString(), color: "#ef4444", meta: "Need attention" },
           ].map((kpi) => (
             <div key={kpi.label} className="card" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
               <div className="kpi-label">{kpi.label}</div>
@@ -365,13 +365,13 @@ export default function AccountantDashboard({ role }: { role: string }) {
             </div>
           </div>
 
-          {/* Overdue Invoices + Quick Actions */}
+          {/* Unpaid Bills + Quick Actions */}
           <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
             <div className="card">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <span style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text)" }}>⏳ Overdue Invoices</span>
+                <span style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text)" }}>📦 Unpaid Bills</span>
                 <button
-                  onClick={() => router.push("/dashboard/invoices?status=Unpaid&overdue=true")}
+                  onClick={() => router.push("/dashboard/bills?status=Unpaid&overdue=true")}
                   style={{
                     background: "none",
                     border: "none",
@@ -385,31 +385,31 @@ export default function AccountantDashboard({ role }: { role: string }) {
                   View All →
                 </button>
               </div>
-              {data.overdueInvoices.length === 0 ? (
+              {data.overdueBills.length === 0 ? (
                 <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>
-                  No overdue invoices – great job!
+                  No overdue bills – great job!
                 </p>
               ) : (
                 <table>
                   <thead>
                     <tr>
-                      <th>Customer</th>
-                      <th>Invoice</th>
+                      <th>Supplier</th>
+                      <th>Bill No</th>
                       <th>Due Date</th>
                       <th>Amount</th>
                       <th>Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.overdueInvoices.map((inv: any) => (
-                      <tr key={inv.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/dashboard/invoices/${inv.id}`)}>
-                        <td>{inv.customers?.name || "—"}</td>
-                        <td>{inv.invoice_no}</td>
-                        <td>{inv.due_date}</td>
-                        <td>{fmt(inv.total)}</td>
+                    {data.overdueBills.map((bill: any) => (
+                      <tr key={bill.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/dashboard/bills/${bill.id}`)}>
+                        <td>{bill.suppliers?.name || "—"}</td>
+                        <td>{bill.invoice_no}</td>
+                        <td>{bill.due_date}</td>
+                        <td>{fmt(bill.total)}</td>
                         <td>
-                          <span className={`status-badge ${inv.status === "Unpaid" ? "status-unpaid" : "status-partial"}`}>
-                            {inv.status}
+                          <span className={`status-badge ${bill.status === "Unpaid" ? "status-unpaid" : "status-partial"}`}>
+                            {bill.status}
                           </span>
                         </td>
                       </tr>
@@ -434,6 +434,12 @@ export default function AccountantDashboard({ role }: { role: string }) {
                 </div>
                 <div className="quick-action-btn" onClick={() => router.push("/dashboard/payments/new")}>
                   💳 Record Payment
+                </div>
+                <div className="quick-action-btn" onClick={() => router.push("/dashboard/customers/new")}>
+                  👤 Add Customer
+                </div>
+                <div className="quick-action-btn" onClick={() => router.push("/dashboard/suppliers/new")}>
+                  🚚 Add Vendor
                 </div>
               </div>
             </div>
