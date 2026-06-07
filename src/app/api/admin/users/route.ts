@@ -138,12 +138,13 @@ export async function POST(request: Request) {
   }
 
   if (inviteData.user) {
-    await supabaseAdmin
+        await supabaseAdmin
       .from('user_roles')
       .upsert({
         user_id: inviteData.user.id,
         company_id: companyId,
         role,
+        is_active: true,   // ✅ Required for the dashboard to allow access
       })
   }
 
