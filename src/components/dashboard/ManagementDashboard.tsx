@@ -449,7 +449,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           padding-right: 1.6rem;
           font-family: inherit;
           max-width: 150px;
-          color-scheme: dark;
+          color-scheme: light;   /* ✅ Forces light dropdown (black text on white) */
         }
         .mgmt .filter-pill:focus { outline: none; border-color: var(--border-strong); }
 
