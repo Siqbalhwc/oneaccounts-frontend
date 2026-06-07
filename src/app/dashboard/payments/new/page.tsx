@@ -24,12 +24,10 @@ export default function NewPaymentPage() {
   const [banks, setBanks] = useState<any[]>([])
   const [selectedBankId, setSelectedBankId] = useState<number | null>(null)
 
-  // Donation / Other Expense mode
   const [isDonation, setIsDonation] = useState(false)
   const [expenseAccounts, setExpenseAccounts] = useState<any[]>([])
   const [selectedExpenseAccountId, setSelectedExpenseAccountId] = useState<number | null>(null)
 
-  // Purchase bills
   const [bills, setBills] = useState<any[]>([])
   const [allocations, setAllocations] = useState<Record<number, number>>({})
 
@@ -211,7 +209,7 @@ export default function NewPaymentPage() {
   return (
     <div style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .pay-shell { width: 100%; } /* full width – no max-width limitation */
+        .pay-shell { width: 100%; }
         .pay-title { font-size: 18px; font-weight: 700; color: var(--text); }
         .pay-card {
           background: var(--card); border-radius: 12px; border: 1px solid var(--border);
@@ -375,48 +373,50 @@ export default function NewPaymentPage() {
             {supplierId && !isDonation && bills.length > 0 && (
               <div className="pay-card">
                 <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 12px 0" }}>Allocate to Purchase Bills</h3>
-                <table>
-                  <thead>
-                    <tr>
-                      <th style={{ width: 30 }}></th>
-                      <th>Bill #</th>
-                      <th>Total</th>
-                      <th>Paid</th>
-                      <th>Due</th>
-                      <th style={{ textAlign: "right" }}>Allocate</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bills.map(bill => {
-                      const due = bill.total - (bill.paid || 0)
-                      const alloc = allocations[bill.id] || 0
-                      const checked = alloc > 0
-                      return (
-                        <tr key={bill.id}>
-                          <td><input className="chk-box" type="checkbox" checked={checked} onChange={() => toggleBill(bill.id, due)} /></td>
-                          <td>{bill.invoice_no}</td>
-                          <td>{bill.total.toLocaleString()}</td>
-                          <td>{(bill.paid || 0).toLocaleString()}</td>
-                          <td style={{ fontWeight: 600 }}>{due.toLocaleString()}</td>
-                          <td style={{ textAlign: "right" }}>
-                            <input className="alloc-input" type="number" min="0" max={due} value={alloc} onChange={e => updateAllocation(bill.id, parseFloat(e.target.value) || 0, due)} />
+                <div style={{ overflowX: "auto" }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th style={{ width: 30 }}></th>
+                        <th>Bill #</th>
+                        <th>Total</th>
+                        <th>Paid</th>
+                        <th>Due</th>
+                        <th style={{ textAlign: "right" }}>Allocate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bills.map(bill => {
+                        const due = bill.total - (bill.paid || 0)
+                        const alloc = allocations[bill.id] || 0
+                        const checked = alloc > 0
+                        return (
+                          <tr key={bill.id}>
+                            <td><input className="chk-box" type="checkbox" checked={checked} onChange={() => toggleBill(bill.id, due)} /></td>
+                            <td>{bill.invoice_no}</td>
+                            <td>{bill.total.toLocaleString()}</td>
+                            <td>{(bill.paid || 0).toLocaleString()}</td>
+                            <td style={{ fontWeight: 600 }}>{due.toLocaleString()}</td>
+                            <td style={{ textAlign: "right" }}>
+                              <input className="alloc-input" type="number" min="0" max={due} value={alloc} onChange={e => updateAllocation(bill.id, parseFloat(e.target.value) || 0, due)} />
+                            </td>
+                          </tr>
+                        )
+                      })}
+                      <tr style={{ borderTop: "2px solid var(--border)", fontWeight: 700 }}>
+                        <td colSpan={5} style={{ textAlign: "right" }}>Allocated</td>
+                        <td style={{ textAlign: "right" }}>PKR {totalAllocated.toLocaleString()}</td>
+                      </tr>
+                      {unallocated > 0 && (
+                        <tr style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                          <td colSpan={6} style={{ textAlign: "right", paddingTop: 4 }}>
+                            Unallocated: PKR {unallocated.toLocaleString()}
                           </td>
                         </tr>
-                      )
-                    })}
-                    <tr style={{ borderTop: "2px solid var(--border)", fontWeight: 700 }}>
-                      <td colSpan={5} style={{ textAlign: "right" }}>Allocated</td>
-                      <td style={{ textAlign: "right" }}>PKR {totalAllocated.toLocaleString()}</td>
-                    </tr>
-                    {unallocated > 0 && (
-                      <tr style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                        <td colSpan={6} style={{ textAlign: "right", paddingTop: 4 }}>
-                          Unallocated: PKR {unallocated.toLocaleString()}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
             {supplierId && !isDonation && bills.length === 0 && (

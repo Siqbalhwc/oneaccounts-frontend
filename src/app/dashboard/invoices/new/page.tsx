@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, Fragment } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import {
@@ -77,7 +77,6 @@ export default function NewInvoicePage() {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
 
-      // Fetch business type
       supabase.from("companies").select("business_type").eq("id", cid).single()
         .then(({ data }) => { if (data) setBusinessType(data.business_type || "") })
 
@@ -107,7 +106,6 @@ export default function NewInvoicePage() {
           }
         })
 
-      // Load projects and donors for NGO
       supabase.from("projects").select("id,name,donor_id").eq("company_id", cid).order("name")
         .then(r => r.data && setProjects(r.data))
       supabase.from("donors").select("id,name").eq("company_id", cid).order("name")
@@ -257,7 +255,6 @@ export default function NewInvoicePage() {
       updated[idx].total = updated[idx].qty * updated[idx].unit_price
     }
 
-    // When project is selected, auto‑resolve donor
     if (field === "project_id" && value) {
       const project = projects.find(p => p.id == value)
       if (project) {
@@ -472,7 +469,6 @@ export default function NewInvoicePage() {
     return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>Loading invoice form…</div>
   }
 
-  // Helper to get project name
   const getProjectName = (projectId: number | null) => {
     if (!projectId) return ""
     const proj = projects.find(p => p.id == projectId)
@@ -484,7 +480,6 @@ export default function NewInvoicePage() {
     return don?.name || ""
   }
 
-  // Grid columns for items – the same number, but second column becomes Project for manual items in NGO
   const itemGridCols = "30px 150px 3fr 80px 110px 110px 110px 30px"
 
   return (
@@ -576,7 +571,6 @@ export default function NewInvoicePage() {
           .inv-items-section { order: 2; }
           .inv-customer-section { order: 1; }
           .inv-summary-section { order: 3; }
-          .inv-item-row, .inv-item-header { overflow-x: auto; }
         }
 
         .price-history {
@@ -626,7 +620,6 @@ export default function NewInvoicePage() {
         )}
 
         <div className="inv-content-wrapper">
-          {/* Customer details */}
           <div className="header-grid inv-customer-section">
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div className="inv-card">
@@ -732,7 +725,6 @@ export default function NewInvoicePage() {
               </div>
             </div>
 
-            {/* Summary + Actions */}
             <div className="inv-summary-section" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div className="inv-card">
                 <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
@@ -762,90 +754,89 @@ export default function NewInvoicePage() {
               <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
             </div>
             {items.length > 0 && (
-              <div className="inv-card" style={{ overflowX: "auto", padding: "16px 12px" }}>
-                <div className="inv-item-header">
-                  <span></span>
-                  <span>{isNGO ? "Product/Project" : "Product"}</span>
-                  <span>Description</span>
-                  <span>Qty</span>
-                  <span>Price</span>
-                  <span style={{ textAlign: "right" }}>Total</span>
-                  <span style={{ textAlign: "right" }}>Cost</span>
-                  <span></span>
-                </div>
-                {items.map((item, idx) => (
-                  <div key={idx}>
-                    <div className="inv-item-row">
-                      <div style={{ display: "flex", justifyContent: "center" }}>
-                        {item.product_image ? (
-                          <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
+              <div className="inv-card" style={{ padding: "16px 12px" }}>
+                <div style={{ overflowX: "auto" }}>
+                  <div className="inv-item-header" style={{ minWidth: "600px" }}>
+                    <span></span>
+                    <span>{isNGO ? "Product/Project" : "Product"}</span>
+                    <span>Description</span>
+                    <span>Qty</span>
+                    <span>Price</span>
+                    <span style={{ textAlign: "right" }}>Total</span>
+                    <span style={{ textAlign: "right" }}>Cost</span>
+                    <span></span>
+                  </div>
+                  {items.map((item, idx) => (
+                    <Fragment key={idx}>
+                      <div className="inv-item-row" style={{ minWidth: "600px" }}>
+                        <div style={{ display: "flex", justifyContent: "center" }}>
+                          {item.product_image ? (
+                            <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
+                          ) : (
+                            <ImageIcon size={14} color="var(--text-muted)" />
+                          )}
+                        </div>
+
+                        {item.product_id ? (
+                          <div className="inv-cell" style={{ paddingLeft: 12 }}>
+                            {item.product_name || "—"}
+                          </div>
                         ) : (
-                          <ImageIcon size={14} color="var(--text-muted)" />
+                          <div>
+                            {isNGO ? (
+                              <select
+                                className="inv-select"
+                                style={{ height: 34, fontSize: 12 }}
+                                value={item.project_id ?? ""}
+                                onChange={e => updateItem(idx, "project_id", e.target.value ? Number(e.target.value) : null)}
+                              >
+                                <option value="">— Select Project —</option>
+                                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                              </select>
+                            ) : (
+                              <div className="inv-cell" style={{ paddingLeft: 12 }}>—</div>
+                            )}
+                          </div>
                         )}
+
+                        <input
+                          className="inv-input"
+                          style={{ height: 34, fontSize: 12 }}
+                          value={item.description}
+                          onChange={e => updateItem(idx, "description", e.target.value)}
+                          placeholder="Description"
+                        />
+                        <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                        <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                        <div className="inv-cell" style={{ justifyContent: "flex-end", fontWeight: 600 }}>
+                          PKR {item.total.toLocaleString()}
+                        </div>
+                        <div className="inv-cell" style={{ justifyContent: "flex-end", color: "var(--text-muted)" }}>
+                          {item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}
+                        </div>
+                        <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}>
+                          <Trash2 size={12} />
+                        </button>
                       </div>
 
-                      {/* Product/Project cell */}
-                      {item.product_id ? (
-                        <div className="inv-cell" style={{ paddingLeft: 12 }}>
-                          {item.product_name || "—"}
-                        </div>
-                      ) : (
-                        <div>
-                          {isNGO ? (
-                            <select
-                              className="inv-select"
-                              style={{ height: 34, fontSize: 12 }}
-                              value={item.project_id ?? ""}
-                              onChange={e => updateItem(idx, "project_id", e.target.value ? Number(e.target.value) : null)}
-                            >
-                              <option value="">— Select Project —</option>
-                              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                            </select>
-                          ) : (
-                            <div className="inv-cell" style={{ paddingLeft: 12 }}>—</div>
-                          )}
+                      {isNGO && !item.product_id && item.project_id && (
+                        <div className="project-info-row" style={{ minWidth: "600px" }}>
+                          <span className="project-chip">
+                            📁 {getProjectName(item.project_id)}
+                            {item.donor_id && (
+                              <span style={{ color: "var(--primary)", marginLeft: 4 }}>· 🤝 {getDonorName(item.donor_id)}</span>
+                            )}
+                          </span>
                         </div>
                       )}
-
-                      <input
-                        className="inv-input"
-                        style={{ height: 34, fontSize: 12 }}
-                        value={item.description}
-                        onChange={e => updateItem(idx, "description", e.target.value)}
-                        placeholder="Description"
-                      />
-                      <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                      <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                      <div className="inv-cell" style={{ justifyContent: "flex-end", fontWeight: 600 }}>
-                        PKR {item.total.toLocaleString()}
-                      </div>
-                      <div className="inv-cell" style={{ justifyContent: "flex-end", color: "var(--text-muted)" }}>
-                        {item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}
-                      </div>
-                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}>
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-
-                    {/* Show project/donor info row for manual items in NGO */}
-                    {isNGO && !item.product_id && item.project_id && (
-                      <div className="project-info-row">
-                        <span className="project-chip">
-                          📁 {getProjectName(item.project_id)}
-                          {item.donor_id && (
-                            <span style={{ color: "var(--primary)", marginLeft: 4 }}>· 🤝 {getDonorName(item.donor_id)}</span>
-                          )}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                    </Fragment>
+                  ))}
+                </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Change History */}
         {editId && (
           <div className="inv-card" style={{ marginTop: 16 }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>

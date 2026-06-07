@@ -258,7 +258,6 @@ export default function AccountantDashboard({ role }: { role: string }) {
           border-color: var(--primary);
         }
 
-        /* Mobile responsiveness */
         @media (max-width: 1024px) {
           .acct .kpi-row { grid-template-columns: repeat(2, 1fr); }
           .acct .two-col { grid-template-columns: 1fr; }
@@ -271,12 +270,17 @@ export default function AccountantDashboard({ role }: { role: string }) {
             flex-direction: column;
             gap: 24px;
           }
-          /* Move recent transactions to bottom */
           .acct .recent-transactions-card {
             order: 2;
           }
           .acct .right-column-card {
             order: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+          }
+          .acct .quick-actions-card {
+            order: -1;   /* moves above unpaid bills */
           }
           .acct .quick-actions { grid-template-columns: 1fr 1fr; }
           .acct table { font-size: 0.7rem; }
@@ -289,7 +293,6 @@ export default function AccountantDashboard({ role }: { role: string }) {
       `}</style>
 
       <div className="acct">
-        {/* Hero / Greeting */}
         <div className="hero">
           <div className="greeting">
             <h2>{getGreeting()}, siqbalhwc</h2>
@@ -303,7 +306,6 @@ export default function AccountantDashboard({ role }: { role: string }) {
           </div>
         </div>
 
-        {/* KPI Cards */}
         <div className="kpi-row">
           {[
             { label: "💰 Total Receivables", value: fmt(data.totalReceivables), color: "#f97316", meta: `${data.overdueBillsCount} overdue bills` },
@@ -321,23 +323,13 @@ export default function AccountantDashboard({ role }: { role: string }) {
           ))}
         </div>
 
-        {/* Two-column content with reordering on mobile */}
         <div className="two-col">
-          {/* Left column: Recent Transactions – will be last on mobile */}
           <div className="card recent-transactions-card">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <span style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text)" }}>🔄 Recent Transactions</span>
               <button
                 onClick={() => router.push("/dashboard/reports/general-ledger")}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "var(--primary)",
-                  fontSize: "0.8rem",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
+                style={{ background: "none", border: "none", color: "var(--primary)", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
               >
                 View All →
               </button>
@@ -356,9 +348,7 @@ export default function AccountantDashboard({ role }: { role: string }) {
                 <tbody>
                   {data.recentTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan={5} style={{ textAlign: "center", color: "var(--text-muted)" }}>
-                        No recent transactions
-                      </td>
+                      <td colSpan={5} style={{ textAlign: "center", color: "var(--text-muted)" }}>No recent transactions</td>
                     </tr>
                   ) : (
                     data.recentTransactions.map((t: any, idx: number) => (
@@ -366,12 +356,8 @@ export default function AccountantDashboard({ role }: { role: string }) {
                         <td>{t.date}</td>
                         <td>{t.description}</td>
                         <td>{t.accountCode} – {t.accountName}</td>
-                        <td style={{ textAlign: "right", color: t.debit > 0 ? "#ef4444" : "var(--text)" }}>
-                          {t.debit > 0 ? t.debit.toLocaleString() : "—"}
-                        </td>
-                        <td style={{ textAlign: "right", color: t.credit > 0 ? "#10b981" : "var(--text)" }}>
-                          {t.credit > 0 ? t.credit.toLocaleString() : "—"}
-                        </td>
+                        <td style={{ textAlign: "right", color: t.debit > 0 ? "#ef4444" : "var(--text)" }}>{t.debit > 0 ? t.debit.toLocaleString() : "—"}</td>
+                        <td style={{ textAlign: "right", color: t.credit > 0 ? "#10b981" : "var(--text)" }}>{t.credit > 0 ? t.credit.toLocaleString() : "—"}</td>
                       </tr>
                     ))
                   )}
@@ -380,40 +366,36 @@ export default function AccountantDashboard({ role }: { role: string }) {
             </div>
           </div>
 
-          {/* Right column: Unpaid Bills + Quick Actions – first on mobile */}
           <div className="right-column-card" style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+            {/* Quick Actions card – with order -1 on mobile to appear first */}
+            <div className="card quick-actions-card">
+              <div style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>⚡ Quick Actions</div>
+              <div className="quick-actions">
+                <div className="quick-action-btn" onClick={() => router.push("/dashboard/invoices/new")}>➕ New Invoice</div>
+                <div className="quick-action-btn" onClick={() => router.push("/dashboard/bills/new")}>📦 New Bill</div>
+                <div className="quick-action-btn" onClick={() => router.push("/dashboard/receipts/new")}>💰 Record Receipt</div>
+                <div className="quick-action-btn" onClick={() => router.push("/dashboard/payments/new")}>💳 Record Payment</div>
+                <div className="quick-action-btn" onClick={() => router.push("/dashboard/customers/new")}>👤 Add Customer</div>
+                <div className="quick-action-btn" onClick={() => router.push("/dashboard/suppliers/new")}>🚚 Add Vendor</div>
+              </div>
+            </div>
+
             <div className="card">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <span style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text)" }}>📦 Unpaid Bills</span>
                 <button
                   onClick={() => router.push("/dashboard/bills?status=Unpaid&overdue=true")}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "var(--primary)",
-                    fontSize: "0.8rem",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                  }}
+                  style={{ background: "none", border: "none", color: "var(--primary)", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
                 >
                   View All →
                 </button>
               </div>
               {data.overdueBills.length === 0 ? (
-                <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>
-                  No overdue bills – great job!
-                </p>
+                <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>No overdue bills – great job!</p>
               ) : (
                 <table>
                   <thead>
-                    <tr>
-                      <th>Supplier</th>
-                      <th>Bill No</th>
-                      <th>Due Date</th>
-                      <th>Amount</th>
-                      <th>Status</th>
-                    </tr>
+                    <tr><th>Supplier</th><th>Bill No</th><th>Due Date</th><th>Amount</th><th>Status</th></tr>
                   </thead>
                   <tbody>
                     {data.overdueBills.map((bill: any) => (
@@ -423,40 +405,13 @@ export default function AccountantDashboard({ role }: { role: string }) {
                         <td>{bill.due_date}</td>
                         <td>{fmt(bill.total)}</td>
                         <td>
-                          <span className={`status-badge ${bill.status === "Unpaid" ? "status-unpaid" : "status-partial"}`}>
-                            {bill.status}
-                          </span>
+                          <span className={`status-badge ${bill.status === "Unpaid" ? "status-unpaid" : "status-partial"}`}>{bill.status}</span>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               )}
-            </div>
-
-            {/* Quick Actions */}
-            <div className="card">
-              <div style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>⚡ Quick Actions</div>
-              <div className="quick-actions">
-                <div className="quick-action-btn" onClick={() => router.push("/dashboard/invoices/new")}>
-                  ➕ New Invoice
-                </div>
-                <div className="quick-action-btn" onClick={() => router.push("/dashboard/bills/new")}>
-                  📦 New Bill
-                </div>
-                <div className="quick-action-btn" onClick={() => router.push("/dashboard/receipts/new")}>
-                  💰 Record Receipt
-                </div>
-                <div className="quick-action-btn" onClick={() => router.push("/dashboard/payments/new")}>
-                  💳 Record Payment
-                </div>
-                <div className="quick-action-btn" onClick={() => router.push("/dashboard/customers/new")}>
-                  👤 Add Customer
-                </div>
-                <div className="quick-action-btn" onClick={() => router.push("/dashboard/suppliers/new")}>
-                  🚚 Add Vendor
-                </div>
-              </div>
             </div>
           </div>
         </div>
