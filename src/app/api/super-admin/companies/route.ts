@@ -33,6 +33,7 @@ export async function GET() {
       plans(name),
       user_roles(count)
     `)
+    .is('deleted_at', null)   // ✅ Exclude soft‑deleted companies
     .order('name')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

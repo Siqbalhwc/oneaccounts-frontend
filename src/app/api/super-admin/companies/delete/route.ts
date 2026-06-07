@@ -27,10 +27,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Company ID is required' }, { status: 400 })
   }
 
-  // Soft‑delete the company (sets deleted_at) – RLS will block access immediately
+  // 1. Remove all user_roles for this company
+  const { error: rolesError } = await supabaseAdmin
+    .from('user_roles')
+    .delete()
+    .eq('company_id', companyId)
+
+  if (rolesError) {
+    return NextResponse.json({ error: 'Failed to remove user roles: ' + rolesError.message }, { status: 500 })
+  }
+
+  // 2. Hard‑delete the company
   const { error: deleteError } = await supabaseAdmin
     .from('companies')
-    .update({ deleted_at: new Date().toISOString() })
+    .delete()
     .eq('id', companyId)
 
   if (deleteError) {
