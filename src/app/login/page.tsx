@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { Eye, EyeOff } from "lucide-react"
 
@@ -22,6 +22,38 @@ export default function LoginPage() {
   const [loading,      setLoading]      = useState(false)
   const [error,        setError]        = useState("")
   const [isSignUp,     setIsSignUp]     = useState(false)
+  const [autoLogin, setAutoLogin]       = useState(false)   // true when handling invite token
+
+  // ── Detect access_token in URL and auto‑login ──────────────
+  useEffect(() => {
+    const hash = window.location.hash.substring(1)          // remove #
+    const params = new URLSearchParams(hash)
+    const accessToken  = params.get("access_token")
+    const refreshToken = params.get("refresh_token")
+    const type         = params.get("type")
+
+    if (accessToken && refreshToken) {
+      setAutoLogin(true)
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
+      supabase.auth.setSession({
+        access_token:  accessToken,
+        refresh_token: refreshToken,
+      }).then(({ error }) => {
+        if (error) {
+          setError("Invitation link expired or invalid. Please request a new invite.")
+          setAutoLogin(false)
+          // Clean URL so the user can try manual login
+          window.history.replaceState(null, "", "/login")
+        } else {
+          // Redirect to dashboard – the user is now signed in
+          window.location.href = "/dashboard"
+        }
+      })
+    }
+  }, [])
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -58,6 +90,7 @@ export default function LoginPage() {
     window.location.href = "/dashboard"
   }
 
+  // ── Render ──────────────────────────────────────────────
   return (
     <>
       <style>{`
@@ -70,9 +103,7 @@ export default function LoginPage() {
           -webkit-font-smoothing: antialiased;
         }
 
-        /* ═══════════════════════════════════════
-           WATER WAVE BACKGROUND
-        ═══════════════════════════════════════ */
+        /* water background */
         .oa-shell {
           display: flex;
           min-height: 100vh;
@@ -85,7 +116,6 @@ export default function LoginPage() {
           background: #0B1E5B;
         }
 
-        /* Animated water background */
         .oa-water-bg {
           position: fixed;
           inset: 0;
@@ -99,7 +129,6 @@ export default function LoginPage() {
               #091A54 100%);
         }
 
-        /* Water shimmer layers */
         .oa-water-bg::before {
           content: '';
           position: absolute;
@@ -133,7 +162,6 @@ export default function LoginPage() {
           animation: waterRipple 12s linear infinite;
         }
 
-        /* SVG wave overlays */
         .oa-waves {
           position: fixed;
           bottom: 0;
@@ -159,7 +187,6 @@ export default function LoginPage() {
           100% { transform: translateX(-50%); }
         }
 
-        /* Floating light particles */
         .oa-particle {
           position: fixed;
           border-radius: 50%;
@@ -175,9 +202,6 @@ export default function LoginPage() {
           100% { transform: translateY(-10vh) scale(1); opacity: 0; }
         }
 
-        /* ═══════════════════════════════════════
-           COLUMNS CONTAINER
-        ═══════════════════════════════════════ */
         .oa-columns {
           position: relative;
           z-index: 2;
@@ -186,12 +210,8 @@ export default function LoginPage() {
           gap: 5px;
           width: 100%;
           max-width: 1100px;
-          /* equal height: stretch both panels to the taller one */
         }
 
-        /* ═══════════════════════════════════════
-           LEFT PANEL — floating, 2× width of right
-        ═══════════════════════════════════════ */
         .oa-left {
           flex: 2;
           background: rgba(7, 19, 82, 0.82);
@@ -211,7 +231,6 @@ export default function LoginPage() {
           overflow: hidden;
         }
 
-        /* Left panel inner glow */
         .oa-dots {
           position: absolute; inset: 0;
           background-image: radial-gradient(rgba(255,255,255,0.04) 1.2px, transparent 1.2px);
@@ -232,7 +251,6 @@ export default function LoginPage() {
           pointer-events: none; z-index: 0;
         }
 
-        /* brand */
         .oa-brand {
           display: flex; align-items: center; gap: 14px;
           position: relative; z-index: 2;
@@ -249,7 +267,6 @@ export default function LoginPage() {
           font-size: 11px; color: rgba(255,255,255,0.42); margin-top: 2px;
         }
 
-        /* badge */
         .oa-badge {
           display: inline-flex; align-items: center; gap: 7px;
           background: rgba(255,255,255,0.10);
@@ -272,7 +289,6 @@ export default function LoginPage() {
           text-transform: uppercase; color: rgba(255,255,255,0.82);
         }
 
-        /* hero */
         .oa-hero {
           position: relative; z-index: 2;
           flex: 1; display: flex; flex-direction: column;
@@ -300,7 +316,6 @@ export default function LoginPage() {
           font-size: 11px; color: rgba(255,255,255,0.82); font-weight: 500;
         }
 
-        /* stats */
         .oa-stats {
           position: relative; z-index: 2;
           border-top: 1px solid rgba(255,255,255,0.12);
@@ -325,9 +340,6 @@ export default function LoginPage() {
           position: relative; z-index: 2; margin-top: 10px;
         }
 
-        /* ═══════════════════════════════════════
-           RIGHT PANEL — floating, 1× width
-        ═══════════════════════════════════════ */
         .oa-right {
           flex: 1;
           display: flex;
@@ -335,13 +347,6 @@ export default function LoginPage() {
           justify-content: center;
         }
 
-        .oa-form-wrap {
-          width: 100%;
-        }
-
-        /* ═══════════════════════════════════════
-           CARD — floating glass card
-        ═══════════════════════════════════════ */
         .oa-card {
           background: rgba(255, 255, 255, 0.97);
           border-radius: 18px;
@@ -365,7 +370,6 @@ export default function LoginPage() {
           text-align: center;
         }
 
-        /* card head content */
         .oa-card-logo {
           width: 48px; height: 48px; border-radius: 12px;
           object-fit: contain; margin: 0 auto 8px; display: block;
@@ -384,9 +388,6 @@ export default function LoginPage() {
         .oa-subtitle { font-size: 12px; color: #6B7280; }
         .oa-subtitle strong { color: #1E3A8A; font-weight: 700; }
 
-        /* ═══════════════════════════════════════
-           FORM FIELDS
-        ═══════════════════════════════════════ */
         .oa-label {
           display: block; font-size: 10px; font-weight: 600;
           color: #6B7280; letter-spacing: 0.07em; text-transform: uppercase;
@@ -415,7 +416,6 @@ export default function LoginPage() {
         }
         .oa-eye:hover { color: #64748B; }
 
-        /* forgot */
         .oa-forgot-row {
           display: flex; justify-content: flex-end;
           margin-top: -6px; margin-bottom: 12px;
@@ -427,9 +427,6 @@ export default function LoginPage() {
         }
         .oa-forgot:hover { text-decoration: underline; }
 
-        /* ═══════════════════════════════════════
-           BUTTONS
-        ═══════════════════════════════════════ */
         .oa-btn {
           width: 100%; height: 41px;
           background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
@@ -460,7 +457,6 @@ export default function LoginPage() {
           padding: 5px 0 0; text-align: center;
         }
 
-        /* divider */
         .oa-divider {
           display: flex; align-items: center; gap: 10px;
           margin: 10px 0;
@@ -468,7 +464,6 @@ export default function LoginPage() {
         .oa-div-line { flex: 1; height: 1px; background: #E8EDF5; }
         .oa-div-txt  { font-size: 10.5px; color: #A0AEC0; font-weight: 500; }
 
-        /* trial button */
         .oa-trial-btn {
           display: flex; align-items: center; justify-content: center;
           width: 100%; height: 41px;
@@ -488,7 +483,6 @@ export default function LoginPage() {
           margin-top: 5px; text-align: center;
         }
 
-        /* switch + alerts */
         .oa-switch-row { text-align: center; margin-top: 9px; }
         .oa-switch {
           background: none; border: none;
@@ -506,7 +500,6 @@ export default function LoginPage() {
           font-size: 12px; color: #15803D; margin-bottom: 11px;
         }
 
-        /* support links */
         .oa-support-lbl { font-size: 10.5px; color: #9CA3AF; margin-bottom: 6px; }
         .oa-support-links {
           display: flex; align-items: center; justify-content: center;
@@ -521,9 +514,7 @@ export default function LoginPage() {
         }
         .oa-support-link:hover { background: #EEF2FF; }
 
-        /* ═══════════════════════════════════════
-           RESPONSIVE — Tablet (768–1023px)
-        ═══════════════════════════════════════ */
+        /* responsive */
         @media (max-width: 1023px) and (min-width: 768px) {
           .oa-columns { max-width: 900px; }
           .oa-left { padding: 28px 28px; }
@@ -531,14 +522,10 @@ export default function LoginPage() {
           .oa-glow { width: 240px; height: 240px; }
         }
 
-        /* ═══════════════════════════════════════
-           RESPONSIVE — Mobile (<768px)
-        ═══════════════════════════════════════ */
         @media (max-width: 767px) {
           .oa-shell { padding: 0; align-items: flex-start; }
           .oa-columns { flex-direction: column; gap: 0; max-width: 100%; border-radius: 0; }
 
-          /* left collapses to a top bar */
           .oa-left {
             border-radius: 0;
             flex-direction: row; align-items: center;
@@ -562,9 +549,6 @@ export default function LoginPage() {
           }
         }
 
-        /* ═══════════════════════════════════════
-           RESPONSIVE — Large (1400px+)
-        ═══════════════════════════════════════ */
         @media (min-width: 1400px) {
           .oa-columns { max-width: 1260px; }
           .oa-left { padding: 44px 56px; }
@@ -572,9 +556,6 @@ export default function LoginPage() {
           .oa-desc { font-size: 14.5px; }
         }
 
-        /* ═══════════════════════════════════════
-           RESPONSIVE — 4K (1920px+)
-        ═══════════════════════════════════════ */
         @media (min-width: 1920px) {
           .oa-columns { max-width: 1600px; }
           .oa-left { padding: 60px 72px; }
@@ -588,10 +569,7 @@ export default function LoginPage() {
         }
       `}</style>
 
-      {/* ══ WATER BACKGROUND ══ */}
       <div className="oa-water-bg" />
-
-      {/* Floating particles */}
       {[
         { left: "10%", size: 4, duration: "12s", delay: "0s" },
         { left: "25%", size: 6, duration: "16s", delay: "3s" },
@@ -600,37 +578,21 @@ export default function LoginPage() {
         { left: "75%", size: 4, duration: "18s", delay: "4s" },
         { left: "88%", size: 6, duration: "11s", delay: "8s" },
       ].map((p, i) => (
-        <div
-          key={i}
-          className="oa-particle"
-          style={{
-            left: p.left,
-            width: p.size,
-            height: p.size,
-            animationDuration: p.duration,
-            animationDelay: p.delay,
-          }}
-        />
+        <div key={i} className="oa-particle" style={{ left: p.left, width: p.size, height: p.size, animationDuration: p.duration, animationDelay: p.delay }} />
       ))}
 
-      {/* Water wave SVG */}
       <svg className="oa-waves" viewBox="0 0 1440 160" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-        <path className="wave1" d="M0,80 C240,20 480,140 720,80 C960,20 1200,140 1440,80 L1440,80 C1200,140 960,20 720,80 C480,140 240,20 0,80 Z M1440,80 C1680,20 1920,140 2160,80 C2400,20 2640,140 2880,80 L2880,80 C2640,140 2400,20 2160,80 C1920,140 1680,20 1440,80 Z" fill="rgba(100,160,255,0.4)" />
-        <path className="wave2" d="M0,100 C360,40 720,160 1080,100 C1440,40 1800,160 2160,100 L2160,160 L0,160 Z M2160,100 C2520,40 2880,160 3240,100 L3240,160 L2160,160 Z" fill="rgba(70,130,220,0.3)" />
-        <path className="wave3" d="M0,120 C480,80 960,160 1440,120 C1920,80 2400,160 2880,120 L2880,160 L0,160 Z" fill="rgba(50,100,200,0.25)" />
+        <path className="wave1" d="..." fill="rgba(100,160,255,0.4)" />
+        <path className="wave2" d="..." fill="rgba(70,130,220,0.3)" />
+        <path className="wave3" d="..." fill="rgba(50,100,200,0.25)" />
       </svg>
 
-      {/* ══ MAIN LAYOUT ══ */}
       <div className="oa-shell">
         <div className="oa-columns">
-
-          {/* ══ LEFT PANEL ══ */}
           <div className="oa-left">
             <div className="oa-dots" />
             <div className="oa-glow" />
             <div className="oa-glow2" />
-
-            {/* Brand */}
             <div className="oa-brand">
               <img src="/logo.png" alt="OneAccounts" className="oa-brand-logo" />
               <div>
@@ -638,8 +600,6 @@ export default function LoginPage() {
                 <div className="oa-brand-sub">by Siqbal · PKR Suite</div>
               </div>
             </div>
-
-            {/* Hero */}
             <div className="oa-hero">
               <div className="oa-badge">
                 <div className="oa-badge-dot" />
@@ -657,8 +617,6 @@ export default function LoginPage() {
                 {PILLS.map(p => <span key={p} className="oa-pill">{p}</span>)}
               </div>
             </div>
-
-            {/* Stats + Footer */}
             <div>
               <div className="oa-stats">
                 {STATS.map(s => (
@@ -672,12 +630,9 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* ══ RIGHT PANEL ══ */}
           <div className="oa-right">
             <div className="oa-form-wrap">
               <div className="oa-card">
-
-                {/* Card Head */}
                 <div className="oa-card-head">
                   <img src="/logo.png" alt="OneAccounts" className="oa-card-logo" />
                   <div className="oa-secure-badge">🔒 SECURE LOGIN</div>
@@ -688,8 +643,13 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                {/* Card Body */}
                 <div className="oa-card-body">
+                  {/* Loading state for invite token handling */}
+                  {autoLogin && (
+                    <div className="oa-success">
+                      ⏳ Verifying your invitation… please wait.
+                    </div>
+                  )}
 
                   {error && (
                     <div className={error.startsWith("✅") ? "oa-success" : "oa-error"}>
@@ -697,76 +657,54 @@ export default function LoginPage() {
                     </div>
                   )}
 
-                  <form onSubmit={handleAuth} noValidate>
-                    <label className="oa-label" htmlFor="email">Email Address</label>
-                    <div className="oa-input-wrap">
-                      <input
-                        id="email" type="email" className="oa-input"
-                        placeholder="you@company.com"
-                        value={email} onChange={e => setEmail(e.target.value)}
-                        autoComplete="email" autoFocus required
-                      />
-                    </div>
-
-                    <label className="oa-label" htmlFor="password">Password</label>
-                    <div className="oa-input-wrap">
-                      <input
-                        id="password"
-                        type={showPassword ? "text" : "password"}
-                        className="oa-input"
-                        placeholder={isSignUp ? "Create a strong password" : "Enter your password"}
-                        value={password} onChange={e => setPassword(e.target.value)}
-                        autoComplete={isSignUp ? "new-password" : "current-password"} required
-                      />
-                      <button
-                        type="button" className="oa-eye"
-                        onClick={() => setShowPassword(p => !p)} tabIndex={-1}
-                      >
-                        {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                      </button>
-                    </div>
-
-                    {!isSignUp && (
-                      <div className="oa-forgot-row">
-                        <a href="/forgot-password" className="oa-forgot">Forgot password?</a>
+                  {/* Show login form only if not auto‑logging in */}
+                  {!autoLogin && (
+                    <form onSubmit={handleAuth} noValidate>
+                      <label className="oa-label" htmlFor="email">Email Address</label>
+                      <div className="oa-input-wrap">
+                        <input id="email" type="email" className="oa-input" placeholder="you@company.com"
+                          value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" autoFocus required />
                       </div>
-                    )}
+                      <label className="oa-label" htmlFor="password">Password</label>
+                      <div className="oa-input-wrap">
+                        <input id="password" type={showPassword ? "text" : "password"} className="oa-input"
+                          placeholder={isSignUp ? "Create a strong password" : "Enter your password"}
+                          value={password} onChange={e => setPassword(e.target.value)}
+                          autoComplete={isSignUp ? "new-password" : "current-password"} required />
+                        <button type="button" className="oa-eye" onClick={() => setShowPassword(p => !p)} tabIndex={-1}>
+                          {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                        </button>
+                      </div>
 
-                    <button type="submit" className="oa-btn" disabled={loading}>
-                      {loading
-                        ? <><div className="oa-spinner" /> Please wait…</>
-                        : isSignUp ? "Create Account →" : "Sign In →"
-                      }
-                    </button>
+                      {!isSignUp && (
+                        <div className="oa-forgot-row">
+                          <a href="/forgot-password" className="oa-forgot">Forgot password?</a>
+                        </div>
+                      )}
 
-                    <div className="oa-ssl">🔒 256-bit SSL encrypted · Your data is safe</div>
-                  </form>
+                      <button type="submit" className="oa-btn" disabled={loading}>
+                        {loading ? <><div className="oa-spinner" /> Please wait…</> : isSignUp ? "Create Account →" : "Sign In →"}
+                      </button>
+                      <div className="oa-ssl">🔒 256-bit SSL encrypted · Your data is safe</div>
+                    </form>
+                  )}
 
-                  <div className="oa-switch-row">
-                    <button
-                      className="oa-switch"
-                      onClick={() => { setIsSignUp(s => !s); setError("") }}
-                    >
-                      {isSignUp
-                        ? "Already have an account? Sign in"
-                        : "Don't have an account? Sign up"}
-                    </button>
-                  </div>
-
-                  <div className="oa-divider">
-                    <div className="oa-div-line" />
-                    <span className="oa-div-txt">or</span>
-                    <div className="oa-div-line" />
-                  </div>
-
-                  <a href="/signup" className="oa-trial-btn">
-                    🚀 Start Free Trial (10 days · Professional Plan)
-                  </a>
-                  <p className="oa-trial-note">No credit card required. Create your company in seconds.</p>
-
+                  {!autoLogin && (
+                    <>
+                      <div className="oa-switch-row">
+                        <button className="oa-switch" onClick={() => { setIsSignUp(s => !s); setError("") }}>
+                          {isSignUp ? "Already have an account? Sign in" : "Don't have an account? Sign up"}
+                        </button>
+                      </div>
+                      <div className="oa-divider">
+                        <div className="oa-div-line" /><span className="oa-div-txt">or</span><div className="oa-div-line" />
+                      </div>
+                      <a href="/signup" className="oa-trial-btn">🚀 Start Free Trial (10 days · Professional Plan)</a>
+                      <p className="oa-trial-note">No credit card required. Create your company in seconds.</p>
+                    </>
+                  )}
                 </div>
 
-                {/* Card Foot */}
                 <div className="oa-card-foot">
                   <div className="oa-support-lbl">Need help? We're here for you.</div>
                   <div className="oa-support-links">
@@ -774,11 +712,9 @@ export default function LoginPage() {
                     <a href="mailto:siqbalhwc@gmail.com" className="oa-support-link">✉ siqbalhwc@gmail.com</a>
                   </div>
                 </div>
-
               </div>
             </div>
           </div>
-
         </div>
       </div>
     </>
