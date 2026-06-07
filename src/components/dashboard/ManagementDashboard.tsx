@@ -51,9 +51,23 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [selectedDonorId, setSelectedDonorId] = useState<string>("")
+  const [userDisplayName, setUserDisplayName] = useState("")
 
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
+
+  // Fetch user name
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      const fullName =
+        (user.user_metadata as any)?.full_name ||
+        (user.user_metadata as any)?.name ||
+        user.email?.split("@")[0] ||
+        "User"
+      setUserDisplayName(fullName)
+    })
+  }, [])
 
   useEffect(() => {
     if (!companyId) return
@@ -435,7 +449,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           padding-right: 1.6rem;
           font-family: inherit;
           max-width: 150px;
-          color-scheme: dark;   /* ✅ Fix for dropdown popup contrast */
+          color-scheme: dark;
         }
         .mgmt .filter-pill:focus { outline: none; border-color: var(--border-strong); }
 
@@ -544,7 +558,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           transition={{ duration: 0.5 }}
         >
           <div className="hero-greeting">
-            <h2>{getGreeting()}, siqbalhwc</h2>
+            <h2>{getGreeting()}, {userDisplayName || "User"}</h2>
             <p>Here's what's happening with your NGO portfolio today</p>
           </div>
           <div className="hero-filters">
