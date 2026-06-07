@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing startDate or endDate' }, { status: 400 })
   }
 
-  // If a project filter is active, we calculate account balances manually
+  // If a project filter is active, calculate account balances manually
   if (projectId) {
     // Fetch all Revenue/Expense accounts for the company
     const { data: accounts, error: acctErr } = await supabase

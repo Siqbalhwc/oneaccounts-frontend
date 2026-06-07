@@ -79,8 +79,17 @@ export default function ProfitLossPage() {
     }
   }
 
+  // ── Fetch projects (MUST include company_id for isolation) ──
   const fetchProjects = async () => {
-    const { data } = await supabase.from("projects").select("id, name").is("deleted_at", null).order("name")
+    const { data: { user } } = await supabase.auth.getUser()
+    const cid = (user?.app_metadata as any)?.company_id
+    if (!cid) return
+    const { data } = await supabase
+      .from("projects")
+      .select("id, name")
+      .eq("company_id", cid)          // ✅ critical fix
+      .is("deleted_at", null)
+      .order("name")
     if (data) setProjects(data)
   }
 
@@ -104,9 +113,13 @@ export default function ProfitLossPage() {
   const netProfit = grossProfit - totalOpEx - totalOther
   const margin = totalRevenue !== 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : "0.0"
 
-  // ── Project comparison (unchanged) ──
+  // ── Project comparison (load only when projects are ready) ──
   useEffect(() => {
-    if (!compareMode || accounts.length === 0) { setCompareRows([]); return }
+    if (!compareMode || accounts.length === 0 || projects.length === 0) {
+      setCompareRows([])
+      setCompareLoading(false)
+      return
+    }
     setCompareLoading(true)
 
     const fetchCompare = async () => {
@@ -187,7 +200,6 @@ export default function ProfitLossPage() {
     else navigateToTrialBalance("Expense", getCategory(account))
   }
 
-  // ── Excel export (unchanged) ──
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new()
     const companyNameLocal = companyName || "Shahid Iqbal & Co"
@@ -202,21 +214,18 @@ export default function ProfitLossPage() {
         [""],
         ["Account", "Amount (PKR)"],
       ]
-
       const addSection = (heading: string, accountsList: any[]) => {
         sheetData.push([heading, ""])
         accountsList.forEach(a => {
           sheetData.push([`${a.code} – ${a.name}`, fmt(a.balance || 0)])
         })
       }
-
       addSection("Income / Revenue", revenueAccounts)
       if (directExpenses.length > 0) addSection("Cost of Goods Sold / Direct Expenses", directExpenses)
       sheetData.push(["Gross Profit", fmt(grossProfit)])
       if (operatingExpenses.length > 0) addSection("Operating Expenses", operatingExpenses)
       if (otherExpenses.length > 0) addSection("Other Expenses", otherExpenses)
       sheetData.push(["Net Profit / Loss", fmt(netProfit)])
-
       const ws = XLSX.utils.aoa_to_sheet(sheetData)
       ws["!cols"] = [{ wch: 50 }, { wch: 20 }]
       XLSX.utils.book_append_sheet(wb, ws, "Profit & Loss")
@@ -229,7 +238,6 @@ export default function ProfitLossPage() {
         [""],
         headers,
       ]
-
       const projSubtotal = (filter: (r: any) => boolean, pid: string) =>
         compareRows.filter(filter).reduce((s, r) => s + (r.projectAmounts[pid] || 0), 0)
       const projUnallocatedSubtotal = (filter: (r: any) => boolean) =>
@@ -278,7 +286,6 @@ export default function ProfitLossPage() {
     XLSX.writeFile(wb, `Profit_Loss_${startDate}_to_${endDate}.xlsx`)
   }
 
-  // ── PDF export handler (unchanged) ──────────────────────────────
   const handleExportPDF = async () => {
     if (compareMode) {
       const pdfData = {
@@ -395,7 +402,6 @@ export default function ProfitLossPage() {
       {/* Report Header */}
       <div className="report-header">
         <div className="report-header-left">
-          {/* ⬅ Back button */}
           <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}>
             <ArrowLeft size={16} />
           </button>
@@ -441,7 +447,6 @@ export default function ProfitLossPage() {
         <input type="date" className="date-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
         <span style={{ color: "var(--text-muted)", fontSize: 12 }}>to</span>
         <input type="date" className="date-input" value={endDate} onChange={e => setEndDate(e.target.value)} />
-        {/* Project filter – now affects overall view */}
         <select className="project-select" style={{ width: 180 }} value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
           <option value="">All Projects</option>
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -459,7 +464,6 @@ export default function ProfitLossPage() {
       {/* Report Body */}
       {!compareMode ? (
         <>
-          {/* Income Section */}
           <div className="section">
             <div className="section-head" onClick={() => navigateToTrialBalance("Revenue")}>
               <div style={{ width: 4, height: 16, borderRadius: 2, background: "#10B981" }} />
@@ -478,7 +482,6 @@ export default function ProfitLossPage() {
             </div>
           </div>
 
-          {/* Direct Expenses */}
           {directExpenses.length > 0 && (
             <div className="section">
               <div className="section-head" onClick={() => navigateToTrialBalance("Expense", "Direct Expenses")}>
@@ -499,13 +502,11 @@ export default function ProfitLossPage() {
             </div>
           )}
 
-          {/* Gross Profit */}
           <div style={{ margin: "0 32px 16px", display: "flex", justifyContent: "space-between", padding: "14px 12px", background: headerBg, color: "white", borderRadius: 8, fontWeight: 700 }}>
             <span>Gross Profit</span>
             <span>{grossProfit < 0 ? "-" : ""}PKR {fmt(grossProfit)}</span>
           </div>
 
-          {/* Operating Expenses */}
           {operatingExpenses.length > 0 && (
             <div className="section">
               <div className="section-head" onClick={() => navigateToTrialBalance("Expense", "Operating Expenses")}>
@@ -526,7 +527,6 @@ export default function ProfitLossPage() {
             </div>
           )}
 
-          {/* Other Expenses */}
           {otherExpenses.length > 0 && (
             <div className="section">
               <div className="section-head" onClick={() => navigateToTrialBalance("Expense")}>
@@ -547,7 +547,6 @@ export default function ProfitLossPage() {
             </div>
           )}
 
-          {/* Net Profit */}
           <div className="net-row" style={{ background: headerBg, color: "white" }}>
             <div>
               <div style={{ fontSize: 16, fontWeight: 800 }}>{netProfit >= 0 ? "Net Profit" : "Net Loss"}</div>
@@ -563,6 +562,8 @@ export default function ProfitLossPage() {
         <div className="compare-wrap">
           {compareLoading ? (
             <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading project comparison…</div>
+          ) : projects.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>No projects found. Please create projects first.</div>
           ) : compareRows.length === 0 ? (
             <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>
               No transactions found for this period.<br />
