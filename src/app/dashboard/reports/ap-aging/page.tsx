@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Download } from "lucide-react"
+import { ArrowLeft, Download, Search, X, Check } from "lucide-react"
 import { useRouter } from "next/navigation"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
@@ -28,6 +28,14 @@ export default function APAgingPage() {
   const [loading, setLoading] = useState(true)
   const [companyId, setCompanyId] = useState("")
 
+  const today = new Date().toISOString().split("T")[0]
+  const [asOfDate, setAsOfDate] = useState(today)
+  const [suppliers, setSuppliers] = useState<any[]>([])
+  const [selectedSupplierIds, setSelectedSupplierIds] = useState<number[]>([])
+  const [supplierSearch, setSupplierSearch] = useState("")
+  const [showSupplierDropdown, setShowSupplierDropdown] = useState(false)
+  const supplierDropdownRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
@@ -37,26 +45,45 @@ export default function APAgingPage() {
 
   useEffect(() => {
     if (!companyId) return
-    setLoading(true)
     supabase
+      .from("suppliers")
+      .select("id, name")
+      .eq("company_id", companyId)
+      .is("deleted_at", null)
+      .order("name")
+      .then(({ data }) => data && setSuppliers(data))
+  }, [companyId])
+
+  useEffect(() => {
+    if (!companyId) return
+    setLoading(true)
+
+    let query = supabase
       .from("invoices")
       .select("id, invoice_no, date, due_date, total, paid, party_id, suppliers!inner(name)")
       .eq("company_id", companyId)
       .eq("type", "purchase")
       .neq("status", "Paid")
       .order("due_date")
-      .then(({ data: invoices }) => {
-        if (!invoices) {
-          setData([])
-          setLoading(false)
-          return
-        }
-        const today = new Date()
-        const rows: AgingRow[] = invoices.map((inv: any) => {
+
+    if (selectedSupplierIds.length > 0) {
+      query = query.in("party_id", selectedSupplierIds)
+    }
+
+    query.then(({ data: invoices }) => {
+      if (!invoices) {
+        setData([])
+        setLoading(false)
+        return
+      }
+
+      const refDate = new Date(asOfDate)
+      const rows: AgingRow[] = invoices
+        .map((inv: any) => {
           const bal = (inv.total || 0) - (inv.paid || 0)
           if (bal <= 0) return null
           const due = new Date(inv.due_date)
-          const days = Math.floor((today.getTime() - due.getTime()) / 86400000)
+          const days = Math.floor((refDate.getTime() - due.getTime()) / 86400000)
           let current = 0, d1to30 = 0, d31to60 = 0, d61to90 = 0, over90 = 0
           if (days <= 0) current = bal
           else if (days <= 30) d1to30 = bal
@@ -76,39 +103,15 @@ export default function APAgingPage() {
             over90,
             total: bal,
           }
-        }).filter(Boolean) as AgingRow[]
+        })
+        .filter(Boolean) as AgingRow[]
 
-        const grouped: AgingRow[] = []
-        let currentSuppId = -1
-        let subCurrent = 0, sub1to30 = 0, sub31to60 = 0, sub61to90 = 0, subOver90 = 0, subTotal = 0
-        rows.forEach((row, idx) => {
-          if (row.supplierId !== currentSuppId) {
-            if (currentSuppId !== -1) {
-              grouped.push({
-                supplierName: "",
-                supplierId: -1,
-                invoiceNo: "Subtotal",
-                invoiceDate: "",
-                dueDate: "",
-                current: subCurrent,
-                days1to30: sub1to30,
-                days31to60: sub31to60,
-                days61to90: sub61to90,
-                over90: subOver90,
-                total: subTotal,
-              })
-              subCurrent = sub1to30 = sub31to60 = sub61to90 = subOver90 = subTotal = 0
-            }
-            currentSuppId = row.supplierId
-          }
-          grouped.push(row)
-          subCurrent += row.current
-          sub1to30 += row.days1to30
-          sub31to60 += row.days31to60
-          sub61to90 += row.days61to90
-          subOver90 += row.over90
-          subTotal += row.total
-          if (idx === rows.length - 1) {
+      const grouped: AgingRow[] = []
+      let currentSuppId = -1
+      let subCurrent = 0, sub1to30 = 0, sub31to60 = 0, sub61to90 = 0, subOver90 = 0, subTotal = 0
+      rows.forEach((row, idx) => {
+        if (row.supplierId !== currentSuppId) {
+          if (currentSuppId !== -1) {
             grouped.push({
               supplierName: "",
               supplierId: -1,
@@ -122,13 +125,48 @@ export default function APAgingPage() {
               over90: subOver90,
               total: subTotal,
             })
+            subCurrent = sub1to30 = sub31to60 = sub61to90 = subOver90 = subTotal = 0
           }
-        })
-
-        setData(grouped)
-        setLoading(false)
+          currentSuppId = row.supplierId
+        }
+        grouped.push(row)
+        subCurrent += row.current
+        sub1to30 += row.days1to30
+        sub31to60 += row.days31to60
+        sub61to90 += row.days61to90
+        subOver90 += row.over90
+        subTotal += row.total
+        if (idx === rows.length - 1) {
+          grouped.push({
+            supplierName: "",
+            supplierId: -1,
+            invoiceNo: "Subtotal",
+            invoiceDate: "",
+            dueDate: "",
+            current: subCurrent,
+            days1to30: sub1to30,
+            days31to60: sub31to60,
+            days61to90: sub61to90,
+            over90: subOver90,
+            total: subTotal,
+          })
+        }
       })
-  }, [companyId])
+
+      setData(grouped)
+      setLoading(false)
+    })
+  }, [companyId, asOfDate, selectedSupplierIds])
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (supplierDropdownRef.current && !supplierDropdownRef.current.contains(e.target as Node)) {
+        setShowSupplierDropdown(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
 
   const totals = data.filter(d => d.invoiceNo === "Subtotal").reduce((acc, d) => ({
     current: acc.current + d.current,
@@ -139,12 +177,27 @@ export default function APAgingPage() {
     total: acc.total + d.total,
   }), { current: 0, days1to30: 0, days31to60: 0, days61to90: 0, over90: 0, total: 0 })
 
+  const filteredSuppliers = suppliers.filter(s =>
+    s.name.toLowerCase().includes(supplierSearch.toLowerCase())
+  )
+
+  const toggleSupplier = (id: number) => {
+    setSelectedSupplierIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }
+
+  const clearSupplierFilter = () => {
+    setSelectedSupplierIds([])
+    setSupplierSearch("")
+  }
+
   const handleDownloadPDF = () => {
     const doc = new jsPDF({ orientation: "landscape" })
     doc.setFontSize(16)
     doc.text("AP Aging Report", 14, 20)
     doc.setFontSize(10)
-    doc.text(`As of ${new Date().toLocaleDateString()}`, 14, 28)
+    doc.text(`As of ${asOfDate}`, 14, 28)
 
     const head = [["Supplier", "Invoice #", "Inv Date", "Current", "1-30", "31-60", "61-90", ">90", "Total"]]
     const body = data.map(d => [
@@ -184,7 +237,7 @@ export default function APAgingPage() {
 
   const format = (v: number) => v ? `PKR ${v.toLocaleString()}` : "–"
 
-  if (loading) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>Loading AP Aging…</div>
+  if (loading && data.length === 0) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>Loading AP Aging…</div>
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -233,6 +286,36 @@ export default function APAgingPage() {
         }
         .aging-summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .aging-summary-value { font-size: 18px; font-weight: 800; }
+        .filter-row {
+          display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
+        }
+        .date-input {
+          height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px;
+          font-size: 13px; background: var(--card); color: var(--text); font-family: inherit;
+        }
+        .multi-select {
+          position: relative; flex: 1; min-width: 200px; max-width: 400px;
+        }
+        .multi-select-trigger {
+          display: flex; align-items: center; justify-content: space-between;
+          height: 38px; border: 1.5px solid var(--border); border-radius: 8px;
+          padding: 0 12px; font-size: 13px; background: var(--card); color: var(--text);
+          cursor: pointer;
+        }
+        .multi-select-dropdown {
+          position: absolute; top: 100%; left: 0; right: 0;
+          background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+          max-height: 220px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .multi-select-option {
+          display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+          cursor: pointer; font-size: 13px; color: var(--text);
+        }
+        .multi-select-option:hover { background: var(--card-hover); }
+        .multi-select-search {
+          position: sticky; top: 0; background: var(--card); padding: 8px 12px;
+          border-bottom: 1px solid var(--border);
+        }
         @media (max-width: 768px) {
           .aging-table th, .aging-table td { padding: 8px 10px; font-size: 11px; }
         }
@@ -242,9 +325,50 @@ export default function APAgingPage() {
         <button className="aging-btn" onClick={() => router.push("/dashboard/reports")}><ArrowLeft size={16} /></button>
         <div style={{ flex: 1 }}>
           <h1 className="aging-title">📅 AP Aging Report</h1>
-          <p className="aging-subtitle">Accounts Payable aging analysis as of {new Date().toLocaleDateString()}</p>
+          <p className="aging-subtitle">Accounts Payable aging analysis as of {asOfDate}</p>
         </div>
         <button className="aging-btn" onClick={handleDownloadPDF}><Download size={14} /> PDF</button>
+      </div>
+
+      <div className="filter-row">
+        <label style={{ fontSize: 13, color: "var(--text-muted)", marginRight: -4 }}>As of:</label>
+        <input type="date" className="date-input" value={asOfDate} onChange={e => setAsOfDate(e.target.value)} />
+
+        <div className="multi-select" ref={supplierDropdownRef}>
+          <div className="multi-select-trigger" onClick={() => setShowSupplierDropdown(!showSupplierDropdown)}>
+            <span>
+              {selectedSupplierIds.length === 0
+                ? "All Suppliers"
+                : `${selectedSupplierIds.length} selected`}
+            </span>
+            <X size={14} color="var(--text-muted)" onClick={(e) => { e.stopPropagation(); clearSupplierFilter(); }} />
+          </div>
+          {showSupplierDropdown && (
+            <div className="multi-select-dropdown">
+              <div className="multi-select-search">
+                <Search size={14} color="var(--text-muted)" style={{ position: "absolute", left: 12, top: 10 }} />
+                <input
+                  style={{ width: "100%", height: 30, border: "1px solid var(--border)", borderRadius: 6, paddingLeft: 32, fontSize: 13, background: "var(--bg)", color: "var(--text)" }}
+                  placeholder="Search suppliers…"
+                  value={supplierSearch}
+                  onChange={e => setSupplierSearch(e.target.value)}
+                  onClick={e => e.stopPropagation()}
+                />
+              </div>
+              {filteredSuppliers.map(s => (
+                <div key={s.id} className="multi-select-option" onClick={() => toggleSupplier(s.id)}>
+                  <div style={{ width: 16, height: 16, border: "1px solid var(--border)", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {selectedSupplierIds.includes(s.id) && <Check size={12} />}
+                  </div>
+                  <span>{s.name}</span>
+                </div>
+              ))}
+              {filteredSuppliers.length === 0 && (
+                <div className="multi-select-option" style={{ color: "var(--text-muted)" }}>No suppliers found</div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="aging-summary">

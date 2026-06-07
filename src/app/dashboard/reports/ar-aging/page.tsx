@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Download } from "lucide-react"
+import { ArrowLeft, Download, Search, X, Check } from "lucide-react"
 import { useRouter } from "next/navigation"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
@@ -28,6 +28,15 @@ export default function ARAgingPage() {
   const [loading, setLoading] = useState(true)
   const [companyId, setCompanyId] = useState("")
 
+  // Filter states
+  const today = new Date().toISOString().split("T")[0]
+  const [asOfDate, setAsOfDate] = useState(today)
+  const [customers, setCustomers] = useState<any[]>([])
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState<number[]>([])
+  const [customerSearch, setCustomerSearch] = useState("")
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
+  const customerDropdownRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
@@ -35,28 +44,49 @@ export default function ARAgingPage() {
     })
   }, [])
 
+  // Fetch customers list
+  useEffect(() => {
+    if (!companyId) return
+    supabase
+      .from("customers")
+      .select("id, name")
+      .eq("company_id", companyId)
+      .is("deleted_at", null)
+      .order("name")
+      .then(({ data }) => data && setCustomers(data))
+  }, [companyId])
+
+  // Fetch invoices when filters change
   useEffect(() => {
     if (!companyId) return
     setLoading(true)
-    supabase
+
+    let query = supabase
       .from("invoices")
       .select("id, invoice_no, date, due_date, total, paid, party_id, customers!inner(name)")
       .eq("company_id", companyId)
       .eq("type", "sale")
       .neq("status", "Paid")
       .order("due_date")
-      .then(({ data: invoices }) => {
-        if (!invoices) {
-          setData([])
-          setLoading(false)
-          return
-        }
-        const today = new Date()
-        const rows: AgingRow[] = invoices.map((inv: any) => {
+
+    if (selectedCustomerIds.length > 0) {
+      query = query.in("party_id", selectedCustomerIds)
+    }
+
+    query.then(({ data: invoices }) => {
+      if (!invoices) {
+        setData([])
+        setLoading(false)
+        return
+      }
+
+      const refDate = new Date(asOfDate)
+      const rows: AgingRow[] = invoices
+        .map((inv: any) => {
           const bal = (inv.total || 0) - (inv.paid || 0)
           if (bal <= 0) return null
           const due = new Date(inv.due_date)
-          const days = Math.floor((today.getTime() - due.getTime()) / 86400000)
+          const days = Math.floor((refDate.getTime() - due.getTime()) / 86400000)
           let current = 0, d1to30 = 0, d31to60 = 0, d61to90 = 0, over90 = 0
           if (days <= 0) current = bal
           else if (days <= 30) d1to30 = bal
@@ -76,39 +106,16 @@ export default function ARAgingPage() {
             over90,
             total: bal,
           }
-        }).filter(Boolean) as AgingRow[]
+        })
+        .filter(Boolean) as AgingRow[]
 
-        const grouped: AgingRow[] = []
-        let currentCustId = -1
-        let subCurrent = 0, sub1to30 = 0, sub31to60 = 0, sub61to90 = 0, subOver90 = 0, subTotal = 0
-        rows.forEach((row, idx) => {
-          if (row.customerId !== currentCustId) {
-            if (currentCustId !== -1) {
-              grouped.push({
-                customerName: "",
-                customerId: -1,
-                invoiceNo: "Subtotal",
-                invoiceDate: "",
-                dueDate: "",
-                current: subCurrent,
-                days1to30: sub1to30,
-                days31to60: sub31to60,
-                days61to90: sub61to90,
-                over90: subOver90,
-                total: subTotal,
-              })
-              subCurrent = sub1to30 = sub31to60 = sub61to90 = subOver90 = subTotal = 0
-            }
-            currentCustId = row.customerId
-          }
-          grouped.push(row)
-          subCurrent += row.current
-          sub1to30 += row.days1to30
-          sub31to60 += row.days31to60
-          sub61to90 += row.days61to90
-          subOver90 += row.over90
-          subTotal += row.total
-          if (idx === rows.length - 1) {
+      // Group by customer
+      const grouped: AgingRow[] = []
+      let currentCustId = -1
+      let subCurrent = 0, sub1to30 = 0, sub31to60 = 0, sub61to90 = 0, subOver90 = 0, subTotal = 0
+      rows.forEach((row, idx) => {
+        if (row.customerId !== currentCustId) {
+          if (currentCustId !== -1) {
             grouped.push({
               customerName: "",
               customerId: -1,
@@ -122,13 +129,49 @@ export default function ARAgingPage() {
               over90: subOver90,
               total: subTotal,
             })
+            subCurrent = sub1to30 = sub31to60 = sub61to90 = subOver90 = subTotal = 0
           }
-        })
-
-        setData(grouped)
-        setLoading(false)
+          currentCustId = row.customerId
+        }
+        grouped.push(row)
+        subCurrent += row.current
+        sub1to30 += row.days1to30
+        sub31to60 += row.days31to60
+        sub61to90 += row.days61to90
+        subOver90 += row.over90
+        subTotal += row.total
+        if (idx === rows.length - 1) {
+          grouped.push({
+            customerName: "",
+            customerId: -1,
+            invoiceNo: "Subtotal",
+            invoiceDate: "",
+            dueDate: "",
+            current: subCurrent,
+            days1to30: sub1to30,
+            days31to60: sub31to60,
+            days61to90: sub61to90,
+            over90: subOver90,
+            total: subTotal,
+          })
+        }
       })
-  }, [companyId])
+
+      setData(grouped)
+      setLoading(false)
+    })
+  }, [companyId, asOfDate, selectedCustomerIds])
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (customerDropdownRef.current && !customerDropdownRef.current.contains(e.target as Node)) {
+        setShowCustomerDropdown(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
 
   const totals = data.filter(d => d.invoiceNo === "Subtotal").reduce((acc, d) => ({
     current: acc.current + d.current,
@@ -139,12 +182,27 @@ export default function ARAgingPage() {
     total: acc.total + d.total,
   }), { current: 0, days1to30: 0, days31to60: 0, days61to90: 0, over90: 0, total: 0 })
 
+  const filteredCustomers = customers.filter(c =>
+    c.name.toLowerCase().includes(customerSearch.toLowerCase())
+  )
+
+  const toggleCustomer = (id: number) => {
+    setSelectedCustomerIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }
+
+  const clearCustomerFilter = () => {
+    setSelectedCustomerIds([])
+    setCustomerSearch("")
+  }
+
   const handleDownloadPDF = () => {
     const doc = new jsPDF({ orientation: "landscape" })
     doc.setFontSize(16)
     doc.text("AR Aging Report", 14, 20)
     doc.setFontSize(10)
-    doc.text(`As of ${new Date().toLocaleDateString()}`, 14, 28)
+    doc.text(`As of ${asOfDate}`, 14, 28)
 
     const head = [["Customer", "Invoice #", "Inv Date", "Current", "1-30", "31-60", "61-90", ">90", "Total"]]
     const body = data.map(d => [
@@ -184,7 +242,7 @@ export default function ARAgingPage() {
 
   const format = (v: number) => v ? `PKR ${v.toLocaleString()}` : "–"
 
-  if (loading) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>Loading AR Aging…</div>
+  if (loading && data.length === 0) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>Loading AR Aging…</div>
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -233,6 +291,36 @@ export default function ARAgingPage() {
         }
         .aging-summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .aging-summary-value { font-size: 18px; font-weight: 800; }
+        .filter-row {
+          display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
+        }
+        .date-input {
+          height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px;
+          font-size: 13px; background: var(--card); color: var(--text); font-family: inherit;
+        }
+        .multi-select {
+          position: relative; flex: 1; min-width: 200px; max-width: 400px;
+        }
+        .multi-select-trigger {
+          display: flex; align-items: center; justify-content: space-between;
+          height: 38px; border: 1.5px solid var(--border); border-radius: 8px;
+          padding: 0 12px; font-size: 13px; background: var(--card); color: var(--text);
+          cursor: pointer;
+        }
+        .multi-select-dropdown {
+          position: absolute; top: 100%; left: 0; right: 0;
+          background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+          max-height: 220px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .multi-select-option {
+          display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+          cursor: pointer; font-size: 13px; color: var(--text);
+        }
+        .multi-select-option:hover { background: var(--card-hover); }
+        .multi-select-search {
+          position: sticky; top: 0; background: var(--card); padding: 8px 12px;
+          border-bottom: 1px solid var(--border);
+        }
         @media (max-width: 768px) {
           .aging-table th, .aging-table td { padding: 8px 10px; font-size: 11px; }
         }
@@ -242,11 +330,54 @@ export default function ARAgingPage() {
         <button className="aging-btn" onClick={() => router.push("/dashboard/reports")}><ArrowLeft size={16} /></button>
         <div style={{ flex: 1 }}>
           <h1 className="aging-title">📅 AR Aging Report</h1>
-          <p className="aging-subtitle">Accounts Receivable aging analysis as of {new Date().toLocaleDateString()}</p>
+          <p className="aging-subtitle">Accounts Receivable aging analysis as of {asOfDate}</p>
         </div>
         <button className="aging-btn" onClick={handleDownloadPDF}><Download size={14} /> PDF</button>
       </div>
 
+      {/* Filter Row */}
+      <div className="filter-row">
+        <label style={{ fontSize: 13, color: "var(--text-muted)", marginRight: -4 }}>As of:</label>
+        <input type="date" className="date-input" value={asOfDate} onChange={e => setAsOfDate(e.target.value)} />
+
+        <div className="multi-select" ref={customerDropdownRef}>
+          <div className="multi-select-trigger" onClick={() => setShowCustomerDropdown(!showCustomerDropdown)}>
+            <span>
+              {selectedCustomerIds.length === 0
+                ? "All Customers"
+                : `${selectedCustomerIds.length} selected`}
+            </span>
+            <X size={14} color="var(--text-muted)" onClick={(e) => { e.stopPropagation(); clearCustomerFilter(); }} />
+          </div>
+          {showCustomerDropdown && (
+            <div className="multi-select-dropdown">
+              <div className="multi-select-search">
+                <Search size={14} color="var(--text-muted)" style={{ position: "absolute", left: 12, top: 10 }} />
+                <input
+                  style={{ width: "100%", height: 30, border: "1px solid var(--border)", borderRadius: 6, paddingLeft: 32, fontSize: 13, background: "var(--bg)", color: "var(--text)" }}
+                  placeholder="Search customers…"
+                  value={customerSearch}
+                  onChange={e => setCustomerSearch(e.target.value)}
+                  onClick={e => e.stopPropagation()}
+                />
+              </div>
+              {filteredCustomers.map(c => (
+                <div key={c.id} className="multi-select-option" onClick={() => toggleCustomer(c.id)}>
+                  <div style={{ width: 16, height: 16, border: "1px solid var(--border)", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {selectedCustomerIds.includes(c.id) && <Check size={12} />}
+                  </div>
+                  <span>{c.name}</span>
+                </div>
+              ))}
+              {filteredCustomers.length === 0 && (
+                <div className="multi-select-option" style={{ color: "var(--text-muted)" }}>No customers found</div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Summary Cards */}
       <div className="aging-summary">
         {[
           { label: "Current", value: totals.current, color: "#10B981" },
@@ -265,6 +396,7 @@ export default function ARAgingPage() {
         ))}
       </div>
 
+      {/* Table */}
       <table className="aging-table">
         <thead>
           <tr>
