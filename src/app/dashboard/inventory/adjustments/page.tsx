@@ -31,13 +31,21 @@ export default function InventoryAdjustmentsPage() {
 
   const [adjustments, setAdjustments] = useState<Adjustment[]>([])
   const [loading, setLoading] = useState(true)
+  const [companyId, setCompanyId] = useState("")
 
   // Sorting state
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
 
   useEffect(() => {
-    if (!role) return
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id
+      if (cid) setCompanyId(cid)
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!role || !companyId) return
     if (!canView) {
       setLoading(false)
       return
@@ -45,12 +53,13 @@ export default function InventoryAdjustmentsPage() {
     supabase
       .from("stock_moves")
       .select("*, product:products(code, name)")
+      .eq("company_id", companyId)          // ✅ company isolation
       .order("date", { ascending: false })
       .then(({ data }) => {
         if (data) setAdjustments(data)
         setLoading(false)
       })
-  }, [role, canView])
+  }, [role, canView, companyId])
 
   // Sort handlers
   const handleSort = (field: SortField) => {
@@ -232,7 +241,11 @@ export default function InventoryAdjustmentsPage() {
                         style={{ color: "#EF4444" }}
                         onClick={async () => {
                           if (confirm("Delete this adjustment?")) {
-                            await supabase.from("stock_moves").delete().eq("id", adj.id)
+                            await supabase
+                              .from("stock_moves")
+                              .delete()
+                              .eq("id", adj.id)
+                              .eq("company_id", companyId)   // ✅ isolation on delete
                             setAdjustments(prev => prev.filter(a => a.id !== adj.id))
                           }
                         }}
