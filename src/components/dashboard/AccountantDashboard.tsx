@@ -1,285 +1,445 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { useRole } from "@/contexts/RoleContext"
-import { usePlan } from "@/contexts/PlanContext"
+import { useRouter } from "next/navigation"
+import { motion } from "framer-motion"
+import { useTheme } from "@/contexts/ThemeContext"
 import { useCompany } from "@/contexts/CompanyContext"
-import {
-  FileText, Receipt, CreditCard, DollarSign, Users, Truck,
-  Package, Monitor, ArrowRightLeft, Briefcase, FolderOpen,
-  BarChart3, BookOpen, ClipboardList, Scale, TrendingUp, PieChart,
-  Plus,
-} from "lucide-react"
+
+interface KpiData {
+  totalReceivables: number
+  totalPayables: number
+  cashBalance: number
+  overdueInvoicesCount: number
+  overdueInvoices: any[]
+  recentTransactions: any[]
+}
+
+function fmt(n: number): string {
+  const abs = Math.abs(n)
+  if (abs >= 1_000_000) return `PKR ${(abs / 1_000_000).toFixed(1)}M`
+  if (abs >= 1_000) return `PKR ${(abs / 1_000).toFixed(1)}K`
+  return `PKR ${abs.toLocaleString()}`
+}
 
 export default function AccountantDashboard({ role }: { role: string }) {
   const router = useRouter()
+  const { theme: themeMode } = useTheme()
+  const { companyId } = useCompany()
+
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const { hasFeature } = usePlan()
-  const { companyId } = useCompany()
-  const [businessType, setBusinessType] = useState<string>("")
 
-  // Fetch company business type
+  const [loading, setLoading] = useState(true)
+  const [data, setData] = useState<KpiData>({
+    totalReceivables: 0,
+    totalPayables: 0,
+    cashBalance: 0,
+    overdueInvoicesCount: 0,
+    overdueInvoices: [],
+    recentTransactions: [],
+  })
+
   useEffect(() => {
     if (!companyId) return
-    supabase
-      .from("companies")
-      .select("business_type")
-      .eq("id", companyId)
-      .single()
-      .then(({ data }) => {
-        if (data) setBusinessType(data.business_type || "")
-      })
+    fetchData()
   }, [companyId])
 
-  // ── Secondary actions (always visible) ──
-  const secondaryActions = [
-    { label: "Receipt", icon: <CreditCard size={20} />, link: "/dashboard/receipts/new" },
-    { label: "Payment", icon: <DollarSign size={20} />, link: "/dashboard/payments/new" },
-    { label: "Customer", icon: <Users size={20} />, link: "/dashboard/customers/new" },
-    { label: "Supplier", icon: <Truck size={20} />, link: "/dashboard/suppliers/new" },
-    { label: "Product", icon: <Package size={20} />, link: "/dashboard/products/new", show: hasFeature("inventory") },
-    { label: "Asset", icon: <Monitor size={20} />, link: "/dashboard/assets/new" },
-    { label: "Bank", icon: <ArrowRightLeft size={20} />, link: "/dashboard/banking/bank-accounts/new" },
-    { label: "Transfer", icon: <ArrowRightLeft size={20} />, link: "/dashboard/banking/bank-transfers/new" },
-    { label: "Project", icon: <Briefcase size={20} />, link: "/dashboard/projects/new", show: businessType === "ngo" },
-    { label: "Activity", icon: <FolderOpen size={20} />, link: "/dashboard/activities/new", show: businessType === "ngo" },
-    { label: "Budget", icon: <BarChart3 size={20} />, link: "/dashboard/budgets/new", show: businessType === "ngo" },
-  ].filter(a => a.show !== false)
+  const fetchData = async () => {
+    setLoading(true)
+    try {
+      const [
+        { data: customers },
+        { data: suppliers },
+        { data: bankAccounts },
+        { data: overdueInvs },
+        { data: journalLines },
+      ] = await Promise.all([
+        supabase.from("customers").select("balance").eq("company_id", companyId),
+        supabase.from("suppliers").select("balance").eq("company_id", companyId),
+        supabase.from("bank_accounts").select("current_balance").eq("company_id", companyId),
+        supabase
+          .from("invoices")
+          .select("id, invoice_no, due_date, total, paid, status, customers(name)")
+          .eq("company_id", companyId)
+          .eq("type", "sale")
+          .eq("status", "Unpaid")
+          .lt("due_date", new Date().toISOString().split("T")[0])
+          .order("due_date", { ascending: true })
+          .limit(5),
+        supabase
+          .from("journal_lines")
+          .select("debit, credit, accounts(code,name), journal_entries!inner(date,description)")
+          .eq("company_id", companyId)
+          .order("journal_entries(date)", { ascending: false })
+          .limit(10),
+      ])
 
-  // ── Report links ──
-  const reports = [
-    { label: "Sales Invoices", icon: <FileText size={18} />, link: "/dashboard/invoices" },
-    { label: "Purchase Bills", icon: <Receipt size={18} />, link: "/dashboard/bills" },
-    { label: "Receipts", icon: <CreditCard size={18} />, link: "/dashboard/receipts" },
-    { label: "Payments", icon: <DollarSign size={18} />, link: "/dashboard/payments" },
-    { label: "Customer Ledger", icon: <BookOpen size={18} />, link: "/dashboard/reports/customer-ledger" },
-    { label: "Vendor Ledger", icon: <BookOpen size={18} />, link: "/dashboard/reports/vendor-ledger" },
-    { label: "General Ledger", icon: <BookOpen size={18} />, link: "/dashboard/reports/ledger" },
-    { label: "Product Ledger", icon: <Package size={18} />, link: "/dashboard/reports/product-ledger" },
-    { label: "Chart of Accounts", icon: <ClipboardList size={18} />, link: "/dashboard/accounts" },
-    { label: "Trial Balance", icon: <Scale size={18} />, link: "/dashboard/reports/trial-balance" },
-    { label: "Profit & Loss", icon: <TrendingUp size={18} />, link: "/dashboard/reports/profit-loss" },
-    { label: "Balance Sheet", icon: <PieChart size={18} />, link: "/dashboard/reports/balance-sheet" },
-  ]
+      const totalReceivables = customers?.reduce((s: number, c: any) => s + (c.balance || 0), 0) || 0
+      const totalPayables = suppliers?.reduce((s: number, s2: any) => s + (s2.balance || 0), 0) || 0
+      const cashBalance = bankAccounts?.reduce((s: number, b: any) => s + (b.current_balance || 0), 0) || 0
+      const overdueInvoicesCount = overdueInvs?.length || 0
+
+      // Process recent transactions
+      const recentTransactions =
+        journalLines?.map((jl: any) => ({
+          date: jl.journal_entries?.date?.split("T")[0],
+          description: jl.journal_entries?.description,
+          accountCode: jl.accounts?.code,
+          accountName: jl.accounts?.name,
+          debit: jl.debit || 0,
+          credit: jl.credit || 0,
+        })) || []
+
+      setData({
+        totalReceivables,
+        totalPayables,
+        cashBalance,
+        overdueInvoicesCount,
+        overdueInvoices: overdueInvs || [],
+        recentTransactions,
+      })
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const getGreeting = () => {
+    const hour = new Date().getHours()
+    if (hour < 12) return "Good morning"
+    if (hour < 18) return "Good afternoon"
+    return "Good evening"
+  }
+
+  if (loading) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "var(--bg)", color: "var(--text-muted)" }}>
+        Loading accountant dashboard…
+      </div>
+    )
+  }
+
+  const cardStyle = {
+    background: "var(--card)",
+    borderRadius: "14px",
+    padding: "20px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+    border: "1px solid var(--border)",
+  }
 
   return (
-    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+    <div style={{ background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)", padding: "0.8rem 1.2rem" }}>
       <style>{`
-        /* ── Mobile‑first layout ── */
-        .ad-hero-actions {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          margin-bottom: 16px;
-        }
-        .hero-action {
-          border-radius: 18px;
-          padding: 18px;
-          display: flex;
-          align-items: center;
-          gap: 14px;
-          cursor: pointer;
-          transition: transform 0.15s, box-shadow 0.15s;
-        }
-        .hero-action:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-        }
-        /* Invoice – gradient blending primary with a dark slate for readability */
-        .hero-action.invoice {
-          background: linear-gradient(135deg, var(--primary), #1e293b);
-          color: #ffffff;
-        }
-        .hero-action.bill {
+        .acct * { box-sizing: border-box; }
+        .acct .card {
           background: var(--card);
           border: 1px solid var(--border);
-          color: var(--text);
+          border-radius: 14px;
+          padding: 20px;
+          box-shadow: var(--shadow-sm);
         }
-        .hero-action h3 {
-          margin: 0;
-          font-size: 16px;
-          font-weight: 700;
-        }
-        .hero-action p {
-          margin: 0;
-          opacity: 0.85;
-          font-size: 12px;
-        }
-
-        /* Secondary grid */
-        .secondary-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 12px;
-          margin-bottom: 16px;
-        }
-        .secondary-card {
-          background: var(--card);
-          border: 1px solid var(--border);
-          border-radius: 16px;
-          padding: 18px;
-          text-align: center;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 8px;
-          cursor: pointer;
-          transition: all 0.15s;
-          color: var(--text);
-        }
-        .secondary-card:hover {
-          background: var(--card-hover);
-          border-color: var(--primary);
-          transform: translateY(-2px);
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-
-        /* Reports – collapsible on mobile, expanded on desktop */
-        .reports-section {
-          margin-top: 8px;
-        }
-        .reports-details > summary {
-          font-size: 14px;
+        .acct .kpi-label {
+          font-size: 0.7rem;
           font-weight: 700;
           text-transform: uppercase;
-          letter-spacing: 0.05em;
+          letter-spacing: 0.06em;
           color: var(--text-muted);
-          cursor: pointer;
-          padding: 8px 0;
-          list-style: none;
+          margin-bottom: 6px;
         }
-        .reports-details > summary::-webkit-details-marker {
-          display: none;
+        .acct .kpi-value {
+          font-size: 1.7rem;
+          font-weight: 800;
+          line-height: 1.2;
         }
-        .reports-grid {
+        .acct .kpi-meta {
+          font-size: 0.8rem;
+          color: var(--text-muted);
+          margin-top: 4px;
+        }
+        .acct .hero {
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 14px;
+          padding: 1rem 1.5rem;
+          margin-bottom: 1.5rem;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 0.8rem;
+        }
+        .acct .greeting h2 {
+          font-size: 1.3rem;
+          font-weight: 700;
+          color: var(--text);
+        }
+        .acct .greeting p {
+          font-size: 0.85rem;
+          color: var(--text-muted);
+        }
+        .acct .date-range {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .acct .date-range label {
+          font-size: 0.8rem;
+          color: var(--text-muted);
+        }
+        .acct .date-range input {
+          padding: 6px 10px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          font-family: inherit;
+          font-size: 0.8rem;
+          background: var(--bg);
+          color: var(--text);
+        }
+        .acct .kpi-row {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-          gap: 12px;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 16px;
+          margin-bottom: 24px;
+        }
+        .acct .two-col {
+          display: grid;
+          grid-template-columns: 2fr 1fr;
+          gap: 24px;
+        }
+        .acct table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 0.8rem;
+        }
+        .acct th {
+          text-align: left;
+          padding: 8px 12px;
+          border-bottom: 2px solid var(--border);
+          color: var(--text-muted);
+          font-weight: 600;
+          font-size: 0.65rem;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+        .acct td {
+          padding: 8px 12px;
+          border-bottom: 1px solid var(--border);
+          color: var(--text);
+        }
+        .acct .status-badge {
+          display: inline-block;
+          padding: 2px 8px;
+          border-radius: 12px;
+          font-size: 0.65rem;
+          font-weight: 600;
+        }
+        .status-unpaid { background: #fee2e2; color: #991b1b; }
+        .status-partial { background: #fef9c3; color: #854d0e; }
+        .acct .quick-actions {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
           margin-top: 12px;
         }
-        .report-card {
+        .acct .quick-action-btn {
           background: var(--card);
           border: 1px solid var(--border);
           border-radius: 10px;
           padding: 14px;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          cursor: pointer;
-          transition: all 0.15s;
+          text-align: center;
+          font-size: 0.8rem;
+          font-weight: 600;
           color: var(--text);
+          cursor: pointer;
+          transition: 0.15s;
         }
-        .report-card:hover {
-          background: var(--card-hover);
+        .acct .quick-action-btn:hover {
+          background: var(--primary);
+          color: var(--primary-text);
           border-color: var(--primary);
         }
-
-        /* Floating action button – smaller, theme‑aware */
-        .fab {
-          position: fixed;
-          right: 16px;
-          bottom: 16px;
-          width: 48px;
-          height: 48px;
-          border-radius: 50%;
-          border: none;
-          background: var(--primary);
-          color: var(--primary-text, #ffffff);
-          box-shadow: 0 8px 24px rgba(0,0,0,0.25);
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-          transition: transform 0.15s, box-shadow 0.15s;
+        @media (max-width: 1024px) {
+          .acct .kpi-row { grid-template-columns: repeat(2, 1fr); }
+          .acct .two-col { grid-template-columns: 1fr; }
         }
-        .fab:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 10px 28px rgba(0,0,0,0.35);
-        }
-
-        /* ── Desktop / tablet overrides ── */
-        @media (min-width: 768px) {
-          .ad-hero-actions {
-            flex-direction: row;
-          }
-          .hero-action {
-            flex: 1;
-          }
-          .secondary-grid {
-            grid-template-columns: repeat(4, 1fr);
-          }
-          .fab {
-            display: none;
-          }
-        }
-        @media (min-width: 1024px) {
-          .secondary-grid {
-            grid-template-columns: repeat(5, 1fr);
-          }
+        @media (max-width: 640px) {
+          .acct .kpi-row { grid-template-columns: 1fr; }
+          .acct .hero { flex-direction: column; align-items: flex-start; }
         }
       `}</style>
 
-      {/* ── Hero Actions ── */}
-      <div className="ad-hero-actions">
-        <div className="hero-action invoice" onClick={() => router.push("/dashboard/invoices/new")}>
-          <FileText size={24} />
-          <div>
-            <h3>Create Invoice</h3>
-            <p>Create customer invoice</p>
+      <div className="acct">
+        {/* Hero / Greeting */}
+        <div className="hero">
+          <div className="greeting">
+            <h2>{getGreeting()}, siqbalhwc</h2>
+            <p>Here’s your accounting snapshot for today</p>
+          </div>
+          <div className="date-range">
+            <label>From</label>
+            <input type="date" defaultValue="2026-01-01" />
+            <label>to</label>
+            <input type="date" defaultValue="2026-12-31" />
           </div>
         </div>
-        <div className="hero-action bill" onClick={() => router.push("/dashboard/bills/new")}>
-          <Receipt size={24} />
-          <div>
-            <h3>Create Bill</h3>
-            <p>Create supplier bill</p>
-          </div>
-        </div>
-      </div>
 
-      {/* ── Secondary Actions ── */}
-      <div className="secondary-grid">
-        {secondaryActions.map((action, idx) => (
-          <div
-            key={idx}
-            className="secondary-card"
-            onClick={() => router.push(action.link)}
-          >
-            <span style={{ color: "var(--primary)" }}>{action.icon}</span>
-            <span style={{ fontSize: 13, fontWeight: 600 }}>{action.label}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Reports (collapsible on mobile, open on desktop) ── */}
-      <div className="reports-section">
-        <details className="reports-details" open>
-          <summary>📊 Reports</summary>
-          <div className="reports-grid">
-            {reports.map((report, idx) => (
-              <div
-                key={idx}
-                className="report-card"
-                onClick={() => router.push(report.link)}
-              >
-                <span style={{ color: "var(--primary)", flexShrink: 0 }}>{report.icon}</span>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>{report.label}</span>
+        {/* KPI Cards */}
+        <div className="kpi-row">
+          {[
+            { label: "💰 Total Receivables", value: fmt(data.totalReceivables), color: "#f97316", meta: `${data.overdueInvoicesCount} open invoices` },
+            { label: "📤 Total Payables",      value: fmt(data.totalPayables),    color: "#ef4444", meta: "Pending bills" },
+            { label: "🏦 Cash Balance",        value: fmt(data.cashBalance),      color: "#10b981", meta: "Across bank accounts" },
+            { label: "⚠️ Overdue Invoices",     value: data.overdueInvoicesCount.toString(), color: "#ef4444", meta: "Need attention" },
+          ].map((kpi) => (
+            <div key={kpi.label} className="card" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+              <div className="kpi-label">{kpi.label}</div>
+              <div className="kpi-value" style={{ color: kpi.color }}>
+                {kpi.value}
               </div>
-            ))}
-          </div>
-        </details>
-      </div>
+              <div className="kpi-meta">{kpi.meta}</div>
+            </div>
+          ))}
+        </div>
 
-      {/* ── Floating Action Button (mobile only) ── */}
-      <button className="fab" onClick={() => router.push("/dashboard/invoices/new")}>
-        <Plus size={28} />
-      </button>
+        {/* Two-column content */}
+        <div className="two-col">
+          {/* Recent Transactions */}
+          <div className="card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text)" }}>🔄 Recent Transactions</span>
+              <button
+                onClick={() => router.push("/dashboard/reports/general-ledger")}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--primary)",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                View All →
+              </button>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Account</th>
+                    <th style={{ textAlign: "right" }}>Debit</th>
+                    <th style={{ textAlign: "right" }}>Credit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.recentTransactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: "center", color: "var(--text-muted)" }}>
+                        No recent transactions
+                      </td>
+                    </tr>
+                  ) : (
+                    data.recentTransactions.map((t: any, idx: number) => (
+                      <tr key={idx}>
+                        <td>{t.date}</td>
+                        <td>{t.description}</td>
+                        <td>{t.accountCode} – {t.accountName}</td>
+                        <td style={{ textAlign: "right", color: t.debit > 0 ? "#ef4444" : "var(--text)" }}>
+                          {t.debit > 0 ? t.debit.toLocaleString() : "—"}
+                        </td>
+                        <td style={{ textAlign: "right", color: t.credit > 0 ? "#10b981" : "var(--text)" }}>
+                          {t.credit > 0 ? t.credit.toLocaleString() : "—"}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Overdue Invoices + Quick Actions */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+            <div className="card">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <span style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text)" }}>⏳ Overdue Invoices</span>
+                <button
+                  onClick={() => router.push("/dashboard/invoices?status=Unpaid&overdue=true")}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "var(--primary)",
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  View All →
+                </button>
+              </div>
+              {data.overdueInvoices.length === 0 ? (
+                <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>
+                  No overdue invoices – great job!
+                </p>
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Customer</th>
+                      <th>Invoice</th>
+                      <th>Due Date</th>
+                      <th>Amount</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.overdueInvoices.map((inv: any) => (
+                      <tr key={inv.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/dashboard/invoices/${inv.id}`)}>
+                        <td>{inv.customers?.name || "—"}</td>
+                        <td>{inv.invoice_no}</td>
+                        <td>{inv.due_date}</td>
+                        <td>{fmt(inv.total)}</td>
+                        <td>
+                          <span className={`status-badge ${inv.status === "Unpaid" ? "status-unpaid" : "status-partial"}`}>
+                            {inv.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Quick Actions */}
+            <div className="card">
+              <div style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>⚡ Quick Actions</div>
+              <div className="quick-actions">
+                <div className="quick-action-btn" onClick={() => router.push("/dashboard/invoices/new")}>
+                  ➕ New Invoice
+                </div>
+                <div className="quick-action-btn" onClick={() => router.push("/dashboard/bills/new")}>
+                  📦 New Bill
+                </div>
+                <div className="quick-action-btn" onClick={() => router.push("/dashboard/receipts/new")}>
+                  💰 Record Receipt
+                </div>
+                <div className="quick-action-btn" onClick={() => router.push("/dashboard/payments/new")}>
+                  💳 Record Payment
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
