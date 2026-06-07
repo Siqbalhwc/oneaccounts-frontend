@@ -28,8 +28,8 @@ async function generateReceiptNo(supabase: any, companyId: string): Promise<stri
   return `${prefix}${String(nextNum).padStart(4, "0")}`
 }
 
-// ── Helper to reverse the effects of a receipt (used by PUT and DELETE) ──
-async function reverseReceipt(supabase: any, receiptId: number, companyId: string) {
+// ✅ Fixed: now accepts receiptNo to reverse only the specific JE
+async function reverseReceipt(supabase: any, receiptId: number, receiptNo: string, companyId: string) {
   // 1. Reverse invoice paid amounts and statuses
   const { data: allocations } = await supabase
     .from("receipt_allocations")
@@ -53,16 +53,15 @@ async function reverseReceipt(supabase: any, receiptId: number, companyId: strin
           .eq("company_id", companyId)
       }
     }
-    // Delete old allocations
     await supabase.from("receipt_allocations").delete().eq("receipt_id", receiptId)
   }
 
-  // 2. Reverse journal entries
+  // 2. Reverse journal entries – ONLY the one for this receipt
   const { data: oldJE } = await supabase
     .from("journal_entries")
     .select("id")
     .eq("company_id", companyId)
-    .like("description", `%REC/%`)  // all receipt journal entries contain the receipt number pattern
+    .eq("description", `Receipt - ${receiptNo}`)   // ✅ exact match
   if (oldJE) {
     for (const je of oldJE) {
       const { data: lines } = await supabase
@@ -151,7 +150,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Amount is required' }, { status: 400 })
   }
 
-  // ── Validate allocations (same as before) ──
   const allocList: { invoice_id: number; amount: number }[] = []
   if (!income_account_id && party_id && allocations && Array.isArray(allocations)) {
     for (const alloc of allocations) {
@@ -199,7 +197,6 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // ── Generate receipt number and insert ──
   let recNo = ''
   let receipt: any = null
 
@@ -236,7 +233,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to create receipt after multiple attempts.' }, { status: 500 })
   }
 
-  // ── Process allocations (same as before) ──
   for (const alloc of allocList) {
     const invId = alloc.invoice_id
     const allocAmt = alloc.amount
@@ -275,7 +271,6 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  // ── Update customer balance ──
   if (party_id) {
     const { data: cust } = await supabase.from('customers')
       .select('balance').eq('id', party_id).eq('company_id', companyId).single()
@@ -286,7 +281,6 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // ── Determine bank GL account ──
   let bankGlAccountId: number | null = null
   if (bank_account_id) {
     const { data: bank } = await supabase.from('bank_accounts')
@@ -304,7 +298,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No bank GL account found.' }, { status: 500 })
   }
 
-  // ── Journal Entry ──
   const jeLines: any[] = []
   jeLines.push({ account_id: bankGlAccountId, debit: amount, credit: 0 })
 
@@ -367,7 +360,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ success: true, receipt_no: recNo, receipt })
 }
 
-// ── PUT ──
+// ── PUT (Fixed: uses exact receipt_no for reversal) ──
 export async function PUT(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -411,16 +404,14 @@ export async function PUT(request: NextRequest) {
     .single()
   if (!oldReceipt) return NextResponse.json({ error: "Receipt not found" }, { status: 404 })
 
-  // Reverse old effects
-  await reverseReceipt(supabase, Number(id), companyId)
+  // ✅ Reverse old effects using exact receipt number
+  await reverseReceipt(supabase, Number(id), oldReceipt.receipt_no, companyId)
 
-  // Now process the new data exactly like a POST, but reuse the existing receipt id
   const {
     party_id, amount, payment_method, bank_account_id,
     income_account_id, date, reference, notes, allocations
   } = body
 
-  // ── Validate allocations (same as POST) ──
   const allocList: { invoice_id: number; amount: number }[] = []
   if (!income_account_id && party_id && allocations && Array.isArray(allocations)) {
     for (const alloc of allocations) {
@@ -466,7 +457,6 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  // Update receipt header (keep the same id and receipt_no)
   const { data: updatedReceipt, error: updateErr } = await supabase
     .from("receipts")
     .update({
@@ -488,7 +478,6 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: updateErr?.message || 'Update failed' }, { status: 500 })
   }
 
-  // ── Process allocations ──
   for (const alloc of allocList) {
     const invId = alloc.invoice_id
     const allocAmt = alloc.amount
@@ -527,7 +516,6 @@ export async function PUT(request: NextRequest) {
     })
   }
 
-  // ── Update customer balance ──
   if (party_id) {
     const { data: cust } = await supabase.from('customers')
       .select('balance').eq('id', party_id).eq('company_id', companyId).single()
@@ -538,7 +526,6 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  // ── Journal Entry (new) ──
   let bankGlAccountId: number | null = null
   if (bank_account_id) {
     const { data: bank } = await supabase.from('bank_accounts')
@@ -598,7 +585,7 @@ export async function PUT(request: NextRequest) {
   return NextResponse.json({ success: true, receipt: updatedReceipt })
 }
 
-// ── DELETE ──
+// ── DELETE (Fixed: uses exact receipt_no) ──
 export async function DELETE(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -631,7 +618,6 @@ export async function DELETE(request: NextRequest) {
   if (!roleData?.company_id) return NextResponse.json({ error: 'No company found' }, { status: 400 })
   const companyId = roleData.company_id
 
-  // Fetch receipt to confirm it exists
   const { data: receipt } = await supabase
     .from("receipts")
     .select("*")
@@ -640,10 +626,8 @@ export async function DELETE(request: NextRequest) {
     .single()
   if (!receipt) return NextResponse.json({ error: "Receipt not found" }, { status: 404 })
 
-  // Reverse all effects
-  await reverseReceipt(supabase, Number(id), companyId)
+  await reverseReceipt(supabase, Number(id), receipt.receipt_no, companyId)
 
-  // Soft‑delete the receipt
   await supabase.from("receipts")
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id)
