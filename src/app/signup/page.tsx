@@ -14,14 +14,14 @@ export default function SignupPage() {
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false)   // ✅ new
+  const [showPassword, setShowPassword] = useState(false)
   const [companyName, setCompanyName] = useState("")
   const [businessType, setBusinessType] = useState("ngo")
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState("")
   const [hasExistingSession, setHasExistingSession] = useState(false)
+  const [isCreating, setIsCreating] = useState(false)   // ✅ full‑screen loading state
 
-  // Check if there's already an active user session
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       setHasExistingSession(!!user)
@@ -39,27 +39,34 @@ export default function SignupPage() {
       return
     }
 
-    // 1. Create auth user
+    // ── 1. Create auth user ──────────────────────────────
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
     })
 
     if (authError) {
-      setErrorMsg(authError.message)
+      if (
+        authError.message.toLowerCase().includes("already registered") ||
+        authError.message.toLowerCase().includes("already exists")
+      ) {
+        setErrorMsg("An account with this email already exists. Please log in instead, or use a different email.")
+      } else {
+        setErrorMsg(authError.message)
+      }
       setLoading(false)
       return
     }
 
     if (!authData.session) {
-      setErrorMsg(
-        "✅ Account created! Please check your email to confirm, then sign in to create your company."
-      )
+      setErrorMsg("✅ Account created! Please check your email to confirm, then sign in to create your company.")
       setLoading(false)
       return
     }
 
-    // 2. Create company via trial API
+    // ── 2. Create company (API call) ──────────────────────
+    setIsCreating(true)   // ✅ show full‑screen loader
+
     try {
       const res = await fetch("/api/trial/signup", {
         method: "POST",
@@ -67,21 +74,56 @@ export default function SignupPage() {
         body: JSON.stringify({ companyName, businessType }),
       })
       const data = await res.json()
+
       if (!data.success) {
         setErrorMsg(data.error || "Failed to create company.")
+        setIsCreating(false)
         setLoading(false)
         return
       }
 
-      // 3. Refresh session
+      // ── 3. Refresh session so the new company_id is loaded ──
       await supabase.auth.refreshSession()
+      // Give Supabase a moment to propagate the new JWT claims
+      await new Promise(resolve => setTimeout(resolve, 800))
 
-      // 4. Redirect to dashboard
+      // ── 4. Redirect to dashboard ─────────────────────────
       router.push("/dashboard")
     } catch (e) {
       setErrorMsg("Network error. Please try again.")
+      setIsCreating(false)
       setLoading(false)
     }
+  }
+
+  // ✅ Full‑screen loading overlay while company is being created
+  if (isCreating) {
+    return (
+      <div style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        zIndex: 9999, fontFamily: "'Inter', sans-serif",
+      }}>
+        <div style={{
+          background: "white", borderRadius: 16, padding: "32px 40px",
+          textAlign: "center", boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+          maxWidth: 360, width: "90%",
+        }}>
+          <div style={{
+            width: 48, height: 48, borderRadius: "50%",
+            border: "4px solid #E2E8F0", borderTopColor: "#1D4ED8",
+            animation: "spin 0.8s linear infinite", margin: "0 auto 16px",
+          }} />
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: "#1E293B", margin: "0 0 8px" }}>
+            Creating your company…
+          </h2>
+          <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>
+            Setting up accounts, budget templates, and more.
+          </p>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -143,6 +185,13 @@ export default function SignupPage() {
             }}
           >
             {errorMsg}
+            {errorMsg.includes("already exists") && (
+              <div style={{ marginTop: 6 }}>
+                <a href="/login" style={{ color: "#1D4ED8", fontWeight: 600 }}>
+                  Go to Login →
+                </a>
+              </div>
+            )}
           </div>
         )}
 
@@ -212,7 +261,6 @@ export default function SignupPage() {
           <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>
             Password
           </label>
-          {/* ✅ Show/hide password toggle */}
           <div style={{ position: "relative", marginBottom: 18 }}>
             <input
               type={showPassword ? "text" : "password"}
@@ -267,11 +315,7 @@ export default function SignupPage() {
               cursor: hasExistingSession ? "not-allowed" : "pointer",
             }}
           >
-            {loading
-              ? "Creating..."
-              : hasExistingSession
-              ? "Sign out first or use incognito"
-              : "Start Free 10‑Day Trial"}
+            {loading ? "Creating..." : hasExistingSession ? "Sign out first or use incognito" : "Start Free 10‑Day Trial"}
           </button>
         </form>
 
