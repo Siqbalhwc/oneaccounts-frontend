@@ -249,7 +249,7 @@ export default function SignupPage() {
               ? "Creating..."
               : hasExistingSession
               ? "Sign out first or use incognito"
-              : "Start Free 14‑Day Trial"}
+              : "Start Free 10‑Day Trial"}
           </button>
         </form>
 
