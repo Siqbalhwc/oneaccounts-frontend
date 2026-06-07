@@ -78,7 +78,6 @@ export default function ARAgingPage() {
           }
         }).filter(Boolean) as AgingRow[]
 
-        // Group by customer
         const grouped: AgingRow[] = []
         let currentCustId = -1
         let subCurrent = 0, sub1to30 = 0, sub31to60 = 0, sub61to90 = 0, subOver90 = 0, subTotal = 0
@@ -177,12 +176,6 @@ export default function ARAgingPage() {
         6: { cellWidth: 20 },
         7: { cellWidth: 20 },
         8: { cellWidth: 20 },
-      },
-      didDrawCell: (data) => {
-        if (data.row.section === "body" && data.column.index === 0 && data.row.raw[0] === "Subtotal") {
-          (doc as any).setFillColor(245, 245, 245)
-          data.cell.styles.fillColor = [245, 245, 245]
-        }
       },
     })
 
