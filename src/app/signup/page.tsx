@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
+import { Eye, EyeOff } from "lucide-react"
 
 export default function SignupPage() {
   const router = useRouter()
@@ -13,6 +14,7 @@ export default function SignupPage() {
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)   // ✅ new
   const [companyName, setCompanyName] = useState("")
   const [businessType, setBusinessType] = useState("ngo")
   const [loading, setLoading] = useState(false)
@@ -31,7 +33,6 @@ export default function SignupPage() {
     setLoading(true)
     setErrorMsg("")
 
-    // If there's an existing session, block the signup (shouldn't happen because the button is disabled)
     if (hasExistingSession) {
       setErrorMsg("You are already logged in. Please sign out or use an incognito window to create a separate trial company.")
       setLoading(false)
@@ -72,7 +73,7 @@ export default function SignupPage() {
         return
       }
 
-      // 3. Refresh session (necessary only for brand‑new user)
+      // 3. Refresh session
       await supabase.auth.refreshSession()
 
       // 4. Redirect to dashboard
@@ -111,7 +112,6 @@ export default function SignupPage() {
           10‑day Professional plan. No credit card required.
         </p>
 
-        {/* Warning banner for existing session */}
         {hasExistingSession && (
           <div
             style={{
@@ -212,23 +212,45 @@ export default function SignupPage() {
           <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>
             Password
           </label>
-          <input
-            type="password"
-            placeholder="Min. 8 characters"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={8}
-            style={{
-              width: "100%",
-              padding: "8px 12px",
-              border: "1px solid #E2E8F0",
-              borderRadius: 6,
-              fontSize: 13,
-              marginBottom: 18,
-              boxSizing: "border-box",
-            }}
-          />
+          {/* ✅ Show/hide password toggle */}
+          <div style={{ position: "relative", marginBottom: 18 }}>
+            <input
+              type={showPassword ? "text" : "password"}
+              placeholder="Min. 8 characters"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={8}
+              style={{
+                width: "100%",
+                padding: "8px 40px 8px 12px",
+                border: "1px solid #E2E8F0",
+                borderRadius: 6,
+                fontSize: 13,
+                boxSizing: "border-box",
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(prev => !prev)}
+              style={{
+                position: "absolute",
+                right: 10,
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "#94A3B8",
+                padding: 4,
+                display: "flex",
+                alignItems: "center",
+              }}
+              tabIndex={-1}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
 
           <button
             type="submit"
