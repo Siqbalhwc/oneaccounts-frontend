@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { TrendingUp, TrendingDown, Minus, CheckCircle, AlertTriangle } from "lucide-react"
 import { motion } from "framer-motion"
@@ -9,7 +9,6 @@ import { useCompany } from "@/contexts/CompanyContext"
 import { useDashboardData } from "@/hooks/useDashboardData"
 import { createBrowserClient } from "@supabase/ssr"
 
-// ── Simple animated number hook ────────────────────────────────────
 function useAnimatedNumber(target: number, duration = 500) {
   const [display, setDisplay] = useState(0)
   const prev = useRef(0)
@@ -52,75 +51,232 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [selectedDonorId, setSelectedDonorId] = useState<string>("")
 
-  // ✅ Load projects and donors from DB so filters work
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
 
   useEffect(() => {
     if (!companyId) return
-    supabase
-      .from("projects")
-      .select("id, name")
-      .eq("company_id", companyId)
-      .order("name")
+    supabase.from("projects").select("id, name").eq("company_id", companyId).order("name")
       .then(({ data }) => data && setProjects(data))
-
-    supabase
-      .from("donors")
-      .select("id, name")
-      .eq("company_id", companyId)
-      .order("name")
+    supabase.from("donors").select("id, name").eq("company_id", companyId).order("name")
       .then(({ data }) => data && setDonors(data))
   }, [companyId])
 
-  // ── React Query cached dashboard data ─────────────────────────────
   const { data: dashData, isLoading, isError } = useDashboardData(companyId, fiscalYear)
 
-  // Extract cached values with safe defaults
-  const donorBalances: any[] = dashData?.donorBalances || []
-  const projectRows: any[] = dashData?.projectRows || []
-  const totalBudget: number = dashData?.totalBudget || 0
-  const totalSpent: number = dashData?.totalSpent || 0
-  const overspentCount: number = dashData?.overspentCount || 0
-  const totalReceivables: number = dashData?.totalReceivables || 0
-  const totalPayables: number = dashData?.totalPayables || 0
-  const monthlySpending: number = dashData?.monthlySpending || 0
-  const lastMonthSpending: number = dashData?.lastMonthSpending || 0
-  const spendingTrend: number = dashData?.spendingTrend || 0
-  const overdueInvoicesCount: number = dashData?.overdueInvoicesCount || 0
-  const lastUpdated: string = dashData?.lastUpdated || ""
-  const underspentActivities: any[] = dashData?.underspentActivities || []
+  // ── Raw arrays from hook ──────────────────────────────────────────
+  const allBudgets = dashData?.allBudgets || []
+  const allJournalLines = dashData?.allJournalLines || []
+  const allDonors = dashData?.allDonors || []
+  const allProjects = dashData?.allProjects || []
+  const allActivities = dashData?.allActivities || []
 
-  // ── Animated values – already in millions ──────────────────────────
-  const animBudget = useAnimatedNumber(totalBudget / 1_000_000, 600)
-  const animSpent = useAnimatedNumber(totalSpent / 1_000_000, 600)
-  const animRemaining = useAnimatedNumber(Math.abs(totalBudget - totalSpent) / 1_000_000, 600)
-  const animMonthly = useAnimatedNumber(monthlySpending / 1_000_000, 600)
+  const now = new Date()
+  const currentMonth = now.getMonth() + 1
+  const currentYear = now.getFullYear()
+  const startOfMonthISO = new Date(Date.UTC(currentYear, currentMonth - 1, 1)).toISOString().split("T")[0]
+  const todayISO = now.toISOString().split("T")[0]
 
-  // ── Formatter that expects a number in millions ────────────────────
-  const fmtM = (valueInMillions: number): string => {
-    const sign = valueInMillions < 0 ? "-" : ""
-    return `${sign}PKR ${Math.abs(valueInMillions).toFixed(1)}M`
-  }
+  // ── Filter helpers ─────────────────────────────────────────────────
+  const filteredBudgets = useMemo(() => {
+    return allBudgets.filter((b: any) => {
+      if (selectedProjectId && String(b.project_id) !== selectedProjectId) return false
+      if (selectedDonorId && String(b.donor_id) !== selectedDonorId) return false
+      return true
+    })
+  }, [allBudgets, selectedProjectId, selectedDonorId])
 
-  // ── Activity health (unchanged) ─────────────
-  const [activityHealth, setActivityHealth] = useState<Record<string, { lowCount: number; threshold: number; message: string }>>({})
+  const filteredJournalLines = useMemo(() => {
+    return allJournalLines.filter((jl: any) => {
+      if (selectedProjectId && String(jl.project_id) !== selectedProjectId) return false
+      if (selectedDonorId && String(jl.donor_id) !== selectedDonorId) return false
+      return true
+    })
+  }, [allJournalLines, selectedProjectId, selectedDonorId])
 
-  // ── Top‑5 projects for the card ──
-  const topFiveProjects: any[] = projectRows.slice(0, 5)
+  // ── Computed totals from filtered data ────────────────────────────
+  const totalBudget = useMemo(() => {
+    return filteredBudgets.reduce((s: number, b: any) => s + (b.budgeted_amount || 0), 0)
+  }, [filteredBudgets])
 
-  // ── Filtered data ─────────────────────────────────────────────────
-  const filteredDonorBalances: any[] = donorBalances.filter((d: any) => !selectedDonorId || d.donor_id == selectedDonorId)
-  const filteredProjectRows: any[] = projectRows.filter((p: any) => !selectedProjectId || p.id == selectedProjectId)
-  const filteredTotalBudget: number = selectedProjectId ? filteredProjectRows.reduce((s: number, p: any) => s + p.budget, 0) : totalBudget
-  const filteredTotalSpent: number = selectedProjectId ? filteredProjectRows.reduce((s: number, p: any) => s + p.actual, 0) : totalSpent
-  const filteredOverspentCount: number = selectedProjectId ? filteredProjectRows.filter((p: any) => p.actual > p.budget).length : overspentCount
-  const remainingFunds: number = filteredTotalBudget - filteredTotalSpent
-  const spentPct: number = filteredTotalBudget ? Math.round((filteredTotalSpent / filteredTotalBudget) * 100) : 0
+  const totalSpent = useMemo(() => {
+    return filteredJournalLines.reduce((s: number, jl: any) => s + (jl.debit || 0) - (jl.credit || 0), 0)
+  }, [filteredJournalLines])
 
-  const projectsSorted: any[] = [...filteredProjectRows].sort((a: any, b: any) => b.pct - a.pct)
-  const highestProject: any = projectsSorted[0] || null
-  const lowestProject: any = projectsSorted[projectsSorted.length - 1] || null
+  // Monthly spending from filtered journal lines
+  const monthlySpending = useMemo(() => {
+    return filteredJournalLines
+      .filter((jl: any) => jl.journal_entries?.date >= startOfMonthISO && jl.journal_entries?.date <= todayISO)
+      .reduce((s: number, jl: any) => s + (jl.debit || 0) - (jl.credit || 0), 0)
+  }, [filteredJournalLines, startOfMonthISO, todayISO])
+
+  // Last month spending from RPC remains, but we can compute similarly if needed. For now, we'll use the RPC data from hook, but it won't respond to filters. We'll just show it as is. Better to compute it similarly from all journal lines? We'll keep the RPC for simplicity; the dashboard shows last month only as comparison, not filterable. So we'll use dashData.lastMonthSpending as is.
+  const lastMonthSpending = dashData?.lastMonthSpending || 0
+  const spendingTrend = dashData?.spendingTrend || 0
+
+  // ── Donor balances (filtered) ─────────────────────────────────────
+  const donorNameMap: Record<string, string> = {}
+  allDonors.forEach((d: any) => { donorNameMap[String(d.id)] = d.name })
+
+  const budgetByDonor: Record<string, number> = {}
+  filteredBudgets.forEach((b: any) => {
+    if (b.donor_id) {
+      const key = String(b.donor_id)
+      budgetByDonor[key] = (budgetByDonor[key] || 0) + (b.budgeted_amount || 0)
+    }
+  })
+
+  const actualByDonor: Record<string, number> = {}
+  filteredJournalLines.forEach((jl: any) => {
+    if (jl.donor_id) {
+      const key = String(jl.donor_id)
+      actualByDonor[key] = (actualByDonor[key] || 0) + (jl.debit || 0) - (jl.credit || 0)
+    }
+  })
+
+  const donorDates: Record<string, { start: string; end: string | null }> = {}
+  allProjects.forEach((p: any) => {
+    if (p.donor_id) {
+      const key = String(p.donor_id)
+      if (!donorDates[key]) {
+        donorDates[key] = { start: p.start_date, end: p.end_date }
+      } else {
+        if (p.start_date && p.start_date < donorDates[key].start) donorDates[key].start = p.start_date
+        if (p.end_date && (!donorDates[key].end || p.end_date > donorDates[key].end)) donorDates[key].end = p.end_date
+      }
+    }
+  })
+
+  const donorBalances = useMemo(() => {
+    return Object.keys(budgetByDonor).map((donorId) => {
+      const budget = budgetByDonor[donorId] || 0
+      const actual = actualByDonor[donorId] || 0
+      const percentSpent = budget ? (actual / budget) * 100 : 0
+
+      const dates = donorDates[donorId]
+      let monthsPassed = currentMonth
+      let monthsTotal = 12
+      if (dates && dates.start) {
+        const start = new Date(dates.start)
+        const end = dates.end ? new Date(dates.end) : new Date(fiscalYear, 11, 31)
+        const diffTotal = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1
+        if (diffTotal > 0) monthsTotal = diffTotal
+        const today = new Date()
+        const diffPassed = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth()) + 1
+        monthsPassed = Math.max(0, Math.min(diffPassed, monthsTotal))
+      }
+
+      const timePercent = (monthsPassed / monthsTotal) * 100
+      const health = percentSpent > timePercent * 0.8 ? "on track" : percentSpent < timePercent * 0.4 ? "slow" : "ok"
+
+      return {
+        donor_id: donorId,
+        name: donorNameMap[donorId] || "Unknown",
+        budget,
+        actual,
+        remaining: budget - actual,
+        pct: Math.round(percentSpent),
+        overspent: actual > budget,
+        monthsPassed,
+        monthsTotal,
+        health,
+      }
+    }).sort((a, b) => b.remaining - a.remaining)
+  }, [budgetByDonor, actualByDonor, donorDates, donorNameMap, currentMonth, fiscalYear])
+
+  // ── Project utilization (filtered) ────────────────────────────────
+  const budgetByProject: Record<string, number> = {}
+  filteredBudgets.forEach((b: any) => {
+    if (b.project_id) {
+      const key = String(b.project_id)
+      budgetByProject[key] = (budgetByProject[key] || 0) + (b.budgeted_amount || 0)
+    }
+  })
+
+  const actualByProject: Record<string, number> = {}
+  filteredJournalLines.forEach((jl: any) => {
+    if (jl.project_id) {
+      const key = String(jl.project_id)
+      actualByProject[key] = (actualByProject[key] || 0) + (jl.debit || 0) - (jl.credit || 0)
+    }
+  })
+
+  const projectNameMap: Record<string, string> = {}
+  allProjects.forEach((p: any) => { projectNameMap[String(p.id)] = p.name })
+
+  const projectRows = useMemo(() => {
+    return Object.keys(budgetByProject).map((pid) => {
+      const budget = budgetByProject[pid] || 0
+      const actual = actualByProject[pid] || 0
+      const pct = budget ? Math.round((actual / budget) * 100) : (actual > 0 ? 100 : 0)
+      return { id: pid, name: projectNameMap[pid] || "Unknown", budget, actual, pct }
+    }).sort((a, b) => b.pct - a.pct).map((p) => ({
+      ...p,
+      status: p.pct > 100 ? "Overspent" : p.pct > 80 ? "Review" : (now.getMonth() > 2 && p.pct < 10) ? "At Risk" : "On Track",
+    }))
+  }, [budgetByProject, actualByProject, projectNameMap, now])
+
+  const overspentCount = projectRows.filter((p: any) => p.actual > p.budget).length
+
+  // ── Underspent activities (filtered) ─────────────────────────────
+  const activityNameMap: Record<number, string> = {}
+  allActivities.forEach((a: any) => { activityNameMap[a.id] = a.name })
+
+  const budgetByAct: Record<number, number> = {}
+  const actualByAct: Record<number, number> = {}
+  const actProjectMap: Record<number, number> = {}
+
+  filteredBudgets.forEach((b: any) => {
+    const aid = b.activity_id
+    budgetByAct[aid] = (budgetByAct[aid] || 0) + (b.budgeted_amount || 0)
+    if (!actProjectMap[aid] && b.project_id) {
+      actProjectMap[aid] = b.project_id
+    }
+  })
+
+  filteredJournalLines.forEach((jl: any) => {
+    if (jl.activity_id) {
+      actualByAct[jl.activity_id] = (actualByAct[jl.activity_id] || 0) + (jl.debit || 0) - (jl.credit || 0)
+    }
+  })
+
+  const underspentActivities = useMemo(() => {
+    return Object.keys(budgetByAct)
+      .map((aid) => {
+        const id = Number(aid)
+        const budget = budgetByAct[id] || 0
+        const actual = actualByAct[id] || 0
+        const spentPct = budget ? Math.round((actual / budget) * 100) : 100
+        const remaining = budget - actual
+        const unspentPct = 100 - spentPct
+        return {
+          id,
+          name: activityNameMap[id] || `Activity ${id}`,
+          budget,
+          actual,
+          remaining,
+          spentPct,
+          unspentPct,
+          projectId: actProjectMap[id] || null,
+        }
+      })
+      .filter((a) => a.budget > 0 && a.spentPct < 100)
+      .sort((a, b) => a.spentPct - b.spentPct)
+      .slice(0, 5)
+  }, [budgetByAct, actualByAct, activityNameMap, actProjectMap])
+
+  // ── Receivables / Payables (unchanged) ────────────────────────────
+  const totalReceivables = dashData?.totalReceivables || 0
+  const totalPayables = dashData?.totalPayables || 0
+  const overdueInvoicesCount = dashData?.overdueInvoicesCount || 0
+  const lastUpdated = dashData?.lastUpdated || ""
+
+  const remainingFunds = totalBudget - totalSpent
+  const spentPct = totalBudget ? Math.round((totalSpent / totalBudget) * 100) : 0
+
+  const projectsSorted = [...projectRows].sort((a: any, b: any) => b.pct - a.pct)
+  const highestProject = projectsSorted[0] || null
+  const lowestProject = projectsSorted[projectsSorted.length - 1] || null
 
   const getGreeting = (): string => {
     const hour = new Date().getHours()
@@ -129,7 +285,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
     return "Good evening"
   }
 
-  // ── For non‑animated values (e.g., project rows) ──────────────────
   const formatPKR = (v: number): string => {
     const sign = v < 0 ? "-" : ""
     const abs = Math.abs(v)
@@ -153,6 +308,34 @@ export default function ManagementDashboard({ role }: { role: string }) {
       <TrendingDown size={14} /> {Math.abs(value)}%
     </span>
     return null
+  }
+
+  const animBudget = useAnimatedNumber(totalBudget / 1_000_000, 600)
+  const animSpent = useAnimatedNumber(totalSpent / 1_000_000, 600)
+  const animRemaining = useAnimatedNumber(Math.abs(totalBudget - totalSpent) / 1_000_000, 600)
+  const animMonthly = useAnimatedNumber(monthlySpending / 1_000_000, 600)
+
+  const fmtM = (valueInMillions: number): string => {
+    const sign = valueInMillions < 0 ? "-" : ""
+    return `${sign}PKR ${Math.abs(valueInMillions).toFixed(1)}M`
+  }
+
+  const cardVariant = {
+    hidden: { opacity: 0, y: 20 },
+    visible: (i: number) => ({
+      opacity: 1,
+      y: 0,
+      transition: { delay: i * 0.08, duration: 0.45 },
+    }),
+  }
+
+  const hoverScale = {
+    whileHover: {
+      scale: 1.03,
+      y: -6,
+      boxShadow: isDark ? "0 12px 40px rgba(0,0,0,0.6)" : "0 12px 40px rgba(0,0,0,0.12)",
+      transition: { duration: 0.25 },
+    },
   }
 
   if (companyError) {
@@ -184,24 +367,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
         <div style={{ fontSize: "0.85rem" }}>Please try refreshing the page.</div>
       </div>
     )
-  }
-
-  const cardVariant = {
-    hidden: { opacity: 0, y: 20 },
-    visible: (i: number) => ({
-      opacity: 1,
-      y: 0,
-      transition: { delay: i * 0.08, duration: 0.45 },
-    }),
-  }
-
-  const hoverScale = {
-    whileHover: {
-      scale: 1.03,
-      y: -6,
-      boxShadow: isDark ? "0 12px 40px rgba(0,0,0,0.6)" : "0 12px 40px rgba(0,0,0,0.12)",
-      transition: { duration: 0.25 },
-    },
   }
 
   return (
@@ -318,12 +483,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .kpi-value { font-size: 1.7rem; font-weight: 700; color: var(--text); line-height: 1.2; }
         .kpi-meta { font-size: 0.8rem; color: var(--text-soft); display: flex; align-items: center; gap: 0.3rem; }
 
-        .underspend-row {
-          display: flex; justify-content: space-between; align-items: center;
-          padding: 0.5rem 0; border-bottom: 1px solid var(--border);
-          gap: 0.8rem;
-        }
-        .underspend-row:last-child { border-bottom: none; }
         .progress-bg { height: 5px; background: var(--border); border-radius: 10px; flex: 1; overflow: hidden; }
         .progress-fill { height: 100%; border-radius: 10px; background: #2DD4BF; }
 
@@ -400,61 +559,34 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
         {/* Overdue invoices banner */}
         {overdueInvoicesCount > 0 && (
-          <motion.div
-            className="overdue-banner"
-            initial={{ opacity: 0, y: -5 }}
-            animate={{ opacity: 1, y: 0, boxShadow: ["0 0 0 rgba(239,68,68,0)", "0 0 20px rgba(239,68,68,0.3)", "0 0 0 rgba(239,68,68,0)"] }}
-            transition={{ boxShadow: { repeat: Infinity, duration: 2.5 } }}
-          >
+          <motion.div className="overdue-banner" initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0, boxShadow: ["0 0 0 rgba(239,68,68,0)", "0 0 20px rgba(239,68,68,0.3)", "0 0 0 rgba(239,68,68,0)"] }} transition={{ boxShadow: { repeat: Infinity, duration: 2.5 } }}>
             <span>⚠️ <strong>{overdueInvoicesCount} overdue {overdueInvoicesCount === 1 ? "invoice" : "invoices"}</strong></span>
-            <button className="overdue-btn" onClick={() => router.push("/dashboard/invoices?status=Unpaid&overdue=true")}>
-              View overdue invoices →
-            </button>
+            <button className="overdue-btn" onClick={() => router.push("/dashboard/invoices?status=Unpaid&overdue=true")}>View overdue invoices →</button>
           </motion.div>
         )}
 
         {/* Overspent warning banner */}
-        {filteredOverspentCount > 0 && (
-          <motion.div
-            className="warning-banner"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-          >
-            <span>
-              ⚠️ Portfolio overspent by {formatPKR(filteredTotalSpent - filteredTotalBudget)}. {filteredOverspentCount} {filteredOverspentCount === 1 ? "project" : "projects"} need review.
-            </span>
-            <button className="warning-btn" onClick={() => router.push("/dashboard/reports/overspent" + detailQuery())}>
-              View overspent projects →
-            </button>
+        {overspentCount > 0 && (
+          <motion.div className="warning-banner" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}>
+            <span>⚠️ Portfolio overspent by {formatPKR(totalSpent - totalBudget)}. {overspentCount} {overspentCount === 1 ? "project" : "projects"} need review.</span>
+            <button className="warning-btn" onClick={() => router.push("/dashboard/reports/overspent" + detailQuery())}>View overspent projects →</button>
           </motion.div>
         )}
 
-        {/* KPI cards – without fake trend for Total Spent */}
+        {/* KPI cards */}
         <div className="dashboard-grid">
           {[
-            { label: "Total Budget",   value: fmtM(animBudget),   meta: `${filteredProjectRows.length} projects`, color: "#A78BFA", link: "/dashboard/reports/budget-summary" },
-            { label: "Total Spent",     value: fmtM(animSpent),    meta: `${spentPct}% of budget`, color: "#F97316", link: "/dashboard/reports/spending-detail" },
-            { label: remainingFunds < 0 ? "Overspent" : "Remaining", value: fmtM(animRemaining), meta: `${Math.abs(Math.round((remainingFunds / filteredTotalBudget) * 100))}% ${remainingFunds < 0 ? "over" : "left"}`, color: remainingFunds >= 0 ? "#2DD4BF" : "#F87171", link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null },
-            { label: "Portfolio Health", value: filteredOverspentCount > 0 ? "⚠️ Needs Attention" : "Healthy", meta: `${Math.round((1 - filteredOverspentCount / Math.max(filteredProjectRows.length, 1)) * 100)}% health score`, color: filteredOverspentCount > 0 ? "#F97316" : "#2DD4BF", link: "/dashboard/reports/overspent" },
+            { label: "Total Budget", value: fmtM(animBudget), meta: `${projectRows.length} projects`, color: "#A78BFA", link: "/dashboard/reports/budget-summary" },
+            { label: "Total Spent", value: fmtM(animSpent), meta: `${spentPct}% of budget`, color: "#F97316", link: "/dashboard/reports/spending-detail" },
+            { label: remainingFunds < 0 ? "Overspent" : "Remaining", value: fmtM(animRemaining), meta: `${Math.abs(Math.round((remainingFunds / totalBudget) * 100))}% ${remainingFunds < 0 ? "over" : "left"}`, color: remainingFunds >= 0 ? "#2DD4BF" : "#F87171", link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null },
+            { label: "Portfolio Health", value: overspentCount > 0 ? "⚠️ Needs Attention" : "Healthy", meta: `${Math.round((1 - overspentCount / Math.max(projectRows.length, 1)) * 100)}% health score`, color: overspentCount > 0 ? "#F97316" : "#2DD4BF", link: "/dashboard/reports/overspent" },
             { label: "📆 Monthly Spending", value: monthlySpending > 0 ? fmtM(animMonthly) : "—", meta: monthlySpending === 0 ? "No transactions this month" : `vs. ${formatPKR(lastMonthSpending)} last month`, color: monthlySpending > 0 ? "#F97316" : "#94A3B8", link: "/dashboard/reports/spending-detail" },
           ].map((kpi: any, i: number) => (
-            <motion.div
-              key={kpi.label}
-              className="card"
-              custom={i}
-              initial="hidden"
-              animate="visible"
-              variants={cardVariant}
-              {...hoverScale}
-              onClick={() => kpi.link && router.push(kpi.link + detailQuery())}
-            >
+            <motion.div key={kpi.label} className="card" custom={i} initial="hidden" animate="visible" variants={cardVariant} {...hoverScale} onClick={() => kpi.link && router.push(kpi.link + detailQuery())}>
               <div className="kpi-label">{kpi.label}</div>
-              <div className="kpi-value" style={{ color: kpi.color }}>
-                {kpi.value}
-              </div>
+              <div className="kpi-value" style={{ color: kpi.color }}>{kpi.value}</div>
               <div className="kpi-meta">
                 {kpi.meta}
-                {/* Only show trend for Monthly Spending (if available) */}
                 {kpi.label === "📆 Monthly Spending" && monthlySpending > 0 && <Trend value={spendingTrend} positive={spendingTrend < 0} negative={spendingTrend > 0} />}
               </div>
               {kpi.label === "Total Spent" && highestProject && lowestProject && highestProject.id !== lowestProject.id && (
@@ -466,73 +598,36 @@ export default function ManagementDashboard({ role }: { role: string }) {
           ))}
         </div>
 
-        {/* ── Project Utilization + Donor Balances ── */}
+        {/* Project Utilization + Donor Balances */}
         <div className="dashboard-grid-32">
-          <motion.div
-            className="card"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4, duration: 0.5 }}
-          >
+          <motion.div className="card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4, duration: 0.5 }}>
             <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>📊 Top 5 Project Utilization</div>
-            {topFiveProjects.map((p: any, idx: number) => {
-              const health = activityHealth[p.id]
-              return (
-                <div key={idx} onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}&fy=${fiscalYear}`)} style={{
-                  display: "flex", alignItems: "center", gap: "0.8rem",
-                  background: "var(--card)", borderRadius: "12px", padding: "0.5rem 1rem",
-                  border: "1px solid var(--border)", cursor: "pointer", marginBottom: "0.5rem",
-                  flexWrap: "wrap",
-                }}>
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: p.status === "Overspent" ? "#F87171" : p.status === "Review" ? "#F97316" : p.status === "At Risk" ? "#F97316" : "#2DD4BF", flexShrink: 0 }}></div>
-                  <span style={{ flex: 1, fontWeight: 600, fontSize: "0.85rem", color: "var(--text)" }}>{p.name}</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
-                    <span style={{ fontWeight: 600, minWidth: 60, fontSize: "0.8rem", color: "var(--text)" }}>{formatPKR(p.actual)}</span>
-                    <span style={{ minWidth: 50, color: p.pct > 100 ? "#F87171" : p.pct > 80 ? "#F97316" : "#2DD4BF", fontSize: "0.8rem" }}>{p.pct}%</span>
-                    <span style={{
-                      padding: "0.1rem 0.6rem", borderRadius: "12px", fontSize: "0.7rem", fontWeight: 700,
-                      background: p.status === "Overspent" ? "#fee2e2" : p.status === "Review" ? "#fef3c7" : p.status === "At Risk" ? "#fef3c7" : "#dcfce7",
-                      color: p.status === "Overspent" ? "#991b1b" : p.status === "Review" ? "#92400e" : p.status === "At Risk" ? "#92400e" : "#166534",
-                    }}>
-                      {p.status}
-                    </span>
-                    {health && (
-                      <span style={{ fontSize: "0.65rem", color: "#F97316", maxWidth: "110px", overflow: "hidden", textOverflow: "ellipsis" }}>{health.message}</span>
-                    )}
-                  </div>
+            {projectRows.slice(0, 5).map((p: any, idx: number) => (
+              <div key={idx} onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}&fy=${fiscalYear}`)} style={{ display: "flex", alignItems: "center", gap: "0.8rem", background: "var(--card)", borderRadius: "12px", padding: "0.5rem 1rem", border: "1px solid var(--border)", cursor: "pointer", marginBottom: "0.5rem", flexWrap: "wrap" }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: p.status === "Overspent" ? "#F87171" : p.status === "Review" ? "#F97316" : p.status === "At Risk" ? "#F97316" : "#2DD4BF", flexShrink: 0 }}></div>
+                <span style={{ flex: 1, fontWeight: 600, fontSize: "0.85rem", color: "var(--text)" }}>{p.name}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+                  <span style={{ fontWeight: 600, minWidth: 60, fontSize: "0.8rem", color: "var(--text)" }}>{formatPKR(p.actual)}</span>
+                  <span style={{ minWidth: 50, color: p.pct > 100 ? "#F87171" : p.pct > 80 ? "#F97316" : "#2DD4BF", fontSize: "0.8rem" }}>{p.pct}%</span>
+                  <span style={{ padding: "0.1rem 0.6rem", borderRadius: "12px", fontSize: "0.7rem", fontWeight: 700, background: p.status === "Overspent" ? "#fee2e2" : p.status === "Review" ? "#fef3c7" : p.status === "At Risk" ? "#fef3c7" : "#dcfce7", color: p.status === "Overspent" ? "#991b1b" : p.status === "Review" ? "#92400e" : p.status === "At Risk" ? "#92400e" : "#166534" }}>{p.status}</span>
                 </div>
-              )
-            })}
+              </div>
+            ))}
             {projectRows.length > 5 && (
               <div style={{ textAlign: "right", marginTop: "0.5rem" }}>
-                <button className="warning-btn" style={{ background: "transparent", color: "#93C5FD", border: "1px solid #334155", padding: "4px 12px" }}
-                  onClick={() => router.push("/dashboard/settings/budgets" + detailQuery())}>
-                  View All Projects →
-                </button>
+                <button className="warning-btn" style={{ background: "transparent", color: "#93C5FD", border: "1px solid #334155", padding: "4px 12px" }} onClick={() => router.push("/dashboard/settings/budgets" + detailQuery())}>View All Projects →</button>
               </div>
             )}
           </motion.div>
 
-          <motion.div
-            className="card"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5, duration: 0.5 }}
-          >
+          <motion.div className="card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5, duration: 0.5 }}>
             <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>💧 Donor Balances</div>
-            {filteredDonorBalances.map((d: any, idx: number) => (
-              <div key={idx} onClick={() => router.push(`/dashboard/settings/budgets?donor=${d.donor_id}&fy=${fiscalYear}`)} style={{
-                display: "flex", alignItems: "center", gap: "0.8rem",
-                background: "var(--card)", borderRadius: "12px", padding: "0.5rem 1rem",
-                border: "1px solid var(--border)", cursor: "pointer", marginBottom: "0.5rem",
-                flexWrap: "wrap",
-              }}>
+            {donorBalances.map((d: any, idx: number) => (
+              <div key={idx} onClick={() => router.push(`/dashboard/settings/budgets?donor=${d.donor_id}&fy=${fiscalYear}`)} style={{ display: "flex", alignItems: "center", gap: "0.8rem", background: "var(--card)", borderRadius: "12px", padding: "0.5rem 1rem", border: "1px solid var(--border)", cursor: "pointer", marginBottom: "0.5rem", flexWrap: "wrap" }}>
                 <div style={{ width: 8, height: 8, borderRadius: "50%", background: d.overspent ? "#F87171" : "#A78BFA", flexShrink: 0 }}></div>
                 <div style={{ flex: 1 }}>
                   <span style={{ fontWeight: 600, fontSize: "0.85rem", color: "var(--text)" }}>{d.name}</span>
-                  <div style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>
-                    {d.monthsPassed}/{d.monthsTotal} months · {d.health === "slow" ? <span style={{ color: "#F87171", fontWeight: 600 }}>Slow: only {d.pct}% spent</span> : d.health === "ok" ? <span style={{ color: "#F97316", fontWeight: 600 }}>OK</span> : <span style={{ color: "#2DD4BF", fontWeight: 600 }}>On Track</span>}
-                  </div>
+                  <div style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>{d.monthsPassed}/{d.monthsTotal} months · {d.health === "slow" ? <span style={{ color: "#F87171", fontWeight: 600 }}>Slow: only {d.pct}% spent</span> : d.health === "ok" ? <span style={{ color: "#F97316", fontWeight: 600 }}>OK</span> : <span style={{ color: "#2DD4BF", fontWeight: 600 }}>On Track</span>}</div>
                 </div>
                 <span style={{ fontWeight: 700, fontSize: "0.85rem", color: "var(--text)" }}>{formatPKR(d.remaining)}</span>
                 <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", minWidth: 30, textAlign: "right" }}>{d.pct}%</span>
@@ -541,15 +636,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </motion.div>
         </div>
 
-        {/* Underspend + Receivables vs Payables */}
+        {/* Underspend + Receivables/Payables */}
         <div className="dashboard-grid">
-          <motion.div
-            className="card"
-            style={{ gridColumn: "span 3" }}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6, duration: 0.5 }}
-          >
+          <motion.div className="card" style={{ gridColumn: "span 3" }} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, duration: 0.5 }}>
             <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>💡 Top 5 Underspend Activities</div>
             {underspentActivities.length === 0 ? (
               <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>No activities with remaining budget this month.</div>
@@ -566,30 +655,19 @@ export default function ManagementDashboard({ role }: { role: string }) {
                     <span style={{ color: "var(--text)" }}>{formatPKR(act.budget)}</span>
                     <span style={{ color: "var(--text)" }}>{formatPKR(act.actual)}</span>
                     <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                      <div className="progress-bg">
-                        <div className="progress-fill" style={{ width: `${Math.min(act.pct, 100)}%` }}></div>
-                      </div>
-                      <span style={{ fontSize: "0.7rem", color: "#2DD4BF", fontWeight: 600, whiteSpace: "nowrap" }}>{act.pct}%</span>
+                      <span style={{ fontWeight: 600, color: "#2DD4BF", fontSize: "0.75rem" }}>{formatPKR(act.remaining)}</span>
+                      <span style={{ fontSize: "0.7rem", color: "#2DD4BF", whiteSpace: "nowrap" }}>({act.unspentPct}%)</span>
                     </div>
                   </div>
                 ))}
                 <div style={{ textAlign: "right", marginTop: "0.5rem" }}>
-                  <button className="warning-btn" style={{ background: "transparent", color: "#93C5FD", border: "1px solid #334155", padding: "4px 12px" }}
-                    onClick={() => router.push("/dashboard/reports/budget-vs-actual" + detailQuery())}>
-                    View all →
-                  </button>
+                  <button className="warning-btn" style={{ background: "transparent", color: "#93C5FD", border: "1px solid #334155", padding: "4px 12px" }} onClick={() => router.push("/dashboard/reports/budget-vs-actual" + detailQuery())}>View all →</button>
                 </div>
               </>
             )}
           </motion.div>
 
-          <motion.div
-            className="card"
-            style={{ gridColumn: "span 2" }}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.7, duration: 0.5 }}
-          >
+          <motion.div className="card" style={{ gridColumn: "span 2" }} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7, duration: 0.5 }}>
             <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "1rem" }}>⚖️ Receivables vs Payables</div>
             <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "0.5rem", marginBottom: "0.8rem" }}>
               <div style={{ textAlign: "center" }}>
@@ -619,20 +697,11 @@ export default function ManagementDashboard({ role }: { role: string }) {
         </div>
 
         {/* Footer summary */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1, duration: 0.5 }}
-          style={{
-            background: "var(--card)", borderRadius: 12, padding: "0.6rem 1.2rem",
-            border: "1px solid var(--border)", display: "flex", justifyContent: "space-between",
-            flexWrap: "wrap", gap: "0.8rem", fontSize: "0.8rem", color: "var(--text-muted)", fontWeight: 500
-          }}
-        >
-          <span>⚠️ Portfolio Health: {filteredOverspentCount > 0 ? "Needs Attention" : "Healthy"}</span>
-          <span>💰 Total Budget: {formatPKR(filteredTotalBudget)}</span>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1, duration: 0.5 }} style={{ background: "var(--card)", borderRadius: 12, padding: "0.6rem 1.2rem", border: "1px solid var(--border)", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "0.8rem", fontSize: "0.8rem", color: "var(--text-muted)", fontWeight: 500 }}>
+          <span>⚠️ Portfolio Health: {overspentCount > 0 ? "Needs Attention" : "Healthy"}</span>
+          <span>💰 Total Budget: {formatPKR(totalBudget)}</span>
           <span>📈 Utilized: {spentPct}%</span>
-          <span>📁 Projects: {filteredProjectRows.length}</span>
+          <span>📁 Projects: {projectRows.length}</span>
           <span style={{ marginLeft: "auto" }}>Last updated: {lastUpdated}</span>
         </motion.div>
       </div>

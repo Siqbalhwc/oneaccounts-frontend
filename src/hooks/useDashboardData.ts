@@ -20,13 +20,12 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
   const prevStart = new Date(Date.UTC(prevYear, prevMonth - 1, 1)).toISOString().split("T")[0]
   const prevEnd = new Date(Date.UTC(prevYear, prevMonth, 0)).toISOString().split("T")[0]
 
-  // ── 1. Fetch everything in parallel ─────────────────────────────
   const [
-    budgetsAll,
-    journalLinesAll,
-    donorsAll,
-    projectsAll,
-    activitiesAll,
+    budgetsRes,
+    journalLinesRes,
+    donorsRes,
+    projectsRes,
+    activitiesRes,
     customers,
     suppliers,
     totalSpentRpc,
@@ -34,7 +33,6 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
     prevMonthlySpendingRpc,
     overdueInvoices,
   ] = await Promise.all([
-    // All budgets for the fiscal year (annual)
     supabase.from("budgets")
       .select("id, project_id, activity_id, account_id, donor_id, location_id, budgeted_amount")
       .eq("company_id", companyId)
@@ -42,59 +40,41 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
       .is("month", null)
       .not("activity_id", "is", null),
 
-    // All journal lines within the fiscal year (needed for donor & project actuals)
     supabase.from("journal_lines")
       .select("debit, credit, project_id, donor_id, activity_id, account_id, location_id, journal_entries!inner(date)")
       .eq("company_id", companyId)
       .gte("journal_entries.date", `${fiscalYear}-01-01`)
       .lte("journal_entries.date", `${fiscalYear}-12-31`),
 
-    // Donors list
     supabase.from("donors").select("id, name").eq("company_id", companyId),
 
-    // Projects list (with start/end dates)
     supabase.from("projects").select("id, name, donor_id, start_date, end_date").eq("company_id", companyId),
 
-    // Activities list (for underspend names)
     supabase.from("activities").select("id, name").eq("company_id", companyId),
 
-    // Customer balances
     supabase.from("customers").select("balance").eq("company_id", companyId),
 
-    // Supplier balances
     supabase.from("suppliers").select("balance").eq("company_id", companyId),
 
-    // ✅ Original RPC calls for spending (restore working figures)
     supabase.rpc("total_spent", { cid: companyId, fy: fiscalYear }),
+
     supabase.rpc("get_period_spending", { cid: companyId, start_d: startOfMonthISO, end_d: todayISO }),
+
     supabase.rpc("get_period_spending", { cid: companyId, start_d: prevStart, end_d: prevEnd }),
 
-    // Overdue invoices
     supabase.from("invoices")
       .select("id").eq("company_id", companyId).eq("type", "sale").eq("status", "Unpaid").lt("due_date", todayISO),
   ])
 
-  // ── 2. Totals from RPCs (restored) ──────────────────────────────
+  const totalBudget = budgetsRes.data?.reduce((s: number, b: any) => s + (b.budgeted_amount || 0), 0) || 0
   const totalSpent = totalSpentRpc.data?.[0]?.total || 0
-  const monthlySpending = monthlySpendingRpc.data || 0
-  const lastMonthSpending = prevMonthlySpendingRpc.data || 0
 
-  let spendingTrend = 0
-  if (lastMonthSpending > 0) {
-    spendingTrend = Math.round(((monthlySpending - lastMonthSpending) / lastMonthSpending) * 100)
-  } else if (monthlySpending > 0) {
-    spendingTrend = 100
-  }
-
-  // ── 3. Total budget ────────────────────────────────────────────
-  const totalBudget = budgetsAll.data?.reduce((s: number, b: any) => s + (b.budgeted_amount || 0), 0) || 0
-
-  // ── 4. Donor balances (same as before, using direct queries) ───
+  // ── Donor balances (same as before) ──────────────────────────────────
   const donorNameMap: Record<string, string> = {}
-  donorsAll.data?.forEach((d: any) => { donorNameMap[String(d.id)] = d.name })
+  donorsRes.data?.forEach((d: any) => { donorNameMap[String(d.id)] = d.name })
 
   const budgetByDonor: Record<string, number> = {}
-  budgetsAll.data?.forEach((b: any) => {
+  budgetsRes.data?.forEach((b: any) => {
     if (b.donor_id) {
       const key = String(b.donor_id)
       budgetByDonor[key] = (budgetByDonor[key] || 0) + (b.budgeted_amount || 0)
@@ -102,7 +82,7 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
   })
 
   const actualByDonor: Record<string, number> = {}
-  journalLinesAll.data?.forEach((jl: any) => {
+  journalLinesRes.data?.forEach((jl: any) => {
     if (jl.donor_id) {
       const key = String(jl.donor_id)
       actualByDonor[key] = (actualByDonor[key] || 0) + (jl.debit || 0) - (jl.credit || 0)
@@ -110,7 +90,7 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
   })
 
   const donorDates: Record<string, { start: string; end: string | null }> = {}
-  projectsAll.data?.forEach((p: any) => {
+  projectsRes.data?.forEach((p: any) => {
     if (p.donor_id) {
       const key = String(p.donor_id)
       if (!donorDates[key]) {
@@ -157,18 +137,16 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
     }
   }).sort((a, b) => b.remaining - a.remaining)
 
-  // ── 5. Project utilization ─────────────────────────────────────
+  // ── Project utilization ────────────────────────────────────────────
   const budgetByProject: Record<string, number> = {}
   const actualByProject: Record<string, number> = {}
-
-  budgetsAll.data?.forEach((b: any) => {
+  budgetsRes.data?.forEach((b: any) => {
     if (b.project_id) {
       const key = String(b.project_id)
       budgetByProject[key] = (budgetByProject[key] || 0) + (b.budgeted_amount || 0)
     }
   })
-
-  journalLinesAll.data?.forEach((jl: any) => {
+  journalLinesRes.data?.forEach((jl: any) => {
     if (jl.project_id) {
       const key = String(jl.project_id)
       actualByProject[key] = (actualByProject[key] || 0) + (jl.debit || 0) - (jl.credit || 0)
@@ -176,7 +154,7 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
   })
 
   const projectNameMap: Record<string, string> = {}
-  projectsAll.data?.forEach((p: any) => { projectNameMap[String(p.id)] = p.name })
+  projectsRes.data?.forEach((p: any) => { projectNameMap[String(p.id)] = p.name })
 
   const projectsArr = Object.keys(budgetByProject).map((pid) => {
     const budget = budgetByProject[pid] || 0
@@ -193,52 +171,20 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
 
   const overspentCount = projectRows.filter((p) => p.actual > p.budget).length
 
-  // ── 6. Underspent activities (top 5) ───────────────────────────
-  // Build map: activity_id → total budget & actual (summing across all locations/accounts)
-  const budgetByAct: Record<number, number> = {}
-  const actualByAct: Record<number, number> = {}
-  // Also track project_id for the activity (pick first budget's project_id)
-  const actProjectMap: Record<number, number> = {}
-
-  budgetsAll.data?.forEach((b: any) => {
-    const aid = b.activity_id
-    budgetByAct[aid] = (budgetByAct[aid] || 0) + (b.budgeted_amount || 0)
-    if (!actProjectMap[aid] && b.project_id) {
-      actProjectMap[aid] = b.project_id
-    }
-  })
-
-  journalLinesAll.data?.forEach((jl: any) => {
-    if (jl.activity_id) {
-      actualByAct[jl.activity_id] = (actualByAct[jl.activity_id] || 0) + (jl.debit || 0) - (jl.credit || 0)
-    }
-  })
-
-  const activityNameMap: Record<number, string> = {}
-  activitiesAll.data?.forEach((a: any) => { activityNameMap[a.id] = a.name })
-
-  const underspentActivities = Object.keys(budgetByAct)
-    .map((aid) => {
-      const id = Number(aid)
-      const budget = budgetByAct[id] || 0
-      const actual = actualByAct[id] || 0
-      const pct = budget ? Math.round((actual / budget) * 100) : 100
-      return {
-        id,
-        name: activityNameMap[id] || `Activity ${id}`,
-        budget,
-        actual,
-        pct,
-        projectId: actProjectMap[id] || null,
-      }
-    })
-    .filter((a) => a.budget > 0 && a.pct < 100)
-    .sort((a, b) => a.pct - b.pct)
-    .slice(0, 5)
-
-  // ── 7. Receivables / Payables ─────────────────────────────────
+  // ── Receivables / Payables ─────────────────────────────────────────
   const totalReceivables = customers.data?.reduce((s: number, c: any) => s + (c.balance || 0), 0) || 0
   const totalPayables = suppliers.data?.reduce((s: number, s2: any) => s + (s2.balance || 0), 0) || 0
+
+  // ── Monthly spending (RPC) ─────────────────────────────────────────
+  const monthlySpending = monthlySpendingRpc.data || 0
+  const lastMonthSpending = prevMonthlySpendingRpc.data || 0
+
+  let spendingTrend = 0
+  if (lastMonthSpending > 0) {
+    spendingTrend = Math.round(((monthlySpending - lastMonthSpending) / lastMonthSpending) * 100)
+  } else if (monthlySpending > 0) {
+    spendingTrend = 100
+  }
 
   const overdueInvoicesCount = overdueInvoices.data?.length || 0
 
@@ -254,8 +200,14 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
     lastMonthSpending,
     spendingTrend,
     overdueInvoicesCount,
-    underspentActivities,       // ✅ now includes id, name, projectId
     lastUpdated: new Date().toLocaleTimeString(),
+
+    // ✅ Raw arrays for filtered calculations in Management Dashboard
+    allBudgets: budgetsRes.data || [],
+    allJournalLines: journalLinesRes.data || [],
+    allDonors: donorsRes.data || [],
+    allProjects: projectsRes.data || [],
+    allActivities: activitiesRes.data || [],
   }
 }
 
