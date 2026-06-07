@@ -36,6 +36,7 @@ export default function NewInvoicePage() {
   const showProducts = hasFeature("inventory")
 
   const [companyId, setCompanyId] = useState("")
+  const [businessType, setBusinessType] = useState("")
   const [loading, setLoading] = useState(true)
   const [company, setCompany] = useState<any>(null)
 
@@ -46,6 +47,10 @@ export default function NewInvoicePage() {
   const [showCustomerList, setShowCustomerList] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
   const customerRef = useRef<HTMLDivElement>(null)
+
+  // Project/Donor for NGO income tagging
+  const [projects, setProjects] = useState<any[]>([])
+  const [donors, setDonors] = useState<any[]>([])
 
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0])
   const [dueDate, setDueDate] = useState("")
@@ -65,11 +70,16 @@ export default function NewInvoicePage() {
 
   const [savedInvoiceId, setSavedInvoiceId] = useState<number | null>(null)
 
-  // … all useEffect, event handlers, helpers are identical to previous version …
+  const isNGO = businessType === "ngo"
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
+
+      // Fetch business type
+      supabase.from("companies").select("business_type").eq("id", cid).single()
+        .then(({ data }) => { if (data) setBusinessType(data.business_type || "") })
 
       supabase.from("customers")
         .select("id,code,name,phone,balance,country_code,payment_terms")
@@ -96,6 +106,12 @@ export default function NewInvoicePage() {
               .then(r2 => r2.data && setCompany(r2.data))
           }
         })
+
+      // Load projects and donors for NGO
+      supabase.from("projects").select("id,name,donor_id").eq("company_id", cid).order("name")
+        .then(r => r.data && setProjects(r.data))
+      supabase.from("donors").select("id,name").eq("company_id", cid).order("name")
+        .then(r => r.data && setDonors(r.data))
 
       setLoading(false)
     })
@@ -133,6 +149,8 @@ export default function NewInvoicePage() {
                 unit_price: item.unit_price,
                 cost_price: item.cost_price || 0,
                 total: item.total,
+                project_id: item.project_id || null,
+                donor_id: item.donor_id || null,
               }))
               setItems(loaded)
             }
@@ -206,6 +224,8 @@ export default function NewInvoicePage() {
       unit_price: prod.sale_price,
       cost_price: prod.cost_price,
       total: prod.sale_price,
+      project_id: null,
+      donor_id: null,
     }])
     setProductSearch("")
     setShowProductList(false)
@@ -224,15 +244,29 @@ export default function NewInvoicePage() {
       unit_price: 0,
       cost_price: 0,
       total: 0,
+      project_id: null,
+      donor_id: null,
     }])
   }
 
   const updateItem = (idx: number, field: string, value: any) => {
     const updated = [...items]
     updated[idx] = { ...updated[idx], [field]: value }
+
     if (field === "qty" || field === "unit_price") {
       updated[idx].total = updated[idx].qty * updated[idx].unit_price
     }
+
+    // When project is selected, auto‑resolve donor
+    if (field === "project_id" && value) {
+      const project = projects.find(p => p.id == value)
+      if (project) {
+        updated[idx].donor_id = project.donor_id || null
+      } else {
+        updated[idx].donor_id = null
+      }
+    }
+
     setItems(updated)
   }
 
@@ -293,6 +327,8 @@ export default function NewInvoicePage() {
             qty: i.qty,
             unit_price: i.unit_price,
             cost_price: i.cost_price,
+            project_id: i.project_id || null,
+            donor_id: i.donor_id || null,
           })),
           reference, notes,
         }),
@@ -436,6 +472,21 @@ export default function NewInvoicePage() {
     return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>Loading invoice form…</div>
   }
 
+  // Helper to get project name
+  const getProjectName = (projectId: number | null) => {
+    if (!projectId) return ""
+    const proj = projects.find(p => p.id == projectId)
+    return proj?.name || ""
+  }
+  const getDonorName = (donorId: number | null) => {
+    if (!donorId) return ""
+    const don = donors.find(d => d.id == donorId)
+    return don?.name || ""
+  }
+
+  // Grid columns for items – the same number, but second column becomes Project for manual items in NGO
+  const itemGridCols = "30px 150px 3fr 80px 110px 110px 110px 30px"
+
   return (
     <div style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
@@ -471,13 +522,13 @@ export default function NewInvoicePage() {
 
         .inv-item-row {
           display: grid;
-          grid-template-columns: 30px 150px 3fr 80px 110px 110px 110px 30px;
+          grid-template-columns: ${itemGridCols};
           gap: 6px; align-items: center; padding: 6px 0;
           border-bottom: 1px solid var(--border);
         }
         .inv-item-header {
           display: grid;
-          grid-template-columns: 30px 150px 3fr 80px 110px 110px 110px 30px;
+          grid-template-columns: ${itemGridCols};
           gap: 6px; font-size: 9px; font-weight: 700;
           text-transform: uppercase; color: var(--text-muted); padding-bottom: 6px;
         }
@@ -516,21 +567,16 @@ export default function NewInvoicePage() {
           position: relative;
         }
 
-        /* ── Desktop layout: customer (left) + summary (right) side‑by‑side ── */
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
 
-        /* ── Mobile: everything stacks, items after customer, before summary ── */
         .inv-content-wrapper { display: flex; flex-direction: column; }
 
         @media (max-width: 900px) {
           .header-grid { grid-template-columns: 1fr; }
-          /* move items between customer details and summary */
-          .inv-items-section { order: 2; }      /* items come second */
-          .inv-customer-section { order: 1; }   /* customer first */
-          .inv-summary-section { order: 3; }    /* summary last */
-          .inv-item-row, .inv-item-header {
-            overflow-x: auto;
-          }
+          .inv-items-section { order: 2; }
+          .inv-customer-section { order: 1; }
+          .inv-summary-section { order: 3; }
+          .inv-item-row, .inv-item-header { overflow-x: auto; }
         }
 
         .price-history {
@@ -540,6 +586,16 @@ export default function NewInvoicePage() {
         .price-history-item {
           display: flex; justify-content: space-between; align-items: center;
           padding: 4px 0; border-bottom: 1px solid var(--border);
+        }
+
+        .project-info-row {
+          font-size: 10px; color: var(--text-muted); margin-top: 2px; padding-left: 8px;
+          display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+        }
+        .project-chip {
+          display: inline-flex; align-items: center; gap: 4px;
+          background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 4px;
+          padding: 1px 6px; font-size: 10px;
         }
 
         input[type="number"]::-webkit-inner-spin-button,
@@ -562,11 +618,7 @@ export default function NewInvoicePage() {
           <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
             <CheckCircle size={16} /> {flash}
             {savedInvoiceId && !editId && (
-              <button
-                className="inv-btn"
-                style={{ marginLeft: 8, borderColor: "#ECFDF5", color: "#ECFDF5" }}
-                onClick={() => router.push(`/dashboard/invoices/${savedInvoiceId}`)}
-              >
+              <button className="inv-btn" style={{ marginLeft: 8, borderColor: "#ECFDF5", color: "#ECFDF5" }} onClick={() => router.push(`/dashboard/invoices/${savedInvoiceId}`)}>
                 <ExternalLink size={14} /> View Invoice
               </button>
             )}
@@ -574,9 +626,8 @@ export default function NewInvoicePage() {
         )}
 
         <div className="inv-content-wrapper">
-          {/* Customer details (order 1 on mobile) */}
+          {/* Customer details */}
           <div className="header-grid inv-customer-section">
-            {/* Left column: customer details */}
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div className="inv-card">
                 <label className="inv-label">Customer *</label>
@@ -585,34 +636,14 @@ export default function NewInvoicePage() {
                     <div className="cust-selected-badge" onClick={clearCustomer}>
                       <span>👤</span><span style={{ flex: 1 }}>{selectedCustomer.code} — {selectedCustomer.name}</span>
                       <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
-                      <button
-                        style={{ marginLeft: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
-                        onClick={(e) => { e.stopPropagation(); clearCustomer(); }}
-                      >
-                        <X size={14} />
-                      </button>
-                      <button
-                        style={{ marginLeft: 2, background: "none", border: "none", color: "var(--primary)", cursor: "pointer" }}
-                        onClick={(e) => { e.stopPropagation(); refreshCustomers(); }}
-                        title="Refresh"
-                      >
-                        <RefreshCw size={13} />
-                      </button>
+                      <button style={{ marginLeft: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); clearCustomer(); }}><X size={14} /></button>
+                      <button style={{ marginLeft: 2, background: "none", border: "none", color: "var(--primary)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); refreshCustomers(); }} title="Refresh"><RefreshCw size={13} /></button>
                     </div>
                   ) : (
                     <>
                       <div className="cust-input-row">
                         <Search size={14} style={{ position: "absolute", left: 10, color: "var(--text-muted)" }} />
-                        <input
-                          className="inv-input"
-                          style={{ paddingLeft: 32, paddingRight: 32 }}
-                          placeholder="Search by name, code or phone..."
-                          value={customerSearch}
-                          onChange={e => { setCustomerSearch(e.target.value); setShowCustomerList(true) }}
-                          onFocus={() => setShowCustomerList(true)}
-                          onClick={() => setShowCustomerList(true)}
-                          autoComplete="off"
-                        />
+                        <input className="inv-input" style={{ paddingLeft: 32, paddingRight: 32 }} placeholder="Search by name, code or phone..." value={customerSearch} onChange={e => { setCustomerSearch(e.target.value); setShowCustomerList(true) }} onFocus={() => setShowCustomerList(true)} onClick={() => setShowCustomerList(true)} autoComplete="off" />
                         {customerSearch && <button onClick={() => setCustomerSearch("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}><X size={13} /></button>}
                       </div>
                       {showCustomerList && (
@@ -651,15 +682,7 @@ export default function NewInvoicePage() {
                     <div style={{ display: "flex", gap: 8 }}>
                       <div style={{ position: "relative", flex: 1 }}>
                         <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "var(--text-muted)" }} />
-                        <input
-                          className="inv-input"
-                          style={{ paddingLeft: 36 }}
-                          placeholder="Search product..."
-                          value={productSearch}
-                          onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
-                          onFocus={() => setShowProductList(true)}
-                          onBlur={() => setTimeout(() => setShowProductList(false), 200)}
-                        />
+                        <input className="inv-input" style={{ paddingLeft: 36 }} placeholder="Search product..." value={productSearch} onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }} onFocus={() => setShowProductList(true)} onBlur={() => setTimeout(() => setShowProductList(false), 200)} />
                         {showProductList && (
                           <div className="cust-dropdown" style={{ marginTop: 4 }}>
                             {filteredProducts.map((p: any) => (
@@ -673,9 +696,7 @@ export default function NewInvoicePage() {
                                 </div>
                               </div>
                             ))}
-                            {filteredProducts.length === 0 && (
-                              <div style={{ padding: 12, color: "var(--text-muted)", fontSize: 12 }}>No products found</div>
-                            )}
+                            {filteredProducts.length === 0 && <div style={{ padding: 12, color: "var(--text-muted)", fontSize: 12 }}>No products found</div>}
                           </div>
                         )}
                       </div>
@@ -692,15 +713,9 @@ export default function NewInvoicePage() {
                 {showHistory && lastSelectedProduct && (
                   <div className="price-history">
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                      {lastSelectedProduct.image_path && (
-                        <img src={lastSelectedProduct.image_path} alt="" style={{ width: 28, height: 28, objectFit: "cover", borderRadius: 4 }} />
-                      )}
-                      <span style={{ fontWeight: 600, fontSize: 12, color: "var(--text)" }}>
-                        📋 Price history for {lastSelectedProduct.name}
-                      </span>
-                      <button style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }} onClick={() => setShowHistory(false)}>
-                        <X size={14} />
-                      </button>
+                      {lastSelectedProduct.image_path && <img src={lastSelectedProduct.image_path} alt="" style={{ width: 28, height: 28, objectFit: "cover", borderRadius: 4 }} />}
+                      <span style={{ fontWeight: 600, fontSize: 12, color: "var(--text)" }}>📋 Price history for {lastSelectedProduct.name}</span>
+                      <button style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }} onClick={() => setShowHistory(false)}><X size={14} /></button>
                     </div>
                     {priceHistory.length > 0 ? (
                       priceHistory.map((h: any, i: number) => (
@@ -717,7 +732,7 @@ export default function NewInvoicePage() {
               </div>
             </div>
 
-            {/* Right column: Summary + Post button (order 3 on mobile) */}
+            {/* Summary + Actions */}
             <div className="inv-summary-section" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div className="inv-card">
                 <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
@@ -741,7 +756,7 @@ export default function NewInvoicePage() {
             </div>
           </div>
 
-          {/* Items table – order 2 on mobile, appears between customer and summary */}
+          {/* Items table */}
           <div className="inv-items-section" style={{ marginBottom: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
@@ -750,7 +765,7 @@ export default function NewInvoicePage() {
               <div className="inv-card" style={{ overflowX: "auto", padding: "16px 12px" }}>
                 <div className="inv-item-header">
                   <span></span>
-                  <span>Product</span>
+                  <span>{isNGO ? "Product/Project" : "Product"}</span>
                   <span>Description</span>
                   <span>Qty</span>
                   <span>Price</span>
@@ -759,35 +774,70 @@ export default function NewInvoicePage() {
                   <span></span>
                 </div>
                 {items.map((item, idx) => (
-                  <div key={idx} className="inv-item-row">
-                    <div style={{ display: "flex", justifyContent: "center" }}>
-                      {item.product_image ? (
-                        <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
+                  <div key={idx}>
+                    <div className="inv-item-row">
+                      <div style={{ display: "flex", justifyContent: "center" }}>
+                        {item.product_image ? (
+                          <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
+                        ) : (
+                          <ImageIcon size={14} color="var(--text-muted)" />
+                        )}
+                      </div>
+
+                      {/* Product/Project cell */}
+                      {item.product_id ? (
+                        <div className="inv-cell" style={{ paddingLeft: 12 }}>
+                          {item.product_name || "—"}
+                        </div>
                       ) : (
-                        <ImageIcon size={14} color="var(--text-muted)" />
+                        <div>
+                          {isNGO ? (
+                            <select
+                              className="inv-select"
+                              style={{ height: 34, fontSize: 12 }}
+                              value={item.project_id ?? ""}
+                              onChange={e => updateItem(idx, "project_id", e.target.value ? Number(e.target.value) : null)}
+                            >
+                              <option value="">— Select Project —</option>
+                              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                          ) : (
+                            <div className="inv-cell" style={{ paddingLeft: 12 }}>—</div>
+                          )}
+                        </div>
                       )}
+
+                      <input
+                        className="inv-input"
+                        style={{ height: 34, fontSize: 12 }}
+                        value={item.description}
+                        onChange={e => updateItem(idx, "description", e.target.value)}
+                        placeholder="Description"
+                      />
+                      <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                      <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                      <div className="inv-cell" style={{ justifyContent: "flex-end", fontWeight: 600 }}>
+                        PKR {item.total.toLocaleString()}
+                      </div>
+                      <div className="inv-cell" style={{ justifyContent: "flex-end", color: "var(--text-muted)" }}>
+                        {item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}
+                      </div>
+                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}>
+                        <Trash2 size={12} />
+                      </button>
                     </div>
-                    <div className="inv-cell" style={{ paddingLeft: 12 }}>
-                      {item.product_name || "—"}
-                    </div>
-                    <input
-                      className="inv-input"
-                      style={{ height: 34, fontSize: 12 }}
-                      value={item.description}
-                      onChange={e => updateItem(idx, "description", e.target.value)}
-                      placeholder="Description"
-                    />
-                    <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                    <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                    <div className="inv-cell" style={{ justifyContent: "flex-end", fontWeight: 600 }}>
-                      PKR {item.total.toLocaleString()}
-                    </div>
-                    <div className="inv-cell" style={{ justifyContent: "flex-end", color: "var(--text-muted)" }}>
-                      {item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}
-                    </div>
-                    <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}>
-                      <Trash2 size={12} />
-                    </button>
+
+                    {/* Show project/donor info row for manual items in NGO */}
+                    {isNGO && !item.product_id && item.project_id && (
+                      <div className="project-info-row">
+                        <span className="project-chip">
+                          📁 {getProjectName(item.project_id)}
+                          {item.donor_id && (
+                            <span style={{ color: "var(--primary)", marginLeft: 4 }}>· 🤝 {getDonorName(item.donor_id)}</span>
+                          )}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -795,7 +845,7 @@ export default function NewInvoicePage() {
           </div>
         </div>
 
-        {/* Change History – below everything */}
+        {/* Change History */}
         {editId && (
           <div className="inv-card" style={{ marginTop: 16 }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
