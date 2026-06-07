@@ -3,7 +3,6 @@ import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { logDataChange } from '@/lib/audit'
 
-// ── Helpers ───────────────────────────────────────────────────────────
 async function getAccount(supabase: any, code: string, companyId: string) {
   const { data } = await supabase.from('accounts')
     .select('id,balance').eq('code', code).eq('company_id', companyId).maybeSingle()
@@ -36,7 +35,6 @@ async function createJE(
   }))
   await supabase.from('journal_lines').insert(lineRows)
 
-  // ⚡ Batch update account balances
   const accountUpdates = lines.reduce((acc, l) => {
     const key = l.account_id
     const existing = acc.find((u: any) => u.account_id === key)
@@ -57,17 +55,15 @@ async function createJE(
   }
 }
 
-// ── Generate unique sequential invoice number ──────────────────────────
 async function generateInvoiceNo(supabase: any, companyId: string): Promise<string> {
   const now = new Date()
   const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`
   const prefix = `SI/${ym}/`
 
-  // ✅ FIX: scope by company_id so each company starts at 0001
   const { data: lastInv } = await supabase
     .from("invoices")
     .select("invoice_no")
-    .eq("company_id", companyId)          // ← added this line
+    .eq("company_id", companyId)
     .like("invoice_no", `${prefix}%`)
     .order("invoice_no", { ascending: false })
     .limit(1)
@@ -81,7 +77,6 @@ async function generateInvoiceNo(supabase: any, companyId: string): Promise<stri
   return `${prefix}${String(nextNum).padStart(4, "0")}`
 }
 
-// ── Stock validation helper ────────────────────────────────────────────
 async function validateStock(supabase: any, companyId: string, items: any[]) {
   for (const item of items) {
     if (item.product_id) {
@@ -99,7 +94,6 @@ async function validateStock(supabase: any, companyId: string, items: any[]) {
   return null
 }
 
-// ── Record product‑line stock movements into stock_moves ───────────────
 async function recordStockMoves(
   supabase: any,
   companyId: string,
@@ -128,7 +122,6 @@ async function recordStockMoves(
   }
 }
 
-// ═══════════════════ POST ══════════════════════════════════════════════
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -158,23 +151,21 @@ export async function POST(request: NextRequest) {
   const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
   const userEmail = user.email || 'system'
 
-  // Stock validation
   const stockErr = await validateStock(supabase, companyId, items)
   if (stockErr) {
     return NextResponse.json({ error: stockErr }, { status: 400 })
   }
 
-  // Business type & automation
   const { data: company } = await supabase.from('companies')
     .select('business_type').eq('id', companyId).single()
   const businessType = company?.business_type || ''
+  const isNGO = businessType === 'ngo'
 
   const { data: settings } = await supabase.from('company_settings')
     .select('invoice_automation_config')
     .eq('company_id', companyId).maybeSingle()
   const automationConfig = settings?.invoice_automation_config || {}
 
-  // ── Check if the invoice_automation feature is enabled ──
   const { data: featureRow } = await supabase
     .from("features")
     .select("id")
@@ -189,7 +180,6 @@ export async function POST(request: NextRequest) {
       .eq("company_id", companyId)
       .eq("feature_id", featureRow.id)
       .maybeSingle()
-
     automationAllowed = companyFeature?.enabled || false
   }
 
@@ -198,7 +188,7 @@ export async function POST(request: NextRequest) {
   const expenseRules = effectiveExpenseEnabled ? (automationConfig.expenseRules || []) : []
   const partners = effectiveProfitEnabled ? (automationConfig.partners || []) : []
 
-  // ── Enhance items with product cost_price if available ──
+  // Enhance items with cost_price
   const enhancedItems = await Promise.all(items.map(async (item: any) => {
     if (item.product_id) {
       const { data: product } = await supabase
@@ -212,11 +202,9 @@ export async function POST(request: NextRequest) {
     return item
   }))
 
-  // ── Generate unique invoice number with retry ──
   let invoice: any = null
   let invoiceNo = ''
-  const MAX_RETRIES = 3
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     invoiceNo = await generateInvoiceNo(supabase, companyId)
     const { data: inv, error: headerError } = await supabase
       .from('invoices')
@@ -243,7 +231,7 @@ export async function POST(request: NextRequest) {
   }
   if (!invoice) return NextResponse.json({ error: 'Could not generate unique invoice number' }, { status: 500 })
 
-  // Insert items
+  // Insert items (now with project_id/donor_id for NGOs)
   const itemRows = enhancedItems.map((item: any) => {
     const qty = Number(item.qty || 0)
     const unit_price = Number(item.unit_price || 0)
@@ -255,6 +243,8 @@ export async function POST(request: NextRequest) {
       unit_price,
       total: lineTotal,
       product_id: item.product_id || null,
+      project_id: isNGO ? (item.project_id || null) : null,
+      donor_id: isNGO ? (item.donor_id || null) : null,
       company_id: companyId,
     }
   })
@@ -266,7 +256,6 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // ── INSERT STOCK MOVES (outflow) ──
   await recordStockMoves(supabase, companyId, enhancedItems, 'sale', invoice.id, 'out')
 
   const totalSalesAmount = itemRows.reduce((s: number, i: any) => s + (i.total || 0), 0)
@@ -277,7 +266,6 @@ export async function POST(request: NextRequest) {
     .select('*')
     .single()
 
-  // Update customer balance
   const { data: custBal } = await supabase.from('customers').select('balance').eq('id', party_id).single()
   if (custBal) {
     await supabase.from('customers').update({ balance: custBal.balance + totalSalesAmount }).eq('id', party_id)
@@ -290,15 +278,31 @@ export async function POST(request: NextRequest) {
 
     const jeLines: any[] = []
 
-    // First pass: AR / Revenue for each item
     for (const item of enhancedItems) {
       const lineTotal = Number(item.qty || 0) * Number(item.unit_price || 0)
       if (lineTotal <= 0) continue
-      jeLines.push({ account_id: arAccount.id, debit: lineTotal, credit: 0 })
-      jeLines.push({ account_id: revenueAccount.id, debit: 0, credit: lineTotal })
+
+      jeLines.push({
+        account_id: arAccount.id,
+        debit: lineTotal,
+        credit: 0,
+        project_id: isNGO ? (item.project_id || null) : null,
+        donor_id: isNGO ? (item.donor_id || null) : null,
+        activity_id: null,
+        location_id: null,
+      })
+
+      jeLines.push({
+        account_id: revenueAccount.id,
+        debit: 0,
+        credit: lineTotal,
+        project_id: isNGO ? (item.project_id || null) : null,
+        donor_id: isNGO ? (item.donor_id || null) : null,
+        activity_id: null,
+        location_id: null,
+      })
     }
 
-    // ── COGS for product lines (fetch accounts once) ──
     const cogsAccount = await getAccount(supabase, '5000', companyId)
     const inventoryAccount = await getAccount(supabase, '1200', companyId)
     if (cogsAccount && inventoryAccount) {
@@ -308,12 +312,27 @@ export async function POST(request: NextRequest) {
         const costPrice = Number(item.cost_price || 0)
         if (qty <= 0 || costPrice <= 0) continue
         const cost = qty * costPrice
-        jeLines.push({ account_id: cogsAccount.id, debit: cost, credit: 0 })
-        jeLines.push({ account_id: inventoryAccount.id, debit: 0, credit: cost })
+        jeLines.push({
+          account_id: cogsAccount.id,
+          debit: cost,
+          credit: 0,
+          project_id: isNGO ? (item.project_id || null) : null,
+          donor_id: isNGO ? (item.donor_id || null) : null,
+          activity_id: null,
+          location_id: null,
+        })
+        jeLines.push({
+          account_id: inventoryAccount.id,
+          debit: 0,
+          credit: cost,
+          project_id: isNGO ? (item.project_id || null) : null,
+          donor_id: isNGO ? (item.donor_id || null) : null,
+          activity_id: null,
+          location_id: null,
+        })
       }
     }
 
-    // Automation expenses – only if feature is enabled
     let totalAutomationExpense = 0
     if (effectiveExpenseEnabled && expenseRules.length > 0) {
       for (const rule of expenseRules) {
@@ -328,7 +347,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Profit allocation – only if feature is enabled
     if (effectiveProfitEnabled && partners.length > 0) {
       let netProfit = totalSalesAmount - totalAutomationExpense
       for (const item of enhancedItems) {
@@ -342,7 +360,6 @@ export async function POST(request: NextRequest) {
           jeLines.push({ account_id: retainedEarnings.id, debit: netProfit, credit: 0 })
 
           const activePartners = partners.filter((p: any) => p.account_id && p.percentage > 0)
-
           if (activePartners.length > 0) {
             let allocated = 0
             for (let i = 0; i < activePartners.length - 1; i++) {
@@ -361,7 +378,6 @@ export async function POST(request: NextRequest) {
 
     await createJE(supabase, companyId, invoice_date, `Sales Invoice ${invoiceNo}`, jeLines, 'sale_invoice', updatedInv.id)
 
-    // ── Per‑product stock update REMOVED – stock_moves is the single source of truth ──
   } catch (e: any) {
     await supabase.from('invoice_items').delete().eq('invoice_id', invoice.id)
     await supabase.from('invoices').delete().eq('id', invoice.id)
@@ -376,7 +392,6 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ success: true, invoice: updatedInv })
 }
 
-// ── PUT (Update) – unchanged, except stock updates removed ──────────
 export async function PUT(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -404,7 +419,6 @@ export async function PUT(request: NextRequest) {
   const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
   const userEmail = user.email || 'system'
 
-  // Stock validation for new items
   const stockErr = await validateStock(supabase, companyId, items)
   if (stockErr) {
     return NextResponse.json({ error: stockErr }, { status: 400 })
@@ -413,9 +427,6 @@ export async function PUT(request: NextRequest) {
   const { data: oldInv } = await supabase.from('invoices')
     .select('*').eq('id', id).eq('company_id', companyId).single()
   if (!oldInv) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
-
-  // Reverse old stock outflow – not needed, stock_moves is the truth
-  const { data: oldItems } = await supabase.from('invoice_items').select('*').eq('invoice_id', id)
 
   // Reverse old JE
   const { data: oldEntries } = await supabase.from('journal_entries')
@@ -447,8 +458,12 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  // Delete old items, insert new
   await supabase.from('invoice_items').delete().eq('invoice_id', id)
+
+  const { data: company } = await supabase.from('companies')
+    .select('business_type').eq('id', companyId).single()
+  const isNGO = (company?.business_type || '') === 'ngo'
+
   const itemRows = (items || []).map((item: any) => {
     const qty = Number(item.qty || 0)
     const unit_price = Number(item.unit_price || 0)
@@ -460,12 +475,13 @@ export async function PUT(request: NextRequest) {
       unit_price,
       total: lineTotal,
       product_id: item.product_id || null,
+      project_id: isNGO ? (item.project_id || null) : null,
+      donor_id: isNGO ? (item.donor_id || null) : null,
       company_id: companyId,
     }
   })
   if (itemRows.length > 0) await supabase.from('invoice_items').insert(itemRows)
 
-  // ── INSERT STOCK MOVES (outflow, new items) ──
   await recordStockMoves(supabase, companyId, items, 'sale', id, 'out')
 
   const totalSalesAmount = itemRows.reduce((s: number, i: any) => s + (i.total || 0), 0)
@@ -494,7 +510,32 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  // ── Per‑product stock update REMOVED – stock_moves is the single source of truth ──
+  // Create a new JE with project tags
+  try {
+    const arAccount = await getAccount(supabase, '1100', companyId)
+    const revenueAccount = await getAccount(supabase, '4000', companyId)
+    if (!arAccount || !revenueAccount) throw new Error('AR or Revenue account not found')
+
+    const jeLines: any[] = []
+    for (const item of items) {
+      const lineTotal = Number(item.qty || 0) * Number(item.unit_price || 0)
+      if (lineTotal <= 0) continue
+      jeLines.push({
+        account_id: arAccount.id, debit: lineTotal, credit: 0,
+        project_id: isNGO ? (item.project_id || null) : null,
+        donor_id: isNGO ? (item.donor_id || null) : null,
+      })
+      jeLines.push({
+        account_id: revenueAccount.id, debit: 0, credit: lineTotal,
+        project_id: isNGO ? (item.project_id || null) : null,
+        donor_id: isNGO ? (item.donor_id || null) : null,
+      })
+    }
+
+    await createJE(supabase, companyId, invoice_date, `Sales Invoice ${updatedInv.invoice_no}`, jeLines, 'sale_invoice', updatedInv.id)
+  } catch (e: any) {
+    return NextResponse.json({ error: 'Journal entry failed after update: ' + e.message }, { status: 500 })
+  }
 
   await logDataChange('invoices', String(id), 'UPDATE', oldInv, updatedInv)
 
