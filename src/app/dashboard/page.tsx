@@ -24,7 +24,6 @@ export default function DashboardPage() {
       const email = user.email
       if (cid) setCompanyId(cid)
       if (email) setUserEmail(email)
-      // Fetch business type
       if (cid) {
         supabase.from("companies").select("business_type").eq("id", cid).single()
           .then(({ data }) => { if (data) setBusinessType(data.business_type || "") })
@@ -36,10 +35,17 @@ export default function DashboardPage() {
     userEmail === "siqbalhwc@gmail.com" &&
     companyId === "00000000-0000-0000-0000-000000000001"
 
+  // For developer, allow manual toggles
   const [devRole, setDevRole] = useState<"management" | "accountant">("management")
+  // When devRole === "management", also allow toggling business type for preview
+  const [devBusinessType, setDevBusinessType] = useState<"ngo" | "trading">("ngo")
 
   const toggleDevRole = () => {
     setDevRole(prev => (prev === "management" ? "accountant" : "management"))
+  }
+
+  const toggleDevBusinessType = () => {
+    setDevBusinessType(prev => (prev === "ngo" ? "trading" : "ngo"))
   }
 
   if (roleLoading || !role) {
@@ -47,30 +53,59 @@ export default function DashboardPage() {
   }
 
   const effectiveRole = isDeveloper ? devRole : role
+  const effectiveBusinessType = isDeveloper ? devBusinessType : businessType
 
   // Accountant → Accountant Dashboard
   if (effectiveRole === "accountant") {
-    return <AccountantDashboard role="accountant" />
+    return (
+      <div style={{ position: "relative" }}>
+        {isDeveloper && (
+          <button
+            onClick={toggleDevRole}
+            style={{
+              position: "absolute", top: 16, right: 24, zIndex: 100,
+              padding: "6px 14px", borderRadius: 8,
+              border: "1px solid #334155", background: "#1E293B", color: "#F1F5F9",
+              fontSize: 13, fontWeight: 600, cursor: "pointer",
+            }}
+          >
+            {devRole === "management" ? "🔄 Switch to Accountant" : "🔄 Switch to Management"}
+          </button>
+        )}
+        <AccountantDashboard role="accountant" />
+      </div>
+    )
   }
 
-  // Management → NGO or Trading/Service
+  // Management view
   return (
     <div style={{ position: "relative" }}>
       {isDeveloper && (
-        <button
-          onClick={toggleDevRole}
-          style={{
-            position: "absolute", top: 16, right: 24, zIndex: 100,
-            padding: "6px 14px", borderRadius: 8,
-            border: "1px solid #334155", background: "#1E293B", color: "#F1F5F9",
-            fontSize: 13, fontWeight: 600, cursor: "pointer",
-          }}
-        >
-          {devRole === "management" ? "🔄 Switch to Accountant" : "🔄 Switch to Management"}
-        </button>
+        <div style={{ position: "absolute", top: 16, right: 24, zIndex: 100, display: "flex", gap: 8 }}>
+          <button
+            onClick={toggleDevBusinessType}
+            style={{
+              padding: "6px 14px", borderRadius: 8,
+              border: "1px solid #334155", background: "#1E293B", color: "#F1F5F9",
+              fontSize: 13, fontWeight: 600, cursor: "pointer",
+            }}
+          >
+            {devBusinessType === "ngo" ? "🔄 Switch to Trading View" : "🔄 Switch to NGO View"}
+          </button>
+          <button
+            onClick={toggleDevRole}
+            style={{
+              padding: "6px 14px", borderRadius: 8,
+              border: "1px solid #334155", background: "#1E293B", color: "#F1F5F9",
+              fontSize: 13, fontWeight: 600, cursor: "pointer",
+            }}
+          >
+            {devRole === "management" ? "🔄 Switch to Accountant" : "🔄 Switch to Management"}
+          </button>
+        </div>
       )}
 
-      {businessType === "ngo" ? (
+      {effectiveBusinessType === "ngo" ? (
         <ManagementDashboard role="management" />
       ) : (
         <TradingServiceDashboard role="management" />
