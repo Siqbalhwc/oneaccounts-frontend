@@ -18,7 +18,7 @@ const invoiceNo = raw?.join("/") || ""
 
   useEffect(() => {
     if (!invoiceNo) return
-    fetch(`/api/public/invoice?invoice_no=${encodeURIComponent(invoiceNo)}`)
+    fetch(`https://www.oneaccountsbysiqbal.com/api/public/invoice?invoice_no=${encodeURIComponent(invoiceNo)}`)
       .then(res => res.json())
       .then(data => {
         if (data.error) {
