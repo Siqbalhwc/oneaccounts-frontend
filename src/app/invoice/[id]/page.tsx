@@ -1,9 +1,10 @@
 import InvoiceViewerClient from "./InvoiceViewerClient"
 
-export default function InvoicePublicPage({
+export default async function InvoicePublicPage({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
-  return <InvoiceViewerClient id={params.id} />
+  const { id } = await params
+  return <InvoiceViewerClient id={id} />
 }
