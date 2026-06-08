@@ -96,7 +96,7 @@ export default function InvoiceDetailPage() {
 
         const inv: Invoice = data
 
-        // 2. Load customer – now includes payment_terms
+        // 2. Load customer
         if (inv.party_id) {
           const { data: cust } = await supabase
             .from("customers")
@@ -174,18 +174,39 @@ export default function InvoiceDetailPage() {
       })
   }, [companyId, invoiceId])
 
-  // WhatsApp links using the safe helper (fixes double‑92)
+  // ✅ Updated WhatsApp message with invoice link and professional signature
   const waLink = invoice && invoice.customer
     ? getWhatsAppLink(
         invoice.customer.phone || "",
-        `Dear ${invoice.customer.name},\n\nYour invoice ${invoice.invoice_no} for PKR ${invoice.total?.toLocaleString()} is ready.\nDate: ${invoice.date}\nDue: ${invoice.due_date}\n\nThank you for your business.\n— OneAccounts`
+        [
+          `Dear ${invoice.customer.name},`,
+          ``,
+          `Your invoice ${invoice.invoice_no} of PKR ${invoice.total?.toLocaleString()} has been generated.`,
+          ``,
+          `📄 View Online: https://www.oneaccountsbysiqbal.com/dashboard/invoices/${invoice.id}`,
+          `📅 Date: ${invoice.date}`,
+          `📆 Due: ${invoice.due_date}`,
+          ``,
+          `Thank you for your business.`,
+          `— OneAccounts by Siqbal`,
+        ].join("\n")
       )
     : ""
 
+  // ✅ Updated reminder with invoice link and professional signature
   const reminderLink = invoice && invoice.customer
     ? getWhatsAppLink(
         invoice.customer.phone || "",
-        `Reminder: Your invoice ${invoice.invoice_no} for PKR ${invoice.total?.toLocaleString()} is overdue. Please pay at your earliest convenience.`
+        [
+          `Dear ${invoice.customer.name},`,
+          ``,
+          `Friendly reminder: Your invoice ${invoice.invoice_no} for PKR ${invoice.total?.toLocaleString()} is overdue.`,
+          ``,
+          `📄 View & Pay: https://www.oneaccountsbysiqbal.com/dashboard/invoices/${invoice.id}`,
+          ``,
+          `Thank you.`,
+          `— OneAccounts by Siqbal`,
+        ].join("\n")
       )
     : ""
 

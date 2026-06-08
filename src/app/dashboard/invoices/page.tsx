@@ -143,14 +143,28 @@ export default function InvoicesPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
+  // ✅ Updated WhatsApp message with invoice link and professional signature
   const sendWhatsApp = (inv: any) => {
     const cust = customerMap[inv.party_id]
     if (!cust?.phone) { alert("No phone number."); return }
-    const message = `Dear ${cust.name}, your invoice ${inv.invoice_no} of PKR ${inv.total?.toLocaleString()} is ready.`
+    const invoiceLink = `https://www.oneaccountsbysiqbal.com/dashboard/invoices/${inv.id}`
+    const message = [
+      `Dear ${cust.name},`,
+      ``,
+      `Your invoice ${inv.invoice_no} of PKR ${inv.total?.toLocaleString()} has been generated.`,
+      ``,
+      `📄 View Online: ${invoiceLink}`,
+      `📅 Date: ${inv.date}`,
+      `📆 Due: ${inv.due_date}`,
+      ``,
+      `Thank you for your business.`,
+      `— OneAccounts by Siqbal`,
+    ].join("\n")
     const link = getWhatsAppLink(cust.phone, message)
     if (link) window.open(link, "_blank")
   }
 
+  // ✅ Updated reminder with invoice link and professional signature
   const sendReminder = (inv: any) => {
     const cust = customerMap[inv.party_id]
     if (!cust?.phone) { alert("No phone number."); return }
@@ -184,7 +198,7 @@ export default function InvoicesPage() {
           background: var(--card-hover);
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
-          min-width: 720px;       /* ensures enough space for all columns */
+          min-width: 720px;
         }
         .data-row {
           display: grid;
@@ -239,7 +253,7 @@ export default function InvoicesPage() {
         }
         @media (max-width: 900px) {
           .header-row, .data-row {
-            min-width: 720px;   /* same as desktop – ensures columns never overlap */
+            min-width: 720px;
           }
         }
       `}</style>
