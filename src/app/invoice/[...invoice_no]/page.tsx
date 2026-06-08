@@ -7,7 +7,8 @@ import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 
 export default function PublicInvoicePage() {
   const params = useParams()
-  const invoiceNo = params?.invoice_no as string
+  const raw = params?.invoice_no as string[]
+const invoiceNo = raw?.join("/") || ""
 
   const [invoice, setInvoice] = useState<any>(null)
   const [items, setItems] = useState<any[]>([])
