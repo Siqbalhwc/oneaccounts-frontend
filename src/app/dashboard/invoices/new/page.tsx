@@ -48,6 +48,7 @@ export default function NewInvoicePage() {
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
   const customerRef = useRef<HTMLDivElement>(null)
 
+  // Project/Donor for NGO income tagging
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
 
@@ -361,14 +362,14 @@ export default function NewInvoicePage() {
     const phone = (selectedCustomer.phone || "").replace(/\D/g, "")
     if (!phone) return ""
     const invoiceLink = invoiceIdForLink
-      ? `https://www.oneaccountsbysiqbal.com/dashboard/invoices/${invoiceIdForLink}`
+      ? `https://www.oneaccountsbysiqbal.com/invoice/${companyId}/${invoiceIdForLink}`
       : null
     const msg = [
       `Dear ${selectedCustomer.name},`,
       ``,
       `Your invoice of PKR ${totalAmount.toLocaleString()} has been generated.`,
       invoiceLink ? `` : `(Save the invoice first to get a link.)`,
-      invoiceLink ? `📄 View Online: https://www.oneaccountsbysiqbal.com/invoice/${companyId}/${invoiceNo}` : "",
+      invoiceLink ? `📄 View Online: ${invoiceLink}` : "",
       `📅 Date: ${invoiceDate}`,
       `📆 Due: ${dueDate}`,
       ``,
@@ -384,7 +385,7 @@ export default function NewInvoicePage() {
     const phone = (selectedCustomer.phone || "").replace(/\D/g, "")
     if (!phone) { alert("No phone number for this customer."); return }
     const invoiceLink = invoiceIdForLink
-      ? `https://www.oneaccountsbysiqbal.com/dashboard/invoices/${invoiceIdForLink}`
+      ? `https://www.oneaccountsbysiqbal.com/invoice/${companyId}/${invoiceIdForLink}`
       : null
     const pdfData = {
       companyName: company?.name || company?.company_name || "OneAccounts",
@@ -433,7 +434,7 @@ export default function NewInvoicePage() {
           `Dear ${selectedCustomer.name},`,
           ``,
           `Your invoice of PKR ${totalAmount.toLocaleString()} has been generated.`,
-          invoiceLink ? `📄 View Online: https://www.oneaccountsbysiqbal.com/invoice/${companyId}/${invoiceNo}` : "",
+          invoiceLink ? `📄 View Online: ${invoiceLink}` : "",
           `📎 Download PDF: ${pdfLink}`,
           `📅 Date: ${invoiceDate}`,
           `📆 Due: ${dueDate}`,
