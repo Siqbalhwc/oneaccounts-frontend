@@ -51,7 +51,6 @@ export default function NewCustomerPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  // Summary state – fetched once quickly
   const [totalCustomers, setTotalCustomers] = useState(0)
   const [totalReceivables, setTotalReceivables] = useState(0)
 
@@ -62,7 +61,6 @@ export default function NewCustomerPage() {
       if (!cid) return
       setCompanyId(cid)
 
-      // Fast aggregate summary
       const { data: summary } = await supabase
         .from("customers")
         .select("balance")
@@ -75,7 +73,6 @@ export default function NewCustomerPage() {
       }
 
       if (editId) {
-        // Editing existing customer – load its data
         const { data: customer } = await supabase
           .from("customers")
           .select("*")
@@ -100,7 +97,6 @@ export default function NewCustomerPage() {
           setPaymentTerms(customer.payment_terms || "Net 15")
         }
       } else {
-        // New customer → generate next code
         const { data: codes } = await supabase
           .from("customers")
           .select("code")
@@ -137,37 +133,46 @@ export default function NewCustomerPage() {
     setLoading(true)
     setError("")
 
-    const { data: { user } } = await supabase.auth.getUser()
-    const userEmail = user?.email || "system"
-
-    const balance = parseFloat(openingBalance || "0")
     const fullPhone = countryCode + (phoneNumber.trim().replace(/\D/g, ""))
+    const balance = parseFloat(openingBalance || "0")
 
+    // ---- EDIT MODE: use our PUT API ----
     if (editId) {
-      const { error: updateErr } = await supabase
-        .from("customers")
-        .update({
-          name: customerName.trim(),
-          phone: fullPhone || null,
-          email: email.trim() || null,
-          address: address.trim() || null,
-          opening_balance: isNaN(balance) ? 0 : balance,
-          payment_terms: paymentTerms,
-          updated_by: userEmail,
+      try {
+        const response = await fetch("/api/customers", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: editId,
+            code: customerCode,
+            name: customerName.trim(),
+            phone: fullPhone || null,
+            email: email.trim() || null,
+            address: address.trim() || null,
+            country_code: countryCode,
+            payment_terms: paymentTerms,
+            opening_balance: balance,
+          }),
         })
-        .eq("id", editId)
-        .eq("company_id", companyId)
 
-      if (updateErr) {
-        setError(updateErr.message)
+        const data = await response.json()
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || "Update failed")
+        }
+
+        setFlash(`✅ Customer ${customerCode} updated!`)
+        setTimeout(() => router.push("/dashboard/customers"), 1500)
+      } catch (err: any) {
+        setError(err.message)
+      } finally {
         setLoading(false)
-        return
       }
-      setFlash(`✅ Customer ${customerCode} updated!`)
-      setLoading(false)
-      setTimeout(() => router.push("/dashboard/customers"), 1500)
       return
     }
+
+    // ---- NEW CUSTOMER MODE: direct insert + opening-entry API ----
+    const { data: { user } } = await supabase.auth.getUser()
+    const userEmail = user?.email || "system"
 
     const { data, error: insertErr } = await supabase
       .from("customers")
@@ -178,7 +183,8 @@ export default function NewCustomerPage() {
         phone: fullPhone || null,
         email: email.trim() || null,
         address: address.trim() || null,
-        balance: isNaN(balance) ? 0 : balance,
+        balance: balance,
+        opening_balance: balance,
         payment_terms: paymentTerms,
         created_by: userEmail,
         updated_by: userEmail,
