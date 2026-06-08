@@ -48,7 +48,6 @@ export default function NewInvoicePage() {
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
   const customerRef = useRef<HTMLDivElement>(null)
 
-  // Project/Donor for NGO income tagging
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
 
@@ -71,6 +70,9 @@ export default function NewInvoicePage() {
   const [savedInvoiceId, setSavedInvoiceId] = useState<number | null>(null)
 
   const isNGO = businessType === "ngo"
+
+  // ✅ The invoice ID to use for WhatsApp links (saved one or edit one)
+  const invoiceIdForLink = savedInvoiceId || (editId ? Number(editId) : null)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -338,9 +340,8 @@ export default function NewInvoicePage() {
       }
 
       const newInvoiceId = result.invoice?.id
-
-      setFlash(`✅ Invoice ${editId ? "updated" : "saved"} successfully!`)
       setSavedInvoiceId(newInvoiceId || null)
+      setFlash(`✅ Invoice ${editId ? "updated" : "saved"} successfully!`)
 
       if (editId) {
         router.push(`/dashboard/invoices/${editId}`)
@@ -353,20 +354,20 @@ export default function NewInvoicePage() {
     }
   }
 
-  // ✅ Updated WhatsApp message with invoice view link
+  // ✅ WhatsApp message with invoice link (works for new & edit)
   const waLink = () => {
     if (!selectedCustomer) return ""
     const code = (selectedCustomer.country_code || "+92").replace(/\D/g, "")
     const phone = (selectedCustomer.phone || "").replace(/\D/g, "")
     if (!phone) return ""
-    const invoiceLink = savedInvoiceId
-      ? `https://www.oneaccountsbysiqbal.com/dashboard/invoices/${savedInvoiceId}`
-      : ""
+    const invoiceLink = invoiceIdForLink
+      ? `https://www.oneaccountsbysiqbal.com/dashboard/invoices/${invoiceIdForLink}`
+      : null
     const msg = [
       `Dear ${selectedCustomer.name},`,
       ``,
       `Your invoice of PKR ${totalAmount.toLocaleString()} has been generated.`,
-      ``,
+      invoiceLink ? `` : `(Save the invoice first to get a link.)`,
       invoiceLink ? `📄 View Online: ${invoiceLink}` : "",
       `📅 Date: ${invoiceDate}`,
       `📆 Due: ${dueDate}`,
@@ -377,14 +378,14 @@ export default function NewInvoicePage() {
     return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
   }
 
-  // ✅ Updated WhatsApp with PDF (also includes view link)
+  // ✅ WhatsApp with PDF (also includes view link)
   const handleWhatsAppWithPDF = async () => {
     if (!selectedCustomer) return
     const phone = (selectedCustomer.phone || "").replace(/\D/g, "")
     if (!phone) { alert("No phone number for this customer."); return }
-    const invoiceLink = savedInvoiceId
-      ? `https://www.oneaccountsbysiqbal.com/dashboard/invoices/${savedInvoiceId}`
-      : ""
+    const invoiceLink = invoiceIdForLink
+      ? `https://www.oneaccountsbysiqbal.com/dashboard/invoices/${invoiceIdForLink}`
+      : null
     const pdfData = {
       companyName: company?.name || company?.company_name || "OneAccounts",
       companyAddress: company?.address || "",
@@ -432,7 +433,6 @@ export default function NewInvoicePage() {
           `Dear ${selectedCustomer.name},`,
           ``,
           `Your invoice of PKR ${totalAmount.toLocaleString()} has been generated.`,
-          ``,
           invoiceLink ? `📄 View Online: ${invoiceLink}` : "",
           `📎 Download PDF: ${pdfLink}`,
           `📅 Date: ${invoiceDate}`,
