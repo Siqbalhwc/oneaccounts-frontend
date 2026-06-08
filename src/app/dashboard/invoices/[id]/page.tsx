@@ -183,7 +183,7 @@ export default function InvoiceDetailPage() {
           ``,
           `Your invoice ${invoice.invoice_no} of PKR ${invoice.total?.toLocaleString()} has been generated.`,
           ``,
-          `📄 View Online: https://www.oneaccountsbysiqbal.com/invoice/${invoice.invoice_no}`,
+          `📄 View Online: https://www.oneaccountsbysiqbal.com/invoice/${companyId}/${invoice.invoice_no}`,
           `📅 Date: ${invoice.date}`,
           `📆 Due: ${invoice.due_date}`,
           ``,

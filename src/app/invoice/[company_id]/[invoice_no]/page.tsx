@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
-import { Printer, Download } from "lucide-react"
+import { Printer } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 
 export default function PublicInvoicePage() {
   const params = useParams()
-  const raw = params?.invoice_no as string[]
-const invoiceNo = raw?.join("/") || ""
+  const companyId = params?.company_id as string
+  const invoiceNo = params?.invoice_no as string
 
   const [invoice, setInvoice] = useState<any>(null)
   const [items, setItems] = useState<any[]>([])
@@ -17,8 +17,8 @@ const invoiceNo = raw?.join("/") || ""
   const [error, setError] = useState("")
 
   useEffect(() => {
-    if (!invoiceNo) return
-    fetch(`https://www.oneaccountsbysiqbal.com/api/public/invoice?invoice_no=${encodeURIComponent(invoiceNo)}`)
+    if (!companyId || !invoiceNo) return
+    fetch(`/api/public/invoice?company_id=${encodeURIComponent(companyId)}&invoice_no=${encodeURIComponent(invoiceNo)}`)
       .then(res => res.json())
       .then(data => {
         if (data.error) {
@@ -34,7 +34,7 @@ const invoiceNo = raw?.join("/") || ""
         setError("Failed to load invoice")
         setLoading(false)
       })
-  }, [invoiceNo])
+  }, [companyId, invoiceNo])
 
   const handlePrintPDF = async () => {
     if (!invoice) return
@@ -53,7 +53,7 @@ const invoiceNo = raw?.join("/") || ""
       customerPhone: invoice.customer_phone || "",
       customerEmail: invoice.customer_email || "",
       items: items.map((i: any) => ({
-        description: i.product_name ? `${i.product_code} – ${i.product_name}` : i.description,
+        description: i.product_name ? `${i.product_code || ""} – ${i.product_name}` : i.description,
         qty: i.qty,
         unit_price: i.unit_price,
         total: i.total,

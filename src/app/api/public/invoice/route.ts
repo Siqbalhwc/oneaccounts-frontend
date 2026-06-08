@@ -9,16 +9,18 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
+  const companyId = searchParams.get('company_id')
   const invoiceNo = searchParams.get('invoice_no')
 
-  if (!invoiceNo) {
-    return NextResponse.json({ error: 'Invoice number required' }, { status: 400 })
+  if (!companyId || !invoiceNo) {
+    return NextResponse.json({ error: 'Company ID and invoice number required' }, { status: 400 })
   }
 
-  // Fetch invoice (no RLS – service role)
+  // Fetch invoice by BOTH company_id and invoice_no – globally unique
   const { data: invoice, error } = await supabaseAdmin
     .from('invoices')
     .select('id, invoice_no, date, due_date, total, paid, status, reference, notes, party_id, company_id')
+    .eq('company_id', companyId)
     .eq('invoice_no', invoiceNo)
     .eq('type', 'sale')
     .single()
