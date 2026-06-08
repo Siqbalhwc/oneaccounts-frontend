@@ -353,19 +353,38 @@ export default function NewInvoicePage() {
     }
   }
 
+  // ✅ Updated WhatsApp message with invoice view link
   const waLink = () => {
     if (!selectedCustomer) return ""
     const code = (selectedCustomer.country_code || "+92").replace(/\D/g, "")
     const phone = (selectedCustomer.phone || "").replace(/\D/g, "")
     if (!phone) return ""
-    const msg = `Dear ${selectedCustomer.name},\n\nYour invoice of PKR ${totalAmount.toLocaleString()} is ready.\nDate: ${invoiceDate}\nDue: ${dueDate}\n\nThank you.\n— OneAccounts`
+    const invoiceLink = savedInvoiceId
+      ? `https://www.oneaccountsbysiqbal.com/dashboard/invoices/${savedInvoiceId}`
+      : ""
+    const msg = [
+      `Dear ${selectedCustomer.name},`,
+      ``,
+      `Your invoice of PKR ${totalAmount.toLocaleString()} has been generated.`,
+      ``,
+      invoiceLink ? `📄 View Online: ${invoiceLink}` : "",
+      `📅 Date: ${invoiceDate}`,
+      `📆 Due: ${dueDate}`,
+      ``,
+      `Thank you for your business.`,
+      `— OneAccounts by Siqbal`,
+    ].filter(line => line !== "").join("\n")
     return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
   }
 
+  // ✅ Updated WhatsApp with PDF (also includes view link)
   const handleWhatsAppWithPDF = async () => {
     if (!selectedCustomer) return
     const phone = (selectedCustomer.phone || "").replace(/\D/g, "")
     if (!phone) { alert("No phone number for this customer."); return }
+    const invoiceLink = savedInvoiceId
+      ? `https://www.oneaccountsbysiqbal.com/dashboard/invoices/${savedInvoiceId}`
+      : ""
     const pdfData = {
       companyName: company?.name || company?.company_name || "OneAccounts",
       companyAddress: company?.address || "",
@@ -409,7 +428,19 @@ export default function NewInvoicePage() {
           .from("invoice-pdfs")
           .getPublicUrl(filePath)
         const pdfLink = publicUrlData.publicUrl
-        const msg = `Dear ${selectedCustomer.name},\n\nYour invoice PDF is ready.\nDownload: ${pdfLink}\n\nDate: ${invoiceDate}\nDue: ${dueDate}\n\nThank you.\n— OneAccounts`
+        const msg = [
+          `Dear ${selectedCustomer.name},`,
+          ``,
+          `Your invoice of PKR ${totalAmount.toLocaleString()} has been generated.`,
+          ``,
+          invoiceLink ? `📄 View Online: ${invoiceLink}` : "",
+          `📎 Download PDF: ${pdfLink}`,
+          `📅 Date: ${invoiceDate}`,
+          `📆 Due: ${dueDate}`,
+          ``,
+          `Thank you for your business.`,
+          `— OneAccounts by Siqbal`,
+        ].filter(line => line !== "").join("\n")
         const waURL = `https://wa.me/${(selectedCustomer.country_code || "+92").replace(/\D/g, "")}${phone}?text=${encodeURIComponent(msg)}`
         window.open(waURL, "_blank")
         return

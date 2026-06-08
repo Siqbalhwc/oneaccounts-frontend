@@ -154,7 +154,17 @@ export default function InvoicesPage() {
   const sendReminder = (inv: any) => {
     const cust = customerMap[inv.party_id]
     if (!cust?.phone) { alert("No phone number."); return }
-    const message = `Reminder: Your invoice ${inv.invoice_no} for PKR ${inv.total?.toLocaleString()} is overdue. Please pay.`
+    const invoiceLink = `https://www.oneaccountsbysiqbal.com/dashboard/invoices/${inv.id}`
+    const message = [
+      `Dear ${cust.name},`,
+      ``,
+      `Friendly reminder: Your invoice ${inv.invoice_no} for PKR ${inv.total?.toLocaleString()} is overdue.`,
+      ``,
+      `📄 View & Pay: ${invoiceLink}`,
+      ``,
+      `Thank you.`,
+      `— OneAccounts by Siqbal`,
+    ].join("\n")
     const link = getWhatsAppLink(cust.phone, message)
     if (link) window.open(link, "_blank")
   }
