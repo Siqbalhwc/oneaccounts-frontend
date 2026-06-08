@@ -19,7 +19,6 @@ async function generatePaymentNo(supabase: any, companyId: string): Promise<stri
     .from('payments')
     .select('payment_no')
     .eq('company_id', companyId)
-    .is('deleted_at', null)          // ✅ Exclude soft‑deleted payments
     .like('payment_no', `${prefix}%`)
     .order('payment_no', { ascending: false })
     .limit(1)
