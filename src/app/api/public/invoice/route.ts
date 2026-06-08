@@ -9,19 +9,17 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
-  const companyId = searchParams.get('company_id')
-  const invoiceNo = searchParams.get('invoice_no')
+  const id = searchParams.get('id')
 
-  if (!companyId || !invoiceNo) {
-    return NextResponse.json({ error: 'Company ID and invoice number required' }, { status: 400 })
+  if (!id) {
+    return NextResponse.json({ error: 'Invoice ID required' }, { status: 400 })
   }
 
-  // Fetch invoice by BOTH company_id and invoice_no – globally unique
+  // Fetch invoice by numeric ID – globally unique
   const { data: invoice, error } = await supabaseAdmin
     .from('invoices')
     .select('id, invoice_no, date, due_date, total, paid, status, reference, notes, party_id, company_id')
-    .eq('company_id', companyId)
-    .eq('invoice_no', invoiceNo)
+    .eq('id', id)
     .eq('type', 'sale')
     .single()
 
@@ -29,20 +27,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
   }
 
-  // Fetch customer name
+  // Customer
   const { data: customer } = await supabaseAdmin
     .from('customers')
     .select('name, code, phone, address, email')
     .eq('id', invoice.party_id)
     .single()
 
-  // Fetch items (without cost prices)
+  // Items
   const { data: items } = await supabaseAdmin
     .from('invoice_items')
     .select('id, description, qty, unit_price, total, product_id')
     .eq('invoice_id', invoice.id)
+    .order('id')
 
-  // Fetch product names
+  // Enrich items with product names
   let itemsWithNames = items || []
   if (items && items.length > 0) {
     const productIds = items.map((i: any) => i.product_id).filter(Boolean)
@@ -61,7 +60,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Fetch company logo
+  // Company settings (logo, name, etc.)
   const { data: settings } = await supabaseAdmin
     .from('company_settings')
     .select('business_name, logo_url, tagline, address, phone, email')

@@ -362,7 +362,7 @@ export default function NewInvoicePage() {
     const phone = (selectedCustomer.phone || "").replace(/\D/g, "")
     if (!phone) return ""
     const invoiceLink = invoiceIdForLink
-      ? `https://www.oneaccountsbysiqbal.com/invoice/${companyId}/${invoiceIdForLink}`
+      ? `https://www.oneaccountsbysiqbal.com/invoice/${invoiceIdForLink}`
       : null
     const msg = [
       `Dear ${selectedCustomer.name},`,
@@ -385,7 +385,7 @@ export default function NewInvoicePage() {
     const phone = (selectedCustomer.phone || "").replace(/\D/g, "")
     if (!phone) { alert("No phone number for this customer."); return }
     const invoiceLink = invoiceIdForLink
-      ? `https://www.oneaccountsbysiqbal.com/invoice/${companyId}/${invoiceIdForLink}`
+      ? `https://www.oneaccountsbysiqbal.com/invoice/${invoiceIdForLink}`
       : null
     const pdfData = {
       companyName: company?.name || company?.company_name || "OneAccounts",
