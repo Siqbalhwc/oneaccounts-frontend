@@ -147,7 +147,7 @@ export default function InvoicesPage() {
   const sendWhatsApp = (inv: any) => {
     const cust = customerMap[inv.party_id]
     if (!cust?.phone) { alert("No phone number."); return }
-    const invoiceLink = `https://www.oneaccountsbysiqbal.com/dashboard/invoices/${inv.id}`
+    const invoiceLink = `https://www.oneaccountsbysiqbal.com/invoice/${inv.invoice_no}`
     const message = [
       `Dear ${cust.name},`,
       ``,
@@ -168,7 +168,7 @@ export default function InvoicesPage() {
   const sendReminder = (inv: any) => {
     const cust = customerMap[inv.party_id]
     if (!cust?.phone) { alert("No phone number."); return }
-    const invoiceLink = `https://www.oneaccountsbysiqbal.com/dashboard/invoices/${inv.id}`
+    const invoiceLink = `https://www.oneaccountsbysiqbal.com/invoice/${inv.invoice_no}`
     const message = [
       `Dear ${cust.name},`,
       ``,
