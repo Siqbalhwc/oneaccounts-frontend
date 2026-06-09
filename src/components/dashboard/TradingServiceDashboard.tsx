@@ -84,13 +84,11 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
     if (!companyId) return
     setLoading(true)
 
-    // 1. Get rolling 12 months ending on current month
     const now = new Date()
     const endDate = now.toISOString().split("T")[0]
     const startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1).toISOString().split("T")[0]
 
     const fetchAll = async () => {
-      // --- Cash, customers, etc. (unchanged, use same rolling period? Actually cash/receivables are point-in-time, keep as is) ---
       const [
         { data: bankAccounts },
         { data: cashAcc },
@@ -122,7 +120,6 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
       const revIds = (revAccs || []).map(a => a.id)
       const expIds = (expAccs || []).map(a => a.id)
 
-      // 2. Revenue & expense totals for rolling 12 months
       const [{ data: revLines }, { data: expLines }] = await Promise.all([
         supabase.from("journal_lines")
           .select("debit, credit, journal_entries!inner(date)")
@@ -142,14 +139,13 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
       setRevenueTotal(Math.abs(rev))
       setExpenseTotal(Math.abs(exp))
 
-      // 3. Monthly profit for each of the last 12 months
+      // Monthly profit for last 12 months
       const months: Date[] = []
       for (let i = 0; i < 12; i++) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-        months.unshift(d) // so earliest first
+        months.unshift(d)
       }
 
-      // Prepare month names and date ranges
       const monthNames: string[] = []
       const startDates: string[] = []
       const endDates: string[] = []
@@ -163,7 +159,6 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         monthNames.push(m.toLocaleString("default", { month: "short" }) + (idx === 11 ? ` ${year}` : ""))
       })
 
-      // Fetch all revenue and expense lines for the entire 12-month window (single query each)
       const { data: allRevLines } = await supabase
         .from("journal_lines")
         .select(`
@@ -188,9 +183,8 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         .gte("journal_entries.date", startDates[0])
         .lte("journal_entries.date", endDates[11])
 
-      // Aggregate per month
       const monthlyProfits: number[] = Array(12).fill(0)
-      const processLines = (lines: any[], isRevenue: boolean) => {
+      const processLines = (lines: any[] | null, isRevenue: boolean) => {
         if (!lines) return
         for (const line of lines) {
           const lineDate = line.journal_entries.date
@@ -212,7 +206,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
       }))
       setMonthlyProfit(monthly)
 
-      // 4. Top customers for rolling year
+      // Top customers for rolling year
       const { data: topCustRows } = await supabase
         .from("invoices")
         .select("party_id, customers(name), total")
