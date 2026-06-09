@@ -20,7 +20,7 @@ const ALL_COLUMNS = [
   { key: "amount",     label: "Amount",              flex: "130px",  default: true },
   { key: "method",     label: "Method",              flex: "120px",  default: true },
   { key: "created_by", label: "Created / Edited By", flex: "190px",  default: true },
-  { key: "actions",    label: "Actions",             flex: "100px",  default: true },
+  { key: "actions",    label: "Actions",             flex: "130px",  default: true },
 ]
 
 // ─── Skeleton row ──────────────────────────────────────────────────────────────
