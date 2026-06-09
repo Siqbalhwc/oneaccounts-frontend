@@ -11,15 +11,14 @@ import { getWhatsAppLink } from "@/lib/whatsapp"
 type SortField = "receipt_no" | "date" | "customer" | "amount" | "method" | "created_by"
 type SortDir = "asc" | "desc"
 
-// Available columns with display names and default visibility
 const ALL_COLUMNS = [
-  { key: "receipt_no", label: "Receipt #", default: true },
-  { key: "date", label: "Date", default: true },
-  { key: "customer", label: "Customer", default: true },
-  { key: "amount", label: "Amount", default: true },
-  { key: "method", label: "Method", default: true },
-  { key: "created_by", label: "Created / Edited By", default: true },
-  { key: "actions", label: "Actions", default: true }, // WhatsApp + view/edit/delete
+  { key: "receipt_no", label: "Receipt #", default: true, width: "minmax(100px, 1fr)" },
+  { key: "date", label: "Date", default: true, width: "minmax(90px, 1fr)" },
+  { key: "customer", label: "Customer", default: true, width: "minmax(140px, 1.5fr)" },
+  { key: "amount", label: "Amount", default: true, width: "minmax(100px, 1fr)" },
+  { key: "method", label: "Method", default: true, width: "minmax(90px, 1fr)" },
+  { key: "created_by", label: "Created / Edited By", default: true, width: "minmax(130px, 1.2fr)" },
+  { key: "actions", label: "Actions", default: true, width: "minmax(140px, auto)" },
 ]
 
 export default function ReceiptsPage() {
@@ -41,7 +40,6 @@ export default function ReceiptsPage() {
   const [companyId, setCompanyId] = useState("")
   const [customerMap, setCustomerMap] = useState<Record<number, { name: string; phone: string }>>({})
   
-  // Column visibility state
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
     const saved = localStorage.getItem("receipts_visible_columns")
     if (saved) {
@@ -49,19 +47,16 @@ export default function ReceiptsPage() {
         return JSON.parse(saved)
       } catch (e) { /* ignore */ }
     }
-    // default: all columns visible except maybe some on small screens? Use all defaults.
     const defaults: Record<string, boolean> = {}
     ALL_COLUMNS.forEach(col => { defaults[col.key] = col.default })
     return defaults
   })
   const [showColumnMenu, setShowColumnMenu] = useState(false)
 
-  // Save column visibility to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem("receipts_visible_columns", JSON.stringify(visibleColumns))
   }, [visibleColumns])
 
-  // Fetch company ID from JWT
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
@@ -69,7 +64,6 @@ export default function ReceiptsPage() {
     })
   }, [])
 
-  // Fetch customers for the current company
   useEffect(() => {
     if (!companyId) return
     supabase
@@ -88,7 +82,6 @@ export default function ReceiptsPage() {
       })
   }, [companyId])
 
-  // Fetch receipts scoped to current company
   useEffect(() => {
     if (!role) return
     if (!canView || !companyId) {
@@ -180,17 +173,11 @@ export default function ReceiptsPage() {
     setVisibleColumns(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
-  // Build grid template columns dynamically based on visible columns
+  // Build grid template columns based on visible columns (fixed widths)
   const gridTemplateColumns = () => {
-    const cols = []
-    if (visibleColumns.receipt_no) cols.push("minmax(100px, 1fr)")
-    if (visibleColumns.date) cols.push("minmax(90px, 1fr)")
-    if (visibleColumns.customer) cols.push("minmax(120px, 1.2fr)")
-    if (visibleColumns.amount) cols.push("minmax(90px, 1fr)")
-    if (visibleColumns.method) cols.push("minmax(90px, 1fr)")
-    if (visibleColumns.created_by) cols.push("minmax(140px, 1.2fr)")
-    if (visibleColumns.actions) cols.push("minmax(160px, auto)")
-    return cols.join(" ")
+    return ALL_COLUMNS.filter(col => visibleColumns[col.key])
+      .map(col => col.width)
+      .join(" ")
   }
 
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
@@ -199,8 +186,8 @@ export default function ReceiptsPage() {
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
-        .rec-table { width: 100%; overflow-x: auto; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow-x: auto; }
+        .rec-table { width: 100%; }
         .header-row, .data-row {
           display: grid;
           grid-template-columns: ${gridTemplateColumns()};
@@ -261,7 +248,12 @@ export default function ReceiptsPage() {
           display: flex;
           gap: 6px;
           flex-wrap: nowrap;
+          justify-content: flex-end;
           align-items: center;
+        }
+        .header-actions {
+          text-align: right;
+          justify-self: end;
         }
         .column-menu {
           position: absolute;
@@ -294,10 +286,7 @@ export default function ReceiptsPage() {
           margin-bottom: 16px;
         }
         @media (max-width: 768px) {
-          .header-row, .data-row {
-            padding: 10px 12px;
-            column-gap: 8px;
-          }
+          .header-row, .data-row { padding: 10px 12px; column-gap: 8px; }
           .btn-icon { padding: 4px; }
         }
       `}</style>
@@ -369,34 +358,34 @@ export default function ReceiptsPage() {
           No receipts found.
         </div>
       ) : (
-        <div className="card rec-table">
-          <div className="header-row" style={{ gridTemplateColumns: gridTemplateColumns() }}>
+        <div className="card">
+          <div className="header-row">
             {visibleColumns.receipt_no && <button className="sort-btn" onClick={() => handleSort("receipt_no")}>Receipt # {getSortIcon("receipt_no")}</button>}
             {visibleColumns.date && <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>}
             {visibleColumns.customer && <button className="sort-btn" onClick={() => handleSort("customer")}>Customer {getSortIcon("customer")}</button>}
             {visibleColumns.amount && <button className="sort-btn" onClick={() => handleSort("amount")} style={{ justifyContent: "flex-end" }}>Amount {getSortIcon("amount")}</button>}
             {visibleColumns.method && <button className="sort-btn" onClick={() => handleSort("method")} style={{ justifyContent: "center" }}>Method {getSortIcon("method")}</button>}
             {visibleColumns.created_by && <button className="sort-btn" onClick={() => handleSort("created_by")} style={{ justifyContent: "center" }}>Created / Edited By {getSortIcon("created_by")}</button>}
-            {visibleColumns.actions && <span style={{ textAlign: "right" }}>Actions</span>}
+            {visibleColumns.actions && <div className="header-actions">Actions</div>}
           </div>
           {sortedFiltered.map((rec) => {
             const cust = customerMap[rec.party_id]
             const custName = rec.party_id ? (cust?.name || "—") : "🎁 Donation"
             return (
-              <div key={rec.id} className="data-row" style={{ gridTemplateColumns: gridTemplateColumns() }}>
+              <div key={rec.id} className="data-row">
                 {visibleColumns.receipt_no && <span style={{ fontWeight: 600, color: "var(--primary)" }}>{rec.receipt_no}</span>}
                 {visibleColumns.date && <span>{rec.date}</span>}
                 {visibleColumns.customer && <span>{custName}</span>}
-                {visibleColumns.amount && <span style={{ fontWeight: 600, color: "#10B981", textAlign: "right" }}>PKR {rec.amount?.toLocaleString()}</span>}
-                {visibleColumns.method && <span style={{ textAlign: "center" }}>{rec.payment_method || "—"}</span>}
+                {visibleColumns.amount && <span style={{ fontWeight: 600, color: "#10B981", textAlign: "right", display: "block" }}>PKR {rec.amount?.toLocaleString()}</span>}
+                {visibleColumns.method && <span style={{ textAlign: "center", display: "block" }}>{rec.payment_method || "—"}</span>}
                 {visibleColumns.created_by && (
-                  <div className="creator-editor-cell" style={{ textAlign: "center" }}>
+                  <div className="creator-editor-cell">
                     <span>Created: {rec.created_by || "—"}</span>
                     <span>Edited: {rec.updated_by || "—"}</span>
                   </div>
                 )}
                 {visibleColumns.actions && (
-                  <div className="actions-cell" style={{ justifyContent: "flex-end" }}>
+                  <div className="actions-cell">
                     <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/${rec.id}`)} title="View receipt">
                       <Eye size={14} />
                     </button>
