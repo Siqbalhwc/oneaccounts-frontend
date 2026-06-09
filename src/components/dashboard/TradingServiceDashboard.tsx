@@ -41,8 +41,6 @@ interface TopCustomer {
 export default function TradingServiceDashboard({ role }: { role: string }) {
   const router = useRouter()
   const { theme: themeMode } = useTheme()
-  const isDark = themeMode === "dark"
-
   const { companyId, companyName } = useCompany()
   const companyError = !companyId
 
@@ -66,7 +64,6 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
   const [monthlyProfit, setMonthlyProfit] = useState<MonthlyProfit[]>([])
   const [topCustomers, setTopCustomers] = useState<TopCustomer[]>([])
 
-  // Fetch user name and business type (lightweight, remains as is)
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -81,12 +78,12 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
       .then(({ data }) => { if (data) setBusinessType(data.business_type || "") })
   }, [companyId])
 
-  // ─── ONE RPC CALL for all dashboard metrics ──────────────────────────────
+  // One RPC call for all metrics
   useEffect(() => {
     if (!companyId) return
     setLoading(true)
 
-    const fetchDashboardData = async () => {
+    const fetchDashboard = async () => {
       try {
         const { data, error } = await supabase.rpc("get_dashboard_metrics", {
           p_company_id: companyId,
@@ -98,7 +95,12 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           return
         }
 
-        // Update KPI states
+        if (!data) {
+          console.error("No data returned")
+          setLoading(false)
+          return
+        }
+
         setRevenueTotal(data.revenueTotal || 0)
         setExpenseTotal(data.expenseTotal || 0)
         setCashBalance(data.cashBalance || 0)
@@ -106,28 +108,16 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         setTotalPayables(data.totalPayables || 0)
         setOverdueInvoicesCount(data.overdueInvoicesCount || 0)
         setOverdueBillsCount(data.overdueBillsCount || 0)
-
-        // Monthly profit trend
-        if (data.monthlyProfit && Array.isArray(data.monthlyProfit)) {
-          setMonthlyProfit(data.monthlyProfit)
-        } else {
-          setMonthlyProfit([])
-        }
-
-        // Top customers
-        if (data.topCustomers && Array.isArray(data.topCustomers)) {
-          setTopCustomers(data.topCustomers)
-        } else {
-          setTopCustomers([])
-        }
+        setMonthlyProfit(data.monthlyProfit || [])
+        setTopCustomers(data.topCustomers || [])
       } catch (err) {
-        console.error("Dashboard RPC failed", err)
+        console.error("Dashboard fetch exception:", err)
       } finally {
         setLoading(false)
       }
     }
 
-    fetchDashboardData()
+    fetchDashboard()
   }, [companyId])
 
   const getGreeting = (): string => {
@@ -169,19 +159,229 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
     </div>
   }
 
-  // The JSX is identical to your original (with clickable KPI cards, chart, quick actions, top customers)
-  // I will re‑use the exact JSX you already have (no changes to the layout or functionality)
-  // To avoid repeating the entire 400+ lines, I assume you keep your existing JSX block.
-  // If you need the full component with JSX, please let me know and I will paste it completely.
-  // For brevity, the JSX below is a placeholder – you must integrate it with the state above.
-  // IMPORTANT: I will provide the complete component in the final answer.
-
-  // ... (the rest of the component JSX remains unchanged from your current version)
-  // However, to ensure you have a fully working file, I have attached the complete component in the next message.
   return (
     <div style={{ background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)", padding: "0.8rem 1.2rem" }}>
-      {/* Your existing JSX goes here – no changes needed to the visual part */}
-      <div>Dashboard content (reuse your existing JSX)</div>
+      <style>{`
+        .tsd * { box-sizing: border-box; }
+        .tsd .card {
+          background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+          padding: 20px; box-shadow: var(--shadow-sm);
+          transition: transform 0.1s ease, box-shadow 0.1s ease;
+          cursor: pointer;
+        }
+        .tsd .card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+          border-color: var(--primary);
+        }
+        .tsd .hero {
+          background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+          padding: 1rem 1.5rem; margin-bottom: 1.5rem; display: flex;
+          justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.8rem;
+        }
+        .tsd .kpi-row {
+          display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;
+        }
+        .tsd .kpi-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 6px; }
+        .tsd .kpi-value { font-size: 1.7rem; font-weight: 800; }
+        .tsd .two-col { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 24px; }
+        .tsd table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        .tsd th { text-align: left; padding: 8px 12px; border-bottom: 2px solid var(--border); color: var(--text-muted); font-weight: 600; font-size: 0.65rem; text-transform: uppercase; }
+        .tsd td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+        .tsd .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+        .tsd .quick-action-btn {
+          background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+          padding: 14px; text-align: center; font-size: 0.8rem; font-weight: 600;
+          color: var(--text); cursor: pointer; transition: 0.15s;
+        }
+        .tsd .quick-action-btn:hover { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+        .tsd .alert-row {
+          background: #fff7ed; border: 1px solid #fed7aa; border-left: 4px solid #f97316;
+          border-radius: 8px; padding: 10px 16px; margin-bottom: 8px; font-size: 0.8rem;
+          display: flex; align-items: center; gap: 12px;
+        }
+        .tsd .alert-row strong { color: #c2410c; }
+        .tsd .alert-btn {
+          background: white; border: 1px solid #cbd5e1; border-radius: 6px;
+          padding: 4px 12px; font-size: 0.75rem; font-weight: 600; cursor: pointer; font-family: inherit;
+        }
+        .tsd .alert-btn.primary { background: #f97316; color: white; border-color: #f97316; }
+        .tsd .chart-container {
+          margin-top: 8px;
+          padding: 12px 0 24px 0;
+          overflow-x: auto;
+        }
+        .tsd .bar-chart {
+          display: flex;
+          align-items: flex-end;
+          gap: 12px;
+          height: 200px;
+          padding: 0 8px;
+          min-width: 600px;
+        }
+        .tsd .bar-column {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 8px;
+        }
+        .tsd .bar {
+          width: 100%;
+          background: linear-gradient(180deg, #6366f1, #818cf8);
+          border-radius: 6px 6px 0 0;
+          transition: height 0.3s;
+          min-height: 4px;
+        }
+        .tsd .bar.negative {
+          background: linear-gradient(180deg, #ef4444, #f87171);
+        }
+        .tsd .bar-value {
+          font-size: 10px;
+          font-weight: 700;
+          color: var(--text);
+          white-space: nowrap;
+        }
+        .tsd .bar-label {
+          font-size: 10px;
+          color: var(--text-muted);
+          font-weight: 600;
+          text-transform: uppercase;
+        }
+        .tsd .trend-summary {
+          display: flex;
+          justify-content: space-between;
+          margin-top: 20px;
+          padding-top: 12px;
+          border-top: 1px solid var(--border);
+          font-size: 0.75rem;
+          font-weight: 600;
+        }
+        @media (max-width: 1024px) {
+          .tsd .kpi-row { grid-template-columns: repeat(2, 1fr); }
+          .tsd .two-col { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 640px) {
+          .tsd .kpi-row { grid-template-columns: 1fr; }
+          .tsd .hero { flex-direction: column; align-items: flex-start; }
+        }
+      `}</style>
+
+      <div className="tsd">
+        <div className="hero">
+          <div>
+            <h2 style={{ fontSize: "1.3rem", fontWeight: 700 }}>{getGreeting()}, {userDisplayName}</h2>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
+              {businessType === "trading" ? "Trading Dashboard" : "Service Dashboard"}
+            </p>
+          </div>
+          <div>
+            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Last 12 months</span>
+          </div>
+        </div>
+
+        <div className="kpi-row">
+          {[
+            { label: "💰 Total Revenue", value: formatPKR(animRevenue), color: "#10B981", onClick: () => router.push("/dashboard/reports/profit-loss") },
+            { label: "📤 Total Expenses", value: formatPKR(animExpense), color: "#EF4444", onClick: () => router.push("/dashboard/reports/profit-loss") },
+            { label: "📈 Gross Profit", value: formatPKR(animProfit), color: grossProfit >= 0 ? "#10B981" : "#EF4444", onClick: () => router.push("/dashboard/reports/profit-loss") },
+            { label: "🏦 Cash & Bank", value: formatPKR(animCash), color: "#A78BFA", onClick: () => router.push("/dashboard/banking/bank-accounts") },
+            { label: "🧾 Receivables", value: formatPKR(animRecv), color: "#F97316", onClick: () => router.push("/dashboard/customers") },
+            { label: "📋 Payables", value: formatPKR(animPay), color: "#EF4444", onClick: () => router.push("/dashboard/suppliers") },
+            { label: "⚠️ Overdue Inv.", value: overdueInvoicesCount.toString(), color: "#EF4444", onClick: () => router.push("/dashboard/invoices?status=Unpaid&overdue=true") },
+            { label: "⚠️ Overdue Bills", value: overdueBillsCount.toString(), color: "#EF4444", onClick: () => router.push("/dashboard/bills?status=Unpaid&overdue=true") },
+          ].map(kpi => (
+            <div key={kpi.label} className="card" onClick={kpi.onClick}>
+              <div className="kpi-label">{kpi.label}</div>
+              <div className="kpi-value" style={{ color: kpi.color }}>{kpi.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {overdueInvoicesCount > 0 && (
+          <div className="alert-row">
+            <span>⚠️ <strong>{overdueInvoicesCount} overdue invoices</strong></span>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+              <button className="alert-btn" onClick={() => router.push("/dashboard/invoices?status=Unpaid&overdue=true")}>View All</button>
+            </div>
+          </div>
+        )}
+        {overdueBillsCount > 0 && (
+          <div className="alert-row">
+            <span>⚠️ <strong>{overdueBillsCount} overdue bills</strong></span>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+              <button className="alert-btn" onClick={() => router.push("/dashboard/bills?status=Unpaid&overdue=true")}>View All</button>
+            </div>
+          </div>
+        )}
+
+        <div className="two-col">
+          <div className="card" style={{ cursor: "default" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <span style={{ fontWeight: 700, fontSize: "1rem" }}>📊 Monthly Profit Trend</span>
+              <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Last 12 months</span>
+            </div>
+            <div className="chart-container">
+              <div className="bar-chart">
+                {monthlyProfit.map((m, i) => (
+                  <div key={i} className="bar-column">
+                    <div className={`bar ${m.profit < 0 ? "negative" : ""}`}
+                      style={{ height: `${(Math.abs(m.profit) / maxProfit) * 140 + 4}px` }} />
+                    <div className="bar-value">{formatPKR(m.profit)}</div>
+                    <div className="bar-label">{m.month}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="trend-summary">
+              {monthlyProfit.length > 0 && (
+                <>
+                  <span>📈 Best: <strong>{monthlyProfit.reduce((a,b) => a.profit > b.profit ? a : b).month}</strong> ({formatPKR(Math.max(...monthlyProfit.map(m=>m.profit)))})</span>
+                  <span>📉 Worst: <strong>{monthlyProfit.reduce((a,b) => a.profit < b.profit ? a : b).month}</strong> ({formatPKR(Math.min(...monthlyProfit.map(m=>m.profit)))})</span>
+                  <span>📊 Avg: <strong>{formatPKR(monthlyProfit.reduce((s,m) => s + m.profit, 0) / 12)}</strong></span>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+            <div className="card" style={{ cursor: "default" }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ fontWeight: 700, fontSize: "1rem", marginBottom: 12 }}>⚡ Quick Actions</div>
+              <div className="quick-actions">
+                <div className="quick-action-btn" onClick={() => router.push("/dashboard/invoices/new")}>➕ New Invoice</div>
+                <div className="quick-action-btn" onClick={() => router.push("/dashboard/bills/new")}>📦 New Bill</div>
+                <div className="quick-action-btn" onClick={() => router.push("/dashboard/receipts/new")}>💰 Receive Payment</div>
+                <div className="quick-action-btn" onClick={() => router.push("/dashboard/payments/new")}>💳 Record Payment</div>
+              </div>
+            </div>
+
+            <div className="card" style={{ cursor: "default" }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <span style={{ fontWeight: 700, fontSize: "1rem" }}>🏆 Top 5 Customers</span>
+                <button onClick={() => router.push("/dashboard/customers")} style={{ background: "none", border: "none", color: "var(--primary)", cursor: "pointer", fontWeight: 600, fontFamily: "inherit", fontSize: "0.8rem" }}>View All →</button>
+              </div>
+              <table>
+                <thead>
+                  <tr><th>Customer</th><th>Revenue</th><th>Outstanding</th></tr>
+                </thead>
+                <tbody>
+                  {topCustomers.length === 0 ? (
+                    <tr><td colSpan={3} style={{ textAlign: "center", color: "var(--text-muted)" }}>No customer data</td></tr>
+                  ) : (
+                    topCustomers.map((c, i) => (
+                      <tr key={i}>
+                        <td>{c.name}</td>
+                        <td style={{ color: "#10B981" }}>{formatPKR(c.revenue)}</td>
+                        <td style={{ color: c.outstanding > 0 ? "#EF4444" : "#10B981" }}>{c.outstanding > 0 ? formatPKR(c.outstanding) : "0"}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
