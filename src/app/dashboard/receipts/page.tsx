@@ -30,7 +30,7 @@ function SkeletonRow({ gridTemplate }: { gridTemplate: string }) {
     <div style={{
       display: "grid",
       gridTemplateColumns: gridTemplate,
-      columnGap: 8,   // reduced from 12
+      columnGap: 4,   // reduced from 12
       padding: "10px 12px",  // reduced from 14px 24px
       borderBottom: "1px solid var(--border)",
       alignItems: "center",
@@ -182,7 +182,7 @@ export default function ReceiptsPage() {
   const rowStyle = (extra?: React.CSSProperties): React.CSSProperties => ({
     display: "grid",
     gridTemplateColumns: gridTemplate,
-    columnGap: 8,   // <--- reduced from 12 to 8
+    columnGap: 4,   // <--- reduced from 12 to 8
     alignItems: "center",
     ...extra,
   })
@@ -239,7 +239,7 @@ export default function ReceiptsPage() {
           min-width: 180px; box-shadow: 0 6px 20px rgba(0,0,0,0.18);
         }
         .col-menu-item {
-          display: flex; align-items: center; gap: 8px;
+          display: flex; align-items: center; gap: 4px;
           padding: 7px 10px; border-radius: 6px; cursor: pointer;
           font-size: 13px; white-space: nowrap; color: var(--text);
         }
