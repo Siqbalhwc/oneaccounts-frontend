@@ -30,8 +30,8 @@ function SkeletonRow({ gridTemplate }: { gridTemplate: string }) {
     <div style={{
       display: "grid",
       gridTemplateColumns: gridTemplate,
-      columnGap: 12,
-      padding: "14px 24px",
+      columnGap: 8,   // reduced from 12
+      padding: "10px 12px",  // reduced from 14px 24px
       borderBottom: "1px solid var(--border)",
       alignItems: "center",
     }}>
@@ -182,7 +182,7 @@ export default function ReceiptsPage() {
   const rowStyle = (extra?: React.CSSProperties): React.CSSProperties => ({
     display: "grid",
     gridTemplateColumns: gridTemplate,
-    columnGap: 12,
+    columnGap: 8,   // <--- reduced from 12 to 8
     alignItems: "center",
     ...extra,
   })
@@ -368,7 +368,7 @@ export default function ReceiptsPage() {
         }}>
           {/* Header */}
           <div style={rowStyle({
-            padding: "12px 24px",
+            padding: "10px 12px",   // reduced
             background: "var(--card-hover)",
             borderBottom: "1px solid var(--border)",
           })}>
@@ -400,7 +400,7 @@ export default function ReceiptsPage() {
           <div style={{ minWidth: 860 }}>
           {/* ── Header Row ── */}
           <div style={rowStyle({
-            padding: "12px 16px",
+            padding: "10px 12px",
             background: "var(--card-hover)",
             borderBottom: "1px solid var(--border)",
           })}>
@@ -456,7 +456,7 @@ export default function ReceiptsPage() {
                 key={rec.id}
                 className="rec-row"
                 style={rowStyle({
-                  padding: "12px 16px",
+                  padding: "10px 12px",
                   borderBottom: isLast ? "none" : "1px solid var(--border)",
                   fontSize: 13,
                   transition: "background 0.15s",
