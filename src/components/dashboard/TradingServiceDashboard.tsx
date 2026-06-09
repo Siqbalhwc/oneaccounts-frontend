@@ -160,7 +160,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
   }
 
   return (
-    <div style={{ background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)", padding: "0.8rem 1.2rem" }}>
+    <div style={{ background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)", padding: "1rem 1.5rem" }}>
       <style>{`
         .tsd * { box-sizing: border-box; }
         .tsd .card {
@@ -168,6 +168,9 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           padding: 20px; box-shadow: var(--shadow-sm);
           transition: transform 0.1s ease, box-shadow 0.1s ease;
           cursor: pointer;
+          height: 100%;
+          display: flex;
+          flex-direction: column;
         }
         .tsd .card:hover {
           transform: translateY(-2px);
@@ -187,25 +190,46 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         .tsd .two-col {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 24px;
+          gap: 20px;
           margin-bottom: 24px;
         }
         .tsd .full-width {
-          margin-bottom: 24px;
+          margin-bottom: 20px;
         }
         .tsd table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
         .tsd th { text-align: left; padding: 8px 12px; border-bottom: 2px solid var(--border); color: var(--text-muted); font-weight: 600; font-size: 0.65rem; text-transform: uppercase; }
         .tsd td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
-        .tsd .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
-        .tsd .quick-action-btn {
-          background: var(--card); border: 1px solid var(--border); border-radius: 10px;
-          padding: 14px; text-align: center; font-size: 0.8rem; font-weight: 600;
-          color: var(--text); cursor: pointer; transition: 0.15s;
+        .tsd .quick-actions {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+          flex: 1;
+          align-items: stretch;
         }
-        .tsd .quick-action-btn:hover { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+        .tsd .quick-action-btn {
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 16px 8px;
+          text-align: center;
+          font-size: 0.85rem;
+          font-weight: 600;
+          color: var(--text);
+          cursor: pointer;
+          transition: 0.15s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+        }
+        .tsd .quick-action-btn:hover {
+          background: var(--primary);
+          color: var(--primary-text);
+          border-color: var(--primary);
+        }
         .tsd .alert-row {
           background: #fff7ed; border: 1px solid #fed7aa; border-left: 4px solid #f97316;
-          border-radius: 8px; padding: 10px 16px; margin-bottom: 8px; font-size: 0.8rem;
+          border-radius: 8px; padding: 10px 16px; margin-bottom: 12px; font-size: 0.8rem;
           display: flex; align-items: center; gap: 12px;
         }
         .tsd .alert-row strong { color: #c2410c; }
@@ -216,7 +240,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         .tsd .alert-btn.primary { background: #f97316; color: white; border-color: #f97316; }
         .tsd .chart-container {
           margin-top: 0;
-          padding: 12px 0 16px 0;
+          padding: 8px 0 12px 0;
           overflow-x: auto;
         }
         .tsd .bar-chart {
@@ -280,6 +304,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           .tsd .kpi-row { grid-template-columns: 1fr; }
           .tsd .hero { flex-direction: column; align-items: flex-start; }
           .customer-name { max-width: 120px; }
+          .tsd .quick-action-btn { padding: 12px 8px; font-size: 0.75rem; }
         }
       `}</style>
 
@@ -334,7 +359,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           </div>
         )}
 
-        {/* Two columns: Top 5 Customers + Quick Actions (side by side) */}
+        {/* Two columns: Top 5 Customers + Quick Actions */}
         <div className="two-col">
           {/* Top 5 Customers Card */}
           <div className="card" style={{ cursor: "default", overflow: "hidden" }} onClick={(e) => e.stopPropagation()}>
@@ -342,7 +367,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
               <span style={{ fontWeight: 700, fontSize: "1rem" }}>🏆 Top 5 Customers</span>
               <button onClick={() => router.push("/dashboard/customers")} style={{ background: "none", border: "none", color: "var(--primary)", cursor: "pointer", fontWeight: 600, fontFamily: "inherit", fontSize: "0.75rem" }}>View All →</button>
             </div>
-            <div style={{ overflowX: "auto" }}>
+            <div style={{ overflowX: "auto", flex: 1 }}>
               <table style={{ width: "100%", fontSize: "0.8rem" }}>
                 <thead>
                   <tr>
@@ -380,7 +405,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           </div>
         </div>
 
-        {/* Monthly Profit Trend (full width, below the two columns) */}
+        {/* Monthly Profit Trend */}
         <div className="full-width">
           <div className="card" style={{ cursor: "default" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
