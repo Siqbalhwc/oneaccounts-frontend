@@ -184,7 +184,15 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         }
         .tsd .kpi-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 6px; }
         .tsd .kpi-value { font-size: 1.7rem; font-weight: 800; }
-        .tsd .two-col { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 24px; }
+        .tsd .two-col {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 24px;
+          margin-bottom: 24px;
+        }
+        .tsd .full-width {
+          margin-bottom: 24px;
+        }
         .tsd table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
         .tsd th { text-align: left; padding: 8px 12px; border-bottom: 2px solid var(--border); color: var(--text-muted); font-weight: 600; font-size: 0.65rem; text-transform: uppercase; }
         .tsd td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
@@ -207,8 +215,8 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         }
         .tsd .alert-btn.primary { background: #f97316; color: white; border-color: #f97316; }
         .tsd .chart-container {
-          margin-top: 8px;
-          padding: 12px 0 24px 0;
+          margin-top: 0;
+          padding: 12px 0 16px 0;
           overflow-x: auto;
         }
         .tsd .bar-chart {
@@ -251,23 +259,32 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         .tsd .trend-summary {
           display: flex;
           justify-content: space-between;
-          margin-top: 20px;
-          padding-top: 12px;
+          margin-top: 12px;
+          padding-top: 8px;
           border-top: 1px solid var(--border);
           font-size: 0.75rem;
           font-weight: 600;
         }
+        .customer-name {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 180px;
+        }
         @media (max-width: 1024px) {
           .tsd .kpi-row { grid-template-columns: repeat(2, 1fr); }
-          .tsd .two-col { grid-template-columns: 1fr; }
+          .tsd .two-col { grid-template-columns: 1fr; gap: 16px; }
+          .customer-name { max-width: 140px; }
         }
         @media (max-width: 640px) {
           .tsd .kpi-row { grid-template-columns: 1fr; }
           .tsd .hero { flex-direction: column; align-items: flex-start; }
+          .customer-name { max-width: 120px; }
         }
       `}</style>
 
       <div className="tsd">
+        {/* Hero */}
         <div className="hero">
           <div>
             <h2 style={{ fontSize: "1.3rem", fontWeight: 700 }}>{getGreeting()}, {userDisplayName}</h2>
@@ -280,6 +297,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           </div>
         </div>
 
+        {/* KPI Cards */}
         <div className="kpi-row">
           {[
             { label: "💰 Total Revenue", value: formatPKR(animRevenue), color: "#10B981", onClick: () => router.push("/dashboard/reports/profit-loss") },
@@ -298,6 +316,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           ))}
         </div>
 
+        {/* Overdue alerts */}
         {overdueInvoicesCount > 0 && (
           <div className="alert-row">
             <span>⚠️ <strong>{overdueInvoicesCount} overdue invoices</strong></span>
@@ -315,7 +334,54 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           </div>
         )}
 
+        {/* Two columns: Top 5 Customers + Quick Actions (side by side) */}
         <div className="two-col">
+          {/* Top 5 Customers Card */}
+          <div className="card" style={{ cursor: "default", overflow: "hidden" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span style={{ fontWeight: 700, fontSize: "1rem" }}>🏆 Top 5 Customers</span>
+              <button onClick={() => router.push("/dashboard/customers")} style={{ background: "none", border: "none", color: "var(--primary)", cursor: "pointer", fontWeight: 600, fontFamily: "inherit", fontSize: "0.75rem" }}>View All →</button>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", fontSize: "0.8rem" }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: "6px 8px" }}>Customer</th>
+                    <th style={{ padding: "6px 8px", textAlign: "right" }}>Outstanding</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topCustomers.length === 0 ? (
+                    <tr><td colSpan={2} style={{ padding: "12px", textAlign: "center", color: "var(--text-muted)" }}>No customer data</td></tr>
+                  ) : (
+                    topCustomers.map((c, i) => (
+                      <tr key={i}>
+                        <td style={{ padding: "6px 8px" }}><span className="customer-name" title={c.name}>{c.name}</span></td>
+                        <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600, color: c.outstanding > 0 ? "#EF4444" : "#10B981" }}>
+                          {formatPKR(c.outstanding)}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Quick Actions Card */}
+          <div className="card" style={{ cursor: "default" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontWeight: 700, fontSize: "1rem", marginBottom: 12 }}>⚡ Quick Actions</div>
+            <div className="quick-actions">
+              <div className="quick-action-btn" onClick={() => router.push("/dashboard/invoices/new")}>➕ New Invoice</div>
+              <div className="quick-action-btn" onClick={() => router.push("/dashboard/bills/new")}>📦 New Bill</div>
+              <div className="quick-action-btn" onClick={() => router.push("/dashboard/receipts/new")}>💰 Receive Payment</div>
+              <div className="quick-action-btn" onClick={() => router.push("/dashboard/payments/new")}>💳 Record Payment</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Monthly Profit Trend (full width, below the two columns) */}
+        <div className="full-width">
           <div className="card" style={{ cursor: "default" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <span style={{ fontWeight: 700, fontSize: "1rem" }}>📊 Monthly Profit Trend</span>
@@ -341,43 +407,6 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
                   <span>📊 Avg: <strong>{formatPKR(monthlyProfit.reduce((s,m) => s + m.profit, 0) / 12)}</strong></span>
                 </>
               )}
-            </div>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-            <div className="card" style={{ cursor: "default" }} onClick={(e) => e.stopPropagation()}>
-              <div style={{ fontWeight: 700, fontSize: "1rem", marginBottom: 12 }}>⚡ Quick Actions</div>
-              <div className="quick-actions">
-                <div className="quick-action-btn" onClick={() => router.push("/dashboard/invoices/new")}>➕ New Invoice</div>
-                <div className="quick-action-btn" onClick={() => router.push("/dashboard/bills/new")}>📦 New Bill</div>
-                <div className="quick-action-btn" onClick={() => router.push("/dashboard/receipts/new")}>💰 Receive Payment</div>
-                <div className="quick-action-btn" onClick={() => router.push("/dashboard/payments/new")}>💳 Record Payment</div>
-              </div>
-            </div>
-
-            <div className="card" style={{ cursor: "default" }} onClick={(e) => e.stopPropagation()}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <span style={{ fontWeight: 700, fontSize: "1rem" }}>🏆 Top 5 Customers</span>
-                <button onClick={() => router.push("/dashboard/customers")} style={{ background: "none", border: "none", color: "var(--primary)", cursor: "pointer", fontWeight: 600, fontFamily: "inherit", fontSize: "0.8rem" }}>View All →</button>
-              </div>
-              <table>
-                <thead>
-                  <tr><th>Customer</th><th>Revenue</th><th>Outstanding</th></tr>
-                </thead>
-                <tbody>
-                  {topCustomers.length === 0 ? (
-                    <tr><td colSpan={3} style={{ textAlign: "center", color: "var(--text-muted)" }}>No customer data</td></tr>
-                  ) : (
-                    topCustomers.map((c, i) => (
-                      <tr key={i}>
-                        <td>{c.name}</td>
-                        <td style={{ color: "#10B981" }}>{formatPKR(c.revenue)}</td>
-                        <td style={{ color: c.outstanding > 0 ? "#EF4444" : "#10B981" }}>{c.outstanding > 0 ? formatPKR(c.outstanding) : "0"}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
             </div>
           </div>
         </div>
