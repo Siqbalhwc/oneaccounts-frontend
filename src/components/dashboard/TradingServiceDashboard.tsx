@@ -51,7 +51,6 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
   const [userDisplayName, setUserDisplayName] = useState("")
   const [businessType, setBusinessType] = useState("")
 
@@ -85,12 +84,13 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
     if (!companyId) return
     setLoading(true)
 
-    // Fiscal year: July of selected year to June of next year
-    const fiscalStartDate = `${fiscalYear}-07-01`
-    const fiscalEndDate = `${fiscalYear + 1}-06-30`
+    // 1. Get rolling 12 months ending on current month
+    const now = new Date()
+    const endDate = now.toISOString().split("T")[0]
+    const startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1).toISOString().split("T")[0]
 
     const fetchAll = async () => {
-      // 1. Cash & Bank, customers, suppliers, overdue, account IDs
+      // --- Cash, customers, etc. (unchanged, use same rolling period? Actually cash/receivables are point-in-time, keep as is) ---
       const [
         { data: bankAccounts },
         { data: cashAcc },
@@ -122,29 +122,49 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
       const revIds = (revAccs || []).map(a => a.id)
       const expIds = (expAccs || []).map(a => a.id)
 
-      // 2. Revenue & expense totals for the fiscal year (July–June)
+      // 2. Revenue & expense totals for rolling 12 months
       const [{ data: revLines }, { data: expLines }] = await Promise.all([
         supabase.from("journal_lines")
           .select("debit, credit, journal_entries!inner(date)")
           .eq("company_id", companyId)
           .in("account_id", revIds)
-          .gte("journal_entries.date", fiscalStartDate)
-          .lte("journal_entries.date", fiscalEndDate),
+          .gte("journal_entries.date", startDate)
+          .lte("journal_entries.date", endDate),
         supabase.from("journal_lines")
           .select("debit, credit, journal_entries!inner(date)")
           .eq("company_id", companyId)
           .in("account_id", expIds)
-          .gte("journal_entries.date", fiscalStartDate)
-          .lte("journal_entries.date", fiscalEndDate),
+          .gte("journal_entries.date", startDate)
+          .lte("journal_entries.date", endDate),
       ])
       const rev = (revLines || []).reduce((s, l) => s + (l.credit || 0) - (l.debit || 0), 0)
       const exp = (expLines || []).reduce((s, l) => s + (l.debit || 0) - (l.credit || 0), 0)
       setRevenueTotal(Math.abs(rev))
       setExpenseTotal(Math.abs(exp))
 
-      // 3. Monthly profit – fetch all revenue/expense lines for fiscal year, group by calendar month,
-      // then map to fiscal months (Jul–Jun)
-      const { data: monthlyRev } = await supabase
+      // 3. Monthly profit for each of the last 12 months
+      const months: Date[] = []
+      for (let i = 0; i < 12; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        months.unshift(d) // so earliest first
+      }
+
+      // Prepare month names and date ranges
+      const monthNames: string[] = []
+      const startDates: string[] = []
+      const endDates: string[] = []
+      months.forEach((m, idx) => {
+        const year = m.getFullYear()
+        const month = m.getMonth()
+        const start = new Date(year, month, 1).toISOString().split("T")[0]
+        const end = new Date(year, month + 1, 0).toISOString().split("T")[0]
+        startDates.push(start)
+        endDates.push(end)
+        monthNames.push(m.toLocaleString("default", { month: "short" }) + (idx === 11 ? ` ${year}` : ""))
+      })
+
+      // Fetch all revenue and expense lines for the entire 12-month window (single query each)
+      const { data: allRevLines } = await supabase
         .from("journal_lines")
         .select(`
           debit,
@@ -153,10 +173,10 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         `)
         .eq("company_id", companyId)
         .in("account_id", revIds)
-        .gte("journal_entries.date", fiscalStartDate)
-        .lte("journal_entries.date", fiscalEndDate)
+        .gte("journal_entries.date", startDates[0])
+        .lte("journal_entries.date", endDates[11])
 
-      const { data: monthlyExp } = await supabase
+      const { data: allExpLines } = await supabase
         .from("journal_lines")
         .select(`
           debit,
@@ -165,42 +185,41 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         `)
         .eq("company_id", companyId)
         .in("account_id", expIds)
-        .gte("journal_entries.date", fiscalStartDate)
-        .lte("journal_entries.date", fiscalEndDate)
+        .gte("journal_entries.date", startDates[0])
+        .lte("journal_entries.date", endDates[11])
 
-      // Aggregate by calendar month (1‑12)
-      const revenueByMonth: Record<number, number> = {}
-      const expenseByMonth: Record<number, number> = {}
-      for (let i = 1; i <= 12; i++) { revenueByMonth[i] = 0; expenseByMonth[i] = 0 }
-
-      ;(monthlyRev || []).forEach((l: any) => {
-        const month = new Date(l.journal_entries.date).getMonth() + 1
-        revenueByMonth[month] += (l.credit || 0) - (l.debit || 0)
-      })
-      ;(monthlyExp || []).forEach((l: any) => {
-        const month = new Date(l.journal_entries.date).getMonth() + 1
-        expenseByMonth[month] += (l.debit || 0) - (l.credit || 0)
-      })
-
-      // Fiscal year months order: July (7) to June (6)
-      const monthNames = ["Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar","Apr","May","Jun"]
-      const fiscalOrder = [7,8,9,10,11,12,1,2,3,4,5,6]
-      const monthly: MonthlyProfit[] = []
-      for (let i = 0; i < fiscalOrder.length; i++) {
-        const calMonth = fiscalOrder[i]
-        const profit = (revenueByMonth[calMonth] || 0) - (expenseByMonth[calMonth] || 0)
-        monthly.push({ month: monthNames[i], profit })
+      // Aggregate per month
+      const monthlyProfits: number[] = Array(12).fill(0)
+      const processLines = (lines: any[], isRevenue: boolean) => {
+        if (!lines) return
+        for (const line of lines) {
+          const lineDate = line.journal_entries.date
+          const amount = isRevenue ? (line.credit || 0) - (line.debit || 0) : (line.debit || 0) - (line.credit || 0)
+          for (let i = 0; i < 12; i++) {
+            if (lineDate >= startDates[i] && lineDate <= endDates[i]) {
+              monthlyProfits[i] += amount
+              break
+            }
+          }
+        }
       }
+      processLines(allRevLines, true)
+      processLines(allExpLines, false)
+
+      const monthly: MonthlyProfit[] = monthNames.map((month, idx) => ({
+        month,
+        profit: monthlyProfits[idx]
+      }))
       setMonthlyProfit(monthly)
 
-      // 4. Top customers (fiscal year)
+      // 4. Top customers for rolling year
       const { data: topCustRows } = await supabase
         .from("invoices")
         .select("party_id, customers(name), total")
         .eq("company_id", companyId)
         .eq("type", "sale")
-        .gte("date", fiscalStartDate)
-        .lte("date", fiscalEndDate)
+        .gte("date", startDates[0])
+        .lte("date", endDates[11])
 
       const custMap: Record<number, { name: string; revenue: number; outstanding: number }> = {}
       ;(topCustRows || []).forEach((inv: any) => {
@@ -217,7 +236,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
       setLoading(false)
     }
     fetchAll()
-  }, [companyId, fiscalYear])
+  }, [companyId])
 
   const getGreeting = (): string => {
     const hour = new Date().getHours()
@@ -258,7 +277,6 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
     </div>
   }
 
-  // Render JSX (identical to your original, with clickable KPI cards)
   return (
     <div style={{ background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)", padding: "0.8rem 1.2rem" }}>
       <style>{`
@@ -306,13 +324,57 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           padding: 4px 12px; font-size: 0.75rem; font-weight: 600; cursor: pointer; font-family: inherit;
         }
         .tsd .alert-btn.primary { background: #f97316; color: white; border-color: #f97316; }
-        .tsd .bar-chart { display: flex; align-items: flex-end; gap: 12px; height: 180px; padding: 0 8px; }
-        .tsd .bar-column { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-        .tsd .bar { width: 100%; background: linear-gradient(180deg, #6366f1, #818cf8); border-radius: 6px 6px 0 0; transition: height 0.3s; min-height: 4px; }
-        .tsd .bar.negative { background: linear-gradient(180deg, #ef4444, #f87171); }
-        .tsd .bar-label { font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
-        .tsd .bar-value { font-size: 10px; font-weight: 700; color: var(--text); }
-        .tsd .trend-summary { display: flex; justify-content: space-between; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 0.75rem; font-weight: 600; }
+        .tsd .chart-container {
+          margin-top: 8px;
+          padding: 12px 0 24px 0;
+          overflow-x: auto;
+        }
+        .tsd .bar-chart {
+          display: flex;
+          align-items: flex-end;
+          gap: 12px;
+          height: 200px;
+          padding: 0 8px;
+          min-width: 600px;
+        }
+        .tsd .bar-column {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 8px;
+        }
+        .tsd .bar {
+          width: 100%;
+          background: linear-gradient(180deg, #6366f1, #818cf8);
+          border-radius: 6px 6px 0 0;
+          transition: height 0.3s;
+          min-height: 4px;
+        }
+        .tsd .bar.negative {
+          background: linear-gradient(180deg, #ef4444, #f87171);
+        }
+        .tsd .bar-value {
+          font-size: 10px;
+          font-weight: 700;
+          color: var(--text);
+          white-space: nowrap;
+        }
+        .tsd .bar-label {
+          font-size: 10px;
+          color: var(--text-muted);
+          font-weight: 600;
+          text-transform: uppercase;
+        }
+        .tsd .trend-summary {
+          display: flex;
+          justify-content: space-between;
+          margin-top: 20px;
+          padding-top: 12px;
+          border-top: 1px solid var(--border);
+          font-size: 0.75rem;
+          font-weight: 600;
+        }
         @media (max-width: 1024px) {
           .tsd .kpi-row { grid-template-columns: repeat(2, 1fr); }
           .tsd .two-col { grid-template-columns: 1fr; }
@@ -333,11 +395,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
             </p>
           </div>
           <div>
-            <label style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginRight: 8 }}>Fiscal Year:</label>
-            <select value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}
-              style={{ padding: "6px 12px", borderRadius: "20px", border: "1px solid var(--border)", background: "var(--card)", color: "var(--text)", fontFamily: "inherit" }}>
-              {[2023,2024,2025,2026].map(y => <option key={y} value={y}>FY {y}–{y+1}</option>)}
-            </select>
+            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Last 12 months</span>
           </div>
         </div>
 
@@ -384,22 +442,28 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           <div className="card" style={{ cursor: "default" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <span style={{ fontWeight: 700, fontSize: "1rem" }}>📊 Monthly Profit Trend</span>
-              <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>FY {fiscalYear}–{fiscalYear+1}</span>
+              <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Last 12 months</span>
             </div>
-            <div className="bar-chart">
-              {monthlyProfit.map((m, i) => (
-                <div key={i} className="bar-column">
-                  <div className={`bar ${m.profit < 0 ? "negative" : ""}`}
-                    style={{ height: `${(Math.abs(m.profit) / maxProfit) * 160 + 4}px` }} />
-                  <div className="bar-value">{formatPKR(m.profit)}</div>
-                  <div className="bar-label">{m.month}</div>
-                </div>
-              ))}
+            <div className="chart-container">
+              <div className="bar-chart">
+                {monthlyProfit.map((m, i) => (
+                  <div key={i} className="bar-column">
+                    <div className={`bar ${m.profit < 0 ? "negative" : ""}`}
+                      style={{ height: `${(Math.abs(m.profit) / maxProfit) * 140 + 4}px` }} />
+                    <div className="bar-value">{formatPKR(m.profit)}</div>
+                    <div className="bar-label">{m.month}</div>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="trend-summary">
-              <span>📈 Best month: <strong>{monthlyProfit.reduce((a,b) => a.profit > b.profit ? a : b).month}</strong></span>
-              <span>📉 Worst month: <strong>{monthlyProfit.reduce((a,b) => a.profit < b.profit ? a : b).month}</strong></span>
-              <span>📊 Average: <strong>{formatPKR(monthlyProfit.reduce((s,m) => s + m.profit, 0) / 12)}</strong></span>
+              {monthlyProfit.length > 0 && (
+                <>
+                  <span>📈 Best: <strong>{monthlyProfit.reduce((a,b) => a.profit > b.profit ? a : b).month}</strong> ({formatPKR(Math.max(...monthlyProfit.map(m=>m.profit)))})</span>
+                  <span>📉 Worst: <strong>{monthlyProfit.reduce((a,b) => a.profit < b.profit ? a : b).month}</strong> ({formatPKR(Math.min(...monthlyProfit.map(m=>m.profit)))})</span>
+                  <span>📊 Avg: <strong>{formatPKR(monthlyProfit.reduce((s,m) => s + m.profit, 0) / 12)}</strong></span>
+                </>
+              )}
             </div>
           </div>
 
