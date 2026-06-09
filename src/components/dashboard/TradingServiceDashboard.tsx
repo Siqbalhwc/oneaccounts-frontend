@@ -84,10 +84,13 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
   useEffect(() => {
     if (!companyId) return
     setLoading(true)
-    const fetchAll = async () => {
-      const startDate = `${fiscalYear}-01-01`
-      const endDate   = `${fiscalYear}-12-31`
 
+    // Fiscal year: July of selected year to June of next year
+    const fiscalStartDate = `${fiscalYear}-07-01`
+    const fiscalEndDate = `${fiscalYear + 1}-06-30`
+
+    const fetchAll = async () => {
+      // 1. Cash & Bank, customers, suppliers, overdue, account IDs
       const [
         { data: bankAccounts },
         { data: cashAcc },
@@ -97,7 +100,6 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         { data: overdueBills },
         { data: revAccs },
         { data: expAccs },
-        { data: topCustRows },
       ] = await Promise.all([
         supabase.from("bank_accounts").select("current_balance").eq("company_id", companyId),
         supabase.from("accounts").select("balance").eq("company_id", companyId).eq("code", "1000").maybeSingle(),
@@ -107,86 +109,110 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         supabase.from("invoices").select("id").eq("company_id", companyId).eq("type", "purchase").in("status", ["Unpaid","Partial"]).lt("due_date", new Date().toISOString().split("T")[0]),
         supabase.from("accounts").select("id").eq("company_id", companyId).eq("type", "Revenue"),
         supabase.from("accounts").select("id").eq("company_id", companyId).eq("type", "Expense"),
-        // Top customers by revenue
-        supabase.from("invoices").select("party_id, customers(name), total").eq("company_id", companyId).eq("type", "sale").gte("date", startDate).lte("date", endDate),
       ])
 
-      // Cash & bank
       const bankCash = bankAccounts?.reduce((s: number, b: any) => s + (b.current_balance || 0), 0) || 0
       const cash = cashAcc?.balance || 0
       setCashBalance(bankCash + cash)
-
-      // Receivables / Payables
-      const receivables = customers?.reduce((s: number, c: any) => s + (c.balance || 0), 0) || 0
-      const payables = suppliers?.reduce((s: number, s2: any) => s + (s2.balance || 0), 0) || 0
-      setTotalReceivables(receivables)
-      setTotalPayables(payables)
-
+      setTotalReceivables(customers?.reduce((s: number, c: any) => s + (c.balance || 0), 0) || 0)
+      setTotalPayables(suppliers?.reduce((s: number, s2: any) => s + (s2.balance || 0), 0) || 0)
       setOverdueInvoicesCount(overdueInvoices?.length || 0)
       setOverdueBillsCount(overdueBills?.length || 0)
 
-      // Revenue & expense totals
       const revIds = (revAccs || []).map(a => a.id)
       const expIds = (expAccs || []).map(a => a.id)
 
-      const { data: revLines } = await supabase.from("journal_lines")
-        .select("debit, credit, journal_entries!inner(date)")
-        .eq("company_id", companyId)
-        .in("account_id", revIds)
-        .gte("journal_entries.date", startDate)
-        .lte("journal_entries.date", endDate)
-      const rev = (revLines || []).reduce((s, l) => s + (l.credit || 0) - (l.debit || 0), 0)
-
-      const { data: expLines } = await supabase.from("journal_lines")
-        .select("debit, credit, journal_entries!inner(date)")
-        .eq("company_id", companyId)
-        .in("account_id", expIds)
-        .gte("journal_entries.date", startDate)
-        .lte("journal_entries.date", endDate)
-      const exp = (expLines || []).reduce((s, l) => s + (l.debit || 0) - (l.credit || 0), 0)
-
-      setRevenueTotal(Math.abs(rev))
-      setExpenseTotal(Math.abs(exp))
-
-      // Monthly profit
-      const monthNames = ["Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar","Apr","May","Jun"]
-      const monthly: MonthlyProfit[] = []
-      for (let i = 0; i < 12; i++) {
-        const monthStart = new Date(fiscalYear, i, 1).toISOString().split("T")[0]
-        const monthEnd   = new Date(fiscalYear, i + 1, 0).toISOString().split("T")[0]
-        const { data: mRev } = await supabase.from("journal_lines")
+      // 2. Revenue & expense totals for the fiscal year (July–June)
+      const [{ data: revLines }, { data: expLines }] = await Promise.all([
+        supabase.from("journal_lines")
           .select("debit, credit, journal_entries!inner(date)")
           .eq("company_id", companyId)
           .in("account_id", revIds)
-          .gte("journal_entries.date", monthStart)
-          .lte("journal_entries.date", monthEnd)
-        const { data: mExp } = await supabase.from("journal_lines")
+          .gte("journal_entries.date", fiscalStartDate)
+          .lte("journal_entries.date", fiscalEndDate),
+        supabase.from("journal_lines")
           .select("debit, credit, journal_entries!inner(date)")
           .eq("company_id", companyId)
           .in("account_id", expIds)
-          .gte("journal_entries.date", monthStart)
-          .lte("journal_entries.date", monthEnd)
-        const mRevTot = (mRev || []).reduce((s, l) => s + (l.credit || 0) - (l.debit || 0), 0)
-        const mExpTot = (mExp || []).reduce((s, l) => s + (l.debit || 0) - (l.credit || 0), 0)
-        monthly.push({ month: monthNames[i], profit: mRevTot - mExpTot })
+          .gte("journal_entries.date", fiscalStartDate)
+          .lte("journal_entries.date", fiscalEndDate),
+      ])
+      const rev = (revLines || []).reduce((s, l) => s + (l.credit || 0) - (l.debit || 0), 0)
+      const exp = (expLines || []).reduce((s, l) => s + (l.debit || 0) - (l.credit || 0), 0)
+      setRevenueTotal(Math.abs(rev))
+      setExpenseTotal(Math.abs(exp))
+
+      // 3. Monthly profit – fetch all revenue/expense lines for fiscal year, group by calendar month,
+      // then map to fiscal months (Jul–Jun)
+      const { data: monthlyRev } = await supabase
+        .from("journal_lines")
+        .select(`
+          debit,
+          credit,
+          journal_entries!inner(date)
+        `)
+        .eq("company_id", companyId)
+        .in("account_id", revIds)
+        .gte("journal_entries.date", fiscalStartDate)
+        .lte("journal_entries.date", fiscalEndDate)
+
+      const { data: monthlyExp } = await supabase
+        .from("journal_lines")
+        .select(`
+          debit,
+          credit,
+          journal_entries!inner(date)
+        `)
+        .eq("company_id", companyId)
+        .in("account_id", expIds)
+        .gte("journal_entries.date", fiscalStartDate)
+        .lte("journal_entries.date", fiscalEndDate)
+
+      // Aggregate by calendar month (1‑12)
+      const revenueByMonth: Record<number, number> = {}
+      const expenseByMonth: Record<number, number> = {}
+      for (let i = 1; i <= 12; i++) { revenueByMonth[i] = 0; expenseByMonth[i] = 0 }
+
+      ;(monthlyRev || []).forEach((l: any) => {
+        const month = new Date(l.journal_entries.date).getMonth() + 1
+        revenueByMonth[month] += (l.credit || 0) - (l.debit || 0)
+      })
+      ;(monthlyExp || []).forEach((l: any) => {
+        const month = new Date(l.journal_entries.date).getMonth() + 1
+        expenseByMonth[month] += (l.debit || 0) - (l.credit || 0)
+      })
+
+      // Fiscal year months order: July (7) to June (6)
+      const monthNames = ["Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar","Apr","May","Jun"]
+      const fiscalOrder = [7,8,9,10,11,12,1,2,3,4,5,6]
+      const monthly: MonthlyProfit[] = []
+      for (let i = 0; i < fiscalOrder.length; i++) {
+        const calMonth = fiscalOrder[i]
+        const profit = (revenueByMonth[calMonth] || 0) - (expenseByMonth[calMonth] || 0)
+        monthly.push({ month: monthNames[i], profit })
       }
       setMonthlyProfit(monthly)
 
-      // Top customers
+      // 4. Top customers (fiscal year)
+      const { data: topCustRows } = await supabase
+        .from("invoices")
+        .select("party_id, customers(name), total")
+        .eq("company_id", companyId)
+        .eq("type", "sale")
+        .gte("date", fiscalStartDate)
+        .lte("date", fiscalEndDate)
+
       const custMap: Record<number, { name: string; revenue: number; outstanding: number }> = {}
       ;(topCustRows || []).forEach((inv: any) => {
         const pid = inv.party_id
         if (!custMap[pid]) custMap[pid] = { name: inv.customers?.name || "Unknown", revenue: 0, outstanding: 0 }
         custMap[pid].revenue += inv.total || 0
       })
-      // Outstanding from customer balances
-      const custBalances = await supabase.from("customers").select("id, balance").eq("company_id", companyId)
-      ;(custBalances.data || []).forEach((c: any) => {
+      const { data: custBalances } = await supabase.from("customers").select("id, balance").eq("company_id", companyId)
+      ;(custBalances || []).forEach((c: any) => {
         if (custMap[c.id]) custMap[c.id].outstanding = c.balance || 0
       })
-      setTopCustomers(
-        Object.values(custMap).sort((a, b) => b.revenue - a.revenue).slice(0, 5)
-      )
+      setTopCustomers(Object.values(custMap).sort((a, b) => b.revenue - a.revenue).slice(0, 5))
 
       setLoading(false)
     }
@@ -232,6 +258,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
     </div>
   }
 
+  // Render JSX (identical to your original, with clickable KPI cards)
   return (
     <div style={{ background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)", padding: "0.8rem 1.2rem" }}>
       <style>{`
@@ -239,6 +266,13 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         .tsd .card {
           background: var(--card); border: 1px solid var(--border); border-radius: 14px;
           padding: 20px; box-shadow: var(--shadow-sm);
+          transition: transform 0.1s ease, box-shadow 0.1s ease;
+          cursor: pointer;
+        }
+        .tsd .card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+          border-color: var(--primary);
         }
         .tsd .hero {
           background: var(--card); border: 1px solid var(--border); border-radius: 14px;
@@ -299,27 +333,27 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
             </p>
           </div>
           <div>
-            <label style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginRight: 8 }}>Period:</label>
+            <label style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginRight: 8 }}>Fiscal Year:</label>
             <select value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}
               style={{ padding: "6px 12px", borderRadius: "20px", border: "1px solid var(--border)", background: "var(--card)", color: "var(--text)", fontFamily: "inherit" }}>
-              {[2024,2025,2026,2027].map(y => <option key={y} value={y}>FY {y}</option>)}
+              {[2023,2024,2025,2026].map(y => <option key={y} value={y}>FY {y}–{y+1}</option>)}
             </select>
           </div>
         </div>
 
-        {/* KPI Cards */}
+        {/* KPI Cards – clickable */}
         <div className="kpi-row">
           {[
-            { label: "💰 Total Revenue",  value: formatPKR(animRevenue), color: "#10B981" },
-            { label: "📤 Total Expenses", value: formatPKR(animExpense), color: "#EF4444" },
-            { label: "📈 Gross Profit",   value: formatPKR(animProfit),  color: grossProfit >= 0 ? "#10B981" : "#EF4444" },
-            { label: "🏦 Cash & Bank",    value: formatPKR(animCash),    color: "#A78BFA" },
-            { label: "🧾 Receivables",   value: formatPKR(animRecv),    color: "#F97316" },
-            { label: "📋 Payables",      value: formatPKR(animPay),     color: "#EF4444" },
-            { label: "⚠️ Overdue Inv.",   value: overdueInvoicesCount.toString(), color: "#EF4444" },
-            { label: "⚠️ Overdue Bills",  value: overdueBillsCount.toString(), color: "#EF4444" },
+            { label: "💰 Total Revenue",  value: formatPKR(animRevenue), color: "#10B981", onClick: () => router.push("/dashboard/reports/profit-loss") },
+            { label: "📤 Total Expenses", value: formatPKR(animExpense), color: "#EF4444", onClick: () => router.push("/dashboard/reports/profit-loss") },
+            { label: "📈 Gross Profit",   value: formatPKR(animProfit),  color: grossProfit >= 0 ? "#10B981" : "#EF4444", onClick: () => router.push("/dashboard/reports/profit-loss") },
+            { label: "🏦 Cash & Bank",    value: formatPKR(animCash),    color: "#A78BFA", onClick: () => router.push("/dashboard/banking/bank-accounts") },
+            { label: "🧾 Receivables",   value: formatPKR(animRecv),    color: "#F97316", onClick: () => router.push("/dashboard/customers") },
+            { label: "📋 Payables",      value: formatPKR(animPay),     color: "#EF4444", onClick: () => router.push("/dashboard/suppliers") },
+            { label: "⚠️ Overdue Inv.",   value: overdueInvoicesCount.toString(), color: "#EF4444", onClick: () => router.push("/dashboard/invoices?status=Unpaid&overdue=true") },
+            { label: "⚠️ Overdue Bills",  value: overdueBillsCount.toString(), color: "#EF4444", onClick: () => router.push("/dashboard/bills?status=Unpaid&overdue=true") },
           ].map(kpi => (
-            <div key={kpi.label} className="card">
+            <div key={kpi.label} className="card" onClick={kpi.onClick}>
               <div className="kpi-label">{kpi.label}</div>
               <div className="kpi-value" style={{ color: kpi.color }}>{kpi.value}</div>
             </div>
@@ -329,7 +363,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         {/* Overdue alerts */}
         {overdueInvoicesCount > 0 && (
           <div className="alert-row">
-            <span>⚠️ <strong>{overdueInvoicesCount} overdue invoices</strong> – total PKR {formatPKR(totalReceivables)}</span>
+            <span>⚠️ <strong>{overdueInvoicesCount} overdue invoices</strong></span>
             <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
               <button className="alert-btn" onClick={() => router.push("/dashboard/invoices?status=Unpaid&overdue=true")}>View All</button>
             </div>
@@ -337,7 +371,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         )}
         {overdueBillsCount > 0 && (
           <div className="alert-row">
-            <span>⚠️ <strong>{overdueBillsCount} overdue bills</strong> – total PKR {formatPKR(totalPayables)}</span>
+            <span>⚠️ <strong>{overdueBillsCount} overdue bills</strong></span>
             <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
               <button className="alert-btn" onClick={() => router.push("/dashboard/bills?status=Unpaid&overdue=true")}>View All</button>
             </div>
@@ -347,10 +381,10 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         {/* Two columns */}
         <div className="two-col">
           {/* Monthly Profit Trend */}
-          <div className="card">
+          <div className="card" style={{ cursor: "default" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <span style={{ fontWeight: 700, fontSize: "1rem" }}>📊 Monthly Profit Trend</span>
-              <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>FY {fiscalYear}</span>
+              <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>FY {fiscalYear}–{fiscalYear+1}</span>
             </div>
             <div className="bar-chart">
               {monthlyProfit.map((m, i) => (
@@ -371,7 +405,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
 
           {/* Right Column */}
           <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-            <div className="card">
+            <div className="card" style={{ cursor: "default" }} onClick={(e) => e.stopPropagation()}>
               <div style={{ fontWeight: 700, fontSize: "1rem", marginBottom: 12 }}>⚡ Quick Actions</div>
               <div className="quick-actions">
                 <div className="quick-action-btn" onClick={() => router.push("/dashboard/invoices/new")}>➕ New Invoice</div>
@@ -381,7 +415,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
               </div>
             </div>
 
-            <div className="card">
+            <div className="card" style={{ cursor: "default" }} onClick={(e) => e.stopPropagation()}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <span style={{ fontWeight: 700, fontSize: "1rem" }}>🏆 Top 5 Customers</span>
                 <button onClick={() => router.push("/dashboard/customers")} style={{ background: "none", border: "none", color: "var(--primary)", cursor: "pointer", fontWeight: 600, fontFamily: "inherit", fontSize: "0.8rem" }}>View All →</button>
