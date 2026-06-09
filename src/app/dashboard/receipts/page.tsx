@@ -11,14 +11,16 @@ type SortField = "receipt_no" | "date" | "customer" | "amount" | "method" | "cre
 type SortDir = "asc" | "desc"
 
 // ─── Column definitions ────────────────────────────────────────────────────────
+// Using fixed px for predictable columns + 1fr only on customer (the natural "wide" column).
+// Actions is always 100px fixed so it never gets squeezed or overlapped.
 const ALL_COLUMNS = [
-  { key: "receipt_no", label: "Receipt #",          flex: "minmax(110px, 1fr)",   default: true },
-  { key: "date",       label: "Date",               flex: "minmax(100px, 0.9fr)", default: true },
-  { key: "customer",   label: "Customer",           flex: "minmax(150px, 1.6fr)", default: true },
-  { key: "amount",     label: "Amount",             flex: "minmax(110px, 1fr)",   default: true },
-  { key: "method",     label: "Method",             flex: "minmax(100px, 0.9fr)", default: true },
-  { key: "created_by", label: "Created / Edited By",flex: "minmax(160px, 1.3fr)", default: true },
-  { key: "actions",    label: "Actions",            flex: "minmax(110px, auto)",  default: true },
+  { key: "receipt_no", label: "Receipt #",           flex: "130px",  default: true },
+  { key: "date",       label: "Date",                flex: "110px",  default: true },
+  { key: "customer",   label: "Customer",            flex: "1fr",    default: true },
+  { key: "amount",     label: "Amount",              flex: "130px",  default: true },
+  { key: "method",     label: "Method",              flex: "120px",  default: true },
+  { key: "created_by", label: "Created / Edited By", flex: "190px",  default: true },
+  { key: "actions",    label: "Actions",             flex: "100px",  default: true },
 ]
 
 // ─── Skeleton row ──────────────────────────────────────────────────────────────
@@ -394,12 +396,13 @@ export default function ReceiptsPage() {
           background: "var(--card)", border: "1px solid var(--border)",
           borderRadius: 12, overflowX: "auto",
         }}>
+          {/* min-width forces horizontal scroll before columns ever compress */}
+          <div style={{ minWidth: 860 }}>
           {/* ── Header Row ── */}
           <div style={rowStyle({
-            padding: "12px 24px",
+            padding: "12px 16px",
             background: "var(--card-hover)",
             borderBottom: "1px solid var(--border)",
-            position: "sticky", top: 0, zIndex: 10,
           })}>
             {visibleColumns.receipt_no && (
               <button className="sort-btn" onClick={() => handleSort("receipt_no")}>
@@ -453,7 +456,7 @@ export default function ReceiptsPage() {
                 key={rec.id}
                 className="rec-row"
                 style={rowStyle({
-                  padding: "12px 24px",
+                  padding: "12px 16px",
                   borderBottom: isLast ? "none" : "1px solid var(--border)",
                   fontSize: 13,
                   transition: "background 0.15s",
@@ -528,6 +531,7 @@ export default function ReceiptsPage() {
               </div>
             )
           })}
+          </div>{/* end min-width inner wrapper */}
         </div>
       )}
     </div>
