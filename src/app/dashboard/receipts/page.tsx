@@ -5,19 +5,18 @@ import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
 import { Plus, Eye, Edit, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown, Settings } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
-import { usePlan } from "@/contexts/PlanContext"
 
 type SortField = "receipt_no" | "date" | "customer" | "amount" | "method" | "created_by"
 type SortDir = "asc" | "desc"
 
 const ALL_COLUMNS = [
-  { key: "receipt_no", label: "Receipt #", default: true, width: "minmax(110px, 1fr)" },
-  { key: "date", label: "Date", default: true, width: "minmax(100px, 1fr)" },
-  { key: "customer", label: "Customer", default: true, width: "minmax(160px, 1.5fr)" },
-  { key: "amount", label: "Amount", default: true, width: "minmax(110px, 1fr)" },
-  { key: "method", label: "Method", default: true, width: "minmax(100px, 1fr)" },
-  { key: "created_by", label: "Created / Edited By", default: true, width: "minmax(140px, 1.2fr)" },
-  { key: "actions", label: "Actions", default: true, width: "minmax(110px, auto)" },
+  { key: "receipt_no", label: "Receipt #", default: true },
+  { key: "date", label: "Date", default: true },
+  { key: "customer", label: "Customer", default: true },
+  { key: "amount", label: "Amount", default: true },
+  { key: "method", label: "Method", default: true },
+  { key: "created_by", label: "Created / Edited By", default: true },
+  { key: "actions", label: "Actions", default: true },
 ]
 
 export default function ReceiptsPage() {
@@ -27,7 +26,6 @@ export default function ReceiptsPage() {
   )
   const router = useRouter()
   const { role } = useRole()
-  const { hasFeature } = usePlan()
   const canView = role === "admin" || role === "accountant"
   const canEdit = role === "admin" || role === "accountant"
 
@@ -161,12 +159,6 @@ export default function ReceiptsPage() {
     setVisibleColumns(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
-  const gridTemplateColumns = () => {
-    return ALL_COLUMNS.filter(col => visibleColumns[col.key])
-      .map(col => col.width)
-      .join(" ")
-  }
-
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
@@ -174,27 +166,18 @@ export default function ReceiptsPage() {
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow-x: auto; }
-        .rec-table { width: 100%; }
-        .header-row, .data-row {
-          display: grid;
-          grid-template-columns: ${gridTemplateColumns()};
-          column-gap: 12px;
-          padding: 12px 20px;
-          align-items: center;
+        .receipts-table { width: 100%; border-collapse: collapse; }
+        .receipts-table th, .receipts-table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); }
+        .receipts-table th { background: var(--card); font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+        .receipts-table td { font-size: 13px; color: var(--text); vertical-align: middle; }
+        .receipts-table tr:hover td { background: var(--card-hover); }
+        .sort-btn {
+          background: none; border: none; color: var(--text-muted); cursor: pointer;
+          display: inline-flex; align-items: center; gap: 4px; padding: 0;
+          font-weight: 700; text-transform: uppercase; font-size: 10px;
+          font-family: inherit;
         }
-        .header-row {
-          background: var(--card);
-          border-bottom: 1px solid var(--border);
-          font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
-          padding: 14px 20px;
-        }
-        .data-row {
-          border-bottom: 1px solid var(--border);
-          font-size: 13px;
-          transition: background 0.15s;
-        }
-        .data-row:hover { background: var(--card-hover); }
-        .data-row:last-child { border-bottom: none; }
+        .sort-btn:hover { color: var(--primary); }
         .btn {
           padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
           cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
@@ -214,12 +197,6 @@ export default function ReceiptsPage() {
           background: var(--card); color: var(--text); outline: none; box-sizing: border-box;
         }
         .input:focus { border-color: var(--primary); }
-        .sort-btn {
-          background: none; border: none; color: var(--text-muted); cursor: pointer;
-          display: inline-flex; align-items: center; gap: 4px; padding: 0;
-          font-weight: 700; text-transform: uppercase; font-size: 10px;
-        }
-        .sort-btn:hover { color: var(--primary); }
         .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
         .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
@@ -235,13 +212,8 @@ export default function ReceiptsPage() {
           display: flex;
           gap: 6px;
           flex-wrap: nowrap;
-          justify-content: flex-end;
-          align-items: center;
         }
-        .header-actions {
-          text-align: right;
-          justify-self: end;
-        }
+        .header-actions { text-align: right; }
         .column-menu {
           position: absolute;
           right: 0;
@@ -276,18 +248,20 @@ export default function ReceiptsPage() {
           font-weight: 600;
           color: #10B981;
           text-align: right;
-          display: block;
+          display: inline-block;
+          width: 100%;
         }
         .method-value {
           text-align: center;
-          display: block;
+          display: inline-block;
+          width: 100%;
         }
         @media (max-width: 768px) {
-          .header-row, .data-row { padding: 10px 12px; column-gap: 8px; }
-          .btn-icon { padding: 4px; }
+          .receipts-table th, .receipts-table td { padding: 8px 12px; }
         }
       `}</style>
 
+      {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>💰 Receipts</h1>
@@ -321,6 +295,7 @@ export default function ReceiptsPage() {
         </div>
       </div>
 
+      {/* Summary Cards */}
       <div className="summary-grid">
         <div className="summary-item">
           <div className="summary-label">Total Receipts</div>
@@ -332,6 +307,7 @@ export default function ReceiptsPage() {
         </div>
       </div>
 
+      {/* Search */}
       <div className="filter-bar">
         <div style={{ position: "relative", flex: 1, maxWidth: 320 }}>
           <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
@@ -344,6 +320,7 @@ export default function ReceiptsPage() {
         </div>
       </div>
 
+      {/* Table */}
       {loading ? (
         <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading receipts…</div>
       ) : sortedFiltered.length === 0 ? (
@@ -352,51 +329,61 @@ export default function ReceiptsPage() {
         </div>
       ) : (
         <div className="card">
-          <div className="header-row">
-            {visibleColumns.receipt_no && <button className="sort-btn" onClick={() => handleSort("receipt_no")}>Receipt # {getSortIcon("receipt_no")}</button>}
-            {visibleColumns.date && <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>}
-            {visibleColumns.customer && <button className="sort-btn" onClick={() => handleSort("customer")}>Customer {getSortIcon("customer")}</button>}
-            {visibleColumns.amount && <button className="sort-btn" onClick={() => handleSort("amount")} style={{ justifyContent: "flex-end" }}>Amount {getSortIcon("amount")}</button>}
-            {visibleColumns.method && <button className="sort-btn" onClick={() => handleSort("method")} style={{ justifyContent: "center" }}>Method {getSortIcon("method")}</button>}
-            {visibleColumns.created_by && <button className="sort-btn" onClick={() => handleSort("created_by")} style={{ justifyContent: "center" }}>Created / Edited By {getSortIcon("created_by")}</button>}
-            {visibleColumns.actions && <div className="header-actions">Actions</div>}
-          </div>
-          {sortedFiltered.map((rec) => {
-            const cust = customerMap[rec.party_id]
-            const custName = rec.party_id ? (cust?.name || "—") : "🎁 Donation"
-            return (
-              <div key={rec.id} className="data-row">
-                {visibleColumns.receipt_no && <span style={{ fontWeight: 600, color: "var(--primary)" }}>{rec.receipt_no}</span>}
-                {visibleColumns.date && <span>{rec.date}</span>}
-                {visibleColumns.customer && <span>{custName}</span>}
-                {visibleColumns.amount && <span className="amount-value">PKR {rec.amount?.toLocaleString()}</span>}
-                {visibleColumns.method && <span className="method-value">{rec.payment_method || "—"}</span>}
-                {visibleColumns.created_by && (
-                  <div className="creator-editor-cell">
-                    <span>Created: {rec.created_by || "—"}</span>
-                    <span>Edited: {rec.updated_by || "—"}</span>
-                  </div>
-                )}
-                {visibleColumns.actions && (
-                  <div className="actions-cell">
-                    <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/${rec.id}`)} title="View receipt">
-                      <Eye size={14} />
-                    </button>
-                    {canEdit && (
-                      <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/new?id=${rec.id}`)} title="Edit receipt">
-                        <Edit size={14} />
-                      </button>
+          <table className="receipts-table">
+            <thead>
+              <tr>
+                {visibleColumns.receipt_no && <th><button className="sort-btn" onClick={() => handleSort("receipt_no")}>Receipt # {getSortIcon("receipt_no")}</button></th>}
+                {visibleColumns.date && <th><button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button></th>}
+                {visibleColumns.customer && <th><button className="sort-btn" onClick={() => handleSort("customer")}>Customer {getSortIcon("customer")}</button></th>}
+                {visibleColumns.amount && <th style={{ textAlign: "right" }}><button className="sort-btn" onClick={() => handleSort("amount")}>Amount {getSortIcon("amount")}</button></th>}
+                {visibleColumns.method && <th style={{ textAlign: "center" }}><button className="sort-btn" onClick={() => handleSort("method")}>Method {getSortIcon("method")}</button></th>}
+                {visibleColumns.created_by && <th><button className="sort-btn" onClick={() => handleSort("created_by")}>Created / Edited By {getSortIcon("created_by")}</button></th>}
+                {visibleColumns.actions && <th style={{ textAlign: "right" }}>Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {sortedFiltered.map((rec) => {
+                const cust = customerMap[rec.party_id]
+                const custName = rec.party_id ? (cust?.name || "—") : "🎁 Donation"
+                return (
+                  <tr key={rec.id}>
+                    {visibleColumns.receipt_no && <td style={{ fontWeight: 600, color: "var(--primary)" }}>{rec.receipt_no}</td>}
+                    {visibleColumns.date && <td>{rec.date}</td>}
+                    {visibleColumns.customer && <td>{custName}</td>}
+                    {visibleColumns.amount && <td style={{ textAlign: "right" }}><span className="amount-value">PKR {rec.amount?.toLocaleString()}</span></td>}
+                    {visibleColumns.method && <td style={{ textAlign: "center" }}><span className="method-value">{rec.payment_method || "—"}</span></td>}
+                    {visibleColumns.created_by && (
+                      <td>
+                        <div className="creator-editor-cell">
+                          <span>Created: {rec.created_by || "—"}</span>
+                          <span>Edited: {rec.updated_by || "—"}</span>
+                        </div>
+                      </td>
                     )}
-                    {canEdit && (
-                      <button className="btn-icon" onClick={() => handleDelete(rec.id)} style={{ color: "#EF4444" }} title="Delete receipt">
-                        <Trash2 size={14} />
-                      </button>
+                    {visibleColumns.actions && (
+                      <td style={{ textAlign: "right" }}>
+                        <div className="actions-cell" style={{ justifyContent: "flex-end" }}>
+                          <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/${rec.id}`)} title="View receipt">
+                            <Eye size={14} />
+                          </button>
+                          {canEdit && (
+                            <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/new?id=${rec.id}`)} title="Edit receipt">
+                              <Edit size={14} />
+                            </button>
+                          )}
+                          {canEdit && (
+                            <button className="btn-icon" onClick={() => handleDelete(rec.id)} style={{ color: "#EF4444" }} title="Delete receipt">
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
                     )}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
