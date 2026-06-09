@@ -6,19 +6,18 @@ import { useRouter } from "next/navigation"
 import { Plus, Eye, Edit, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown, Settings } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
-import { getWhatsAppLink } from "@/lib/whatsapp"
 
 type SortField = "receipt_no" | "date" | "customer" | "amount" | "method" | "created_by"
 type SortDir = "asc" | "desc"
 
 const ALL_COLUMNS = [
-  { key: "receipt_no", label: "Receipt #", default: true, width: "minmax(100px, 1fr)" },
-  { key: "date", label: "Date", default: true, width: "minmax(90px, 1fr)" },
-  { key: "customer", label: "Customer", default: true, width: "minmax(140px, 1.5fr)" },
-  { key: "amount", label: "Amount", default: true, width: "minmax(100px, 1fr)" },
-  { key: "method", label: "Method", default: true, width: "minmax(90px, 1fr)" },
-  { key: "created_by", label: "Created / Edited By", default: true, width: "minmax(130px, 1.2fr)" },
-  { key: "actions", label: "Actions", default: true, width: "minmax(140px, auto)" },
+  { key: "receipt_no", label: "Receipt #", default: true, width: "minmax(110px, 1fr)" },
+  { key: "date", label: "Date", default: true, width: "minmax(100px, 1fr)" },
+  { key: "customer", label: "Customer", default: true, width: "minmax(160px, 1.5fr)" },
+  { key: "amount", label: "Amount", default: true, width: "minmax(110px, 1fr)" },
+  { key: "method", label: "Method", default: true, width: "minmax(100px, 1fr)" },
+  { key: "created_by", label: "Created / Edited By", default: true, width: "minmax(140px, 1.2fr)" },
+  { key: "actions", label: "Actions", default: true, width: "minmax(110px, auto)" },
 ]
 
 export default function ReceiptsPage() {
@@ -152,17 +151,6 @@ export default function ReceiptsPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  const sendWhatsApp = (rec: any) => {
-    const cust = customerMap[rec.party_id]
-    if (!cust?.phone) {
-      alert("No phone number for this customer.")
-      return
-    }
-    const message = `Dear ${cust.name}, your receipt ${rec.receipt_no} for PKR ${rec.amount?.toLocaleString()} has been recorded.`
-    const link = getWhatsAppLink(cust.phone, message)
-    if (link) window.open(link, "_blank")
-  }
-
   const handleDelete = async (id: number) => {
     if (!confirm("Delete this receipt? This will reverse all its accounting entries.")) return
     await fetch(`/api/receipts?id=${id}`, { method: "DELETE" })
@@ -173,7 +161,6 @@ export default function ReceiptsPage() {
     setVisibleColumns(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
-  // Build grid template columns based on visible columns (fixed widths)
   const gridTemplateColumns = () => {
     return ALL_COLUMNS.filter(col => visibleColumns[col.key])
       .map(col => col.width)
@@ -285,13 +272,22 @@ export default function ReceiptsPage() {
           gap: 12px;
           margin-bottom: 16px;
         }
+        .amount-value {
+          font-weight: 600;
+          color: #10B981;
+          text-align: right;
+          display: block;
+        }
+        .method-value {
+          text-align: center;
+          display: block;
+        }
         @media (max-width: 768px) {
           .header-row, .data-row { padding: 10px 12px; column-gap: 8px; }
           .btn-icon { padding: 4px; }
         }
       `}</style>
 
-      {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>💰 Receipts</h1>
@@ -325,7 +321,6 @@ export default function ReceiptsPage() {
         </div>
       </div>
 
-      {/* Summary Cards */}
       <div className="summary-grid">
         <div className="summary-item">
           <div className="summary-label">Total Receipts</div>
@@ -337,7 +332,6 @@ export default function ReceiptsPage() {
         </div>
       </div>
 
-      {/* Search */}
       <div className="filter-bar">
         <div style={{ position: "relative", flex: 1, maxWidth: 320 }}>
           <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
@@ -350,7 +344,6 @@ export default function ReceiptsPage() {
         </div>
       </div>
 
-      {/* Table */}
       {loading ? (
         <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading receipts…</div>
       ) : sortedFiltered.length === 0 ? (
@@ -376,8 +369,8 @@ export default function ReceiptsPage() {
                 {visibleColumns.receipt_no && <span style={{ fontWeight: 600, color: "var(--primary)" }}>{rec.receipt_no}</span>}
                 {visibleColumns.date && <span>{rec.date}</span>}
                 {visibleColumns.customer && <span>{custName}</span>}
-                {visibleColumns.amount && <span style={{ fontWeight: 600, color: "#10B981", textAlign: "right", display: "block" }}>PKR {rec.amount?.toLocaleString()}</span>}
-                {visibleColumns.method && <span style={{ textAlign: "center", display: "block" }}>{rec.payment_method || "—"}</span>}
+                {visibleColumns.amount && <span className="amount-value">PKR {rec.amount?.toLocaleString()}</span>}
+                {visibleColumns.method && <span className="method-value">{rec.payment_method || "—"}</span>}
                 {visibleColumns.created_by && (
                   <div className="creator-editor-cell">
                     <span>Created: {rec.created_by || "—"}</span>
@@ -397,11 +390,6 @@ export default function ReceiptsPage() {
                     {canEdit && (
                       <button className="btn-icon" onClick={() => handleDelete(rec.id)} style={{ color: "#EF4444" }} title="Delete receipt">
                         <Trash2 size={14} />
-                      </button>
-                    )}
-                    {hasFeature("whatsapp_invoice") && (
-                      <button className="btn-icon" onClick={() => sendWhatsApp(rec)} title="Send via WhatsApp" style={{ color: "#25D366" }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
                       </button>
                     )}
                   </div>
