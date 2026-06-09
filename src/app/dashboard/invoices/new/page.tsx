@@ -89,9 +89,11 @@ export default function NewInvoicePage() {
         .order("name")
         .then(r => { if (r.data) setCustomers(r.data) })
 
+      // ✅ FIX: Added company filter to products query
       if (showProducts) {
         supabase.from("products")
           .select("id,code,name,sale_price,cost_price,qty_on_hand,image_path")
+          .eq("company_id", cid)               // ← CRITICAL FIX for multi‑tenant isolation
           .is("deleted_at", null)
           .order("name")
           .then(r => r.data && setProducts(r.data))

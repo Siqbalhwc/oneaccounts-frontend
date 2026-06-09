@@ -10,6 +10,7 @@ interface Product {
   id: number
   code: string
   name: string
+  category: string | null   // ← NEW
   cost_price: number
   sale_price: number
   opening_qty: number
@@ -21,7 +22,7 @@ interface Product {
   updated_by?: string | null
 }
 
-type SortField = "code" | "name" | "cost_price" | "sale_price" | "opening_qty" | "qty_on_hand" | "total_inflow" | "total_outflow"
+type SortField = "code" | "name" | "category" | "cost_price" | "sale_price" | "opening_qty" | "qty_on_hand" | "total_inflow" | "total_outflow"
 type SortDir = "asc" | "desc"
 
 export default function StockRegisterPage() {
@@ -38,6 +39,8 @@ export default function StockRegisterPage() {
   const [loading, setLoading] = useState(true)
   const [products, setProducts] = useState<Product[]>([])
   const [search, setSearch] = useState("")
+  const [categoryFilter, setCategoryFilter] = useState<string>("")   // ← NEW
+  const [categories, setCategories] = useState<string[]>([])         // ← NEW
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const pageSize = 25
@@ -58,7 +61,24 @@ export default function StockRegisterPage() {
     })
   }, [])
 
-  // ── Fetch products ──
+  // ── Fetch distinct categories for filter dropdown ──
+  useEffect(() => {
+    if (!companyId) return
+    supabase
+      .from("products")
+      .select("category")
+      .eq("company_id", companyId)
+      .is("deleted_at", null)
+      .not("category", "is", null)
+      .then(({ data }) => {
+        if (data) {
+          const unique = Array.from(new Set(data.map(item => item.category).filter(Boolean))) as string[]
+          setCategories(unique.sort())
+        }
+      })
+  }, [companyId])
+
+  // ── Fetch products with filters ──
   const fetchProducts = () => {
     if (!companyId) return
     setLoading(true)
@@ -74,6 +94,9 @@ export default function StockRegisterPage() {
     if (search.trim()) {
       query = query.or(`name.ilike.%${search}%,code.ilike.%${search}%`)
     }
+    if (categoryFilter) {
+      query = query.eq("category", categoryFilter)
+    }
 
     query = query.order(sortField, { ascending: sortDir === "asc" })
     query.range(start, end).then(async ({ data, count }) => {
@@ -84,7 +107,7 @@ export default function StockRegisterPage() {
         return
       }
 
-      // ── Live calculation from stock_moves ──
+      // Live calculation from stock_moves
       const productIds = data.map((p: any) => p.id)
       const { data: moves } = await supabase
         .from("stock_moves")
@@ -122,7 +145,7 @@ export default function StockRegisterPage() {
     })
   }
 
-  useEffect(() => { fetchProducts() }, [companyId, search, page, sortField, sortDir])
+  useEffect(() => { fetchProducts() }, [companyId, search, categoryFilter, page, sortField, sortDir])
 
   // Sort handlers
   const handleSort = (col: SortField) => {
@@ -139,7 +162,7 @@ export default function StockRegisterPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  // ── Soft delete ──
+  // Soft delete
   const handleDelete = async (id: number) => {
     if (!confirm("Delete this product?")) return
     await supabase.from("products").update({ deleted_at: new Date().toISOString() }).eq("id", id).eq("company_id", companyId)
@@ -148,7 +171,7 @@ export default function StockRegisterPage() {
     setTimeout(() => setFlash(""), 3000)
   }
 
-  // ── Summary: sum of (closing qty × cost price) ──
+  // Summary: closing stock value
   const totalStockValue = products.reduce((sum, p) => {
     const qty = p.qty_on_hand
     return sum + (qty * (p.cost_price || 0))
@@ -171,7 +194,7 @@ export default function StockRegisterPage() {
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
         .header-row {
           display: grid;
-          grid-template-columns: 90px 1fr 90px 90px 70px 70px 70px 80px 50px 45px 45px 50px;
+          grid-template-columns: 80px 1fr 120px 80px 80px 70px 70px 70px 80px 50px 45px 45px 50px;
           column-gap: 8px;
           padding: 14px 24px;
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
@@ -180,7 +203,7 @@ export default function StockRegisterPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: 90px 1fr 90px 90px 70px 70px 70px 80px 50px 45px 45px 50px;
+          grid-template-columns: 80px 1fr 120px 80px 80px 70px 70px 70px 80px 50px 45px 45px 50px;
           column-gap: 8px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
@@ -200,12 +223,14 @@ export default function StockRegisterPage() {
           display: inline-flex; align-items: center; justify-content: center; gap: 4px;
           font-weight: 700; text-transform: uppercase; font-size: 10px; color: var(--text-muted);
         }
-        .search-input {
+        .search-input, .filter-select {
           height: 38px; border: 1.5px solid var(--border); border-radius: 8px;
-          padding: 0 12px 0 36px; font-size: 13px; width: 260px; box-sizing: border-box;
+          padding: 0 12px; font-size: 13px; width: 260px; box-sizing: border-box;
           outline: none; font-family: inherit; background: var(--card); color: var(--text);
         }
-        .search-input:focus { border-color: var(--primary); }
+        .search-input { padding-left: 36px; }
+        .search-input:focus, .filter-select:focus { border-color: var(--primary); }
+        .filter-select { width: 180px; cursor: pointer; }
         .btn {
           padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border);
           font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
@@ -221,31 +246,33 @@ export default function StockRegisterPage() {
         .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
-        .creator-editor-cell {
-          display: flex; flex-direction: column; font-size: 11px; color: var(--text-muted);
-          line-height: 1.3; word-wrap: break-word;
+        .filter-bar {
+          display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+          margin-bottom: 16px;
         }
-        @media (max-width: 1100px) {
+        @media (max-width: 1300px) {
           .header-row, .data-row {
-            grid-template-columns: 70px 1fr 70px 70px 50px 50px 50px 60px 40px 35px 35px 40px;
+            grid-template-columns: 70px 1fr 100px 70px 70px 50px 50px 50px 60px 40px 35px 35px 40px;
             column-gap: 4px;
           }
         }
-        @media (max-width: 800px) {
+        @media (max-width: 1000px) {
           .header-row, .data-row {
-            grid-template-columns: 60px 1fr 60px 60px 0px 0px 0px 0px 0px 30px 30px 30px;
+            grid-template-columns: 60px 1fr 80px 60px 60px 0px 0px 0px 0px 30px 30px 30px 30px;
             column-gap: 2px;
           }
-          .header-row > :nth-child(5),
           .header-row > :nth-child(6),
           .header-row > :nth-child(7),
           .header-row > :nth-child(8),
           .header-row > :nth-child(9),
-          .data-row > :nth-child(5),
           .data-row > :nth-child(6),
           .data-row > :nth-child(7),
           .data-row > :nth-child(8),
           .data-row > :nth-child(9) { display: none; }
+        }
+        @media (max-width: 700px) {
+          .filter-bar { flex-direction: column; align-items: stretch; }
+          .search-input, .filter-select { width: 100%; }
         }
       `}</style>
 
@@ -276,20 +303,42 @@ export default function StockRegisterPage() {
       </div>
 
       {flash && (
-        <div style={{ background: flash.startsWith("Error") ? "var(--card)" : "var(--card)", border: flash.startsWith("Error") ? "1px solid #EF4444" : "1px solid #065F46", color: flash.startsWith("Error") ? "#FCA5A5" : "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
+        <div style={{ background: "var(--card)", border: flash.startsWith("Error") ? "1px solid #EF4444" : "1px solid #065F46", color: flash.startsWith("Error") ? "#FCA5A5" : "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
           {flash}
         </div>
       )}
 
-      {/* Search */}
-      <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
-        <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-        <input
-          className="search-input"
-          placeholder="Search by name or code..."
-          value={search}
-          onChange={e => { setSearch(e.target.value); setPage(1) }}
-        />
+      {/* Filter Bar: Search + Category Dropdown */}
+      <div className="filter-bar">
+        <div style={{ position: "relative", flex: 1, maxWidth: 320 }}>
+          <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+          <input
+            className="search-input"
+            placeholder="Search by name or code..."
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1) }}
+            style={{ width: "100%" }}
+          />
+        </div>
+        <select
+          className="filter-select"
+          value={categoryFilter}
+          onChange={e => { setCategoryFilter(e.target.value); setPage(1) }}
+        >
+          <option value="">All Categories</option>
+          {categories.map(cat => (
+            <option key={cat} value={cat}>{cat}</option>
+          ))}
+        </select>
+        {categoryFilter && (
+          <button
+            className="btn btn-outline"
+            onClick={() => { setCategoryFilter(""); setPage(1); }}
+            style={{ padding: "6px 12px" }}
+          >
+            Clear Filter
+          </button>
+        )}
       </div>
 
       {/* Products Table */}
@@ -304,6 +353,7 @@ export default function StockRegisterPage() {
           <div className="header-row">
             <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
             <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
+            <button className="sort-btn" onClick={() => handleSort("category")}>Category {getSortIcon("category")}</button>
             <button className="sort-btn" onClick={() => handleSort("cost_price")}>Cost {getSortIcon("cost_price")}</button>
             <button className="sort-btn" onClick={() => handleSort("sale_price")}>Sale {getSortIcon("sale_price")}</button>
             <button className="sort-btn" onClick={() => handleSort("opening_qty")} style={{ justifyContent: "center" }}>Opening {getSortIcon("opening_qty")}</button>
@@ -323,6 +373,7 @@ export default function StockRegisterPage() {
               <div key={prod.id} className="data-row">
                 <span style={{ fontWeight: 600, color: "var(--primary)" }}>{prod.code}</span>
                 <span style={{ color: "var(--text)" }}>{prod.name}</span>
+                <span style={{ color: "var(--text-muted)", fontSize: 12 }}>{prod.category || "—"}</span>
                 <span style={{ textAlign: "center" }}>PKR {prod.cost_price?.toLocaleString()}</span>
                 <span style={{ textAlign: "center" }}>PKR {prod.sale_price?.toLocaleString()}</span>
                 <span style={{ textAlign: "center" }}>{prod.opening_qty}</span>
