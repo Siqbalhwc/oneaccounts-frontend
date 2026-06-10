@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, Suspense } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Search, X, CheckCircle, RefreshCw } from "lucide-react"
+import AttachmentUploader from "@/components/AttachmentUploader"
 
 export default function NewPaymentPage() {
   const router = useRouter()
@@ -38,6 +39,9 @@ export default function NewPaymentPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
+
+  // State for attachments – will be set after payment is saved
+  const [savedPaymentId, setSavedPaymentId] = useState<number | null>(null)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -189,6 +193,11 @@ export default function NewPaymentPage() {
         setError(result.error || "Failed")
         setLoading(false)
         return
+      }
+
+      // Store the saved payment ID for attachments
+      if (result.payment?.id) {
+        setSavedPaymentId(result.payment.id)
       }
 
       setFlash(`✅ Payment ${result.payment_no} saved!`)
@@ -448,6 +457,17 @@ export default function NewPaymentPage() {
                 {loading ? "Posting..." : "💾 Save Payment"}
               </button>
             </div>
+
+            {/* Attachments section – shown only after payment is saved */}
+            {savedPaymentId && (
+              <div className="pay-card">
+                <AttachmentUploader
+                  sourceType="payment"
+                  sourceId={savedPaymentId}
+                  companyId={companyId}
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>
