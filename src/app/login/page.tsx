@@ -22,8 +22,9 @@ export default function LoginPage() {
   const [loading,      setLoading]      = useState(false)
   const [error,        setError]        = useState("")
   const [isSignUp,     setIsSignUp]     = useState(false)
+  const [rememberMe,   setRememberMe]   = useState(false)   // ← ADDED
 
-  // ── Invite token handling (only addition) ────────────────────────
+  // ── Invite token handling ─────────────────────────────────────────
   const [inviteStatus, setInviteStatus] = useState<"idle" | "processing" | "expired">("idle")
 
   useEffect(() => {
@@ -65,7 +66,11 @@ export default function LoginPage() {
     )
     const { error: authError } = isSignUp
       ? await supabase.auth.signUp({ email, password })
-      : await supabase.auth.signInWithPassword({ email, password })
+      : await supabase.auth.signInWithPassword({
+          email,
+          password,
+          options: { persistSession: rememberMe }   // ← ADDED
+        })
 
     if (authError) {
       setError(isSignUp
@@ -90,7 +95,7 @@ export default function LoginPage() {
     window.location.href = "/dashboard"
   }
 
-  // ── Original return, completely untouched (only the invite banner added) ──
+  // ── Original return, only the "forgot + remember me" row changed ──
   return (
     <>
       <style>{`
@@ -448,9 +453,9 @@ export default function LoginPage() {
         }
         .oa-eye:hover { color: #64748B; }
 
-        /* forgot */
+        /* forgot row (modified to include remember me) */
         .oa-forgot-row {
-          display: flex; justify-content: flex-end;
+          display: flex; justify-content: space-between; align-items: center;
           margin-top: -6px; margin-bottom: 12px;
         }
         .oa-forgot {
@@ -724,7 +729,7 @@ export default function LoginPage() {
                 {/* Card Body */}
                 <div className="oa-card-body">
 
-                  {/* Invite processing / expired banners (only additions) */}
+                  {/* Invite processing / expired banners */}
                   {inviteStatus === "processing" && (
                     <div className="oa-success">⏳ Verifying your invitation… please wait.</div>
                   )}
@@ -774,6 +779,15 @@ export default function LoginPage() {
 
                     {!isSignUp && (
                       <div className="oa-forgot-row">
+                        <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "#6B7280", cursor: "pointer" }}>
+                          <input
+                            type="checkbox"
+                            checked={rememberMe}
+                            onChange={(e) => setRememberMe(e.target.checked)}
+                            style={{ width: "14px", height: "14px", accentColor: "#1740C8", cursor: "pointer" }}
+                          />
+                          Remember me
+                        </label>
                         <a href="/forgot-password" className="oa-forgot">Forgot password?</a>
                       </div>
                     )}
