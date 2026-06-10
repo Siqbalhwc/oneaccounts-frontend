@@ -366,8 +366,10 @@ export default function NewInvoicePage() {
     const invoiceLink = invoiceIdForLink
       ? `https://www.oneaccountsbysiqbal.com/invoice/${invoiceIdForLink}`
       : null
+    const customerDisplayName = selectedCustomer.name?.trim() || selectedCustomer.phone || "Customer"
+    const actualCompanyName = company?.name || company?.company_name || "OneAccounts"
     const msg = [
-      `Dear ${selectedCustomer.name},`,
+      `Dear ${customerDisplayName},`,
       ``,
       `Your invoice of PKR ${totalAmount.toLocaleString()} has been generated.`,
       invoiceLink ? `` : `(Save the invoice first to get a link.)`,
@@ -376,7 +378,7 @@ export default function NewInvoicePage() {
       `📆 Due: ${dueDate}`,
       ``,
       `Thank you for your business.`,
-      `— OneAccounts by Siqbal`,
+      `— ${actualCompanyName}`,
     ].filter(line => line !== "").join("\n")
     return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
   }
@@ -389,8 +391,11 @@ export default function NewInvoicePage() {
     const invoiceLink = invoiceIdForLink
       ? `https://www.oneaccountsbysiqbal.com/invoice/${invoiceIdForLink}`
       : null
+    const customerDisplayName = selectedCustomer.name?.trim() || selectedCustomer.phone || "Customer"
+    const actualCompanyName = company?.name || company?.company_name || "OneAccounts"
+
     const pdfData = {
-      companyName: company?.name || company?.company_name || "OneAccounts",
+      companyName: actualCompanyName,
       companyAddress: company?.address || "",
       companyPhone: company?.phone || "",
       companyEmail: company?.email || "",
@@ -400,7 +405,7 @@ export default function NewInvoicePage() {
       invoiceNo: "PREVIEW",
       date: invoiceDate,
       dueDate: dueDate,
-      customerName: selectedCustomer.name || "Customer",
+      customerName: customerDisplayName,
       customerPhone: selectedCustomer.phone || "",
       customerAddress: selectedCustomer.address || "",
       customerEmail: selectedCustomer.email || "",
@@ -433,7 +438,7 @@ export default function NewInvoicePage() {
           .getPublicUrl(filePath)
         const pdfLink = publicUrlData.publicUrl
         const msg = [
-          `Dear ${selectedCustomer.name},`,
+          `Dear ${customerDisplayName},`,
           ``,
           `Your invoice of PKR ${totalAmount.toLocaleString()} has been generated.`,
           invoiceLink ? `📄 View Online: ${invoiceLink}` : "",
@@ -442,7 +447,7 @@ export default function NewInvoicePage() {
           `📆 Due: ${dueDate}`,
           ``,
           `Thank you for your business.`,
-          `— OneAccounts by Siqbal`,
+          `— ${actualCompanyName}`,
         ].filter(line => line !== "").join("\n")
         const waURL = `https://wa.me/${(selectedCustomer.country_code || "+92").replace(/\D/g, "")}${phone}?text=${encodeURIComponent(msg)}`
         window.open(waURL, "_blank")
