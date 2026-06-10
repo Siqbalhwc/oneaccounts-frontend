@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect, useRef, Suspense } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Search, X, CheckCircle, RefreshCw } from "lucide-react"
+import { ArrowLeft, Search, X, CheckCircle, RefreshCw, ExternalLink } from "lucide-react"
 import AttachmentUploader from "@/components/AttachmentUploader"
 
 export default function NewPaymentPage() {
@@ -40,8 +40,8 @@ export default function NewPaymentPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  // State for attachments – will be set after payment is saved
   const [savedPaymentId, setSavedPaymentId] = useState<number | null>(null)
+  const [lastPaymentNo, setLastPaymentNo] = useState<string | null>(null)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -195,18 +195,23 @@ export default function NewPaymentPage() {
         return
       }
 
-      // Store the saved payment ID for attachments
+      // Store saved payment details
       if (result.payment?.id) {
         setSavedPaymentId(result.payment.id)
       }
+      if (result.payment_no) {
+        setLastPaymentNo(result.payment_no)
+      }
 
       setFlash(`✅ Payment ${result.payment_no} saved!`)
+
+      // Clear the form for a new payment, but keep savedPaymentId and lastPaymentNo
       setSupplierId(null); setSelectedSupplier(null); setSupplierSearch("")
       setSelectedBankId(null); setSelectedExpenseAccountId(null); setIsDonation(false)
       setBills([]); setAllocations({}); setPaymentAmount(""); setNotes(""); setReference("")
       setLoading(false)
       setTimeout(() => loadSuppliers(), 500)
-      setTimeout(() => setFlash(null), 4000)
+      setTimeout(() => setFlash(null), 6000) // keep flash longer so user sees the link
     } catch {
       setError("Network error")
       setLoading(false)
@@ -293,7 +298,16 @@ export default function NewPaymentPage() {
         </div>
 
         {error && <div style={{ background: "var(--card)", border: "1px solid #EF4444", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
-        {flash && <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
+        {flash && (
+          <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</span>
+            {lastPaymentNo && (
+              <button className="pay-btn" onClick={() => router.push(`/dashboard/payments/${savedPaymentId}`)} style={{ padding: "4px 10px", fontSize: 12 }}>
+                <ExternalLink size={12} /> View Payment
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="header-grid">
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -458,7 +472,7 @@ export default function NewPaymentPage() {
               </button>
             </div>
 
-            {/* Attachments section – shown only after payment is saved */}
+            {/* Attachments section – shown only after a payment has been saved */}
             {savedPaymentId && (
               <div className="pay-card">
                 <AttachmentUploader
@@ -466,6 +480,9 @@ export default function NewPaymentPage() {
                   sourceId={savedPaymentId}
                   companyId={companyId}
                 />
+                <div style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)", textAlign: "center" }}>
+                  These files belong to payment #{lastPaymentNo}
+                </div>
               </div>
             )}
           </div>
