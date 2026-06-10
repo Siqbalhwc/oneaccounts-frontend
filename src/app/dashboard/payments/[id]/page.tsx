@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Printer, Send } from "lucide-react"
+import { ArrowLeft, Printer, Send, Upload, Trash2, FileText, Image } from "lucide-react"
 import { generatePaymentPDF } from "@/lib/pdf/paymentPDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
@@ -43,6 +43,14 @@ interface JournalLine {
   credit: number
 }
 
+interface Attachment {
+  id: number
+  file_name: string
+  file_url: string
+  file_size: number
+  mime_type: string
+}
+
 export default function PaymentDetailPage() {
   const router = useRouter()
   const params = useParams()
@@ -60,6 +68,8 @@ export default function PaymentDetailPage() {
   const [companyId, setCompanyId] = useState<string>("")
   const [bankName, setBankName] = useState<string>("")
   const [journalLines, setJournalLines] = useState<JournalLine[]>([])
+  const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -69,6 +79,7 @@ export default function PaymentDetailPage() {
     })
   }, [])
 
+  // Fetch payment details
   useEffect(() => {
     if (!companyId || !paymentId) return
     setLoading(true)
@@ -136,11 +147,78 @@ export default function PaymentDetailPage() {
       })
   }, [companyId, paymentId])
 
+  // Fetch attachments
+  const fetchAttachments = async () => {
+    if (!paymentId || !companyId) return
+    const { data } = await supabase
+      .from("attachments")
+      .select("*")
+      .eq("source_type", "payment")
+      .eq("source_id", paymentId)
+    setAttachments(data || [])
+  }
+
+  useEffect(() => {
+    if (paymentId && companyId) {
+      fetchAttachments()
+    }
+  }, [paymentId, companyId])
+
+  const uploadFile = async (file: File) => {
+    if (!paymentId || !companyId) return
+    setUploading(true)
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
+    const storagePath = `${companyId}/payment/${paymentId}/${fileName}`
+
+    const { error: uploadError } = await supabase.storage
+      .from("attachments")
+      .upload(storagePath, file)
+
+    if (uploadError) {
+      alert("Upload failed: " + uploadError.message)
+      setUploading(false)
+      return
+    }
+
+    const { data: urlData } = supabase.storage
+      .from("attachments")
+      .getPublicUrl(storagePath)
+
+    const { error: dbError } = await supabase
+      .from("attachments")
+      .insert({
+        company_id: companyId,
+        source_type: "payment",
+        source_id: parseInt(paymentId),
+        file_name: file.name,
+        file_url: urlData.publicUrl,
+        file_size: file.size,
+        mime_type: file.type,
+        uploaded_by: (await supabase.auth.getUser()).data.user?.email,
+      })
+
+    if (dbError) {
+      alert("Failed to save attachment record: " + dbError.message)
+    } else {
+      fetchAttachments()
+    }
+    setUploading(false)
+  }
+
+  const deleteAttachment = async (id: number, fileUrl: string) => {
+    const pathParts = fileUrl.split('/')
+    const storagePath = pathParts.slice(-3).join('/')
+    await supabase.storage.from("attachments").remove([storagePath])
+    await supabase.from("attachments").delete().eq("id", id)
+    fetchAttachments()
+  }
+
   // WhatsApp link using the safe helper
   const waLink = payment && payment.supplier
     ? getWhatsAppLink(
         payment.supplier.phone || "",
-        `Dear ${payment.supplier.name},\n\nYour payment ${payment.payment_no} for PKR ${payment.amount?.toLocaleString()} has been processed.\nDate: ${payment.payment_date}\nMethod: ${payment.payment_method}\n${payment.notes ? "Notes: " + payment.notes : ""}\n\nThank you.\n— OneAccounts`
+        `Dear ${payment.supplier.name},\n\nYour payment ${payment.payment_no} for PKR ${payment.amount?.toLocaleString()} has been processed.\nDate: ${payment.payment_date}\nMethod: ${payment.payment_method}\n${payment.notes ? "Notes: " + payment.notes : ""}\n\nThank you.\n— ${companyName || "OneAccounts"}`
       )
     : ""
 
@@ -199,6 +277,9 @@ export default function PaymentDetailPage() {
         .btn-success:hover { background: #22C55E; }
         .record-history { background: var(--bg-soft); border-radius: 8px; padding: 8px; }
         .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 8px; }
+        .attachment-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); }
+        .attachment-link { display: flex; align-items: center; gap: 8px; color: var(--primary); text-decoration: none; }
+        .attachment-link:hover { text-decoration: underline; }
 
         @media (max-width: 640px) {
           .row { flex-direction: column; align-items: flex-start; }
@@ -219,6 +300,18 @@ export default function PaymentDetailPage() {
             <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success"><Send size={16} /> WhatsApp</a>
           )}
           <button className="btn btn-primary" onClick={handlePrintPDF}><Printer size={16} /> Print PDF</button>
+          {/* ADD ATTACHMENT BUTTON */}
+          <label className="btn" style={{ cursor: "pointer", position: "relative" }}>
+            <Upload size={16} /> {uploading ? "Uploading..." : "Add Attachment"}
+            <input
+              type="file"
+              onChange={(e) => {
+                if (e.target.files?.[0]) uploadFile(e.target.files[0])
+              }}
+              disabled={uploading}
+              style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }}
+            />
+          </label>
         </div>
       </div>
 
@@ -277,6 +370,30 @@ export default function PaymentDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Attachments Section */}
+      <div className="card">
+        <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📎 Attachments</h3>
+        {attachments.length === 0 ? (
+          <div style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center", padding: 12 }}>
+            No attachments yet. Use the "Add Attachment" button above.
+          </div>
+        ) : (
+          <div>
+            {attachments.map((att) => (
+              <div key={att.id} className="attachment-item">
+                <a href={att.file_url} target="_blank" rel="noopener noreferrer" className="attachment-link">
+                  {att.mime_type?.startsWith("image/") ? <Image size={16} /> : <FileText size={16} />}
+                  <span>{att.file_name}</span>
+                </a>
+                <button className="btn" onClick={() => deleteAttachment(att.id, att.file_url)} style={{ padding: "4px 8px", borderColor: "#EF4444" }}>
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {payment && payment.id && (
         <div className="card">
