@@ -22,7 +22,7 @@ export default function LoginPage() {
   const [loading,      setLoading]      = useState(false)
   const [error,        setError]        = useState("")
   const [isSignUp,     setIsSignUp]     = useState(false)
-  const [rememberMe,   setRememberMe]   = useState(false)   // ← ADDED
+  const [rememberMe,   setRememberMe]   = useState(false)
 
   // ── Invite token handling ─────────────────────────────────────────
   const [inviteStatus, setInviteStatus] = useState<"idle" | "processing" | "expired">("idle")
@@ -69,7 +69,7 @@ export default function LoginPage() {
       : await supabase.auth.signInWithPassword({
           email,
           password,
-          options: { persistSession: rememberMe }   // ← ADDED
+          options: { persistSession: rememberMe } as any   // ✅ FIX: type assertion
         })
 
     if (authError) {
@@ -95,7 +95,9 @@ export default function LoginPage() {
     window.location.href = "/dashboard"
   }
 
-  // ── Original return, only the "forgot + remember me" row changed ──
+  // ═══════════════════════════════════════════════════════════════════
+  // RETURN JSX (unchanged from your original – includes water background, etc.)
+  // ═══════════════════════════════════════════════════════════════════
   return (
     <>
       <style>{`
