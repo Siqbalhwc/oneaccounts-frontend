@@ -1,4 +1,5 @@
 // app/dashboard/layout.tsx
+import { SessionMonitor } from "@/components/SessionMonitor"
 import { redirect } from 'next/navigation'
 import { getUserCompany } from '@/lib/get-user-company'
 import SidebarClient from './sidebar-client'
@@ -234,13 +235,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
         <div className="dl-main">
           <CompanyProvider value={{
-  companyId: tenant.companyId,          // ← new
-  companyName: tenant.companyName,
-  companyTagline: tenant.companyTagline,
-  logoUrl: tenant.companyLogo,
-}}>
-            <QueryProvider>              {/* ← NEW – wraps all page content */}
-              <div className="dl-main-content">{children}</div>
+            companyId: tenant.companyId,
+            companyName: tenant.companyName,
+            companyTagline: tenant.companyTagline,
+            logoUrl: tenant.companyLogo,
+          }}>
+            <QueryProvider>
+              {/* ✅ SessionMonitor wraps the page content – monitors inactivity */}
+              <SessionMonitor>
+                <div className="dl-main-content">{children}</div>
+              </SessionMonitor>
             </QueryProvider>
           </CompanyProvider>
           <div className="mobile-bottom-nav"><BottomNav /></div>
