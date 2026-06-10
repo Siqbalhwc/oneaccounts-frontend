@@ -18,6 +18,7 @@ export default function ProductFormPage() {
   const [companyId, setCompanyId] = useState("")
   const [productCode, setProductCode] = useState("")
   const [name, setName] = useState("")
+  const [category, setCategory] = useState("")        // ← NEW category field
   const [salePrice, setSalePrice] = useState("")
   const [costPrice, setCostPrice] = useState("")
   const [openingQty, setOpeningQty] = useState("")
@@ -49,6 +50,7 @@ export default function ProductFormPage() {
         if (product) {
           setProductCode(product.code)
           setName(product.name)
+          setCategory(product.category || "")        // ← NEW
           setSalePrice(String(product.sale_price || ""))
           setCostPrice(String(product.cost_price || ""))
           setOpeningQty(String(product.opening_qty || ""))
@@ -116,6 +118,7 @@ export default function ProductFormPage() {
       company_id: companyId,
       code: productCode,
       name: name.trim(),
+      category: category.trim() || null,        // ← NEW
       sale_price: parseFloat(salePrice) || 0,
       cost_price: parseFloat(costPrice) || 0,
       opening_qty: parseFloat(openingQty) || 0,
@@ -140,6 +143,7 @@ export default function ProductFormPage() {
 
     if (!editId) {
       setName("")
+      setCategory("")        // ← NEW
       setSalePrice("")
       setCostPrice("")
       setOpeningQty("")
@@ -221,6 +225,12 @@ export default function ProductFormPage() {
             <div style={{ marginBottom: 16 }}>
               <label className="label">Product Name *</label>
               <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Widget A" />
+            </div>
+
+            {/* Category field */}
+            <div style={{ marginBottom: 16 }}>
+              <label className="label">Category (optional)</label>
+              <input className="input" value={category} onChange={e => setCategory(e.target.value)} placeholder="e.g. Cabinet Handles, Cabinet Knobs" />
             </div>
 
             <div className="inline-group" style={{ marginBottom: 16 }}>
