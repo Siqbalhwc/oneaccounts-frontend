@@ -1,5 +1,6 @@
 "use client"
 
+import { Suspense } from "react"
 import { useState, useEffect, useRef, Fragment } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
@@ -22,7 +23,7 @@ function getCreditDays(term?: string | null): number {
   return 30
 }
 
-export default function NewInvoicePage() {
+function NewInvoicePageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const editId = searchParams.get("id")
@@ -48,7 +49,6 @@ export default function NewInvoicePage() {
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
   const customerRef = useRef<HTMLDivElement>(null)
 
-  // Project/Donor for NGO income tagging
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
 
@@ -71,8 +71,6 @@ export default function NewInvoicePage() {
   const [savedInvoiceId, setSavedInvoiceId] = useState<number | null>(null)
 
   const isNGO = businessType === "ngo"
-
-  // ✅ The invoice ID to use for WhatsApp links (saved one or edit one)
   const invoiceIdForLink = savedInvoiceId || (editId ? Number(editId) : null)
 
   useEffect(() => {
@@ -89,11 +87,10 @@ export default function NewInvoicePage() {
         .order("name")
         .then(r => { if (r.data) setCustomers(r.data) })
 
-      // ✅ FIX: Added company filter to products query
       if (showProducts) {
         supabase.from("products")
           .select("id,code,name,sale_price,cost_price,qty_on_hand,image_path")
-          .eq("company_id", cid)               // ← CRITICAL FIX for multi‑tenant isolation
+          .eq("company_id", cid)
           .is("deleted_at", null)
           .order("name")
           .then(r => r.data && setProducts(r.data))
@@ -357,7 +354,6 @@ export default function NewInvoicePage() {
     }
   }
 
-  // ✅ WhatsApp message with invoice link (works for new & edit)
   const waLink = () => {
     if (!selectedCustomer) return ""
     const code = (selectedCustomer.country_code || "+92").replace(/\D/g, "")
@@ -383,7 +379,6 @@ export default function NewInvoicePage() {
     return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
   }
 
-  // ✅ WhatsApp with PDF (also includes view link)
   const handleWhatsAppWithPDF = async () => {
     if (!selectedCustomer) return
     const phone = (selectedCustomer.phone || "").replace(/\D/g, "")
@@ -787,7 +782,6 @@ export default function NewInvoicePage() {
             </div>
           </div>
 
-          {/* Items table */}
           <div className="inv-items-section" style={{ marginBottom: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
@@ -884,5 +878,13 @@ export default function NewInvoicePage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading invoice form...</div>}>
+      <NewInvoicePageContent />
+    </Suspense>
   )
 }
