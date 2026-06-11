@@ -45,10 +45,11 @@ export default function BankTransfersPage() {
   const [sortField, setSortField] = useState<SortField>("transfer_date")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
 
+  // ✅ No fallback – wait for real company ID from JWT
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
-      const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
-      setCompanyId(cid)
+      const cid = (user?.app_metadata as any)?.company_id
+      if (cid) setCompanyId(cid)
     })
   }, [])
 
@@ -56,6 +57,7 @@ export default function BankTransfersPage() {
     if (!companyId) return
     setLoading(true)
 
+    // ✅ Accounts query already has company_id filter
     const { data: accountData } = await supabase
       .from("accounts")
       .select("id, code, name, balance")
@@ -87,8 +89,9 @@ export default function BankTransfersPage() {
 
   useEffect(() => { if (companyId) fetchData() }, [companyId])
 
+  // ✅ Show loading until companyId is available (no fallback data)
   if (!companyId || roleLoading || !role) {
-    return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
+    return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading company data…</div>
   }
   if (!canView) {
     return (
@@ -156,7 +159,7 @@ export default function BankTransfersPage() {
           -webkit-overflow-scrolling: touch;
         }
         .table-grid {
-          min-width: 900px; /* ensures columns never shrink below this width */
+          min-width: 900px;
         }
         .header-row {
           display: grid;

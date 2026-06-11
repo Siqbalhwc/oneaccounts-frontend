@@ -13,7 +13,7 @@ export default function NewBankTransferPage() {
   )
 
   const [companyId, setCompanyId] = useState("")
-  const [glAccounts, setGlAccounts] = useState<any[]>([])
+  const [bankAccounts, setBankAccounts] = useState<any[]>([])  // ← changed from glAccounts
   const [fromAccountId, setFromAccountId] = useState<number | null>(null)
   const [toAccountId, setToAccountId] = useState<number | null>(null)
   const [amount, setAmount] = useState("")
@@ -33,14 +33,15 @@ export default function NewBankTransferPage() {
       if (!cid) return
       setCompanyId(cid)
 
-      const { data: accounts } = await supabase
-        .from("accounts")
-        .select("id, code, name, balance")
-        .eq("type", "Asset")
-        .like("code", "10%")
+      // ✅ FIX: Fetch from bank_accounts table instead of accounts
+      const { data: banks } = await supabase
+        .from("bank_accounts")
+        .select("id, bank_name, account_number, opening_balance")
         .eq("company_id", cid)
-        .order("code")
-      if (accounts) setGlAccounts(accounts)
+        .is("deleted_at", null)
+        .order("bank_name")
+      
+      if (banks) setBankAccounts(banks)
 
       const { count } = await supabase
         .from("bank_transfers")
@@ -65,7 +66,6 @@ export default function NewBankTransferPage() {
     setLoading(true)
     setError("")
 
-    // Call the API route that updates both bank and GL balances
     const res = await fetch("/api/banking/bank-transfers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -75,6 +75,7 @@ export default function NewBankTransferPage() {
         amount: parseFloat(amount),
         transfer_date: transferDate,
         notes,
+        reference,
       }),
     })
 
@@ -156,9 +157,9 @@ export default function NewBankTransferPage() {
               <div style={{ marginBottom: 16 }}>
                 <label className="label">From Account *</label>
                 <select className="select" value={fromAccountId ?? ""} onChange={e => setFromAccountId(e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">— Select Account —</option>
-                  {glAccounts.map(a => (
-                    <option key={a.id} value={a.id}>{a.code} – {a.name} (PKR {a.balance?.toLocaleString()})</option>
+                  <option value="">— Select Bank Account —</option>
+                  {bankAccounts.map(a => (
+                    <option key={a.id} value={a.id}>{a.bank_name} {a.account_number ? `(${a.account_number})` : ""}</option>
                   ))}
                 </select>
               </div>
@@ -166,9 +167,9 @@ export default function NewBankTransferPage() {
               <div style={{ marginBottom: 16 }}>
                 <label className="label">To Account *</label>
                 <select className="select" value={toAccountId ?? ""} onChange={e => setToAccountId(e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">— Select Account —</option>
-                  {glAccounts.map(a => (
-                    <option key={a.id} value={a.id}>{a.code} – {a.name} (PKR {a.balance?.toLocaleString()})</option>
+                  <option value="">— Select Bank Account —</option>
+                  {bankAccounts.map(a => (
+                    <option key={a.id} value={a.id}>{a.bank_name} {a.account_number ? `(${a.account_number})` : ""}</option>
                   ))}
                 </select>
               </div>
