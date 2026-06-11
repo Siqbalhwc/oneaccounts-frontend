@@ -214,18 +214,18 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setLineWidth(0.3)
   doc.line(ML, divY, PW - MR, divY)
 
-  // ── TABLE HEADER – increased image column width ──────────────────
+  // ── TABLE HEADER ─────────────────────────────────────────────────
   const tableY = divY + 4
-  const ROW_H = 6
+  const ROW_H = 9               // increased from 6 mm
   const HEADER_ROW_H = ROW_H
 
-  // New column widths: IMG 22mm, # 8mm, Description 70mm, Qty 16mm, Price 32mm, Amount 34mm = 182mm
-  const COL_IMG_W  = 22    // was 14
+  // Column widths (IMG 18mm, # 8mm, Description 74mm, Qty 16mm, Price 32mm, Amount 34mm = 182mm)
+  const COL_IMG_W  = 18
   const COL_NUM_W  = 8
   const COL_QTY_W  = 16
   const COL_PRICE_W = 32
   const COL_AMT_W  = 34
-  const COL_DESC_W = CW - COL_IMG_W - COL_NUM_W - COL_QTY_W - COL_PRICE_W - COL_AMT_W  // 70 mm
+  const COL_DESC_W = CW - COL_IMG_W - COL_NUM_W - COL_QTY_W - COL_PRICE_W - COL_AMT_W  // 74 mm
 
   // Navy background
   filledRect(doc, ML, tableY, CW, HEADER_ROW_H, NAVY)
@@ -314,11 +314,15 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
       textColor: DARK,
       lineColor: BORDER,
       lineWidth: 0.2,
-      minCellHeight: ROW_H,
+      minCellHeight: ROW_H,   // increased to 9 mm
     },
     alternateRowStyles: { fillColor: ROW_ALT },
     columnStyles: {
-      0: { cellWidth: COL_IMG_W,  halign: "center" },
+      0: { 
+        cellWidth: COL_IMG_W,  
+        halign: "center",
+        cellPadding: { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 } // minimal padding
+      },
       1: { cellWidth: COL_NUM_W,  halign: "center" },
       2: { cellWidth: COL_DESC_W, halign: "left" },
       3: { cellWidth: COL_QTY_W,  halign: "center" },
@@ -326,13 +330,11 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
       5: { cellWidth: COL_AMT_W,  halign: "right", fontStyle: "bold" },
     },
     didDrawCell(hookData) {
-      // Draw product image in the first column – larger size
       if (hookData.section === "body" && hookData.column.index === 0) {
         const imgData = imageCache[hookData.row.index]
         if (imgData) {
           const { x, y, width, height } = hookData.cell
-          // Use almost full cell width/height, leaving a small margin
-          const size = Math.min(width - 4, height - 4)
+          const size = Math.min(width - 1, height - 1)   // nearly full cell
           const offsetX = x + (width - size) / 2
           const offsetY = y + (height - size) / 2
           doc.addImage(imgData, "JPEG", offsetX, offsetY, size, size)
@@ -348,7 +350,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setLineWidth(0.3)
   doc.rect(ML, bodyStartY, CW, afterTable - bodyStartY, "S")
 
-  // ── SUBTOTAL / TAX / TOTAL (height = ROW_H) ────────────────────
+  // ── SUBTOTAL / TAX / TOTAL ──────────────────────────────────────
   let SY = afterTable + 6
 
   const sumX = PW - MR - 70
