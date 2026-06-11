@@ -13,8 +13,8 @@ export default function NewBankTransferPage() {
   )
 
   const [companyId, setCompanyId] = useState("")
-  const [accounts, setAccounts] = useState<any[]>([])   // ← changed from bankAccounts
-  const [fromAccountId, setFromAccountId] = useState<number | null>(null)
+  const [bankAccounts, setBankAccounts] = useState<any[]>([])   // will hold { id, bank_name, account_id }
+  const [fromAccountId, setFromAccountId] = useState<number | null>(null) // stores GL account_id
   const [toAccountId, setToAccountId] = useState<number | null>(null)
   const [amount, setAmount] = useState("")
   const [transferDate, setTransferDate] = useState(new Date().toISOString().split("T")[0])
@@ -23,7 +23,6 @@ export default function NewBankTransferPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
-
   const [totalTransfers, setTotalTransfers] = useState(0)
 
   useEffect(() => {
@@ -33,18 +32,18 @@ export default function NewBankTransferPage() {
       if (!cid) return
       setCompanyId(cid)
 
-      // ✅ Fetch accounts of type Asset (bank accounts) for the current company
-      const { data: accountsData, error: accountsError } = await supabase
-        .from("accounts")
-        .select("id, code, name, balance")
+      // Fetch bank accounts (from bank_accounts table) for the current company
+      const { data: banks, error: banksError } = await supabase
+        .from("bank_accounts")
+        .select("id, bank_name, account_id")
         .eq("company_id", cid)
-        .eq("type", "Asset")
-        .order("code")
-      
-      if (accountsError) {
-        console.error("Error fetching accounts:", accountsError)
-      } else if (accountsData) {
-        setAccounts(accountsData)
+        .eq("is_active", true)
+        .order("bank_name")
+
+      if (banksError) {
+        console.error("Error fetching bank accounts:", banksError)
+      } else if (banks) {
+        setBankAccounts(banks)
       }
 
       const { count } = await supabase
@@ -157,9 +156,9 @@ export default function NewBankTransferPage() {
               <div style={{ marginBottom: 16 }}>
                 <label className="label">From Account *</label>
                 <select className="select" value={fromAccountId ?? ""} onChange={e => setFromAccountId(e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">— Select Account —</option>
-                  {accounts.map(a => (
-                    <option key={a.id} value={a.id}>{a.code} – {a.name} (PKR {a.balance?.toLocaleString()})</option>
+                  <option value="">— Select Bank Account —</option>
+                  {bankAccounts.map(bank => (
+                    <option key={bank.id} value={bank.account_id}>{bank.bank_name} {bank.account_number ? `(${bank.account_number})` : ""}</option>
                   ))}
                 </select>
               </div>
@@ -167,9 +166,9 @@ export default function NewBankTransferPage() {
               <div style={{ marginBottom: 16 }}>
                 <label className="label">To Account *</label>
                 <select className="select" value={toAccountId ?? ""} onChange={e => setToAccountId(e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">— Select Account —</option>
-                  {accounts.map(a => (
-                    <option key={a.id} value={a.id}>{a.code} – {a.name} (PKR {a.balance?.toLocaleString()})</option>
+                  <option value="">— Select Bank Account —</option>
+                  {bankAccounts.map(bank => (
+                    <option key={bank.id} value={bank.account_id}>{bank.bank_name} {bank.account_number ? `(${bank.account_number})` : ""}</option>
                   ))}
                 </select>
               </div>
