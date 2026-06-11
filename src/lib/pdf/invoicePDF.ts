@@ -214,18 +214,18 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setLineWidth(0.3)
   doc.line(ML, divY, PW - MR, divY)
 
-  // ── TABLE HEADER (6 mm, white separators, includes image column) ──
+  // ── TABLE HEADER – increased image column width ──────────────────
   const tableY = divY + 4
   const ROW_H = 6
   const HEADER_ROW_H = ROW_H
 
-  // Precise column widths: image (14) + number (8) + description (78) + qty (16) + price (32) + amount (34) = 182
-  const COL_IMG_W  = 14
+  // New column widths: IMG 22mm, # 8mm, Description 70mm, Qty 16mm, Price 32mm, Amount 34mm = 182mm
+  const COL_IMG_W  = 22    // was 14
   const COL_NUM_W  = 8
   const COL_QTY_W  = 16
   const COL_PRICE_W = 32
   const COL_AMT_W  = 34
-  const COL_DESC_W = CW - COL_IMG_W - COL_NUM_W - COL_QTY_W - COL_PRICE_W - COL_AMT_W  // 78 mm
+  const COL_DESC_W = CW - COL_IMG_W - COL_NUM_W - COL_QTY_W - COL_PRICE_W - COL_AMT_W  // 70 mm
 
   // Navy background
   filledRect(doc, ML, tableY, CW, HEADER_ROW_H, NAVY)
@@ -293,7 +293,6 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
       desc = (item.description ?? "").trim()
     }
 
-    // Return 6-element array: image index, row number, description, qty, unit price, amount
     return [
       i,               // image index
       i + 1,
@@ -327,14 +326,16 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
       5: { cellWidth: COL_AMT_W,  halign: "right", fontStyle: "bold" },
     },
     didDrawCell(hookData) {
-      // Draw product image in the first column
+      // Draw product image in the first column – larger size
       if (hookData.section === "body" && hookData.column.index === 0) {
         const imgData = imageCache[hookData.row.index]
         if (imgData) {
           const { x, y, width, height } = hookData.cell
-          const pad = 2
-          const size = Math.min(width, height) - pad * 2
-          doc.addImage(imgData, "JPEG", x + (width - size) / 2, y + (height - size) / 2, size, size)
+          // Use almost full cell width/height, leaving a small margin
+          const size = Math.min(width - 4, height - 4)
+          const offsetX = x + (width - size) / 2
+          const offsetY = y + (height - size) / 2
+          doc.addImage(imgData, "JPEG", offsetX, offsetY, size, size)
         }
       }
     },
