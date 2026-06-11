@@ -57,13 +57,12 @@ export default function BankTransfersPage() {
     if (!companyId) return
     setLoading(true)
 
-    // ✅ Accounts query already has company_id filter
+    // Fetch all asset accounts (bank accounts) for the current company
     const { data: accountData } = await supabase
       .from("accounts")
       .select("id, code, name, balance")
-      .eq("type", "Asset")
-      .like("code", "10%")
       .eq("company_id", companyId)
+      .eq("type", "Asset")
       .order("code")
 
     const { data: transferData } = await supabase
@@ -89,7 +88,6 @@ export default function BankTransfersPage() {
 
   useEffect(() => { if (companyId) fetchData() }, [companyId])
 
-  // ✅ Show loading until companyId is available (no fallback data)
   if (!companyId || roleLoading || !role) {
     return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading company data…</div>
   }
@@ -102,7 +100,6 @@ export default function BankTransfersPage() {
     )
   }
 
-  // Filter by search
   const filtered = search.trim()
     ? transfers.filter(t =>
         (t.from_code || "").toLowerCase().includes(search.toLowerCase()) ||
@@ -113,7 +110,6 @@ export default function BankTransfersPage() {
       )
     : transfers
 
-  // Client-side sort
   const sortedFiltered = [...filtered].sort((a, b) => {
     let valA: any, valB: any
     if (sortField === "from_code") {
@@ -154,13 +150,8 @@ export default function BankTransfersPage() {
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
-        .table-wrapper {
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-        }
-        .table-grid {
-          min-width: 900px;
-        }
+        .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .table-grid { min-width: 900px; }
         .header-row {
           display: grid;
           grid-template-columns: 100px 1fr 1fr 100px 1fr 130px;

@@ -13,7 +13,7 @@ export default function NewBankTransferPage() {
   )
 
   const [companyId, setCompanyId] = useState("")
-  const [bankAccounts, setBankAccounts] = useState<any[]>([])  // ← changed from glAccounts
+  const [accounts, setAccounts] = useState<any[]>([])   // ← changed from bankAccounts
   const [fromAccountId, setFromAccountId] = useState<number | null>(null)
   const [toAccountId, setToAccountId] = useState<number | null>(null)
   const [amount, setAmount] = useState("")
@@ -33,15 +33,19 @@ export default function NewBankTransferPage() {
       if (!cid) return
       setCompanyId(cid)
 
-      // ✅ FIX: Fetch from bank_accounts table instead of accounts
-      const { data: banks } = await supabase
-        .from("bank_accounts")
-        .select("id, bank_name, account_number, opening_balance")
+      // ✅ Fetch accounts of type Asset (bank accounts) for the current company
+      const { data: accountsData, error: accountsError } = await supabase
+        .from("accounts")
+        .select("id, code, name, balance")
         .eq("company_id", cid)
-        .is("deleted_at", null)
-        .order("bank_name")
+        .eq("type", "Asset")
+        .order("code")
       
-      if (banks) setBankAccounts(banks)
+      if (accountsError) {
+        console.error("Error fetching accounts:", accountsError)
+      } else if (accountsData) {
+        setAccounts(accountsData)
+      }
 
       const { count } = await supabase
         .from("bank_transfers")
@@ -66,31 +70,36 @@ export default function NewBankTransferPage() {
     setLoading(true)
     setError("")
 
-    const res = await fetch("/api/banking/bank-transfers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from_bank_account_id: fromAccountId,
-        to_bank_account_id: toAccountId,
-        amount: parseFloat(amount),
-        transfer_date: transferDate,
-        notes,
-        reference,
-      }),
-    })
+    try {
+      const res = await fetch("/api/banking/bank-transfers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from_account_id: fromAccountId,
+          to_account_id: toAccountId,
+          amount: parseFloat(amount),
+          transfer_date: transferDate,
+          reference,
+          notes,
+        }),
+      })
 
-    const result = await res.json()
-    if (!result.success) {
-      setError(result.error || "Transfer failed")
+      const result = await res.json()
+      if (!result.success) {
+        setError(result.error || "Transfer failed")
+        setLoading(false)
+        return
+      }
+
+      setFlash("✅ Transfer recorded and balances updated!")
+      setFromAccountId(null); setToAccountId(null); setAmount(""); setReference(""); setNotes("")
+      setTotalTransfers(prev => prev + 1)
       setLoading(false)
-      return
+      setTimeout(() => router.push("/dashboard/banking/bank-transfers"), 1500)
+    } catch (err) {
+      setError("Network error")
+      setLoading(false)
     }
-
-    setFlash("✅ Transfer recorded and balances updated!")
-    setFromAccountId(null); setToAccountId(null); setAmount(""); setReference(""); setNotes("")
-    setTotalTransfers(prev => prev + 1)
-    setLoading(false)
-    setTimeout(() => router.push("/dashboard/banking/bank-transfers"), 1500)
   }
 
   if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading company data…</div>
@@ -124,19 +133,10 @@ export default function NewBankTransferPage() {
           box-shadow: 0 4px 12px rgba(37,99,235,0.3);
         }
         .btn-primary:hover { background: var(--primary-hover); }
-
-        .layout {
-          display: flex;
-          gap: 24px;
-          align-items: flex-start;
-        }
+        .layout { display: flex; gap: 24px; align-items: flex-start; }
         .form-side { flex: 1; min-width: 0; }
         .summary-side { width: 260px; flex-shrink: 0; }
-
-        @media (max-width: 860px) {
-          .layout { flex-direction: column; }
-          .summary-side { width: 100%; }
-        }
+        @media (max-width: 860px) { .layout { flex-direction: column; } .summary-side { width: 100%; } }
       `}</style>
 
       <div style={{ maxWidth: 1100, margin: "0 auto" }}>
@@ -157,9 +157,9 @@ export default function NewBankTransferPage() {
               <div style={{ marginBottom: 16 }}>
                 <label className="label">From Account *</label>
                 <select className="select" value={fromAccountId ?? ""} onChange={e => setFromAccountId(e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">— Select Bank Account —</option>
-                  {bankAccounts.map(a => (
-                    <option key={a.id} value={a.id}>{a.bank_name} {a.account_number ? `(${a.account_number})` : ""}</option>
+                  <option value="">— Select Account —</option>
+                  {accounts.map(a => (
+                    <option key={a.id} value={a.id}>{a.code} – {a.name} (PKR {a.balance?.toLocaleString()})</option>
                   ))}
                 </select>
               </div>
@@ -167,9 +167,9 @@ export default function NewBankTransferPage() {
               <div style={{ marginBottom: 16 }}>
                 <label className="label">To Account *</label>
                 <select className="select" value={toAccountId ?? ""} onChange={e => setToAccountId(e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">— Select Bank Account —</option>
-                  {bankAccounts.map(a => (
-                    <option key={a.id} value={a.id}>{a.bank_name} {a.account_number ? `(${a.account_number})` : ""}</option>
+                  <option value="">— Select Account —</option>
+                  {accounts.map(a => (
+                    <option key={a.id} value={a.id}>{a.code} – {a.name} (PKR {a.balance?.toLocaleString()})</option>
                   ))}
                 </select>
               </div>
