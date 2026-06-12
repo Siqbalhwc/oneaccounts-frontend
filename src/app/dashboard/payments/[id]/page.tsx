@@ -33,6 +33,8 @@ interface Payment {
     invoice_no: string
     amount: number
   }[]
+  created_by?: string
+  updated_by?: string
 }
 
 interface JournalLine {
@@ -217,7 +219,7 @@ export default function PaymentDetailPage() {
     await fetchAttachments()
   }
 
-  // WhatsApp link
+  // WhatsApp link using the helper
   const waLink = payment && payment.supplier
     ? getWhatsAppLink(
         payment.supplier.phone || "",
@@ -263,11 +265,11 @@ export default function PaymentDetailPage() {
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: var(--shadow-sm); }
-        .row { display: flex; margin-bottom: 10px; font-size: 14px; align-items: center; }
-        .label { width: 130px; color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
-        .value { color: var(--text); font-weight: 500; }
+        .grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+        .value { font-size: 14px; font-weight: 500; color: var(--text); }
         table { width: 100%; border-collapse: collapse; margin-top: 12px; min-width: 600px; }
-        th { text-align: left; padding: 10px 12px; background: var(--card-hover); font-weight: 700; color: var(--text-muted); font-size: 10px; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+        th { text-align: left; padding: 10px 12px; background: var(--card-hover); font-weight: 700; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); }
         td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); }
         tr:hover td { background: var(--card-hover); }
         .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; text-decoration: none; }
@@ -329,8 +331,7 @@ export default function PaymentDetailPage() {
           100% { opacity: 0; visibility: hidden; }
         }
         @media (max-width: 640px) {
-          .row { flex-direction: column; align-items: flex-start; }
-          .label { margin-bottom: 2px; }
+          .grid-2col { grid-template-columns: 1fr; }
           .attachments-grid { grid-template-columns: 1fr; }
         }
       `}</style>
@@ -344,17 +345,23 @@ export default function PaymentDetailPage() {
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button className="btn" onClick={() => router.push("/dashboard/payments")}><ArrowLeft size={16} /></button>
+          <button className="btn" onClick={() => router.push("/dashboard/payments")}>
+            <ArrowLeft size={16} />
+          </button>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>Payment #{payment.payment_no}</h1>
-            <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>{payment.payment_type === "expense" ? "Expense Payment" : payment.supplier?.name || "Unknown Supplier"}</p>
+            <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>{payment.supplier?.name || "Unknown Supplier"}</p>
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           {waLink && hasFeature("whatsapp_invoice") && (
-            <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success"><Send size={16} /> WhatsApp</a>
+            <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success">
+              <Send size={16} /> WhatsApp
+            </a>
           )}
-          <button className="btn btn-primary" onClick={handlePrintPDF}><Printer size={16} /> Print PDF</button>
+          <button className="btn btn-primary" onClick={handlePrintPDF}>
+            <Printer size={16} /> Print PDF
+          </button>
           <label className="btn" style={{ cursor: "pointer", position: "relative" }}>
             <Upload size={16} /> {uploading ? "Uploading..." : "Add Attachment"}
             <input
@@ -370,16 +377,64 @@ export default function PaymentDetailPage() {
       </div>
 
       <div className="card">
-        <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>Payment Details</h3>
-        <div className="row"><span className="label">Payment No.</span><span className="value">{payment.payment_no}</span></div>
-        <div className="row"><span className="label">Date</span><span className="value">{payment.payment_date}</span></div>
-        <div className="row"><span className="label">Type</span><span className="value">{payment.payment_type === "expense" ? "Expense Payment" : "Supplier Payment"}</span></div>
-        {payment.supplier && <div className="row"><span className="label">Supplier</span><span className="value">{payment.supplier.code} – {payment.supplier.name}</span></div>}
-        <div className="row"><span className="label">Amount</span><span className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B" }}>PKR {payment.amount?.toLocaleString()}</span></div>
-        {bankName && <div className="row"><span className="label">Bank</span><span className="value">{bankName}</span></div>}
-        <div className="row"><span className="label">Method</span><span className="value">{payment.payment_method}</span></div>
-        {payment.reference && <div className="row"><span className="label">Reference</span><span className="value">{payment.reference}</span></div>}
-        {payment.notes && <div className="row"><span className="label">Notes</span><span className="value">{payment.notes}</span></div>}
+        <div className="grid-2col">
+          <div>
+            <div className="label">Payment No.</div>
+            <div className="value">{payment.payment_no}</div>
+          </div>
+          <div>
+            <div className="label">Date</div>
+            <div className="value">{payment.payment_date}</div>
+          </div>
+          <div>
+            <div className="label">Type</div>
+            <div className="value">{payment.payment_type === "expense" ? "Expense Payment" : "Supplier Payment"}</div>
+          </div>
+          <div>
+            <div className="label">Supplier</div>
+            <div className="value">{payment.supplier?.code} – {payment.supplier?.name || "—"}</div>
+          </div>
+          <div>
+            <div className="label">Amount</div>
+            <div className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B" }}>PKR {payment.amount?.toLocaleString()}</div>
+          </div>
+          <div>
+            <div className="label">Bank</div>
+            <div className="value">{bankName || "—"}</div>
+          </div>
+          <div>
+            <div className="label">Method</div>
+            <div className="value">{payment.payment_method}</div>
+          </div>
+          <div>
+            <div className="label">Status</div>
+            <span style={{ padding: "2px 10px", borderRadius: 12, fontSize: 12, fontWeight: 700, background: "#065F46", color: "#6EE7B7" }}>Processed</span>
+          </div>
+          {payment.reference && (
+            <div>
+              <div className="label">Reference</div>
+              <div className="value">{payment.reference}</div>
+            </div>
+          )}
+          {payment.notes && (
+            <div>
+              <div className="label">Notes</div>
+              <div className="value">{payment.notes}</div>
+            </div>
+          )}
+          {payment.created_by && (
+            <div>
+              <div className="label">Created by</div>
+              <div className="value">{payment.created_by}</div>
+            </div>
+          )}
+          {payment.updated_by && (
+            <div>
+              <div className="label">Last updated by</div>
+              <div className="value">{payment.updated_by}</div>
+            </div>
+          )}
+        </div>
       </div>
 
       {payment.allocations && payment.allocations.length > 0 && (
@@ -432,7 +487,7 @@ export default function PaymentDetailPage() {
         </div>
       )}
 
-      {/* Attachments Section – two‑column grid */}
+      {/* Attachments Section */}
       <div className="card">
         <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📎 Attachments</h3>
         {attachments.length === 0 ? (
