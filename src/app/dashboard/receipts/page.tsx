@@ -1,55 +1,31 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { Plus, Eye, Edit, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown, Settings } from "lucide-react"
+import { Plus, Eye, Edit, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 
-type SortField = "receipt_no" | "date" | "customer" | "amount" | "method" | "created_by"
+type SortField = "receipt_no" | "date" | "customer" | "amount" | "method"
 type SortDir = "asc" | "desc"
 
-// ─── Column definitions ────────────────────────────────────────────────────────
-// Using fixed px for predictable columns + 1fr only on customer (the natural "wide" column).
-// Actions is always 100px fixed so it never gets squeezed or overlapped.
-const ALL_COLUMNS = [
-  { key: "receipt_no", label: "Receipt #",           flex: "130px",  default: true },
-  { key: "date",       label: "Date",                flex: "110px",  default: true },
-  { key: "customer",   label: "Customer",            flex: "1fr",    default: true },
-  { key: "amount",     label: "Amount",              flex: "130px",  default: true },
-  { key: "method",     label: "Method",              flex: "120px",  default: true },
-  { key: "created_by", label: "Created / Edited By", flex: "190px",  default: true },
-  { key: "actions",    label: "Actions",             flex: "130px",  default: true },
-]
-
-// ─── Skeleton row ──────────────────────────────────────────────────────────────
-function SkeletonRow({ gridTemplate }: { gridTemplate: string }) {
-  const blocks = [60, 70, 80, 50, 60, 80, 80]
+function SkeletonRow() {
   return (
-    <div style={{
-      display: "grid",
-      gridTemplateColumns: gridTemplate,
-      columnGap: 4,   // reduced from 12
-      padding: "10px 12px",  // reduced from 14px 24px
-      borderBottom: "1px solid var(--border)",
-      alignItems: "center",
-    }}>
-      {blocks.map((w, i) => (
-        <div key={i} style={{
-          width: `${w}%`, height: 12, borderRadius: 4,
-          background: "var(--bg-soft)",
-          animation: "shimmer 1.5s ease-in-out infinite",
-        }} />
+    <tr>
+      {[60, 50, 70, 40, 50, 80].map((w, i) => (
+        <td key={i} style={{ padding: "12px 16px" }}>
+          <div style={{
+            width: `${w}%`,
+            height: 12,
+            background: "var(--bg-soft)",
+            borderRadius: 4,
+            animation: "shimmer 1.5s ease-in-out infinite"
+          }} />
+        </table>
       ))}
-    </div>
+    </tr>
   )
-}
-
-// ─── Sort icon ─────────────────────────────────────────────────────────────────
-function SortIcon({ field, active, dir }: { field: string; active: boolean; dir: SortDir }) {
-  if (!active) return <ArrowUpDown size={11} style={{ opacity: 0.4 }} />
-  return dir === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />
 }
 
 export default function ReceiptsPage() {
@@ -63,37 +39,14 @@ export default function ReceiptsPage() {
   const canView = role === "admin" || role === "accountant"
   const canEdit = role === "admin" || role === "accountant"
 
-  const [receipts, setReceipts]     = useState<any[]>([])
-  const [loading, setLoading]       = useState(true)
-  const [search, setSearch]         = useState("")
-  const [sortField, setSortField]   = useState<SortField>("date")
-  const [sortDir, setSortDir]       = useState<SortDir>("desc")
-  const [companyId, setCompanyId]   = useState("")
+  const [receipts, setReceipts] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState("")
+  const [sortField, setSortField] = useState<SortField>("date")
+  const [sortDir, setSortDir] = useState<SortDir>("desc")
+  const [companyId, setCompanyId] = useState("")
   const [customerMap, setCustomerMap] = useState<Record<number, { name: string; phone: string }>>({})
-  const [showColumnMenu, setShowColumnMenu] = useState(false)
 
-  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("receipts_visible_columns")
-      if (saved) {
-        try { return JSON.parse(saved) } catch { /* ignore */ }
-      }
-    }
-    return Object.fromEntries(ALL_COLUMNS.map(c => [c.key, c.default]))
-  })
-
-  // Persist column visibility
-  useEffect(() => {
-    localStorage.setItem("receipts_visible_columns", JSON.stringify(visibleColumns))
-  }, [visibleColumns])
-
-  // ── Compute grid template from visible columns ──
-  const gridTemplate = ALL_COLUMNS
-    .filter(c => visibleColumns[c.key] !== false)
-    .map(c => c.flex)
-    .join(" ")
-
-  // ── Fetch company id ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
@@ -101,7 +54,6 @@ export default function ReceiptsPage() {
     })
   }, [])
 
-  // ── Fetch customers ──
   useEffect(() => {
     if (!companyId) return
     supabase
@@ -118,10 +70,12 @@ export default function ReceiptsPage() {
       })
   }, [companyId])
 
-  // ── Fetch receipts ──
   useEffect(() => {
     if (!role) return
-    if (!canView || !companyId) { setLoading(false); return }
+    if (!canView || !companyId) {
+      setLoading(false)
+      return
+    }
     setLoading(true)
     supabase
       .from("receipts")
@@ -134,38 +88,43 @@ export default function ReceiptsPage() {
       })
   }, [role, canView, companyId, sortField, sortDir])
 
-  // ── Filter & sort client-side ──
-  const sortedFiltered = [...receipts]
-    .filter(rec => {
-      if (!search.trim()) return true
-      const custName = (customerMap[rec.party_id]?.name || "").toLowerCase()
-      return (
-        rec.receipt_no?.toLowerCase().includes(search.toLowerCase()) ||
-        custName.includes(search.toLowerCase())
-      )
-    })
-    .sort((a, b) => {
-      let valA: any, valB: any
-      if (sortField === "customer") {
-        valA = (customerMap[a.party_id]?.name || "").toLowerCase()
-        valB = (customerMap[b.party_id]?.name || "").toLowerCase()
-      } else if (sortField === "amount") {
-        valA = Number(a.amount) || 0
-        valB = Number(b.amount) || 0
-      } else {
-        valA = String(a[sortField] ?? "").toLowerCase()
-        valB = String(b[sortField] ?? "").toLowerCase()
-      }
-      if (valA < valB) return sortDir === "asc" ? -1 : 1
-      if (valA > valB) return sortDir === "asc" ? 1 : -1
-      return 0
-    })
+  const filtered = receipts.filter((rec) => {
+    if (!search.trim()) return true
+    const custName = (customerMap[rec.party_id]?.name || "").toLowerCase()
+    return (
+      rec.receipt_no?.toLowerCase().includes(search.toLowerCase()) ||
+      custName.includes(search.toLowerCase())
+    )
+  })
 
+  const sortedFiltered = [...filtered].sort((a, b) => {
+    let valA: any, valB: any
+    if (sortField === "customer") {
+      valA = (customerMap[a.party_id]?.name || "").toLowerCase()
+      valB = (customerMap[b.party_id]?.name || "").toLowerCase()
+    } else if (sortField === "amount") {
+      valA = Number(a.amount) || 0
+      valB = Number(b.amount) || 0
+    } else {
+      valA = String(a[sortField] ?? "").toLowerCase()
+      valB = String(b[sortField] ?? "").toLowerCase()
+    }
+    if (valA < valB) return sortDir === "asc" ? -1 : 1
+    if (valA > valB) return sortDir === "asc" ? 1 : -1
+    return 0
+  })
+
+  const totalReceipts = sortedFiltered.length
   const totalAmount = sortedFiltered.reduce((s, r) => s + (r.amount || 0), 0)
 
   const handleSort = (field: SortField) => {
-    setSortField(field)
-    setSortDir(prev => sortField === field ? (prev === "asc" ? "desc" : "asc") : "asc")
+    if (sortField === field) setSortDir(prev => prev === "asc" ? "desc" : "asc")
+    else { setSortField(field); setSortDir("asc") }
+  }
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown size={12} style={{ opacity: 0.5 }} />
+    return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
   const handleDelete = async (id: number) => {
@@ -174,366 +133,212 @@ export default function ReceiptsPage() {
     setReceipts(prev => prev.filter(r => r.id !== id))
   }
 
-  const toggleColumn = (key: string) => {
-    setVisibleColumns(prev => ({ ...prev, [key]: !prev[key] }))
+  // Shared th/td styles (identical to invoice page)
+  const thStyle: React.CSSProperties = {
+    padding: "12px 16px",
+    background: "var(--card-hover)",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 12,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    color: "var(--text-muted)",
+    whiteSpace: "nowrap",
+    userSelect: "none",
+  }
+  const tdStyle: React.CSSProperties = {
+    padding: "12px 16px",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 13,
+    verticalAlign: "middle",
   }
 
-  // ── Shared row style (always computed from current gridTemplate) ──
-  const rowStyle = (extra?: React.CSSProperties): React.CSSProperties => ({
-    display: "grid",
-    gridTemplateColumns: gridTemplate,
-    columnGap: 4,   // <--- reduced from 12 to 8
-    alignItems: "center",
-    ...extra,
-  })
+  const SortTh = ({ field, children, style }: { field: SortField; children: React.ReactNode; style?: React.CSSProperties }) => (
+    <th style={{ ...thStyle, ...style }}>
+      <button
+        onClick={() => handleSort(field)}
+        style={{
+          background: "none", border: "none", cursor: "pointer",
+          font: "inherit", fontSize: 12, fontWeight: 700,
+          textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-muted)",
+          display: "inline-flex", alignItems: "center", gap: 4, padding: 0,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {children} {getSortIcon(field)}
+      </button>
+    </th>
+  )
 
-  if (!role) return (
-    <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
-  )
-  if (!canView) return (
-    <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
-  )
+  if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
+  if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
   return (
-    <div style={{
-      padding: "24px 24px 48px",
-      background: "var(--bg)",
-      minHeight: "100vh",
-      fontFamily: "'Inter', sans-serif",
-      color: "var(--text)",
-    }}>
+    <div className="page-wrap" style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         @keyframes shimmer {
-          0%,100% { opacity: 0.4; }
-          50%      { opacity: 0.8; }
+          0%   { opacity: 0.4; }
+          50%  { opacity: 0.8; }
+          100% { opacity: 0.4; }
         }
-        .rec-row:hover { background: var(--card-hover); }
-        .sort-btn {
-          background: none; border: none; cursor: pointer;
-          font: 700 10px/1 'Inter', sans-serif;
-          text-transform: uppercase; letter-spacing: 0.04em;
-          color: var(--text-muted); display: inline-flex;
-          align-items: center; gap: 4px; padding: 0;
-          white-space: nowrap;
+        .rec-table { width: 100%; border-collapse: collapse; }
+        .rec-table tbody tr:last-child td { border-bottom: none; }
+        .rec-table tbody tr:hover td { background: var(--card-hover); }
+        .btn {
+          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
+          color: white; border: none; transition: all 0.2s;
         }
-        .sort-btn:hover { color: var(--primary); }
+        .btn:hover {
+          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
+          transform: translateY(-1px);
+          box-shadow: 0 6px 20px rgba(7,19,82,0.45);
+        }
         .btn-icon {
           background: transparent; border: 1.5px solid var(--border);
-          color: var(--text-muted); padding: 5px; border-radius: 7px;
+          color: var(--text-muted); padding: 5px; border-radius: 6px;
           cursor: pointer; display: inline-flex; align-items: center;
-          justify-content: center; transition: background 0.15s;
-          flex-shrink: 0;
+          justify-content: center; flex-shrink: 0; line-height: 1;
         }
         .btn-icon:hover { background: var(--card-hover); }
         .search-input {
-          height: 38px; border: 1.5px solid var(--border); border-radius: 8px;
-          padding: 0 12px 0 36px; font-size: 13px; width: 280px; max-width: 100%;
-          box-sizing: border-box; outline: none; font-family: inherit;
-          background: var(--card); color: var(--text);
+          width: 100%; height: 38px; border: 1.5px solid var(--border);
+          border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px;
+          background: var(--card); color: var(--text); outline: none;
+          box-sizing: border-box;
         }
         .search-input:focus { border-color: var(--primary); }
-        .column-menu {
-          position: absolute; right: 0; top: calc(100% + 4px);
+        .summary-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: 12px; margin-bottom: 20px;
+        }
+        .summary-item {
           background: var(--card); border: 1px solid var(--border);
-          border-radius: 10px; padding: 6px; z-index: 200;
-          min-width: 180px; box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+          border-radius: 12px; padding: 16px;
         }
-        .col-menu-item {
-          display: flex; align-items: center; gap: 4px;
-          padding: 7px 10px; border-radius: 6px; cursor: pointer;
-          font-size: 13px; white-space: nowrap; color: var(--text);
+        .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+        .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
+        .card {
+          background: var(--card); border: 1px solid var(--border);
+          border-radius: 12px; overflow: hidden;
+          box-shadow: var(--shadow-sm);
         }
-        .col-menu-item:hover { background: var(--card-hover); }
-        @media (max-width: 640px) {
-          .search-input { width: 100%; }
-          .page-header { flex-direction: column; align-items: flex-start !important; }
-          .header-actions-group { width: 100%; justify-content: flex-end; }
+        .table-scroll {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: thin;
+          scrollbar-color: var(--border) transparent;
+        }
+        .table-scroll::-webkit-scrollbar { height: 4px; }
+        .table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .rec-table { min-width: 700px; }
+
+        @media (max-width: 480px) {
+          .page-wrap { padding: 12px !important; }
+          .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
         }
       `}</style>
 
-      {/* ── Page Header ── */}
-      <div className="page-header" style={{
-        display: "flex", justifyContent: "space-between",
-        alignItems: "center", marginBottom: 20,
-        flexWrap: "wrap", gap: 12,
-      }}>
+      {/* ── Page header ── */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>
-            💰 Receipts
-          </h1>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "2px 0 0" }}>
-            {canEdit ? "Record customer payments" : "View receipts"}
-          </p>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>💰 Receipts</h1>
+          <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>{canEdit ? "Record customer payments" : "View receipts"}</p>
         </div>
-
-        <div className="header-actions-group" style={{ display: "flex", gap: 10 }}>
-          {canEdit && (
-            <button
-              onClick={() => router.push("/dashboard/receipts/new")}
-              style={{
-                height: 38, padding: "0 14px", borderRadius: 8,
-                fontWeight: 600, fontSize: 13, cursor: "pointer",
-                display: "inline-flex", alignItems: "center", gap: 6,
-                background: "transparent", color: "var(--text-muted)",
-                border: "1.5px solid var(--border)",
-              }}
-            >
-              <Plus size={15} /> New Receipt
-            </button>
-          )}
-          <div style={{ position: "relative" }}>
-            <button
-              onClick={() => setShowColumnMenu(v => !v)}
-              style={{
-                height: 38, padding: "0 14px", borderRadius: 8,
-                fontWeight: 600, fontSize: 13, cursor: "pointer",
-                display: "inline-flex", alignItems: "center", gap: 6,
-                background: "transparent", color: "var(--text-muted)",
-                border: "1.5px solid var(--border)",
-              }}
-            >
-              <Settings size={15} /> Columns
-            </button>
-            {showColumnMenu && (
-              <>
-                {/* Backdrop */}
-                <div
-                  style={{ position: "fixed", inset: 0, zIndex: 199 }}
-                  onClick={() => setShowColumnMenu(false)}
-                />
-                <div className="column-menu">
-                  {ALL_COLUMNS.map(col => (
-                    <label key={col.key} className="col-menu-item">
-                      <input
-                        type="checkbox"
-                        checked={visibleColumns[col.key] ?? col.default}
-                        onChange={() => toggleColumn(col.key)}
-                        style={{ accentColor: "var(--primary)" }}
-                      />
-                      <span>{col.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+        {canEdit && (
+          <button className="btn" onClick={() => router.push("/dashboard/receipts/new")}>
+            <Plus size={16} /> New Receipt
+          </button>
+        )}
       </div>
 
-      {/* ── Summary Cards ── */}
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-        gap: 12, marginBottom: 20,
-      }}>
-        {[
-          { label: "Total Receipts", value: String(sortedFiltered.length), color: "var(--text)" },
-          { label: "Total Amount",   value: `PKR ${totalAmount.toLocaleString()}`, color: "#10B981" },
-        ].map(card => (
-          <div key={card.label} style={{
-            background: "var(--card)", border: "1px solid var(--border)",
-            borderRadius: 12, padding: "16px 20px",
-          }}>
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", marginBottom: 6 }}>
-              {card.label}
-            </div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: card.color }}>
-              {card.value}
-            </div>
-          </div>
-        ))}
+      {/* ── Summary cards ── */}
+      <div className="summary-grid">
+        <div className="summary-item"><div className="summary-label">Total Receipts</div><div className="summary-value">{totalReceipts}</div></div>
+        <div className="summary-item"><div className="summary-label">Total Amount</div><div className="summary-value" style={{ color: "#10B981" }}>PKR {totalAmount.toLocaleString()}</div></div>
       </div>
 
-      {/* ── Search Bar ── */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ position: "relative", display: "inline-block", maxWidth: "100%" }}>
-          <Search size={15} style={{
-            position: "absolute", left: 11, top: "50%",
-            transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none",
-          }} />
-          <input
-            className="search-input"
-            placeholder="Search by receipt # or customer…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
+      {/* ── Search ── */}
+      <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
+        <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+        <input className="search-input" placeholder="Search by receipt # or customer..." value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
       {/* ── Table ── */}
-      {loading ? (
-        <div style={{
-          background: "var(--card)", border: "1px solid var(--border)",
-          borderRadius: 12, overflow: "hidden",
-        }}>
-          {/* Header */}
-          <div style={rowStyle({
-            padding: "10px 12px",   // reduced
-            background: "var(--card-hover)",
-            borderBottom: "1px solid var(--border)",
-          })}>
-            {ALL_COLUMNS.filter(c => visibleColumns[c.key] !== false).map(col => (
-              <span key={col.key} style={{
-                fontSize: 10, fontWeight: 700, textTransform: "uppercase",
-                letterSpacing: "0.04em", color: "var(--text-muted)",
-              }}>
-                {col.label}
-              </span>
-            ))}
-          </div>
-          {[1,2,3,4,5].map(i => <SkeletonRow key={i} gridTemplate={gridTemplate} />)}
+      <div className="card">
+        <div className="table-scroll">
+          <table className="rec-table">
+            <colgroup>
+              <col style={{ width: 130 }} /> {/* Receipt # */}
+              <col style={{ width: 100 }} /> {/* Date */}
+              <col />                         {/* Customer – takes remaining space */}
+              <col style={{ width: 120 }} /> {/* Amount */}
+              <col style={{ width: 110 }} /> {/* Method */}
+              <col style={{ width: 130 }} /> {/* Actions */}
+            </colgroup>
+            <thead>
+              <tr>
+                <SortTh field="receipt_no">Receipt #</SortTh>
+                <SortTh field="date">Date</SortTh>
+                <SortTh field="customer" style={{ textAlign: "left" }}>Customer</SortTh>
+                <SortTh field="amount" style={{ textAlign: "right" }}>Amount</SortTh>
+                <SortTh field="method" style={{ textAlign: "center" }}>Method</SortTh>
+                <th style={{ ...thStyle, textAlign: "center" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                [1, 2, 3, 4, 5].map(i => <SkeletonRow key={i} />)
+              ) : sortedFiltered.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>
+                    No receipts found.
+                  </td>
+                </tr>
+              ) : (
+                sortedFiltered.map((rec) => {
+                  const cust = customerMap[rec.party_id]
+                  const custName = rec.party_id ? (cust?.name || "—") : "🎁 Donation"
+                  return (
+                    <tr key={rec.id}>
+                      <td style={tdStyle}>
+                        <span style={{ fontWeight: 600, color: "var(--primary)" }}>{rec.receipt_no}</span>
+                      </td>
+                      <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{rec.date}</td>
+                      <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {custName}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: "#10B981", whiteSpace: "nowrap" }}>
+                        PKR {rec.amount?.toLocaleString()}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{rec.payment_method || "—"}</td>
+                      <td style={{ ...tdStyle, textAlign: "center" }}>
+                        <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
+                          <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/${rec.id}`)} title="View">
+                            <Eye size={13} />
+                          </button>
+                          {canEdit && (
+                            <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/new?id=${rec.id}`)} title="Edit">
+                              <Edit size={13} />
+                            </button>
+                          )}
+                          {canEdit && (
+                            <button className="btn-icon" onClick={() => handleDelete(rec.id)} style={{ color: "#EF4444" }} title="Delete">
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
         </div>
-      ) : sortedFiltered.length === 0 ? (
-        <div style={{
-          background: "var(--card)", border: "1px solid var(--border)",
-          borderRadius: 12, padding: "48px 24px",
-          textAlign: "center", color: "var(--text-muted)", fontSize: 14,
-        }}>
-          No receipts found.
-        </div>
-      ) : (
-        <div style={{
-          background: "var(--card)", border: "1px solid var(--border)",
-          borderRadius: 12, overflowX: "auto",
-        }}>
-          {/* min-width forces horizontal scroll before columns ever compress */}
-          <div style={{ minWidth: 860 }}>
-          {/* ── Header Row ── */}
-          <div style={rowStyle({
-            padding: "10px 12px",
-            background: "var(--card-hover)",
-            borderBottom: "1px solid var(--border)",
-          })}>
-            {visibleColumns.receipt_no && (
-              <button className="sort-btn" onClick={() => handleSort("receipt_no")}>
-                Receipt # <SortIcon field="receipt_no" active={sortField === "receipt_no"} dir={sortDir} />
-              </button>
-            )}
-            {visibleColumns.date && (
-              <button className="sort-btn" onClick={() => handleSort("date")}>
-                Date <SortIcon field="date" active={sortField === "date"} dir={sortDir} />
-              </button>
-            )}
-            {visibleColumns.customer && (
-              <button className="sort-btn" onClick={() => handleSort("customer")}>
-                Customer <SortIcon field="customer" active={sortField === "customer"} dir={sortDir} />
-              </button>
-            )}
-            {visibleColumns.amount && (
-              <button className="sort-btn" onClick={() => handleSort("amount")} style={{ justifyContent: "flex-end", width: "100%" }}>
-                Amount <SortIcon field="amount" active={sortField === "amount"} dir={sortDir} />
-              </button>
-            )}
-            {visibleColumns.method && (
-              <button className="sort-btn" onClick={() => handleSort("method")} style={{ justifyContent: "center", width: "100%" }}>
-                Method <SortIcon field="method" active={sortField === "method"} dir={sortDir} />
-              </button>
-            )}
-            {visibleColumns.created_by && (
-              <button className="sort-btn" onClick={() => handleSort("created_by")}>
-                Created / Edited By <SortIcon field="created_by" active={sortField === "created_by"} dir={sortDir} />
-              </button>
-            )}
-            {visibleColumns.actions && (
-              <span style={{
-                fontSize: 10, fontWeight: 700, textTransform: "uppercase",
-                letterSpacing: "0.04em", color: "var(--text-muted)",
-                textAlign: "right", display: "block",
-              }}>
-                Actions
-              </span>
-            )}
-          </div>
-
-          {/* ── Data Rows ── */}
-          {sortedFiltered.map((rec, idx) => {
-            const cust    = customerMap[rec.party_id]
-            const custName = rec.party_id ? (cust?.name || "—") : "🎁 Donation"
-            const isLast   = idx === sortedFiltered.length - 1
-
-            return (
-              <div
-                key={rec.id}
-                className="rec-row"
-                style={rowStyle({
-                  padding: "10px 12px",
-                  borderBottom: isLast ? "none" : "1px solid var(--border)",
-                  fontSize: 13,
-                  transition: "background 0.15s",
-                  cursor: "default",
-                })}
-              >
-                {visibleColumns.receipt_no && (
-                  <span style={{ fontWeight: 600, color: "var(--primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {rec.receipt_no}
-                  </span>
-                )}
-                {visibleColumns.date && (
-                  <span style={{ color: "var(--text)", whiteSpace: "nowrap" }}>
-                    {rec.date}
-                  </span>
-                )}
-                {visibleColumns.customer && (
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {custName}
-                  </span>
-                )}
-                {visibleColumns.amount && (
-                  <span style={{ textAlign: "right", fontWeight: 600, color: "#10B981", whiteSpace: "nowrap" }}>
-                    PKR {rec.amount?.toLocaleString()}
-                  </span>
-                )}
-                {visibleColumns.method && (
-                  <span style={{ textAlign: "center", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
-                    {rec.payment_method || "—"}
-                  </span>
-                )}
-                {visibleColumns.created_by && (
-                  <div style={{ display: "flex", flexDirection: "column", fontSize: 11, color: "var(--text-muted)", lineHeight: 1.4 }}>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      Created: {rec.created_by || "—"}
-                    </span>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      Edited: {rec.updated_by || "—"}
-                    </span>
-                  </div>
-                )}
-                {visibleColumns.actions && (
-                  <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center" }}>
-                    <button
-                      className="btn-icon"
-                      onClick={() => router.push(`/dashboard/receipts/${rec.id}`)}
-                      title="View receipt"
-                    >
-                      <Eye size={14} />
-                    </button>
-                    {canEdit && (
-                      <button
-                        className="btn-icon"
-                        onClick={() => router.push(`/dashboard/receipts/new?id=${rec.id}`)}
-                        title="Edit receipt"
-                      >
-                        <Edit size={14} />
-                      </button>
-                    )}
-                    {canEdit && (
-                      <button
-                        className="btn-icon"
-                        onClick={() => handleDelete(rec.id)}
-                        style={{ color: "#EF4444", borderColor: "#EF444440" }}
-                        title="Delete receipt"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-          </div>{/* end min-width inner wrapper */}
-        </div>
-      )}
+      </div>
     </div>
   )
 }
