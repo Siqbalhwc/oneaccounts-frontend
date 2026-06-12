@@ -8,7 +8,7 @@ import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
 
-type SortField = "invoice_no" | "date" | "customer" | "total" | "status" | "created_by"
+type SortField = "invoice_no" | "date" | "customer" | "total" | "status"
 type SortDir = "asc" | "desc"
 
 function SkeletonRow() {
@@ -19,7 +19,6 @@ function SkeletonRow() {
       <div className="skeleton-block" style={{ width: "80%", height: 12 }} />
       <div className="skeleton-block" style={{ width: "40%", height: 12 }} />
       <div className="skeleton-block" style={{ width: "50%", height: 12 }} />
-      <div className="skeleton-block" style={{ width: "90%", height: 12 }} />
       <div className="skeleton-block" style={{ width: 80, height: 24, borderRadius: 4 }} />
     </div>
   )
@@ -118,9 +117,6 @@ export default function InvoicesPage() {
     } else if (sortField === "status") {
       valA = (a.status || "").toLowerCase()
       valB = (b.status || "").toLowerCase()
-    } else if (sortField === "created_by") {
-      valA = (a.created_by || "").toLowerCase()
-      valB = (b.created_by || "").toLowerCase()
     } else {
       valA = (a[sortField] || "").toString().toLowerCase()
       valB = (b[sortField] || "").toString().toLowerCase()
@@ -143,7 +139,6 @@ export default function InvoicesPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  // ✅ Updated WhatsApp message with invoice link and professional signature
   const sendWhatsApp = (inv: any) => {
     const cust = customerMap[inv.party_id]
     if (!cust?.phone) { alert("No phone number."); return }
@@ -164,7 +159,6 @@ export default function InvoicesPage() {
     if (link) window.open(link, "_blank")
   }
 
-  // ✅ Updated reminder with invoice link and professional signature
   const sendReminder = (inv: any) => {
     const cust = customerMap[inv.party_id]
     if (!cust?.phone) { alert("No phone number."); return }
@@ -193,7 +187,7 @@ export default function InvoicesPage() {
         .inv-table { width: 100%; }
         .header-row {
           display: grid;
-          grid-template-columns: minmax(100px, 1fr) minmax(90px, 1fr) minmax(140px, 2fr) minmax(80px, 1fr) minmax(70px, 1fr) minmax(130px, 1.5fr) 120px;
+          grid-template-columns: minmax(100px, 1fr) minmax(90px, 1fr) minmax(140px, 2fr) minmax(80px, 1fr) minmax(70px, 1fr) 120px;
           padding: 14px 24px;
           background: var(--card-hover);
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
@@ -202,7 +196,7 @@ export default function InvoicesPage() {
         }
         .data-row {
           display: grid;
-          grid-template-columns: minmax(100px, 1fr) minmax(90px, 1fr) minmax(140px, 2fr) minmax(80px, 1fr) minmax(70px, 1fr) minmax(130px, 1.5fr) 120px;
+          grid-template-columns: minmax(100px, 1fr) minmax(90px, 1fr) minmax(140px, 2fr) minmax(80px, 1fr) minmax(70px, 1fr) 120px;
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
@@ -246,7 +240,6 @@ export default function InvoicesPage() {
         .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
-        .creator-editor-cell { display: flex; flex-direction: column; font-size: 11px; color: var(--text-muted); line-height: 1.3; word-wrap: break-word; }
         .table-scroll {
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
@@ -288,8 +281,7 @@ export default function InvoicesPage() {
             <span style={{ fontWeight: 700 }}>Customer</span>
             <span style={{ fontWeight: 700, textAlign: "right" }}>Total</span>
             <span style={{ fontWeight: 700 }}>Status</span>
-            <span style={{ fontWeight: 700 }}>Created / Edited By</span>
-            <span></span>
+            <span style={{ fontWeight: 700 }}>Actions</span>
           </div>
           {[1, 2, 3, 4, 5].map((i) => <SkeletonRow key={i} />)}
         </div>
@@ -304,8 +296,7 @@ export default function InvoicesPage() {
               <button className="sort-btn" onClick={() => handleSort("customer")}>Customer {getSortIcon("customer")}</button>
               <button className="sort-btn" onClick={() => handleSort("total")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Total {getSortIcon("total")}</button>
               <button className="sort-btn" onClick={() => handleSort("status")}>Status {getSortIcon("status")}</button>
-              <button className="sort-btn" onClick={() => handleSort("created_by")}>Created / Edited By {getSortIcon("created_by")}</button>
-              <span style={{ textAlign: "center", fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Actions</span>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", display: "flex", alignItems: "center" }}>Actions</span>
             </div>
             {sortedFiltered.map((inv) => {
               const cust = customerMap[inv.party_id]
@@ -317,10 +308,6 @@ export default function InvoicesPage() {
                   <span>{custName}</span>
                   <span style={{ fontWeight: 600, textAlign: "right" }}>PKR {inv.total?.toLocaleString()}</span>
                   <span style={{ color: inv.status === "Paid" ? "#10B981" : inv.status === "Unpaid" ? "#EF4444" : "#F59E0B", fontWeight: 600, textAlign: "center" }}>{inv.status}</span>
-                  <div className="creator-editor-cell">
-                    <span>Created: {inv.created_by || "—"}</span>
-                    <span>Edited: {inv.updated_by || "—"}</span>
-                  </div>
                   <div style={{ display: "flex", gap: 4, justifyContent: "flex-end", alignItems: "center" }}>
                     <button className="btn-icon" onClick={() => router.push(`/dashboard/invoices/${inv.id}`)} title="View">
                       <Eye size={12} />
