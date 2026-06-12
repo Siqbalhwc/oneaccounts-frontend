@@ -355,7 +355,6 @@ export default function PaymentDetailPage() {
             <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success"><Send size={16} /> WhatsApp</a>
           )}
           <button className="btn btn-primary" onClick={handlePrintPDF}><Printer size={16} /> Print PDF</button>
-          {/* ADD ATTACHMENT BUTTON */}
           <label className="btn" style={{ cursor: "pointer", position: "relative" }}>
             <Upload size={16} /> {uploading ? "Uploading..." : "Add Attachment"}
             <input
@@ -388,10 +387,15 @@ export default function PaymentDetailPage() {
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>Applied to Bills</h3>
           <div className="table-wrapper">
             <table>
-              <thead><tr><th>Bill Number</th><th style={{ textAlign: "right" }}>Amount</th></tr></thead>
+              <thead>
+                <tr><th>Bill Number</th><th style={{ textAlign: "right" }}>Amount</th></tr>
+              </thead>
               <tbody>
                 {payment.allocations.map((alloc, idx) => (
-                  <tr key={idx}><td>{alloc.invoice_no}</td><td style={{ textAlign: "right", fontWeight: 600 }}>PKR {alloc.amount?.toLocaleString()}</td></tr>
+                  <tr key={idx}>
+                    <td>{alloc.invoice_no}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {alloc.amount?.toLocaleString()}</td>
+                  </tr>
                 ))}
               </tbody>
             </table>
@@ -404,7 +408,9 @@ export default function PaymentDetailPage() {
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📒 Journal Entry</h3>
           <div className="table-wrapper">
             <table>
-              <thead><tr><th>Account</th><th style={{ textAlign: "right" }}>Debit (PKR)</th><th style={{ textAlign: "right" }}>Credit (PKR)</th></tr></thead>
+              <thead>
+                <tr><th>Account</th><th style={{ textAlign: "right" }}>Debit (PKR)</th><th style={{ textAlign: "right" }}>Credit (PKR)</th></tr>
+              </thead>
               <tbody>
                 {journalLines.map((line, idx) => (
                   <tr key={idx}>
@@ -416,7 +422,7 @@ export default function PaymentDetailPage() {
               </tbody>
               <tfoot>
                 <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
-                  <td>Total</th>
+                  <td style={{ fontWeight: 700 }}>Total</td>
                   <td style={{ textAlign: "right", color: "#F87171" }}>{totalDebit.toLocaleString()}</td>
                   <td style={{ textAlign: "right", color: "#2DD4BF" }}>{totalCredit.toLocaleString()}</td>
                 </tr>

@@ -3,13 +3,15 @@
 import { useState, useEffect, useMemo } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter, useSearchParams } from "next/navigation"
-import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, Printer } from "lucide-react"
+import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, Printer, ChevronLeft, ChevronRight } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { useCompany } from "@/contexts/CompanyContext"
 import { generateGeneralLedgerPDF } from "@/lib/pdf/generalLedgerPDF"
 
 type SortField = "date" | "description" | "debit" | "credit" | "running_balance"
 type SortDir   = "asc" | "desc"
+
+const ROWS_PER_PAGE = 50
 
 export default function GeneralLedgerPage() {
   const supabase = createBrowserClient(
@@ -45,13 +47,15 @@ export default function GeneralLedgerPage() {
   const [locationId, setLocationId] = useState("")
 
   const [ledgerLines, setLedgerLines] = useState<any[]>([])
-  // tagLabels returned by the API for PDF use: { project: "Relief Fund", ... }
   const [tagLabels,   setTagLabels]   = useState<Record<string, string>>({})
-  const [loading,   setLoading]   = useState(true)
-  const [errorMsg,  setErrorMsg]  = useState("")
+  const [loading,     setLoading]     = useState(true)
+  const [errorMsg,    setErrorMsg]    = useState("")
 
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir,   setSortDir]   = useState<SortDir>("asc")
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
 
   // ── Fetch company ID, accounts, and tag options ───────────────────
   useEffect(() => {
@@ -91,6 +95,7 @@ export default function GeneralLedgerPage() {
     if (!selectedAccountId || !companyId) return
     setLoading(true)
     setErrorMsg("")
+    setCurrentPage(1)  // reset to first page when filters change
 
     const params = new URLSearchParams({ accountId: selectedAccountId, startDate, endDate })
     if (projectId)  params.append("projectId",  projectId)
@@ -107,7 +112,7 @@ export default function GeneralLedgerPage() {
         setTagLabels({})
       } else {
         setLedgerLines(data.lines   || [])
-        setTagLabels(data.tagLabels || {})   // ← store tag names for PDF
+        setTagLabels(data.tagLabels || {})
       }
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to load ledger")
@@ -140,9 +145,16 @@ export default function GeneralLedgerPage() {
     return list
   }, [ledgerLines, sortField, sortDir])
 
+  // Pagination slicing
+  const totalRows = sortedLines.length
+  const totalPages = Math.ceil(totalRows / ROWS_PER_PAGE)
+  const startIdx = (currentPage - 1) * ROWS_PER_PAGE
+  const paginatedLines = sortedLines.slice(startIdx, startIdx + ROWS_PER_PAGE)
+
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDir(prev => prev === "asc" ? "desc" : "asc")
     else { setSortField(field); setSortDir("asc") }
+    setCurrentPage(1) // reset to first page after sorting
   }
   const getSortIcon = (field: SortField) => {
     if (sortField !== field) return <ArrowUpDown size={12} style={{ opacity: 0.5 }} />
@@ -173,7 +185,7 @@ export default function GeneralLedgerPage() {
       totalCredit,
       closingBalance,
       ledgerLines:    sortedLines,
-      tagLabels,        // ← pass resolved tag names to PDF
+      tagLabels,
     })
     doc.save(`General_Ledger_${account.code}.pdf`)
   }
@@ -201,6 +213,7 @@ export default function GeneralLedgerPage() {
         .btn { padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
         .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
         .btn-outline:hover { background: var(--card-hover); }
+        .btn-pagination { padding: 4px 12px; font-size: 12px; }
         .account-select { height: 34px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text); outline: none; font-family: inherit; min-width: 220px; }
         .account-select:focus { border-color: var(--primary); }
         @media (max-width: 640px) { .ledger-header, .ledger-row { grid-template-columns: 70px 80px 1fr 80px 80px 100px; } }
@@ -261,7 +274,6 @@ export default function GeneralLedgerPage() {
               <div style={{ fontWeight: 700, color: "var(--text)" }}>{account.name}</div>
               <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{account.type}</div>
             </div>
-            {/* Active tag chips */}
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginLeft: "auto" }}>
               {tagLabels.project  && <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, background: "var(--bg-soft)", color: "var(--text-muted)" }}>Project: {tagLabels.project}</span>}
               {tagLabels.donor    && <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, background: "var(--bg-soft)", color: "var(--text-muted)" }}>Donor: {tagLabels.donor}</span>}
@@ -289,35 +301,60 @@ export default function GeneralLedgerPage() {
             </div>
           </div>
 
-          {/* Ledger table */}
+          {/* Ledger table with pagination */}
           {loading ? (
             <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading ledger entries…</div>
           ) : sortedLines.length === 0 ? (
             <div className="ledger-card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>No transactions found for this period.</div>
           ) : (
-            <div className="ledger-card">
-              <div className="ledger-header">
-                <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
-                <button className="sort-btn" onClick={() => handleSort("description")}>Entry #{getSortIcon("description")}</button>
-                <span>Description</span>
-                <button className="sort-btn" onClick={() => handleSort("debit")}            style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
-                <button className="sort-btn" onClick={() => handleSort("credit")}           style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
-                <button className="sort-btn" onClick={() => handleSort("running_balance")}  style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("running_balance")}</button>
-              </div>
-              {sortedLines.map((line, idx) => (
-                <div key={line.id || idx} className={`ledger-row ${line.isOpening ? "opening-row" : ""}`}>
-                  <span style={{ fontSize: 12 }}>{line.isOpening ? "" : line.date}</span>
-                  <span style={{ color: "var(--primary)", fontSize: 12 }}>{line.entry_no}</span>
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line.description}</span>
-                  <span style={{ textAlign: "right", color: line.debit  > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit  > 0 ? 600 : 400 }}>{line.debit  > 0 ? `PKR ${line.debit.toLocaleString("en-PK")}`  : "—"}</span>
-                  <span style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.credit > 0 ? 600 : 400 }}>{line.credit > 0 ? `PKR ${line.credit.toLocaleString("en-PK")}` : "—"}</span>
-                  <span style={{ textAlign: "right", fontWeight: 600, color: line.running_balance >= 0 ? "#10B981" : "#EF4444" }}>
-                    PKR {Math.abs(line.running_balance).toLocaleString("en-PK")}
-                    <span style={{ fontSize: 10, marginLeft: 2 }}>{line.running_balance >= 0 ? "Dr" : "Cr"}</span>
-                  </span>
+            <>
+              <div className="ledger-card">
+                <div className="ledger-header">
+                  <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
+                  <button className="sort-btn" onClick={() => handleSort("description")}>Entry #{getSortIcon("description")}</button>
+                  <span>Description</span>
+                  <button className="sort-btn" onClick={() => handleSort("debit")}            style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
+                  <button className="sort-btn" onClick={() => handleSort("credit")}           style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
+                  <button className="sort-btn" onClick={() => handleSort("running_balance")}  style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("running_balance")}</button>
                 </div>
-              ))}
-            </div>
+                {paginatedLines.map((line, idx) => (
+                  <div key={line.id || idx} className={`ledger-row ${line.isOpening ? "opening-row" : ""}`}>
+                    <span style={{ fontSize: 12 }}>{line.isOpening ? "" : line.date}</span>
+                    <span style={{ color: "var(--primary)", fontSize: 12 }}>{line.entry_no}</span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line.description}</span>
+                    <span style={{ textAlign: "right", color: line.debit  > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit  > 0 ? 600 : 400 }}>{line.debit  > 0 ? `PKR ${line.debit.toLocaleString("en-PK")}`  : "—"}</span>
+                    <span style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.credit > 0 ? 600 : 400 }}>{line.credit > 0 ? `PKR ${line.credit.toLocaleString("en-PK")}` : "—"}</span>
+                    <span style={{ textAlign: "right", fontWeight: 600, color: line.running_balance >= 0 ? "#10B981" : "#EF4444" }}>
+                      PKR {Math.abs(line.running_balance).toLocaleString("en-PK")}
+                      <span style={{ fontSize: 10, marginLeft: 2 }}>{line.running_balance >= 0 ? "Dr" : "Cr"}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Pagination controls */}
+              {totalPages > 1 && (
+                <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginTop: 16 }}>
+                  <button
+                    className="btn btn-outline btn-pagination"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft size={14} /> Previous
+                  </button>
+                  <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    className="btn btn-outline btn-pagination"
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next <ChevronRight size={14} />
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </>
       ) : (
