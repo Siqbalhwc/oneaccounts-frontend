@@ -3,8 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Search, X, CheckCircle, RefreshCw, ExternalLink } from "lucide-react"
-import AttachmentUploader from "@/components/AttachmentUploader"
+import { ArrowLeft, Search, X, CheckCircle, RefreshCw } from "lucide-react"
 
 export default function NewPaymentPage() {
   const router = useRouter()
@@ -39,9 +38,6 @@ export default function NewPaymentPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
-
-  const [savedPaymentId, setSavedPaymentId] = useState<number | null>(null)
-  const [lastPaymentNo, setLastPaymentNo] = useState<string | null>(null)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -195,23 +191,13 @@ export default function NewPaymentPage() {
         return
       }
 
-      // Store saved payment details
-      if (result.payment?.id) {
-        setSavedPaymentId(result.payment.id)
-      }
-      if (result.payment_no) {
-        setLastPaymentNo(result.payment_no)
-      }
-
       setFlash(`✅ Payment ${result.payment_no} saved!`)
-
-      // Clear the form for a new payment, but keep savedPaymentId and lastPaymentNo
       setSupplierId(null); setSelectedSupplier(null); setSupplierSearch("")
       setSelectedBankId(null); setSelectedExpenseAccountId(null); setIsDonation(false)
       setBills([]); setAllocations({}); setPaymentAmount(""); setNotes(""); setReference("")
       setLoading(false)
       setTimeout(() => loadSuppliers(), 500)
-      setTimeout(() => setFlash(null), 6000) // keep flash longer so user sees the link
+      setTimeout(() => setFlash(null), 4000)
     } catch {
       setError("Network error")
       setLoading(false)
@@ -262,7 +248,7 @@ export default function NewPaymentPage() {
         .sup-option:last-child { border-bottom: none; }
         .sup-option:hover { background: var(--card-hover); }
         .sup-option-name { font-size: 13px; font-weight: 600; color: var(--text); }
-        .sup-option-meta { font-size: 11px; color: var(--text-muted); }
+        .sup-option-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
         .sup-option-bal { font-size: 12px; font-weight: 600; color: var(--primary); white-space: nowrap; }
         .sup-selected-badge {
           display: inline-flex; align-items: center; gap: 6px;
@@ -298,16 +284,7 @@ export default function NewPaymentPage() {
         </div>
 
         {error && <div style={{ background: "var(--card)", border: "1px solid #EF4444", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
-        {flash && (
-          <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</span>
-            {lastPaymentNo && (
-              <button className="pay-btn" onClick={() => router.push(`/dashboard/payments/${savedPaymentId}`)} style={{ padding: "4px 10px", fontSize: 12 }}>
-                <ExternalLink size={12} /> View Payment
-              </button>
-            )}
-          </div>
-        )}
+        {flash && <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
 
         <div className="header-grid">
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -429,7 +406,7 @@ export default function NewPaymentPage() {
                       <tr style={{ borderTop: "2px solid var(--border)", fontWeight: 700 }}>
                         <td colSpan={5} style={{ textAlign: "right" }}>Allocated</td>
                         <td style={{ textAlign: "right" }}>PKR {totalAllocated.toLocaleString()}</td>
-                      </tr>
+                       </tr>
                       {unallocated > 0 && (
                         <tr style={{ fontSize: 12, color: "var(--text-muted)" }}>
                           <td colSpan={6} style={{ textAlign: "right", paddingTop: 4 }}>
@@ -438,7 +415,7 @@ export default function NewPaymentPage() {
                         </tr>
                       )}
                     </tbody>
-                  </table>
+                   </table>
                 </div>
               </div>
             )}
@@ -471,20 +448,6 @@ export default function NewPaymentPage() {
                 {loading ? "Posting..." : "💾 Save Payment"}
               </button>
             </div>
-
-            {/* Attachments section – shown only after a payment has been saved */}
-            {savedPaymentId && (
-              <div className="pay-card">
-                <AttachmentUploader
-                  sourceType="payment"
-                  sourceId={savedPaymentId}
-                  companyId={companyId}
-                />
-                <div style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)", textAlign: "center" }}>
-                  These files belong to payment #{lastPaymentNo}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
