@@ -190,9 +190,10 @@ export default function InvoicesPage() {
     padding: "12px 16px",
     background: "var(--card-hover)",
     borderBottom: "1px solid var(--border)",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: 700,
     textTransform: "uppercase",
+    letterSpacing: "0.04em",
     color: "var(--text-muted)",
     whiteSpace: "nowrap",
     userSelect: "none",
@@ -210,8 +211,8 @@ export default function InvoicesPage() {
         onClick={() => handleSort(field)}
         style={{
           background: "none", border: "none", cursor: "pointer",
-          font: "inherit", fontSize: 10, fontWeight: 700,
-          textTransform: "uppercase", color: "var(--text-muted)",
+          font: "inherit", fontSize: 12, fontWeight: 700,
+          textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-muted)",
           display: "inline-flex", alignItems: "center", gap: 4, padding: 0,
           whiteSpace: "nowrap",
         }}
@@ -222,7 +223,7 @@ export default function InvoicesPage() {
   )
 
   return (
-    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+    <div className="page-wrap" style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         @keyframes shimmer {
           0%   { opacity: 0.4; }
@@ -273,7 +274,24 @@ export default function InvoicesPage() {
           border-radius: 12px; overflow: hidden;
           box-shadow: var(--shadow-sm);
         }
-        .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        /* table-scroll: enables horizontal swipe on mobile.
+           The table itself has a min-width so columns never collapse. */
+        .table-scroll {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          /* show a subtle scrollbar on mobile so user knows it's scrollable */
+          scrollbar-width: thin;
+          scrollbar-color: var(--border) transparent;
+        }
+        .table-scroll::-webkit-scrollbar { height: 4px; }
+        .table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .inv-table { min-width: 650px; }  /* never collapse below this */
+
+        /* on very small screens, reduce outer page padding so table gets more room */
+        @media (max-width: 480px) {
+          .page-wrap { padding: 12px !important; }
+          .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        }
       `}</style>
 
       {/* ── Page header ── */}
@@ -319,11 +337,11 @@ export default function InvoicesPage() {
               <tr>
                 <SortTh field="invoice_no">Invoice #</SortTh>
                 <SortTh field="date">Date</SortTh>
-                <SortTh field="customer">Customer</SortTh>
+                <SortTh field="customer" style={{ textAlign: "left" }}>Customer</SortTh>
                 <SortTh field="total" style={{ textAlign: "right" }}>Total</SortTh>
                 <SortTh field="status" style={{ textAlign: "center" }}>Status</SortTh>
                 {/* Plain th — not sortable */}
-                <th style={{ ...thStyle, textAlign: "right" }}>Actions</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Actions</th>
               </tr>
             </thead>
 
@@ -359,7 +377,7 @@ export default function InvoicesPage() {
                         {inv.status}
                       </td>
                       <td style={{ ...tdStyle, textAlign: "right" }}>
-                        <div style={{ display: "flex", gap: 4, justifyContent: "flex-end", alignItems: "center" }}>
+                        <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
                           <button className="btn-icon" onClick={() => router.push(`/dashboard/invoices/${inv.id}`)} title="View">
                             <Eye size={13} />
                           </button>
