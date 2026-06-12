@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Printer, Send, Upload, Trash2, FileText, Image } from "lucide-react"
+import { ArrowLeft, Printer, Send, Upload, Trash2, FileText, Image, CheckCircle } from "lucide-react"
 import { generatePaymentPDF } from "@/lib/pdf/paymentPDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
@@ -70,6 +70,7 @@ export default function PaymentDetailPage() {
   const [journalLines, setJournalLines] = useState<JournalLine[]>([])
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [uploading, setUploading] = useState(false)
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -201,7 +202,9 @@ export default function PaymentDetailPage() {
     if (dbError) {
       alert("Failed to save attachment record: " + dbError.message)
     } else {
-      fetchAttachments()
+      await fetchAttachments()
+      setUploadSuccess(`✅ ${file.name} uploaded`)
+      setTimeout(() => setUploadSuccess(null), 3000)
     }
     setUploading(false)
   }
@@ -211,10 +214,10 @@ export default function PaymentDetailPage() {
     const storagePath = pathParts.slice(-3).join('/')
     await supabase.storage.from("attachments").remove([storagePath])
     await supabase.from("attachments").delete().eq("id", id)
-    fetchAttachments()
+    await fetchAttachments()
   }
 
-  // WhatsApp link using the safe helper
+  // WhatsApp link
   const waLink = payment && payment.supplier
     ? getWhatsAppLink(
         payment.supplier.phone || "",
@@ -224,7 +227,6 @@ export default function PaymentDetailPage() {
 
   const handlePrintPDF = async () => {
     if (!payment) return
-
     const pdfData = {
       companyName:    companyName || "OneAccounts",
       companyAddress: "",
@@ -247,7 +249,6 @@ export default function PaymentDetailPage() {
       paid:           payment.amount,
       balanceDue:     0,
     }
-
     const doc = await generatePaymentPDF(pdfData)
     doc.save(`Payment_${payment.payment_no}.pdf`)
   }
@@ -277,15 +278,69 @@ export default function PaymentDetailPage() {
         .btn-success:hover { background: #22C55E; }
         .record-history { background: var(--bg-soft); border-radius: 8px; padding: 8px; }
         .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 8px; }
-        .attachment-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); }
-        .attachment-link { display: flex; align-items: center; gap: 8px; color: var(--primary); text-decoration: none; }
+        .attachments-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+          max-height: 200px;
+          overflow-y: auto;
+          padding: 4px 0;
+        }
+        .attachment-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          background: var(--bg-soft);
+          border-radius: 6px;
+          padding: 6px 8px;
+          font-size: 12px;
+        }
+        .attachment-link {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          color: var(--primary);
+          text-decoration: none;
+          overflow: hidden;
+          white-space: nowrap;
+          text-overflow: ellipsis;
+          max-width: calc(100% - 30px);
+        }
         .attachment-link:hover { text-decoration: underline; }
-
+        .toast {
+          position: fixed;
+          bottom: 24px;
+          right: 24px;
+          background: #065F46;
+          color: white;
+          padding: 10px 16px;
+          border-radius: 8px;
+          font-size: 13px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          z-index: 200;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+          animation: fadeOut 3s forwards;
+        }
+        @keyframes fadeOut {
+          0% { opacity: 1; }
+          70% { opacity: 1; }
+          100% { opacity: 0; visibility: hidden; }
+        }
         @media (max-width: 640px) {
           .row { flex-direction: column; align-items: flex-start; }
           .label { margin-bottom: 2px; }
+          .attachments-grid { grid-template-columns: 1fr; }
         }
       `}</style>
+
+      {/* Toast notification */}
+      {uploadSuccess && (
+        <div className="toast">
+          <CheckCircle size={16} /> {uploadSuccess}
+        </div>
+      )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -361,7 +416,7 @@ export default function PaymentDetailPage() {
               </tbody>
               <tfoot>
                 <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
-                  <td>Total</td>
+                  <td>Total</th>
                   <td style={{ textAlign: "right", color: "#F87171" }}>{totalDebit.toLocaleString()}</td>
                   <td style={{ textAlign: "right", color: "#2DD4BF" }}>{totalCredit.toLocaleString()}</td>
                 </tr>
@@ -371,26 +426,29 @@ export default function PaymentDetailPage() {
         </div>
       )}
 
-      {/* Attachments Section */}
+      {/* Attachments Section – two‑column grid */}
       <div className="card">
         <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📎 Attachments</h3>
         {attachments.length === 0 ? (
           <div style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center", padding: 12 }}>
-            No attachments yet. Use the "Add Attachment" button above.
+            No attachments. Use the "Add Attachment" button above.
           </div>
         ) : (
-          <div>
-            {attachments.map((att) => (
-              <div key={att.id} className="attachment-item">
-                <a href={att.file_url} target="_blank" rel="noopener noreferrer" className="attachment-link">
-                  {att.mime_type?.startsWith("image/") ? <Image size={16} /> : <FileText size={16} />}
-                  <span>{att.file_name}</span>
-                </a>
-                <button className="btn" onClick={() => deleteAttachment(att.id, att.file_url)} style={{ padding: "4px 8px", borderColor: "#EF4444" }}>
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
+          <div className="attachments-grid">
+            {attachments.map((att) => {
+              const fileName = att.file_name.length > 40 ? att.file_name.substring(0, 37) + "..." : att.file_name
+              return (
+                <div key={att.id} className="attachment-item">
+                  <a href={att.file_url} target="_blank" rel="noopener noreferrer" className="attachment-link" title={att.file_name}>
+                    {att.mime_type?.startsWith("image/") ? <Image size={14} /> : <FileText size={14} />}
+                    <span>{fileName}</span>
+                  </a>
+                  <button className="btn" onClick={() => deleteAttachment(att.id, att.file_url)} style={{ padding: "2px 6px", borderColor: "#EF4444" }}>
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
