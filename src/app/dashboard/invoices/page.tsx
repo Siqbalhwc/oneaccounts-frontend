@@ -16,7 +16,7 @@ function SkeletonRow() {
     <div className="data-row skeleton-row">
       <div className="skeleton-block" style={{ width: "60%", height: 12 }} />
       <div className="skeleton-block" style={{ width: "50%", height: 12 }} />
-      <div className="skeleton-block" style={{ width: "80%", height: 12 }} />
+      <div className="skeleton-block" style={{ width: "70%", height: 12 }} />
       <div className="skeleton-block" style={{ width: "40%", height: 12 }} />
       <div className="skeleton-block" style={{ width: "50%", height: 12 }} />
       <div className="skeleton-block" style={{ width: 80, height: 24, borderRadius: 4 }} />
@@ -187,21 +187,23 @@ export default function InvoicesPage() {
         .inv-table { width: 100%; }
         .header-row {
           display: grid;
-          grid-template-columns: minmax(100px, 1fr) minmax(90px, 1fr) minmax(140px, 2fr) minmax(80px, 1fr) minmax(70px, 1fr) 120px;
+          grid-template-columns: minmax(100px, 1fr) minmax(90px, 1fr) minmax(110px, 1.5fr) minmax(80px, 1fr) minmax(85px, 1fr) minmax(130px, auto);
           padding: 14px 24px;
           background: var(--card-hover);
           font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
           border-bottom: 1px solid var(--border);
-          min-width: 720px;
+          min-width: 700px;
+          align-items: center;
         }
         .data-row {
           display: grid;
-          grid-template-columns: minmax(100px, 1fr) minmax(90px, 1fr) minmax(140px, 2fr) minmax(80px, 1fr) minmax(70px, 1fr) 120px;
+          grid-template-columns: minmax(100px, 1fr) minmax(90px, 1fr) minmax(110px, 1.5fr) minmax(80px, 1fr) minmax(85px, 1fr) minmax(130px, auto);
           padding: 12px 24px;
           border-bottom: 1px solid var(--border);
-          font-size: 13px; align-items: center;
+          font-size: 13px;
+          align-items: center;
           transition: background 0.15s;
-          min-width: 720px;
+          min-width: 700px;
         }
         .data-row:hover { background: var(--card-hover); }
         .skeleton-row .skeleton-block {
@@ -246,7 +248,7 @@ export default function InvoicesPage() {
         }
         @media (max-width: 900px) {
           .header-row, .data-row {
-            min-width: 720px;
+            min-width: 700px;
           }
         }
       `}</style>
@@ -276,12 +278,12 @@ export default function InvoicesPage() {
       {loading ? (
         <div className="card inv-table">
           <div className="header-row">
-            <span style={{ fontWeight: 700 }}>Invoice #</span>
-            <span style={{ fontWeight: 700 }}>Date</span>
-            <span style={{ fontWeight: 700 }}>Customer</span>
-            <span style={{ fontWeight: 700, textAlign: "right" }}>Total</span>
-            <span style={{ fontWeight: 700 }}>Status</span>
-            <span style={{ fontWeight: 700 }}>Actions</span>
+            <span>Invoice #</span>
+            <span>Date</span>
+            <span>Customer</span>
+            <span style={{ textAlign: "right" }}>Total</span>
+            <span>Status</span>
+            <span>Actions</span>
           </div>
           {[1, 2, 3, 4, 5].map((i) => <SkeletonRow key={i} />)}
         </div>
@@ -296,7 +298,7 @@ export default function InvoicesPage() {
               <button className="sort-btn" onClick={() => handleSort("customer")}>Customer {getSortIcon("customer")}</button>
               <button className="sort-btn" onClick={() => handleSort("total")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Total {getSortIcon("total")}</button>
               <button className="sort-btn" onClick={() => handleSort("status")}>Status {getSortIcon("status")}</button>
-              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", display: "flex", alignItems: "center" }}>Actions</span>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Actions</span>
             </div>
             {sortedFiltered.map((inv) => {
               const cust = customerMap[inv.party_id]
