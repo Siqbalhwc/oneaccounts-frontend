@@ -22,7 +22,7 @@ function SkeletonRow() {
             borderRadius: 4,
             animation: "shimmer 1.5s ease-in-out infinite"
           }} />
-        </table>
+        </td>
       ))}
     </tr>
   )
@@ -133,7 +133,6 @@ export default function ReceiptsPage() {
     setReceipts(prev => prev.filter(r => r.id !== id))
   }
 
-  // Shared th/td styles (identical to invoice page)
   const thStyle: React.CSSProperties = {
     padding: "12px 16px",
     background: "var(--card-hover)",
@@ -241,7 +240,6 @@ export default function ReceiptsPage() {
         }
       `}</style>
 
-      {/* ── Page header ── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>💰 Receipts</h1>
@@ -254,29 +252,26 @@ export default function ReceiptsPage() {
         )}
       </div>
 
-      {/* ── Summary cards ── */}
       <div className="summary-grid">
         <div className="summary-item"><div className="summary-label">Total Receipts</div><div className="summary-value">{totalReceipts}</div></div>
         <div className="summary-item"><div className="summary-label">Total Amount</div><div className="summary-value" style={{ color: "#10B981" }}>PKR {totalAmount.toLocaleString()}</div></div>
       </div>
 
-      {/* ── Search ── */}
       <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
         <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
         <input className="search-input" placeholder="Search by receipt # or customer..." value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
-      {/* ── Table ── */}
       <div className="card">
         <div className="table-scroll">
           <table className="rec-table">
             <colgroup>
-              <col style={{ width: 130 }} /> {/* Receipt # */}
-              <col style={{ width: 100 }} /> {/* Date */}
-              <col />                         {/* Customer – takes remaining space */}
-              <col style={{ width: 120 }} /> {/* Amount */}
-              <col style={{ width: 110 }} /> {/* Method */}
-              <col style={{ width: 130 }} /> {/* Actions */}
+              <col style={{ width: 130 }} />
+              <col style={{ width: 100 }} />
+              <col />
+              <col style={{ width: 120 }} />
+              <col style={{ width: 110 }} />
+              <col style={{ width: 130 }} />
             </colgroup>
             <thead>
               <tr>
@@ -303,32 +298,16 @@ export default function ReceiptsPage() {
                   const custName = rec.party_id ? (cust?.name || "—") : "🎁 Donation"
                   return (
                     <tr key={rec.id}>
-                      <td style={tdStyle}>
-                        <span style={{ fontWeight: 600, color: "var(--primary)" }}>{rec.receipt_no}</span>
-                      </td>
+                      <td style={tdStyle}><span style={{ fontWeight: 600, color: "var(--primary)" }}>{rec.receipt_no}</span></td>
                       <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{rec.date}</td>
-                      <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {custName}
-                      </td>
-                      <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: "#10B981", whiteSpace: "nowrap" }}>
-                        PKR {rec.amount?.toLocaleString()}
-                      </td>
+                      <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{custName}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: "#10B981", whiteSpace: "nowrap" }}>PKR {rec.amount?.toLocaleString()}</td>
                       <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{rec.payment_method || "—"}</td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>
                         <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
-                          <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/${rec.id}`)} title="View">
-                            <Eye size={13} />
-                          </button>
-                          {canEdit && (
-                            <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/new?id=${rec.id}`)} title="Edit">
-                              <Edit size={13} />
-                            </button>
-                          )}
-                          {canEdit && (
-                            <button className="btn-icon" onClick={() => handleDelete(rec.id)} style={{ color: "#EF4444" }} title="Delete">
-                              <Trash2 size={13} />
-                            </button>
-                          )}
+                          <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/${rec.id}`)} title="View"><Eye size={13} /></button>
+                          {canEdit && <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/new?id=${rec.id}`)} title="Edit"><Edit size={13} /></button>}
+                          {canEdit && <button className="btn-icon" onClick={() => handleDelete(rec.id)} style={{ color: "#EF4444" }} title="Delete"><Trash2 size={13} /></button>}
                         </div>
                       </td>
                     </tr>
