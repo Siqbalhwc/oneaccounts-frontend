@@ -10,7 +10,7 @@ interface Product {
   id: number
   code: string
   name: string
-  category: string | null   // ← NEW
+  category: string | null
   cost_price: number
   sale_price: number
   opening_qty: number
@@ -24,6 +24,24 @@ interface Product {
 
 type SortField = "code" | "name" | "category" | "cost_price" | "sale_price" | "opening_qty" | "qty_on_hand" | "total_inflow" | "total_outflow"
 type SortDir = "asc" | "desc"
+
+function SkeletonRow() {
+  return (
+    <tr>
+      {[60, 70, 50, 40, 40, 50, 50, 50, 50, 60, 60, 60, 60].map((w, i) => (
+        <td key={i} style={{ padding: "12px 16px" }}>
+          <div style={{
+            width: `${w}%`,
+            height: 12,
+            background: "var(--bg-soft)",
+            borderRadius: 4,
+            animation: "shimmer 1.5s ease-in-out infinite"
+          }} />
+        </td>
+      ))}
+    </tr>
+  )
+}
 
 export default function StockRegisterPage() {
   const supabase = createBrowserClient(
@@ -39,20 +57,16 @@ export default function StockRegisterPage() {
   const [loading, setLoading] = useState(true)
   const [products, setProducts] = useState<Product[]>([])
   const [search, setSearch] = useState("")
-  const [categoryFilter, setCategoryFilter] = useState<string>("")   // ← NEW
-  const [categories, setCategories] = useState<string[]>([])         // ← NEW
+  const [categoryFilter, setCategoryFilter] = useState<string>("")
+  const [categories, setCategories] = useState<string[]>([])
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const pageSize = 25
 
-  // Sorting
   const [sortField, setSortField] = useState<SortField>("name")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
-
-  // Flash message
   const [flash, setFlash] = useState("")
 
-  // ── Get company ID ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -61,7 +75,6 @@ export default function StockRegisterPage() {
     })
   }, [])
 
-  // ── Fetch distinct categories for filter dropdown ──
   useEffect(() => {
     if (!companyId) return
     supabase
@@ -78,7 +91,6 @@ export default function StockRegisterPage() {
       })
   }, [companyId])
 
-  // ── Fetch products with filters ──
   const fetchProducts = () => {
     if (!companyId) return
     setLoading(true)
@@ -107,7 +119,6 @@ export default function StockRegisterPage() {
         return
       }
 
-      // Live calculation from stock_moves
       const productIds = data.map((p: any) => p.id)
       const { data: moves } = await supabase
         .from("stock_moves")
@@ -147,7 +158,6 @@ export default function StockRegisterPage() {
 
   useEffect(() => { fetchProducts() }, [companyId, search, categoryFilter, page, sortField, sortDir])
 
-  // Sort handlers
   const handleSort = (col: SortField) => {
     if (sortField === col) {
       setSortDir(prev => prev === "asc" ? "desc" : "asc")
@@ -162,7 +172,6 @@ export default function StockRegisterPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  // Soft delete
   const handleDelete = async (id: number) => {
     if (!confirm("Delete this product?")) return
     await supabase.from("products").update({ deleted_at: new Date().toISOString() }).eq("id", id).eq("company_id", companyId)
@@ -171,12 +180,45 @@ export default function StockRegisterPage() {
     setTimeout(() => setFlash(""), 3000)
   }
 
-  // Summary: closing stock value
-  const totalStockValue = products.reduce((sum, p) => {
-    const qty = p.qty_on_hand
-    return sum + (qty * (p.cost_price || 0))
-  }, 0)
+  const totalStockValue = products.reduce((sum, p) => sum + (p.qty_on_hand * (p.cost_price || 0)), 0)
   const totalProducts = total
+
+  // Shared th/td styles (identical to invoice page)
+  const thStyle: React.CSSProperties = {
+    padding: "12px 16px",
+    background: "var(--card-hover)",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 12,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    color: "var(--text-muted)",
+    whiteSpace: "nowrap",
+    userSelect: "none",
+  }
+  const tdStyle: React.CSSProperties = {
+    padding: "12px 16px",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 13,
+    verticalAlign: "middle",
+  }
+
+  const SortTh = ({ field, children, style }: { field: SortField; children: React.ReactNode; style?: React.CSSProperties }) => (
+    <th style={{ ...thStyle, ...style }}>
+      <button
+        onClick={() => handleSort(field)}
+        style={{
+          background: "none", border: "none", cursor: "pointer",
+          font: "inherit", fontSize: 12, fontWeight: 700,
+          textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-muted)",
+          display: "inline-flex", alignItems: "center", gap: 4, padding: 0,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {children} {getSortIcon(field)}
+      </button>
+    </th>
+  )
 
   if (roleLoading || !role) {
     return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
@@ -189,90 +231,85 @@ export default function StockRegisterPage() {
   }
 
   return (
-    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+    <div className="page-wrap" style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
-        .header-row {
-          display: grid;
-          grid-template-columns: 80px 1fr 120px 80px 80px 70px 70px 70px 80px 50px 45px 45px 50px;
-          column-gap: 8px;
-          padding: 14px 24px;
-          font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
-          border-bottom: 1px solid var(--border);
-          background: var(--card);
+        @keyframes shimmer {
+          0%   { opacity: 0.4; }
+          50%  { opacity: 0.8; }
+          100% { opacity: 0.4; }
         }
-        .data-row {
-          display: grid;
-          grid-template-columns: 80px 1fr 120px 80px 80px 70px 70px 70px 80px 50px 45px 45px 50px;
-          column-gap: 8px;
-          padding: 12px 24px;
-          border-bottom: 1px solid var(--border);
-          font-size: 13px; align-items: center;
-          transition: background 0.15s;
-        }
-        .data-row:hover { background: var(--card-hover); }
-        .data-row:last-child { border-bottom: none; }
-        .sort-btn {
-          background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
-          display: inline-flex; align-items: center; gap: 4px; padding: 0;
-          font-weight: 700; text-transform: uppercase; font-size: 10px;
-          text-align: left;
-        }
-        .sort-btn:hover { color: var(--primary); }
-        .header-span {
-          display: inline-flex; align-items: center; justify-content: center; gap: 4px;
-          font-weight: 700; text-transform: uppercase; font-size: 10px; color: var(--text-muted);
-        }
-        .search-input, .filter-select {
-          height: 38px; border: 1.5px solid var(--border); border-radius: 8px;
-          padding: 0 12px; font-size: 13px; width: 260px; box-sizing: border-box;
-          outline: none; font-family: inherit; background: var(--card); color: var(--text);
-        }
-        .search-input { padding-left: 36px; }
-        .search-input:focus, .filter-select:focus { border-color: var(--primary); }
-        .filter-select { width: 180px; cursor: pointer; }
+        .stock-table { width: 100%; border-collapse: collapse; }
+        .stock-table tbody tr:last-child td { border-bottom: none; }
+        .stock-table tbody tr:hover td { background: var(--card-hover); }
         .btn {
-          padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border);
-          font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
+          color: white; border: none; transition: all 0.2s;
         }
-        .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
-        .btn-outline:hover { background: var(--card-hover); }
+        .btn:hover {
+          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
+          transform: translateY(-1px);
+          box-shadow: 0 6px 20px rgba(7,19,82,0.45);
+        }
+        .btn-outline {
+          background: transparent; color: var(--text-muted); border: 1.5px solid var(--border);
+        }
+        .btn-outline:hover {
+          background: var(--card-hover);
+          transform: translateY(-1px);
+          box-shadow: none;
+        }
         .btn-icon {
-          background: transparent; border: 1.5px solid var(--border); color: var(--text-muted);
-          padding: 6px; border-radius: 8px; cursor: pointer;
+          background: transparent; border: 1.5px solid var(--border);
+          color: var(--text-muted); padding: 5px; border-radius: 6px;
+          cursor: pointer; display: inline-flex; align-items: center;
+          justify-content: center; flex-shrink: 0; line-height: 1;
         }
         .btn-icon:hover { background: var(--card-hover); }
-        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
-        .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+        .search-input {
+          width: 100%; height: 38px; border: 1.5px solid var(--border);
+          border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px;
+          background: var(--card); color: var(--text); outline: none;
+          box-sizing: border-box;
+        }
+        .search-input:focus { border-color: var(--primary); }
+        .summary-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: 12px; margin-bottom: 20px;
+        }
+        .summary-item {
+          background: var(--card); border: 1px solid var(--border);
+          border-radius: 12px; padding: 16px;
+        }
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
+        .card {
+          background: var(--card); border: 1px solid var(--border);
+          border-radius: 12px; overflow: hidden;
+          box-shadow: var(--shadow-sm);
+        }
+        .table-scroll {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: thin;
+          scrollbar-color: var(--border) transparent;
+        }
+        .table-scroll::-webkit-scrollbar { height: 4px; }
+        .table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .stock-table { min-width: 1100px; }
+
+        @media (max-width: 480px) {
+          .page-wrap { padding: 12px !important; }
+          .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        }
         .filter-bar {
-          display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 12px;
+          align-items: center;
           margin-bottom: 16px;
-        }
-        @media (max-width: 1300px) {
-          .header-row, .data-row {
-            grid-template-columns: 70px 1fr 100px 70px 70px 50px 50px 50px 60px 40px 35px 35px 40px;
-            column-gap: 4px;
-          }
-        }
-        @media (max-width: 1000px) {
-          .header-row, .data-row {
-            grid-template-columns: 60px 1fr 80px 60px 60px 0px 0px 0px 0px 30px 30px 30px 30px;
-            column-gap: 2px;
-          }
-          .header-row > :nth-child(6),
-          .header-row > :nth-child(7),
-          .header-row > :nth-child(8),
-          .header-row > :nth-child(9),
-          .data-row > :nth-child(6),
-          .data-row > :nth-child(7),
-          .data-row > :nth-child(8),
-          .data-row > :nth-child(9) { display: none; }
-        }
-        @media (max-width: 700px) {
-          .filter-bar { flex-direction: column; align-items: stretch; }
-          .search-input, .filter-select { width: 100%; }
         }
       `}</style>
 
@@ -282,24 +319,15 @@ export default function StockRegisterPage() {
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Manage inventory, view opening / inflow / outflow / closing</p>
         </div>
         {canEdit && (
-          <button className="btn btn-outline" onClick={() => router.push("/dashboard/products/new")}>
+          <button className="btn" onClick={() => router.push("/dashboard/products/new")}>
             <Plus size={16} /> Add Product
           </button>
         )}
       </div>
 
-      {/* Summary Cards */}
       <div className="summary-grid">
-        <div className="summary-item">
-          <div className="summary-label">Total Products</div>
-          <div className="summary-value">{totalProducts}</div>
-        </div>
-        <div className="summary-item">
-          <div className="summary-label">Closing Stock Value</div>
-          <div className="summary-value" style={{ color: "#10B981" }}>
-            PKR {totalStockValue.toLocaleString()}
-          </div>
-        </div>
+        <div className="summary-item"><div className="summary-label">Total Products</div><div className="summary-value">{totalProducts}</div></div>
+        <div className="summary-item"><div className="summary-label">Closing Stock Value</div><div className="summary-value" style={{ color: "#10B981" }}>PKR {totalStockValue.toLocaleString()}</div></div>
       </div>
 
       {flash && (
@@ -308,99 +336,105 @@ export default function StockRegisterPage() {
         </div>
       )}
 
-      {/* Filter Bar: Search + Category Dropdown */}
       <div className="filter-bar">
         <div style={{ position: "relative", flex: 1, maxWidth: 320 }}>
           <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-          <input
-            className="search-input"
-            placeholder="Search by name or code..."
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1) }}
-            style={{ width: "100%" }}
-          />
+          <input className="search-input" placeholder="Search by name or code..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} style={{ width: "100%" }} />
         </div>
-        <select
-          className="filter-select"
-          value={categoryFilter}
-          onChange={e => { setCategoryFilter(e.target.value); setPage(1) }}
-        >
+        <select className="filter-select" value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); setPage(1) }} style={{ height: 38, border: "1.5px solid var(--border)", borderRadius: 8, padding: "0 12px", fontSize: 13, background: "var(--card)", color: "var(--text)" }}>
           <option value="">All Categories</option>
-          {categories.map(cat => (
-            <option key={cat} value={cat}>{cat}</option>
-          ))}
+          {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
         </select>
         {categoryFilter && (
-          <button
-            className="btn btn-outline"
-            onClick={() => { setCategoryFilter(""); setPage(1); }}
-            style={{ padding: "6px 12px" }}
-          >
+          <button className="btn btn-outline" onClick={() => { setCategoryFilter(""); setPage(1); }} style={{ padding: "6px 12px" }}>
             Clear Filter
           </button>
         )}
       </div>
 
-      {/* Products Table */}
-      {loading ? (
-        <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading products…</div>
-      ) : products.length === 0 ? (
-        <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
-          No products found. {canEdit && "Add a product to get started."}
+      <div className="card">
+        <div className="table-scroll">
+          <table className="stock-table">
+            <colgroup>
+              <col style={{ width: 100 }} /> {/* Code */}
+              <col />                         {/* Name */}
+              <col style={{ width: 100 }} /> {/* Category */}
+              <col style={{ width: 80 }} />  {/* Cost */}
+              <col style={{ width: 80 }} />  {/* Sale */}
+              <col style={{ width: 70 }} />  {/* Opening */}
+              <col style={{ width: 70 }} />  {/* Inflow */}
+              <col style={{ width: 70 }} />  {/* Outflow */}
+              <col style={{ width: 80 }} />  {/* Closing */}
+              <col style={{ width: 50 }} />  {/* Img */}
+              <col style={{ width: 80 }} />  {/* Actions (Edit/Delete/Ledger) */}
+            </colgroup>
+            <thead>
+              <tr>
+                <SortTh field="code">Code</SortTh>
+                <SortTh field="name" style={{ textAlign: "left" }}>Name</SortTh>
+                <SortTh field="category">Category</SortTh>
+                <SortTh field="cost_price" style={{ textAlign: "center" }}>Cost</SortTh>
+                <SortTh field="sale_price" style={{ textAlign: "center" }}>Sale</SortTh>
+                <SortTh field="opening_qty" style={{ textAlign: "center" }}>Opening</SortTh>
+                <SortTh field="total_inflow" style={{ textAlign: "center" }}>Inflow</SortTh>
+                <SortTh field="total_outflow" style={{ textAlign: "center" }}>Outflow</SortTh>
+                <SortTh field="qty_on_hand" style={{ textAlign: "center" }}>Closing</SortTh>
+                <th style={{ ...thStyle, textAlign: "center" }}>Img</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                [1, 2, 3, 4, 5].map(i => <SkeletonRow key={i} />)
+              ) : products.length === 0 ? (
+                <tr>
+                  <td colSpan={11} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>
+                    No products found. {canEdit && "Add a product to get started."}
+                  </td>
+                </tr>
+              ) : (
+                products.map((prod) => {
+                  const inflow = prod.total_inflow
+                  const outflow = prod.total_outflow
+                  const closing = prod.qty_on_hand
+                  return (
+                    <tr key={prod.id}>
+                      <td style={tdStyle}><span style={{ fontWeight: 600, color: "var(--primary)" }}>{prod.code}</span></td>
+                      <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{prod.name}</td>
+                      <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{prod.category || "—"}</td>
+                      <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>PKR {prod.cost_price?.toLocaleString()}</td>
+                      <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>PKR {prod.sale_price?.toLocaleString()}</td>
+                      <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{prod.opening_qty}</td>
+                      <td style={{ ...tdStyle, textAlign: "center", color: "#10B981", whiteSpace: "nowrap" }}>{inflow}</td>
+                      <td style={{ ...tdStyle, textAlign: "center", color: "#EF4444", whiteSpace: "nowrap" }}>{outflow}</td>
+                      <td style={{ ...tdStyle, textAlign: "center", fontWeight: 600, whiteSpace: "nowrap" }}>{closing}</td>
+                      <td style={{ ...tdStyle, textAlign: "center" }}>
+                        {prod.image_path ? (
+                          <img src={prod.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
+                        ) : "—"}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: "center" }}>
+                        <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
+                          <button className="btn-icon" onClick={() => router.push(`/dashboard/products/new?id=${prod.id}`)} title="Edit">
+                            <Edit size={13} />
+                          </button>
+                          <button className="btn-icon" onClick={() => handleDelete(prod.id)} style={{ color: "#EF4444" }} title="Delete">
+                            <Trash2 size={13} />
+                          </button>
+                          <button className="btn-icon" onClick={() => router.push(`/dashboard/reports/product-ledger?productId=${prod.id}`)} title="View Ledger">
+                            <Eye size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
         </div>
-      ) : (
-        <div className="card">
-          <div className="header-row">
-            <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
-            <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
-            <button className="sort-btn" onClick={() => handleSort("category")}>Category {getSortIcon("category")}</button>
-            <button className="sort-btn" onClick={() => handleSort("cost_price")}>Cost {getSortIcon("cost_price")}</button>
-            <button className="sort-btn" onClick={() => handleSort("sale_price")}>Sale {getSortIcon("sale_price")}</button>
-            <button className="sort-btn" onClick={() => handleSort("opening_qty")} style={{ justifyContent: "center" }}>Opening {getSortIcon("opening_qty")}</button>
-            <button className="sort-btn" onClick={() => handleSort("total_inflow")} style={{ justifyContent: "center" }}>Inflow {getSortIcon("total_inflow")}</button>
-            <button className="sort-btn" onClick={() => handleSort("total_outflow")} style={{ justifyContent: "center" }}>Outflow {getSortIcon("total_outflow")}</button>
-            <button className="sort-btn" onClick={() => handleSort("qty_on_hand")} style={{ justifyContent: "center" }}>Closing {getSortIcon("qty_on_hand")}</button>
-            <span className="header-span">Img</span>
-            <span></span>
-            <span></span>
-            <span></span>
-          </div>
-          {products.map(prod => {
-            const inflow = prod.total_inflow
-            const outflow = prod.total_outflow
-            const closing = prod.qty_on_hand
-            return (
-              <div key={prod.id} className="data-row">
-                <span style={{ fontWeight: 600, color: "var(--primary)" }}>{prod.code}</span>
-                <span style={{ color: "var(--text)" }}>{prod.name}</span>
-                <span style={{ color: "var(--text-muted)", fontSize: 12 }}>{prod.category || "—"}</span>
-                <span style={{ textAlign: "center" }}>PKR {prod.cost_price?.toLocaleString()}</span>
-                <span style={{ textAlign: "center" }}>PKR {prod.sale_price?.toLocaleString()}</span>
-                <span style={{ textAlign: "center" }}>{prod.opening_qty}</span>
-                <span style={{ textAlign: "center", color: "#10B981" }}>{inflow}</span>
-                <span style={{ textAlign: "center", color: "#EF4444" }}>{outflow}</span>
-                <span style={{ textAlign: "center", fontWeight: 600 }}>{closing}</span>
-                <span style={{ textAlign: "center" }}>
-                  {prod.image_path ? (
-                    <img src={prod.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
-                  ) : "—"}
-                </span>
-                <button className="btn-icon" onClick={() => router.push(`/dashboard/products/new?id=${prod.id}`)} title="Edit"><Edit size={14} /></button>
-                <button className="btn-icon" onClick={() => handleDelete(prod.id)} style={{ color: "#EF4444" }} title="Delete"><Trash2 size={14} /></button>
-                <button
-                  className="btn-icon"
-                  onClick={() => router.push(`/dashboard/reports/product-ledger?productId=${prod.id}`)}
-                  title="View Ledger"
-                >
-                  <Eye size={14} />
-                </button>
-              </div>
-            )
-          })}
-        </div>
-      )}
+      </div>
 
-      {/* Pagination */}
       {total > pageSize && (
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16, fontSize: 13, color: "var(--text-muted)" }}>
           <span>Showing {Math.min(pageSize, total - (page-1)*pageSize)} of {total}</span>
