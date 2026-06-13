@@ -61,13 +61,17 @@ export default function NewBillPage() {
   const [activities, setActivities] = useState<any[]>([])
   const [allAccounts, setAllAccounts] = useState<any[]>([])
 
+  // Pre‑loaded lookups
   const [allProjects, setAllProjects] = useState<any[]>([])
   const [allDonors, setAllDonors] = useState<any[]>([])
 
+  // budgetInfo
   const [budgetInfo, setBudgetInfo] = useState<Record<string, { budget: number; spent: number; available: number; hasBudget: boolean }>>({})
   const [budgetError, setBudgetError] = useState("")
 
   const [locationActivitiesMap, setLocationActivitiesMap] = useState<Record<number, number[]>>({})
+
+  // Combo cache: key = `${locationId}_${activityId}` -> array of {project_id, donor_id, projectName, donorName}
   const [comboCache, setComboCache] = useState<Record<string, { project_id: number; donor_id: number; projectName: string; donorName: string | null }[]>>({})
 
   const fiscalYear = new Date().getFullYear()
@@ -75,6 +79,7 @@ export default function NewBillPage() {
   const budgetKey = (actId: number, locId: number | null, accId: number) =>
     `${actId}_${locId ?? "none"}_${accId}`
 
+  // Pending tracker
   const pendingByKey = useMemo(() => {
     const map: Record<string, number> = {}
     items.forEach(item => {
@@ -173,6 +178,7 @@ export default function NewBillPage() {
       .then(r => r.data && setProducts(r.data))
   }
 
+  // PO logic
   useEffect(() => {
     if (!companyId || !supplierId || !showPO) {
       setOpenPOs([])
@@ -214,6 +220,7 @@ export default function NewBillPage() {
       })
   }, [companyId, supplierId, showPO])
 
+  // Load existing bill for editing
   useEffect(() => {
     if (!editId || !companyId) return
     supabase.from("invoices")
@@ -248,7 +255,7 @@ export default function NewBillPage() {
             location_id: item.location_id || "",
             activity_id: item.activity_id || "",
             account_id: item.account_id || null,
-            project_id: null,
+            project_id: null,   // we don't know original; let user re-select if needed
             donor_id: null,
           }))
           setItems(loaded)
@@ -266,6 +273,7 @@ export default function NewBillPage() {
       })
   }, [editId, companyId, suppliers])
 
+  // AUTO‑COMPUTE DUE DATE
   useEffect(() => {
     if (!selectedSupplier || !billDate) return
     const term = (selectedSupplier.payment_terms || "").toLowerCase()
@@ -384,10 +392,13 @@ export default function NewBillPage() {
     setItems(updated)
   }
 
+  // Fetch distinct (project_id, donor_id) combinations for a location+activity
   const fetchCombosForLine = async (locId: number, actId: number) => {
     const key = `${locId}_${actId}`
     if (comboCache[key] !== undefined) return
-    setComboCache(prev => ({ ...prev, [key]: [] }))
+
+    setComboCache(prev => ({ ...prev, [key]: [] }))  // placeholder
+
     const { data: rows } = await supabase
       .from("budgets")
       .select("project_id, donor_id")
@@ -396,18 +407,23 @@ export default function NewBillPage() {
       .eq("activity_id", actId)
       .eq("fiscal_year", fiscalYear)
       .is("month", null)
+
     if (!rows || rows.length === 0) {
       setComboCache(prev => ({ ...prev, [key]: [] }))
       return
     }
+
+    // Deduplicate by project_id + donor_id pair
     const seen = new Set<string>()
     const combos: { project_id: number; donor_id: number; projectName: string; donorName: string | null }[] = []
+
     for (const r of rows) {
       const pid = r.project_id
       const did = r.donor_id
       const uid = `${pid}_${did}`
       if (seen.has(uid)) continue
       seen.add(uid)
+
       const project = allProjects.find(p => p.id === pid)
       const donor = did ? allDonors.find(d => d.id === did) : null
       combos.push({
@@ -417,20 +433,26 @@ export default function NewBillPage() {
         donorName: donor?.name || null,
       })
     }
+
     setComboCache(prev => ({ ...prev, [key]: combos }))
   }
 
+  // Auto‑select or show dropdown
   const applyCombosToLine = (idx: number) => {
     const item = items[idx]
     if (!item.location_id || !item.activity_id) return
+
     const key = `${item.location_id}_${item.activity_id}`
     const combos = comboCache[key]
+
     const updated = [...items]
     if (!combos || combos.length === 0) {
+      // no combo
       updated[idx] = { ...updated[idx], project_id: null, donor_id: null }
     } else if (combos.length === 1) {
       updated[idx] = { ...updated[idx], project_id: combos[0].project_id, donor_id: combos[0].donor_id }
     } else {
+      // multiple combos – keep current selection if still valid, else clear
       const current = updated[idx]
       if (current.project_id) {
         const stillValid = combos.some(c => c.project_id === current.project_id && c.donor_id === current.donor_id)
@@ -524,10 +546,12 @@ export default function NewBillPage() {
       updated[idx].total = updated[idx].qty * updated[idx].unit_price
     }
 
+    // Reset project/donor when location or activity changes
     if (field === "location_id" || field === "activity_id") {
       updated[idx].project_id = null
       updated[idx].donor_id = null
 
+      // Fetch new combos if both are set
       if (updated[idx].location_id && updated[idx].activity_id) {
         const locId = Number(updated[idx].location_id)
         const actId = Number(updated[idx].activity_id)
@@ -535,6 +559,7 @@ export default function NewBillPage() {
       }
     }
 
+    // Handle project selection from dropdown
     if (field === "project_select") {
       const selectedCombo = JSON.parse(value) as { project_id: number; donor_id: number }
       updated[idx].project_id = selectedCombo.project_id
@@ -542,6 +567,9 @@ export default function NewBillPage() {
     }
 
     setItems(updated)
+
+    // Apply auto‑selection after combos load (deferred via useEffect, but we also call applyCombosToLine)
+    // We'll rely on the combo fetch completion; apply via useEffect later.
 
     if ((field === "account_id" || field === "activity_id" || field === "location_id") && updated[idx].activity_id && updated[idx].account_id) {
       const actId = Number(updated[idx].activity_id)
@@ -551,6 +579,7 @@ export default function NewBillPage() {
     }
   }
 
+  // When combos arrive, auto‑select or clear
   useEffect(() => {
     items.forEach((item, idx) => {
       if (item.location_id && item.activity_id && item.project_id === null && item.donor_id === null) {
@@ -584,6 +613,7 @@ export default function NewBillPage() {
         if (showLoc && !item.location_id) { setError("Each manual line must have Location selected"); return }
         if (showAct && !item.activity_id) { setError("Each manual line must have Activity selected"); return }
         if (!item.account_id) { setError("Each manual line must have a GL Account selected"); return }
+        // If multiple combos, force project selection
         const key = `${item.location_id}_${item.activity_id}`
         const combos = comboCache[key]
         if (combos && combos.length > 1 && !item.project_id) {
@@ -748,6 +778,8 @@ export default function NewBillPage() {
         .inv-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; transition: all 0.15s; white-space: nowrap; }
         .inv-btn:hover { background: var(--card-hover); }
         .inv-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .inv-item-row { display: grid; grid-template-columns: ${isNGO || locations.length > 0 || activities.length > 0 ? "2fr 70px 90px 110px 110px 80px 90px 30px" : "2fr 70px 90px 120px 90px 30px"}; gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
+        .inv-item-header { display: grid; grid-template-columns: ${isNGO || locations.length > 0 || activities.length > 0 ? "2fr 70px 90px 110px 110px 80px 90px 30px" : "2fr 70px 90px 120px 90px 30px"}; gap: 6px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); padding-bottom: 6px; }
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
         .cust-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; max-height: 220px; overflow-y: auto; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
@@ -759,47 +791,13 @@ export default function NewBillPage() {
         .cust-option-bal { font-size: 12px; font-weight: 600; color: var(--primary); white-space: nowrap; }
         .cust-selected-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 600; color: var(--text); width: 100%; cursor: pointer; }
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
-        .inv-item-row { display: grid; grid-template-columns: ${isNGO || locations.length > 0 || activities.length > 0 ? "2fr 70px 90px 110px 110px 80px 90px 30px" : "2fr 70px 90px 120px 90px 30px"}; gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
-        .inv-item-header { display: grid; grid-template-columns: ${isNGO || locations.length > 0 || activities.length > 0 ? "2fr 70px 90px 110px 110px 80px 90px 30px" : "2fr 70px 90px 120px 90px 30px"}; gap: 6px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); padding-bottom: 6px; }
+        @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
         .budget-warning { background: var(--card); border: 1px solid #EF4444; color: #FCA5A5; padding: 8px 12px; border-radius: 6px; font-size: 12px; display: flex; align-items: center; gap: 6px; }
         .line-info-row { font-size: 10px; color: var(--text-muted); margin-left: 4px; display: flex; gap: 14px; padding: 3px 0 5px 0; flex-wrap: wrap; align-items: center; }
         .line-info-chip { display: inline-flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 10px; }
         .over-budget-chip { border-color: #EF4444 !important; color: #FCA5A5 !important; }
         .ok-budget-chip { border-color: #059669 !important; color: #6EE7B7 !important; }
         .project-select-small { height: 24px; font-size: 10px; padding: 0 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); margin-left: 6px; }
-
-        /* MOBILE RESPONSIVE ADDITIONS */
-        @media (max-width: 768px) {
-          .header-grid {
-            grid-template-columns: 1fr;
-            gap: 12px;
-          }
-          .inv-card {
-            padding: 14px 12px;
-          }
-          .inv-row {
-            grid-template-columns: 1fr;
-            gap: 10px;
-          }
-          .inv-btn {
-            width: 100%;
-            justify-content: center;
-            padding: 10px 12px;
-          }
-          .cust-selected-badge {
-            flex-wrap: wrap;
-          }
-          .inv-item-header, .inv-item-row {
-            min-width: 500px;
-          }
-          .cust-dropdown {
-            max-height: 200px;
-          }
-          .inv-title {
-            font-size: 16px;
-          }
-        }
-
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
@@ -925,6 +923,7 @@ export default function NewBillPage() {
                 </div>
               </div>
 
+              {/* Add Item area */}
               {showProducts ? (
                 <div style={{ marginTop: 14 }}>
                   <label className="inv-label">Add Item</label>
@@ -1006,6 +1005,7 @@ export default function NewBillPage() {
           </div>
         </div>
 
+        {/* Items table */}
         <div style={{ marginTop: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
@@ -1116,6 +1116,7 @@ export default function NewBillPage() {
 
                     {showInfoRow && (
                       <div className="line-info-row">
+                        {/* Project/Donor selection */}
                         {combos.length === 0 && (
                           <span className="line-info-chip" style={{ opacity: 0.5 }}>📁 No project linked</span>
                         )}
@@ -1150,6 +1151,7 @@ export default function NewBillPage() {
                           </>
                         )}
 
+                        {/* Budget chips */}
                         {budgetData && !budgetData.hasBudget && (
                           <span className="line-info-chip over-budget-chip">🚫 No budget defined</span>
                         )}
