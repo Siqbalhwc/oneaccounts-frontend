@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useMediaQuery } from "@/hooks/useMediaQuery"
 import MobileBottomNav from "@/components/dashboard/MobileBottomNav"
 import MobileDrawer from "@/components/dashboard/MobileDrawer"
@@ -12,25 +12,8 @@ import QueryProvider from "@/components/QueryProvider"
 import { SessionMonitor } from "@/components/SessionMonitor"
 
 export default function DashboardLayoutClient({ tenant, email, initial, children }: { tenant: any; email: string; initial: string; children: React.ReactNode }) {
-  const [forceMobile, setForceMobile] = useState(false)
-  const isMobileMedia = useMediaQuery("(max-width: 768px)")
-  const isMobile = forceMobile || isMobileMedia
+  const isMobile = useMediaQuery("(max-width: 768px)")
   const [drawerOpen, setDrawerOpen] = useState(false)
-
-  // Debug: show a small banner on mobile detection
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("forceMobile")
-      if (stored === "true") setForceMobile(true)
-    }
-  }, [])
-
-  const toggleForceMobile = () => {
-    const newVal = !forceMobile
-    setForceMobile(newVal)
-    localStorage.setItem("forceMobile", String(newVal))
-    window.location.reload()
-  }
 
   if (isMobile) {
     return (
@@ -42,10 +25,6 @@ export default function DashboardLayoutClient({ tenant, email, initial, children
       }}>
         <QueryProvider>
           <SessionMonitor>
-            {/* Debug banner */}
-            <div style={{ background: "#F97316", color: "black", fontSize: 10, textAlign: "center", padding: "4px", position: "sticky", top: 0, zIndex: 1000 }}>
-              MOBILE MODE {forceMobile ? "(force)" : ""} | <button onClick={toggleForceMobile} style={{ background: "none", border: "none", color: "black", fontWeight: "bold", cursor: "pointer" }}>Toggle</button>
-            </div>
             <div style={{ position: "relative", minHeight: "100vh", background: "var(--bg)", paddingBottom: "60px" }}>
               {children}
             </div>
@@ -57,7 +36,7 @@ export default function DashboardLayoutClient({ tenant, email, initial, children
     )
   }
 
-  // Desktop layout
+  // Desktop layout (original)
   return (
     <div className="dl-shell">
       <SidebarClient />
