@@ -13,6 +13,7 @@ interface Adjustment {
   qty: number
   date: string
   reason: string
+  move_type: string
   product?: { code: string; name: string }
 }
 
@@ -71,6 +72,7 @@ export default function InventoryAdjustmentsPage() {
       .from("stock_moves")
       .select("*, product:products(code, name)")
       .eq("company_id", companyId)
+      .eq("move_type", "adjustment")   // ✅ ONLY show manual adjustments, not sales/purchases
       .order("date", { ascending: false })
       .then(({ data }) => {
         if (data) setAdjustments(data)
@@ -126,7 +128,7 @@ export default function InventoryAdjustmentsPage() {
   const totalAdjustments = adjustments.length
   const netQuantityChange = adjustments.reduce((s, a) => s + a.qty, 0)
 
-  // Shared th/td styles (identical to invoice page)
+  // Shared th/td styles
   const thStyle: React.CSSProperties = {
     padding: "12px 16px",
     background: "var(--card-hover)",
@@ -276,7 +278,7 @@ export default function InventoryAdjustmentsPage() {
                   <SortTh field="date" style={{ textAlign: "center" }}>Date</SortTh>
                   <SortTh field="reason" style={{ textAlign: "left" }}>Reason</SortTh>
                   <th style={{ ...thStyle, textAlign: "center" }}>Actions</th>
-                </tr>
+              </tr>
               </thead>
               <tbody>
                 {loading ? (
