@@ -343,11 +343,11 @@ export default function ManagementDashboard({ role }: { role: string }) {
   // ── Receivables / Payables ────────────────────────────────────────
   const totalReceivables = dashData?.totalReceivables || 0
   const totalPayables = dashData?.totalPayables || 0
-  const overdueInvoicesCount = dashData?.overdueInvoicesCount || 0
-  const overdueBillsCount = dashData?.overdueBillsCount || 0
-  const lastUpdated = dashData?.lastUpdated || ""
+const overdueInvoicesCount = dashData?.overdueInvoicesCount || 0
+const lastUpdated = dashData?.lastUpdated || ""
 
-  const totalOverdueCount = (overdueInvoicesCount || 0) + (overdueBillsCount || 0)
+// Bills count is not in dashData, we'll use the list length from the fetched data
+const totalOverdueCount = (overdueInvoicesCount || 0) + overdueBillsList.length
 
   const remainingFunds = totalBudget - totalSpent
   const spentPct = totalBudget ? Math.round((totalSpent / totalBudget) * 100) : 0
