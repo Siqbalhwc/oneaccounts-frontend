@@ -5,7 +5,7 @@ import { useMediaQuery } from "@/hooks/useMediaQuery"
 import MobileBottomNav from "@/components/dashboard/MobileBottomNav"
 import MobileDrawer from "@/components/dashboard/MobileDrawer"
 import SidebarClient from "@/app/dashboard/sidebar-client"
-import DashboardSidebar from "@/components/dashboard/DashboardSidebar"
+import DashboardSidebar from "@/components/DashboardSidebar"   // ← fixed path
 import BottomNav from "@/components/BottomNav"
 import { CompanyProvider } from "@/contexts/CompanyContext"
 import QueryProvider from "@/components/QueryProvider"
@@ -36,7 +36,7 @@ export default function DashboardLayoutClient({ tenant, email, initial, children
     )
   }
 
-  // Desktop layout
+  // Desktop layout – matches original
   return (
     <div className="dl-shell">
       <SidebarClient />
