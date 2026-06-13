@@ -10,6 +10,24 @@ import { usePlan } from "@/contexts/PlanContext"
 type SortField = "po_no" | "date" | "supplier" | "total" | "status"
 type SortDir = "asc" | "desc"
 
+function SkeletonRow() {
+  return (
+    <tr>
+      {[60, 50, 70, 40, 50, 80].map((w, i) => (
+        <td key={i} style={{ padding: "12px 16px" }}>
+          <div style={{
+            width: `${w}%`,
+            height: 12,
+            background: "var(--bg-soft)",
+            borderRadius: 4,
+            animation: "shimmer 1.5s ease-in-out infinite"
+          }} />
+        </td>
+      ))}
+    </tr>
+  )
+}
+
 export default function PurchaseOrdersPage() {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -37,7 +55,6 @@ export default function PurchaseOrdersPage() {
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
 
-  // Supplier map for names
   const [supplierMap, setSupplierMap] = useState<Record<number, string>>({})
 
   useEffect(() => {
@@ -100,6 +117,7 @@ export default function PurchaseOrdersPage() {
     return 0
   })
 
+  const totalOrders = sortedFiltered.length
   const totalAmount = sortedFiltered.reduce((s, o) => s + (o.total || 0), 0)
 
   const handleSort = (field: SortField) => {
@@ -116,62 +134,111 @@ export default function PurchaseOrdersPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
+  // Shared th/td styles (identical to invoice page)
+  const thStyle: React.CSSProperties = {
+    padding: "12px 16px",
+    background: "var(--card-hover)",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 12,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    color: "var(--text-muted)",
+    whiteSpace: "nowrap",
+    userSelect: "none",
+  }
+  const tdStyle: React.CSSProperties = {
+    padding: "12px 16px",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 13,
+    verticalAlign: "middle",
+  }
+
+  const SortTh = ({ field, children, style }: { field: SortField; children: React.ReactNode; style?: React.CSSProperties }) => (
+    <th style={{ ...thStyle, ...style }}>
+      <button
+        onClick={() => handleSort(field)}
+        style={{
+          background: "none", border: "none", cursor: "pointer",
+          font: "inherit", fontSize: 12, fontWeight: 700,
+          textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-muted)",
+          display: "inline-flex", alignItems: "center", gap: 4, padding: 0,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {children} {getSortIcon(field)}
+      </button>
+    </th>
+  )
+
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
   return (
-    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+    <div className="page-wrap" style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
-        .header-row {
-          display: grid;
-          grid-template-columns: 140px 100px 1fr 120px 120px 100px 60px;
-          column-gap: 8px;
-          padding: 14px 24px;
-          font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
-          border-bottom: 1px solid var(--border);
-          background: var(--card);
+        @keyframes shimmer {
+          0%   { opacity: 0.4; }
+          50%  { opacity: 0.8; }
+          100% { opacity: 0.4; }
         }
-        .data-row {
-          display: grid;
-          grid-template-columns: 140px 100px 1fr 120px 120px 100px 60px;
-          column-gap: 8px;
-          padding: 12px 24px;
-          border-bottom: 1px solid var(--border);
-          font-size: 13px; align-items: center;
-          transition: background 0.15s;
-        }
-        .data-row:hover { background: var(--card-hover); }
-        .data-row:last-child { border-bottom: none; }
+        .po-table { width: 100%; border-collapse: collapse; }
+        .po-table tbody tr:last-child td { border-bottom: none; }
+        .po-table tbody tr:hover td { background: var(--card-hover); }
         .btn {
-          padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
+          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
           cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-          transition: 0.2s; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted);
+          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
+          color: white; border: none; transition: all 0.2s;
         }
-        .btn:hover { background: var(--card-hover); }
+        .btn:hover {
+          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
+          transform: translateY(-1px);
+          box-shadow: 0 6px 20px rgba(7,19,82,0.45);
+        }
         .btn-icon {
-          background: transparent; border: 1.5px solid var(--border); color: var(--text-muted);
-          padding: 6px; border-radius: 8px; cursor: pointer;
+          background: transparent; border: 1.5px solid var(--border);
+          color: var(--text-muted); padding: 5px; border-radius: 6px;
+          cursor: pointer; display: inline-flex; align-items: center;
+          justify-content: center; flex-shrink: 0; line-height: 1;
         }
         .btn-icon:hover { background: var(--card-hover); }
-        .input {
-          width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px;
-          padding: 0 12px 0 36px; font-size: 13px;
-          background: var(--card); color: var(--text); outline: none; box-sizing: border-box;
+        .search-input {
+          width: 100%; height: 38px; border: 1.5px solid var(--border);
+          border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px;
+          background: var(--card); color: var(--text); outline: none;
+          box-sizing: border-box;
         }
-        .input:focus { border-color: var(--primary); }
-        .sort-btn {
-          background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
-          display: inline-flex; align-items: center; gap: 4px; padding: 0;
-          font-weight: 700; text-transform: uppercase; font-size: 10px;
+        .search-input:focus { border-color: var(--primary); }
+        .summary-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: 12px; margin-bottom: 20px;
         }
-        .sort-btn:hover { color: var(--primary); }
-        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
-        .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+        .summary-item {
+          background: var(--card); border: 1px solid var(--border);
+          border-radius: 12px; padding: 16px;
+        }
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
-        @media (max-width: 640px) {
-          .header-row, .data-row { grid-template-columns: 100px 70px 1fr 80px 80px 70px 50px; padding: 10px 12px; }
+        .card {
+          background: var(--card); border: 1px solid var(--border);
+          border-radius: 12px; overflow: hidden;
+          box-shadow: var(--shadow-sm);
+        }
+        .table-scroll {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: thin;
+          scrollbar-color: var(--border) transparent;
+        }
+        .table-scroll::-webkit-scrollbar { height: 4px; }
+        .table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .po-table { min-width: 700px; }
+
+        @media (max-width: 480px) {
+          .page-wrap { padding: 12px !important; }
+          .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
         }
       `}</style>
 
@@ -188,62 +255,78 @@ export default function PurchaseOrdersPage() {
       </div>
 
       <div className="summary-grid">
-        <div className="summary-item">
-          <div className="summary-label">Total Orders</div>
-          <div className="summary-value">{sortedFiltered.length}</div>
-        </div>
-        <div className="summary-item">
-          <div className="summary-label">Total Amount</div>
-          <div className="summary-value" style={{ color: "#F59E0B" }}>PKR {totalAmount.toLocaleString()}</div>
-        </div>
+        <div className="summary-item"><div className="summary-label">Total Orders</div><div className="summary-value">{totalOrders}</div></div>
+        <div className="summary-item"><div className="summary-label">Total Amount</div><div className="summary-value" style={{ color: "#F59E0B" }}>PKR {totalAmount.toLocaleString()}</div></div>
       </div>
 
       <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
         <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-        <input
-          className="input"
-          placeholder="Search by PO # or supplier..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+        <input className="search-input" placeholder="Search by PO # or supplier..." value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
-      {loading ? (
-        <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading orders…</div>
-      ) : sortedFiltered.length === 0 ? (
-        <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
-          No purchase orders found.
+      <div className="card">
+        <div className="table-scroll">
+          <table className="po-table">
+            <colgroup>
+              <col style={{ width: 130 }} /> {/* PO # */}
+              <col style={{ width: 100 }} /> {/* Date */}
+              <col />                         {/* Supplier – takes remaining space */}
+              <col style={{ width: 120 }} /> {/* Total */}
+              <col style={{ width: 85  }} /> {/* Status */}
+              <col style={{ width: 80  }} /> {/* Actions */}
+            </colgroup>
+            <thead>
+              <tr>
+                <SortTh field="po_no">PO #</SortTh>
+                <SortTh field="date">Date</SortTh>
+                <SortTh field="supplier" style={{ textAlign: "left" }}>Supplier</SortTh>
+                <SortTh field="total" style={{ textAlign: "right" }}>Total</SortTh>
+                <SortTh field="status" style={{ textAlign: "center" }}>Status</SortTh>
+                <th style={{ ...thStyle, textAlign: "center" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                [1, 2, 3, 4, 5].map(i => <SkeletonRow key={i} />)
+              ) : sortedFiltered.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>
+                    No purchase orders found.
+                  </td>
+                </tr>
+              ) : (
+                sortedFiltered.map((po) => {
+                  const suppName = supplierMap[po.supplier_id] || "—"
+                  return (
+                    <tr key={po.id}>
+                      <td style={tdStyle}>
+                        <span style={{ fontWeight: 600, color: "var(--primary)" }}>{po.po_no}</span>
+                      </td>
+                      <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{po.date}</td>
+                      <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {suppName}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>
+                        PKR {(po.total || 0).toLocaleString()}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: "center", fontWeight: 600, whiteSpace: "nowrap", color: po.status === "Approved" ? "#10B981" : po.status === "Draft" ? "#F59E0B" : "#EF4444" }}>
+                        {po.status}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: "center" }}>
+                        <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
+                          <button className="btn-icon" onClick={() => router.push(`/dashboard/purchase-orders/${po.id}`)} title="View order">
+                            <Eye size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
         </div>
-      ) : (
-        <div className="card">
-          <div className="header-row">
-            <button className="sort-btn" onClick={() => handleSort("po_no")}>PO # {getSortIcon("po_no")}</button>
-            <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
-            <button className="sort-btn" onClick={() => handleSort("supplier")}>Supplier {getSortIcon("supplier")}</button>
-            <button className="sort-btn" onClick={() => handleSort("total")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Total {getSortIcon("total")}</button>
-            <button className="sort-btn" onClick={() => handleSort("status")}>Status {getSortIcon("status")}</button>
-            <span></span>
-          </div>
-          {sortedFiltered.map((po) => {
-            const suppName = supplierMap[po.supplier_id] || "—"
-            return (
-              <div key={po.id} className="data-row">
-                <span style={{ fontWeight: 600, color: "var(--primary)" }}>{po.po_no}</span>
-                <span>{po.date}</span>
-                <span>{suppName}</span>
-                <span style={{ fontWeight: 600, textAlign: "right" }}>PKR {(po.total || 0).toLocaleString()}</span>
-                <span style={{
-                  fontWeight: 600,
-                  color: po.status === "Approved" ? "#10B981" : po.status === "Draft" ? "#F59E0B" : "#EF4444"
-                }}>{po.status}</span>
-                <button className="btn-icon" onClick={() => router.push(`/dashboard/purchase-orders/${po.id}`)} title="View order">
-                  <Eye size={14} />
-                </button>
-              </div>
-            )
-          })}
-        </div>
-      )}
+      </div>
     </div>
   )
 }
