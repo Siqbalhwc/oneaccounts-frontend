@@ -21,8 +21,26 @@ interface BankAccount {
   updated_by?: string | null
 }
 
-type SortField = "account" | "bank_name" | "account_number" | "branch" | "balance" | "created_by"
+type SortField = "account" | "bank_name" | "account_number" | "branch" | "balance"
 type SortDir = "asc" | "desc"
+
+function SkeletonRow() {
+  return (
+    <tr>
+      {[60, 50, 40, 30, 50, 80].map((w, i) => (
+        <td key={i} style={{ padding: "12px 16px" }}>
+          <div style={{
+            width: `${w}%`,
+            height: 12,
+            background: "var(--bg-soft)",
+            borderRadius: 4,
+            animation: "shimmer 1.5s ease-in-out infinite"
+          }} />
+        </td>
+      ))}
+    </tr>
+  )
+}
 
 export default function BankAccountsPage() {
   const supabase = createBrowserClient(
@@ -162,10 +180,6 @@ export default function BankAccountsPage() {
         valA = a.balance || 0
         valB = b.balance || 0
         break
-      case "created_by":
-        valA = (a.created_by || "").toLowerCase()
-        valB = (b.created_by || "").toLowerCase()
-        break
       default:
         return 0
     }
@@ -233,71 +247,117 @@ export default function BankAccountsPage() {
     setTimeout(() => setFlash(""), 3000)
   }
 
+  // Shared th/td styles (identical to invoice page)
+  const thStyle: React.CSSProperties = {
+    padding: "12px 16px",
+    background: "var(--card-hover)",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 12,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    color: "var(--text-muted)",
+    whiteSpace: "nowrap",
+    userSelect: "none",
+  }
+  const tdStyle: React.CSSProperties = {
+    padding: "12px 16px",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 13,
+    verticalAlign: "middle",
+  }
+
+  const SortTh = ({ field, children, style }: { field: SortField; children: React.ReactNode; style?: React.CSSProperties }) => (
+    <th style={{ ...thStyle, ...style }}>
+      <button
+        onClick={() => handleSort(field)}
+        style={{
+          background: "none", border: "none", cursor: "pointer",
+          font: "inherit", fontSize: 12, fontWeight: 700,
+          textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-muted)",
+          display: "inline-flex", alignItems: "center", gap: 4, padding: 0,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {children} {getSortIcon(field)}
+      </button>
+    </th>
+  )
+
   return (
-    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+    <div className="page-wrap" style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; width: 100%; }
-        .table-wrapper {
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-          width: 100%;
+        @keyframes shimmer {
+          0%   { opacity: 0.4; }
+          50%  { opacity: 0.8; }
+          100% { opacity: 0.4; }
         }
-        .table-grid {
-          width: 100%;
-        }
-        .header-row {
-          display: grid;
-          grid-template-columns: 200px minmax(200px, 1fr) minmax(120px, 1fr) minmax(100px, 1fr) minmax(120px, 1fr) minmax(200px, 1fr) 55px 55px;
-          column-gap: 10px;
-          padding: 14px 24px;
-          font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
-          border-bottom: 1px solid var(--border);
-          background: var(--card);
-          width: 100%;
-        }
-        .data-row {
-          display: grid;
-          grid-template-columns: 200px minmax(200px, 1fr) minmax(120px, 1fr) minmax(100px, 1fr) minmax(120px, 1fr) minmax(200px, 1fr) 55px 55px;
-          column-gap: 10px;
-          padding: 12px 24px;
-          border-bottom: 1px solid var(--border);
-          font-size: 13px; align-items: center;
-          transition: background 0.15s;
-        }
-        .data-row:hover { background: var(--card-hover); }
-        .data-row:last-child { border-bottom: none; }
+        .bank-table { width: 100%; border-collapse: collapse; }
+        .bank-table tbody tr:last-child td { border-bottom: none; }
+        .bank-table tbody tr:hover td { background: var(--card-hover); }
         .btn {
-          padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border);
-          font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
+          color: white; border: none; transition: all 0.2s;
         }
-        .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
-        .btn-outline:hover { background: var(--card-hover); }
-        .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+        .btn:hover {
+          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
+          transform: translateY(-1px);
+          box-shadow: 0 6px 20px rgba(7,19,82,0.45);
+        }
+        .btn-outline {
+          background: transparent; color: var(--text-muted); border: 1.5px solid var(--border);
+        }
+        .btn-outline:hover {
+          background: var(--card-hover);
+          transform: translateY(-1px);
+          box-shadow: none;
+        }
         .btn-icon {
-          background: transparent; border: 1.5px solid var(--border); color: var(--text-muted);
-          padding: 6px; border-radius: 8px; cursor: pointer;
+          background: transparent; border: 1.5px solid var(--border);
+          color: var(--text-muted); padding: 5px; border-radius: 6px;
+          cursor: pointer; display: inline-flex; align-items: center;
+          justify-content: center; flex-shrink: 0; line-height: 1;
         }
         .btn-icon:hover { background: var(--card-hover); }
-        .input {
-          height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px 0 36px;
-          font-size: 13px; width: 260px; box-sizing: border-box; outline: none;
-          font-family: inherit; background: var(--card); color: var(--text);
+        .search-input {
+          width: 100%; height: 38px; border: 1.5px solid var(--border);
+          border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px;
+          background: var(--card); color: var(--text); outline: none;
+          box-sizing: border-box;
         }
-        .input:focus { border-color: var(--primary); }
-        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
-        .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+        .search-input:focus { border-color: var(--primary); }
+        .summary-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: 12px; margin-bottom: 20px;
+        }
+        .summary-item {
+          background: var(--card); border: 1px solid var(--border);
+          border-radius: 12px; padding: 16px;
+        }
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
-        .creator-editor-cell {
-          display: flex; flex-direction: column; font-size: 11px; color: var(--text-muted);
-          line-height: 1.3; word-wrap: break-word;
+        .card {
+          background: var(--card); border: 1px solid var(--border);
+          border-radius: 12px; overflow: hidden;
+          box-shadow: var(--shadow-sm);
         }
-        .sort-btn {
-          background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
-          display: inline-flex; align-items: center; gap: 4px; padding: 0;
-          font-weight: 700; text-transform: uppercase; font-size: 10px;
+        .table-scroll {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: thin;
+          scrollbar-color: var(--border) transparent;
         }
-        .sort-btn:hover { color: var(--primary); }
+        .table-scroll::-webkit-scrollbar { height: 4px; }
+        .table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .bank-table { min-width: 700px; }
+
+        @media (max-width: 480px) {
+          .page-wrap { padding: 12px !important; }
+          .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        }
         .pr-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
         .pr-modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; color: var(--text); }
         .pr-modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
@@ -307,19 +367,6 @@ export default function BankAccountsPage() {
         .pr-field-input, .pr-field-select { width: 100%; height: 40px; border: 1.5px solid var(--border); border-radius: 9px; padding: 0 14px; font-size: 13px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; }
         .pr-field-input:focus, .pr-field-select:focus { border-color: var(--primary); }
         .pr-modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
-
-        @media (max-width: 800px) {
-          .header-row, .data-row {
-            grid-template-columns: 200px minmax(200px, 1fr) minmax(120px, 1fr) minmax(100px, 1fr) minmax(120px, 1fr) minmax(200px, 1fr) 55px 55px;
-            column-gap: 6px; padding: 10px 12px;
-          }
-        }
-        @media (max-width: 600px) {
-          .header-row, .data-row {
-            grid-template-columns: 150px minmax(150px, 1fr) minmax(100px, 1fr) minmax(80px, 1fr) minmax(100px, 1fr) minmax(150px, 1fr) 45px 45px;
-            column-gap: 4px; padding: 10px 8px;
-          }
-        }
       `}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
@@ -331,7 +378,7 @@ export default function BankAccountsPage() {
         </div>
         {canEdit && (
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-primary" onClick={() => router.push("/dashboard/banking/bank-accounts/new")}>
+            <button className="btn" onClick={() => router.push("/dashboard/banking/bank-accounts/new")}>
               <Plus size={16} /> Add Bank Account
             </button>
             <button className="btn btn-outline" onClick={() => router.push("/dashboard/accounts/new")}>
@@ -348,64 +395,79 @@ export default function BankAccountsPage() {
       )}
 
       <div className="summary-grid">
-        <div className="summary-item">
-          <div className="summary-label">Total Accounts</div>
-          <div className="summary-value">{sortedFiltered.length}</div>
-        </div>
-        <div className="summary-item">
-          <div className="summary-label">Total Balance</div>
-          <div className="summary-value" style={{ color: "#10B981" }}>PKR {totalBalance.toLocaleString()}</div>
-        </div>
+        <div className="summary-item"><div className="summary-label">Total Accounts</div><div className="summary-value">{sortedFiltered.length}</div></div>
+        <div className="summary-item"><div className="summary-label">Total Balance</div><div className="summary-value" style={{ color: "#10B981" }}>PKR {totalBalance.toLocaleString()}</div></div>
       </div>
 
       <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
         <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-        <input
-          className="input"
-          placeholder="Search bank name, code, or account..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
+        <input className="search-input" placeholder="Search bank name, code, or account..." value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
       <div className="card">
-        {loading ? (
-          <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading...</div>
-        ) : sortedFiltered.length === 0 ? (
-          <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
-            No bank accounts found. {canEdit && 'Use "Add Bank Account" to link a Cash & Bank account, or create a new GL account first.'}
-          </div>
-        ) : (
-          <div className="table-wrapper">
-            <div className="table-grid">
-              <div className="header-row">
-                <button className="sort-btn" onClick={() => handleSort("account")} style={{ justifyContent: "flex-start" }}>Account {getSortIcon("account")}</button>
-                <button className="sort-btn" onClick={() => handleSort("bank_name")} style={{ justifyContent: "flex-start" }}>Bank Name {getSortIcon("bank_name")}</button>
-                <button className="sort-btn" onClick={() => handleSort("account_number")} style={{ justifyContent: "center" }}>Account # {getSortIcon("account_number")}</button>
-                <button className="sort-btn" onClick={() => handleSort("branch")} style={{ justifyContent: "center" }}>Branch {getSortIcon("branch")}</button>
-                <button className="sort-btn" onClick={() => handleSort("balance")} style={{ justifyContent: "flex-end", textAlign: "right" }}>Balance {getSortIcon("balance")}</button>
-                <button className="sort-btn" onClick={() => handleSort("created_by")} style={{ justifyContent: "flex-start" }}>Created / Edited By {getSortIcon("created_by")}</button>
-                <span></span>
-                <span></span>
-              </div>
-              {sortedFiltered.map((b) => (
-                <div key={b.id} className="data-row">
-                  <span style={{ fontWeight: 600, color: "var(--primary)" }}>{b.code} - {b.name}</span>
-                  <span>{b.bank_name}</span>
-                  <span style={{ color: "var(--text-muted)", textAlign: "center" }}>{b.account_number || "—"}</span>
-                  <span style={{ color: "var(--text-muted)", textAlign: "center" }}>{b.branch || "—"}</span>
-                  <span style={{ fontWeight: 600, textAlign: "right" }}>PKR {(b.balance || 0).toLocaleString()}</span>
-                  <div className="creator-editor-cell">
-                    <span>Created: {b.created_by || "—"}</span>
-                    <span>Edited: {b.updated_by || "—"}</span>
-                  </div>
-                  <button className="btn-icon" onClick={() => openEdit(b)}><Edit size={14} /></button>
-                  <button className="btn-icon" onClick={() => setDeleteId(b.id)} style={{ color: "#EF4444" }}><Trash2 size={14} /></button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <div className="table-scroll">
+          <table className="bank-table">
+            <colgroup>
+              <col style={{ width: 180 }} /> {/* Account */}
+              <col />                         {/* Bank Name – takes remaining space */}
+              <col style={{ width: 120 }} /> {/* Account # */}
+              <col style={{ width: 100 }} /> {/* Branch */}
+              <col style={{ width: 120 }} /> {/* Balance */}
+              <col style={{ width: 90  }} /> {/* Actions */}
+            </colgroup>
+            <thead>
+              <tr>
+                <SortTh field="account">Account</SortTh>
+                <SortTh field="bank_name" style={{ textAlign: "left" }}>Bank Name</SortTh>
+                <SortTh field="account_number" style={{ textAlign: "center" }}>Account #</SortTh>
+                <SortTh field="branch" style={{ textAlign: "center" }}>Branch</SortTh>
+                <SortTh field="balance" style={{ textAlign: "right" }}>Balance</SortTh>
+                <th style={{ ...thStyle, textAlign: "center" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                [1, 2, 3, 4, 5].map(i => <SkeletonRow key={i} />)
+              ) : sortedFiltered.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>
+                    No bank accounts found. {canEdit && 'Use "Add Bank Account" to link a Cash & Bank account, or create a new GL account first.'}
+                  </td>
+                </tr>
+              ) : (
+                sortedFiltered.map((b) => (
+                  <tr key={b.id}>
+                    <td style={tdStyle}>
+                      <span style={{ fontWeight: 600, color: "var(--primary)" }}>{b.code} - {b.name}</span>
+                    </td>
+                    <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {b.bank_name}
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{b.account_number || "—"}</td>
+                    <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{b.branch || "—"}</td>
+                    <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>
+                      PKR {(b.balance || 0).toLocaleString()}
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: "center" }}>
+                      <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
+                        {canEdit && (
+                          <button className="btn-icon" onClick={() => openEdit(b)} title="Edit">
+                            <Edit size={13} />
+                          </button>
+                        )}
+                        {canEdit && (
+                          <button className="btn-icon" onClick={() => setDeleteId(b.id)} style={{ color: "#EF4444" }} title="Delete">
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Edit Modal */}
@@ -438,7 +500,7 @@ export default function BankAccountsPage() {
             </div>
             <div className="pr-modal-footer">
               <button className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</button>
+              <button className="btn" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</button>
             </div>
           </div>
         </div>
@@ -454,7 +516,7 @@ export default function BankAccountsPage() {
             </div>
             <div className="pr-modal-footer" style={{ justifyContent: "center" }}>
               <button className="btn btn-outline" onClick={() => setDeleteId(null)}>Cancel</button>
-              <button className="btn btn-primary" style={{ background: "#EF4444", borderColor: "#EF4444" }} onClick={handleDelete}>Delete</button>
+              <button className="btn" style={{ background: "#EF4444", borderColor: "#EF4444" }} onClick={handleDelete}>Delete</button>
             </div>
           </div>
         </div>
