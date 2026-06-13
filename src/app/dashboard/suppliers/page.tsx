@@ -42,8 +42,26 @@ interface Supplier {
   updated_by?: string | null
 }
 
-type SortField = "code" | "name" | "phone" | "balance" | "created_by"
+type SortField = "code" | "name" | "phone" | "balance"
 type SortDir = "asc" | "desc"
+
+function SkeletonRow() {
+  return (
+    <tr>
+      {[60, 70, 50, 60, 80].map((w, i) => (
+        <td key={i} style={{ padding: "12px 16px" }}>
+          <div style={{
+            width: `${w}%`,
+            height: 12,
+            background: "var(--bg-soft)",
+            borderRadius: 4,
+            animation: "shimmer 1.5s ease-in-out infinite"
+          }} />
+        </td>
+      ))}
+    </tr>
+  )
+}
 
 export default function SuppliersPage() {
   const supabase = createBrowserClient(
@@ -88,7 +106,6 @@ export default function SuppliersPage() {
   const [flash, setFlash] = useState("")
   const [formError, setFormError] = useState("")
 
-  // Import states
   const [importMessage, setImportMessage] = useState("")
   const [importing, setImporting] = useState(false)
 
@@ -256,7 +273,6 @@ export default function SuppliersPage() {
     fetchSuppliers()
   }
 
-  // CSV Export
   const handleExport = () => {
     if (suppliers.length === 0) { alert("No data to export"); return }
     const headers = ["code", "name", "phone", "email", "address", "opening_balance", "balance", "payment_terms"]
@@ -273,7 +289,6 @@ export default function SuppliersPage() {
     window.URL.revokeObjectURL(url)
   }
 
-  // Download Template
   const downloadTemplate = () => {
     const headers = ["code", "name", "phone", "email", "address", "opening_balance", "balance", "payment_terms"]
     const sample = ["SUP-001", "Acme Corp", "+923001234567", "acme@example.com", "123 Street", "0", "0", "Net 15"]
@@ -287,7 +302,6 @@ export default function SuppliersPage() {
     window.URL.revokeObjectURL(url)
   }
 
-  // Handle file import
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -319,6 +333,43 @@ export default function SuppliersPage() {
 
   const totalPayables = suppliers.reduce((s, c) => s + (c.balance || 0), 0)
 
+  // Shared th/td styles (same as invoice page)
+  const thStyle: React.CSSProperties = {
+    padding: "12px 16px",
+    background: "var(--card-hover)",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 12,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    color: "var(--text-muted)",
+    whiteSpace: "nowrap",
+    userSelect: "none",
+  }
+  const tdStyle: React.CSSProperties = {
+    padding: "12px 16px",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 13,
+    verticalAlign: "middle",
+  }
+
+  const SortTh = ({ field, children, style }: { field: SortField; children: React.ReactNode; style?: React.CSSProperties }) => (
+    <th style={{ ...thStyle, ...style }}>
+      <button
+        onClick={() => handleSort(field)}
+        style={{
+          background: "none", border: "none", cursor: "pointer",
+          font: "inherit", fontSize: 12, fontWeight: 700,
+          textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-muted)",
+          display: "inline-flex", alignItems: "center", gap: 4, padding: 0,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {children} {getSortIcon(field)}
+      </button>
+    </th>
+  )
+
   if (roleLoading || !role) {
     return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
   }
@@ -333,67 +384,80 @@ export default function SuppliersPage() {
   if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading company data...</div>
 
   return (
-    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+    <div className="page-wrap" style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; width: 100%; }
-        .table-wrap { width: 100%; }
-        .header-row {
-          display: grid;
-          grid-template-columns: minmax(100px, 1fr) minmax(150px, 2fr) minmax(100px, 1fr) minmax(90px, 1fr) minmax(130px, 1.3fr) 55px 55px 50px;
-          column-gap: 10px;
-          padding: 14px 24px;
-          font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
-          border-bottom: 1px solid var(--border);
-          background: var(--card);
-          width: 100%;
+        @keyframes shimmer {
+          0%   { opacity: 0.4; }
+          50%  { opacity: 0.8; }
+          100% { opacity: 0.4; }
         }
-        .data-row {
-          display: grid;
-          grid-template-columns: minmax(100px, 1fr) minmax(150px, 2fr) minmax(100px, 1fr) minmax(90px, 1fr) minmax(130px, 1.3fr) 55px 55px 50px;
-          column-gap: 10px;
-          padding: 12px 24px;
-          border-bottom: 1px solid var(--border);
-          font-size: 13px; align-items: center;
-          transition: background 0.15s;
-          width: 100%;
-        }
-        .data-row:hover { background: var(--card-hover); }
-        .data-row:last-child { border-bottom: none; }
-        .sort-btn {
-          background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
-          display: inline-flex; align-items: center; gap: 4px; padding: 0;
-          font-weight: 700; text-transform: uppercase; font-size: 10px;
-        }
-        .sort-btn:hover { color: var(--primary); }
-        .search-input {
-          height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px 0 36px;
-          font-size: 13px; width: 260px; box-sizing: border-box; outline: none;
-          font-family: inherit; background: var(--card); color: var(--text);
-        }
-        .search-input:focus { border-color: var(--primary); }
+        .sup-table { width: 100%; border-collapse: collapse; }
+        .sup-table tbody tr:last-child td { border-bottom: none; }
+        .sup-table tbody tr:hover td { background: var(--card-hover); }
         .btn {
-          padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border);
-          font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
+          color: white; border: none; transition: all 0.2s;
         }
-        .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
-        .btn-outline:hover { background: var(--card-hover); }
+        .btn:hover {
+          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
+          transform: translateY(-1px);
+          box-shadow: 0 6px 20px rgba(7,19,82,0.45);
+        }
+        .btn-outline {
+          background: transparent; color: var(--text-muted); border: 1.5px solid var(--border);
+        }
+        .btn-outline:hover {
+          background: var(--card-hover);
+          transform: translateY(-1px);
+          box-shadow: none;
+        }
         .btn-icon {
-          background: transparent; border: 1.5px solid var(--border); color: var(--text-muted);
-          padding: 6px; border-radius: 8px; cursor: pointer;
+          background: transparent; border: 1.5px solid var(--border);
+          color: var(--text-muted); padding: 5px; border-radius: 6px;
+          cursor: pointer; display: inline-flex; align-items: center;
+          justify-content: center; flex-shrink: 0; line-height: 1;
         }
         .btn-icon:hover { background: var(--card-hover); }
-        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
-        .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+        .search-input {
+          width: 100%; height: 38px; border: 1.5px solid var(--border);
+          border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px;
+          background: var(--card); color: var(--text); outline: none;
+          box-sizing: border-box;
+        }
+        .search-input:focus { border-color: var(--primary); }
+        .summary-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: 12px; margin-bottom: 20px;
+        }
+        .summary-item {
+          background: var(--card); border: 1px solid var(--border);
+          border-radius: 12px; padding: 16px;
+        }
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
-        .creator-editor-cell {
-          display: flex;
-          flex-direction: column;
-          font-size: 11px;
-          color: var(--text-muted);
-          line-height: 1.3;
-          word-wrap: break-word;
+        .card {
+          background: var(--card); border: 1px solid var(--border);
+          border-radius: 12px; overflow: hidden;
+          box-shadow: var(--shadow-sm);
         }
+        .table-scroll {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: thin;
+          scrollbar-color: var(--border) transparent;
+        }
+        .table-scroll::-webkit-scrollbar { height: 4px; }
+        .table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .sup-table { min-width: 700px; }
+
+        @media (max-width: 480px) {
+          .page-wrap { padding: 12px !important; }
+          .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        }
+        .message { padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
         .pr-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
         .pr-modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; color: var(--text); }
         .form-error { background: var(--card); border: 1px solid #EF4444; color: #FCA5A5; padding: 8px 12px; border-radius: 6px; }
@@ -404,22 +468,9 @@ export default function SuppliersPage() {
         }
         .input:focus, .select:focus { border-color: var(--primary); outline: none; }
         label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; display: block; }
-        .message { padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
-
-        @media (max-width: 900px) {
-          .table-wrap { overflow-x: auto; }
-          .header-row, .data-row {
-            grid-template-columns: 90px 130px 90px 70px 110px 45px 45px 45px;
-            column-gap: 6px;
-            padding: 10px 12px;
-          }
-        }
-        @media (max-width: 640px) {
-          .header-row, .data-row { grid-template-columns: 70px 110px 70px 60px 90px 40px 40px 40px; column-gap: 4px; padding: 10px 8px; }
-          .search-input { width: 100%; }
-        }
       `}</style>
 
+      {/* ── Page header ── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>🚚 Suppliers</h1>
@@ -441,7 +492,7 @@ export default function SuppliersPage() {
             </>
           )}
           {canEdit && (
-            <button className="btn btn-outline" onClick={openNew}>
+            <button className="btn" onClick={openNew}>
               <Plus size={16} /> Add Supplier
             </button>
           )}
@@ -454,17 +505,10 @@ export default function SuppliersPage() {
         </div>
       )}
 
+      {/* ── Summary cards ── */}
       <div className="summary-grid">
-        <div className="summary-item">
-          <div className="summary-label">Total Suppliers</div>
-          <div className="summary-value">{total}</div>
-        </div>
-        <div className="summary-item">
-          <div className="summary-label">Total Payables</div>
-          <div className="summary-value" style={{ color: totalPayables >= 0 ? "#10B981" : "#EF4444" }}>
-            PKR {totalPayables.toLocaleString()}
-          </div>
-        </div>
+        <div className="summary-item"><div className="summary-label">Total Suppliers</div><div className="summary-value">{total}</div></div>
+        <div className="summary-item"><div className="summary-label">Total Payables</div><div className="summary-value" style={{ color: totalPayables >= 0 ? "#10B981" : "#EF4444" }}>PKR {totalPayables.toLocaleString()}</div></div>
       </div>
 
       {flash && (
@@ -473,58 +517,78 @@ export default function SuppliersPage() {
         </div>
       )}
 
+      {/* ── Search ── */}
       <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
         <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-        <input
-          className="search-input"
-          placeholder="Search by code, name, or phone..."
-          value={search}
-          onChange={e => { setSearch(e.target.value); setPage(1) }}
-        />
+        <input className="search-input" placeholder="Search by code, name, or phone..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
       </div>
 
-      {loading ? (
-        <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading suppliers…</div>
-      ) : suppliers.length === 0 ? (
-        <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
-          {search ? "No matching suppliers found." : "No suppliers yet. Add your first supplier."}
+      {/* ── Table ── */}
+      <div className="card">
+        <div className="table-scroll">
+          <table className="sup-table">
+            <colgroup>
+              <col style={{ width: 110 }} /> {/* Code */}
+              <col />                         {/* Name – takes remaining space */}
+              <col style={{ width: 120 }} /> {/* Phone */}
+              <col style={{ width: 130 }} /> {/* Balance */}
+              <col style={{ width: 140 }} /> {/* Actions */}
+            </colgroup>
+            <thead>
+              <tr>
+                <SortTh field="code">Code</SortTh>
+                <SortTh field="name" style={{ textAlign: "left" }}>Name</SortTh>
+                <SortTh field="phone" style={{ textAlign: "left" }}>Phone</SortTh>
+                <SortTh field="balance" style={{ textAlign: "right" }}>Balance</SortTh>
+                <th style={{ ...thStyle, textAlign: "center" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                [1, 2, 3, 4, 5].map(i => <SkeletonRow key={i} />)
+              ) : suppliers.length === 0 ? (
+                <tr>
+                  <td colSpan={5} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>
+                    {search ? "No matching suppliers found." : "No suppliers yet. Add your first supplier."}
+                  </td>
+                </tr>
+              ) : (
+                suppliers.map((s) => (
+                  <tr key={s.id}>
+                    <td style={tdStyle}>
+                      <span style={{ fontWeight: 600, color: "var(--primary)" }}>{s.code}</span>
+                    </td>
+                    <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {s.name}
+                    </td>
+                    <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{s.phone || "—"}</td>
+                    <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: s.balance >= 0 ? "#10B981" : "#EF4444", whiteSpace: "nowrap" }}>
+                      PKR {s.balance?.toLocaleString()}
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: "center" }}>
+                      <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
+                        <button className="btn-icon" onClick={() => router.push(`/dashboard/reports/vendor-ledger?supplierId=${s.id}`)} title="View Ledger">
+                          <Eye size={13} />
+                        </button>
+                        {canEdit && (
+                          <button className="btn-icon" onClick={() => openEdit(s)} title="Edit">
+                            <Edit size={13} />
+                          </button>
+                        )}
+                        {canEdit && (
+                          <button className="btn-icon" onClick={() => handleDelete(s.id)} style={{ color: "#EF4444" }} title="Delete">
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      ) : (
-        <div className="table-wrap">
-          <div className="card">
-            <div className="header-row">
-              <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
-              <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
-              <button className="sort-btn" onClick={() => handleSort("phone")}>Phone {getSortIcon("phone")}</button>
-              <button className="sort-btn" onClick={() => handleSort("balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("balance")}</button>
-              {/* Sortable Created / Edited By header */}
-              <button className="sort-btn" onClick={() => handleSort("created_by")} style={{ justifyContent: "flex-start" }}>
-                Created / Edited By {getSortIcon("created_by")}
-              </button>
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-            {suppliers.map(s => (
-              <div key={s.id} className="data-row">
-                <span style={{ fontWeight: 600, color: "var(--primary)" }}>{s.code}</span>
-                <span style={{ color: "var(--text)" }}>{s.name}</span>
-                <span style={{ color: "var(--text-muted)" }}>{s.phone || "—"}</span>
-                <span style={{ textAlign: "right", fontWeight: 600, color: s.balance >= 0 ? "#10B981" : "#EF4444" }}>PKR {s.balance?.toLocaleString()}</span>
-                <div className="creator-editor-cell">
-                  <span>Created: {s.created_by || "—"}</span>
-                  <span>Edited: {s.updated_by || "—"}</span>
-                </div>
-                <button className="btn-icon" onClick={() => router.push(`/dashboard/reports/vendor-ledger?supplierId=${s.id}`)} title="View Ledger">
-                  <Eye size={14} />
-                </button>
-                <button className="btn-icon" onClick={() => openEdit(s)}><Edit size={14} /></button>
-                <button className="btn-icon" onClick={() => handleDelete(s.id)} style={{ color: "#EF4444" }}><Trash2 size={14} /></button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      </div>
 
       {importing && <div style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>Importing...</div>}
 
@@ -538,6 +602,7 @@ export default function SuppliersPage() {
         </div>
       )}
 
+      {/* Modal for add/edit (unchanged, but kept) */}
       {showModal && canEdit && (
         <div className="pr-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="pr-modal" onClick={e => e.stopPropagation()}>
