@@ -48,7 +48,7 @@ const PERIOD_OPTIONS: PeriodOption[] = [
 function getPeriodDates(key: PeriodKey): { start: string | null; end: string | null } {
   const now   = new Date()
   const y     = now.getFullYear()
-  const m     = now.getMonth()         // 0-based
+  const m     = now.getMonth()
   const pad   = (n: number) => String(n).padStart(2, "0")
   const ymd   = (d: Date)   => d.toISOString().split("T")[0]
   const qStart = (q: number, yr: number) => new Date(yr, q * 3, 1)
@@ -113,7 +113,6 @@ function BellNotification({
 
   return (
     <div ref={ref} style={{ position: "relative", textAlign: "center", userSelect: "none" }}>
-      {/* Bell button */}
       <div
         onClick={() => (hasItems ? setOpen(o => !o) : onViewAll())}
         style={{
@@ -121,8 +120,7 @@ function BellNotification({
           display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
-          width: 38,
-          height: 38,
+          width: 38, height: 38,
           borderRadius: "50%",
           background: hasItems
             ? isDark ? "rgba(239,68,68,0.15)" : "rgba(239,68,68,0.08)"
@@ -132,21 +130,17 @@ function BellNotification({
           position: "relative",
         }}
         onMouseEnter={e => {
-          ;(e.currentTarget as HTMLDivElement).style.background = hasItems
+          (e.currentTarget as HTMLDivElement).style.background = hasItems
             ? isDark ? "rgba(239,68,68,0.25)" : "rgba(239,68,68,0.15)"
             : isDark ? "rgba(255,255,255,0.1)"  : "rgba(0,0,0,0.08)"
         }}
         onMouseLeave={e => {
-          ;(e.currentTarget as HTMLDivElement).style.background = hasItems
+          (e.currentTarget as HTMLDivElement).style.background = hasItems
             ? isDark ? "rgba(239,68,68,0.15)" : "rgba(239,68,68,0.08)"
             : isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"
         }}
       >
-        <Bell
-          size={17}
-          color={hasItems ? "#EF4444" : "var(--text-muted)"}
-          style={hasItems ? { animation: "bellShake 0.6s ease" } : undefined}
-        />
+        <Bell size={17} color={hasItems ? "#EF4444" : "var(--text-muted)"} style={hasItems ? { animation: "bellShake 0.6s ease" } : undefined} />
         {hasItems && (
           <span style={{
             position: "absolute", top: -3, right: -3,
@@ -160,16 +154,12 @@ function BellNotification({
           </span>
         )}
       </div>
-
-      {/* Label */}
       <div style={{
         fontSize: 9, marginTop: 3, fontWeight: hasItems ? 700 : 400,
         color: hasItems ? "#EF4444" : "var(--text-muted)",
       }}>
         {label}
       </div>
-
-      {/* Dropdown */}
       {open && hasItems && (
         <div
           style={{
@@ -183,7 +173,6 @@ function BellNotification({
             overflow: "hidden",
           }}
         >
-          {/* Header */}
           <div style={{
             padding: "9px 14px 8px",
             borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)"}`,
@@ -199,8 +188,6 @@ function BellNotification({
               View All →
             </button>
           </div>
-
-          {/* Items */}
           <div style={{ maxHeight: 230, overflowY: "auto" }}>
             {items.slice(0, 8).map((item, i) => (
               <div
@@ -251,7 +238,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
   const [userDisplayName, setUserDisplayName]   = useState("")
   const [businessType,    setBusinessType]       = useState("")
   const [loading,         setLoading]            = useState(true)
-  const [selectedPeriod,  setSelectedPeriod]     = useState<PeriodKey>("all")   // ← default to "All Time"
+  const [selectedPeriod,  setSelectedPeriod]     = useState<PeriodKey>("all")
 
   // KPIs
   const [revenueTotal,        setRevenueTotal]        = useState(0)
@@ -375,7 +362,6 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
   const maxProfit    = Math.max(...monthlyProfit.map(m => Math.abs(m.profit)), 1)
   const periodLabel  = PERIOD_OPTIONS.find(p => p.key === selectedPeriod)?.label || ""
 
-  // Bell dropdown items
   const invoiceBellItems = overdueInvoicesList.map(inv => ({
     title:    inv.invoice_no || `INV-${inv.id}`,
     subtitle: `Due ${inv.due_date}${inv.parties?.name ? " · " + inv.parties.name : ""}`,
@@ -387,7 +373,6 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
     amount:   formatPKR(bill.total || 0),
   }))
 
-  // ── Guards ────────────────────────────────────────────────
   if (companyError) return (
     <div style={{ padding: 40, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>
       <div style={{ fontSize: "1.2rem", color: "#F87171" }}>Could not load dashboard</div>
@@ -403,7 +388,6 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
     </div>
   )
 
-  // ── Render ────────────────────────────────────────────────
   return (
     <div style={{ background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)", padding: "1rem 1.5rem" }}>
       <style>{`
@@ -431,7 +415,6 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           border-color: var(--primary);
         }
 
-        /* ── Hero ── */
         .tsd .hero {
           background: var(--card); border: 1px solid var(--border); border-radius: 14px;
           padding: 0.9rem 1.4rem; margin-bottom: 1.5rem;
@@ -445,7 +428,6 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
         }
 
-        /* Period selector */
         .tsd .period-select {
           -webkit-appearance: none; appearance: none;
           background: ${isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"};
@@ -463,28 +445,24 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         }
         .tsd .period-select:focus { outline: none; border-color: #A78BFA; }
 
-        /* Bell divider */
         .tsd .bells-group {
           display: flex; align-items: flex-start; gap: 10px;
           padding-left: 1rem;
           border-left: 1px solid var(--border);
         }
 
-        /* KPI grid */
         .tsd .kpi-row {
           display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;
         }
         .tsd .kpi-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 6px; }
         .tsd .kpi-value { font-size: 1.65rem; font-weight: 800; }
 
-        /* Two-col layout with horizontal scroll on mobile */
         .tsd .two-col {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 20px;
           margin-bottom: 24px;
         }
-        /* Make the first card (top customers) scrollable horizontally */
         .tsd .two-col .card:first-child {
           overflow-x: auto;
         }
@@ -509,12 +487,10 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         }
         .tsd .quick-action-btn:hover { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
 
-        /* Table styles */
         .tsd table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
         .tsd th { text-align: left; padding: 8px 12px; border-bottom: 2px solid var(--border); color: var(--text-muted); font-weight: 600; font-size: 0.65rem; text-transform: uppercase; }
         .tsd td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
 
-        /* Bar chart */
         .tsd .chart-container { padding: 8px 0 12px; overflow-x: auto; }
         .tsd .bar-chart        { display: flex; align-items: flex-end; gap: 12px; height: 200px; padding: 0 8px; min-width: 600px; }
         .tsd .bar-column       { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; }
@@ -526,7 +502,6 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
 
         .customer-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
 
-        /* Responsive */
         @media (max-width: 1024px) {
           .tsd .kpi-row { grid-template-columns: repeat(2, 1fr); }
           .tsd .two-col { grid-template-columns: 1fr; gap: 16px; }
@@ -637,7 +612,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
               </button>
             </div>
             <div style={{ overflowX: "auto", flex: 1 }}>
-              <table className="top-customers-table" style={{ minWidth: "300px", width: "100%" }}>
+              <table className="top-customers-table">
                 <thead>
                   <tr>
                     <th>Customer</th>
@@ -646,7 +621,9 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
                 </thead>
                 <tbody>
                   {topCustomers.length === 0 ? (
-                    <td><td colSpan={2} style={{ padding: "12px", textAlign: "center", color: "var(--text-muted)" }}>No customer data</td></tr>
+                    <tr>
+                      <td colSpan={2} style={{ padding: "12px", textAlign: "center", color: "var(--text-muted)" }}>No customer data</td>
+                    </tr>
                   ) : (
                     topCustomers.map((c, i) => (
                       <tr key={i}>
