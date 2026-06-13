@@ -33,6 +33,24 @@ function fmt(n: number) {
   return n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+function SkeletonRow() {
+  return (
+    <tr>
+      {[60, 70, 50, 80, 80, 80].map((w, i) => (
+        <td key={i} style={{ padding: "12px 16px" }}>
+          <div style={{
+            width: `${w}%`,
+            height: 12,
+            background: "var(--bg-soft)",
+            borderRadius: 4,
+            animation: "shimmer 1.5s ease-in-out infinite"
+          }} />
+        </td>
+      ))}
+    </tr>
+  )
+}
+
 export default function TrialBalancePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -131,7 +149,7 @@ export default function TrialBalancePage() {
   }
 
   const getSortIcon = (field: SortField) => {
-    if (sortField !== field) return <ArrowUpDown size={12} style={{ opacity: 0.7 }} />
+    if (sortField !== field) return <ArrowUpDown size={12} style={{ opacity: 0.5 }} />
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
@@ -164,6 +182,43 @@ export default function TrialBalancePage() {
     doc.save(`Trial_Balance_${startDate}_to_${endDate}.pdf`)
   }
 
+  // Shared th/td styles
+  const thStyle: React.CSSProperties = {
+    padding: "12px 16px",
+    background: "var(--card-hover)",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 12,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    color: "var(--text-muted)",
+    whiteSpace: "nowrap",
+    userSelect: "none",
+  }
+  const tdStyle: React.CSSProperties = {
+    padding: "12px 16px",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 13,
+    verticalAlign: "middle",
+  }
+
+  const SortTh = ({ field, children, style }: { field: SortField; children: React.ReactNode; style?: React.CSSProperties }) => (
+    <th style={{ ...thStyle, ...style }}>
+      <button
+        onClick={() => handleSort(field)}
+        style={{
+          background: "none", border: "none", cursor: "pointer",
+          font: "inherit", fontSize: 12, fontWeight: 700,
+          textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-muted)",
+          display: "inline-flex", alignItems: "center", gap: 4, padding: 0,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {children} {getSortIcon(field)}
+      </button>
+    </th>
+  )
+
   const headerBg = isOneAccounts ? "#07085B" : (isDarkTheme ? "#000000" : "#07085B")
   const rowLight = isLightStyle ? "#FFFFFF" : "#1E293B"
   const rowDark  = isLightStyle ? "#F8F9FC" : "#111827"
@@ -173,258 +228,172 @@ export default function TrialBalancePage() {
   const reportMutedColor = isOneAccounts ? "#64748B" : "var(--text-muted)"
 
   return (
-    <div style={{ background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)", transition: "background 0.3s, color 0.3s" }}>
+    <div className="page-wrap" style={{ background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)", transition: "background 0.3s, color 0.3s", padding: 24 }}>
       <style>{`
-        .report-header {
-          background: var(--card);
-          border-bottom: 1px solid var(--border);
-          padding: 20px 32px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          flex-wrap: wrap;
-          gap: 16px;
+        @keyframes shimmer {
+          0%   { opacity: 0.4; }
+          50%  { opacity: 0.8; }
+          100% { opacity: 0.4; }
         }
-        .report-header-left {
-          display: flex;
-          align-items: center;
-          gap: 14px;
-        }
-        .report-logo {
-          width: 34px; height: 34px;
-          border-radius: 9px;
-          object-fit: contain;
-        }
-        .report-company-name {
-          font-size: 16px; font-weight: 700;
-        }
-        .report-company-tagline {
-          font-size: 11px;
-        }
-        .report-header-right {
-          text-align: right;
-        }
-        .report-title {
-          font-size: 24px; font-weight: 800;
-        }
-        .report-period {
-          font-size: 12px;
-        }
-
-        .kpi-row {
-          display: flex; gap: 16px;
-          padding: 24px 32px; flex-wrap: wrap;
-        }
-        .kpi-card {
-          background: var(--card);
-          border: 1px solid var(--border);
-          border-radius: 12px; padding: 18px 24px;
-          min-width: 170px; box-shadow: var(--shadow-sm);
-        }
-        .kpi-label {
-          font-size: 10px; font-weight: 700;
-          text-transform: uppercase; letter-spacing: 0.08em;
-          color: var(--text-muted); margin-bottom: 6px;
-        }
-        .kpi-value { font-size: 26px; font-weight: 800; }
-
-        .filter-bar {
-          display: flex; align-items: center; gap: 12px;
-          padding: 0 32px 20px; flex-wrap: wrap;
-        }
+        .trial-table { width: 100%; border-collapse: collapse; }
+        .trial-table tbody tr:last-child td { border-bottom: none; }
+        .trial-table tbody tr:hover td { background: var(--card-hover); }
         .btn {
-          padding: 8px 16px; border-radius: 8px;
-          border: 1.5px solid var(--border); font-weight: 600;
-          font-size: 13px; cursor: pointer;
-          display: inline-flex; align-items: center; gap: 6px;
-          font-family: inherit;
+          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
+          color: white; border: none; transition: all 0.2s;
         }
         .btn-outline {
-          background: transparent; color: var(--text-muted);
-          border-color: var(--border);
+          background: transparent; color: var(--text-muted); border: 1.5px solid var(--border);
         }
-        .btn-outline:hover { background: var(--card-hover); }
+        .btn-outline:hover {
+          background: var(--card-hover);
+          transform: translateY(-1px);
+          box-shadow: none;
+        }
         .date-input {
-          height: 34px; border: 1.5px solid var(--border);
-          border-radius: 8px; padding: 0 10px; font-size: 12px;
-          background: var(--card); color: var(--text);
-          outline: none; font-family: inherit; width: 140px;
+          height: 38px; border: 1.5px solid var(--border);
+          border-radius: 8px; padding: 0 12px; font-size: 13px;
+          background: var(--card); color: var(--text); outline: none;
         }
         .date-input:focus { border-color: var(--primary); }
-
-        .table-wrap {
-          margin: 0 32px 32px;
-          background: var(--card);
-          border: 1px solid var(--border);
+        .summary-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+          gap: 12px; margin-bottom: 20px;
+        }
+        .summary-item {
+          background: var(--card); border: 1px solid var(--border);
+          border-radius: 12px; padding: 16px;
+        }
+        .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+        .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
+        .card {
+          background: var(--card); border: 1px solid var(--border);
           border-radius: 12px; overflow: hidden;
           box-shadow: var(--shadow-sm);
         }
-        .table-header {
-          display: grid;
-          grid-template-columns: 90px 1fr 90px 100px 140px 140px;
-          padding: 14px 24px;
-          font-size: 10px; font-weight: 700;
-          text-transform: uppercase; color: white;
+        .table-scroll {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: thin;
+          scrollbar-color: var(--border) transparent;
         }
-        .table-row {
-          display: grid;
-          grid-template-columns: 90px 1fr 90px 100px 140px 140px;
-          padding: 12px 24px;
-          font-size: 13px; align-items: center;
-          cursor: pointer; transition: background 0.15s;
-        }
-        .table-row:hover { background: var(--card-hover); }
-        .totals-row {
-          display: grid;
-          grid-template-columns: 90px 1fr 90px 100px 140px 140px;
-          padding: 14px 24px;
-          color: white; font-weight: 700; font-size: 13px;
-        }
+        .table-scroll::-webkit-scrollbar { height: 4px; }
+        .table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .trial-table { min-width: 800px; }
 
-        .sort-btn {
-          background: none; border: none; cursor: pointer;
-          font: inherit; color: white;
-          display: inline-flex; align-items: center; gap: 4px;
-          padding: 0; font-weight: 700; text-transform: uppercase;
-          font-size: 10px;
+        @media (max-width: 480px) {
+          .page-wrap { padding: 12px !important; }
+          .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
         }
-
-        @media (max-width: 640px) {
-          .table-header, .table-row, .totals-row {
-            grid-template-columns: 70px 1fr 80px 90px 100px 100px;
-          }
+        .filter-bar {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 12px;
+          align-items: center;
+          margin-bottom: 20px;
         }
       `}</style>
 
-      {/* ── Report Header ── */}
-      <div className="report-header">
-        <div className="report-header-left">
-          {/* ⬅ Back button */}
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}>
             <ArrowLeft size={16} />
           </button>
-          {logoUrl ? (
-            <img src={logoUrl} alt={companyName} className="report-logo" width={34} height={34} />
-          ) : (
-            <div style={{
-              width: 34, height: 34, borderRadius: 9,
-              background: "var(--primary)", display: "flex",
-              alignItems: "center", justifyContent: "center",
-              color: "white", fontWeight: 700,
-            }}>
-              {(companyName || "O")[0]}
-            </div>
-          )}
           <div>
-            <div className="report-company-name" style={{ color: reportTextColor }}>
-              {companyName || "OneAccounts"}
-            </div>
-            <div className="report-company-tagline" style={{ color: reportMutedColor }}>
-              {companyTagline || ""}
-            </div>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>Trial Balance</h1>
+            <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>From {startDate} to {endDate}</p>
           </div>
         </div>
-        <div className="report-header-right">
-          <div className="report-title" style={{ color: reportTextColor }}>Trial Balance</div>
-          <div className="report-period" style={{ color: reportMutedColor }}>From {startDate} to {endDate}</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-outline" onClick={handleExportPDF}>
+            <Download size={16} /> PDF
+          </button>
         </div>
       </div>
 
-      {/* rest of the component unchanged */}
-      <div className="kpi-row">
-        <div className="kpi-card">
-          <div className="kpi-label">Total Debits</div>
-          <div className="kpi-value" style={{ color: "#EF4444" }}>
-            PKR {fmt(totalDebit)}
-          </div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Total Credits</div>
-          <div className="kpi-value" style={{ color: "#10B981" }}>
-            PKR {fmt(totalCredit)}
-          </div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Status</div>
-          <div className="kpi-value" style={{ color: isBalanced ? "#10B981" : "#EF4444", fontSize: 20 }}>
-            {isBalanced ? "✓ Balanced" : "✗ Imbalance"}
-          </div>
-        </div>
+      {/* Summary Cards */}
+      <div className="summary-grid">
+        <div className="summary-item"><div className="summary-label">Total Debits</div><div className="summary-value" style={{ color: "#EF4444" }}>PKR {fmt(totalDebit)}</div></div>
+        <div className="summary-item"><div className="summary-label">Total Credits</div><div className="summary-value" style={{ color: "#10B981" }}>PKR {fmt(totalCredit)}</div></div>
+        <div className="summary-item"><div className="summary-label">Status</div><div className="summary-value" style={{ color: isBalanced ? "#10B981" : "#EF4444", fontSize: 20 }}>{isBalanced ? "✓ Balanced" : "✗ Imbalance"}</div></div>
       </div>
 
+      {/* Filters */}
       <div className="filter-bar">
         <input type="date" className="date-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
         <span style={{ color: "var(--text-muted)", fontSize: 12 }}>to</span>
         <input type="date" className="date-input" value={endDate} onChange={e => setEndDate(e.target.value)} />
         <button className="btn btn-outline" onClick={fetchTrial}>Refresh</button>
-        <button className="btn btn-outline" onClick={handleExportPDF}><Download size={16} /> PDF</button>
       </div>
 
       {errorMsg && (
-        <div style={{ margin: "0 32px 16px", background: "#FEF2F2", color: "#B91C1C", padding: "10px 14px", borderRadius: 8, fontSize: 13 }}>
+        <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#B91C1C", padding: "10px 14px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
           {errorMsg}
         </div>
       )}
 
-      {loading ? (
-        <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading accounts…</div>
-      ) : sortedData.length === 0 ? (
-        <div style={{
-          margin: "0 32px", background: "var(--card)", border: "1px solid var(--border)",
-          borderRadius: 12, padding: 40, textAlign: "center", color: "var(--text-muted)",
-        }}>
-          No accounts match the selected filter or date range.
+      {/* Table */}
+      <div className="card">
+        <div className="table-scroll">
+          <table className="trial-table">
+            <colgroup>
+              <col style={{ width: 100 }} />  {/* Code */}
+              <col />                          {/* Name */}
+              <col style={{ width: 100 }} />  {/* Type */}
+              <col style={{ width: 120 }} />  {/* Category */}
+              <col style={{ width: 120 }} />  {/* Debit */}
+              <col style={{ width: 120 }} />  {/* Credit */}
+            </colgroup>
+            <thead>
+              <tr>
+                <SortTh field="code">Code</SortTh>
+                <SortTh field="name" style={{ textAlign: "left" }}>Name</SortTh>
+                <SortTh field="type" style={{ textAlign: "center" }}>Type</SortTh>
+                <th style={{ ...thStyle, textAlign: "center" }}>Category</th>
+                <SortTh field="debit" style={{ textAlign: "right" }}>Debit</SortTh>
+                <SortTh field="credit" style={{ textAlign: "right" }}>Credit</SortTh>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                [1, 2, 3, 4, 5].map(i => <SkeletonRow key={i} />)
+              ) : sortedData.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>
+                    No accounts match the selected filter or date range.
+                  </td>
+                </tr>
+              ) : (
+                sortedData.map((a, i) => (
+                  <tr key={a.id} onClick={() => openLedger(a.id)} style={{ cursor: "pointer" }}>
+                    <td style={{ ...tdStyle, whiteSpace: "nowrap" }}><span style={{ fontWeight: 600, color: "var(--primary)" }}>{a.code}</span></td>
+                    <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{a.name}</td>
+                    <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{a.type}</td>
+                    <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap", color: "var(--text-muted)" }}>{a.category || "—"}</td>
+                    <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: a.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: a.debit > 0 ? 600 : 400 }}>
+                      {a.debit > 0 ? `PKR ${fmt(a.debit)}` : "—"}
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: a.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: a.credit > 0 ? 600 : 400 }}>
+                      {a.credit > 0 ? `PKR ${fmt(a.credit)}` : "—"}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+            <tfoot>
+              <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
+                <td colSpan={4} style={{ ...tdStyle, textAlign: "right" }}>Total</td>
+                <td style={{ ...tdStyle, textAlign: "right", color: "#EF4444" }}>PKR {fmt(totalDebit)}</td>
+                <td style={{ ...tdStyle, textAlign: "right", color: "#10B981" }}>PKR {fmt(totalCredit)}</td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
-      ) : (
-        <div className="table-wrap">
-          <div className="table-header" style={{ background: headerBg }}>
-            <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>
-            <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
-            <button className="sort-btn" onClick={() => handleSort("type")}>Type {getSortIcon("type")}</button>
-            <button className="sort-btn" onClick={() => handleSort("credit")} style={{ textAlign: "center" }}>Category {getSortIcon("credit")}</button>
-            <button className="sort-btn" onClick={() => handleSort("debit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
-            <button className="sort-btn" onClick={() => handleSort("credit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
-          </div>
-          {sortedData.map((a, i) => (
-            <div
-              key={a.id}
-              className="table-row"
-              style={{
-                background: i % 2 === 0 ? rowLight : rowDark,
-                color: isOneAccounts ? "#1E293B" : "inherit",
-              }}
-              onClick={() => openLedger(a.id)}
-            >
-              <span style={{ fontWeight: 600, color: "var(--primary)" }}>{a.code}</span>
-              <span>{a.name}</span>
-              <span style={{ fontSize: 11, color: textMuted }}>{a.type}</span>
-              <span style={{ fontSize: 11, color: textMuted, textAlign: "center" }}>{a.category || "—"}</span>
-              <span style={{
-                textAlign: "right",
-                color: a.debit > 0 ? "#EF4444" : textMuted,
-                fontWeight: a.debit > 0 ? 600 : 400,
-              }}>
-                {a.debit > 0 ? `PKR ${fmt(a.debit)}` : "—"}
-              </span>
-              <span style={{
-                textAlign: "right",
-                color: a.credit > 0 ? "#10B981" : textMuted,
-                fontWeight: a.credit > 0 ? 600 : 400,
-              }}>
-                {a.credit > 0 ? `PKR ${fmt(a.credit)}` : "—"}
-              </span>
-            </div>
-          ))}
-          <div className="totals-row" style={{ background: totalBg }}>
-            <span></span>
-            <span>Total</span>
-            <span></span>
-            <span></span>
-            <span style={{ textAlign: "right", color: "#FFA7A7" }}>PKR {fmt(totalDebit)}</span>
-            <span style={{ textAlign: "right", color: "#A7F3D0" }}>PKR {fmt(totalCredit)}</span>
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   )
 }
