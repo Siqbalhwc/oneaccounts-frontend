@@ -600,6 +600,38 @@ function NewInvoicePageContent() {
 
         .inv-content-wrapper { display: flex; flex-direction: column; }
 
+        /* MOBILE RESPONSIVE ADDITIONS */
+        @media (max-width: 768px) {
+          .header-grid {
+            grid-template-columns: 1fr;
+            gap: 12px;
+          }
+          .inv-card {
+            padding: 14px 12px;
+          }
+          .inv-row {
+            grid-template-columns: 1fr;
+            gap: 10px;
+          }
+          .inv-btn {
+            width: 100%;
+            justify-content: center;
+            padding: 10px 12px;
+          }
+          .cust-selected-badge {
+            flex-wrap: wrap;
+          }
+          .inv-item-header, .inv-item-row {
+            min-width: 500px;
+          }
+          .cust-dropdown {
+            max-height: 200px;
+          }
+          .inv-title {
+            font-size: 16px;
+          }
+        }
+
         @media (max-width: 900px) {
           .header-grid { grid-template-columns: 1fr; }
           .inv-items-section { order: 2; }
