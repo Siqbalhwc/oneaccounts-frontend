@@ -477,17 +477,29 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         .tsd .kpi-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 6px; }
         .tsd .kpi-value { font-size: 1.65rem; font-weight: 800; }
 
-        /* Two-col layout */
-        .tsd .two-col   { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
-        .tsd .full-width { margin-bottom: 20px; }
-
-        /* Table */
-        .tsd table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-        .tsd th { text-align: left; padding: 8px 12px; border-bottom: 2px solid var(--border); color: var(--text-muted); font-weight: 600; font-size: 0.65rem; text-transform: uppercase; }
-        .tsd td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
-
-        /* Quick actions */
-        .tsd .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex: 1; align-items: stretch; }
+        /* Two-col layout with horizontal scroll on mobile */
+        .tsd .two-col {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 20px;
+          margin-bottom: 24px;
+        }
+        /* Make the first card (top customers) scrollable horizontally */
+        .tsd .two-col .card:first-child {
+          overflow-x: auto;
+        }
+        .tsd .top-customers-table {
+          min-width: 300px;
+          width: 100%;
+          border-collapse: collapse;
+        }
+        .tsd .quick-actions {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+          flex: 1;
+          align-items: stretch;
+        }
         .tsd .quick-action-btn {
           background: var(--card); border: 1px solid var(--border); border-radius: 10px;
           padding: 16px 8px; text-align: center;
@@ -496,6 +508,11 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           display: flex; align-items: center; justify-content: center; gap: 8px;
         }
         .tsd .quick-action-btn:hover { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+
+        /* Table styles */
+        .tsd table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        .tsd th { text-align: left; padding: 8px 12px; border-bottom: 2px solid var(--border); color: var(--text-muted); font-weight: 600; font-size: 0.65rem; text-transform: uppercase; }
+        .tsd td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
 
         /* Bar chart */
         .tsd .chart-container { padding: 8px 0 12px; overflow-x: auto; }
@@ -524,6 +541,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           .tsd .hero    { flex-direction: column; align-items: flex-start; }
           .customer-name { max-width: 120px; }
           .tsd .quick-action-btn { padding: 12px 8px; font-size: 0.75rem; }
+          .tsd .quick-actions { grid-template-columns: 1fr; }
         }
         @media (max-width: 380px) {
           .tsd .kpi-row { grid-template-columns: 1fr; }
@@ -619,7 +637,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
               </button>
             </div>
             <div style={{ overflowX: "auto", flex: 1 }}>
-              <table style={{ minWidth: "300px", width: "100%" }}>
+              <table className="top-customers-table" style={{ minWidth: "300px", width: "100%" }}>
                 <thead>
                   <tr>
                     <th>Customer</th>
@@ -628,7 +646,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
                 </thead>
                 <tbody>
                   {topCustomers.length === 0 ? (
-                    <tr><td colSpan={2} style={{ padding: "12px", textAlign: "center", color: "var(--text-muted)" }}>No customer data</td></tr>
+                    <td><td colSpan={2} style={{ padding: "12px", textAlign: "center", color: "var(--text-muted)" }}>No customer data</td></tr>
                   ) : (
                     topCustomers.map((c, i) => (
                       <tr key={i}>
