@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRole } from "@/contexts/RoleContext"
+import { useMediaQuery } from "@/hooks/useMediaQuery"
 import ManagementDashboard from "@/components/dashboard/ManagementDashboard"
 import AccountantDashboard from "@/components/dashboard/AccountantDashboard"
 import TradingServiceDashboard from "@/components/dashboard/TradingServiceDashboard"
+import MobileDashboard from "@/components/dashboard/MobileDashboard"
 
 export default function DashboardPage() {
   const { role, loading: roleLoading } = useRole()
@@ -16,6 +18,7 @@ export default function DashboardPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
+  const isMobile = useMediaQuery("(max-width: 768px)")
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -55,7 +58,12 @@ export default function DashboardPage() {
   const effectiveRole = isDeveloper ? devRole : role
   const effectiveBusinessType = isDeveloper ? devBusinessType : businessType
 
-  // Accountant → Accountant Dashboard
+  // On mobile, render the compact mobile dashboard
+  if (isMobile) {
+    return <MobileDashboard role={effectiveRole} businessType={effectiveBusinessType} />
+  }
+
+  // Accountant → Accountant Dashboard (desktop)
   if (effectiveRole === "accountant") {
     return (
       <div style={{ position: "relative" }}>
@@ -77,7 +85,7 @@ export default function DashboardPage() {
     )
   }
 
-  // Management view
+  // Management view (desktop)
   return (
     <div style={{ position: "relative" }}>
       {isDeveloper && (
