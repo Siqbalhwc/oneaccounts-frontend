@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRole } from "@/contexts/RoleContext"
-import { useMediaQuery } from "@/hooks/useMediaQuery"
 import ManagementDashboard from "@/components/dashboard/ManagementDashboard"
 import AccountantDashboard from "@/components/dashboard/AccountantDashboard"
 import TradingServiceDashboard from "@/components/dashboard/TradingServiceDashboard"
@@ -14,11 +13,20 @@ export default function DashboardPage() {
   const [companyId, setCompanyId] = useState("")
   const [userEmail, setUserEmail] = useState("")
   const [businessType, setBusinessType] = useState("")
+  const [isMobile, setIsMobile] = useState(false)
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const isMobile = useMediaQuery("(max-width: 768px)")
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768)
+    }
+    checkMobile()
+    window.addEventListener("resize", checkMobile)
+    return () => window.removeEventListener("resize", checkMobile)
+  }, [])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -38,9 +46,7 @@ export default function DashboardPage() {
     userEmail === "siqbalhwc@gmail.com" &&
     companyId === "00000000-0000-0000-0000-000000000001"
 
-  // For developer, allow manual toggles
   const [devRole, setDevRole] = useState<"management" | "accountant">("management")
-  // When devRole === "management", also allow toggling business type for preview
   const [devBusinessType, setDevBusinessType] = useState<"ngo" | "trading">("ngo")
 
   const toggleDevRole = () => {
