@@ -22,13 +22,13 @@ interface Product {
   updated_by?: string | null
 }
 
-type SortField = "code" | "name" | "category" | "cost_price" | "sale_price" | "opening_qty" | "qty_on_hand" | "total_inflow" | "total_outflow"
+type SortField = "code" | "name" | "cost_price" | "sale_price" | "opening_qty" | "qty_on_hand" | "total_inflow" | "total_outflow"
 type SortDir = "asc" | "desc"
 
 function SkeletonRow() {
   return (
     <tr>
-      {[60, 70, 50, 40, 40, 50, 50, 50, 50, 60, 60, 60, 60].map((w, i) => (
+      {[60, 70, 40, 40, 50, 50, 50, 50, 60, 60, 60].map((w, i) => (
         <td key={i} style={{ padding: "12px 16px" }}>
           <div style={{
             width: `${w}%`,
@@ -183,7 +183,7 @@ export default function StockRegisterPage() {
   const totalStockValue = products.reduce((sum, p) => sum + (p.qty_on_hand * (p.cost_price || 0)), 0)
   const totalProducts = total
 
-  // Shared th/td styles (identical to invoice page)
+  // Shared th/td styles
   const thStyle: React.CSSProperties = {
     padding: "12px 16px",
     background: "var(--card-hover)",
@@ -201,6 +201,9 @@ export default function StockRegisterPage() {
     borderBottom: "1px solid var(--border)",
     fontSize: 13,
     verticalAlign: "middle",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
   }
 
   const SortTh = ({ field, children, style }: { field: SortField; children: React.ReactNode; style?: React.CSSProperties }) => (
@@ -298,7 +301,7 @@ export default function StockRegisterPage() {
         }
         .table-scroll::-webkit-scrollbar { height: 4px; }
         .table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-        .stock-table { min-width: 1100px; }
+        .stock-table { min-width: 900px; }
 
         @media (max-width: 480px) {
           .page-wrap { padding: 12px !important; }
@@ -310,6 +313,15 @@ export default function StockRegisterPage() {
           gap: 12px;
           align-items: center;
           margin-bottom: 16px;
+        }
+        .filter-select {
+          height: 38px;
+          border: 1.5px solid var(--border);
+          border-radius: 8px;
+          padding: 0 12px;
+          font-size: 13px;
+          background: var(--card);
+          color: var(--text);
         }
       `}</style>
 
@@ -341,7 +353,7 @@ export default function StockRegisterPage() {
           <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
           <input className="search-input" placeholder="Search by name or code..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} style={{ width: "100%" }} />
         </div>
-        <select className="filter-select" value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); setPage(1) }} style={{ height: 38, border: "1.5px solid var(--border)", borderRadius: 8, padding: "0 12px", fontSize: 13, background: "var(--card)", color: "var(--text)" }}>
+        <select className="filter-select" value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); setPage(1) }}>
           <option value="">All Categories</option>
           {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
         </select>
@@ -356,23 +368,21 @@ export default function StockRegisterPage() {
         <div className="table-scroll">
           <table className="stock-table">
             <colgroup>
-              <col style={{ width: 100 }} /> {/* Code */}
-              <col />                         {/* Name */}
-              <col style={{ width: 100 }} /> {/* Category */}
-              <col style={{ width: 80 }} />  {/* Cost */}
-              <col style={{ width: 80 }} />  {/* Sale */}
-              <col style={{ width: 70 }} />  {/* Opening */}
-              <col style={{ width: 70 }} />  {/* Inflow */}
-              <col style={{ width: 70 }} />  {/* Outflow */}
-              <col style={{ width: 80 }} />  {/* Closing */}
-              <col style={{ width: 50 }} />  {/* Img */}
-              <col style={{ width: 80 }} />  {/* Actions (Edit/Delete/Ledger) */}
+              <col style={{ width: "30%" }} />  {/* Code */}
+              <col style={{ width: "70%" }} />  {/* Name */}
+              <col style={{ width: 80 }} />     {/* Cost */}
+              <col style={{ width: 80 }} />     {/* Sale */}
+              <col style={{ width: 70 }} />     {/* Opening */}
+              <col style={{ width: 70 }} />     {/* Inflow */}
+              <col style={{ width: 70 }} />     {/* Outflow */}
+              <col style={{ width: 80 }} />     {/* Closing */}
+              <col style={{ width: 50 }} />     {/* Img */}
+              <col style={{ width: 120 }} />    {/* Actions */}
             </colgroup>
             <thead>
               <tr>
                 <SortTh field="code">Code</SortTh>
                 <SortTh field="name" style={{ textAlign: "left" }}>Name</SortTh>
-                <SortTh field="category">Category</SortTh>
                 <SortTh field="cost_price" style={{ textAlign: "center" }}>Cost</SortTh>
                 <SortTh field="sale_price" style={{ textAlign: "center" }}>Sale</SortTh>
                 <SortTh field="opening_qty" style={{ textAlign: "center" }}>Opening</SortTh>
@@ -388,7 +398,7 @@ export default function StockRegisterPage() {
                 [1, 2, 3, 4, 5].map(i => <SkeletonRow key={i} />)
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan={11} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>
+                  <td colSpan={10} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>
                     No products found. {canEdit && "Add a product to get started."}
                   </td>
                 </tr>
@@ -400,14 +410,13 @@ export default function StockRegisterPage() {
                   return (
                     <tr key={prod.id}>
                       <td style={tdStyle}><span style={{ fontWeight: 600, color: "var(--primary)" }}>{prod.code}</span></td>
-                      <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{prod.name}</td>
-                      <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{prod.category || "—"}</td>
-                      <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>PKR {prod.cost_price?.toLocaleString()}</td>
-                      <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>PKR {prod.sale_price?.toLocaleString()}</td>
-                      <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{prod.opening_qty}</td>
-                      <td style={{ ...tdStyle, textAlign: "center", color: "#10B981", whiteSpace: "nowrap" }}>{inflow}</td>
-                      <td style={{ ...tdStyle, textAlign: "center", color: "#EF4444", whiteSpace: "nowrap" }}>{outflow}</td>
-                      <td style={{ ...tdStyle, textAlign: "center", fontWeight: 600, whiteSpace: "nowrap" }}>{closing}</td>
+                      <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{prod.name}</td>
+                      <td style={{ ...tdStyle, textAlign: "center" }}>PKR {prod.cost_price?.toLocaleString()}</td>
+                      <td style={{ ...tdStyle, textAlign: "center" }}>PKR {prod.sale_price?.toLocaleString()}</td>
+                      <td style={{ ...tdStyle, textAlign: "center" }}>{prod.opening_qty}</td>
+                      <td style={{ ...tdStyle, textAlign: "center", color: "#10B981" }}>{inflow}</td>
+                      <td style={{ ...tdStyle, textAlign: "center", color: "#EF4444" }}>{outflow}</td>
+                      <td style={{ ...tdStyle, textAlign: "center", fontWeight: 600 }}>{closing}</td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>
                         {prod.image_path ? (
                           <img src={prod.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
