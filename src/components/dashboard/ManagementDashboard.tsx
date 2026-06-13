@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { TrendingUp, TrendingDown, Minus, CheckCircle, AlertTriangle, Bell } from "lucide-react"
+import { TrendingUp, TrendingDown, Minus, CheckCircle, AlertTriangle } from "lucide-react"
 import { motion } from "framer-motion"
 import { useTheme } from "@/contexts/ThemeContext"
 import { useCompany } from "@/contexts/CompanyContext"
@@ -19,6 +19,7 @@ function useAnimatedNumber(target: number, duration = 500) {
     const diff = target - start
     if (diff === 0) return
     const startTime = performance.now()
+
     const tick = (now: number) => {
       const elapsed = now - startTime
       const progress = Math.min(elapsed / duration, 1)
@@ -51,7 +52,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [selectedDonorId, setSelectedDonorId] = useState<string>("")
   const [userDisplayName, setUserDisplayName] = useState("")
-  const [overdueBillsList, setOverdueBillsList] = useState<any[]>([])
 
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
@@ -68,25 +68,6 @@ export default function ManagementDashboard({ role }: { role: string }) {
       setUserDisplayName(fullName)
     })
   }, [])
-
-  // Fetch overdue bills for notification badge
-  useEffect(() => {
-    if (!companyId) return
-    const fetchOverdueBills = async () => {
-      const todayISO = new Date().toISOString().split("T")[0]
-      const { data: overdueBills } = await supabase
-        .from("invoices")
-        .select("id, invoice_no, party_id, total, due_date")
-        .eq("company_id", companyId)
-        .eq("type", "purchase")
-        .in("status", ["Unpaid", "Partial"])
-        .lt("due_date", todayISO)
-        .order("due_date", { ascending: true })
-        .limit(10)
-      setOverdueBillsList(overdueBills || [])
-    }
-    fetchOverdueBills()
-  }, [companyId, supabase])
 
   useEffect(() => {
     if (!companyId) return
@@ -468,7 +449,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           padding-right: 1.6rem;
           font-family: inherit;
           max-width: 150px;
-          color-scheme: light;
+          color-scheme: light;   /* ✅ Forces light dropdown (black text on white) */
         }
         .mgmt .filter-pill:focus { outline: none; border-color: var(--border-strong); }
 
@@ -529,6 +510,21 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
         .clickable { color: #93C5FD; text-decoration: underline; cursor: pointer; }
 
+        .overdue-banner {
+          background: var(--card); border: 1px solid var(--border); border-left: 4px solid #EF4444;
+          border-radius: 8px; padding: 0.5rem 1rem; margin-bottom: 1rem;
+          display: flex; align-items: center; justify-content: space-between;
+          gap: 10px; font-size: 0.85rem; color: var(--text); font-weight: 500;
+          flex-wrap: nowrap;
+        }
+        .overdue-banner strong { color: #EF4444; white-space: nowrap; }
+        .overdue-btn {
+          background: #EF4444; color: white; border: none;
+          border-radius: 6px; padding: 5px 12px;
+          font-weight: 600; cursor: pointer; font-size: 0.78rem;
+          white-space: nowrap; font-family: inherit;
+        }
+
         @media (max-width: 1100px) {
           .dashboard-grid { grid-template-columns: repeat(3, 1fr); }
         }
@@ -565,63 +561,33 @@ export default function ManagementDashboard({ role }: { role: string }) {
             <h2>{getGreeting()}, {userDisplayName || "User"}</h2>
             <p>Here's what's happening with your NGO portfolio today</p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-            <div className="hero-filters">
-              <span className="filter-label">Period:</span>
-              <select className="filter-pill" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
-                {[2024,2025,2026,2027].map((y: number) => <option key={y} value={y}>FY {y}</option>)}
-              </select>
-              <span className="filter-label">Projects:</span>
-              <select className="filter-pill" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
-                <option value="">All Projects</option>
-                {projects.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-              <span className="filter-label">Donors:</span>
-              <select className="filter-pill" value={selectedDonorId} onChange={e => setSelectedDonorId(e.target.value)}>
-                <option value="">All Donors</option>
-                {donors.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-            </div>
-            <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-              {/* Overdue Invoices Bell */}
-              <div style={{ textAlign: "center" }}>
-                <div
-                  style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 8, borderRadius: "50%", transition: "background 0.15s", position: "relative" }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = "var(--card-hover)"}
-                  onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-                  onClick={() => router.push("/dashboard/invoices?status=Unpaid&overdue=true")}
-                >
-                  <Bell size={20} color="var(--text-muted)" />
-                  {overdueInvoicesCount > 0 && (
-                    <span style={{ position: "absolute", top: -2, right: -2, background: "#EF4444", color: "white", fontSize: 10, fontWeight: 700, borderRadius: 10, minWidth: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>
-                      {overdueInvoicesCount > 9 ? "9+" : overdueInvoicesCount}
-                    </span>
-                  )}
-                </div>
-                <div style={{ fontSize: 9, marginTop: 2, color: "var(--text-muted)" }}>Invoices</div>
-              </div>
-              {/* Overdue Bills Bell */}
-              <div style={{ textAlign: "center" }}>
-                <div
-                  style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 8, borderRadius: "50%", transition: "background 0.15s", position: "relative" }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = "var(--card-hover)"}
-                  onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-                  onClick={() => router.push("/dashboard/bills?status=Unpaid&overdue=true")}
-                >
-                  <Bell size={20} color="var(--text-muted)" />
-                  {overdueBillsList.length > 0 && (
-                    <span style={{ position: "absolute", top: -2, right: -2, background: "#EF4444", color: "white", fontSize: 10, fontWeight: 700, borderRadius: 10, minWidth: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>
-                      {overdueBillsList.length > 9 ? "9+" : overdueBillsList.length}
-                    </span>
-                  )}
-                </div>
-                <div style={{ fontSize: 9, marginTop: 2, color: "var(--text-muted)" }}>Bills</div>
-              </div>
-            </div>
+          <div className="hero-filters">
+            <span className="filter-label">Period:</span>
+            <select className="filter-pill" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
+              {[2024,2025,2026,2027].map((y: number) => <option key={y} value={y}>FY {y}</option>)}
+            </select>
+            <span className="filter-label">Projects:</span>
+            <select className="filter-pill" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
+              <option value="">All Projects</option>
+              {projects.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <span className="filter-label">Donors:</span>
+            <select className="filter-pill" value={selectedDonorId} onChange={e => setSelectedDonorId(e.target.value)}>
+              <option value="">All Donors</option>
+              {donors.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
           </div>
         </motion.div>
 
-        {/* Overspent warning banner (kept) */}
+        {/* Overdue invoices banner */}
+        {overdueInvoicesCount > 0 && (
+          <motion.div className="overdue-banner" initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0, boxShadow: ["0 0 0 rgba(239,68,68,0)", "0 0 20px rgba(239,68,68,0.3)", "0 0 0 rgba(239,68,68,0)"] }} transition={{ boxShadow: { repeat: Infinity, duration: 2.5 } }}>
+            <span>⚠️ <strong>{overdueInvoicesCount} overdue {overdueInvoicesCount === 1 ? "invoice" : "invoices"}</strong></span>
+            <button className="overdue-btn" onClick={() => router.push("/dashboard/invoices?status=Unpaid&overdue=true")}>View overdue invoices →</button>
+          </motion.div>
+        )}
+
+        {/* Overspent warning banner */}
         {overspentCount > 0 && (
           <motion.div className="warning-banner" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}>
             <span>⚠️ Portfolio overspent by {formatPKR(totalSpent - totalBudget)}. {overspentCount} {overspentCount === 1 ? "project" : "projects"} need review.</span>
