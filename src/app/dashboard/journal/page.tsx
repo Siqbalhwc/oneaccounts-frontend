@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import React from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
 import { Plus, Eye, ChevronDown, ChevronRight, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
