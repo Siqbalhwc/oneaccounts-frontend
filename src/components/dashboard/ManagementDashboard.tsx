@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useRef, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { TrendingUp, TrendingDown, Minus, CheckCircle, AlertTriangle } from "lucide-react"
-import { motion } from "framer-motion"
+import { TrendingUp, TrendingDown, Minus, CheckCircle, AlertTriangle, Bell } from "lucide-react"
+import { motion, AnimatePresence } from "framer-motion"
 import { useTheme } from "@/contexts/ThemeContext"
 import { useCompany } from "@/contexts/CompanyContext"
 import { useDashboardData } from "@/hooks/useDashboardData"
@@ -19,7 +19,6 @@ function useAnimatedNumber(target: number, duration = 500) {
     const diff = target - start
     if (diff === 0) return
     const startTime = performance.now()
-
     const tick = (now: number) => {
       const elapsed = now - startTime
       const progress = Math.min(elapsed / duration, 1)
@@ -52,6 +51,9 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [selectedDonorId, setSelectedDonorId] = useState<string>("")
   const [userDisplayName, setUserDisplayName] = useState("")
+  const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
+  const [overdueInvoicesList, setOverdueInvoicesList] = useState<any[]>([])
+  const [overdueBillsList, setOverdueBillsList] = useState<any[]>([])
 
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
@@ -68,6 +70,58 @@ export default function ManagementDashboard({ role }: { role: string }) {
       setUserDisplayName(fullName)
     })
   }, [])
+
+  // Fetch overdue items for notification dropdown
+  useEffect(() => {
+    if (!companyId) return
+    const fetchOverdueItems = async () => {
+      const todayISO = new Date().toISOString().split("T")[0]
+      const { data: overdueInvoices } = await supabase
+        .from("invoices")
+        .select("id, invoice_no, party_id, total, due_date")
+        .eq("company_id", companyId)
+        .eq("type", "sale")
+        .eq("status", "Unpaid")
+        .lt("due_date", todayISO)
+        .order("due_date", { ascending: true })
+        .limit(10)
+
+      const { data: overdueBills } = await supabase
+        .from("invoices")
+        .select("id, invoice_no, party_id, total, due_date")
+        .eq("company_id", companyId)
+        .eq("type", "purchase")
+        .in("status", ["Unpaid", "Partial"])
+        .lt("due_date", todayISO)
+        .order("due_date", { ascending: true })
+        .limit(10)
+
+      // Fetch customer/supplier names
+      const partyIds = [...(overdueInvoices || []), ...(overdueBills || [])].map(i => i.party_id).filter(Boolean)
+      const { data: customers } = await supabase
+        .from("customers")
+        .select("id, name")
+        .in("id", partyIds)
+      const { data: suppliers } = await supabase
+        .from("suppliers")
+        .select("id, name")
+        .in("id", partyIds)
+
+      const customerMap: Record<number, string> = {}
+      customers?.forEach(c => { customerMap[c.id] = c.name })
+      suppliers?.forEach(s => { customerMap[s.id] = s.name })
+
+      setOverdueInvoicesList((overdueInvoices || []).map(inv => ({
+        ...inv,
+        party_name: customerMap[inv.party_id] || "Unknown"
+      })))
+      setOverdueBillsList((overdueBills || []).map(bill => ({
+        ...bill,
+        party_name: customerMap[bill.party_id] || "Unknown"
+      })))
+    }
+    fetchOverdueItems()
+  }, [companyId, supabase])
 
   useEffect(() => {
     if (!companyId) return
@@ -290,7 +344,10 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const totalReceivables = dashData?.totalReceivables || 0
   const totalPayables = dashData?.totalPayables || 0
   const overdueInvoicesCount = dashData?.overdueInvoicesCount || 0
+  const overdueBillsCount = dashData?.overdueBillsCount || 0
   const lastUpdated = dashData?.lastUpdated || ""
+
+  const totalOverdueCount = (overdueInvoicesCount || 0) + (overdueBillsCount || 0)
 
   const remainingFunds = totalBudget - totalSpent
   const spentPct = totalBudget ? Math.round((totalSpent / totalBudget) * 100) : 0
@@ -449,7 +506,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           padding-right: 1.6rem;
           font-family: inherit;
           max-width: 150px;
-          color-scheme: light;   /* ✅ Forces light dropdown (black text on white) */
+          color-scheme: light;
         }
         .mgmt .filter-pill:focus { outline: none; border-color: var(--border-strong); }
 
@@ -510,20 +567,57 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
         .clickable { color: #93C5FD; text-decoration: underline; cursor: pointer; }
 
-        .overdue-banner {
-          background: var(--card); border: 1px solid var(--border); border-left: 4px solid #EF4444;
-          border-radius: 8px; padding: 0.5rem 1rem; margin-bottom: 1rem;
-          display: flex; align-items: center; justify-content: space-between;
-          gap: 10px; font-size: 0.85rem; color: var(--text); font-weight: 500;
-          flex-wrap: nowrap;
+        .notification-bell {
+          position: relative;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 8px;
+          border-radius: 50%;
+          transition: background 0.15s;
         }
-        .overdue-banner strong { color: #EF4444; white-space: nowrap; }
-        .overdue-btn {
-          background: #EF4444; color: white; border: none;
-          border-radius: 6px; padding: 5px 12px;
-          font-weight: 600; cursor: pointer; font-size: 0.78rem;
-          white-space: nowrap; font-family: inherit;
+        .notification-bell:hover { background: var(--card-hover); }
+        .notification-badge {
+          position: absolute;
+          top: -2px;
+          right: -2px;
+          background: #EF4444;
+          color: white;
+          font-size: 10px;
+          font-weight: 700;
+          border-radius: 10px;
+          min-width: 16px;
+          height: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0 4px;
         }
+        .notification-dropdown {
+          position: absolute;
+          top: 100%;
+          right: 0;
+          margin-top: 8px;
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          width: 320px;
+          max-height: 400px;
+          overflow-y: auto;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+          z-index: 100;
+        }
+        .notification-item {
+          padding: 12px 16px;
+          border-bottom: 1px solid var(--border);
+          cursor: pointer;
+          transition: background 0.15s;
+        }
+        .notification-item:hover { background: var(--card-hover); }
+        .notification-item:last-child { border-bottom: none; }
+        .notification-title { font-weight: 600; font-size: 13px; color: var(--text); }
+        .notification-subtitle { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 
         @media (max-width: 1100px) {
           .dashboard-grid { grid-template-columns: repeat(3, 1fr); }
@@ -543,6 +637,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           .filter-pill { font-size: 0.7rem; padding: 0.15rem 0.4rem; padding-right: 1.4rem; background-position: right 0.3rem center; max-width: 120px; }
           .card { padding: 1rem; }
           .kpi-value { font-size: 1.4rem; }
+          .notification-dropdown { width: 280px; right: -10px; }
         }
         @media (max-width: 380px) {
           .dashboard-grid { grid-template-columns: 1fr; }
@@ -561,33 +656,94 @@ export default function ManagementDashboard({ role }: { role: string }) {
             <h2>{getGreeting()}, {userDisplayName || "User"}</h2>
             <p>Here's what's happening with your NGO portfolio today</p>
           </div>
-          <div className="hero-filters">
-            <span className="filter-label">Period:</span>
-            <select className="filter-pill" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
-              {[2024,2025,2026,2027].map((y: number) => <option key={y} value={y}>FY {y}</option>)}
-            </select>
-            <span className="filter-label">Projects:</span>
-            <select className="filter-pill" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
-              <option value="">All Projects</option>
-              {projects.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-            <span className="filter-label">Donors:</span>
-            <select className="filter-pill" value={selectedDonorId} onChange={e => setSelectedDonorId(e.target.value)}>
-              <option value="">All Donors</option>
-              {donors.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div className="hero-filters">
+              <span className="filter-label">Period:</span>
+              <select className="filter-pill" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
+                {[2024,2025,2026,2027].map((y: number) => <option key={y} value={y}>FY {y}</option>)}
+              </select>
+              <span className="filter-label">Projects:</span>
+              <select className="filter-pill" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
+                <option value="">All Projects</option>
+                {projects.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <span className="filter-label">Donors:</span>
+              <select className="filter-pill" value={selectedDonorId} onChange={e => setSelectedDonorId(e.target.value)}>
+                <option value="">All Donors</option>
+                {donors.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </div>
+            {/* Bell Notification Icon */}
+            <div style={{ position: "relative" }}>
+              <div
+                className="notification-bell"
+                onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
+              >
+                <Bell size={20} color="var(--text-muted)" />
+                {totalOverdueCount > 0 && (
+                  <span className="notification-badge">{totalOverdueCount > 9 ? "9+" : totalOverdueCount}</span>
+                )}
+              </div>
+              <AnimatePresence>
+                {showNotificationDropdown && (
+                  <motion.div
+                    className="notification-dropdown"
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                  >
+                    <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)", fontWeight: 700, fontSize: 12 }}>
+                      Overdue Items
+                    </div>
+                    {overdueInvoicesList.length === 0 && overdueBillsList.length === 0 ? (
+                      <div className="notification-item" style={{ textAlign: "center", color: "var(--text-muted)" }}>
+                        No overdue items
+                      </div>
+                    ) : (
+                      <>
+                        {overdueInvoicesList.map(inv => (
+                          <div
+                            key={`inv-${inv.id}`}
+                            className="notification-item"
+                            onClick={() => router.push(`/dashboard/invoices/${inv.id}`)}
+                          >
+                            <div className="notification-title">Invoice #{inv.invoice_no}</div>
+                            <div className="notification-subtitle">
+                              {inv.party_name} · PKR {inv.total?.toLocaleString()} · Due {inv.due_date}
+                            </div>
+                          </div>
+                        ))}
+                        {overdueBillsList.map(bill => (
+                          <div
+                            key={`bill-${bill.id}`}
+                            className="notification-item"
+                            onClick={() => router.push(`/dashboard/bills/${bill.id}`)}
+                          >
+                            <div className="notification-title">Bill #{bill.invoice_no}</div>
+                            <div className="notification-subtitle">
+                              {bill.party_name} · PKR {bill.total?.toLocaleString()} · Due {bill.due_date}
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                    <div
+                      className="notification-item"
+                      style={{ borderTop: "1px solid var(--border)", textAlign: "center", color: "var(--primary)" }}
+                      onClick={() => router.push("/dashboard/invoices?status=Unpaid&overdue=true")}
+                    >
+                      View All Overdue →
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </motion.div>
 
-        {/* Overdue invoices banner */}
-        {overdueInvoicesCount > 0 && (
-          <motion.div className="overdue-banner" initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0, boxShadow: ["0 0 0 rgba(239,68,68,0)", "0 0 20px rgba(239,68,68,0.3)", "0 0 0 rgba(239,68,68,0)"] }} transition={{ boxShadow: { repeat: Infinity, duration: 2.5 } }}>
-            <span>⚠️ <strong>{overdueInvoicesCount} overdue {overdueInvoicesCount === 1 ? "invoice" : "invoices"}</strong></span>
-            <button className="overdue-btn" onClick={() => router.push("/dashboard/invoices?status=Unpaid&overdue=true")}>View overdue invoices →</button>
-          </motion.div>
-        )}
+        {/* Removed the large overdue banners - they are now in the bell icon */}
 
-        {/* Overspent warning banner */}
+        {/* Overspent warning banner (kept as is) */}
         {overspentCount > 0 && (
           <motion.div className="warning-banner" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}>
             <span>⚠️ Portfolio overspent by {formatPKR(totalSpent - totalBudget)}. {overspentCount} {overspentCount === 1 ? "project" : "projects"} need review.</span>
