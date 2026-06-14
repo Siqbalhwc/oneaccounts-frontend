@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   const { companyId } = await request.json()
   if (!companyId) return NextResponse.json({ error: 'Missing companyId' }, { status: 400 })
 
-  // Get the admin user of that company
+  // 1. Find the admin user for this company
   const { data: adminRole } = await supabaseAdmin
     .from('user_roles')
     .select('user_id')
@@ -41,18 +41,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No admin found for this company' }, { status: 404 })
   }
 
-  // Generate a magic link / session for that user
-  // We can use admin.generateLink() or directly create a session.
-  // The easiest: generate a temporary access token and redirect.
+  // 2. Fetch the admin's email
+  const { data: authUser, error: userError } = await supabaseAdmin.auth.admin.getUserById(adminRole.user_id)
+  if (userError || !authUser?.user?.email) {
+    return NextResponse.json({ error: 'Could not retrieve admin email' }, { status: 500 })
+  }
+
+  // 3. Generate a magic link for the admin (this will also send an email, but the link works for us)
   const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
     type: 'magiclink',
-    email: (await supabaseAdmin.auth.admin.getUserById(adminRole.user_id)).data?.user?.email || '',
+    email: authUser.user.email,
   })
 
-  if (linkError || !linkData) {
+  if (linkError || !linkData?.properties?.action_link) {
     return NextResponse.json({ error: linkError?.message || 'Link generation failed' }, { status: 500 })
   }
 
-  // Return the URL the super admin should be redirected to
-  return NextResponse.json({ redirectUrl: linkData.properties?.action_link })
+  // 4. Return the magic link URL
+  return NextResponse.json({ redirectUrl: linkData.properties.action_link })
 }

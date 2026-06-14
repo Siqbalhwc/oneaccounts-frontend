@@ -211,6 +211,21 @@ export default function SuperAdminPage() {
     setShowSubscriptionModal(true)
   }
 
+  const extendTrial = async (company: Company, days: number) => {
+    const res = await fetch("/api/super-admin/companies/extend-trial", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ companyId: company.id, days }),
+    })
+    const data = await res.json()
+    if (data.success) {
+      showMessage(`✅ Trial extended by ${days} days – new expiry: ${new Date(data.newTrialEndsAt).toLocaleDateString()}`)
+      fetchCompanies()
+    } else {
+      showMessage(data.error || "Extension failed", true)
+    }
+  }
+
   const toggleTopup = (code: string) => {
     setSubscriptionForm(prev => ({
       ...prev,
@@ -315,6 +330,23 @@ export default function SuperAdminPage() {
           </td>
           <td className="sa-td">{getStatusBadge(company)}</td>
           <td className="sa-td sa-actions">
+            {company.is_trial && (
+              <select
+                className="sa-select-trial"
+                defaultValue=""
+                onChange={(e) => {
+                  const days = parseInt(e.target.value)
+                  if (!days) return
+                  extendTrial(company, days)
+                  e.target.value = ""
+                }}
+              >
+                <option value="" disabled>⏳ Extend</option>
+                <option value="7">+7 days</option>
+                <option value="15">+15 days</option>
+                <option value="30">+30 days</option>
+              </select>
+            )}
             <button className="sa-btn" onClick={() => openFeatureModal(company)} title="Features">⚙️</button>
             <button className="sa-btn sa-btn-primary" onClick={() => openSubscriptionModal(company)} title="Subscribe / Update"><CreditCard size={12} /></button>
             <button className="sa-btn" onClick={() => impersonate(company)} title="Login as admin"><LogIn size={12} /></button>
@@ -419,6 +451,12 @@ export default function SuperAdminPage() {
         .sa-btn:hover { background: var(--card-hover); }
         .sa-btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
         .sa-btn-danger { background: #EF4444; color: white; border-color: #EF4444; }
+        
+        .sa-select-trial {
+          padding: 4px 6px; border-radius: 6px; font-size: 11px; font-weight: 600;
+          border: 1px solid var(--border); cursor: pointer; font-family: inherit;
+          background: transparent; color: var(--text-muted); height: 28px;
+        }
         
         .feature-pill {
           display: inline-block; padding: 1px 6px; margin-right: 4px; margin-bottom: 4px;
