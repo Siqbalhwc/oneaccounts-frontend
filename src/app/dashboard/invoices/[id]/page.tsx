@@ -258,6 +258,7 @@ export default function InvoiceDetailPage() {
 
   const balanceDue    = invoice.total - (invoice.paid || 0)
   const isOverdue     = invoice.status !== "Paid" && new Date(invoice.due_date) < new Date()
+  const isReturned    = invoice.status === "Returned"
 
   const totalDebit  = journalLines.reduce((s, l) => s + l.debit,  0)
   const totalCredit = journalLines.reduce((s, l) => s + l.credit, 0)
@@ -281,10 +282,12 @@ export default function InvoiceDetailPage() {
         .btn-success:hover { background: #22C55E; }
         .btn-warning { background: #F97316; color: white; border-color: #F97316; }
         .btn-warning:hover { background: #EA580C; }
+        .btn:disabled, .btn[disabled] { opacity: 0.5; pointer-events: none; }
         .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; }
         .badge-paid    { background: #065F46; color: #6EE7B7; }
         .badge-unpaid  { background: #7C2D12; color: #FCA5A5; }
         .badge-overdue { background: #7C2D12; color: #FCA5A5; }
+        .badge-returned { background: #1D4ED8; color: #DBEAFE; }
         .record-history { background: var(--bg-soft); border-radius: 8px; padding: 8px; }
         @media (max-width: 640px) {
           .row { flex-direction: column; align-items: flex-start; }
@@ -303,19 +306,27 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn" onClick={() => router.push(`/dashboard/invoices/new?id=${invoice.id}`)}>
-            ✏️ Edit
-          </button>
-          {/* ↪️ Return button – navigates to new sales return form with this invoice as original */}
-          <button className="btn" onClick={() => router.push(`/dashboard/sales-returns/new?original_invoice_id=${invoice.id}`)}>
-            ↩️ Return
-          </button>
+          {/* Edit button – hidden if returned */}
+          {!isReturned && (
+            <button className="btn" onClick={() => router.push(`/dashboard/invoices/new?id=${invoice.id}`)}>
+              ✏️ Edit
+            </button>
+          )}
+          {/* Return button – hidden if returned */}
+          {!isReturned && (
+            <button className="btn" onClick={() => router.push(`/dashboard/sales-returns/new?original_invoice_id=${invoice.id}`)}>
+              ↩️ Return
+            </button>
+          )}
+          {isReturned && (
+            <span className="badge badge-returned">↩️ Returned</span>
+          )}
           {waLink && hasFeature("whatsapp_invoice") && (
             <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success">
               <Send size={14} /> WhatsApp
             </a>
           )}
-          {reminderLink && hasFeature("payment_reminders") && isOverdue && (
+          {reminderLink && hasFeature("payment_reminders") && isOverdue && !isReturned && (
             <a href={reminderLink} target="_blank" rel="noopener noreferrer" className="btn btn-warning">
               <Send size={14} /> Remind
             </a>
@@ -338,6 +349,7 @@ export default function InvoiceDetailPage() {
           <span className="label">Status</span>
           <span className={`badge ${
             invoice.status === "Paid" ? "badge-paid" :
+            invoice.status === "Returned" ? "badge-returned" :
             invoice.status === "Overdue" ? "badge-overdue" : "badge-unpaid"
           }`}>{invoice.status}</span>
         </div>

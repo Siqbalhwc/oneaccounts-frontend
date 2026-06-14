@@ -41,6 +41,9 @@ function NewSalesReturnPageContent() {
   const [originalInvoice, setOriginalInvoice] = useState<any>(null)
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
 
+  // Guard against double return
+  const [alreadyReturned, setAlreadyReturned] = useState(false)
+
   // Read‑only mode: when a valid original invoice is present
   const isFullReturn = Boolean(originalInvoiceIdFromQuery)
 
@@ -97,6 +100,14 @@ function NewSalesReturnPageContent() {
           setLoading(false)
           return
         }
+
+        // ⛔ Check if already returned
+        if (inv.status === "Returned") {
+          setAlreadyReturned(true)
+          setLoading(false)
+          return
+        }
+
         setOriginalInvoice(inv)
 
         // Fetch customer
@@ -178,6 +189,23 @@ function NewSalesReturnPageContent() {
       setError("Network error")
       setSaving(false)
     }
+  }
+
+  // Already returned guard
+  if (alreadyReturned) {
+    return (
+      <div style={{ padding: "16px", textAlign: "center", background: "var(--bg)", minHeight: "100%", color: "var(--text)" }}>
+        <h2>This invoice has already been returned.</h2>
+        <p style={{ color: "var(--text-muted)" }}>You cannot return an invoice more than once.</p>
+        <button
+          style={{ marginTop: 16 }}
+          className="inv-btn"
+          onClick={() => router.push("/dashboard/invoices")}
+        >
+          Back to Invoices
+        </button>
+      </div>
+    )
   }
 
   if (loading) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading invoice details…</div>
