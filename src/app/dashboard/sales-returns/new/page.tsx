@@ -5,15 +5,15 @@ import { useState, useEffect, useRef, Fragment } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import {
-  ArrowLeft, Plus, Trash2, Search, X, CheckCircle, ExternalLink, ImageIcon, RefreshCw
+  ArrowLeft, Plus, Trash2, Search, X, CheckCircle, ExternalLink, ImageIcon, RefreshCw,
 } from "lucide-react"
 import { usePlan } from "@/contexts/PlanContext"
-import { getWhatsAppLink } from "@/lib/whatsapp"
 
 function NewSalesReturnPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const editId = searchParams.get("id")
+  const originalInvoiceIdFromQuery = searchParams.get("original_invoice_id") // ← read original invoice id from URL
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -100,7 +100,16 @@ function NewSalesReturnPageContent() {
     })
   }, [showProducts])
 
-  // When original invoice selected, auto-fill customer and items
+  // Pre‑select original invoice from URL
+  useEffect(() => {
+    if (originalInvoiceIdFromQuery && companyId) {
+      const id = Number(originalInvoiceIdFromQuery)
+      setOriginalInvoiceId(id)
+      // The other useEffect will fetch its details
+    }
+  }, [originalInvoiceIdFromQuery, companyId])
+
+  // When an original invoice is selected, auto‑fill customer and items
   useEffect(() => {
     if (!originalInvoiceId || !companyId) return
     supabase.from("invoices")
@@ -108,28 +117,27 @@ function NewSalesReturnPageContent() {
       .eq("id", originalInvoiceId)
       .single()
       .then(async ({ data: inv }) => {
-        if (inv) {
-          setCustomerId(inv.party_id)
-          const cust = customers.find(c => c.id === inv.party_id)
-          if (cust) { setSelectedCustomer(cust); setCustomerSearch(cust.name) }
-          setInvoiceDate(inv.date)
-          // load items
-          const { data: invItems } = await supabase.from("invoice_items")
-            .select("*")
-            .eq("invoice_id", inv.id)
-          if (invItems) {
-            const mapped = invItems.map((item: any) => ({
-              product_id: item.product_id,
-              description: item.description,
-              product_name: "",
-              product_image: null,
-              qty: item.qty,   // you can adjust return quantity later
-              unit_price: item.unit_price,
-              cost_price: item.cost_price || 0,
-              total: item.qty * item.unit_price,
-            }))
-            setItems(mapped)
-          }
+        if (!inv) return
+        setCustomerId(inv.party_id)
+        const cust = customers.find(c => c.id === inv.party_id)
+        if (cust) { setSelectedCustomer(cust); setCustomerSearch(cust.name) }
+        setInvoiceDate(inv.date)
+        // load items
+        const { data: invItems } = await supabase.from("invoice_items")
+          .select("*")
+          .eq("invoice_id", inv.id)
+        if (invItems) {
+          const mapped = invItems.map((item: any) => ({
+            product_id: item.product_id,
+            description: item.description,
+            product_name: "",
+            product_image: null,
+            qty: item.qty,      // user can adjust
+            unit_price: item.unit_price,
+            cost_price: item.cost_price || 0,
+            total: item.qty * item.unit_price,
+          }))
+          setItems(mapped)
         }
       })
   }, [originalInvoiceId, companyId, customers])

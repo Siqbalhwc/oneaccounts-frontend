@@ -174,7 +174,7 @@ export default function InvoiceDetailPage() {
       })
   }, [companyId, invoiceId])
 
-  // ✅ Updated WhatsApp message with invoice link and professional signature
+  // WhatsApp message
   const waLink = invoice && invoice.customer
     ? getWhatsAppLink(
         invoice.customer.phone || "",
@@ -193,7 +193,7 @@ export default function InvoiceDetailPage() {
       )
     : ""
 
-  // ✅ Updated reminder with invoice link and professional signature
+  // Reminder message
   const reminderLink = invoice && invoice.customer
     ? getWhatsAppLink(
         invoice.customer.phone || "",
@@ -306,6 +306,10 @@ export default function InvoiceDetailPage() {
           <button className="btn" onClick={() => router.push(`/dashboard/invoices/new?id=${invoice.id}`)}>
             ✏️ Edit
           </button>
+          {/* ↪️ Return button – navigates to new sales return form with this invoice as original */}
+          <button className="btn" onClick={() => router.push(`/dashboard/sales-returns/new?original_invoice_id=${invoice.id}`)}>
+            ↩️ Return
+          </button>
           {waLink && hasFeature("whatsapp_invoice") && (
             <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success">
               <Send size={14} /> WhatsApp
@@ -417,10 +421,7 @@ export default function InvoiceDetailPage() {
             📝 Change History
           </h3>
           <div className="record-history">
-            <RecordHistory
-  tableName="invoices"
-  recordId={String(invoice.id)}
-  />
+            <RecordHistory tableName="invoices" recordId={String(invoice.id)} />
           </div>
         </div>
       )}
