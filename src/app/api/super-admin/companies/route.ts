@@ -25,7 +25,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  // Fetch all companies with plan name and subscription status
+  // Fetch all companies with plan name and user count
   const { data: companies, error } = await supabaseAdmin
     .from('companies')
     .select(`
@@ -33,12 +33,12 @@ export async function GET() {
       plans(name),
       user_roles(count)
     `)
-    .is('deleted_at', null)   // ✅ Exclude soft‑deleted companies
+    .is('deleted_at', null)
     .order('name')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Enrich with subscription info (latest)
+  // Enrich with subscription info, admin email, and enabled features
   const enriched = await Promise.all(companies.map(async (c: any) => {
     const { data: latestSub } = await supabaseAdmin
       .from('subscriptions')
@@ -62,6 +62,15 @@ export async function GET() {
       adminEmail = authUser?.user?.email || ''
     }
 
+    // Fetch enabled features for this company
+    const { data: companyFeatures } = await supabaseAdmin
+      .from('company_features')
+      .select('features(code)')
+      .eq('company_id', c.id)
+      .eq('enabled', true)
+
+    const featureCodes = companyFeatures?.map((f: any) => f.features?.code).filter(Boolean) || []
+
     return {
       id: c.id,
       name: c.name,
@@ -71,6 +80,7 @@ export async function GET() {
       user_count: c.user_roles?.[0]?.count || 0,
       admin_email: adminEmail,
       subscription: latestSub || null,
+      features: featureCodes,
     }
   }))
 

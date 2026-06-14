@@ -18,6 +18,13 @@ const FEATURE_LABELS: Record<string, string> = {
   csv_import_export:"CSV Import/Export", email_reports:"Email Reports",
   purchase_orders:"Purchase Orders",
 }
+// Add‑ons that can be paid for separately
+const ADDON_FEATURES = ["whatsapp_invoice", "inventory", "purchase_orders"]
+const ADDON_LABELS: Record<string, string> = {
+  whatsapp_invoice: "WhatsApp Integration",
+  inventory: "Inventory",
+  purchase_orders: "Purchase Orders",
+}
 
 interface Company {
   id: string
@@ -27,6 +34,7 @@ interface Company {
   trial_ends_at: string | null
   user_count: number
   admin_email: string
+  features: string[]
   subscription: {
     plan_type: string
     status: string
@@ -52,6 +60,7 @@ export default function SuperAdminPage() {
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false)
   const [subscriptionForm, setSubscriptionForm] = useState({
     companyId: "", planType: "basic", paymentMethod: "Bank Transfer", paymentRef: "", amount: "", startDate: "",
+    topups: [] as string[],
   })
   const [savingSubscription, setSavingSubscription] = useState(false)
   const [payments, setPayments] = useState<any[]>([])
@@ -114,6 +123,8 @@ export default function SuperAdminPage() {
     setSelectedCompanyForFeatures(company)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
+
+    // Fetch actual feature states from the API
     try {
       const res = await fetch(`/api/super-admin/features/${company.id}`)
       if (res.ok) {
@@ -143,6 +154,8 @@ export default function SuperAdminPage() {
       }),
     })
     showMessage(`✅ ${FEATURE_LABELS[code] || code} updated`)
+    // Refresh company list to update feature badges
+    fetchCompanies()
   }
 
   const impersonate = async (company: Company) => {
@@ -160,7 +173,7 @@ export default function SuperAdminPage() {
   }
 
   const deleteCompany = async (company: Company) => {
-    if (!confirm(`Permanently delete ${company.name} and ALL its data?`)) return
+    if (!confirm(`Delete ${company.name}? It will be hidden but can be restored later.`)) return
     const res = await fetch("/api/super-admin/companies/delete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -177,13 +190,23 @@ export default function SuperAdminPage() {
   const openSubscriptionModal = (company: Company) => {
     setSubscriptionForm({
       companyId: company.id,
-      planType: company.plan?.toLowerCase() || "basic",
+      planType: company.plan?.toLowerCase().replace(/ .*/, '') || "basic", // map e.g. "Basic – Trading" -> "basic-trading"? We'll keep basic for now
       paymentMethod: "Bank Transfer",
       paymentRef: "",
       amount: "",
       startDate: new Date().toISOString().split("T")[0],
+      topups: [],
     })
     setShowSubscriptionModal(true)
+  }
+
+  const toggleTopup = (code: string) => {
+    setSubscriptionForm(prev => ({
+      ...prev,
+      topups: prev.topups.includes(code)
+        ? prev.topups.filter(t => t !== code)
+        : [...prev.topups, code],
+    }))
   }
 
   const submitSubscription = async () => {
@@ -198,6 +221,7 @@ export default function SuperAdminPage() {
         paymentRef: subscriptionForm.paymentRef,
         amount: parseFloat(subscriptionForm.amount) || 0,
         startDate: subscriptionForm.startDate,
+        topups: subscriptionForm.topups,
       }),
     })
     const data = await res.json()
@@ -205,6 +229,7 @@ export default function SuperAdminPage() {
       showMessage("✅ Subscription recorded & company activated")
       setShowSubscriptionModal(false)
       fetchCompanies()
+      fetchPayments()
     } else {
       showMessage(data.error || "Failed", true)
     }
@@ -276,6 +301,10 @@ export default function SuperAdminPage() {
         .kpi-value { font-size: 22px; font-weight: 800; }
         .kpi-label { font-size: 10px; text-transform: uppercase; color: var(--text-muted); margin-top: 2px; }
         .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+        .feature-pill {
+          display: inline-block; padding: 1px 6px; margin-right: 4px; margin-bottom: 4px;
+          background: #065F46; color: #A7F3D0; border-radius: 12px; font-size: 10px; font-weight: 600;
+        }
         @media (max-width: 640px) {
           .sa-company-card { flex-direction: column; align-items: flex-start; }
           .sa-btn { font-size: 10px; padding: 4px 8px; }
@@ -326,6 +355,13 @@ export default function SuperAdminPage() {
                 <div style={{ fontWeight: 700 }}>{c.name}</div>
                 <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
                   {c.admin_email} · Users: {c.user_count} · Plan: {c.plan}
+                  {c.features.length > 0 && (
+                    <div style={{ marginTop: 4 }}>
+                      {c.features.map(f => (
+                        <span key={f} className="feature-pill">{FEATURE_LABELS[f] || f}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {c.trial_ends_at && <div style={{ fontSize: 10, color: "#10B981" }}>Ends {new Date(c.trial_ends_at).toLocaleDateString()}</div>}
               </div>
@@ -349,6 +385,13 @@ export default function SuperAdminPage() {
                 <div style={{ fontWeight: 700 }}>{c.name}</div>
                 <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
                   {c.admin_email} · Users: {c.user_count} · Plan: {c.plan}
+                  {c.features.length > 0 && (
+                    <div style={{ marginTop: 4 }}>
+                      {c.features.map(f => (
+                        <span key={f} className="feature-pill">{FEATURE_LABELS[f] || f}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {c.trial_ends_at && <div style={{ fontSize: 10, color: "#EF4444" }}>Expired {new Date(c.trial_ends_at).toLocaleDateString()}</div>}
               </div>
@@ -371,6 +414,13 @@ export default function SuperAdminPage() {
                 <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
                   {c.admin_email} · Users: {c.user_count} · Plan: {c.plan}
                   {c.subscription && <span> · Last payment: {c.subscription.amount ? `PKR ${c.subscription.amount}` : "—"}</span>}
+                  {c.features.length > 0 && (
+                    <div style={{ marginTop: 4 }}>
+                      {c.features.map(f => (
+                        <span key={f} className="feature-pill">{FEATURE_LABELS[f] || f}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
@@ -409,7 +459,11 @@ export default function SuperAdminPage() {
                     <td>{p.companies?.name || '—'}</td>
                     <td>PKR {p.amount?.toLocaleString()}</td>
                     <td>{p.plan_code} / {p.period}</td>
-                    <td>{p.topups?.join(', ') || '—'}</td>
+                    <td>
+                      {p.topups && p.topups.length > 0
+                        ? p.topups.map((t: string) => ADDON_LABELS[t] || t).join(', ')
+                        : '—'}
+                    </td>
                     <td>
                       {p.receipt_url ? (
                         <a href={p.receipt_url} target="_blank" rel="noopener noreferrer"
@@ -464,6 +518,22 @@ export default function SuperAdminPage() {
             <input className="input-field" placeholder="Amount (PKR)" type="number" value={subscriptionForm.amount} onChange={e => setSubscriptionForm({...subscriptionForm, amount: e.target.value})} />
             <input className="input-field" type="date" value={subscriptionForm.startDate} onChange={e => setSubscriptionForm({...subscriptionForm, startDate: e.target.value})} />
             <input className="input-field" placeholder="Payment Method" value={subscriptionForm.paymentMethod} onChange={e => setSubscriptionForm({...subscriptionForm, paymentMethod: e.target.value})} />
+
+            <div style={{ marginTop: 8, marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Add‑ons (select if purchased)</div>
+              {ADDON_FEATURES.map(addon => (
+                <label key={addon} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, fontSize: 12 }}>
+                  <input
+                    type="checkbox"
+                    checked={subscriptionForm.topups.includes(addon)}
+                    onChange={() => toggleTopup(addon)}
+                    style={{ accentColor: "var(--primary)" }}
+                  />
+                  {ADDON_LABELS[addon] || addon}
+                </label>
+              ))}
+            </div>
+
             <button className="sa-btn sa-btn-primary" onClick={submitSubscription} disabled={savingSubscription} style={{ width: "100%", padding: "10px", fontSize: 13 }}>
               {savingSubscription ? "Saving..." : "Record Subscription"}
             </button>

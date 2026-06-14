@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { companyId, planType, paymentMethod, paymentRef, amount, startDate } = await request.json()
+  const { companyId, planType, paymentMethod, paymentRef, amount, startDate, topups } = await request.json()
   if (!companyId || !planType) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
@@ -70,6 +70,22 @@ export async function POST(request: Request) {
 
   if (insertError) {
     return NextResponse.json({ error: insertError.message }, { status: 500 })
+  }
+
+  // Also insert a payment notification with breakdown
+  const { error: notifError } = await supabaseAdmin
+    .from('payment_notifications')
+    .insert({
+      company_id: companyId,
+      amount,
+      plan_code: planType,
+      period: '1 year', // adjust as needed
+      topups: topups || [],
+    })
+
+  if (notifError) {
+    // non‑critical – log but don’t fail the whole request
+    console.error('Failed to insert payment notification:', notifError)
   }
 
   return NextResponse.json({ success: true })
