@@ -40,9 +40,10 @@ export async function GET() {
 
   // Enrich with subscription info, admin email, and enabled features
   const enriched = await Promise.all(companies.map(async (c: any) => {
+    // Fetch the latest subscription with all details
     const { data: latestSub } = await supabaseAdmin
       .from('subscriptions')
-      .select('*')
+      .select('plan_type, status, start_date, end_date, amount, payment_method, topups')
       .eq('company_id', c.id)
       .order('created_at', { ascending: false })
       .limit(1)

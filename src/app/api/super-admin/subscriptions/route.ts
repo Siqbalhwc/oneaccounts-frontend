@@ -41,6 +41,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid plan type' }, { status: 400 })
   }
 
+  const start = startDate || new Date().toISOString().split('T')[0]
+  // Set end date to 1 year after start
+  const endDate = new Date(start)
+  endDate.setFullYear(endDate.getFullYear() + 1)
+  const end = endDate.toISOString().split('T')[0]
+
   // Update company: set plan, clear trial flags
   const { error: updateError } = await supabaseAdmin
     .from('companies')
@@ -55,17 +61,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: updateError.message }, { status: 500 })
   }
 
-  // Insert subscription record
+  // Insert subscription record with end_date
   const { error: insertError } = await supabaseAdmin
     .from('subscriptions')
     .insert({
       company_id: companyId,
       plan_type: planType,
       status: 'active',
-      start_date: startDate || new Date().toISOString().split('T')[0],
+      start_date: start,
+      end_date: end,
       payment_method: paymentMethod,
       payment_reference: paymentRef,
       amount,
+      topups: topups || [],
     })
 
   if (insertError) {
@@ -79,12 +87,11 @@ export async function POST(request: Request) {
       company_id: companyId,
       amount,
       plan_code: planType,
-      period: '1 year', // adjust as needed
+      period: '1 year',
       topups: topups || [],
     })
 
   if (notifError) {
-    // non‑critical – log but don’t fail the whole request
     console.error('Failed to insert payment notification:', notifError)
   }
 

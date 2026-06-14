@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import {
-  Trash2, ToggleLeft, ToggleRight, Plus, X, LogIn, CreditCard,
+  Trash2, ToggleLeft, ToggleRight, Plus, X, LogIn, CreditCard, AlertTriangle,
 } from "lucide-react"
 
 const FEATURE_CODES = [
@@ -18,12 +18,21 @@ const FEATURE_LABELS: Record<string, string> = {
   csv_import_export:"CSV Import/Export", email_reports:"Email Reports",
   purchase_orders:"Purchase Orders",
 }
-// Add‑ons that can be paid for separately
 const ADDON_FEATURES = ["whatsapp_invoice", "inventory", "purchase_orders"]
 const ADDON_LABELS: Record<string, string> = {
   whatsapp_invoice: "WhatsApp Integration",
   inventory: "Inventory",
   purchase_orders: "Purchase Orders",
+}
+
+interface Subscription {
+  plan_type: string
+  status: string
+  start_date: string
+  end_date: string
+  amount: number
+  payment_method: string
+  topups: string[]
 }
 
 interface Company {
@@ -35,14 +44,7 @@ interface Company {
   user_count: number
   admin_email: string
   features: string[]
-  subscription: {
-    plan_type: string
-    status: string
-    start_date: string
-    payment_method: string
-    payment_reference: string
-    amount: number
-  } | null
+  subscription: Subscription | null
 }
 
 export default function SuperAdminPage() {
@@ -124,7 +126,6 @@ export default function SuperAdminPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    // Fetch actual feature states from the API
     try {
       const res = await fetch(`/api/super-admin/features/${company.id}`)
       if (res.ok) {
@@ -154,7 +155,6 @@ export default function SuperAdminPage() {
       }),
     })
     showMessage(`✅ ${FEATURE_LABELS[code] || code} updated`)
-    // Refresh company list to update feature badges
     fetchCompanies()
   }
 
@@ -190,7 +190,7 @@ export default function SuperAdminPage() {
   const openSubscriptionModal = (company: Company) => {
     setSubscriptionForm({
       companyId: company.id,
-      planType: company.plan?.toLowerCase().replace(/ .*/, '') || "basic", // map e.g. "Basic – Trading" -> "basic-trading"? We'll keep basic for now
+      planType: company.plan?.toLowerCase().replace(/ .*/, '') || "basic",
       paymentMethod: "Bank Transfer",
       paymentRef: "",
       amount: "",
@@ -236,6 +236,14 @@ export default function SuperAdminPage() {
     setSavingSubscription(false)
   }
 
+  const isExpiringSoon = (sub: Subscription | null) => {
+    if (!sub || !sub.end_date) return false
+    const expiry = new Date(sub.end_date)
+    const now = new Date()
+    const diff = (expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+    return diff <= 10 && diff > 0
+  }
+
   const activeTrials = companies.filter(c => c.is_trial && c.trial_ends_at && new Date(c.trial_ends_at) > new Date())
   const expiredTrials = companies.filter(c => c.is_trial && c.trial_ends_at && new Date(c.trial_ends_at) <= new Date())
   const activeClients = companies.filter(c => !c.is_trial)
@@ -266,10 +274,17 @@ export default function SuperAdminPage() {
         .sa-company-card {
           background: var(--card); border: 1px solid var(--border); border-radius: 10px;
           padding: 12px 16px; margin-bottom: 8px;
-          display: flex; justify-content: space-between; align-items: center; gap: 10px;
-          flex-wrap: wrap;
+          display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+          flex-wrap: nowrap;
         }
         .sa-company-card:hover { background: var(--card-hover); }
+        .sa-card-left {
+          flex: 1; min-width: 0;
+          display: flex; flex-direction: column; gap: 4px;
+        }
+        .sa-card-right {
+          display: flex; gap: 6px; flex-shrink: 0; align-items: center;
+        }
         .sa-badge {
           padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600;
           display: inline-block;
@@ -279,6 +294,7 @@ export default function SuperAdminPage() {
           padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 600;
           border: 1px solid var(--border); cursor: pointer; font-family: inherit;
           background: transparent; color: var(--text-muted);
+          white-space: nowrap;
         }
         .sa-btn:hover { background: var(--card-hover); }
         .sa-btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
@@ -305,8 +321,12 @@ export default function SuperAdminPage() {
           display: inline-block; padding: 1px 6px; margin-right: 4px; margin-bottom: 4px;
           background: #065F46; color: #A7F3D0; border-radius: 12px; font-size: 10px; font-weight: 600;
         }
+        .expiry-warning {
+          color: #EF4444; font-weight: 600; font-size: 11px; display: flex; align-items: center; gap: 3px;
+        }
         @media (max-width: 640px) {
-          .sa-company-card { flex-direction: column; align-items: flex-start; }
+          .sa-company-card { flex-direction: column; align-items: stretch; }
+          .sa-card-right { justify-content: flex-end; flex-wrap: wrap; }
           .sa-btn { font-size: 10px; padding: 4px 8px; }
           .kpi-grid { grid-template-columns: 1fr 1fr; }
         }
@@ -351,21 +371,21 @@ export default function SuperAdminPage() {
           <div className="sa-section-title">🌟 Active Trials ({activeTrials.length})</div>
           {activeTrials.map(c => (
             <div key={c.id} className="sa-company-card">
-              <div>
+              <div className="sa-card-left">
                 <div style={{ fontWeight: 700 }}>{c.name}</div>
                 <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
                   {c.admin_email} · Users: {c.user_count} · Plan: {c.plan}
-                  {c.features.length > 0 && (
-                    <div style={{ marginTop: 4 }}>
-                      {c.features.map(f => (
-                        <span key={f} className="feature-pill">{FEATURE_LABELS[f] || f}</span>
-                      ))}
-                    </div>
-                  )}
                 </div>
-                {c.trial_ends_at && <div style={{ fontSize: 10, color: "#10B981" }}>Ends {new Date(c.trial_ends_at).toLocaleDateString()}</div>}
+                {c.trial_ends_at && <div style={{ fontSize: 10, color: "#10B981" }}>Trial ends {new Date(c.trial_ends_at).toLocaleDateString()}</div>}
+                {c.features.length > 0 && (
+                  <div style={{ marginTop: 2 }}>
+                    {c.features.map(f => (
+                      <span key={f} className="feature-pill">{FEATURE_LABELS[f] || f}</span>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <div className="sa-card-right">
                 <button className="sa-btn" onClick={() => openFeatureModal(c)}>⚙️ Features</button>
                 <button className="sa-btn sa-btn-primary" onClick={() => openSubscriptionModal(c)}><CreditCard size={12}/> Subscribe</button>
                 <button className="sa-btn" onClick={() => impersonate(c)}><LogIn size={12}/> Login</button>
@@ -381,21 +401,21 @@ export default function SuperAdminPage() {
           <div className="sa-section-title">⏳ Expired Trials ({expiredTrials.length})</div>
           {expiredTrials.map(c => (
             <div key={c.id} className="sa-company-card">
-              <div>
+              <div className="sa-card-left">
                 <div style={{ fontWeight: 700 }}>{c.name}</div>
                 <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
                   {c.admin_email} · Users: {c.user_count} · Plan: {c.plan}
-                  {c.features.length > 0 && (
-                    <div style={{ marginTop: 4 }}>
-                      {c.features.map(f => (
-                        <span key={f} className="feature-pill">{FEATURE_LABELS[f] || f}</span>
-                      ))}
-                    </div>
-                  )}
                 </div>
                 {c.trial_ends_at && <div style={{ fontSize: 10, color: "#EF4444" }}>Expired {new Date(c.trial_ends_at).toLocaleDateString()}</div>}
+                {c.features.length > 0 && (
+                  <div style={{ marginTop: 2 }}>
+                    {c.features.map(f => (
+                      <span key={f} className="feature-pill">{FEATURE_LABELS[f] || f}</span>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div style={{ display: "flex", gap: 6 }}>
+              <div className="sa-card-right">
                 <button className="sa-btn sa-btn-primary" onClick={() => openSubscriptionModal(c)}>Subscribe</button>
                 <button className="sa-btn sa-btn-danger" onClick={() => deleteCompany(c)}>Delete</button>
               </div>
@@ -409,21 +429,35 @@ export default function SuperAdminPage() {
           <div className="sa-section-title">💼 Active Clients ({activeClients.length})</div>
           {activeClients.map(c => (
             <div key={c.id} className="sa-company-card">
-              <div>
-                <div style={{ fontWeight: 700 }}>{c.name}</div>
-                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                  {c.admin_email} · Users: {c.user_count} · Plan: {c.plan}
-                  {c.subscription && <span> · Last payment: {c.subscription.amount ? `PKR ${c.subscription.amount}` : "—"}</span>}
-                  {c.features.length > 0 && (
-                    <div style={{ marginTop: 4 }}>
-                      {c.features.map(f => (
-                        <span key={f} className="feature-pill">{FEATURE_LABELS[f] || f}</span>
-                      ))}
-                    </div>
+              <div className="sa-card-left">
+                <div style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
+                  {c.name}
+                  {isExpiringSoon(c.subscription) && (
+                    <span className="expiry-warning"><AlertTriangle size={12}/> Expiring soon</span>
                   )}
                 </div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                  {c.admin_email} · Users: {c.user_count}
+                </div>
+                {c.subscription ? (
+                  <div style={{ fontSize: 12, color: "var(--text)", marginTop: 2 }}>
+                    {c.subscription.plan_type} · PKR {c.subscription.amount?.toLocaleString()}
+                    {c.subscription.topups?.length > 0 && ` + ${c.subscription.topups.map(t => ADDON_LABELS[t] || t).join(', ')}`}
+                    <br/>
+                    Start: {new Date(c.subscription.start_date).toLocaleDateString()} · Expires: {new Date(c.subscription.end_date).toLocaleDateString()}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: "var(--text-muted)" }}>No payment recorded yet</div>
+                )}
+                {c.features.length > 0 && (
+                  <div style={{ marginTop: 2 }}>
+                    {c.features.map(f => (
+                      <span key={f} className="feature-pill">{FEATURE_LABELS[f] || f}</span>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div style={{ display: "flex", gap: 6 }}>
+              <div className="sa-card-right">
                 <button className="sa-btn" onClick={() => openFeatureModal(c)}>Features</button>
                 <button className="sa-btn sa-btn-primary" onClick={() => openSubscriptionModal(c)}>Update</button>
                 <button className="sa-btn" onClick={() => impersonate(c)}>Login</button>
