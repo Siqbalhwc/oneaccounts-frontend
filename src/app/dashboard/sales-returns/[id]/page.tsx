@@ -41,6 +41,14 @@ interface SalesReturn {
   items?: ReturnItem[]
 }
 
+interface JournalLine {
+  account_id: number
+  account_code?: string
+  account_name?: string
+  debit: number
+  credit: number
+}
+
 export default function SalesReturnDetailPage() {
   const router = useRouter()
   const params = useParams()
@@ -56,6 +64,7 @@ export default function SalesReturnDetailPage() {
   const [ret, setRet] = useState<SalesReturn | null>(null)
   const [loading, setLoading] = useState(true)
   const [companyId, setCompanyId] = useState("")
+  const [journalLines, setJournalLines] = useState<JournalLine[]>([])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -150,12 +159,34 @@ export default function SalesReturnDetailPage() {
         setRet(returnData)
         setLoading(false)
       })
+
+    // Load journal lines for this return
+    supabase
+      .from("journal_lines")
+      .select("account_id, debit, credit, accounts(code, name)")
+      .eq("company_id", companyId)
+      .eq("source_type", "sale_return")
+      .eq("source_id", returnId)
+      .then(({ data: lines }) => {
+        if (lines && lines.length > 0) {
+          const formatted = lines.map((l: any) => ({
+            account_id:   l.account_id,
+            account_code: l.accounts?.code || "",
+            account_name: l.accounts?.name || "",
+            debit:        l.debit  || 0,
+            credit:       l.credit || 0,
+          }))
+          setJournalLines(formatted)
+        }
+      })
   }, [companyId, returnId])
 
   if (loading)   return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>Loading…</div>
   if (!ret)      return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>Return not found</div>
 
   const balanceDue = ret.total - (ret.paid || 0)
+  const totalDebit  = journalLines.reduce((s: number, l: JournalLine) => s + l.debit,  0)
+  const totalCredit = journalLines.reduce((s: number, l: JournalLine) => s + l.credit, 0)
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -188,6 +219,9 @@ export default function SalesReturnDetailPage() {
             <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>Return #{ret.invoice_no}</h1>
             <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>{ret.customer?.name || "Unknown Customer"}</p>
           </div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn" onClick={() => window.print()}><Printer size={14} /> Print</button>
         </div>
       </div>
 
@@ -248,6 +282,41 @@ export default function SalesReturnDetailPage() {
                 </tr>
               ))}
             </tbody>
+          </table>
+        </div>
+      )}
+
+      {journalLines.length > 0 && (
+        <div className="card">
+          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📒 Journal Entry (Reversal)</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Account</th>
+                <th style={{ textAlign: "right" }}>Debit (PKR)</th>
+                <th style={{ textAlign: "right" }}>Credit (PKR)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {journalLines.map((line, idx) => (
+                <tr key={idx}>
+                  <td>{line.account_code} – {line.account_name}</td>
+                  <td style={{ textAlign: "right", color: line.debit  > 0 ? "#F87171" : "var(--text-muted)" }}>
+                    {line.debit  > 0 ? line.debit.toLocaleString()  : "–"}
+                  </td>
+                  <td style={{ textAlign: "right", color: line.credit > 0 ? "#2DD4BF" : "var(--text-muted)" }}>
+                    {line.credit > 0 ? line.credit.toLocaleString() : "–"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
+                <td>Total</td>
+                <td style={{ textAlign: "right", color: "#F87171" }}>{totalDebit.toLocaleString()}</td>
+                <td style={{ textAlign: "right", color: "#2DD4BF" }}>{totalCredit.toLocaleString()}</td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       )}
