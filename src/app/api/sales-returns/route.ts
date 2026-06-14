@@ -37,7 +37,7 @@ async function createJE(
   await supabase.from('journal_lines').insert(lineRows)
 
   // Update balances (optional – using RPC if exists)
-  const accountUpdates = lines.reduce((acc, l) => {
+  const accountUpdates = lines.reduce((acc: any[], l: any) => {
     const key = l.account_id
     const existing = acc.find((u: any) => u.account_id === key)
     if (existing) {
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
       due_date: due_date || new Date().toISOString().split('T')[0],
       total: 0,
       paid: 0,
-      status: 'Unpaid',   // or 'Returned' – you can adjust
+      status: 'Unpaid',
       reference,
       notes,
       company_id: companyId,
@@ -211,8 +211,8 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Update total
-  const totalAmount = itemRows.reduce((s, i) => s + i.total, 0)
+  // Update total – FIXED: explicitly typed reduce
+  const totalAmount = itemRows.reduce((s: number, i: any) => s + i.total, 0)
   await supabase.from('invoices').update({ total: totalAmount }).eq('id', returnInv.id)
 
   // Stock moves (inward)
@@ -238,7 +238,7 @@ export async function POST(request: NextRequest) {
         .eq('company_id', companyId)
 
       if (originalJELines && originalJELines.length > 0) {
-        jeLines = originalJELines.map(l => ({
+        jeLines = originalJELines.map((l: any) => ({
           account_id: l.account_id,
           debit: l.credit,    // swap
           credit: l.debit,
@@ -269,11 +269,12 @@ export async function POST(request: NextRequest) {
       const cogsAccount = await getAccount(supabase, '5000', companyId)
       const inventoryAccount = await getAccount(supabase, '1200', companyId)
       if (cogsAccount && inventoryAccount) {
-        let totalCOGS = 0
-        for (const item of items) {
-          if (!item.product_id || !item.cost_price) continue
-          totalCOGS += (item.qty || 0) * (item.cost_price || 0)
-        }
+        const totalCOGS = items.reduce((s: number, item: any) => {
+          if (item.product_id && item.cost_price) {
+            return s + (item.qty || 0) * (item.cost_price || 0)
+          }
+          return s
+        }, 0)
         if (totalCOGS > 0) {
           jeLines.push({
             account_id: inventoryAccount.id, // Debit inventory
