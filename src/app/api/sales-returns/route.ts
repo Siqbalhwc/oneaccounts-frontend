@@ -238,7 +238,7 @@ export async function POST(request: NextRequest) {
         .eq('id', original_invoice_id)
 
       // Log reversal on original invoice
-      await logDataChange('invoices', String(original_invoice_id), 'REVERSAL', origInv, { ...origInv, status: 'Returned' })
+      await logDataChange('invoices', String(original_invoice_id), 'UPDATE', origInv, { ...origInv, status: 'Returned' })
     }
   }
 
