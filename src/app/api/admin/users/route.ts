@@ -41,6 +41,29 @@ async function requireAdmin() {
   return { error: null, status: 200, user, companyId }
 }
 
+// Helper to get the current user limit for a company
+async function getUserLimit(companyId: string): Promise<number | null> {
+  const { data: sub } = await supabaseAdmin
+    .from('subscriptions')
+    .select('max_users')
+    .eq('company_id', companyId)
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return sub?.max_users ?? null
+}
+
+// Helper to count current users in a company
+async function getCurrentUserCount(companyId: string): Promise<number> {
+  const { count, error } = await supabaseAdmin
+    .from('user_roles')
+    .select('*', { count: 'exact', head: true })
+    .eq('company_id', companyId)
+  if (error) return 0
+  return count || 0
+}
+
 // ── GET (list users who have a role in this company) ──
 export async function GET() {
   const { error, status, companyId } = await requireAdmin()
@@ -119,13 +142,24 @@ export async function PUT(request: Request) {
   return NextResponse.json({ success: true })
 }
 
-// ── POST (invite user) ──
+// ── POST (invite user) with limit check ──
 export async function POST(request: Request) {
   const { error, status, companyId } = await requireAdmin()
   if (error) return NextResponse.json({ error }, { status })
 
   const { email, role = 'viewer' } = await request.json()
   if (!email) return NextResponse.json({ error: 'Email required' }, { status: 400 })
+
+  // --- User limit check ---
+  const currentCount = await getCurrentUserCount(companyId)
+  const maxUsers = await getUserLimit(companyId)
+
+  if (maxUsers !== null && currentCount >= maxUsers) {
+    return NextResponse.json({
+      error: `User limit reached (${currentCount}/${maxUsers}). Please upgrade your plan to add more users.`
+    }, { status: 403 })
+  }
+  // --- End limit check ---
 
   const { data: inviteData, error: inviteError } = await supabaseAdmin
     .auth.admin.inviteUserByEmail(email, {
@@ -138,13 +172,13 @@ export async function POST(request: Request) {
   }
 
   if (inviteData.user) {
-        await supabaseAdmin
+    await supabaseAdmin
       .from('user_roles')
       .upsert({
         user_id: inviteData.user.id,
         company_id: companyId,
         role,
-        is_active: true,   // ✅ Required for the dashboard to allow access
+        is_active: true,
       })
   }
 

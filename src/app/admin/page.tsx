@@ -34,6 +34,7 @@ interface Subscription {
   amount: number
   payment_method: string
   topups: string[]
+  max_users?: number | null
 }
 
 interface Company {
@@ -64,6 +65,7 @@ export default function SuperAdminPage() {
   const [subscriptionForm, setSubscriptionForm] = useState({
     companyId: "", planType: "basic", paymentMethod: "Bank Transfer", paymentRef: "", amount: "", startDate: "",
     topups: [] as string[],
+    maxUsers: "",
   })
   const [savingSubscription, setSavingSubscription] = useState(false)
   const [payments, setPayments] = useState<any[]>([])
@@ -204,6 +206,7 @@ export default function SuperAdminPage() {
       amount: "",
       startDate: new Date().toISOString().split("T")[0],
       topups: [],
+      maxUsers: "",
     })
     setShowSubscriptionModal(true)
   }
@@ -230,6 +233,7 @@ export default function SuperAdminPage() {
         amount: parseFloat(subscriptionForm.amount) || 0,
         startDate: subscriptionForm.startDate,
         topups: subscriptionForm.topups,
+        maxUsers: subscriptionForm.maxUsers ? parseInt(subscriptionForm.maxUsers) : null,
       }),
     })
     const data = await res.json()
@@ -333,6 +337,11 @@ export default function SuperAdminPage() {
                         {company.subscription.topups?.length > 0 && (
                           <div className="sa-expanded-subtext">
                             Add‑ons: {company.subscription.topups.map(t => ADDON_LABELS[t] || t).join(', ')}
+                          </div>
+                        )}
+                        {company.subscription.max_users != null && (
+                          <div className="sa-expanded-subtext">
+                            Users: {company.user_count} / {company.subscription.max_users}
                           </div>
                         )}
                       </div>
@@ -575,6 +584,7 @@ export default function SuperAdminPage() {
             <input className="input-field" placeholder="Amount (PKR)" type="number" value={subscriptionForm.amount} onChange={e => setSubscriptionForm({...subscriptionForm, amount: e.target.value})} />
             <input className="input-field" type="date" value={subscriptionForm.startDate} onChange={e => setSubscriptionForm({...subscriptionForm, startDate: e.target.value})} />
             <input className="input-field" placeholder="Payment Method" value={subscriptionForm.paymentMethod} onChange={e => setSubscriptionForm({...subscriptionForm, paymentMethod: e.target.value})} />
+            <input className="input-field" placeholder="Max Users (e.g., 1, 5, blank=unlimited)" type="number" value={subscriptionForm.maxUsers} onChange={e => setSubscriptionForm({...subscriptionForm, maxUsers: e.target.value})} />
 
             <div style={{ marginTop: 8, marginBottom: 12 }}>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Add‑ons (select if purchased)</div>
