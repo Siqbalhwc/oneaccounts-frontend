@@ -3,9 +3,12 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { Shield, UserPlus, Search, Trash2, Plus, X, Save, CheckCircle, Edit3, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { Shield, UserPlus, Search, Trash2, Plus, X, Save, CheckCircle, Edit3, ArrowUpDown, ArrowUp, ArrowDown, AlertCircle } from "lucide-react"
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
+import { getWhatsAppLink } from "@/lib/whatsapp"
+
+const ADMIN_WHATSAPP = "923117798157" // ⬅️ Replace with your actual WhatsApp number (without +)
 
 const ALL_MODULES = [
   "Dashboard",
@@ -81,10 +84,11 @@ export default function AdminUsersPage() {
   const [userPerms, setUserPerms] = useState<Record<string, boolean>>({})
   const [savingUserPerms, setSavingUserPerms] = useState(false)
 
-  // Company ID
+  // Company ID & subscription limit
   const [companyId, setCompanyId] = useState("")
-
-  const maxUsers = 0   // unlimited
+  const [maxUsers, setMaxUsers] = useState<number | null>(null) // null = unlimited, number = limit
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false)
+  const [requestingUpgrade, setRequestingUpgrade] = useState(false)
 
   useEffect(() => {
     if (!role) return
@@ -97,6 +101,22 @@ export default function AdminUsersPage() {
       if (user) {
         const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
         setCompanyId(cid)
+        // Fetch subscription limit
+        supabase
+          .from("subscriptions")
+          .select("max_users")
+          .eq("company_id", cid)
+          .eq("status", "active")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+          .then(({ data: sub }) => {
+            if (sub?.max_users !== undefined && sub?.max_users !== null) {
+              setMaxUsers(sub.max_users)
+            } else {
+              setMaxUsers(null) // unlimited
+            }
+          })
       }
     })
 
@@ -142,6 +162,9 @@ export default function AdminUsersPage() {
       setRoles(data)
     }
   }
+
+  // Check if limit is reached
+  const isLimitReached = maxUsers !== null && maxUsers > 0 && users.length >= maxUsers
 
   // ── Helper: get effective permissions for a user ──
   const getEffectivePermissions = (user: User): Record<string, boolean> => {
@@ -213,6 +236,10 @@ export default function AdminUsersPage() {
 
   const handleInvite = async () => {
     if (!inviteEmail.trim()) return
+    if (isLimitReached) {
+      setShowUpgradePrompt(true)
+      return
+    }
     setInviting(true)
     try {
       const res = await fetch("/api/admin/users", {
@@ -233,6 +260,36 @@ export default function AdminUsersPage() {
     }
     setInviting(false)
     setTimeout(() => setMessage(""), 5000)
+  }
+
+  const requestUpgrade = async () => {
+    if (!companyId) return
+    setRequestingUpgrade(true)
+    const { error } = await supabase
+      .from("payment_notifications")
+      .insert({
+        company_id: companyId,
+        amount: 0,
+        plan_code: "upgrade_request",
+        period: "N/A",
+        topups: [],
+        // receipt_url can be null
+      })
+    if (error) {
+      setMessage("Failed to send upgrade request. Please try WhatsApp.")
+    } else {
+      setMessage("✅ Upgrade request sent! Our team will contact you.")
+      setShowUpgradePrompt(false)
+    }
+    setRequestingUpgrade(false)
+    setTimeout(() => setMessage(""), 5000)
+  }
+
+  const openWhatsApp = () => {
+    const msg = encodeURIComponent(
+      `Hi, I'm the admin of ${users.length > 0 ? 'my company' : ''}. I've reached my user limit and would like to upgrade to add more team members.`
+    )
+    window.open(getWhatsAppLink(ADMIN_WHATSAPP, msg), "_blank")
   }
 
   // ── Open user permissions modal ──
@@ -415,11 +472,42 @@ export default function AdminUsersPage() {
             font-weight: 700; text-transform: uppercase; font-size: 10px;
           }
           .sort-btn:hover { color: var(--primary); }
+          .upgrade-card {
+            background: #7F1D1D;
+            border: 1px solid #FECACA;
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 16px;
+            color: #FEE2E2;
+          }
+          .upgrade-title { font-weight: 700; font-size: 15px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+          .upgrade-actions { display: flex; gap: 10px; margin-top: 12px; }
           @media (max-width: 700px) {
             .header-row, .data-row { grid-template-columns: 1fr 80px 80px 80px; }
             .header-row > :nth-child(2), .data-row > :nth-child(2) { display: none; }
           }
         `}</style>
+
+        {/* ── Upgrade Prompt ── */}
+        {showUpgradePrompt && (
+          <div className="upgrade-card">
+            <div className="upgrade-title">
+              <AlertCircle size={18} />
+              User Limit Reached
+            </div>
+            <p style={{ margin: 0, fontSize: 13 }}>
+              You have reached the maximum number of users allowed by your current plan ({users.length}/{maxUsers}). Upgrade to add more team members.
+            </p>
+            <div className="upgrade-actions">
+              <button className="btn btn-primary" onClick={requestUpgrade} disabled={requestingUpgrade}>
+                {requestingUpgrade ? "Sending..." : "Request Upgrade"}
+              </button>
+              <button className="btn" onClick={openWhatsApp} style={{ borderColor: "#25D366", color: "#25D366" }}>
+                WhatsApp Admin
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── User Permissions Modal ── */}
         {selectedUser && (
@@ -534,7 +622,7 @@ export default function AdminUsersPage() {
           <div className="summary-item">
             <div className="summary-label">Total Users</div>
             <div className="summary-value">{filtered.length}</div>
-            {maxUsers > 0 && <div style={{ fontSize: 11, color: "var(--text-soft)", marginTop: 4 }}>Plan limit: {maxUsers}</div>}
+            {maxUsers !== null && maxUsers > 0 && <div style={{ fontSize: 11, color: "var(--text-soft)", marginTop: 4 }}>Plan limit: {maxUsers}</div>}
           </div>
           <div className="summary-item">
             <div className="summary-label">Admins</div>
@@ -556,16 +644,20 @@ export default function AdminUsersPage() {
               onChange={(e) => setInviteEmail(e.target.value)}
               className="input"
               style={{ flex: 1, maxWidth: 300 }}
+              disabled={isLimitReached}
             />
             <button
               onClick={handleInvite}
-              disabled={inviting || !inviteEmail.trim() || (maxUsers > 0 && filtered.length >= maxUsers)}
+              disabled={inviting || !inviteEmail.trim() || isLimitReached}
               className="btn btn-primary"
+              title={isLimitReached ? "User limit reached. Upgrade to invite more users." : ""}
             >
               {inviting ? "Inviting..." : "Invite User"}
             </button>
-            {maxUsers > 0 && filtered.length >= maxUsers && (
-              <span style={{ color: "#FCA5A5", fontSize: 12 }}>Plan limit reached</span>
+            {isLimitReached && (
+              <button className="btn" onClick={() => setShowUpgradePrompt(true)} style={{ borderColor: "#F59E0B", color: "#F59E0B" }}>
+                <AlertCircle size={14} /> Upgrade
+              </button>
             )}
             <div style={{ flex: 1, maxWidth: 300, marginLeft: 'auto', position: "relative" }}>
               <Search size={14} style={{ position: "absolute", left: 10, top: 12, color: "var(--text-muted)" }} />
