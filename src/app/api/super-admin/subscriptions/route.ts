@@ -30,24 +30,47 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
-  // Mark company as paid (not trial) and set plan
-  await supabaseAdmin.from('companies').update({
-    plan_id: (await supabaseAdmin.from('plans').select('id').eq('code', planType).single()).data?.id,
-    is_trial: false,
-    trial_ends_at: null,
-  }).eq('id', companyId)
+  // Find the plan id from the code
+  const { data: planData, error: planError } = await supabaseAdmin
+    .from('plans')
+    .select('id')
+    .eq('code', planType)
+    .single()
+
+  if (planError || !planData) {
+    return NextResponse.json({ error: 'Invalid plan type' }, { status: 400 })
+  }
+
+  // Update company: set plan, clear trial flags
+  const { error: updateError } = await supabaseAdmin
+    .from('companies')
+    .update({
+      plan_id: planData.id,
+      is_trial: false,
+      trial_ends_at: null,
+    })
+    .eq('id', companyId)
+
+  if (updateError) {
+    return NextResponse.json({ error: updateError.message }, { status: 500 })
+  }
 
   // Insert subscription record
-  const { error } = await supabaseAdmin.from('subscriptions').insert({
-    company_id: companyId,
-    plan_type: planType,
-    status: 'active',
-    start_date: startDate || new Date().toISOString().split('T')[0],
-    payment_method: paymentMethod,
-    payment_reference: paymentRef,
-    amount,
-  })
+  const { error: insertError } = await supabaseAdmin
+    .from('subscriptions')
+    .insert({
+      company_id: companyId,
+      plan_type: planType,
+      status: 'active',
+      start_date: startDate || new Date().toISOString().split('T')[0],
+      payment_method: paymentMethod,
+      payment_reference: paymentRef,
+      amount,
+    })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (insertError) {
+    return NextResponse.json({ error: insertError.message }, { status: 500 })
+  }
+
   return NextResponse.json({ success: true })
 }
