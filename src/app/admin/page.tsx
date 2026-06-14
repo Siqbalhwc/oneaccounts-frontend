@@ -56,7 +56,35 @@ export default function SuperAdminPage() {
   const [savingSubscription, setSavingSubscription] = useState(false)
   const [payments, setPayments] = useState<any[]>([])
 
-  useEffect(() => { fetchCompanies(); fetchPayments() }, [])
+  // --- Super Admin Access Control ---
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
+  const [checkingAccess, setCheckingAccess] = useState(true)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) {
+        setCheckingAccess(false)
+        return
+      }
+      supabase
+        .from("super_admins")
+        .select("user_id")
+        .eq("user_id", user.id)
+        .maybeSingle()
+        .then(({ data }) => {
+          setIsSuperAdmin(!!data)
+          setCheckingAccess(false)
+        })
+    })
+  }, [])
+
+  useEffect(() => {
+    if (isSuperAdmin) {
+      fetchCompanies()
+      fetchPayments()
+    }
+  }, [isSuperAdmin])
+  // --- End Access Control ---
 
   const fetchCompanies = async () => {
     setLoading(true)
@@ -186,6 +214,19 @@ export default function SuperAdminPage() {
   const activeTrials = companies.filter(c => c.is_trial && c.trial_ends_at && new Date(c.trial_ends_at) > new Date())
   const expiredTrials = companies.filter(c => c.is_trial && c.trial_ends_at && new Date(c.trial_ends_at) <= new Date())
   const activeClients = companies.filter(c => !c.is_trial)
+
+  if (checkingAccess) {
+    return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Checking permissions…</div>
+  }
+
+  if (!isSuperAdmin) {
+    return (
+      <div style={{ padding: 40, textAlign: "center", color: "var(--text)" }}>
+        <h2>Access Denied</h2>
+        <p style={{ color: "var(--text-muted)" }}>You do not have permission to view this page.</p>
+      </div>
+    )
+  }
 
   if (loading) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading platform...</div>
 
