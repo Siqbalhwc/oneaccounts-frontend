@@ -76,19 +76,19 @@ export default function CustomerLedgerPage() {
       .then(({ data }) => data && setCustomer(data))
   }, [selectedCustomerId, companyId])
 
-  // ── CORRECT LEDGER FETCH – same logic as Vendor Ledger ──────────────
+  // ── CORRECT LEDGER FETCH – includes sales returns ──────────────
   const fetchLedger = async () => {
     if (!selectedCustomerId || !companyId) return
     setLoading(true)
     setErrorMsg("")
 
     try {
-      // 1. All sale invoices for this customer
+      // 1. All sale invoices AND sale returns for this customer
       const { data: allInvoices } = await supabase
         .from("invoices")
-        .select("id, total, invoice_no, date")
+        .select("id, total, invoice_no, date, type")
         .eq("party_id", selectedCustomerId)
-        .eq("type", "sale")
+        .in("type", ["sale", "sale_return"])
         .is("deleted_at", null)
         .order("date", { ascending: true })
 
@@ -99,25 +99,42 @@ export default function CustomerLedgerPage() {
         .eq("party_id", selectedCustomerId)
         .order("date", { ascending: true })
 
-      // 3. Compute opening balance = invoices before start - receipts before start
+      // 3. Compute opening balance
       let openingBalance = 0
-
       const periodLines: any[] = []
 
-      // Process invoices (debit side – customer owes you)
+      // Process invoices and returns
       for (const inv of allInvoices || []) {
-        if (inv.date < startDate) {
-          openingBalance += (inv.total || 0)
-        } else if (inv.date >= startDate && inv.date <= endDate) {
-          periodLines.push({
-            id: `inv-${inv.id}`,
-            entry_no: `INV-${inv.invoice_no}`,
-            date: inv.date,
-            description: `Sales Invoice ${inv.invoice_no}`,
-            debit: inv.total || 0,
-            credit: 0,
-            running_balance: 0,
-          })
+        if (inv.type === "sale") {
+          // Regular sale: customer owes you → debit
+          if (inv.date < startDate) {
+            openingBalance += (inv.total || 0)
+          } else if (inv.date >= startDate && inv.date <= endDate) {
+            periodLines.push({
+              id: `inv-${inv.id}`,
+              entry_no: `INV-${inv.invoice_no}`,
+              date: inv.date,
+              description: `Sales Invoice ${inv.invoice_no}`,
+              debit: inv.total || 0,
+              credit: 0,
+              running_balance: 0,
+            })
+          }
+        } else if (inv.type === "sale_return") {
+          // Sales return: customer returns goods → credit (reduces what they owe)
+          if (inv.date < startDate) {
+            openingBalance -= (inv.total || 0)
+          } else if (inv.date >= startDate && inv.date <= endDate) {
+            periodLines.push({
+              id: `ret-${inv.id}`,
+              entry_no: `SR-${inv.invoice_no}`,
+              date: inv.date,
+              description: `Sales Return ${inv.invoice_no}`,
+              debit: 0,
+              credit: inv.total || 0,
+              running_balance: 0,
+            })
+          }
         }
       }
 
@@ -174,7 +191,7 @@ export default function CustomerLedgerPage() {
     if (selectedCustomerId && companyId) fetchLedger()
   }, [selectedCustomerId, companyId, startDate, endDate])
 
-  // Sorting (unchanged)
+  // Sorting
   const sortedLines = useMemo(() => {
     const list = [...ledgerLines]
     list.sort((a, b) => {

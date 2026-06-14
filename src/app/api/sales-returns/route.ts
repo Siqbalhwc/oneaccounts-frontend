@@ -19,14 +19,23 @@ async function createJE(
   sourceType: string = 'manual_journal',
   sourceId: number | null = null,
 ) {
-  const { data: entry } = await supabase.from('journal_entries').insert({
-    company_id: companyId,
-    entry_no: `JE-RET-${Date.now()}`,
-    date,
-    description,
-  }).select('id').single()
-  if (!entry) throw new Error('Journal entry creation failed')
+  // 1. Insert the journal entry header
+  const { data: entry, error: entryError } = await supabase
+    .from('journal_entries')
+    .insert({
+      company_id: companyId,
+      entry_no: `JE-RET-${Date.now()}`,
+      date,
+      description,
+    })
+    .select('id')
+    .single()
 
+  if (entryError || !entry) {
+    throw new Error('Journal entry creation failed: ' + (entryError?.message || 'no entry returned'))
+  }
+
+  // 2. Insert the lines – check for error
   const lineRows = lines.map(l => ({
     ...l,
     entry_id: entry.id,
@@ -34,9 +43,18 @@ async function createJE(
     source_type: sourceType,
     source_id: sourceId,
   }))
-  await supabase.from('journal_lines').insert(lineRows)
 
-  // Update balances (optional – using RPC if exists)
+  const { error: linesError } = await supabase
+    .from('journal_lines')
+    .insert(lineRows)
+
+  if (linesError) {
+    // Clean up the empty journal entry
+    await supabase.from('journal_entries').delete().eq('id', entry.id)
+    throw new Error('Journal lines insert failed: ' + linesError.message)
+  }
+
+  // 3. Update account balances (optional – using RPC if exists)
   const accountUpdates = lines.reduce((acc: any[], l: any) => {
     const key = l.account_id
     const existing = acc.find((u: any) => u.account_id === key)
@@ -51,7 +69,9 @@ async function createJE(
   if (accountUpdates.length > 0) {
     try {
       await supabase.rpc('bulk_update_account_balances', { data: accountUpdates })
-    } catch {}
+    } catch {
+      // not critical
+    }
   }
 }
 
@@ -173,7 +193,7 @@ export async function POST(request: NextRequest) {
       due_date: due_date || new Date().toISOString().split('T')[0],
       total: 0,
       paid: 0,
-      status: 'Unpaid',   // could be 'Returned' for display
+      status: 'Unpaid',
       reference,
       notes,
       company_id: companyId,
@@ -232,17 +252,35 @@ export async function POST(request: NextRequest) {
       .eq('id', original_invoice_id)
       .single()
 
-    if (!origErr && origInv) {
-      await supabase.from('invoices')
-        .update({ status: 'Returned', updated_by: userEmail })
-        .eq('id', original_invoice_id)
-
-      // Log reversal on original invoice
-      await logDataChange('invoices', String(original_invoice_id), 'UPDATE', origInv, { ...origInv, status: 'Returned' })
+    if (origErr) {
+      // Rollback
+      await supabase.from('invoice_items').delete().eq('invoice_id', returnInv.id)
+      await supabase.from('invoices').delete().eq('id', returnInv.id)
+      if (custBal) {
+        await supabase.from('customers').update({ balance: custBal.balance }).eq('id', party_id)
+      }
+      return NextResponse.json({ error: 'Original invoice not found' }, { status: 404 })
     }
+
+    // Prevent double return
+    if (origInv.status === 'Returned') {
+      await supabase.from('invoice_items').delete().eq('invoice_id', returnInv.id)
+      await supabase.from('invoices').delete().eq('id', returnInv.id)
+      if (custBal) {
+        await supabase.from('customers').update({ balance: custBal.balance }).eq('id', party_id)
+      }
+      return NextResponse.json({ error: 'This invoice has already been returned.' }, { status: 400 })
+    }
+
+    await supabase.from('invoices')
+      .update({ status: 'Returned', updated_by: userEmail })
+      .eq('id', original_invoice_id)
+
+    // Log the status change on the original invoice
+    await logDataChange('invoices', String(original_invoice_id), 'UPDATE', origInv, { ...origInv, status: 'Returned' })
   }
 
-  // Journal Entry – reversal of original or generic reversal
+  // ── Journal Entry – reversal of original or generic reversal ──
   try {
     let jeLines: any[] = []
 
@@ -266,11 +304,13 @@ export async function POST(request: NextRequest) {
           location_id: l.location_id,
         }))
       }
-    } else {
-      // Generic reversal: Debit Sales Returns (or Revenue), Credit AR
+    }
+
+    // If no original lines found (or no original invoice), do a generic reversal
+    if (jeLines.length === 0) {
       const arAccount = await getAccount(supabase, '1100', companyId)
       const revenueAccount = await getAccount(supabase, '4000', companyId)
-      if (!arAccount || !revenueAccount) throw new Error('Accounts not found')
+      if (!arAccount || !revenueAccount) throw new Error('Required accounts (1100, 4000) not found')
 
       jeLines.push({
         account_id: revenueAccount.id,
