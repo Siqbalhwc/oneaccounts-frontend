@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
       due_date: due_date || new Date().toISOString().split('T')[0],
       total: 0,
       paid: 0,
-      status: 'Unpaid',
+      status: 'Unpaid',   // could be 'Returned' for display
       reference,
       notes,
       company_id: companyId,
@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: headerError?.message || 'Failed to create return' }, { status: 500 })
   }
 
-  // Insert items (positive amounts – reversal will happen in journal)
+  // Insert items (positive amounts – reversal happens in journal)
   const itemRows = items.map((item: any) => {
     const qty = Number(item.qty || 0)
     const unit_price = Number(item.unit_price || 0)
@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Update total – FIXED: explicitly typed reduce
+  // Update total
   const totalAmount = itemRows.reduce((s: number, i: any) => s + i.total, 0)
   await supabase.from('invoices').update({ total: totalAmount }).eq('id', returnInv.id)
 
@@ -222,6 +222,24 @@ export async function POST(request: NextRequest) {
   const { data: custBal } = await supabase.from('customers').select('balance').eq('id', party_id).single()
   if (custBal) {
     await supabase.from('customers').update({ balance: custBal.balance - totalAmount }).eq('id', party_id)
+  }
+
+  // ── Update original invoice status to "Returned" ──
+  if (original_invoice_id) {
+    const { data: origInv, error: origErr } = await supabase
+      .from('invoices')
+      .select('*')
+      .eq('id', original_invoice_id)
+      .single()
+
+    if (!origErr && origInv) {
+      await supabase.from('invoices')
+        .update({ status: 'Returned', updated_by: userEmail })
+        .eq('id', original_invoice_id)
+
+      // Log reversal on original invoice
+      await logDataChange('invoices', String(original_invoice_id), 'REVERSAL', origInv, { ...origInv, status: 'Returned' })
+    }
   }
 
   // Journal Entry – reversal of original or generic reversal
@@ -255,7 +273,7 @@ export async function POST(request: NextRequest) {
       if (!arAccount || !revenueAccount) throw new Error('Accounts not found')
 
       jeLines.push({
-        account_id: revenueAccount.id, // Debit revenue (or sales returns)
+        account_id: revenueAccount.id,
         debit: totalAmount,
         credit: 0,
       })
@@ -277,12 +295,12 @@ export async function POST(request: NextRequest) {
         }, 0)
         if (totalCOGS > 0) {
           jeLines.push({
-            account_id: inventoryAccount.id, // Debit inventory
+            account_id: inventoryAccount.id,
             debit: totalCOGS,
             credit: 0,
           })
           jeLines.push({
-            account_id: cogsAccount.id,      // Credit COGS
+            account_id: cogsAccount.id,
             debit: 0,
             credit: totalCOGS,
           })
@@ -297,12 +315,22 @@ export async function POST(request: NextRequest) {
     // Rollback
     await supabase.from('invoice_items').delete().eq('invoice_id', returnInv.id)
     await supabase.from('invoices').delete().eq('id', returnInv.id)
+    // Restore customer balance
     if (custBal) {
-      await supabase.from('customers').update({ balance: custBal.balance + totalAmount }).eq('id', party_id)
+      await supabase.from('customers').update({ balance: custBal.balance }).eq('id', party_id)
+    }
+    // Revert original invoice status
+    if (original_invoice_id) {
+      const { data: orig } = await supabase.from('invoices').select('status').eq('id', original_invoice_id).single()
+      if (orig) {
+        await supabase.from('invoices').update({ status: orig.status }).eq('id', original_invoice_id)
+      }
     }
     return NextResponse.json({ error: 'Journal entry failed: ' + e.message }, { status: 500 })
   }
 
+  // Log the return creation
   await logDataChange('invoices', String(returnInv.id), 'INSERT', undefined, returnInv)
+
   return NextResponse.json({ success: true, return: returnInv })
 }
