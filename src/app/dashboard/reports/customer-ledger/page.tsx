@@ -62,7 +62,6 @@ export default function CustomerLedgerPage() {
     }
   }, [urlCustomerId, customers])
 
-  // Fetch selected customer (including balance)
   useEffect(() => {
     if (!selectedCustomerId || !companyId) {
       setCustomer(null)
@@ -77,7 +76,7 @@ export default function CustomerLedgerPage() {
       .then(({ data }) => data && setCustomer(data))
   }, [selectedCustomerId, companyId])
 
-  // ── LEDGER FETCH – uses server API for opening balance ──
+  // ── LEDGER FETCH (kept identical to working version) ──
   const fetchLedger = async () => {
     if (!selectedCustomerId || !companyId || !customer) return
     setLoading(true)
@@ -112,9 +111,7 @@ export default function CustomerLedgerPage() {
             isOpening: true,
           }
         }
-      } catch (apiErr) {
-        // API call failed – we’ll fall back to formula
-      }
+      } catch (apiErr) {}
 
       // 4. Build period lines (invoices, returns, receipts)
       const periodLines: any[] = []
@@ -159,7 +156,7 @@ export default function CustomerLedgerPage() {
 
       periodLines.sort((a, b) => a.date.localeCompare(b.date))
 
-      // 5. If no opening line from API, calculate it from the current balance
+      // 5. If no opening line from API, calculate from current balance
       if (!openingLine) {
         const periodDebits = periodLines.reduce((s: number, l: any) => s + l.debit, 0)
         const periodCredits = periodLines.reduce((s: number, l: any) => s + l.credit, 0)
@@ -230,7 +227,6 @@ export default function CustomerLedgerPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  // Totals exclude opening line
   const totalDebit = sortedLines.filter(l => !l.isOpening).reduce((s, l) => s + l.debit, 0)
   const totalCredit = sortedLines.filter(l => !l.isOpening).reduce((s, l) => s + l.credit, 0)
   const closingBalance = sortedLines.length > 0 ? sortedLines[sortedLines.length - 1].running_balance : 0
@@ -273,15 +269,21 @@ export default function CustomerLedgerPage() {
         .ledger-header {
           display: grid;
           grid-template-columns: 90px 130px 1fr 110px 110px 130px;
-          padding: 14px 24px;
-          background: var(--card);
-          font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
+          padding: 12px 16px;
+          background: var(--card-hover);
+          font-size: 12px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          color: var(--text-muted);
           border-bottom: 1px solid var(--border);
+          white-space: nowrap;
+          user-select: none;
         }
         .ledger-row {
           display: grid;
           grid-template-columns: 90px 130px 1fr 110px 110px 130px;
-          padding: 12px 24px;
+          padding: 12px 16px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
           transition: background 0.15s;
@@ -292,7 +294,8 @@ export default function CustomerLedgerPage() {
         .sort-btn {
           background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
           display: inline-flex; align-items: center; gap: 4px; padding: 0;
-          font-weight: 700; text-transform: uppercase; font-size: 10px;
+          font-weight: 700; text-transform: uppercase; font-size: 12px;
+          letter-spacing: 0.04em;
         }
         .sort-btn:hover { color: var(--primary); }
         .date-input {
