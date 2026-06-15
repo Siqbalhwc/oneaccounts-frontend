@@ -62,6 +62,7 @@ export default function CustomerLedgerPage() {
     }
   }, [urlCustomerId, customers])
 
+  // Fetch selected customer (including balance for reference)
   useEffect(() => {
     if (!selectedCustomerId || !companyId) {
       setCustomer(null)
@@ -69,21 +70,21 @@ export default function CustomerLedgerPage() {
     }
     supabase
       .from("customers")
-      .select("id, code, name")
+      .select("id, code, name, balance")
       .eq("id", selectedCustomerId)
       .eq("company_id", companyId)
       .single()
       .then(({ data }) => data && setCustomer(data))
   }, [selectedCustomerId, companyId])
 
-  // ── CORRECT LEDGER FETCH – includes sales returns ──────────────
+  // ── LEDGER FETCH – now includes real opening journal entry ──
   const fetchLedger = async () => {
     if (!selectedCustomerId || !companyId) return
     setLoading(true)
     setErrorMsg("")
 
     try {
-      // 1. All sale invoices AND sale returns for this customer
+      // 1. Sale invoices & returns within period
       const { data: allInvoices } = await supabase
         .from("invoices")
         .select("id, total, invoice_no, date, type")
@@ -92,94 +93,130 @@ export default function CustomerLedgerPage() {
         .is("deleted_at", null)
         .order("date", { ascending: true })
 
-      // 2. All receipts from this customer
+      // 2. Receipts within period
       const { data: allReceipts } = await supabase
         .from("receipts")
         .select("id, amount, receipt_no, date")
         .eq("party_id", selectedCustomerId)
         .order("date", { ascending: true })
 
-      // 3. Compute opening balance
-      let openingBalance = 0
-      const periodLines: any[] = []
+      // 3. Try to fetch the real opening balance journal entry for this customer
+      let openingLine = null
 
-      // Process invoices and returns
-      for (const inv of allInvoices || []) {
-        if (inv.type === "sale") {
-          // Regular sale: customer owes you → debit
-          if (inv.date < startDate) {
-            openingBalance += (inv.total || 0)
-          } else if (inv.date >= startDate && inv.date <= endDate) {
-            periodLines.push({
-              id: `inv-${inv.id}`,
-              entry_no: `INV-${inv.invoice_no}`,
-              date: inv.date,
-              description: `Sales Invoice ${inv.invoice_no}`,
-              debit: inv.total || 0,
-              credit: 0,
-              running_balance: 0,
-            })
+      // Method A: by source_type = 'opening_balance' and source_id = customer.id
+      const { data: jLines } = await supabase
+        .from("journal_lines")
+        .select("debit, credit, entry_id, source_type, source_id")
+        .eq("source_type", "opening_balance")
+        .eq("source_id", selectedCustomerId)
+        .maybeSingle()
+
+      if (jLines) {
+        // Fetch the associated journal entry for date and description
+        const { data: jEntry } = await supabase
+          .from("journal_entries")
+          .select("id, date, description, entry_no")
+          .eq("id", jLines.entry_id)
+          .maybeSingle()
+
+        if (jEntry) {
+          openingLine = {
+            id: `opening-${jEntry.id}`,
+            entry_no: jEntry.entry_no,
+            date: jEntry.date,
+            description: jEntry.description,
+            debit: jLines.debit || 0,
+            credit: jLines.credit || 0,
+            running_balance: 0,
+            isOpening: true,
           }
-        } else if (inv.type === "sale_return") {
-          // Sales return: customer returns goods → credit (reduces what they owe)
-          if (inv.date < startDate) {
-            openingBalance -= (inv.total || 0)
-          } else if (inv.date >= startDate && inv.date <= endDate) {
-            periodLines.push({
-              id: `ret-${inv.id}`,
-              entry_no: `SR-${inv.invoice_no}`,
-              date: inv.date,
-              description: `Sales Return ${inv.invoice_no}`,
-              debit: 0,
-              credit: inv.total || 0,
+        }
+      } else {
+        // Method B: fallback to description pattern (for older records without source_type)
+        const { data: jEntriesFallback } = await supabase
+          .from("journal_entries")
+          .select("id, date, description, entry_no")
+          .ilike("description", `%Opening balance for customer ${selectedCustomerId}%`)
+          .maybeSingle()
+
+        if (jEntriesFallback) {
+          const { data: jLinesFallback } = await supabase
+            .from("journal_lines")
+            .select("debit, credit")
+            .eq("entry_id", jEntriesFallback.id)
+            .maybeSingle()
+
+          if (jLinesFallback) {
+            openingLine = {
+              id: `opening-${jEntriesFallback.id}`,
+              entry_no: jEntriesFallback.entry_no,
+              date: jEntriesFallback.date,
+              description: jEntriesFallback.description,
+              debit: jLinesFallback.debit || 0,
+              credit: jLinesFallback.credit || 0,
               running_balance: 0,
-            })
+              isOpening: true,
+            }
           }
         }
       }
 
-      // Process receipts (credit side – customer pays you)
-      for (const rec of allReceipts || []) {
-        if (rec.date < startDate) {
-          openingBalance -= (rec.amount || 0)
-        } else if (rec.date >= startDate && rec.date <= endDate) {
+      // Build period lines (invoices, returns, receipts)
+      const periodLines: any[] = []
+
+      for (const inv of allInvoices || []) {
+        if (inv.date < startDate || inv.date > endDate) continue
+        if (inv.type === "sale") {
           periodLines.push({
-            id: `rec-${rec.id}`,
-            entry_no: `REC-${rec.receipt_no}`,
-            date: rec.date,
-            description: `Receipt ${rec.receipt_no}`,
+            id: `inv-${inv.id}`,
+            entry_no: `INV-${inv.invoice_no}`,
+            date: inv.date,
+            description: `Sales Invoice ${inv.invoice_no}`,
+            debit: inv.total || 0,
+            credit: 0,
+            running_balance: 0,
+          })
+        } else if (inv.type === "sale_return") {
+          periodLines.push({
+            id: `ret-${inv.id}`,
+            entry_no: `SR-${inv.invoice_no}`,
+            date: inv.date,
+            description: `Sales Return ${inv.invoice_no}`,
             debit: 0,
-            credit: rec.amount || 0,
+            credit: inv.total || 0,
             running_balance: 0,
           })
         }
       }
 
-      // Sort period lines by date
-      periodLines.sort((a, b) => a.date.localeCompare(b.date))
-
-      // Build final lines with running balance
-      const finalLines: any[] = [
-        {
-          id: "opening",
-          entry_no: "",
-          date: startDate,
-          description: "Opening Balance",
-          debit: openingBalance > 0 ? openingBalance : 0,
-          credit: openingBalance < 0 ? -openingBalance : 0,
-          running_balance: openingBalance,
-          isOpening: true,
-        },
-      ]
-
-      let running = openingBalance
-      for (const line of periodLines) {
-        running += (line.debit || 0) - (line.credit || 0)
-        line.running_balance = running
-        finalLines.push(line)
+      for (const rec of allReceipts || []) {
+        if (rec.date < startDate || rec.date > endDate) continue
+        periodLines.push({
+          id: `rec-${rec.id}`,
+          entry_no: `REC-${rec.receipt_no}`,
+          date: rec.date,
+          description: `Receipt ${rec.receipt_no}`,
+          debit: 0,
+          credit: rec.amount || 0,
+          running_balance: 0,
+        })
       }
 
-      setLedgerLines(finalLines)
+      periodLines.sort((a, b) => a.date.localeCompare(b.date))
+
+      // Combine: opening line first, then period lines
+      const allLines: any[] = []
+      if (openingLine) allLines.push(openingLine)
+      allLines.push(...periodLines)
+
+      // Calculate running balance from zero
+      let running = 0
+      for (const line of allLines) {
+        running += (line.debit || 0) - (line.credit || 0)
+        line.running_balance = running
+      }
+
+      setLedgerLines(allLines)
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to load ledger")
     } finally {
@@ -221,6 +258,7 @@ export default function CustomerLedgerPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
+  // Totals exclude opening line
   const totalDebit = sortedLines.filter(l => !l.isOpening).reduce((s, l) => s + l.debit, 0)
   const totalCredit = sortedLines.filter(l => !l.isOpening).reduce((s, l) => s + l.credit, 0)
   const closingBalance = sortedLines.length > 0 ? sortedLines[sortedLines.length - 1].running_balance : 0
@@ -393,7 +431,7 @@ export default function CustomerLedgerPage() {
               </div>
               {sortedLines.map((line, idx) => (
                 <div key={line.id || idx} className={`ledger-row ${line.isOpening ? "opening-row" : ""}`}>
-                  <span style={{ fontSize: 12 }}>{line.isOpening ? "" : line.date}</span>
+                  <span style={{ fontSize: 12 }}>{line.date}</span>
                   <span style={{ color: "var(--primary)", fontSize: 12 }}>{line.entry_no}</span>
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line.description}</span>
                   <span style={{ textAlign: "right", color: line.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit > 0 ? 600 : 400 }}>
