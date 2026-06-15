@@ -13,40 +13,58 @@ export async function GET(request: Request) {
   if (!customerId) return NextResponse.json({ error: 'Missing customerId' }, { status: 400 })
 
   // Find the opening balance journal entry for this customer
-  // First try by source_type on journal_lines
+  // Method 1: via source_type on journal_lines
   const { data: jLines } = await supabaseAdmin
     .from('journal_lines')
-    .select('entry_id, debit, credit')
+    .select('entry_id, debit, credit, accounts(code)')
     .eq('source_type', 'opening_balance')
     .eq('source_id', customerId)
 
   if (jLines && jLines.length > 0) {
-    const entryId = jLines[0].entry_id
+    // Find the AR line (account code 1100) – that's the customer's side
+    const arLine = jLines.find((l: any) => l.accounts?.code === '1100')
+    if (arLine) {
+      const { data: jEntry } = await supabaseAdmin
+        .from('journal_entries')
+        .select('id, date, description, entry_no')
+        .eq('id', arLine.entry_id)
+        .single()
+
+      if (jEntry) {
+        return NextResponse.json({
+          entry: {
+            id: `opening-${jEntry.id}`,
+            entry_no: jEntry.entry_no,
+            date: jEntry.date,
+            description: jEntry.description,
+            debit: arLine.debit || 0,
+            credit: arLine.credit || 0,
+          },
+        })
+      }
+    }
+    // If no AR line found, fallback to first line (unlikely)
+    const first = jLines[0]
     const { data: jEntry } = await supabaseAdmin
       .from('journal_entries')
       .select('id, date, description, entry_no')
-      .eq('id', entryId)
+      .eq('id', first.entry_id)
       .single()
-
     if (jEntry) {
-      // Sum all lines for this entry (debits and credits separately)
-      const totalDebit = jLines.reduce((s: number, l: any) => s + (l.debit || 0), 0)
-      const totalCredit = jLines.reduce((s: number, l: any) => s + (l.credit || 0), 0)
-
       return NextResponse.json({
         entry: {
           id: `opening-${jEntry.id}`,
           entry_no: jEntry.entry_no,
           date: jEntry.date,
           description: jEntry.description,
-          debit: totalDebit,
-          credit: totalCredit,
+          debit: first.debit || 0,
+          credit: first.credit || 0,
         },
       })
     }
   }
 
-  // Fallback: search by description in journal_entries (older entries)
+  // Method 2: search by description (older entries without source_type)
   const { data: fallbackEntry } = await supabaseAdmin
     .from('journal_entries')
     .select('id, date, description, entry_no')
@@ -56,21 +74,33 @@ export async function GET(request: Request) {
   if (fallbackEntry) {
     const { data: fallbackLines } = await supabaseAdmin
       .from('journal_lines')
-      .select('debit, credit')
+      .select('debit, credit, accounts(code)')
       .eq('entry_id', fallbackEntry.id)
 
     if (fallbackLines && fallbackLines.length > 0) {
-      const totalDebit = fallbackLines.reduce((s: number, l: any) => s + (l.debit || 0), 0)
-      const totalCredit = fallbackLines.reduce((s: number, l: any) => s + (l.credit || 0), 0)
-
+      const arLine = fallbackLines.find((l: any) => l.accounts?.code === '1100')
+      if (arLine) {
+        return NextResponse.json({
+          entry: {
+            id: `opening-${fallbackEntry.id}`,
+            entry_no: fallbackEntry.entry_no,
+            date: fallbackEntry.date,
+            description: fallbackEntry.description,
+            debit: arLine.debit || 0,
+            credit: arLine.credit || 0,
+          },
+        })
+      }
+      // fallback: use first line
+      const first = fallbackLines[0]
       return NextResponse.json({
         entry: {
           id: `opening-${fallbackEntry.id}`,
           entry_no: fallbackEntry.entry_no,
           date: fallbackEntry.date,
           description: fallbackEntry.description,
-          debit: totalDebit,
-          credit: totalCredit,
+          debit: first.debit || 0,
+          credit: first.credit || 0,
         },
       })
     }
