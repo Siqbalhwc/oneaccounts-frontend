@@ -95,7 +95,7 @@ export default function GeneralLedgerPage() {
     if (!selectedAccountId || !companyId) return
     setLoading(true)
     setErrorMsg("")
-    setCurrentPage(1)  // reset to first page when filters change
+    setCurrentPage(1)
 
     const params = new URLSearchParams({ accountId: selectedAccountId, startDate, endDate })
     if (projectId)  params.append("projectId",  projectId)
@@ -154,7 +154,7 @@ export default function GeneralLedgerPage() {
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDir(prev => prev === "asc" ? "desc" : "asc")
     else { setSortField(field); setSortDir("asc") }
-    setCurrentPage(1) // reset to first page after sorting
+    setCurrentPage(1)
   }
   const getSortIcon = (field: SortField) => {
     if (sortField !== field) return <ArrowUpDown size={12} style={{ opacity: 0.5 }} />
@@ -201,12 +201,37 @@ export default function GeneralLedgerPage() {
         .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
-        .ledger-header { display: grid; grid-template-columns: 90px 100px 1fr 110px 110px 130px; padding: 14px 24px; background: var(--card); font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border); }
-        .ledger-row { display: grid; grid-template-columns: 90px 100px 1fr 110px 110px 130px; padding: 12px 24px; border-bottom: 1px solid var(--border); font-size: 13px; align-items: center; transition: background 0.15s; }
+        .ledger-header {
+          display: grid;
+          grid-template-columns: 90px 100px 1fr 110px 110px 130px;
+          padding: 12px 16px;
+          background: var(--card-hover);
+          font-size: 12px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          color: var(--text-muted);
+          border-bottom: 1px solid var(--border);
+          white-space: nowrap;
+          user-select: none;
+        }
+        .ledger-row {
+          display: grid;
+          grid-template-columns: 90px 100px 1fr 110px 110px 130px;
+          padding: 12px 16px;
+          border-bottom: 1px solid var(--border);
+          font-size: 13px; align-items: center;
+          transition: background 0.15s;
+        }
         .ledger-row:hover { background: var(--card-hover); }
         .ledger-row:last-child { border-bottom: none; }
         .opening-row { background: var(--bg-soft); font-weight: 600; }
-        .sort-btn { background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted); display: inline-flex; align-items: center; gap: 4px; padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px; }
+        .sort-btn {
+          background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
+          display: inline-flex; align-items: center; gap: 4px; padding: 0;
+          font-weight: 700; text-transform: uppercase; font-size: 12px;
+          letter-spacing: 0.04em;
+        }
         .sort-btn:hover { color: var(--primary); }
         .date-input, .select-input { height: 34px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text); outline: none; font-family: inherit; width: 140px; }
         .date-input:focus, .select-input:focus { border-color: var(--primary); }

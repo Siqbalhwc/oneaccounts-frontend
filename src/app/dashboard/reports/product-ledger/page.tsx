@@ -21,7 +21,7 @@ export default function ProductLedgerPage() {
 
   const { companyName, companyTagline, logoUrl } = useCompany()
 
-  const [companyId, setCompanyId] = useState<string>("") // ✅ NEW
+  const [companyId, setCompanyId] = useState<string>("")
   const [product, setProduct] = useState<any>(null)
   const [ledgerLines, setLedgerLines] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -33,7 +33,6 @@ export default function ProductLedgerPage() {
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
-  // ✅ Get company ID from JWT
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
@@ -42,29 +41,24 @@ export default function ProductLedgerPage() {
   }, [])
 
   const fetchLedger = async () => {
-    if (!productId || !companyId) return // ✅ wait for companyId
+    if (!productId || !companyId) return
     setLoading(true)
 
-    // ✅ Fetch product scoped to current company
     const { data: prod } = await supabase
       .from("products")
       .select("*")
       .eq("id", productId)
-      .eq("company_id", companyId) // ✅ FILTER ADDED
+      .eq("company_id", companyId)
       .single()
     setProduct(prod)
     if (!prod) { setLoading(false); return }
 
-    // Fetch ALL stock_moves for this product (already scoped via prod.company_id)
     const { data: moves } = await supabase
       .from("stock_moves")
       .select("*")
       .eq("product_id", productId)
       .eq("company_id", prod.company_id)
       .order("date", { ascending: true })
-
-    // DEBUG – check browser console (F12 → Console) for this log
-    console.log("Stock moves fetched:", moves)
 
     const allLines: any[] = []
     if (moves) {
@@ -83,7 +77,6 @@ export default function ProductLedgerPage() {
 
     allLines.sort((a, b) => a.date.localeCompare(b.date))
 
-    // Opening balance before start date
     const opening = prod.opening_qty || 0
     let runningQty = opening
     for (const line of allLines) {
@@ -107,7 +100,6 @@ export default function ProductLedgerPage() {
 
     runningQty = openingBalanceQty
     for (const line of allLines) {
-      // Compare only the date part to avoid timezone mismatches
       const lineDate = line.date.toString().substring(0, 10)
       if (lineDate >= startDate && lineDate <= endDate) {
         runningQty = runningQty + line.qty_in - line.qty_out
@@ -164,7 +156,7 @@ export default function ProductLedgerPage() {
   }
 
   if (!productId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>No product selected.</div>
-  if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div> // ✅ guard
+  if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -177,15 +169,21 @@ export default function ProductLedgerPage() {
         .ledger-header {
           display: grid;
           grid-template-columns: 90px 100px 1fr 80px 80px 100px;
-          padding: 14px 24px;
-          background: var(--card);
-          font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
+          padding: 12px 16px;
+          background: var(--card-hover);
+          font-size: 12px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          color: var(--text-muted);
           border-bottom: 1px solid var(--border);
+          white-space: nowrap;
+          user-select: none;
         }
         .ledger-row {
           display: grid;
           grid-template-columns: 90px 100px 1fr 80px 80px 100px;
-          padding: 12px 24px;
+          padding: 12px 16px;
           border-bottom: 1px solid var(--border);
           font-size: 13px; align-items: center;
           transition: background 0.15s;
@@ -196,7 +194,8 @@ export default function ProductLedgerPage() {
         .sort-btn {
           background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
           display: inline-flex; align-items: center; gap: 4px; padding: 0;
-          font-weight: 700; text-transform: uppercase; font-size: 10px;
+          font-weight: 700; text-transform: uppercase; font-size: 12px;
+          letter-spacing: 0.04em;
         }
         .sort-btn:hover { color: var(--primary); }
         .date-input {
