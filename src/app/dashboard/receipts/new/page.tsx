@@ -9,7 +9,7 @@ import { useTheme } from "@/contexts/ThemeContext"
 export default function NewReceiptPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const editId = searchParams.get("id")   // ✅ for editing
+  const editId = searchParams.get("id")
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -36,7 +36,7 @@ export default function NewReceiptPage() {
   const [isDonation, setIsDonation] = useState(false)
 
   const [invoices, setInvoices] = useState<any[]>([])
-  const [allocations, setAllocations] = useState<Record<number, number>>({})
+  const [allocations, setAllocations] = useState<Record<string, number>>({})
 
   const [receiptDate, setReceiptDate] = useState(new Date().toISOString().split("T")[0])
   const [receiptAmount, setReceiptAmount] = useState<number | "">("")
@@ -45,6 +45,8 @@ export default function NewReceiptPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
+
+  const [customerOpeningBalance, setCustomerOpeningBalance] = useState(0)
 
   // ── Load company ID and master data ──
   useEffect(() => {
@@ -61,14 +63,17 @@ export default function NewReceiptPage() {
     try {
       const { data } = await supabase
         .from("customers")
-        .select("id, code, name, phone, balance, country_code")
+        .select("id, code, name, phone, balance, opening_balance, country_code")
         .eq("company_id", companyId)
         .order("name")
       if (data) {
         setCustomers(data)
         if (selectedCustomer) {
           const updated = data.find((c: any) => c.id === selectedCustomer.id)
-          if (updated) setSelectedCustomer(updated)
+          if (updated) {
+            setSelectedCustomer(updated)
+            setCustomerOpeningBalance(updated.opening_balance || 0)
+          }
         }
       }
     } catch (err) {
@@ -109,23 +114,22 @@ export default function NewReceiptPage() {
 
         if (data.party_id) {
           setCustomerId(data.party_id)
-          // fetch customer details
           supabase.from("customers")
-            .select("id,code,name,phone,balance,country_code")
+            .select("id,code,name,phone,balance,opening_balance,country_code")
             .eq("id", data.party_id)
             .single()
             .then(({ data: cust }) => {
               if (cust) {
                 setSelectedCustomer(cust)
                 setCustomerSearch(cust.name)
+                setCustomerOpeningBalance(cust.opening_balance || 0)
               }
             })
         }
 
-        // Build allocations from saved data
-        const allocs: Record<number, number> = {}
+        const allocs: Record<string, number> = {}
         data.receipt_allocations?.forEach((a: any) => {
-          allocs[a.invoice_id] = a.amount
+          allocs[String(a.invoice_id)] = a.amount
         })
         setAllocations(allocs)
       })
@@ -135,7 +139,11 @@ export default function NewReceiptPage() {
   useEffect(() => {
     if (!companyId || !customerId || isDonation) {
       setInvoices([])
-      setAllocations({})
+      setAllocations(prev => {
+        const copy = { ...prev }
+        delete copy["opening"]
+        return copy
+      })
       return
     }
 
@@ -150,7 +158,11 @@ export default function NewReceiptPage() {
 
       if (!invs || invs.length === 0) {
         setInvoices([])
-        setAllocations({})
+        setAllocations(prev => {
+          const copy = { ...prev }
+          delete copy["opening"]
+          return copy
+        })
         return
       }
 
@@ -174,10 +186,9 @@ export default function NewReceiptPage() {
 
       const stillDue = enriched.filter(inv => inv.total - inv.paid > 0.001)
 
-      // Keep existing allocations if editing (they were already set)
       if (!editId) {
-        const initAlloc: Record<number, number> = {}
-        stillDue.forEach(inv => { initAlloc[inv.id] = 0 })
+        const initAlloc: Record<string, number> = { opening: 0 }
+        stillDue.forEach(inv => { initAlloc[String(inv.id)] = 0 })
         setAllocations(prev => ({ ...initAlloc, ...prev }))
       }
 
@@ -209,6 +220,7 @@ export default function NewReceiptPage() {
     setSelectedCustomer(c)
     setCustomerSearch(c.name)
     setShowCustomerList(false)
+    setCustomerOpeningBalance(c.opening_balance || 0)
   }
 
   const clearCustomer = () => {
@@ -218,22 +230,38 @@ export default function NewReceiptPage() {
     setShowCustomerList(true)
     setInvoices([])
     setAllocations({})
+    setCustomerOpeningBalance(0)
   }
 
+  // ── Allocation helpers ──
   const toggleInvoice = (invId: number, due: number) => {
+    const key = String(invId)
     setAllocations(prev => {
-      const current = prev[invId] || 0
+      const current = prev[key] || 0
       const newVal = current > 0 ? 0 : due
-      return { ...prev, [invId]: newVal }
+      return { ...prev, [key]: newVal }
     })
   }
 
   const updateAllocation = (invId: number, value: number, due: number) => {
     const clamped = Math.min(Math.max(value, 0), due)
-    setAllocations(prev => ({ ...prev, [invId]: clamped }))
+    setAllocations(prev => ({ ...prev, [String(invId)]: clamped }))
   }
 
-  const totalAllocated = Object.values(allocations).reduce((s, v) => s + v, 0)
+  const toggleOpeningAllocation = () => {
+    setAllocations(prev => {
+      const current = prev["opening"] || 0
+      const newVal = current > 0 ? 0 : customerOpeningBalance
+      return { ...prev, opening: newVal }
+    })
+  }
+
+  const totalAllocatedToInvoices = Object.entries(allocations)
+    .filter(([key]) => key !== "opening")
+    .reduce((s, [_, v]) => s + v, 0)
+
+  const openingAllocation = allocations["opening"] || 0
+  const totalAllocated = totalAllocatedToInvoices + openingAllocation
   const totalAmount = Number(receiptAmount || 0)
   const unallocated = totalAmount - totalAllocated
 
@@ -263,7 +291,7 @@ export default function NewReceiptPage() {
         body: JSON.stringify({
           party_id: customerId,
           amount: totalAmount,
-          unallocated_amount: unallocated > 0 ? unallocated : 0,
+          unallocated_amount: 0,                // we've fully allocated
           payment_method: "Bank Transfer",
           bank_account_id: selectedBankId,
           income_account_id: isDonation ? selectedIncomeAccountId : null,
@@ -271,7 +299,7 @@ export default function NewReceiptPage() {
           reference,
           notes,
           allocations: Object.entries(allocations)
-            .filter(([_, allocAmt]) => allocAmt > 0)
+            .filter(([key, allocAmt]) => key !== "opening" && allocAmt > 0)
             .map(([invId, allocAmt]) => ({
               invoice_id: parseInt(invId), amount: allocAmt
             })),
@@ -288,7 +316,6 @@ export default function NewReceiptPage() {
       if (editId) {
         setTimeout(() => router.push("/dashboard/receipts"), 1500)
       } else {
-        // Reset form for new receipt
         setCustomerId(null)
         setSelectedCustomer(null)
         setCustomerSearch("")
@@ -301,6 +328,7 @@ export default function NewReceiptPage() {
         setReceiptAmount("")
         setNotes("")
         setReference("")
+        setCustomerOpeningBalance(0)
         setLoading(false)
         setTimeout(() => loadCustomers(), 500)
       }
@@ -480,14 +508,14 @@ export default function NewReceiptPage() {
               </div>
             </div>
 
-            {customerId && !isDonation && invoices.length > 0 && (
+            {customerId && !isDonation && (
               <div className="inv-card">
-                <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 12px 0" }}>Allocate to Invoices</h3>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 12px 0" }}>Allocate to Invoices & Opening</h3>
                 <table>
                   <thead>
                     <tr>
                       <th style={{ width: 30 }}></th>
-                      <th>Invoice #</th>
+                      <th>Description</th>
                       <th>Total</th>
                       <th>Paid</th>
                       <th>Due</th>
@@ -495,9 +523,28 @@ export default function NewReceiptPage() {
                     </tr>
                   </thead>
                   <tbody>
+                    {customerOpeningBalance > 0 && (
+                      <tr style={{ background: "var(--bg-soft)" }}>
+                        <td>
+                          <input className="chk-box" type="checkbox"
+                            checked={(allocations["opening"] || 0) > 0}
+                            onChange={toggleOpeningAllocation}
+                          />
+                        </td>
+                        <td colSpan={4}>
+                          <span style={{ fontWeight: 600 }}>Opening Balance</span>
+                          <span style={{ marginLeft: 8, fontSize: 12, color: "var(--text-muted)" }}>
+                            (PKR {customerOpeningBalance.toLocaleString()})
+                          </span>
+                        </td>
+                        <td style={{ textAlign: "right", fontWeight: 600 }}>
+                          PKR {customerOpeningBalance.toLocaleString()}
+                        </td>
+                      </tr>
+                    )}
                     {invoices.map(inv => {
                       const due = inv.total - (inv.paid || 0)
-                      const alloc = allocations[inv.id] || 0
+                      const alloc = allocations[String(inv.id)] || 0
                       const checked = alloc > 0
                       return (
                         <tr key={inv.id}>
@@ -523,13 +570,20 @@ export default function NewReceiptPage() {
                         </td>
                       </tr>
                     )}
+                    {totalAmount > 0 && unallocated === 0 && (
+                      <tr style={{ fontSize: 12, color: "#10B981" }}>
+                        <td colSpan={6} style={{ textAlign: "right", paddingTop: 4 }}>
+                          ✅ Fully allocated
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
-              </div>
-            )}
-            {customerId && !isDonation && invoices.length === 0 && (
-              <div className="inv-card" style={{ textAlign: "center", color: "var(--text-muted)" }}>
-                No unpaid invoices for this customer. Any amount entered will be recorded as an advance.
+                {invoices.length === 0 && customerOpeningBalance === 0 && (
+                  <div style={{ textAlign: "center", color: "var(--text-muted)" }}>
+                    No unpaid invoices or opening balance for this customer. The full amount will be recorded as an advance.
+                  </div>
+                )}
               </div>
             )}
           </div>
