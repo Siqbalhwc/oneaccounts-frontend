@@ -76,13 +76,14 @@ export default function VendorLedgerPage() {
       .then(({ data }) => data && setSupplier(data))
   }, [selectedSupplierId, companyId])
 
-  // ── LEDGER FETCH (opening via API, identical logic) ──
+  // ── LEDGER FETCH (with opening balance) ──
   const fetchLedger = async () => {
     if (!selectedSupplierId || !companyId || !supplier) return
     setLoading(true)
     setErrorMsg("")
 
     try {
+      // 1. All bills
       const { data: allBills } = await supabase
         .from("invoices")
         .select("id, total, invoice_no, date")
@@ -91,6 +92,7 @@ export default function VendorLedgerPage() {
         .is("deleted_at", null)
         .order("date", { ascending: true })
 
+      // 2. All payments
       const { data: allPayments } = await supabase
         .from("payments")
         .select("id, amount, payment_no, payment_date")
@@ -98,15 +100,21 @@ export default function VendorLedgerPage() {
         .eq("party_type", "supplier")
         .order("payment_date", { ascending: true })
 
+      // 3. Real opening balance entry
       let openingLine = null
       try {
         const apiRes = await fetch(`/api/vendor-ledger/opening-balance?supplierId=${selectedSupplierId}`)
-        const apiData = await apiRes.json()
-        if (apiData.entry) {
-          openingLine = { ...apiData.entry, running_balance: 0, isOpening: true }
+        if (apiRes.ok) {
+          const apiData = await apiRes.json()
+          if (apiData.entry) {
+            openingLine = { ...apiData.entry, running_balance: 0, isOpening: true }
+          }
         }
-      } catch (apiErr) {}
+      } catch (apiErr) {
+        // ignore
+      }
 
+      // 4. Period lines
       const periodLines: any[] = []
       for (const bill of allBills || []) {
         if (bill.date < startDate || bill.date > endDate) continue
@@ -134,6 +142,7 @@ export default function VendorLedgerPage() {
       }
       periodLines.sort((a, b) => a.date.localeCompare(b.date))
 
+      // 5. Fallback opening
       if (!openingLine) {
         const periodDebits = periodLines.reduce((s: number, l: any) => s + l.debit, 0)
         const periodCredits = periodLines.reduce((s: number, l: any) => s + l.credit, 0)
@@ -151,12 +160,16 @@ export default function VendorLedgerPage() {
         }
       }
 
+      // 6. Combine
       const allLines = [openingLine, ...periodLines]
+
+      // 7. Running balance
       let running = 0
       for (const line of allLines) {
         running += (line.debit || 0) - (line.credit || 0)
         line.running_balance = running
       }
+
       setLedgerLines(allLines)
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to load ledger")
@@ -287,10 +300,116 @@ export default function VendorLedgerPage() {
         }
       `}</style>
 
-      {/* ... rest of the JSX unchanged (toolbar, summary, table rows) ... */}
-      {/* The full JSX from the working vendor ledger, just with the new styles */}
-      {/* I'm abbreviating for space, but you can reuse the previous vendor-ledger code with updated styles */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}>
+          <ArrowLeft size={16} />
+        </button>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>
+            🚚 Vendor Ledger
+          </h1>
+          <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Transaction history for a specific supplier</p>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <select
+            className="supplier-select"
+            value={selectedSupplierId}
+            onChange={(e) => setSelectedSupplierId(e.target.value)}
+          >
+            <option value="">— Select Supplier —</option>
+            {suppliers.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.code} – {s.name}
+              </option>
+            ))}
+          </select>
+          <input type="date" className="date-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
+          <span style={{ color: "var(--text-muted)", fontSize: 12 }}>to</span>
+          <input type="date" className="date-input" value={endDate} onChange={e => setEndDate(e.target.value)} />
+          <button className="btn btn-outline" onClick={fetchLedger}>Refresh</button>
+          <button className="btn btn-outline" onClick={handlePrintPDF}>
+            <Printer size={16} /> Print PDF
+          </button>
+        </div>
+      </div>
 
+      {errorMsg && (
+        <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, border: "1px solid #FECACA" }}>
+          {errorMsg}
+        </div>
+      )}
+
+      {selectedSupplierId && supplier ? (
+        <>
+          <div style={{
+            background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12,
+            padding: "12px 20px", marginBottom: 20, display: "flex", alignItems: "center", gap: 16
+          }}>
+            <div style={{ background: "var(--bg-soft)", borderRadius: 8, padding: "6px 12px", fontWeight: 700, fontSize: 14, color: "var(--primary)" }}>
+              {supplier.code}
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, color: "var(--text)" }}>{supplier.name}</div>
+            </div>
+          </div>
+
+          <div className="summary-grid">
+            <div className="summary-item">
+              <div className="summary-label">Total Debits</div>
+              <div className="summary-value" style={{ color: "#EF4444" }}>PKR {totalDebit.toLocaleString()}</div>
+            </div>
+            <div className="summary-item">
+              <div className="summary-label">Total Credits</div>
+              <div className="summary-value" style={{ color: "#10B981" }}>PKR {totalCredit.toLocaleString()}</div>
+            </div>
+            <div className="summary-item">
+              <div className="summary-label">Closing Balance</div>
+              <div className="summary-value" style={{ color: closingBalance >= 0 ? "#10B981" : "#EF4444" }}>
+                PKR {closingBalance.toLocaleString()}
+              </div>
+            </div>
+          </div>
+
+          {loading ? (
+            <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading ledger entries…</div>
+          ) : sortedLines.length === 0 ? (
+            <div className="ledger-card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
+              No transactions found for this period.
+            </div>
+          ) : (
+            <div className="ledger-card">
+              <div className="ledger-header">
+                <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
+                <button className="sort-btn" onClick={() => handleSort("description")}>Entry #{getSortIcon("description")}</button>
+                <span>Description</span>
+                <button className="sort-btn" onClick={() => handleSort("debit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
+                <button className="sort-btn" onClick={() => handleSort("credit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
+                <button className="sort-btn" onClick={() => handleSort("running_balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("running_balance")}</button>
+              </div>
+              {sortedLines.map((line, idx) => (
+                <div key={line.id || idx} className={`ledger-row ${line.isOpening ? "opening-row" : ""}`}>
+                  <span style={{ fontSize: 12 }}>{line.date}</span>
+                  <span style={{ color: "var(--primary)", fontSize: 12 }}>{line.entry_no}</span>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line.description}</span>
+                  <span style={{ textAlign: "right", color: line.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit > 0 ? 600 : 400 }}>
+                    {line.debit > 0 ? `PKR ${line.debit.toLocaleString()}` : "—"}
+                  </span>
+                  <span style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.credit > 0 ? 600 : 400 }}>
+                    {line.credit > 0 ? `PKR ${line.credit.toLocaleString()}` : "—"}
+                  </span>
+                  <span style={{ textAlign: "right", fontWeight: 600, color: line.running_balance >= 0 ? "#10B981" : "#EF4444" }}>
+                    PKR {line.running_balance.toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        <div style={{ textAlign: "center", padding: 60, color: "var(--text-muted)" }}>
+          <p style={{ fontSize: 16 }}>Select a supplier above to view their ledger.</p>
+        </div>
+      )}
     </div>
   )
 }
