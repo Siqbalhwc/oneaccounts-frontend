@@ -62,7 +62,7 @@ export default function CustomerLedgerPage() {
     }
   }, [urlCustomerId, customers])
 
-  // Fetch selected customer (including balance for reference)
+  // Fetch selected customer (including balance)
   useEffect(() => {
     if (!selectedCustomerId || !companyId) {
       setCustomer(null)
@@ -77,9 +77,9 @@ export default function CustomerLedgerPage() {
       .then(({ data }) => data && setCustomer(data))
   }, [selectedCustomerId, companyId])
 
-  // ── LEDGER FETCH – now includes real opening journal entry ──
+  // ── LEDGER FETCH – uses server API for opening balance ──
   const fetchLedger = async () => {
-    if (!selectedCustomerId || !companyId) return
+    if (!selectedCustomerId || !companyId || !customer) return
     setLoading(true)
     setErrorMsg("")
 
@@ -100,68 +100,23 @@ export default function CustomerLedgerPage() {
         .eq("party_id", selectedCustomerId)
         .order("date", { ascending: true })
 
-      // 3. Try to fetch the real opening balance journal entry for this customer
+      // 3. Fetch the real opening balance entry via server API
       let openingLine = null
-
-      // Method A: by source_type = 'opening_balance' and source_id = customer.id
-      const { data: jLines } = await supabase
-        .from("journal_lines")
-        .select("debit, credit, entry_id, source_type, source_id")
-        .eq("source_type", "opening_balance")
-        .eq("source_id", selectedCustomerId)
-        .maybeSingle()
-
-      if (jLines) {
-        // Fetch the associated journal entry for date and description
-        const { data: jEntry } = await supabase
-          .from("journal_entries")
-          .select("id, date, description, entry_no")
-          .eq("id", jLines.entry_id)
-          .maybeSingle()
-
-        if (jEntry) {
+      try {
+        const apiRes = await fetch(`/api/customer-ledger/opening-balance?customerId=${selectedCustomerId}`)
+        const apiData = await apiRes.json()
+        if (apiData.entry) {
           openingLine = {
-            id: `opening-${jEntry.id}`,
-            entry_no: jEntry.entry_no,
-            date: jEntry.date,
-            description: jEntry.description,
-            debit: jLines.debit || 0,
-            credit: jLines.credit || 0,
+            ...apiData.entry,
             running_balance: 0,
             isOpening: true,
           }
         }
-      } else {
-        // Method B: fallback to description pattern (for older records without source_type)
-        const { data: jEntriesFallback } = await supabase
-          .from("journal_entries")
-          .select("id, date, description, entry_no")
-          .ilike("description", `%Opening balance for customer ${selectedCustomerId}%`)
-          .maybeSingle()
-
-        if (jEntriesFallback) {
-          const { data: jLinesFallback } = await supabase
-            .from("journal_lines")
-            .select("debit, credit")
-            .eq("entry_id", jEntriesFallback.id)
-            .maybeSingle()
-
-          if (jLinesFallback) {
-            openingLine = {
-              id: `opening-${jEntriesFallback.id}`,
-              entry_no: jEntriesFallback.entry_no,
-              date: jEntriesFallback.date,
-              description: jEntriesFallback.description,
-              debit: jLinesFallback.debit || 0,
-              credit: jLinesFallback.credit || 0,
-              running_balance: 0,
-              isOpening: true,
-            }
-          }
-        }
+      } catch (apiErr) {
+        // API call failed – we’ll fall back to formula
       }
 
-      // Build period lines (invoices, returns, receipts)
+      // 4. Build period lines (invoices, returns, receipts)
       const periodLines: any[] = []
 
       for (const inv of allInvoices || []) {
@@ -204,12 +159,29 @@ export default function CustomerLedgerPage() {
 
       periodLines.sort((a, b) => a.date.localeCompare(b.date))
 
-      // Combine: opening line first, then period lines
-      const allLines: any[] = []
-      if (openingLine) allLines.push(openingLine)
-      allLines.push(...periodLines)
+      // 5. If no opening line from API, calculate it from the current balance
+      if (!openingLine) {
+        const periodDebits = periodLines.reduce((s: number, l: any) => s + l.debit, 0)
+        const periodCredits = periodLines.reduce((s: number, l: any) => s + l.credit, 0)
+        const currentBalance = Number(customer.balance || 0)
+        const openingBalance = currentBalance - periodDebits + periodCredits
 
-      // Calculate running balance from zero
+        openingLine = {
+          id: "opening-calc",
+          entry_no: "",
+          date: startDate,
+          description: "Opening Balance",
+          debit: openingBalance > 0 ? openingBalance : 0,
+          credit: openingBalance < 0 ? -openingBalance : 0,
+          running_balance: 0,
+          isOpening: true,
+        }
+      }
+
+      // 6. Combine: opening line first, then period lines
+      const allLines: any[] = [openingLine, ...periodLines]
+
+      // 7. Calculate running balance from zero
       let running = 0
       for (const line of allLines) {
         running += (line.debit || 0) - (line.credit || 0)
@@ -225,8 +197,8 @@ export default function CustomerLedgerPage() {
   }
 
   useEffect(() => {
-    if (selectedCustomerId && companyId) fetchLedger()
-  }, [selectedCustomerId, companyId, startDate, endDate])
+    if (selectedCustomerId && companyId && customer) fetchLedger()
+  }, [selectedCustomerId, companyId, startDate, endDate, customer])
 
   // Sorting
   const sortedLines = useMemo(() => {
