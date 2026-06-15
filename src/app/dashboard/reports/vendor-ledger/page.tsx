@@ -62,6 +62,7 @@ export default function VendorLedgerPage() {
     }
   }, [urlSupplierId, suppliers])
 
+  // Fetch selected supplier including balance
   useEffect(() => {
     if (!selectedSupplierId || !companyId) {
       setSupplier(null)
@@ -69,21 +70,21 @@ export default function VendorLedgerPage() {
     }
     supabase
       .from("suppliers")
-      .select("id, code, name")
+      .select("id, code, name, balance")
       .eq("id", selectedSupplierId)
       .eq("company_id", companyId)
       .single()
       .then(({ data }) => data && setSupplier(data))
   }, [selectedSupplierId, companyId])
 
-  // ── CORRECT LEDGER FETCH ────────────────────────────────────────────
+  // ── LEDGER FETCH (now includes real opening balance from API) ──
   const fetchLedger = async () => {
-    if (!selectedSupplierId || !companyId) return
+    if (!selectedSupplierId || !companyId || !supplier) return
     setLoading(true)
     setErrorMsg("")
 
     try {
-      // 1. All bills for this supplier (any date, no deleted)
+      // 1. All bills for this supplier
       const { data: allBills } = await supabase
         .from("invoices")
         .select("id, total, invoice_no, date")
@@ -100,72 +101,85 @@ export default function VendorLedgerPage() {
         .eq("party_type", "supplier")
         .order("payment_date", { ascending: true })
 
-      // 3. Compute opening balance = sum of bills before start date - sum of payments before start date
-      let openingBalance = 0
+      // 3. Fetch the real opening balance entry via server API
+      let openingLine = null
+      try {
+        const apiRes = await fetch(`/api/vendor-ledger/opening-balance?supplierId=${selectedSupplierId}`)
+        const apiData = await apiRes.json()
+        if (apiData.entry) {
+          openingLine = {
+            ...apiData.entry,
+            running_balance: 0,
+            isOpening: true,
+          }
+        }
+      } catch (apiErr) {
+        // API call failed – fall back to formula
+      }
 
+      // 4. Build period lines (bills = credit, payments = debit)
       const periodLines: any[] = []
 
-      // Process bills
       for (const bill of allBills || []) {
-        if (bill.date < startDate) {
-          // Bills increase what you owe (credit)
-          openingBalance -= (bill.total || 0)
-        } else if (bill.date >= startDate && bill.date <= endDate) {
-          periodLines.push({
-            id: `bill-${bill.id}`,
-            entry_no: `JE-BILL-${bill.invoice_no}`,
-            date: bill.date,
-            description: `Purchase Bill ${bill.invoice_no}`,
-            debit: 0,
-            credit: bill.total || 0,
-            running_balance: 0, // filled later
-          })
-        }
+        if (bill.date < startDate || bill.date > endDate) continue
+        periodLines.push({
+          id: `bill-${bill.id}`,
+          entry_no: `BILL-${bill.invoice_no}`,
+          date: bill.date,
+          description: `Purchase Bill ${bill.invoice_no}`,
+          debit: 0,
+          credit: bill.total || 0,
+          running_balance: 0,
+        })
       }
 
-      // Process payments
       for (const payment of allPayments || []) {
-        if (payment.payment_date < startDate) {
-          // Payments decrease what you owe (debit)
-          openingBalance += (payment.amount || 0)
-        } else if (payment.payment_date >= startDate && payment.payment_date <= endDate) {
-          periodLines.push({
-            id: `payment-${payment.id}`,
-            entry_no: `JE-PAY-${payment.payment_no}`,
-            date: payment.payment_date,
-            description: `Payment ${payment.payment_no}`,
-            debit: payment.amount || 0,
-            credit: 0,
-            running_balance: 0,
-          })
-        }
+        if (payment.payment_date < startDate || payment.payment_date > endDate) continue
+        periodLines.push({
+          id: `payment-${payment.id}`,
+          entry_no: `PAY-${payment.payment_no}`,
+          date: payment.payment_date,
+          description: `Payment ${payment.payment_no}`,
+          debit: payment.amount || 0,
+          credit: 0,
+          running_balance: 0,
+        })
       }
 
-      // Sort period lines by date
       periodLines.sort((a, b) => a.date.localeCompare(b.date))
 
-      // Build final lines with running balance
-      const finalLines: any[] = [
-        {
-          id: "opening",
+      // 5. If no opening line from API, calculate from current balance
+      if (!openingLine) {
+        const periodDebits = periodLines.reduce((s: number, l: any) => s + l.debit, 0)
+        const periodCredits = periodLines.reduce((s: number, l: any) => s + l.credit, 0)
+        const currentBalance = Number(supplier.balance || 0)
+        // Supplier balance is normally negative (credit), but in DB it's stored as what you owe
+        // Opening = Current Balance - Period Debits + Period Credits
+        const openingBalance = currentBalance - periodDebits + periodCredits
+
+        openingLine = {
+          id: "opening-calc",
           entry_no: "",
           date: startDate,
           description: "Opening Balance",
           debit: openingBalance > 0 ? openingBalance : 0,
           credit: openingBalance < 0 ? -openingBalance : 0,
-          running_balance: openingBalance,
+          running_balance: 0,
           isOpening: true,
-        },
-      ]
-
-      let running = openingBalance
-      for (const line of periodLines) {
-        running += (line.debit || 0) - (line.credit || 0)
-        line.running_balance = running
-        finalLines.push(line)
+        }
       }
 
-      setLedgerLines(finalLines)
+      // 6. Combine: opening line first, then period lines
+      const allLines: any[] = [openingLine, ...periodLines]
+
+      // 7. Calculate running balance from zero
+      let running = 0
+      for (const line of allLines) {
+        running += (line.debit || 0) - (line.credit || 0)
+        line.running_balance = running
+      }
+
+      setLedgerLines(allLines)
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to load ledger")
     } finally {
@@ -174,8 +188,8 @@ export default function VendorLedgerPage() {
   }
 
   useEffect(() => {
-    if (selectedSupplierId && companyId) fetchLedger()
-  }, [selectedSupplierId, companyId, startDate, endDate])
+    if (selectedSupplierId && companyId && supplier) fetchLedger()
+  }, [selectedSupplierId, companyId, startDate, endDate, supplier])
 
   // Sorting (unchanged)
   const sortedLines = useMemo(() => {
@@ -379,7 +393,7 @@ export default function VendorLedgerPage() {
               </div>
               {sortedLines.map((line, idx) => (
                 <div key={line.id || idx} className={`ledger-row ${line.isOpening ? "opening-row" : ""}`}>
-                  <span style={{ fontSize: 12 }}>{line.isOpening ? "" : line.date}</span>
+                  <span style={{ fontSize: 12 }}>{line.date}</span>
                   <span style={{ color: "var(--primary)", fontSize: 12 }}>{line.entry_no}</span>
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line.description}</span>
                   <span style={{ textAlign: "right", color: line.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit > 0 ? 600 : 400 }}>

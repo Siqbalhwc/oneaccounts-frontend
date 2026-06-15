@@ -29,7 +29,7 @@ export default function NewPaymentPage() {
   const [selectedExpenseAccountId, setSelectedExpenseAccountId] = useState<number | null>(null)
 
   const [bills, setBills] = useState<any[]>([])
-  const [allocations, setAllocations] = useState<Record<number, number>>({})
+  const [allocations, setAllocations] = useState<Record<string, number>>({})
 
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split("T")[0])
   const [paymentAmount, setPaymentAmount] = useState<number | "">("")
@@ -38,6 +38,8 @@ export default function NewPaymentPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
+
+  const [supplierOpeningBalance, setSupplierOpeningBalance] = useState(0)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -53,14 +55,17 @@ export default function NewPaymentPage() {
     try {
       const { data, error } = await supabase
         .from("suppliers")
-        .select("id, code, name, phone, balance")
+        .select("id, code, name, phone, balance, opening_balance")
         .eq("company_id", companyId)
         .order("name")
       if (data) {
         setSuppliers(data)
         if (selectedSupplier) {
           const updated = data.find((s: any) => s.id === selectedSupplier.id)
-          if (updated) setSelectedSupplier(updated)
+          if (updated) {
+            setSelectedSupplier(updated)
+            setSupplierOpeningBalance(updated.opening_balance || 0)
+          }
         }
       }
     } catch (err) {
@@ -84,7 +89,11 @@ export default function NewPaymentPage() {
   useEffect(() => {
     if (!companyId || !supplierId || isDonation) {
       setBills([])
-      setAllocations({})
+      setAllocations(prev => {
+        const copy = { ...prev }
+        delete copy["opening"]
+        return copy
+      })
       return
     }
     supabase.from("invoices")
@@ -96,9 +105,9 @@ export default function NewPaymentPage() {
       .then(r => {
         const invs = r.data || []
         setBills(invs)
-        const initAlloc: Record<number, number> = {}
-        invs.forEach(inv => { initAlloc[inv.id] = 0 })
-        setAllocations(initAlloc)
+        const initAlloc: Record<string, number> = { opening: 0 }
+        invs.forEach(inv => { initAlloc[String(inv.id)] = 0 })
+        setAllocations(prev => ({ ...initAlloc, ...prev }))
       })
   }, [companyId, supplierId, isDonation])
 
@@ -123,6 +132,7 @@ export default function NewPaymentPage() {
     setSelectedSupplier(s)
     setSupplierSearch(s.name)
     setShowSupplierList(false)
+    setSupplierOpeningBalance(s.opening_balance || 0)
   }
 
   const clearSupplier = () => {
@@ -132,22 +142,37 @@ export default function NewPaymentPage() {
     setShowSupplierList(true)
     setBills([])
     setAllocations({})
+    setSupplierOpeningBalance(0)
   }
 
   const toggleBill = (invId: number, due: number) => {
+    const key = String(invId)
     setAllocations(prev => {
-      const current = prev[invId] || 0
+      const current = prev[key] || 0
       const newVal = current > 0 ? 0 : due
-      return { ...prev, [invId]: newVal }
+      return { ...prev, [key]: newVal }
     })
   }
 
   const updateAllocation = (invId: number, value: number, due: number) => {
     const clamped = Math.min(Math.max(value, 0), due)
-    setAllocations(prev => ({ ...prev, [invId]: clamped }))
+    setAllocations(prev => ({ ...prev, [String(invId)]: clamped }))
   }
 
-  const totalAllocated = Object.values(allocations).reduce((s, v) => s + v, 0)
+  const toggleOpeningAllocation = () => {
+    setAllocations(prev => {
+      const current = prev["opening"] || 0
+      const newVal = current > 0 ? 0 : supplierOpeningBalance
+      return { ...prev, opening: newVal }
+    })
+  }
+
+  const totalAllocatedToBills = Object.entries(allocations)
+    .filter(([key]) => key !== "opening")
+    .reduce((s, [_, v]) => s + v, 0)
+
+  const openingAllocation = allocations["opening"] || 0
+  const totalAllocated = totalAllocatedToBills + openingAllocation
   const totalAmount = Number(paymentAmount || 0)
   const unallocated = totalAmount - totalAllocated
 
@@ -179,9 +204,11 @@ export default function NewPaymentPage() {
           date: paymentDate,
           reference,
           notes,
-          allocations: Object.entries(allocations).map(([billId, allocAmt]) => ({
-            bill_id: parseInt(billId), amount: allocAmt
-          })),
+          allocations: Object.entries(allocations)
+            .filter(([key, allocAmt]) => key !== "opening" && allocAmt > 0)
+            .map(([billId, allocAmt]) => ({
+              bill_id: parseInt(billId), amount: allocAmt
+            })),
         }),
       })
       const result = await res.json()
@@ -195,6 +222,7 @@ export default function NewPaymentPage() {
       setSupplierId(null); setSelectedSupplier(null); setSupplierSearch("")
       setSelectedBankId(null); setSelectedExpenseAccountId(null); setIsDonation(false)
       setBills([]); setAllocations({}); setPaymentAmount(""); setNotes(""); setReference("")
+      setSupplierOpeningBalance(0)
       setLoading(false)
       setTimeout(() => loadSuppliers(), 500)
       setTimeout(() => setFlash(null), 4000)
@@ -370,15 +398,15 @@ export default function NewPaymentPage() {
               </div>
             </div>
 
-            {supplierId && !isDonation && bills.length > 0 && (
+            {supplierId && !isDonation && (
               <div className="pay-card">
-                <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 12px 0" }}>Allocate to Purchase Bills</h3>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 12px 0" }}>Allocate to Bills & Opening</h3>
                 <div style={{ overflowX: "auto" }}>
                   <table>
                     <thead>
                       <tr>
                         <th style={{ width: 30 }}></th>
-                        <th>Bill #</th>
+                        <th>Description</th>
                         <th>Total</th>
                         <th>Paid</th>
                         <th>Due</th>
@@ -386,9 +414,28 @@ export default function NewPaymentPage() {
                       </tr>
                     </thead>
                     <tbody>
+                      {supplierOpeningBalance > 0 && (
+                        <tr style={{ background: "var(--bg-soft)" }}>
+                          <td>
+                            <input className="chk-box" type="checkbox"
+                              checked={(allocations["opening"] || 0) > 0}
+                              onChange={toggleOpeningAllocation}
+                            />
+                          </td>
+                          <td colSpan={4}>
+                            <span style={{ fontWeight: 600 }}>Opening Balance</span>
+                            <span style={{ marginLeft: 8, fontSize: 12, color: "var(--text-muted)" }}>
+                              (PKR {supplierOpeningBalance.toLocaleString()})
+                            </span>
+                          </td>
+                          <td style={{ textAlign: "right", fontWeight: 600 }}>
+                            PKR {supplierOpeningBalance.toLocaleString()}
+                          </td>
+                        </tr>
+                      )}
                       {bills.map(bill => {
                         const due = bill.total - (bill.paid || 0)
-                        const alloc = allocations[bill.id] || 0
+                        const alloc = allocations[String(bill.id)] || 0
                         const checked = alloc > 0
                         return (
                           <tr key={bill.id}>
@@ -406,7 +453,7 @@ export default function NewPaymentPage() {
                       <tr style={{ borderTop: "2px solid var(--border)", fontWeight: 700 }}>
                         <td colSpan={5} style={{ textAlign: "right" }}>Allocated</td>
                         <td style={{ textAlign: "right" }}>PKR {totalAllocated.toLocaleString()}</td>
-                       </tr>
+                      </tr>
                       {unallocated > 0 && (
                         <tr style={{ fontSize: 12, color: "var(--text-muted)" }}>
                           <td colSpan={6} style={{ textAlign: "right", paddingTop: 4 }}>
@@ -414,14 +461,21 @@ export default function NewPaymentPage() {
                           </td>
                         </tr>
                       )}
+                      {totalAmount > 0 && unallocated === 0 && (
+                        <tr style={{ fontSize: 12, color: "#10B981" }}>
+                          <td colSpan={6} style={{ textAlign: "right", paddingTop: 4 }}>
+                            ✅ Fully allocated
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
-                   </table>
+                  </table>
                 </div>
-              </div>
-            )}
-            {supplierId && !isDonation && bills.length === 0 && (
-              <div className="pay-card" style={{ textAlign: "center", color: "var(--text-muted)" }}>
-                No unpaid purchase bills for this supplier. The full amount will be recorded as unallocated.
+                {bills.length === 0 && supplierOpeningBalance === 0 && (
+                  <div style={{ textAlign: "center", color: "var(--text-muted)" }}>
+                    No unpaid purchase bills or opening balance for this supplier. The full amount will be recorded as unallocated.
+                  </div>
+                )}
               </div>
             )}
           </div>
