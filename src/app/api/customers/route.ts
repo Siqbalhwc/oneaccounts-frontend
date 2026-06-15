@@ -34,6 +34,8 @@ export async function POST(request: NextRequest) {
     custCode = await generateNextCode('customers', 'CUST-', companyId)
   }
 
+  const balanceValue = opening_balance || 0
+
   const { data: customer, error } = await supabase
     .from('customers')
     .insert({
@@ -45,14 +47,114 @@ export async function POST(request: NextRequest) {
       address,
       country_code,
       payment_terms,
-      opening_balance,
-      balance: opening_balance || 0,
+      opening_balance: balanceValue,
+      balance: balanceValue,
     })
     .select('*')
     .single()
 
   if (error || !customer) {
     return NextResponse.json({ error: error?.message || 'Insert failed' }, { status: 500 })
+  }
+
+  // ── Create journal entry for opening balance if non‑zero ──
+  if (balanceValue !== 0) {
+    const serviceSupabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        cookies: {
+          getAll() { return cookieStore.getAll() },
+          setAll() {},
+        },
+      }
+    )
+
+    try {
+      // Get required accounts
+      const { data: arAccount } = await serviceSupabase
+        .from('accounts')
+        .select('id, balance')
+        .eq('code', '1100')
+        .eq('company_id', companyId)
+        .maybeSingle()
+
+      let equityAccount = null
+      const { data: eqAccount } = await serviceSupabase
+        .from('accounts')
+        .select('id, balance')
+        .eq('code', '3000')
+        .eq('company_id', companyId)
+        .maybeSingle()
+      equityAccount = eqAccount
+
+      // If equity account doesn't exist, create it
+      if (!equityAccount) {
+        const { data: newEq } = await serviceSupabase
+          .from('accounts')
+          .insert({
+            code: '3000',
+            name: 'Opening Balance Equity',
+            type: 'Equity',
+            company_id: companyId,
+            balance: 0,
+          })
+          .select('id, balance')
+          .single()
+        equityAccount = newEq
+      }
+
+      if (arAccount && equityAccount) {
+        // Insert journal entry header
+        const { data: entry } = await serviceSupabase
+          .from('journal_entries')
+          .insert({
+            company_id: companyId,
+            entry_no: `JE-OP-${customer.id}-${Date.now()}`,
+            date: new Date().toISOString().split('T')[0],
+            description: `Opening balance for customer ${customer.id}`,
+          })
+          .select('id')
+          .single()
+
+        if (entry) {
+          // Insert lines with source tracking
+          await serviceSupabase.from('journal_lines').insert([
+            {
+              entry_id: entry.id,
+              account_id: arAccount.id,
+              debit: balanceValue,
+              credit: 0,
+              company_id: companyId,
+              source_type: 'opening_balance',
+              source_id: customer.id,
+            },
+            {
+              entry_id: entry.id,
+              account_id: equityAccount.id,
+              debit: 0,
+              credit: balanceValue,
+              company_id: companyId,
+              source_type: 'opening_balance',
+              source_id: customer.id,
+            },
+          ])
+
+          // Update account balances
+          await serviceSupabase
+            .from('accounts')
+            .update({ balance: (arAccount.balance || 0) + balanceValue })
+            .eq('id', arAccount.id)
+          await serviceSupabase
+            .from('accounts')
+            .update({ balance: (equityAccount.balance || 0) - balanceValue })
+            .eq('id', equityAccount.id)
+        }
+      }
+    } catch (e) {
+      console.error('Failed to create opening balance journal entry:', e)
+      // Non‑critical – customer is already created
+    }
   }
 
   // Audit log
@@ -97,14 +199,13 @@ export async function PUT(request: NextRequest) {
   const oldOpeningBalance = oldCustomer.opening_balance || 0
   const newOpeningBalance = opening_balance || 0
 
-  // Update customer record (balance will be updated after journal entries, but keep opening_balance)
+  // Update customer record
   const { data: updatedCustomer, error: updateError } = await supabase
     .from('customers')
     .update({
       code, name, phone, email, address, country_code,
       payment_terms,
       opening_balance: newOpeningBalance,
-      // balance will be updated later after journal entry
     })
     .eq('id', id)
     .select('*')
@@ -176,7 +277,7 @@ export async function PUT(request: NextRequest) {
         .ilike('description', `%Opening balance for customer ${id}%`)
         .maybeSingle()
 
-      // 2. Reverse the old entry if it exists
+      // 2. Reverse the old entry if it exists and old balance wasn't zero
       if (oldEntry && oldOpeningBalance !== 0) {
         // Get old lines
         const { data: oldLines } = await serviceSupabase
@@ -206,6 +307,8 @@ export async function PUT(request: NextRequest) {
               debit: line.credit,
               credit: line.debit,
               company_id: companyId,
+              source_type: 'opening_balance',
+              source_id: id,
             }))
             await serviceSupabase.from('journal_lines').insert(reversalLines)
 
@@ -242,8 +345,8 @@ export async function PUT(request: NextRequest) {
         if (newEntryErr) throw newEntryErr
 
         const newLines = [
-          { entry_id: newEntry.id, account_id: arAccount.id, debit: newOpeningBalance, credit: 0, company_id: companyId },
-          { entry_id: newEntry.id, account_id: equityAccount.id, debit: 0, credit: newOpeningBalance, company_id: companyId },
+          { entry_id: newEntry.id, account_id: arAccount.id, debit: newOpeningBalance, credit: 0, company_id: companyId, source_type: 'opening_balance', source_id: id },
+          { entry_id: newEntry.id, account_id: equityAccount.id, debit: 0, credit: newOpeningBalance, company_id: companyId, source_type: 'opening_balance', source_id: id },
         ]
         const { error: linesErr } = await serviceSupabase.from('journal_lines').insert(newLines)
         if (linesErr) throw linesErr
@@ -267,7 +370,6 @@ export async function PUT(request: NextRequest) {
 
     } catch (err) {
       console.error('Error handling opening balance change:', err)
-      // Still return success for customer update? No – rollback is complex. Log and return error.
       return NextResponse.json({ error: 'Failed to update opening balance journal entry' }, { status: 500 })
     }
   }
