@@ -12,7 +12,6 @@ import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
 
-// ── helpers ───────────────────────────────────────────────────────────
 function getCreditDays(term?: string | null): number {
   if (!term) return 30
   const s = term.toLowerCase()
@@ -518,9 +517,8 @@ function NewInvoicePageContent() {
   const itemGridCols = "30px 150px 3fr 80px 110px 110px 110px 30px"
 
   return (
-    <div className="invoice-page" style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+    <div style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        /* ── Desktop styles (unchanged) ── */
         .inv-shell { width: 100%; margin: 0; }
         .inv-title { font-size: 18px; font-weight: 700; color: var(--text); }
         .inv-card {
@@ -631,53 +629,6 @@ function NewInvoicePageContent() {
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
-
-        /* ── Mobile‑only overrides ── */
-        .mobile-only { display: none; }
-        .desktop-only { display: block; }
-        .mobile-sticky-summary { display: none; }
-
-        @media (max-width: 768px) {
-          .desktop-only { display: none; }
-          .mobile-only { display: block; }
-          .header-grid { display: block; }
-          .inv-summary-section { display: none; } /* hide desktop summary card */
-          .mobile-sticky-summary {
-            display: flex;
-            position: sticky;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: var(--card);
-            border-top: 1px solid var(--border);
-            padding: 12px 16px;
-            align-items: center;
-            justify-content: space-between;
-            z-index: 50;
-            margin-top: 16px;
-          }
-          .inv-card { padding: 12px; }
-          .inv-input, .inv-select { height: 44px; font-size: 16px; }
-          .inv-btn { padding: 10px 16px; font-size: 14px; }
-          .inv-item-row {
-            grid-template-columns: 24px 1fr 70px 90px 90px 24px;
-            gap: 4px;
-            padding: 8px 0;
-          }
-          .inv-item-header {
-            grid-template-columns: 24px 1fr 70px 90px 90px 24px;
-            font-size: 8px;
-            padding-bottom: 4px;
-          }
-          .inv-item-header span:nth-child(1),
-          .inv-item-row > :nth-child(1) { display: none; } /* hide image col */
-          .inv-item-header span:nth-child(6),
-          .inv-item-row > :nth-child(6) { display: none; } /* hide cost col */
-          .inv-item-header span:nth-child(7),
-          .inv-item-row > :nth-child(7) { text-align: right; }
-          .inv-item-row > input { width: 100%; box-sizing: border-box; }
-          .cust-dropdown { max-height: 180px; }
-        }
       `}</style>
 
       <div className="inv-shell">
@@ -687,7 +638,7 @@ function NewInvoicePageContent() {
             <div className="inv-title">{editId ? "✏️ Edit Sales Invoice" : "🧾 New Sales Invoice"}</div>
             <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{editId ? "Modify invoice details and items" : "Create invoice with full accounting automation"}</div>
           </div>
-          <button className="inv-btn desktop-only" onClick={() => router.push("/dashboard/invoices")}>View List</button>
+          <button className="inv-btn" onClick={() => router.push("/dashboard/invoices")}>View List</button>
         </div>
 
         {error && <div style={{ background: "var(--card)", border: "1px solid #EF4444", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
@@ -808,8 +759,7 @@ function NewInvoicePageContent() {
               </div>
             </div>
 
-            {/* Desktop summary card (hidden on mobile) */}
-            <div className="inv-summary-section desktop-only" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div className="inv-summary-section" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div className="inv-card">
                 <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
@@ -917,17 +867,6 @@ function NewInvoicePageContent() {
                 </div>
               </div>
             )}
-          </div>
-
-          {/* Mobile sticky summary bar (visible only on mobile) */}
-          <div className="mobile-sticky-summary">
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Total</div>
-              <div style={{ fontSize: 18, fontWeight: 800 }}>PKR {totalAmount.toLocaleString()}</div>
-            </div>
-            <button className="inv-btn" style={{ background: "var(--primary)", color: "var(--primary-text)", borderColor: "var(--primary)", padding: "12px 24px", fontWeight: 700 }} onClick={handleSubmit} disabled={saving}>
-              {saving ? "Posting..." : "POST"}
-            </button>
           </div>
         </div>
 
