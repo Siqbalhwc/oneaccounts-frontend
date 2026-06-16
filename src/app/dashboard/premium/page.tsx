@@ -79,7 +79,7 @@ function Skeleton() {
   )
 }
 
-// ── Sparkline (unchanged) ──────────────────────────────────
+// ── Sparkline ──────────────────────────────────────────────
 function Sparkline({ values, color }: { values: number[]; color: string }) {
   if (!values || values.length < 2) return null
   const W = 200, H = 32, P = 3
@@ -177,7 +177,6 @@ export default function PremiumDashboardPage() {
   const [refreshing,  setRefreshing]  = useState(false)
   const [companyId,   setCompanyId]   = useState<string | null>(null)
 
-  // ── Compute trend percentages ─────────────────────────────
   const profitTrend = profitChart.values.length >= 2
     ? ((profitChart.values[profitChart.values.length-1] - profitChart.values[profitChart.values.length-2]) / (Math.abs(profitChart.values[profitChart.values.length-2]) || 1) * 100).toFixed(0)
     : null
@@ -197,35 +196,39 @@ export default function PremiumDashboardPage() {
     })
 
     try {
-      const accountPromise = supabase.from("accounts").select("type,balance").eq("company_id", cid)
-      const custCountPromise = supabase.from("customers").select("*", { count: "exact", head: true }).eq("company_id", cid)
-      const suppCountPromise = supabase.from("suppliers").select("*", { count: "exact", head: true }).eq("company_id", cid)
-      const prodCountPromise = supabase.from("products").select("*", { count: "exact", head: true }).eq("company_id", cid)
-      const unpaidInvsPromise = supabase.from("invoices").select("total,paid,status").eq("company_id", cid).eq("type", "sale").neq("status", "Paid")
-      const payablesPromise = supabase.from("accounts").select("balance").eq("company_id", cid).eq("code", "2000").maybeSingle()
-      const prodsPromise = supabase.from("products").select("qty_on_hand,reorder_level").eq("company_id", cid)
-      const overduePromise = supabase.from("invoices").select("id,invoice_no,total,paid,due_date,party_id").eq("company_id", cid).eq("type", "sale").lt("due_date", today).neq("status", "Paid").limit(5)
-      const monthlyPromises = monthRanges.flatMap(({ start, end }) => [
-        supabase.from("invoices").select("total").eq("company_id", cid).eq("type", "sale").gte("date", start).lte("date", end),
-        supabase.from("invoices").select("total").eq("company_id", cid).eq("type", "purchase").gte("date", start).lte("date", end),
+      // ── Wrap every query with .catch(() => null) ──
+      const accountPromise     = supabase.from("accounts").select("type,balance").eq("company_id", cid).then(r => r).catch(() => null)
+      const custCountPromise   = supabase.from("customers").select("*", { count: "exact", head: true }).eq("company_id", cid).then(r => r).catch(() => null)
+      const suppCountPromise   = supabase.from("suppliers").select("*", { count: "exact", head: true }).eq("company_id", cid).then(r => r).catch(() => null)
+      const prodCountPromise   = supabase.from("products").select("*", { count: "exact", head: true }).eq("company_id", cid).then(r => r).catch(() => null)
+      const unpaidInvsPromise  = supabase.from("invoices").select("total,paid,status").eq("company_id", cid).eq("type", "sale").neq("status", "Paid").then(r => r).catch(() => null)
+      const payablesPromise    = supabase.from("accounts").select("balance").eq("company_id", cid).eq("code", "2000").maybeSingle().then(r => r).catch(() => null)
+      const prodsPromise       = supabase.from("products").select("qty_on_hand,reorder_level").eq("company_id", cid).then(r => r).catch(() => null)
+
+      // 🔧 Overdue query – catch error and return null so it never hangs
+      const overduePromise = supabase.from("invoices")
+        .select("id,invoice_no,total,paid,due_date,party_id")
+        .eq("company_id", cid).eq("type", "sale")
+        .lt("due_date", today).neq("status", "Paid").limit(5)
+        .then(r => r).catch(() => null)
+
+      const [
+        accountsRes, custCountRes, suppCountRes, prodCountRes,
+        unpaidInvsRes, payablesRes, prodsRes, overdueRes,
+      ] = await Promise.all([
+        accountPromise, custCountPromise, suppCountPromise, prodCountPromise,
+        unpaidInvsPromise, payablesPromise, prodsPromise, overduePromise,
       ])
 
-      const [accountsRes, custCountRes, suppCountRes, prodCountRes,
-             unpaidInvsRes, payablesRes, prodsRes, overdueRes] =
-        await Promise.all([
-          accountPromise, custCountPromise, suppCountPromise, prodCountPromise,
-          unpaidInvsPromise, payablesPromise, prodsPromise, overduePromise,
-        ].map(p => Promise.resolve(p).catch(() => null)))
-
-      // fetch monthly data separately to keep indices safe
-      const monthlyResults = await Promise.all(
-        monthRanges.map(({ start, end }) =>
-          Promise.all([
-            Promise.resolve(supabase.from("invoices").select("total").eq("company_id", cid).eq("type", "sale").gte("date", start).lte("date", end)).catch(() => null),
-            Promise.resolve(supabase.from("invoices").select("total").eq("company_id", cid).eq("type", "purchase").gte("date", start).lte("date", end)).catch(() => null),
-          ])
-        )
-      )
+      // Monthly data – wrapped in try/catch
+      const monthlyResults: any[] = []
+      for (const { start, end } of monthRanges) {
+        const [rev, exp] = await Promise.all([
+          supabase.from("invoices").select("total").eq("company_id", cid).eq("type", "sale").gte("date", start).lte("date", end).then(r => r).catch(() => null),
+          supabase.from("invoices").select("total").eq("company_id", cid).eq("type", "purchase").gte("date", start).lte("date", end).then(r => r).catch(() => null),
+        ])
+        monthlyResults.push([rev, exp])
+      }
 
       // Accounts → KPIs
       const rawAccounts = accountsRes?.data
@@ -253,7 +256,7 @@ export default function PremiumDashboardPage() {
         })
       }
       const payablesData = payablesRes?.data
-const payables = (!Array.isArray(payablesData) && payablesData?.balance != null) ? payablesData.balance : 0
+      const payables = (!Array.isArray(payablesData) && payablesData?.balance != null) ? payablesData.balance : 0
       const prodsData = prodsRes?.data
       const lowStock = Array.isArray(prodsData)
         ? prodsData.filter((p: any) => p.qty_on_hand > 0 && p.qty_on_hand <= p.reorder_level).length
@@ -458,7 +461,7 @@ const payables = (!Array.isArray(payablesData) && payablesData?.balance != null)
   )
 }
 
-// ── ChartCard (unchanged) ──────────────────────────────────
+// ── ChartCard ──────────────────────────────────────────────
 function ChartCard({ title, badge, badgeColor, labels, values, color }: {
   title: string; badge: string; badgeColor: string; labels: string[]; values: number[]; color: string
 }) {
