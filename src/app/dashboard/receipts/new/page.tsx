@@ -153,7 +153,9 @@ export default function NewReceiptPage() {
         .select("id, invoice_no, date, due_date, total, paid, status")
         .eq("company_id", companyId)
         .eq("party_id", customerId)
+        .eq("type", "sale")                  // ← only sale invoices
         .in("status", ["Unpaid", "Partial"])
+        .neq("status", "Returned")           // ← exclude fully returned
         .order("date")
 
       if (!invs || invs.length === 0) {
@@ -291,7 +293,7 @@ export default function NewReceiptPage() {
         body: JSON.stringify({
           party_id: customerId,
           amount: totalAmount,
-          unallocated_amount: 0,                // we've fully allocated
+          unallocated_amount: 0,
           payment_method: "Bank Transfer",
           bank_account_id: selectedBankId,
           income_account_id: isDonation ? selectedIncomeAccountId : null,
