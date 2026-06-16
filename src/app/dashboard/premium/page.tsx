@@ -269,10 +269,12 @@ export default function PremiumDashboardPage() {
       let customerMap: Record<number, { name: string; phone: string }> = {}
       if (partyIds.length > 0) {
         try {
-          const { data: custData } = await Promise.resolve(
+          const custRes = await Promise.resolve(
             supabase.from("customers").select("id,name,phone").in("id", partyIds).eq("company_id", cid)
           ).catch(() => null)
-          if (Array.isArray(custData?.data)) custData.data.forEach((c: any) => { customerMap[c.id] = { name: c.name, phone: c.phone } })
+          if (custRes?.data && Array.isArray(custRes.data)) {
+            custRes.data.forEach((c: any) => { customerMap[c.id] = { name: c.name, phone: c.phone } })
+          }
         } catch {}
       }
       setOverdue(overdueData.map((inv: any) => ({
