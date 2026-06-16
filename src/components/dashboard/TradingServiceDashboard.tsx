@@ -270,9 +270,11 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
   // ── Business type ──────────────────────────────────────────
   useEffect(() => {
     if (!companyId) return
-    supabase.from("companies").select("business_type").eq("id", companyId).single()
-      .then(({ data }) => { if (data) setBusinessType(data.business_type || "") })
-      .catch(() => {}) // ignore
+    Promise.resolve(
+      supabase.from("companies").select("business_type").eq("id", companyId).single()
+    ).then(({ data }) => {
+      if (data) setBusinessType(data.business_type || "")
+    }).catch(() => {}) // ignore
   }, [companyId])
 
   // ── Dashboard metrics (re-fetch on period change) ─────────
@@ -316,30 +318,30 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
     const today = new Date().toISOString().split("T")[0]
 
     // Fetch overdue invoices (with catch)
-    supabase
-      .from("invoices")
-      .select("id, invoice_no, total, due_date, parties(name)")
-      .eq("company_id", companyId)
-      .eq("type", "sale")
-      .in("status", ["Unpaid", "Partial"])
-      .lt("due_date", today)
-      .order("due_date", { ascending: true })
-      .limit(10)
-      .then(({ data }) => setOverdueInvoicesList((data as any) || []))
-      .catch(() => setOverdueInvoicesList([]))
+    Promise.resolve(
+      supabase.from("invoices")
+        .select("id, invoice_no, total, due_date, parties(name)")
+        .eq("company_id", companyId)
+        .eq("type", "sale")
+        .in("status", ["Unpaid", "Partial"])
+        .lt("due_date", today)
+        .order("due_date", { ascending: true })
+        .limit(10)
+    ).then(({ data }) => setOverdueInvoicesList((data as any) || []))
+     .catch(() => setOverdueInvoicesList([]))
 
     // Fetch overdue bills (with catch)
-    supabase
-      .from("invoices")
-      .select("id, invoice_no, total, due_date, parties(name)")
-      .eq("company_id", companyId)
-      .eq("type", "purchase")
-      .in("status", ["Unpaid", "Partial"])
-      .lt("due_date", today)
-      .order("due_date", { ascending: true })
-      .limit(10)
-      .then(({ data }) => setOverdueBillsList((data as any) || []))
-      .catch(() => setOverdueBillsList([]))
+    Promise.resolve(
+      supabase.from("invoices")
+        .select("id, invoice_no, total, due_date, parties(name)")
+        .eq("company_id", companyId)
+        .eq("type", "purchase")
+        .in("status", ["Unpaid", "Partial"])
+        .lt("due_date", today)
+        .order("due_date", { ascending: true })
+        .limit(10)
+    ).then(({ data }) => setOverdueBillsList((data as any) || []))
+     .catch(() => setOverdueBillsList([]))
   }, [companyId])
 
   // ── Helpers ───────────────────────────────────────────────
