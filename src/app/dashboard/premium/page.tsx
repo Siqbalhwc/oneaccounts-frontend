@@ -169,8 +169,7 @@ export default function PremiumDashboardPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  // Use CompanyContext for the active company (with loading state)
-  const { companyId: contextCompanyId, isLoading: companyLoading } = useCompany()
+  const { companyId: contextCompanyId } = useCompany()
 
   const [kpis,        setKpis]        = useState({ assets: 0, liabilities: 0, equity: 0, revenue: 0, expenses: 0, profit: 0 })
   const [ops,         setOps]         = useState({ receivables: 0, unpaid_invoices: 0, partial_invoices: 0, payables: 0, low_stock: 0, total_products: 0, total_customers: 0, total_suppliers: 0 })
@@ -180,6 +179,7 @@ export default function PremiumDashboardPage() {
   const [loading,     setLoading]     = useState(true)
   const [online,      setOnline]      = useState(true)
   const [refreshing,  setRefreshing]  = useState(false)
+  const [companyId,   setCompanyId]   = useState<string | null>(null)
 
   const profitTrend = profitChart.values.length >= 2
     ? ((profitChart.values[profitChart.values.length-1] - profitChart.values[profitChart.values.length-2]) / (Math.abs(profitChart.values[profitChart.values.length-2]) || 1) * 100).toFixed(0)
@@ -318,11 +318,18 @@ export default function PremiumDashboardPage() {
     setRefreshing(false)
   }
 
+  // Resolve company ID
   useEffect(() => {
-    if (!companyLoading && contextCompanyId) {
+    if (contextCompanyId) {
+      setCompanyId(contextCompanyId)
       fetchData(contextCompanyId)
+    } else {
+      getActiveCompanyId(supabase).then(cid => {
+        setCompanyId(cid)
+        fetchData(cid)
+      })
     }
-  }, [contextCompanyId, companyLoading])
+  }, [contextCompanyId])
 
   useEffect(() => {
     const on = () => setOnline(true), off = () => setOnline(false)
@@ -331,12 +338,11 @@ export default function PremiumDashboardPage() {
   }, [])
 
   useEffect(() => {
-    if (!contextCompanyId) return
-    const interval = setInterval(() => fetchData(contextCompanyId), 30000)
+    if (!companyId) return
+    const interval = setInterval(() => fetchData(companyId), 30000)
     return () => clearInterval(interval)
-  }, [contextCompanyId])
+  }, [companyId])
 
-  // New company check
   const isEmpty = !loading &&
     kpis.assets === 0 && kpis.liabilities === 0 && kpis.equity === 0 &&
     kpis.revenue === 0 && kpis.expenses === 0 &&
@@ -344,22 +350,20 @@ export default function PremiumDashboardPage() {
     ops.total_customers === 0 && ops.total_suppliers === 0 && ops.total_products === 0 &&
     incomeChart.values.length === 0
 
-  if (companyLoading) return <Skeleton />
-  if (!contextCompanyId)
+  if (loading) return <Skeleton />
+  if (!companyId)
     return (
       <div style={{ padding: 40, textAlign: "center", color: "#F87171" }}>
         Could not load dashboard – no company linked.
       </div>
     )
 
-  if (loading) return <Skeleton />
-
   if (isEmpty) {
     return (
       <div style={{ padding: "2rem", background: "#F4F6FB", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ maxWidth: 480, textAlign: "center" }}>
           <h2 style={{ fontWeight: 700, marginBottom: 8, color: "#1E293B" }}>Welcome to OneAccounts!</h2>
-          <p style={{ color: "#64748B", marginBottom: 24 }}>Your financial command center is ready. Let’s set up your business.</p>
+          <p style={{ color: "#64748B", marginBottom: 24 }}>Your financial command center is ready. Let's set up your business.</p>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div onClick={() => window.location.href = "/dashboard/settings"} style={{ background: "white", borderRadius: 12, padding: "16px 20px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.04)", border: "1px solid #E5EAF2" }}>
               <BuildingIcon size={20} color="#1D4ED8"/>
@@ -438,7 +442,7 @@ export default function PremiumDashboardPage() {
             </div>
           )}
           <button
-            onClick={() => contextCompanyId && fetchData(contextCompanyId)}
+            onClick={() => companyId && fetchData(companyId)}
             disabled={refreshing}
             style={{
               marginTop: 14, display: "inline-flex", alignItems: "center", gap: 6,
