@@ -60,18 +60,12 @@ export default function AccountantDashboard({ role }: { role: string }) {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const [
-        { data: customers },
-        { data: suppliers },
-        { data: bankAccounts },
-        { data: cashAccount },
-        { data: overdueBills },
-        { data: journalLines },
-      ] = await Promise.all([
-        supabase.from("customers").select("balance").eq("company_id", companyId),
-        supabase.from("suppliers").select("balance").eq("company_id", companyId),
-        supabase.from("bank_accounts").select("current_balance").eq("company_id", companyId),
-        supabase.from("accounts").select("balance").eq("company_id", companyId).eq("code", "1000").maybeSingle(),
+      // Wrap each query in Promise.all with individual catch
+      const [customers, suppliers, bankAccounts, cashAccount, overdueBills, journalLines] = await Promise.all([
+        supabase.from("customers").select("balance").eq("company_id", companyId).then(r => r).catch(() => null),
+        supabase.from("suppliers").select("balance").eq("company_id", companyId).then(r => r).catch(() => null),
+        supabase.from("bank_accounts").select("current_balance").eq("company_id", companyId).then(r => r).catch(() => null),
+        supabase.from("accounts").select("balance").eq("company_id", companyId).eq("code", "1000").maybeSingle().then(r => r).catch(() => null),
         supabase
           .from("invoices")
           .select("id, invoice_no, due_date, total, paid, status, suppliers(name)")
@@ -80,38 +74,39 @@ export default function AccountantDashboard({ role }: { role: string }) {
           .in("status", ["Unpaid", "Partial"])
           .lt("due_date", new Date().toISOString().split("T")[0])
           .order("due_date", { ascending: true })
-          .limit(5),
+          .limit(5)
+          .then(r => r).catch(() => null),
         supabase
           .from("journal_lines")
           .select("debit, credit, accounts(code,name), journal_entries!inner(date,description)")
           .eq("company_id", companyId)
           .order("journal_entries(date)", { ascending: false })
-          .limit(10),
+          .limit(10)
+          .then(r => r).catch(() => null),
       ])
 
-      const totalReceivables = customers?.reduce((s: number, c: any) => s + (c.balance || 0), 0) || 0
-      const totalPayables = suppliers?.reduce((s: number, s2: any) => s + (s2.balance || 0), 0) || 0
-      const bankCash = bankAccounts?.reduce((s: number, b: any) => s + (b.current_balance || 0), 0) || 0
-      const cash = cashAccount?.balance || 0
+      const totalReceivables = (customers?.data || []).reduce((s: number, c: any) => s + (c.balance || 0), 0)
+      const totalPayables = (suppliers?.data || []).reduce((s: number, s2: any) => s + (s2.balance || 0), 0)
+      const bankCash = (bankAccounts?.data || []).reduce((s: number, b: any) => s + (b.current_balance || 0), 0)
+      const cash = cashAccount?.data?.balance || 0
       const cashBalance = bankCash + cash
-      const overdueBillsCount = overdueBills?.length || 0
+      const overdueBillsCount = (overdueBills?.data || []).length
 
-      const recentTransactions =
-        journalLines?.map((jl: any) => ({
-          date: jl.journal_entries?.date?.split("T")[0],
-          description: jl.journal_entries?.description,
-          accountCode: jl.accounts?.code,
-          accountName: jl.accounts?.name,
-          debit: jl.debit || 0,
-          credit: jl.credit || 0,
-        })) || []
+      const recentTransactions = (journalLines?.data || []).map((jl: any) => ({
+        date: jl.journal_entries?.date?.split("T")[0],
+        description: jl.journal_entries?.description,
+        accountCode: jl.accounts?.code,
+        accountName: jl.accounts?.name,
+        debit: jl.debit || 0,
+        credit: jl.credit || 0,
+      }))
 
       setData({
         totalReceivables,
         totalPayables,
         cashBalance,
         overdueBillsCount,
-        overdueBills: overdueBills || [],
+        overdueBills: overdueBills?.data || [],
         recentTransactions,
       })
     } catch (err) {
