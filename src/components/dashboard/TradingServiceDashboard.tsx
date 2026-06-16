@@ -217,10 +217,321 @@ function BellNotification({
   )
 }
 
+// ── Odoo-style animated loading screen ─────────────────────
+const LOADING_STEPS = [
+  { icon: "🏗️", text: "Setting up your workspace…" },
+  { icon: "📊", text: "Configuring chart of accounts…" },
+  { icon: "🔐", text: "Applying security policies…" },
+  { icon: "✨", text: "Almost ready — brewing the numbers…" },
+]
+
+function OdooLoader({ isDark }: { isDark: boolean }) {
+  const [stepIdx, setStepIdx] = useState(0)
+  const [dotCount, setDotCount] = useState(1)
+
+  useEffect(() => {
+    const stepTimer = setInterval(() => {
+      setStepIdx(i => (i + 1) % LOADING_STEPS.length)
+    }, 1800)
+    const dotTimer = setInterval(() => {
+      setDotCount(d => (d % 3) + 1)
+    }, 400)
+    return () => { clearInterval(stepTimer); clearInterval(dotTimer) }
+  }, [])
+
+  const step = LOADING_STEPS[stepIdx]
+  const dots = ".".repeat(dotCount)
+
+  return (
+    <div style={{
+      minHeight: "100vh",
+      background: "var(--bg)",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 0,
+      padding: 40,
+    }}>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeSlide {
+          0%  { opacity: 0; transform: translateY(8px); }
+          20% { opacity: 1; transform: translateY(0); }
+          80% { opacity: 1; transform: translateY(0); }
+          100%{ opacity: 0; transform: translateY(-8px); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 0.4; transform: scale(0.95); }
+          50%       { opacity: 1;   transform: scale(1.05); }
+        }
+        @keyframes barGrow {
+          0%   { transform: scaleY(0.3); opacity: 0.4; }
+          50%  { transform: scaleY(1);   opacity: 1;   }
+          100% { transform: scaleY(0.3); opacity: 0.4; }
+        }
+      `}</style>
+
+      {/* Logo / brand mark */}
+      <div style={{ marginBottom: 36, textAlign: "center" }}>
+        <div style={{
+          width: 72, height: 72,
+          borderRadius: 20,
+          background: isDark
+            ? "linear-gradient(135deg, #6366f1 0%, #8B5CF6 100%)"
+            : "linear-gradient(135deg, #6366f1 0%, #8B5CF6 100%)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          margin: "0 auto 16px",
+          boxShadow: "0 8px 32px rgba(99,102,241,0.35)",
+        }}>
+          <span style={{ fontSize: 34 }}>📒</span>
+        </div>
+        <div style={{
+          fontSize: "1.5rem", fontWeight: 800,
+          background: "linear-gradient(135deg, #6366f1, #A78BFA)",
+          WebkitBackgroundClip: "text",
+          WebkitTextFillColor: "transparent",
+          letterSpacing: "-0.02em",
+        }}>
+          OneAccounts
+        </div>
+        <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: 4 }}>
+          by Siqbal
+        </div>
+      </div>
+
+      {/* Animated bar chart decoration */}
+      <div style={{
+        display: "flex", alignItems: "flex-end", gap: 5,
+        height: 48, marginBottom: 36,
+      }}>
+        {[0.4, 0.7, 0.55, 1.0, 0.65, 0.85, 0.5, 0.75, 0.45, 0.9].map((h, i) => (
+          <div
+            key={i}
+            style={{
+              width: 8,
+              height: `${h * 44}px`,
+              borderRadius: 4,
+              background: `hsl(${240 + i * 8}, 70%, ${isDark ? "65%" : "55%"})`,
+              transformOrigin: "bottom",
+              animation: `barGrow ${1.2 + i * 0.15}s ease-in-out ${i * 0.1}s infinite`,
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Spinner ring */}
+      <div style={{
+        width: 44, height: 44,
+        borderRadius: "50%",
+        border: "3px solid var(--border)",
+        borderTop: "3px solid #A78BFA",
+        animation: "spin 1s linear infinite",
+        marginBottom: 28,
+      }} />
+
+      {/* Animated step text */}
+      <div
+        key={stepIdx}
+        style={{
+          textAlign: "center",
+          animation: "fadeSlide 1.8s ease forwards",
+        }}
+      >
+        <div style={{ fontSize: "1.6rem", marginBottom: 8 }}>{step.icon}</div>
+        <div style={{
+          fontSize: "1rem",
+          fontWeight: 600,
+          color: "var(--text)",
+          maxWidth: 320,
+          lineHeight: 1.4,
+        }}>
+          {step.text.replace("…", dots)}
+        </div>
+      </div>
+
+      {/* Progress dots */}
+      <div style={{ display: "flex", gap: 6, marginTop: 32 }}>
+        {LOADING_STEPS.map((_, i) => (
+          <div
+            key={i}
+            style={{
+              width: i === stepIdx ? 20 : 6,
+              height: 6,
+              borderRadius: 3,
+              background: i === stepIdx ? "#A78BFA" : isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)",
+              transition: "all 0.3s ease",
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Subtext */}
+      <div style={{
+        marginTop: 24,
+        fontSize: "0.75rem",
+        color: "var(--text-muted)",
+        textAlign: "center",
+        maxWidth: 260,
+        lineHeight: 1.6,
+      }}>
+        Building your financial dashboard. This only takes a moment.
+      </div>
+    </div>
+  )
+}
+
+// ── Empty state for new companies ───────────────────────────
+function NewCompanyEmptyState({
+  router,
+  isDark,
+  userDisplayName,
+}: {
+  router: ReturnType<typeof useRouter>
+  isDark: boolean
+  userDisplayName: string
+}) {
+  return (
+    <div style={{
+      background: "var(--bg)", minHeight: "100%",
+      fontFamily: "'Inter', sans-serif", color: "var(--text)",
+      padding: "2rem 1.5rem",
+    }}>
+      <style>{`
+        @keyframes floatUp {
+          0%   { opacity: 0; transform: translateY(20px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+        .setup-card {
+          animation: floatUp 0.5s ease forwards;
+        }
+        .setup-card:nth-child(2) { animation-delay: 0.1s; opacity: 0; }
+        .setup-card:nth-child(3) { animation-delay: 0.2s; opacity: 0; }
+        .setup-card:nth-child(4) { animation-delay: 0.3s; opacity: 0; }
+        .setup-card:nth-child(5) { animation-delay: 0.4s; opacity: 0; }
+        .setup-step-btn {
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 16px 20px;
+          cursor: pointer;
+          transition: all 0.15s;
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          width: 100%;
+          text-align: left;
+          font-family: inherit;
+          color: var(--text);
+        }
+        .setup-step-btn:hover {
+          border-color: #A78BFA;
+          transform: translateX(4px);
+          background: ${isDark ? "rgba(167,139,250,0.08)" : "rgba(167,139,250,0.05)"};
+        }
+      `}</style>
+
+      {/* Welcome hero */}
+      <div
+        className="setup-card"
+        style={{
+          background: isDark
+            ? "linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(139,92,246,0.1) 100%)"
+            : "linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(139,92,246,0.05) 100%)",
+          border: `1px solid ${isDark ? "rgba(167,139,250,0.25)" : "rgba(99,102,241,0.15)"}`,
+          borderRadius: 16,
+          padding: "28px 28px",
+          marginBottom: 24,
+        }}
+      >
+        <div style={{ fontSize: "2rem", marginBottom: 12 }}>🎉</div>
+        <h2 style={{ fontSize: "1.4rem", fontWeight: 800, margin: "0 0 8px", lineHeight: 1.2 }}>
+          Welcome to OneAccounts{userDisplayName ? `, ${userDisplayName}` : ""}!
+        </h2>
+        <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--text-muted)", maxWidth: 480, lineHeight: 1.6 }}>
+          Your company workspace is live. Let's set up the essentials so your
+          dashboard lights up with real data. It only takes a few minutes.
+        </p>
+      </div>
+
+      {/* Setup checklist */}
+      <div className="setup-card" style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: 12 }}>
+          ⚡ Quick Setup — 4 steps to your first dashboard
+        </div>
+      </div>
+
+      {[
+        {
+          step: "01", icon: "🏢", title: "Add your company details",
+          sub: "Logo, address, tax number, and business info",
+          link: "/dashboard/settings/company",
+        },
+        {
+          step: "02", icon: "👤", title: "Add your first customer",
+          sub: "Start tracking who owes you money",
+          link: "/dashboard/customers/new",
+        },
+        {
+          step: "03", icon: "📄", title: "Create your first invoice",
+          sub: "Bill a customer and watch receivables populate",
+          link: "/dashboard/invoices/new",
+        },
+        {
+          step: "04", icon: "🏦", title: "Link a bank or cash account",
+          sub: "Set opening balances so your cash & bank KPI works",
+          link: "/dashboard/banking/bank-accounts",
+        },
+      ].map((item, i) => (
+        <div key={i} className="setup-card" style={{ marginBottom: 10 }}>
+          <button className="setup-step-btn" onClick={() => router.push(item.link)}>
+            <div style={{
+              width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+              background: isDark ? "rgba(167,139,250,0.15)" : "rgba(99,102,241,0.1)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: "1.2rem",
+            }}>
+              {item.icon}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#A78BFA", letterSpacing: "0.05em" }}>
+                  STEP {item.step}
+                </span>
+              </div>
+              <div style={{ fontSize: "0.9rem", fontWeight: 700 }}>{item.title}</div>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 2 }}>{item.sub}</div>
+            </div>
+            <div style={{ fontSize: "1.1rem", color: "var(--text-muted)", flexShrink: 0 }}>→</div>
+          </button>
+        </div>
+      ))}
+
+      {/* Tip */}
+      <div
+        className="setup-card"
+        style={{
+          marginTop: 20,
+          padding: "14px 18px",
+          background: isDark ? "rgba(16,185,129,0.08)" : "rgba(16,185,129,0.06)",
+          border: `1px solid ${isDark ? "rgba(16,185,129,0.2)" : "rgba(16,185,129,0.15)"}`,
+          borderRadius: 10,
+          fontSize: "0.78rem",
+          color: "var(--text-muted)",
+          lineHeight: 1.6,
+        }}
+      >
+        💡 <strong style={{ color: "#10B981" }}>Tip:</strong> Once you create your first invoice, your Revenue, Receivables, and Profit cards will populate automatically. No manual GL entry needed.
+      </div>
+    </div>
+  )
+}
+
 // ── Interfaces ──────────────────────────────────────────────
 interface MonthlyProfit  { month: string; profit: number }
 interface TopCustomer    { name: string; revenue: number; outstanding: number }
-interface OverdueItem    { id: string; invoice_no: string; total: number; due_date: string; parties?: { name: string } }
+// FIX: removed parties(name) join — use customer_name directly from overdue query
+interface OverdueItem    { id: string; invoice_no: string; total: number; due_date: string; customer_name?: string }
 
 // ── Main component ──────────────────────────────────────────
 export default function TradingServiceDashboard({ role }: { role: string }) {
@@ -239,6 +550,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
   const [businessType,    setBusinessType]       = useState("")
   const [loading,         setLoading]            = useState(true)
   const [selectedPeriod,  setSelectedPeriod]     = useState<PeriodKey>("all")
+  const [isNewCompany,    setIsNewCompany]        = useState(false)
 
   // KPIs
   const [revenueTotal,        setRevenueTotal]        = useState(0)
@@ -270,26 +582,28 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
   // ── Business type ──────────────────────────────────────────
   useEffect(() => {
     if (!companyId) return
-    Promise.resolve(
-      supabase.from("companies").select("business_type").eq("id", companyId).single()
-    ).then(({ data }) => {
-      if (data) setBusinessType(data.business_type || "")
-    }).catch(() => {})
+    supabase.from("companies").select("business_type").eq("id", companyId).single()
+      .then(({ data }) => {
+        if (data) setBusinessType(data.business_type || "")
+      })
+      .catch(() => {})
   }, [companyId])
 
-  // ── Dashboard metrics (re-fetch on period change, with safety timeout) ─────────
+  // ── Dashboard metrics ──────────────────────────────────────
   useEffect(() => {
     if (!companyId) return
     setLoading(true)
     const { start, end } = getPeriodDates(selectedPeriod)
 
     let finished = false
+
+    // Safety valve: 8 seconds max — never block on a slow/broken RPC
     const safetyTimer = setTimeout(() => {
       if (!finished) {
         finished = true
         setLoading(false)
       }
-    }, 10000) // 10 seconds max
+    }, 8000)
 
     const fetchDashboard = async () => {
       try {
@@ -298,15 +612,28 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           ...(start ? { p_date_from: start } : {}),
           ...(end   ? { p_date_to:   end   } : {}),
         })
+
         if (!finished) {
-          if (error) { console.error("RPC error:", error); }
-          else if (!data) { console.error("No data returned"); }
-          else {
-            setRevenueTotal(data.revenueTotal || 0)
-            setExpenseTotal(data.expenseTotal || 0)
-            setCashBalance(data.cashBalance || 0)
-            setTotalReceivables(data.totalReceivables || 0)
-            setTotalPayables(data.totalPayables || 0)
+          if (error) {
+            console.error("Dashboard RPC error:", error)
+            // RPC failed — show empty state rather than loading forever
+          } else if (data) {
+            const revenue = data.revenueTotal || 0
+            const expense = data.expenseTotal || 0
+            const cash    = data.cashBalance  || 0
+            const recv    = data.totalReceivables || 0
+            const pay     = data.totalPayables    || 0
+
+            // Detect new / empty company: all zeros and no monthly data
+            const hasAnyData = revenue > 0 || expense > 0 || cash !== 0 || recv > 0 || pay > 0 ||
+              (Array.isArray(data.monthlyProfit) && data.monthlyProfit.length > 0)
+            setIsNewCompany(!hasAnyData)
+
+            setRevenueTotal(revenue)
+            setExpenseTotal(expense)
+            setCashBalance(cash)
+            setTotalReceivables(recv)
+            setTotalPayables(pay)
             setOverdueInvoicesCount(data.overdueInvoicesCount || 0)
             setOverdueBillsCount(data.overdueBillsCount || 0)
             setMonthlyProfit(data.monthlyProfit || [])
@@ -315,6 +642,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         }
       } catch (err) {
         console.error("Dashboard fetch error:", err)
+        // Don't stay loading — show empty state
       } finally {
         if (!finished) {
           finished = true
@@ -332,36 +660,60 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
     }
   }, [companyId, selectedPeriod])
 
-  // ── Overdue lists for bell dropdowns (always current, never block loading) ─────
+  // ── Overdue lists — FIX: no more parties(name) join that caused 400 ──────────
+  // We fetch invoices without the foreign key join, then separately fetch party names.
   useEffect(() => {
     if (!companyId) return
     const today = new Date().toISOString().split("T")[0]
 
-    // Fetch overdue invoices (with catch)
-    Promise.resolve(
-      supabase.from("invoices")
-        .select("id, invoice_no, total, due_date, parties(name)")
-        .eq("company_id", companyId)
-        .eq("type", "sale")
-        .in("status", ["Unpaid", "Partial"])
-        .lt("due_date", today)
-        .order("due_date", { ascending: true })
-        .limit(10)
-    ).then(({ data }) => setOverdueInvoicesList((data as any) || []))
-     .catch(() => setOverdueInvoicesList([]))
+    const fetchOverdueWithNames = async (type: "sale" | "purchase") => {
+      try {
+        // Step 1: fetch overdue invoices WITHOUT the broken parties join
+        const { data: invoices } = await supabase
+          .from("invoices")
+          .select("id, invoice_no, total, due_date, party_id")
+          .eq("company_id", companyId)
+          .eq("type", type)
+          .in("status", ["Unpaid", "Partial"])
+          .lt("due_date", today)
+          .order("due_date", { ascending: true })
+          .limit(10)
 
-    // Fetch overdue bills (with catch)
-    Promise.resolve(
-      supabase.from("invoices")
-        .select("id, invoice_no, total, due_date, parties(name)")
-        .eq("company_id", companyId)
-        .eq("type", "purchase")
-        .in("status", ["Unpaid", "Partial"])
-        .lt("due_date", today)
-        .order("due_date", { ascending: true })
-        .limit(10)
-    ).then(({ data }) => setOverdueBillsList((data as any) || []))
-     .catch(() => setOverdueBillsList([]))
+        if (!invoices || invoices.length === 0) return []
+
+        // Step 2: batch-fetch party names from customers or suppliers
+        const partyIds = invoices.map((i: any) => i.party_id).filter(Boolean)
+        let nameMap: Record<string, string> = {}
+
+        if (partyIds.length > 0) {
+          const table = type === "sale" ? "customers" : "suppliers"
+          const { data: parties } = await supabase
+            .from(table)
+            .select("id, name")
+            .in("id", partyIds)
+            .eq("company_id", companyId)
+
+          if (parties) {
+            parties.forEach((p: any) => { nameMap[p.id] = p.name })
+          }
+        }
+
+        // Step 3: merge names back
+        return invoices.map((inv: any) => ({
+          id:            inv.id,
+          invoice_no:    inv.invoice_no,
+          total:         inv.total || 0,
+          due_date:      inv.due_date,
+          customer_name: nameMap[inv.party_id] || undefined,
+        })) as OverdueItem[]
+      } catch (err) {
+        console.error(`Overdue ${type} fetch error:`, err)
+        return []
+      }
+    }
+
+    fetchOverdueWithNames("sale").then(setOverdueInvoicesList)
+    fetchOverdueWithNames("purchase").then(setOverdueBillsList)
   }, [companyId])
 
   // ── Helpers ───────────────────────────────────────────────
@@ -391,14 +743,16 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
 
   const invoiceBellItems = overdueInvoicesList.map(inv => ({
     title:    inv.invoice_no || `INV-${inv.id}`,
-    subtitle: `Due ${inv.due_date}${inv.parties?.name ? " · " + inv.parties.name : ""}`,
+    subtitle: `Due ${inv.due_date}${inv.customer_name ? " · " + inv.customer_name : ""}`,
     amount:   formatPKR(inv.total || 0),
   }))
   const billBellItems = overdueBillsList.map(bill => ({
     title:    bill.invoice_no || `BILL-${bill.id}`,
-    subtitle: `Due ${bill.due_date}${bill.parties?.name ? " · " + bill.parties.name : ""}`,
+    subtitle: `Due ${bill.due_date}${bill.customer_name ? " · " + bill.customer_name : ""}`,
     amount:   formatPKR(bill.total || 0),
   }))
+
+  // ── Render guards ─────────────────────────────────────────
 
   if (companyError) return (
     <div style={{ padding: 40, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>
@@ -407,12 +761,12 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
     </div>
   )
 
-  if (loading) return (
-    <div style={{ padding: 40, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
-      <div style={{ width: 36, height: 36, borderRadius: "50%", border: "3px solid var(--border)", borderTop: "3px solid #A78BFA", animation: "spin 1.2s linear infinite" }} />
-      <div>Loading your dashboard…</div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
+  // Show animated Odoo-style loader instead of bare spinner
+  if (loading) return <OdooLoader isDark={isDark} />
+
+  // Show onboarding checklist for new / empty companies
+  if (isNewCompany) return (
+    <NewCompanyEmptyState router={router} isDark={isDark} userDisplayName={userDisplayName} />
   )
 
   return (
