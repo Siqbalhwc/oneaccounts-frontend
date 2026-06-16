@@ -23,7 +23,7 @@ function fmt(n: number): string {
 
 export default function AccountantDashboard({ role }: { role: string }) {
   const router = useRouter()
-  const { companyId, isLoading: companyLoading } = useCompany()
+  const { companyId } = useCompany()
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -147,8 +147,8 @@ export default function AccountantDashboard({ role }: { role: string }) {
   }
 
   useEffect(() => {
-    if (companyId && !companyLoading) fetchData()
-  }, [companyId, companyLoading])
+    if (companyId) fetchData()
+  }, [companyId])
 
   const getGreeting = () => {
     const hour = new Date().getHours()
@@ -158,23 +158,7 @@ export default function AccountantDashboard({ role }: { role: string }) {
   }
 
   // Render guards
-  if (companyLoading)
-    return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          height: "100vh",
-          background: "var(--bg)",
-          color: "var(--text-muted)",
-        }}
-      >
-        Loading…
-      </div>
-    )
-
-  if (!companyId)
+  if (!companyId) {
     return (
       <div
         style={{
@@ -188,8 +172,9 @@ export default function AccountantDashboard({ role }: { role: string }) {
         Could not load dashboard – no company linked.
       </div>
     )
+  }
 
-  if (loading)
+  if (loading) {
     return (
       <div
         style={{
@@ -204,6 +189,7 @@ export default function AccountantDashboard({ role }: { role: string }) {
         Loading accountant dashboard…
       </div>
     )
+  }
 
   return (
     <div
@@ -384,7 +370,7 @@ export default function AccountantDashboard({ role }: { role: string }) {
         <div className="hero">
           <div className="greeting">
             <h2>{getGreeting()}, {userDisplayName || "User"}</h2>
-            <p>Here’s your accounting snapshot for today</p>
+            <p>Here's your accounting snapshot for today</p>
           </div>
           <div className="date-range">
             <label>From</label>

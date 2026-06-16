@@ -207,7 +207,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
   const router = useRouter()
   const { theme: themeMode } = useTheme()
   const isDark = themeMode === "dark"
-  const { companyId, isLoading: companyLoading } = useCompany()   // ← now uses loading flag
+  const { companyId } = useCompany()   // ← now uses loading flag
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
