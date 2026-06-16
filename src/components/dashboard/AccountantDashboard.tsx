@@ -23,7 +23,7 @@ function fmt(n: number): string {
 
 export default function AccountantDashboard({ role }: { role: string }) {
   const router = useRouter()
-  const { companyId } = useCompany()
+  const { companyId, isLoading: companyLoading } = useCompany()
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,10 +42,6 @@ export default function AccountantDashboard({ role }: { role: string }) {
   const [userDisplayName, setUserDisplayName] = useState("")
 
   useEffect(() => {
-    if (!companyId) return
-    fetchData()
-
-    // Fetch user name
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
       const fullName =
@@ -55,16 +51,32 @@ export default function AccountantDashboard({ role }: { role: string }) {
         "User"
       setUserDisplayName(fullName)
     })
-  }, [companyId])
+  }, [])
 
   const fetchData = async () => {
+    if (!companyId) return
     setLoading(true)
     try {
-      // Wrap every Supabase query with Promise.resolve().catch(() => null)
-      const customersPromise    = Promise.resolve(supabase.from("customers").select("balance").eq("company_id", companyId)).catch(() => null)
-      const suppliersPromise    = Promise.resolve(supabase.from("suppliers").select("balance").eq("company_id", companyId)).catch(() => null)
-      const banksPromise        = Promise.resolve(supabase.from("bank_accounts").select("current_balance").eq("company_id", companyId)).catch(() => null)
-      const cashPromise         = Promise.resolve(supabase.from("accounts").select("balance").eq("company_id", companyId).eq("code", "1000").maybeSingle()).catch(() => null)
+      const customersPromise = Promise.resolve(
+        supabase.from("customers").select("balance").eq("company_id", companyId)
+      ).catch(() => null)
+
+      const suppliersPromise = Promise.resolve(
+        supabase.from("suppliers").select("balance").eq("company_id", companyId)
+      ).catch(() => null)
+
+      const banksPromise = Promise.resolve(
+        supabase.from("bank_accounts").select("current_balance").eq("company_id", companyId)
+      ).catch(() => null)
+
+      const cashPromise = Promise.resolve(
+        supabase.from("accounts")
+          .select("balance")
+          .eq("company_id", companyId)
+          .eq("code", "1000")
+          .maybeSingle()
+      ).catch(() => null)
+
       const overdueBillsPromise = Promise.resolve(
         supabase.from("invoices")
           .select("id, invoice_no, due_date, total, paid, status, suppliers(name)")
@@ -75,7 +87,8 @@ export default function AccountantDashboard({ role }: { role: string }) {
           .order("due_date", { ascending: true })
           .limit(5)
       ).catch(() => null)
-      const journalPromise      = Promise.resolve(
+
+      const journalPromise = Promise.resolve(
         supabase.from("journal_lines")
           .select("debit, credit, accounts(code,name), journal_entries!inner(date,description)")
           .eq("company_id", companyId)
@@ -84,11 +97,27 @@ export default function AccountantDashboard({ role }: { role: string }) {
       ).catch(() => null)
 
       const [customers, suppliers, bankAccounts, cashAccount, overdueBills, journalLines] =
-        await Promise.all([customersPromise, suppliersPromise, banksPromise, cashPromise, overdueBillsPromise, journalPromise])
+        await Promise.all([
+          customersPromise,
+          suppliersPromise,
+          banksPromise,
+          cashPromise,
+          overdueBillsPromise,
+          journalPromise,
+        ])
 
-      const totalReceivables = (customers?.data || []).reduce((s: number, c: any) => s + (c.balance || 0), 0)
-      const totalPayables = (suppliers?.data || []).reduce((s: number, s2: any) => s + (s2.balance || 0), 0)
-      const bankCash = (bankAccounts?.data || []).reduce((s: number, b: any) => s + (b.current_balance || 0), 0)
+      const totalReceivables = (customers?.data || []).reduce(
+        (s: number, c: any) => s + (c.balance || 0),
+        0
+      )
+      const totalPayables = (suppliers?.data || []).reduce(
+        (s: number, s2: any) => s + (s2.balance || 0),
+        0
+      )
+      const bankCash = (bankAccounts?.data || []).reduce(
+        (s: number, b: any) => s + (b.current_balance || 0),
+        0
+      )
       const cash = cashAccount?.data?.balance || 0
       const cashBalance = bankCash + cash
       const overdueBillsCount = (overdueBills?.data || []).length
@@ -117,6 +146,10 @@ export default function AccountantDashboard({ role }: { role: string }) {
     }
   }
 
+  useEffect(() => {
+    if (companyId && !companyLoading) fetchData()
+  }, [companyId, companyLoading])
+
   const getGreeting = () => {
     const hour = new Date().getHours()
     if (hour < 12) return "Good morning"
@@ -124,16 +157,64 @@ export default function AccountantDashboard({ role }: { role: string }) {
     return "Good evening"
   }
 
-  if (loading) {
+  // Render guards
+  if (companyLoading)
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "var(--bg)", color: "var(--text-muted)" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100vh",
+          background: "var(--bg)",
+          color: "var(--text-muted)",
+        }}
+      >
+        Loading…
+      </div>
+    )
+
+  if (!companyId)
+    return (
+      <div
+        style={{
+          padding: 40,
+          textAlign: "center",
+          color: "#F87171",
+          background: "var(--bg)",
+          minHeight: "100vh",
+        }}
+      >
+        Could not load dashboard – no company linked.
+      </div>
+    )
+
+  if (loading)
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100vh",
+          background: "var(--bg)",
+          color: "var(--text-muted)",
+        }}
+      >
         Loading accountant dashboard…
       </div>
     )
-  }
 
   return (
-    <div style={{ background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)", padding: "0.8rem 1.2rem" }}>
+    <div
+      style={{
+        background: "var(--bg)",
+        minHeight: "100vh",
+        fontFamily: "'Inter', sans-serif",
+        color: "var(--text)",
+        padding: "0.8rem 1.2rem",
+      }}
+    >
       <style>{`
         .acct * { box-sizing: border-box; }
         .acct .card {
@@ -315,14 +396,40 @@ export default function AccountantDashboard({ role }: { role: string }) {
 
         <div className="kpi-row">
           {[
-            { label: "💰 Total Receivables", value: fmt(data.totalReceivables), color: "#f97316", meta: `${data.overdueBillsCount} overdue bills` },
-            { label: "📤 Total Payables",      value: fmt(data.totalPayables),    color: "#ef4444", meta: "Pending payments" },
-            { label: "🏦 Cash & Bank Balance", value: fmt(data.cashBalance),      color: "#10b981", meta: "Cash + Bank accounts" },
-            { label: "⚠️ Overdue Bills",        value: data.overdueBillsCount.toString(), color: "#ef4444", meta: "Need attention" },
+            {
+              label: "💰 Total Receivables",
+              value: fmt(data.totalReceivables),
+              color: "#f97316",
+              meta: `${data.overdueBillsCount} overdue bills`,
+            },
+            {
+              label: "📤 Total Payables",
+              value: fmt(data.totalPayables),
+              color: "#ef4444",
+              meta: "Pending payments",
+            },
+            {
+              label: "🏦 Cash & Bank Balance",
+              value: fmt(data.cashBalance),
+              color: "#10b981",
+              meta: "Cash + Bank accounts",
+            },
+            {
+              label: "⚠️ Overdue Bills",
+              value: data.overdueBillsCount.toString(),
+              color: "#ef4444",
+              meta: "Need attention",
+            },
           ].map((kpi) => (
-            <div key={kpi.label} className="card" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+            <div
+              key={kpi.label}
+              className="card"
+              style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+            >
               <div className="kpi-label">{kpi.label}</div>
-              <div className="kpi-value" style={{ color: kpi.color }}>{kpi.value}</div>
+              <div className="kpi-value" style={{ color: kpi.color }}>
+                {kpi.value}
+              </div>
               <div className="kpi-meta">{kpi.meta}</div>
             </div>
           ))}
@@ -330,26 +437,80 @@ export default function AccountantDashboard({ role }: { role: string }) {
 
         <div className="two-col">
           <div className="card recent-transactions-card">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <span style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text)" }}>🔄 Recent Transactions</span>
-              <button onClick={() => router.push("/dashboard/reports/general-ledger")} style={{ background: "none", border: "none", color: "var(--primary)", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>View All →</button>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 12,
+              }}
+            >
+              <span style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text)" }}>
+                🔄 Recent Transactions
+              </span>
+              <button
+                onClick={() => router.push("/dashboard/reports/general-ledger")}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--primary)",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                View All →
+              </button>
             </div>
             <div style={{ overflowX: "auto" }}>
               <table>
                 <thead>
-                  <tr><th>Date</th><th>Description</th><th>Account</th><th style={{ textAlign: "right" }}>Debit</th><th style={{ textAlign: "right" }}>Credit</th></tr>
+                  <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Account</th>
+                    <th style={{ textAlign: "right" }}>Debit</th>
+                    <th style={{ textAlign: "right" }}>Credit</th>
+                  </tr>
                 </thead>
                 <tbody>
                   {data.recentTransactions.length === 0 ? (
-                    <tr><td colSpan={5} style={{ textAlign: "center", color: "var(--text-muted)" }}>No recent transactions</td></tr>
+                    <tr>
+                      <td
+                        colSpan={5}
+                        style={{
+                          textAlign: "center",
+                          color: "var(--text-muted)",
+                        }}
+                      >
+                        No recent transactions
+                      </td>
+                    </tr>
                   ) : (
                     data.recentTransactions.map((t: any, idx: number) => (
                       <tr key={idx}>
                         <td>{t.date}</td>
                         <td>{t.description}</td>
-                        <td>{t.accountCode} – {t.accountName}</td>
-                        <td style={{ textAlign: "right", color: t.debit > 0 ? "#ef4444" : "var(--text)" }}>{t.debit > 0 ? t.debit.toLocaleString() : "—"}</td>
-                        <td style={{ textAlign: "right", color: t.credit > 0 ? "#10b981" : "var(--text)" }}>{t.credit > 0 ? t.credit.toLocaleString() : "—"}</td>
+                        <td>
+                          {t.accountCode} – {t.accountName}
+                        </td>
+                        <td
+                          style={{
+                            textAlign: "right",
+                            color: t.debit > 0 ? "#ef4444" : "var(--text)",
+                          }}
+                        >
+                          {t.debit > 0 ? t.debit.toLocaleString() : "—"}
+                        </td>
+                        <td
+                          style={{
+                            textAlign: "right",
+                            color: t.credit > 0 ? "#10b981" : "var(--text)",
+                          }}
+                        >
+                          {t.credit > 0 ? t.credit.toLocaleString() : "—"}
+                        </td>
                       </tr>
                     ))
                   )}
@@ -358,39 +519,134 @@ export default function AccountantDashboard({ role }: { role: string }) {
             </div>
           </div>
 
-          <div className="right-column-card" style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <div
+            className="right-column-card"
+            style={{ display: "flex", flexDirection: "column", gap: 24 }}
+          >
             <div className="card quick-actions-card">
-              <div style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>⚡ Quick Actions</div>
+              <div
+                style={{
+                  fontSize: "1rem",
+                  fontWeight: 700,
+                  color: "var(--text)",
+                  marginBottom: 12,
+                }}
+              >
+                ⚡ Quick Actions
+              </div>
               <div className="quick-actions">
-                <div className="quick-action-btn" onClick={() => router.push("/dashboard/invoices/new")}>➕ New Invoice</div>
-                <div className="quick-action-btn" onClick={() => router.push("/dashboard/bills/new")}>📦 New Bill</div>
-                <div className="quick-action-btn" onClick={() => router.push("/dashboard/receipts/new")}>💰 Record Receipt</div>
-                <div className="quick-action-btn" onClick={() => router.push("/dashboard/payments/new")}>💳 Record Payment</div>
-                <div className="quick-action-btn" onClick={() => router.push("/dashboard/customers/new")}>👤 Add Customer</div>
-                <div className="quick-action-btn" onClick={() => router.push("/dashboard/suppliers/new")}>🚚 Add Vendor</div>
+                <div
+                  className="quick-action-btn"
+                  onClick={() => router.push("/dashboard/invoices/new")}
+                >
+                  ➕ New Invoice
+                </div>
+                <div
+                  className="quick-action-btn"
+                  onClick={() => router.push("/dashboard/bills/new")}
+                >
+                  📦 New Bill
+                </div>
+                <div
+                  className="quick-action-btn"
+                  onClick={() => router.push("/dashboard/receipts/new")}
+                >
+                  💰 Record Receipt
+                </div>
+                <div
+                  className="quick-action-btn"
+                  onClick={() => router.push("/dashboard/payments/new")}
+                >
+                  💳 Record Payment
+                </div>
+                <div
+                  className="quick-action-btn"
+                  onClick={() => router.push("/dashboard/customers/new")}
+                >
+                  👤 Add Customer
+                </div>
+                <div
+                  className="quick-action-btn"
+                  onClick={() => router.push("/dashboard/suppliers/new")}
+                >
+                  🚚 Add Vendor
+                </div>
               </div>
             </div>
 
             <div className="card">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <span style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text)" }}>📦 Unpaid Bills</span>
-                <button onClick={() => router.push("/dashboard/bills?status=Unpaid&overdue=true")} style={{ background: "none", border: "none", color: "var(--primary)", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>View All →</button>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 12,
+                }}
+              >
+                <span style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text)" }}>
+                  📦 Unpaid Bills
+                </span>
+                <button
+                  onClick={() =>
+                    router.push("/dashboard/bills?status=Unpaid&overdue=true")
+                  }
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "var(--primary)",
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  View All →
+                </button>
               </div>
               {data.overdueBills.length === 0 ? (
-                <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>No overdue bills – great job!</p>
+                <p
+                  style={{
+                    fontSize: "0.8rem",
+                    color: "var(--text-muted)",
+                    textAlign: "center",
+                    padding: "12px 0",
+                  }}
+                >
+                  No overdue bills – great job!
+                </p>
               ) : (
                 <table>
                   <thead>
-                    <tr><th>Supplier</th><th>Bill No</th><th>Due Date</th><th>Amount</th><th>Status</th></tr>
+                    <tr>
+                      <th>Supplier</th>
+                      <th>Bill No</th>
+                      <th>Due Date</th>
+                      <th>Amount</th>
+                      <th>Status</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {data.overdueBills.map((bill: any) => (
-                      <tr key={bill.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/dashboard/bills/${bill.id}`)}>
+                      <tr
+                        key={bill.id}
+                        style={{ cursor: "pointer" }}
+                        onClick={() => router.push(`/dashboard/bills/${bill.id}`)}
+                      >
                         <td>{bill.suppliers?.name || "—"}</td>
                         <td>{bill.invoice_no}</td>
                         <td>{bill.due_date}</td>
                         <td>{fmt(bill.total)}</td>
-                        <td><span className={`status-badge ${bill.status === "Unpaid" ? "status-unpaid" : "status-partial"}`}>{bill.status}</span></td>
+                        <td>
+                          <span
+                            className={`status-badge ${
+                              bill.status === "Unpaid"
+                                ? "status-unpaid"
+                                : "status-partial"
+                            }`}
+                          >
+                            {bill.status}
+                          </span>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

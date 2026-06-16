@@ -6,8 +6,9 @@ import {
   TrendingUp, TrendingDown, Building2, AlertTriangle,
   Clock, Package, Users, CreditCard, ArrowUpRight,
   RefreshCw, WifiOff, CheckCircle2, MessageCircle,
-  Building2 as BuildingIcon, UserPlus, FileText
+  Building2 as BuildingIcon, UserPlus, FileText,
 } from "lucide-react"
+import { useCompany } from "@/contexts/CompanyContext"
 
 interface MonthlyData { labels: string[]; values: number[] }
 
@@ -168,6 +169,9 @@ export default function PremiumDashboardPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
+  // Use CompanyContext for the active company (with loading state)
+  const { companyId: contextCompanyId, isLoading: companyLoading } = useCompany()
+
   const [kpis,        setKpis]        = useState({ assets: 0, liabilities: 0, equity: 0, revenue: 0, expenses: 0, profit: 0 })
   const [ops,         setOps]         = useState({ receivables: 0, unpaid_invoices: 0, partial_invoices: 0, payables: 0, low_stock: 0, total_products: 0, total_customers: 0, total_suppliers: 0 })
   const [incomeChart, setIncomeChart] = useState<MonthlyData>({ labels: [], values: [] })
@@ -176,7 +180,6 @@ export default function PremiumDashboardPage() {
   const [loading,     setLoading]     = useState(true)
   const [online,      setOnline]      = useState(true)
   const [refreshing,  setRefreshing]  = useState(false)
-  const [companyId,   setCompanyId]   = useState<string | null>(null)
 
   const profitTrend = profitChart.values.length >= 2
     ? ((profitChart.values[profitChart.values.length-1] - profitChart.values[profitChart.values.length-2]) / (Math.abs(profitChart.values[profitChart.values.length-2]) || 1) * 100).toFixed(0)
@@ -316,11 +319,10 @@ export default function PremiumDashboardPage() {
   }
 
   useEffect(() => {
-    getActiveCompanyId(supabase).then(cid => {
-      setCompanyId(cid)
-      fetchData(cid)
-    })
-  }, [])
+    if (!companyLoading && contextCompanyId) {
+      fetchData(contextCompanyId)
+    }
+  }, [contextCompanyId, companyLoading])
 
   useEffect(() => {
     const on = () => setOnline(true), off = () => setOnline(false)
@@ -329,10 +331,10 @@ export default function PremiumDashboardPage() {
   }, [])
 
   useEffect(() => {
-    if (!companyId) return
-    const interval = setInterval(() => fetchData(companyId), 30000)
+    if (!contextCompanyId) return
+    const interval = setInterval(() => fetchData(contextCompanyId), 30000)
     return () => clearInterval(interval)
-  }, [companyId])
+  }, [contextCompanyId])
 
   // New company check
   const isEmpty = !loading &&
@@ -341,6 +343,14 @@ export default function PremiumDashboardPage() {
     ops.receivables === 0 && ops.payables === 0 &&
     ops.total_customers === 0 && ops.total_suppliers === 0 && ops.total_products === 0 &&
     incomeChart.values.length === 0
+
+  if (companyLoading) return <Skeleton />
+  if (!contextCompanyId)
+    return (
+      <div style={{ padding: 40, textAlign: "center", color: "#F87171" }}>
+        Could not load dashboard – no company linked.
+      </div>
+    )
 
   if (loading) return <Skeleton />
 
@@ -428,7 +438,7 @@ export default function PremiumDashboardPage() {
             </div>
           )}
           <button
-            onClick={() => companyId && fetchData(companyId)}
+            onClick={() => contextCompanyId && fetchData(contextCompanyId)}
             disabled={refreshing}
             style={{
               marginTop: 14, display: "inline-flex", alignItems: "center", gap: 6,
