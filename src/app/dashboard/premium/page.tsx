@@ -20,7 +20,6 @@ const SHORT = (n: number) => {
 const waLink = (phone: string, no: string, bal: number, name: string) =>
   `https://wa.me/${phone}?text=${encodeURIComponent(`Dear ${name},\nPayment of PKR ${bal.toLocaleString()} for invoice ${no} is overdue.\nPlease clear at your earliest convenience. 🙏`)}`
 
-// ── Simpler, safer active‑company resolver ─────────────────
 async function getActiveCompanyId(supabase: any): Promise<string> {
   try {
     const { data: { user } } = await supabase.auth.getUser()
@@ -42,7 +41,6 @@ async function getActiveCompanyId(supabase: any): Promise<string> {
   }
 }
 
-// ── Animated number component ──────────────────────────────
 function AnimatedNumber({ value, isCurrency = true }: { value: number; isCurrency?: boolean }) {
   const [display, setDisplay] = useState(isCurrency ? `PKR ${SHORT(0)}` : "0")
   useEffect(() => {
@@ -62,7 +60,6 @@ function AnimatedNumber({ value, isCurrency = true }: { value: number; isCurrenc
   return <span>{display}</span>
 }
 
-// ── Skeleton shimmer ───────────────────────────────────────
 function Skeleton() {
   return (
     <div style={{ display: "grid", gap: 12 }}>
@@ -79,7 +76,6 @@ function Skeleton() {
   )
 }
 
-// ── Sparkline ──────────────────────────────────────────────
 function Sparkline({ values, color }: { values: number[]; color: string }) {
   if (!values || values.length < 2) return null
   const W = 200, H = 32, P = 3
@@ -118,7 +114,6 @@ function BarChart({ labels, values, color }: { labels: string[]; values: number[
   )
 }
 
-// ── Upgraded KPI Card ──────────────────────────────────────
 function KpiCard({ label, value, subtitle, accent, icon, isCurrency = true, trend, href }: {
   label: string; value: number; subtitle: string; accent: string;
   icon: React.ReactNode; isCurrency?: boolean; trend?: number[]; href?: string
@@ -160,7 +155,6 @@ function KpiCard({ label, value, subtitle, accent, icon, isCurrency = true, tren
   )
 }
 
-// ── Main Component ─────────────────────────────────────────
 export default function PremiumDashboardPage() {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -196,21 +190,20 @@ export default function PremiumDashboardPage() {
     })
 
     try {
-      // ── Wrap every query with .catch(() => null) ──
-      const accountPromise     = supabase.from("accounts").select("type,balance").eq("company_id", cid).then(r => r).catch(() => null)
-      const custCountPromise   = supabase.from("customers").select("*", { count: "exact", head: true }).eq("company_id", cid).then(r => r).catch(() => null)
-      const suppCountPromise   = supabase.from("suppliers").select("*", { count: "exact", head: true }).eq("company_id", cid).then(r => r).catch(() => null)
-      const prodCountPromise   = supabase.from("products").select("*", { count: "exact", head: true }).eq("company_id", cid).then(r => r).catch(() => null)
-      const unpaidInvsPromise  = supabase.from("invoices").select("total,paid,status").eq("company_id", cid).eq("type", "sale").neq("status", "Paid").then(r => r).catch(() => null)
-      const payablesPromise    = supabase.from("accounts").select("balance").eq("company_id", cid).eq("code", "2000").maybeSingle().then(r => r).catch(() => null)
-      const prodsPromise       = supabase.from("products").select("qty_on_hand,reorder_level").eq("company_id", cid).then(r => r).catch(() => null)
+      const accountPromise     = Promise.resolve(supabase.from("accounts").select("type,balance").eq("company_id", cid)).catch(() => null)
+      const custCountPromise   = Promise.resolve(supabase.from("customers").select("*", { count: "exact", head: true }).eq("company_id", cid)).catch(() => null)
+      const suppCountPromise   = Promise.resolve(supabase.from("suppliers").select("*", { count: "exact", head: true }).eq("company_id", cid)).catch(() => null)
+      const prodCountPromise   = Promise.resolve(supabase.from("products").select("*", { count: "exact", head: true }).eq("company_id", cid)).catch(() => null)
+      const unpaidInvsPromise  = Promise.resolve(supabase.from("invoices").select("total,paid,status").eq("company_id", cid).eq("type", "sale").neq("status", "Paid")).catch(() => null)
+      const payablesPromise    = Promise.resolve(supabase.from("accounts").select("balance").eq("company_id", cid).eq("code", "2000").maybeSingle()).catch(() => null)
+      const prodsPromise       = Promise.resolve(supabase.from("products").select("qty_on_hand,reorder_level").eq("company_id", cid)).catch(() => null)
 
-      // 🔧 Overdue query – catch error and return null so it never hangs
-      const overduePromise = supabase.from("invoices")
-        .select("id,invoice_no,total,paid,due_date,party_id")
-        .eq("company_id", cid).eq("type", "sale")
-        .lt("due_date", today).neq("status", "Paid").limit(5)
-        .then(r => r).catch(() => null)
+      const overduePromise = Promise.resolve(
+        supabase.from("invoices")
+          .select("id,invoice_no,total,paid,due_date,party_id")
+          .eq("company_id", cid).eq("type", "sale")
+          .lt("due_date", today).neq("status", "Paid").limit(5)
+      ).catch(() => null)
 
       const [
         accountsRes, custCountRes, suppCountRes, prodCountRes,
@@ -220,12 +213,12 @@ export default function PremiumDashboardPage() {
         unpaidInvsPromise, payablesPromise, prodsPromise, overduePromise,
       ])
 
-      // Monthly data – wrapped in try/catch
+      // Monthly data
       const monthlyResults: any[] = []
       for (const { start, end } of monthRanges) {
         const [rev, exp] = await Promise.all([
-          supabase.from("invoices").select("total").eq("company_id", cid).eq("type", "sale").gte("date", start).lte("date", end).then(r => r).catch(() => null),
-          supabase.from("invoices").select("total").eq("company_id", cid).eq("type", "purchase").gte("date", start).lte("date", end).then(r => r).catch(() => null),
+          Promise.resolve(supabase.from("invoices").select("total").eq("company_id", cid).eq("type", "sale").gte("date", start).lte("date", end)).catch(() => null),
+          Promise.resolve(supabase.from("invoices").select("total").eq("company_id", cid).eq("type", "purchase").gte("date", start).lte("date", end)).catch(() => null),
         ])
         monthlyResults.push([rev, exp])
       }
@@ -276,8 +269,10 @@ export default function PremiumDashboardPage() {
       let customerMap: Record<number, { name: string; phone: string }> = {}
       if (partyIds.length > 0) {
         try {
-          const { data: custData } = await supabase.from("customers").select("id,name,phone").in("id", partyIds).eq("company_id", cid)
-          if (Array.isArray(custData)) custData.forEach((c: any) => { customerMap[c.id] = { name: c.name, phone: c.phone } })
+          const { data: custData } = await Promise.resolve(
+            supabase.from("customers").select("id,name,phone").in("id", partyIds).eq("company_id", cid)
+          ).catch(() => null)
+          if (Array.isArray(custData?.data)) custData.data.forEach((c: any) => { customerMap[c.id] = { name: c.name, phone: c.phone } })
         } catch {}
       }
       setOverdue(overdueData.map((inv: any) => ({
@@ -339,10 +334,10 @@ export default function PremiumDashboardPage() {
         }
         .hero-card:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(16,24,40,0.1); }
         .hero-value { font-size: clamp(2.2rem, 4vw, 3.2rem); font-weight: 800; line-height: 1; }
-        .hero-label { font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #64748B; margin-bottom: 12px; }
+        .hero-label { font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: "#64748B"; margin-bottom: 12px; }
         .hero-trend { font-size: 0.85rem; font-weight: 600; margin-top: 8px; }
-        .section-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #64748B; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
-        .section-title::before { content: ''; width: 4px; height: 16px; background: #1D4ED8; border-radius: 2px; }
+        .section-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: "#64748B"; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+        .section-title::before { content: ''; width: 4px; height: 16px; background: "#1D4ED8"; border-radius: 2px; }
         .card-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
         .chart-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; }
         @media (max-width: 900px) {
@@ -363,7 +358,7 @@ export default function PremiumDashboardPage() {
           </div>
         )}
 
-        {/* ── Hero KPI ── */}
+        {/* Hero KPI */}
         <div className="hero-card">
           <div className="hero-label">Net Profit</div>
           <div className="hero-value" style={{ color: profitable ? "#10B981" : "#EF4444" }}>
@@ -388,7 +383,7 @@ export default function PremiumDashboardPage() {
           </button>
         </div>
 
-        {/* ── Financial Overview ── */}
+        {/* Financial Overview */}
         <div className="card-grid">
           <KpiCard label="Total Assets"      value={kpis.assets}      subtitle="All company resources"   accent="#1E3A8A" icon={<Building2 size={14}/>}   trend={incomeChart.values} href="/dashboard/reports/balance-sheet"/>
           <KpiCard label="Total Liabilities" value={kpis.liabilities} subtitle="Outstanding obligations" accent="#EF4444" icon={<TrendingDown size={14}/>} trend={incomeChart.values.map(v => v * 0.4)} href="/dashboard/reports/balance-sheet"/>
@@ -396,7 +391,7 @@ export default function PremiumDashboardPage() {
           <KpiCard label="Revenue"           value={kpis.revenue}     subtitle="Total income"            accent="#0EA5E9" icon={<TrendingUp size={14}/>}   trend={incomeChart.values} href="/dashboard/reports/profit-loss"/>
         </div>
 
-        {/* ── Operational Health ── */}
+        {/* Operational Health */}
         <div className="section-title">Operational Health</div>
         <div className="card-grid">
           <KpiCard label="Receivables" value={ops.receivables}     subtitle={`${ops.unpaid_invoices} unpaid · ${ops.partial_invoices} partial`} accent="#F59E0B" icon={<Clock size={14}/>}        trend={incomeChart.values.map(v => v * 0.2)}  href="/dashboard/reports/ar-aging"/>
@@ -405,14 +400,14 @@ export default function PremiumDashboardPage() {
           <KpiCard label="Customers"   value={ops.total_customers} subtitle={`${ops.total_suppliers} suppliers · ${ops.total_products} SKUs`} accent="#0EA5E9" icon={<Users size={14}/>} isCurrency={false} trend={incomeChart.values.map(v => Math.max(1, v * 0.03))} href="/dashboard/customers"/>
         </div>
 
-        {/* ── Monthly Trends ── */}
+        {/* Monthly Trends */}
         <div className="section-title">Monthly Trends</div>
         <div className="chart-grid">
           <ChartCard title="Monthly Revenue" badge="Last 6 months" badgeColor="#1D4ED8" labels={incomeChart.labels} values={incomeChart.values} color="#1D4ED8"/>
           <ChartCard title="Monthly Profit"  badge="Last 6 months" badgeColor="#10B981" labels={profitChart.labels} values={profitChart.values} color={profitChart.values.every(v => v >= 0) ? "#10B981" : "#1D4ED8"}/>
         </div>
 
-        {/* ── Overdue ── */}
+        {/* Overdue */}
         <div className="section-title">Overdue Invoice Reminders</div>
         <div style={{ background: "white", borderRadius: 14, border: "1px solid #E5EAF2", overflow: "hidden", marginBottom: 16 }}>
           {overdue.length === 0
@@ -443,7 +438,7 @@ export default function PremiumDashboardPage() {
           }
         </div>
 
-        {/* ── Status Footer ── */}
+        {/* Status Footer */}
         <div style={{ background: "white", borderRadius: 12, border: "1px solid #E5EAF2", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, fontSize: 12, color: "#64748B" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: profitable ? "#10B981" : "#EF4444", boxShadow: `0 0 0 3px ${profitable ? "#10B98133" : "#EF444433"}`, flexShrink: 0 }}/>
@@ -461,7 +456,6 @@ export default function PremiumDashboardPage() {
   )
 }
 
-// ── ChartCard ──────────────────────────────────────────────
 function ChartCard({ title, badge, badgeColor, labels, values, color }: {
   title: string; badge: string; badgeColor: string; labels: string[]; values: number[]; color: string
 }) {
