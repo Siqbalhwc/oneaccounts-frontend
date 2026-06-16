@@ -179,6 +179,12 @@ export default function PremiumDashboardPage() {
     setRefreshing(true)
     const today = new Date().toISOString().split("T")[0]
 
+    // Safety timer – never stay stuck
+    const safetyTimer = setTimeout(() => {
+      setLoading(false)
+      setRefreshing(false)
+    }, 10000)
+
     const monthRanges = Array.from({ length: 6 }, (_, i) => {
       const d = new Date()
       d.setMonth(d.getMonth() - (5 - i))
@@ -297,6 +303,7 @@ export default function PremiumDashboardPage() {
       setProfitChart({ labels: months, values: profitValues })
 
     } catch (e) { console.error(e) }
+    clearTimeout(safetyTimer)
     setLoading(false)
     setRefreshing(false)
   }

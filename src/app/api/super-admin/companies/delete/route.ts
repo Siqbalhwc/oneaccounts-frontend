@@ -1,6 +1,6 @@
 import { createClient as createSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,43 +8,35 @@ const supabaseAdmin = createClient(
   { auth: { persistSession: false, autoRefreshToken: false } }
 )
 
-async function requireAdmin() {
-  const supabase = await createSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Unauthorized', status: 401 }
-  const { data: roleData } = await supabase
-    .from('user_roles').select('role').eq('user_id', user.id).maybeSingle()
-  if (!roleData || roleData.role !== 'admin') return { error: 'Forbidden', status: 403 }
-  return { error: null, status: 200 }
+async function isSuperAdmin(user: any) {
+  if (!user) return false
+  const { data } = await supabaseAdmin
+    .from('super_admins')
+    .select('user_id')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  return !!data
 }
 
-export async function POST(request: NextRequest) {
-  const { error, status } = await requireAdmin()
-  if (error) return NextResponse.json({ error }, { status })
+export async function POST(request: Request) {
+  const supabase = await createSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user || !(await isSuperAdmin(user))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   const { companyId } = await request.json()
-  if (!companyId) {
-    return NextResponse.json({ error: 'Company ID is required' }, { status: 400 })
-  }
+  if (!companyId) return NextResponse.json({ error: 'Missing companyId' }, { status: 400 })
 
-  // 1. Remove all user_roles for this company
-  const { error: rolesError } = await supabaseAdmin
-    .from('user_roles')
-    .delete()
-    .eq('company_id', companyId)
-
-  if (rolesError) {
-    return NextResponse.json({ error: 'Failed to remove user roles: ' + rolesError.message }, { status: 500 })
-  }
-
-  // 2. Hard‑delete the company
-  const { error: deleteError } = await supabaseAdmin
+  // Soft‑delete only – NO hard delete, NO foreign‑key conflict
+  const { error } = await supabaseAdmin
     .from('companies')
-    .delete()
+    .update({ deleted_at: new Date().toISOString() })
     .eq('id', companyId)
 
-  if (deleteError) {
-    return NextResponse.json({ error: deleteError.message }, { status: 500 })
+  if (error) {
+    console.error('Failed to soft‑delete company:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
   return NextResponse.json({ success: true })

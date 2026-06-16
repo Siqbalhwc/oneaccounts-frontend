@@ -274,14 +274,22 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
       supabase.from("companies").select("business_type").eq("id", companyId).single()
     ).then(({ data }) => {
       if (data) setBusinessType(data.business_type || "")
-    }).catch(() => {}) // ignore
+    }).catch(() => {})
   }, [companyId])
 
-  // ── Dashboard metrics (re-fetch on period change) ─────────
+  // ── Dashboard metrics (re-fetch on period change, with safety timeout) ─────────
   useEffect(() => {
     if (!companyId) return
     setLoading(true)
     const { start, end } = getPeriodDates(selectedPeriod)
+
+    let finished = false
+    const safetyTimer = setTimeout(() => {
+      if (!finished) {
+        finished = true
+        setLoading(false)
+      }
+    }, 10000) // 10 seconds max
 
     const fetchDashboard = async () => {
       try {
@@ -290,26 +298,38 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           ...(start ? { p_date_from: start } : {}),
           ...(end   ? { p_date_to:   end   } : {}),
         })
-        if (error) { console.error("RPC error:", error); return }
-        if (!data)  { console.error("No data returned");  return }
-
-        setRevenueTotal(data.revenueTotal || 0)
-        setExpenseTotal(data.expenseTotal || 0)
-        setCashBalance(data.cashBalance || 0)
-        setTotalReceivables(data.totalReceivables || 0)
-        setTotalPayables(data.totalPayables || 0)
-        setOverdueInvoicesCount(data.overdueInvoicesCount || 0)
-        setOverdueBillsCount(data.overdueBillsCount || 0)
-        setMonthlyProfit(data.monthlyProfit || [])
-        setTopCustomers(data.topCustomers || [])
+        if (!finished) {
+          if (error) { console.error("RPC error:", error); }
+          else if (!data) { console.error("No data returned"); }
+          else {
+            setRevenueTotal(data.revenueTotal || 0)
+            setExpenseTotal(data.expenseTotal || 0)
+            setCashBalance(data.cashBalance || 0)
+            setTotalReceivables(data.totalReceivables || 0)
+            setTotalPayables(data.totalPayables || 0)
+            setOverdueInvoicesCount(data.overdueInvoicesCount || 0)
+            setOverdueBillsCount(data.overdueBillsCount || 0)
+            setMonthlyProfit(data.monthlyProfit || [])
+            setTopCustomers(data.topCustomers || [])
+          }
+        }
       } catch (err) {
         console.error("Dashboard fetch error:", err)
       } finally {
-        setLoading(false)
+        if (!finished) {
+          finished = true
+          clearTimeout(safetyTimer)
+          setLoading(false)
+        }
       }
     }
 
     fetchDashboard()
+
+    return () => {
+      clearTimeout(safetyTimer)
+      finished = true
+    }
   }, [companyId, selectedPeriod])
 
   // ── Overdue lists for bell dropdowns (always current, never block loading) ─────
