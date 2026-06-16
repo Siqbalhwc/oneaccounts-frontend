@@ -6,6 +6,7 @@ import {
   TrendingUp, TrendingDown, Building2, AlertTriangle,
   Clock, Package, Users, CreditCard, ArrowUpRight,
   RefreshCw, WifiOff, CheckCircle2, MessageCircle,
+  Building2 as BuildingIcon, UserPlus, FileText
 } from "lucide-react"
 
 interface MonthlyData { labels: string[]; values: number[] }
@@ -20,24 +21,30 @@ const SHORT = (n: number) => {
 const waLink = (phone: string, no: string, bal: number, name: string) =>
   `https://wa.me/${phone}?text=${encodeURIComponent(`Dear ${name},\nPayment of PKR ${bal.toLocaleString()} for invoice ${no} is overdue.\nPlease clear at your earliest convenience. 🙏`)}`
 
+// ── Bulletproof company ID resolver with 3‑second timeout ──
 async function getActiveCompanyId(supabase: any): Promise<string> {
+  const fallback = '00000000-0000-0000-0000-000000000001'
   try {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return '00000000-0000-0000-0000-000000000001'
-    const claim = (user.app_metadata as any)?.company_id
-    if (claim) return claim
-    const cookieMatch = document.cookie.match(/(?:^| )active_company_id=([^;]+)/)
-    const cookieId = cookieMatch ? cookieMatch[2] : null
-    if (cookieId) return cookieId
-    const { data: anyRole } = await supabase
-      .from('user_roles')
-      .select('company_id')
-      .eq('user_id', user.id)
-      .limit(1)
-      .maybeSingle()
-    return anyRole?.company_id || '00000000-0000-0000-0000-000000000001'
+    const timeoutPromise = new Promise<string>((resolve) => setTimeout(() => resolve(fallback), 3000))
+    const authPromise = (async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return fallback
+      const claim = (user.app_metadata as any)?.company_id
+      if (claim) return claim
+      const cookieMatch = document.cookie.match(/(?:^| )active_company_id=([^;]+)/)
+      const cookieId = cookieMatch ? cookieMatch[2] : null
+      if (cookieId) return cookieId
+      const { data: anyRole } = await supabase
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', user.id)
+        .limit(1)
+        .maybeSingle()
+      return anyRole?.company_id || fallback
+    })()
+    return await Promise.race([authPromise, timeoutPromise])
   } catch {
-    return '00000000-0000-0000-0000-000000000001'
+    return fallback
   }
 }
 
@@ -327,7 +334,49 @@ export default function PremiumDashboardPage() {
     return () => clearInterval(interval)
   }, [companyId])
 
+  // New company check
+  const isEmpty = !loading &&
+    kpis.assets === 0 && kpis.liabilities === 0 && kpis.equity === 0 &&
+    kpis.revenue === 0 && kpis.expenses === 0 &&
+    ops.receivables === 0 && ops.payables === 0 &&
+    ops.total_customers === 0 && ops.total_suppliers === 0 && ops.total_products === 0 &&
+    incomeChart.values.length === 0
+
   if (loading) return <Skeleton />
+
+  if (isEmpty) {
+    return (
+      <div style={{ padding: "2rem", background: "#F4F6FB", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ maxWidth: 480, textAlign: "center" }}>
+          <h2 style={{ fontWeight: 700, marginBottom: 8, color: "#1E293B" }}>Welcome to OneAccounts!</h2>
+          <p style={{ color: "#64748B", marginBottom: 24 }}>Your financial command center is ready. Let’s set up your business.</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div onClick={() => window.location.href = "/dashboard/settings"} style={{ background: "white", borderRadius: 12, padding: "16px 20px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.04)", border: "1px solid #E5EAF2" }}>
+              <BuildingIcon size={20} color="#1D4ED8"/>
+              <div style={{ textAlign: "left" }}>
+                <div style={{ fontWeight: 600, color: "#1E293B" }}>Company Settings</div>
+                <div style={{ fontSize: 12, color: "#64748B" }}>Add your logo, business name, and tax info</div>
+              </div>
+            </div>
+            <div onClick={() => window.location.href = "/dashboard/customers/new"} style={{ background: "white", borderRadius: 12, padding: "16px 20px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.04)", border: "1px solid #E5EAF2" }}>
+              <UserPlus size={20} color="#1D4ED8"/>
+              <div style={{ textAlign: "left" }}>
+                <div style={{ fontWeight: 600, color: "#1E293B" }}>Add First Customer</div>
+                <div style={{ fontSize: 12, color: "#64748B" }}>Create a customer to start invoicing</div>
+              </div>
+            </div>
+            <div onClick={() => window.location.href = "/dashboard/invoices/new"} style={{ background: "white", borderRadius: 12, padding: "16px 20px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.04)", border: "1px solid #E5EAF2" }}>
+              <FileText size={20} color="#1D4ED8"/>
+              <div style={{ textAlign: "left" }}>
+                <div style={{ fontWeight: 600, color: "#1E293B" }}>Create First Invoice</div>
+                <div style={{ fontSize: 12, color: "#64748B" }}>Send an invoice to your customer</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const profitable = kpis.profit >= 0
 
