@@ -318,11 +318,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
 
     fetchDashboard()
 
-    return () => {
-      clearTimeout(safetyTimer)
-      finished = true
-    }
-  }, [companyId, companyLoading, selectedPeriod])
+      }, [companyId, selectedPeriod])
 
   // ── Overdue lists (fixed two‑step fetch) ──────────────────
   useEffect(() => {
