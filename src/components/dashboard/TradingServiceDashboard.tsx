@@ -258,8 +258,8 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
   }, [companyId])
 
   // ── Dashboard metrics (runs only when companyId is ready) ──
-  useEffect(() => {
-    if (!companyId || companyLoading) return   // wait for context to load
+    useEffect(() => {
+    if (!companyId) return   // only run when companyId is resolved
     setLoading(true)
     const { start, end } = getPeriodDates(selectedPeriod)
 
