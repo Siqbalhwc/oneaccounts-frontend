@@ -60,14 +60,13 @@ export default function AccountantDashboard({ role }: { role: string }) {
   const fetchData = async () => {
     setLoading(true)
     try {
-      // Wrap each query in Promise.all with individual catch
-      const [customers, suppliers, bankAccounts, cashAccount, overdueBills, journalLines] = await Promise.all([
-        supabase.from("customers").select("balance").eq("company_id", companyId).then(r => r).catch(() => null),
-        supabase.from("suppliers").select("balance").eq("company_id", companyId).then(r => r).catch(() => null),
-        supabase.from("bank_accounts").select("current_balance").eq("company_id", companyId).then(r => r).catch(() => null),
-        supabase.from("accounts").select("balance").eq("company_id", companyId).eq("code", "1000").maybeSingle().then(r => r).catch(() => null),
-        supabase
-          .from("invoices")
+      // Wrap every Supabase query with Promise.resolve().catch(() => null)
+      const customersPromise    = Promise.resolve(supabase.from("customers").select("balance").eq("company_id", companyId)).catch(() => null)
+      const suppliersPromise    = Promise.resolve(supabase.from("suppliers").select("balance").eq("company_id", companyId)).catch(() => null)
+      const banksPromise        = Promise.resolve(supabase.from("bank_accounts").select("current_balance").eq("company_id", companyId)).catch(() => null)
+      const cashPromise         = Promise.resolve(supabase.from("accounts").select("balance").eq("company_id", companyId).eq("code", "1000").maybeSingle()).catch(() => null)
+      const overdueBillsPromise = Promise.resolve(
+        supabase.from("invoices")
           .select("id, invoice_no, due_date, total, paid, status, suppliers(name)")
           .eq("company_id", companyId)
           .eq("type", "purchase")
@@ -75,15 +74,17 @@ export default function AccountantDashboard({ role }: { role: string }) {
           .lt("due_date", new Date().toISOString().split("T")[0])
           .order("due_date", { ascending: true })
           .limit(5)
-          .then(r => r).catch(() => null),
-        supabase
-          .from("journal_lines")
+      ).catch(() => null)
+      const journalPromise      = Promise.resolve(
+        supabase.from("journal_lines")
           .select("debit, credit, accounts(code,name), journal_entries!inner(date,description)")
           .eq("company_id", companyId)
           .order("journal_entries(date)", { ascending: false })
           .limit(10)
-          .then(r => r).catch(() => null),
-      ])
+      ).catch(() => null)
+
+      const [customers, suppliers, bankAccounts, cashAccount, overdueBills, journalLines] =
+        await Promise.all([customersPromise, suppliersPromise, banksPromise, cashPromise, overdueBillsPromise, journalPromise])
 
       const totalReceivables = (customers?.data || []).reduce((s: number, c: any) => s + (c.balance || 0), 0)
       const totalPayables = (suppliers?.data || []).reduce((s: number, s2: any) => s + (s2.balance || 0), 0)
