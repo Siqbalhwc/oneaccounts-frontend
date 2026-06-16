@@ -113,7 +113,6 @@ function BellNotification({
 
   return (
     <div ref={ref} style={{ position: "relative", textAlign: "center", userSelect: "none" }}>
-      {/* ... unchanged ... */}
       <div
         onClick={() => (hasItems ? setOpen(o => !o) : onViewAll())}
         style={{
@@ -155,7 +154,6 @@ function BellNotification({
           </span>
         )}
       </div>
-      {/* ... remaining bell dropdown unchanged ... */}
       <div style={{ fontSize: 9, marginTop: 3, fontWeight: hasItems ? 700 : 400, color: hasItems ? "#EF4444" : "var(--text-muted)" }}>{label}</div>
       {open && hasItems && (
         <div style={{ position: "absolute", top: "calc(100% + 10px)", right: 0, width: 290, background: isDark ? "#1E293B" : "#FFFFFF", border: `1px solid ${isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)"}`, borderRadius: 12, boxShadow: isDark ? "0 16px 48px rgba(0,0,0,0.7)" : "0 16px 48px rgba(0,0,0,0.15)", zIndex: 999, overflow: "hidden" }}>
@@ -180,7 +178,7 @@ function BellNotification({
   )
 }
 
-// ── Odoo-style loading screen (unchanged) ──────────────────
+// ── Odoo-style animated loading screen ─────────────────────
 const LOADING_STEPS = [
   { icon: "🏗️", text: "Setting up your workspace…" },
   { icon: "📊", text: "Configuring chart of accounts…" },
@@ -189,12 +187,305 @@ const LOADING_STEPS = [
 ]
 
 function OdooLoader({ isDark }: { isDark: boolean }) {
-  // ... unchanged ...
+  const [stepIdx, setStepIdx] = useState(0)
+  const [dotCount, setDotCount] = useState(1)
+
+  useEffect(() => {
+    const stepTimer = setInterval(() => {
+      setStepIdx(i => (i + 1) % LOADING_STEPS.length)
+    }, 1800)
+    const dotTimer = setInterval(() => {
+      setDotCount(d => (d % 3) + 1)
+    }, 400)
+    return () => { clearInterval(stepTimer); clearInterval(dotTimer) }
+  }, [])
+
+  const step = LOADING_STEPS[stepIdx]
+  const dots = ".".repeat(dotCount)
+
+  return (
+    <div style={{
+      minHeight: "100vh",
+      background: "var(--bg)",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 0,
+      padding: 40,
+    }}>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeSlide {
+          0%  { opacity: 0; transform: translateY(8px); }
+          20% { opacity: 1; transform: translateY(0); }
+          80% { opacity: 1; transform: translateY(0); }
+          100%{ opacity: 0; transform: translateY(-8px); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 0.4; transform: scale(0.95); }
+          50%       { opacity: 1;   transform: scale(1.05); }
+        }
+        @keyframes barGrow {
+          0%   { transform: scaleY(0.3); opacity: 0.4; }
+          50%  { transform: scaleY(1);   opacity: 1;   }
+          100% { transform: scaleY(0.3); opacity: 0.4; }
+        }
+      `}</style>
+
+      {/* Logo / brand mark */}
+      <div style={{ marginBottom: 36, textAlign: "center" }}>
+        <div style={{
+          width: 72, height: 72,
+          borderRadius: 20,
+          background: isDark
+            ? "linear-gradient(135deg, #6366f1 0%, #8B5CF6 100%)"
+            : "linear-gradient(135deg, #6366f1 0%, #8B5CF6 100%)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          margin: "0 auto 16px",
+          boxShadow: "0 8px 32px rgba(99,102,241,0.35)",
+        }}>
+          <span style={{ fontSize: 34 }}>📒</span>
+        </div>
+        <div style={{
+          fontSize: "1.5rem", fontWeight: 800,
+          background: "linear-gradient(135deg, #6366f1, #A78BFA)",
+          WebkitBackgroundClip: "text",
+          WebkitTextFillColor: "transparent",
+          letterSpacing: "-0.02em",
+        }}>
+          OneAccounts
+        </div>
+        <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: 4 }}>
+          by Siqbal
+        </div>
+      </div>
+
+      {/* Animated bar chart decoration */}
+      <div style={{
+        display: "flex", alignItems: "flex-end", gap: 5,
+        height: 48, marginBottom: 36,
+      }}>
+        {[0.4, 0.7, 0.55, 1.0, 0.65, 0.85, 0.5, 0.75, 0.45, 0.9].map((h, i) => (
+          <div
+            key={i}
+            style={{
+              width: 8,
+              height: `${h * 44}px`,
+              borderRadius: 4,
+              background: `hsl(${240 + i * 8}, 70%, ${isDark ? "65%" : "55%"})`,
+              transformOrigin: "bottom",
+              animation: `barGrow ${1.2 + i * 0.15}s ease-in-out ${i * 0.1}s infinite`,
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Spinner ring */}
+      <div style={{
+        width: 44, height: 44,
+        borderRadius: "50%",
+        border: "3px solid var(--border)",
+        borderTop: "3px solid #A78BFA",
+        animation: "spin 1s linear infinite",
+        marginBottom: 28,
+      }} />
+
+      {/* Animated step text */}
+      <div
+        key={stepIdx}
+        style={{
+          textAlign: "center",
+          animation: "fadeSlide 1.8s ease forwards",
+        }}
+      >
+        <div style={{ fontSize: "1.6rem", marginBottom: 8 }}>{step.icon}</div>
+        <div style={{
+          fontSize: "1rem",
+          fontWeight: 600,
+          color: "var(--text)",
+          maxWidth: 320,
+          lineHeight: 1.4,
+        }}>
+          {step.text.replace("…", dots)}
+        </div>
+      </div>
+
+      {/* Progress dots */}
+      <div style={{ display: "flex", gap: 6, marginTop: 32 }}>
+        {LOADING_STEPS.map((_, i) => (
+          <div
+            key={i}
+            style={{
+              width: i === stepIdx ? 20 : 6,
+              height: 6,
+              borderRadius: 3,
+              background: i === stepIdx ? "#A78BFA" : isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)",
+              transition: "all 0.3s ease",
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Subtext */}
+      <div style={{
+        marginTop: 24,
+        fontSize: "0.75rem",
+        color: "var(--text-muted)",
+        textAlign: "center",
+        maxWidth: 260,
+        lineHeight: 1.6,
+      }}>
+        Building your financial dashboard. This only takes a moment.
+      </div>
+    </div>
+  )
 }
 
-// ── New company empty state (unchanged) ─────────────────────
-function NewCompanyEmptyState({ router, isDark, userDisplayName }: { router: any; isDark: boolean; userDisplayName: string }) {
-  // ... unchanged ...
+// ── New company empty state ─────────────────────────────────
+function NewCompanyEmptyState({
+  router,
+  isDark,
+  userDisplayName,
+}: {
+  router: ReturnType<typeof useRouter>
+  isDark: boolean
+  userDisplayName: string
+}) {
+  return (
+    <div style={{
+      background: "var(--bg)", minHeight: "100%",
+      fontFamily: "'Inter', sans-serif", color: "var(--text)",
+      padding: "2rem 1.5rem",
+    }}>
+      <style>{`
+        @keyframes floatUp {
+          0%   { opacity: 0; transform: translateY(20px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+        .setup-card {
+          animation: floatUp 0.5s ease forwards;
+        }
+        .setup-card:nth-child(2) { animation-delay: 0.1s; opacity: 0; }
+        .setup-card:nth-child(3) { animation-delay: 0.2s; opacity: 0; }
+        .setup-card:nth-child(4) { animation-delay: 0.3s; opacity: 0; }
+        .setup-card:nth-child(5) { animation-delay: 0.4s; opacity: 0; }
+        .setup-step-btn {
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 16px 20px;
+          cursor: pointer;
+          transition: all 0.15s;
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          width: 100%;
+          text-align: left;
+          font-family: inherit;
+          color: var(--text);
+        }
+        .setup-step-btn:hover {
+          border-color: #A78BFA;
+          transform: translateX(4px);
+          background: ${isDark ? "rgba(167,139,250,0.08)" : "rgba(167,139,250,0.05)"};
+        }
+      `}</style>
+
+      {/* Welcome hero */}
+      <div
+        className="setup-card"
+        style={{
+          background: isDark
+            ? "linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(139,92,246,0.1) 100%)"
+            : "linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(139,92,246,0.05) 100%)",
+          border: `1px solid ${isDark ? "rgba(167,139,250,0.25)" : "rgba(99,102,241,0.15)"}`,
+          borderRadius: 16,
+          padding: "28px 28px",
+          marginBottom: 24,
+        }}
+      >
+        <div style={{ fontSize: "2rem", marginBottom: 12 }}>🎉</div>
+        <h2 style={{ fontSize: "1.4rem", fontWeight: 800, margin: "0 0 8px", lineHeight: 1.2 }}>
+          Welcome to OneAccounts{userDisplayName ? `, ${userDisplayName}` : ""}!
+        </h2>
+        <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--text-muted)", maxWidth: 480, lineHeight: 1.6 }}>
+          Your company workspace is live. Let's set up the essentials so your
+          dashboard lights up with real data. It only takes a few minutes.
+        </p>
+      </div>
+
+      {/* Setup checklist */}
+      <div className="setup-card" style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: 12 }}>
+          ⚡ Quick Setup — 4 steps to your first dashboard
+        </div>
+      </div>
+
+      {[
+        {
+          step: "01", icon: "🏢", title: "Add your company details",
+          sub: "Logo, address, tax number, and business info",
+          link: "/dashboard/settings/company",
+        },
+        {
+          step: "02", icon: "👤", title: "Add your first customer",
+          sub: "Start tracking who owes you money",
+          link: "/dashboard/customers/new",
+        },
+        {
+          step: "03", icon: "📄", title: "Create your first invoice",
+          sub: "Bill a customer and watch receivables populate",
+          link: "/dashboard/invoices/new",
+        },
+        {
+          step: "04", icon: "🏦", title: "Link a bank or cash account",
+          sub: "Set opening balances so your cash & bank KPI works",
+          link: "/dashboard/banking/bank-accounts",
+        },
+      ].map((item, i) => (
+        <div key={i} className="setup-card" style={{ marginBottom: 10 }}>
+          <button className="setup-step-btn" onClick={() => router.push(item.link)}>
+            <div style={{
+              width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+              background: isDark ? "rgba(167,139,250,0.15)" : "rgba(99,102,241,0.1)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: "1.2rem",
+            }}>
+              {item.icon}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#A78BFA", letterSpacing: "0.05em" }}>
+                  STEP {item.step}
+                </span>
+              </div>
+              <div style={{ fontSize: "0.9rem", fontWeight: 700 }}>{item.title}</div>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 2 }}>{item.sub}</div>
+            </div>
+            <div style={{ fontSize: "1.1rem", color: "var(--text-muted)", flexShrink: 0 }}>→</div>
+          </button>
+        </div>
+      ))}
+
+      {/* Tip */}
+      <div
+        className="setup-card"
+        style={{
+          marginTop: 20,
+          padding: "14px 18px",
+          background: isDark ? "rgba(16,185,129,0.08)" : "rgba(16,185,129,0.06)",
+          border: `1px solid ${isDark ? "rgba(16,185,129,0.2)" : "rgba(16,185,129,0.15)"}`,
+          borderRadius: 10,
+          fontSize: "0.78rem",
+          color: "var(--text-muted)",
+          lineHeight: 1.6,
+        }}
+      >
+        💡 <strong style={{ color: "#10B981" }}>Tip:</strong> Once you create your first invoice, your Revenue, Receivables, and Profit cards will populate automatically. No manual GL entry needed.
+      </div>
+    </div>
+  )
 }
 
 // ── Interfaces ──────────────────────────────────────────────
@@ -207,7 +498,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
   const router = useRouter()
   const { theme: themeMode } = useTheme()
   const isDark = themeMode === "dark"
-  const { companyId } = useCompany()   // ← now uses loading flag
+  const { companyId } = useCompany()
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -257,9 +548,9 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
     }).catch(() => {})
   }, [companyId])
 
-  // ── Dashboard metrics (runs only when companyId is ready) ──
-    useEffect(() => {
-    if (!companyId) return   // only run when companyId is resolved
+  // ── Dashboard metrics ──────────────────────────────────────
+  useEffect(() => {
+    if (!companyId) return
     setLoading(true)
     const { start, end } = getPeriodDates(selectedPeriod)
 
@@ -318,7 +609,11 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
 
     fetchDashboard()
 
-      }, [companyId, selectedPeriod])
+    return () => {
+      clearTimeout(safetyTimer)
+      finished = true
+    }
+  }, [companyId, selectedPeriod])
 
   // ── Overdue lists (fixed two‑step fetch) ──────────────────
   useEffect(() => {
@@ -406,10 +701,6 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
   }))
 
   // ── Render guards ─────────────────────────────────────────
-  // If CompanyContext is still loading, show the animated loader
-  if (companyLoading) return <OdooLoader isDark={isDark} />
-
-  // If the context has loaded but no companyId could be resolved
   if (!companyId) {
     return (
       <div style={{ padding: 40, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>
@@ -422,13 +713,309 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
   // If the dashboard data is still loading, show the animated loader
   if (loading) return <OdooLoader isDark={isDark} />
 
-  // If it’s a brand‑new company, show the onboarding checklist
+  // If it's a brand‑new company, show the onboarding checklist
   if (isNewCompany) return <NewCompanyEmptyState router={router} isDark={isDark} userDisplayName={userDisplayName} />
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)", padding: "1rem 1.5rem" }}>
-      {/* ... styles and JSX unchanged from the latest version ... */}
-      {/* (the rest of the dashboard UI as you already have it) */}
+      <style>{`
+        @keyframes spin       { to { transform: rotate(360deg); } }
+        @keyframes bellShake  {
+          0%,100% { transform: rotate(0deg); }
+          15%     { transform: rotate(-12deg); }
+          30%     { transform: rotate(10deg); }
+          45%     { transform: rotate(-8deg); }
+          60%     { transform: rotate(6deg); }
+          75%     { transform: rotate(-4deg); }
+        }
+
+        .tsd * { box-sizing: border-box; }
+
+        .tsd .card {
+          background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+          padding: 20px; box-shadow: var(--shadow-sm);
+          transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+          cursor: pointer; display: flex; flex-direction: column;
+        }
+        .tsd .card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+          border-color: var(--primary);
+        }
+
+        .tsd .hero {
+          background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+          padding: 0.9rem 1.4rem; margin-bottom: 1.5rem;
+          display: flex; justify-content: space-between; align-items: center;
+          flex-wrap: wrap; gap: 0.8rem;
+        }
+        .tsd .hero-left h2 { font-size: 1.25rem; font-weight: 700; margin-bottom: 2px; }
+        .tsd .hero-left p  { font-size: 0.82rem; color: var(--text-muted); margin: 0; }
+
+        .tsd .hero-right {
+          display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+        }
+
+        .tsd .period-select {
+          -webkit-appearance: none; appearance: none;
+          background: ${isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"};
+          border: 1px solid var(--border);
+          border-radius: 20px;
+          padding: 0.28rem 1.8rem 0.28rem 0.75rem;
+          font-size: 0.78rem; font-weight: 600;
+          color: var(--text); font-family: inherit;
+          cursor: pointer;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+          background-repeat: no-repeat;
+          background-position: right 0.55rem center;
+          transition: border-color 0.15s, background 0.15s;
+          color-scheme: ${isDark ? "dark" : "light"};
+        }
+        .tsd .period-select:focus { outline: none; border-color: #A78BFA; }
+
+        .tsd .bells-group {
+          display: flex; align-items: flex-start; gap: 10px;
+          padding-left: 1rem;
+          border-left: 1px solid var(--border);
+        }
+
+        .tsd .kpi-row {
+          display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;
+        }
+        .tsd .kpi-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 6px; }
+        .tsd .kpi-value { font-size: 1.65rem; font-weight: 800; }
+
+        .tsd .two-col {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 20px;
+          margin-bottom: 24px;
+        }
+        .tsd .two-col .card:first-child {
+          overflow-x: auto;
+        }
+        .tsd .top-customers-table {
+          min-width: 300px;
+          width: 100%;
+          border-collapse: collapse;
+        }
+        .tsd .quick-actions {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+          flex: 1;
+          align-items: stretch;
+        }
+        .tsd .quick-action-btn {
+          background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+          padding: 16px 8px; text-align: center;
+          font-size: 0.85rem; font-weight: 600; color: var(--text);
+          cursor: pointer; transition: 0.15s;
+          display: flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .tsd .quick-action-btn:hover { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+
+        .tsd table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        .tsd th { text-align: left; padding: 8px 12px; border-bottom: 2px solid var(--border); color: var(--text-muted); font-weight: 600; font-size: 0.65rem; text-transform: uppercase; }
+        .tsd td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+
+        .tsd .chart-container { padding: 8px 0 12px; overflow-x: auto; }
+        .tsd .bar-chart        { display: flex; align-items: flex-end; gap: 12px; height: 200px; padding: 0 8px; min-width: 600px; }
+        .tsd .bar-column       { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+        .tsd .bar              { width: 100%; background: linear-gradient(180deg, #6366f1, #818cf8); border-radius: 6px 6px 0 0; min-height: 4px; }
+        .tsd .bar.negative     { background: linear-gradient(180deg, #ef4444, #f87171); }
+        .tsd .bar-value        { font-size: 10px; font-weight: 700; color: var(--text); white-space: nowrap; }
+        .tsd .bar-label        { font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+        .tsd .trend-summary    { display: flex; justify-content: space-between; margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 0.75rem; font-weight: 600; }
+
+        .customer-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+
+        @media (max-width: 1024px) {
+          .tsd .kpi-row { grid-template-columns: repeat(2, 1fr); }
+          .tsd .two-col { grid-template-columns: 1fr; gap: 16px; }
+          .customer-name { max-width: 140px; }
+        }
+        @media (max-width: 768px) {
+          .tsd .hero-right { width: 100%; justify-content: space-between; }
+          .tsd .bells-group { border-left: none; padding-left: 0; }
+        }
+        @media (max-width: 640px) {
+          .tsd .kpi-row { grid-template-columns: 1fr 1fr; }
+          .tsd .hero    { flex-direction: column; align-items: flex-start; }
+          .customer-name { max-width: 120px; }
+          .tsd .quick-action-btn { padding: 12px 8px; font-size: 0.75rem; }
+          .tsd .quick-actions { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 380px) {
+          .tsd .kpi-row { grid-template-columns: 1fr; }
+        }
+      `}</style>
+
+      <div className="tsd">
+
+        {/* ── Hero ── */}
+        <div className="hero">
+          <div className="hero-left">
+            <h2>{getGreeting()}, {userDisplayName}</h2>
+            <p>{businessType === "trading" ? "Trading Dashboard" : "Service Dashboard"}</p>
+          </div>
+
+          <div className="hero-right">
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", whiteSpace: "nowrap" }}>Period:</span>
+              <select
+                className="period-select"
+                value={selectedPeriod}
+                onChange={e => setSelectedPeriod(e.target.value as PeriodKey)}
+              >
+                {PERIOD_OPTIONS.map(opt => (
+                  <option key={opt.key} value={opt.key}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="bells-group">
+              <BellNotification
+                count={overdueInvoicesCount}
+                label="Invoices"
+                items={invoiceBellItems}
+                onViewAll={() => router.push("/dashboard/invoices?status=Unpaid&overdue=true")}
+                isDark={isDark}
+              />
+              <BellNotification
+                count={overdueBillsCount}
+                label="Bills"
+                items={billBellItems}
+                onViewAll={() => router.push("/dashboard/bills?status=Unpaid&overdue=true")}
+                isDark={isDark}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* ── KPI Cards ── */}
+        <div className="kpi-row">
+          {[
+            { label: "💰 Total Revenue",   value: formatPKR(animRevenue), color: "#10B981", link: "/dashboard/reports/profit-loss" },
+            { label: "📤 Total Expenses",  value: formatPKR(animExpense), color: "#EF4444", link: "/dashboard/reports/profit-loss" },
+            { label: "📈 Gross Profit",    value: formatPKR(animProfit),  color: grossProfit >= 0 ? "#10B981" : "#EF4444", link: "/dashboard/reports/profit-loss" },
+            { label: "🏦 Cash & Bank",     value: formatPKR(animCash),   color: "#A78BFA", link: "/dashboard/banking/bank-accounts" },
+            { label: "🧾 Receivables",     value: formatPKR(animRecv),   color: "#F97316", link: "/dashboard/customers" },
+            { label: "📋 Payables",        value: formatPKR(animPay),    color: "#EF4444", link: "/dashboard/suppliers" },
+            {
+              label: "⚠️ Overdue Inv.",
+              value: overdueInvoicesCount.toString(),
+              color: overdueInvoicesCount > 0 ? "#EF4444" : "#10B981",
+              link: "/dashboard/invoices?status=Unpaid&overdue=true",
+              sub: overdueInvoicesCount > 0 ? "Needs attention" : "All clear",
+            },
+            {
+              label: "⚠️ Overdue Bills",
+              value: overdueBillsCount.toString(),
+              color: overdueBillsCount > 0 ? "#EF4444" : "#10B981",
+              link: "/dashboard/bills?status=Unpaid&overdue=true",
+              sub: overdueBillsCount > 0 ? "Needs attention" : "All clear",
+            },
+          ].map((kpi: any) => (
+            <div key={kpi.label} className="card" onClick={() => router.push(kpi.link)}>
+              <div className="kpi-label">{kpi.label}</div>
+              <div className="kpi-value" style={{ color: kpi.color }}>{kpi.value}</div>
+              {kpi.sub && (
+                <div style={{ fontSize: "0.72rem", marginTop: 4, color: kpi.color, fontWeight: 600 }}>{kpi.sub}</div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* ── Two columns: Top Customers + Quick Actions ── */}
+        <div className="two-col">
+          <div className="card" style={{ cursor: "default" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span style={{ fontWeight: 700, fontSize: "1rem" }}>🏆 Top 5 Customers</span>
+              <button
+                onClick={() => router.push("/dashboard/customers")}
+                style={{ background: "none", border: "none", color: "var(--primary)", cursor: "pointer", fontWeight: 600, fontFamily: "inherit", fontSize: "0.75rem" }}
+              >
+                View All →
+              </button>
+            </div>
+            <div style={{ overflowX: "auto", flex: 1 }}>
+              <table className="top-customers-table">
+                <thead>
+                  <tr>
+                    <th>Customer</th>
+                    <th style={{ textAlign: "right" }}>Outstanding</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topCustomers.length === 0 ? (
+                    <tr>
+                      <td colSpan={2} style={{ padding: "12px", textAlign: "center", color: "var(--text-muted)" }}>No customer data</td>
+                    </tr>
+                  ) : (
+                    topCustomers.map((c, i) => (
+                      <tr key={i}>
+                        <td><span className="customer-name" title={c.name}>{c.name}</span></td>
+                        <td style={{ textAlign: "right", fontWeight: 600, color: c.outstanding > 0 ? "#EF4444" : "#10B981" }}>
+                          {formatPKR(c.outstanding)}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="card" style={{ cursor: "default" }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 700, fontSize: "1rem", marginBottom: 12 }}>⚡ Quick Actions</div>
+            <div className="quick-actions">
+              <div className="quick-action-btn" onClick={() => router.push("/dashboard/invoices/new")}>➕ New Invoice</div>
+              <div className="quick-action-btn" onClick={() => router.push("/dashboard/bills/new")}>📦 New Bill</div>
+              <div className="quick-action-btn" onClick={() => router.push("/dashboard/receipts/new")}>💰 Receive Payment</div>
+              <div className="quick-action-btn" onClick={() => router.push("/dashboard/payments/new")}>💳 Record Payment</div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Monthly Profit Trend ── */}
+        <div className="full-width">
+          <div className="card" style={{ cursor: "default" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <span style={{ fontWeight: 700, fontSize: "1rem" }}>📊 Monthly Profit Trend</span>
+              <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{periodLabel}</span>
+            </div>
+            {monthlyProfit.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                No profit data for selected period
+              </div>
+            ) : (
+              <>
+                <div className="chart-container">
+                  <div className="bar-chart">
+                    {monthlyProfit.map((m, i) => (
+                      <div key={i} className="bar-column">
+                        <div
+                          className={`bar${m.profit < 0 ? " negative" : ""}`}
+                          style={{ height: `${(Math.abs(m.profit) / maxProfit) * 140 + 4}px` }}
+                        />
+                        <div className="bar-value">{formatPKR(m.profit)}</div>
+                        <div className="bar-label">{m.month}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="trend-summary">
+                  <span>📈 Best: <strong>{monthlyProfit.reduce((a, b) => a.profit > b.profit ? a : b).month}</strong> ({formatPKR(Math.max(...monthlyProfit.map(m => m.profit)))})</span>
+                  <span>📉 Worst: <strong>{monthlyProfit.reduce((a, b) => a.profit < b.profit ? a : b).month}</strong> ({formatPKR(Math.min(...monthlyProfit.map(m => m.profit)))})</span>
+                  <span>📊 Avg: <strong>{formatPKR(monthlyProfit.reduce((s, m) => s + m.profit, 0) / monthlyProfit.length)}</strong></span>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+      </div>
     </div>
   )
 }
