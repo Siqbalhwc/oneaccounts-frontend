@@ -14,30 +14,67 @@ export default function DashboardPage() {
   const [userEmail, setUserEmail] = useState("")
   const [businessType, setBusinessType] = useState("")
   const [isMobile, setIsMobile] = useState(false)
+
+  // FIX: track whether we've given up waiting for role
+  const [roleTimedOut, setRoleTimedOut] = useState(false)
+
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
+  // FIX: safety timeout — if role hasn't resolved in 5s, render anyway with fallback
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth <= 768)
-    }
+    if (!roleLoading) return
+    const timer = setTimeout(() => setRoleTimedOut(true), 5000)
+    return () => clearTimeout(timer)
+  }, [roleLoading])
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth <= 768)
     checkMobile()
     window.addEventListener("resize", checkMobile)
     return () => window.removeEventListener("resize", checkMobile)
   }, [])
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return
-      const cid = (user?.app_metadata as any)?.company_id
-      const email = user.email
-      if (cid) setCompanyId(cid)
-      if (email) setUserEmail(email)
+
+      setUserEmail(user.email || "")
+
+      // FIX: try app_metadata first, then fall back to user_roles table
+      // New company users often don't have company_id in app_metadata yet
+      let cid: string | null = (user?.app_metadata as any)?.company_id || null
+
+      if (!cid) {
+        try {
+          const { data: roleRow } = await supabase
+            .from("user_roles")
+            .select("company_id")
+            .eq("user_id", user.id)
+            .eq("is_active", true)
+            .limit(1)
+            .maybeSingle()
+          cid = roleRow?.company_id || null
+        } catch {
+          // ignore
+        }
+      }
+
       if (cid) {
-        supabase.from("companies").select("business_type").eq("id", cid).single()
-          .then(({ data }) => { if (data) setBusinessType(data.business_type || "") })
+        setCompanyId(cid)
+        // Fetch business type
+        try {
+          const { data } = await supabase
+            .from("companies")
+            .select("business_type")
+            .eq("id", cid)
+            .single()
+          if (data) setBusinessType(data.business_type || "")
+        } catch {
+          // ignore — businessType stays ""
+        }
       }
     })
   }, [])
@@ -57,19 +94,37 @@ export default function DashboardPage() {
     setDevBusinessType(prev => (prev === "ngo" ? "trading" : "ngo"))
   }
 
-  if (roleLoading || !role) {
-    return <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>Loading…</div>
+  // FIX: was — if (roleLoading || !role) { return <Loading /> }
+  // This blocked forever for new companies with no role row.
+  // Now: wait max 5s, then fall through with "management" as default.
+  const stillWaiting = roleLoading && !roleTimedOut
+  if (stillWaiting) {
+    return (
+      <div style={{
+        padding: 40, textAlign: "center", color: "#94A3B8",
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 16,
+        minHeight: "60vh", justifyContent: "center",
+      }}>
+        <div style={{
+          width: 32, height: 32, borderRadius: "50%",
+          border: "3px solid rgba(148,163,184,0.2)",
+          borderTop: "3px solid #A78BFA",
+          animation: "spin 1s linear infinite",
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <div style={{ fontSize: "0.85rem" }}>Setting up your dashboard…</div>
+      </div>
+    )
   }
 
-  const effectiveRole = isDeveloper ? devRole : role
+  // FIX: if role never loaded, default to "management" so dashboard renders
+  const effectiveRole = isDeveloper ? devRole : (role || "management")
   const effectiveBusinessType = isDeveloper ? devBusinessType : businessType
 
-  // On mobile, render the compact mobile dashboard
   if (isMobile) {
     return <MobileDashboard role={effectiveRole} businessType={effectiveBusinessType} />
   }
 
-  // Accountant → Accountant Dashboard (desktop)
   if (effectiveRole === "accountant") {
     return (
       <div style={{ position: "relative" }}>
@@ -91,7 +146,6 @@ export default function DashboardPage() {
     )
   }
 
-  // Management view (desktop)
   return (
     <div style={{ position: "relative" }}>
       {isDeveloper && (
