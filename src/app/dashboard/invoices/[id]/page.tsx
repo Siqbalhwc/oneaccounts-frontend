@@ -396,15 +396,15 @@ export default function InvoiceDetailPage() {
                   <td style={{ color: "var(--text-muted)" }}>{item.product_code ? item.description : ""}</td>
                   <td style={{ textAlign: "center" }}>{item.qty}</td>
                   <td style={{ textAlign: "right" }}>PKR {item.unit_price?.toLocaleString()}</td>
-                  {taxEnabled && (
+                                    {taxEnabled && (
                     <td style={{ textAlign: "right", color: "var(--text-muted)" }}>
-                      {item.tax_rate > 0 ? `${item.tax_rate}%` : "—"}
+                      {(item.tax_rate ?? 0) > 0 ? `${item.tax_rate}%` : "—"}
                     </td>
                   )}
                   <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {item.total?.toLocaleString()}</td>
                   {taxEnabled && (
-                    <td style={{ textAlign: "right", color: item.tax_amount > 0 ? "#EF4444" : "var(--text-muted)" }}>
-                      {item.tax_amount > 0 ? `PKR ${item.tax_amount.toLocaleString()}` : "—"}
+                    <td style={{ textAlign: "right", color: (item.tax_amount ?? 0) > 0 ? "#EF4444" : "var(--text-muted)" }}>
+                      {(item.tax_amount ?? 0) > 0 ? `PKR ${(item.tax_amount ?? 0).toLocaleString()}` : "—"}
                     </td>
                   )}
                 </tr>
