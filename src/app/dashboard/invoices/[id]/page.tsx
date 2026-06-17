@@ -20,6 +20,11 @@ interface InvoiceItem {
   product_code?: string
   product_name?: string
   product_image?: string | null
+  tax_code_id?: string | null
+  tax_code_snapshot?: string
+  tax_name_snapshot?: string
+  tax_rate?: number
+  tax_amount?: number
 }
 
 interface Invoice {
@@ -28,6 +33,7 @@ interface Invoice {
   date: string
   due_date: string
   total: number
+  total_tax: number
   paid: number
   status: string
   reference?: string
@@ -64,6 +70,7 @@ export default function InvoiceDetailPage() {
   )
 
   const { hasFeature } = usePlan()
+  const taxEnabled = hasFeature("tax_management")
   const { companyName, companyTagline, logoUrl } = useCompany()
 
   const [invoice, setInvoice] = useState<Invoice | null>(null)
@@ -84,7 +91,7 @@ export default function InvoiceDetailPage() {
     if (!companyId || !invoiceId) return
     setLoading(true)
 
-    // 1. Load invoice
+    // 1. Load invoice (now includes total_tax)
     supabase
       .from("invoices")
       .select("*")
@@ -106,7 +113,7 @@ export default function InvoiceDetailPage() {
           inv.customer = cust || undefined
         }
 
-        // 3. Load items
+        // 3. Load items (now includes tax columns)
         const { data: items } = await supabase
           .from("invoice_items")
           .select("*")
@@ -193,7 +200,6 @@ export default function InvoiceDetailPage() {
       )
     : ""
 
-  // Reminder message
   const reminderLink = invoice && invoice.customer
     ? getWhatsAppLink(
         invoice.customer.phone || "",
@@ -242,9 +248,12 @@ export default function InvoiceDetailPage() {
         image_path:   item.product_image || null,
         product_id:   item.product_code  || null,
         product_name: item.product_name  || "",
+        tax_rate:     item.tax_rate      || 0,
+        tax_amount:   item.tax_amount    || 0,
       })),
       subtotal:   subTotal,
       total:      invoice.total,
+      totalTax:   invoice.total_tax || 0,
       paid:       invoice.paid || 0,
       balanceDue: invoice.total - (invoice.paid || 0),
     }
@@ -306,13 +315,11 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          {/* Edit button – hidden if returned */}
           {!isReturned && (
             <button className="btn" onClick={() => router.push(`/dashboard/invoices/new?id=${invoice.id}`)}>
               ✏️ Edit
             </button>
           )}
-          {/* Return button – hidden if returned */}
           {!isReturned && (
             <button className="btn" onClick={() => router.push(`/dashboard/sales-returns/new?original_invoice_id=${invoice.id}`)}>
               ↩️ Return
@@ -343,6 +350,9 @@ export default function InvoiceDetailPage() {
         <div className="row"><span className="label">Due Date</span><span className="value">{invoice.due_date}</span></div>
         <div className="row"><span className="label">Customer</span><span className="value">{invoice.customer?.code} – {invoice.customer?.name}</span></div>
         <div className="row"><span className="label">Total</span><span className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B" }}>PKR {invoice.total?.toLocaleString()}</span></div>
+        {taxEnabled && invoice.total_tax > 0 && (
+          <div className="row"><span className="label">Tax</span><span className="value">PKR {invoice.total_tax?.toLocaleString()}</span></div>
+        )}
         <div className="row"><span className="label">Paid</span><span className="value">PKR {invoice.paid?.toLocaleString()}</span></div>
         <div className="row"><span className="label">Due</span><span className="value" style={{ color: balanceDue > 0 ? "#EF4444" : "#10B981", fontWeight: 600 }}>PKR {balanceDue.toLocaleString()}</span></div>
         <div className="row">
@@ -367,7 +377,9 @@ export default function InvoiceDetailPage() {
                 <th>Description</th>
                 <th style={{ textAlign: "center" }}>Qty</th>
                 <th style={{ textAlign: "right" }}>Unit Price</th>
+                {taxEnabled && <th style={{ textAlign: "right" }}>Tax Rate</th>}
                 <th style={{ textAlign: "right" }}>Total</th>
+                {taxEnabled && <th style={{ textAlign: "right" }}>Tax</th>}
               </tr>
             </thead>
             <tbody>
@@ -384,10 +396,28 @@ export default function InvoiceDetailPage() {
                   <td style={{ color: "var(--text-muted)" }}>{item.product_code ? item.description : ""}</td>
                   <td style={{ textAlign: "center" }}>{item.qty}</td>
                   <td style={{ textAlign: "right" }}>PKR {item.unit_price?.toLocaleString()}</td>
+                  {taxEnabled && (
+                    <td style={{ textAlign: "right", color: "var(--text-muted)" }}>
+                      {item.tax_rate > 0 ? `${item.tax_rate}%` : "—"}
+                    </td>
+                  )}
                   <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {item.total?.toLocaleString()}</td>
+                  {taxEnabled && (
+                    <td style={{ textAlign: "right", color: item.tax_amount > 0 ? "#EF4444" : "var(--text-muted)" }}>
+                      {item.tax_amount > 0 ? `PKR ${item.tax_amount.toLocaleString()}` : "—"}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
+            {taxEnabled && invoice.total_tax > 0 && (
+              <tfoot>
+                <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
+                  <td colSpan={taxEnabled ? 6 : 4} style={{ textAlign: "right" }}>Total Tax</td>
+                  <td style={{ textAlign: "right", color: "#EF4444" }}>PKR {invoice.total_tax.toLocaleString()}</td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       )}

@@ -47,6 +47,8 @@ export interface InvoiceItem {
   image_path?:   string | null
   product_id?:   string | null
   product_name?: string
+  tax_rate?:     number    // ← new
+  tax_amount?:   number    // ← new
 }
 
 export interface InvoicePDFData {
@@ -75,6 +77,7 @@ export interface InvoicePDFData {
   items:      InvoiceItem[]
   subtotal:   number
   total:      number
+  totalTax?:  number    // ← new
   paid:       number
   balanceDue: number
 
@@ -216,16 +219,20 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
 
   // ── TABLE HEADER ─────────────────────────────────────────────────
   const tableY = divY + 4
-  const ROW_H = 9               // increased from 6 mm
+  const ROW_H = 9
   const HEADER_ROW_H = ROW_H
 
-  // Column widths (IMG 18mm, # 8mm, Description 74mm, Qty 16mm, Price 32mm, Amount 34mm = 182mm)
+  // Determine if any item has tax (for column visibility)
+  const hasTax = data.totalTax && data.totalTax > 0
+
+  // Column widths (adjust if tax column present)
   const COL_IMG_W  = 18
   const COL_NUM_W  = 8
   const COL_QTY_W  = 16
-  const COL_PRICE_W = 32
-  const COL_AMT_W  = 34
-  const COL_DESC_W = CW - COL_IMG_W - COL_NUM_W - COL_QTY_W - COL_PRICE_W - COL_AMT_W  // 74 mm
+  const COL_PRICE_W = hasTax ? 28 : 32
+  const COL_TAX_W  = hasTax ? 18 : 0
+  const COL_AMT_W  = hasTax ? 28 : 34
+  const COL_DESC_W = CW - COL_IMG_W - COL_NUM_W - COL_QTY_W - COL_PRICE_W - COL_TAX_W - COL_AMT_W
 
   // Navy background
   filledRect(doc, ML, tableY, CW, HEADER_ROW_H, NAVY)
@@ -242,23 +249,31 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.line(sepX, tableY, sepX, tableY + HEADER_ROW_H)
   sepX += COL_PRICE_W
   doc.line(sepX, tableY, sepX, tableY + HEADER_ROW_H)
+  if (hasTax) {
+    sepX += COL_TAX_W
+    doc.line(sepX, tableY, sepX, tableY + HEADER_ROW_H)
+  }
 
   // Header text
   const headerTextY = tableY + HEADER_ROW_H / 2 + 1.5
   doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...WHITE)
 
-  const imgCenterX  = ML + COL_IMG_W / 2
-  const numCenterX  = ML + COL_IMG_W + COL_NUM_W / 2
-  const descLeftX   = ML + COL_IMG_W + COL_NUM_W + 2
-  const qtyCenterX  = ML + COL_IMG_W + COL_NUM_W + COL_DESC_W + COL_QTY_W / 2
+  const imgCenterX   = ML + COL_IMG_W / 2
+  const numCenterX   = ML + COL_IMG_W + COL_NUM_W / 2
+  const descLeftX    = ML + COL_IMG_W + COL_NUM_W + 2
+  const qtyCenterX   = ML + COL_IMG_W + COL_NUM_W + COL_DESC_W + COL_QTY_W / 2
   const priceCenterX = ML + COL_IMG_W + COL_NUM_W + COL_DESC_W + COL_QTY_W + COL_PRICE_W / 2
-  const amtCenterX  = ML + COL_IMG_W + COL_NUM_W + COL_DESC_W + COL_QTY_W + COL_PRICE_W + COL_AMT_W / 2
+  const taxCenterX   = hasTax ? ML + COL_IMG_W + COL_NUM_W + COL_DESC_W + COL_QTY_W + COL_PRICE_W + COL_TAX_W / 2 : 0
+  const amtCenterX   = hasTax
+    ? ML + COL_IMG_W + COL_NUM_W + COL_DESC_W + COL_QTY_W + COL_PRICE_W + COL_TAX_W + COL_AMT_W / 2
+    : ML + COL_IMG_W + COL_NUM_W + COL_DESC_W + COL_QTY_W + COL_PRICE_W + COL_AMT_W / 2
 
   doc.text("Img",        imgCenterX, headerTextY, { align: "center" })
   doc.text("#",          numCenterX, headerTextY, { align: "center" })
   doc.text("Description", descLeftX,  headerTextY, { align: "left" })
   doc.text("Qty",        qtyCenterX, headerTextY, { align: "center" })
   doc.text("Unit Price", priceCenterX, headerTextY, { align: "center" })
+  if (hasTax) doc.text("Tax", taxCenterX, headerTextY, { align: "center" })
   doc.text("Amount",     amtCenterX, headerTextY, { align: "center" })
 
   // ── TABLE BODY ───────────────────────────────────────────────────
@@ -275,6 +290,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     }
   }))
 
+  // Build rows with or without tax column
   const tableRows = data.items.map((item, i) => {
     const productIdStr = String(item.product_id ?? "")
     let namepart = ""
@@ -293,15 +309,34 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
       desc = (item.description ?? "").trim()
     }
 
-    return [
-      i,               // image index
+    const row = [
+      i,               // image index (will be drawn manually)
       i + 1,
       desc,
       item.qty.toString(),
       pkr(item.unit_price),
-      pkr(item.total),
     ]
+    if (hasTax) {
+      row.push(item.tax_amount && item.tax_amount > 0 ? pkr(item.tax_amount) : "—")
+    }
+    row.push(pkr(item.total))
+    return row
   })
+
+  // Adjust column styles if tax is present
+  const columnStyles: any = {
+    0: { cellWidth: COL_IMG_W, halign: "center", cellPadding: { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 } },
+    1: { cellWidth: COL_NUM_W, halign: "center" },
+    2: { cellWidth: COL_DESC_W, halign: "left" },
+    3: { cellWidth: COL_QTY_W, halign: "center" },
+    4: { cellWidth: COL_PRICE_W, halign: "right" },
+  }
+  if (hasTax) {
+    columnStyles[5] = { cellWidth: COL_TAX_W, halign: "right" }
+    columnStyles[6] = { cellWidth: COL_AMT_W, halign: "right", fontStyle: "bold" }
+  } else {
+    columnStyles[5] = { cellWidth: COL_AMT_W, halign: "right", fontStyle: "bold" }
+  }
 
   autoTable(doc, {
     startY: bodyStartY,
@@ -314,27 +349,16 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
       textColor: DARK,
       lineColor: BORDER,
       lineWidth: 0.2,
-      minCellHeight: ROW_H,   // increased to 9 mm
+      minCellHeight: ROW_H,
     },
     alternateRowStyles: { fillColor: ROW_ALT },
-    columnStyles: {
-      0: { 
-        cellWidth: COL_IMG_W,  
-        halign: "center",
-        cellPadding: { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 } // minimal padding
-      },
-      1: { cellWidth: COL_NUM_W,  halign: "center" },
-      2: { cellWidth: COL_DESC_W, halign: "left" },
-      3: { cellWidth: COL_QTY_W,  halign: "center" },
-      4: { cellWidth: COL_PRICE_W, halign: "right" },
-      5: { cellWidth: COL_AMT_W,  halign: "right", fontStyle: "bold" },
-    },
+    columnStyles,
     didDrawCell(hookData) {
       if (hookData.section === "body" && hookData.column.index === 0) {
         const imgData = imageCache[hookData.row.index]
         if (imgData) {
           const { x, y, width, height } = hookData.cell
-          const size = Math.min(width - 1, height - 1)   // nearly full cell
+          const size = Math.min(width - 1, height - 1)
           const offsetX = x + (width - size) / 2
           const offsetY = y + (height - size) / 2
           doc.addImage(imgData, "JPEG", offsetX, offsetY, size, size)
@@ -364,14 +388,16 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.text(pkr(data.subtotal), valX, SY, { align: "right" })
   SY += 5.5
 
+  // Tax row – actual value now
   doc.setFont("helvetica", "bold")
   doc.setTextColor(...MUTED)
-  doc.text("Tax (0%)", sumX, SY)
+  const taxLabel = hasTax ? "Tax" : "Tax (0%)"
+  doc.text(taxLabel, sumX, SY)
   doc.setTextColor(...DARK)
-  doc.text(pkr(0), valX, SY, { align: "right" })
+  doc.text(pkr(data.totalTax || 0), valX, SY, { align: "right" })
   SY += 5.5
 
-  // Total box – same height as header
+  // Total box
   const TOTAL_H = ROW_H
   filledRect(doc, sumX - 2, SY - 3, valX - sumX + 4, TOTAL_H, NAVY)
   doc.setFont("helvetica", "bold")

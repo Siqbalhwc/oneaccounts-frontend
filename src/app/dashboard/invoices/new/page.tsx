@@ -35,6 +35,7 @@ function NewInvoicePageContent() {
 
   const { hasFeature } = usePlan()
   const showProducts = hasFeature("inventory")
+  const taxEnabled = hasFeature("tax_management")   // tax feature flag
 
   const [companyId, setCompanyId] = useState("")
   const [businessType, setBusinessType] = useState("")
@@ -69,6 +70,9 @@ function NewInvoicePageContent() {
   const [refreshingCustomers, setRefreshingCustomers] = useState(false)
 
   const [savedInvoiceId, setSavedInvoiceId] = useState<number | null>(null)
+
+  // Tax codes list (fetched when tax is enabled)
+  const [taxCodes, setTaxCodes] = useState<any[]>([])
 
   const isNGO = businessType === "ngo"
   const invoiceIdForLink = savedInvoiceId || (editId ? Number(editId) : null)
@@ -113,11 +117,18 @@ function NewInvoicePageContent() {
       supabase.from("donors").select("id,name").eq("company_id", cid).order("name")
         .then(r => r.data && setDonors(r.data))
 
+      // Fetch tax codes if feature is enabled
+      if (taxEnabled) {
+        supabase.from("tax_codes")
+          .select("id, code, name, rate, tax_account_id")
+          .eq("company_id", cid)
+          .order("code")
+          .then(r => r.data && setTaxCodes(r.data))
+      }
+
       setLoading(false)
     })
-  }, [showProducts])
-
-  // ... (all existing useEffect for edit, due date, price history, etc. remain exactly the same)
+  }, [showProducts, taxEnabled])
 
   useEffect(() => {
     if (!editId || !companyId) return
@@ -153,6 +164,9 @@ function NewInvoicePageContent() {
                 total: item.total,
                 project_id: item.project_id || null,
                 donor_id: item.donor_id || null,
+                tax_code_id: item.tax_code_id || null,
+                tax_rate: item.tax_rate || 0,
+                tax_amount: item.tax_amount || 0,
               }))
               setItems(loaded)
             }
@@ -173,8 +187,6 @@ function NewInvoicePageContent() {
       fetchPriceHistory(lastSelectedProduct.id, customerId)
     }
   }, [customerId])
-
-  // ... (all other functions – refreshCustomers, selectCustomer, addProductItem, etc. – unchanged)
 
   const refreshCustomers = () => {
     if (!companyId) return
@@ -230,6 +242,9 @@ function NewInvoicePageContent() {
       total: prod.sale_price,
       project_id: null,
       donor_id: null,
+      tax_code_id: null,
+      tax_rate: 0,
+      tax_amount: 0,
     }])
     setProductSearch("")
     setShowProductList(false)
@@ -250,6 +265,9 @@ function NewInvoicePageContent() {
       total: 0,
       project_id: null,
       donor_id: null,
+      tax_code_id: null,
+      tax_rate: 0,
+      tax_amount: 0,
     }])
   }
 
@@ -259,6 +277,12 @@ function NewInvoicePageContent() {
 
     if (field === "qty" || field === "unit_price") {
       updated[idx].total = updated[idx].qty * updated[idx].unit_price
+      // Recalculate tax if tax_rate is set
+      if (updated[idx].tax_rate > 0) {
+        updated[idx].tax_amount = (updated[idx].qty * updated[idx].unit_price * updated[idx].tax_rate) / 100
+      } else {
+        updated[idx].tax_amount = 0
+      }
     }
 
     if (field === "project_id" && value) {
@@ -305,6 +329,7 @@ function NewInvoicePageContent() {
   }
 
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
+  const totalTaxAmount = items.reduce((s, i) => s + (i.tax_amount || 0), 0)
 
   const handleSubmit = async () => {
     if (!customerId) { setError("Please select a customer"); return }
@@ -332,6 +357,9 @@ function NewInvoicePageContent() {
             cost_price: i.cost_price,
             project_id: i.project_id || null,
             donor_id: i.donor_id || null,
+            tax_code_id: taxEnabled ? (i.tax_code_id || null) : undefined,
+            tax_rate: taxEnabled ? (i.tax_rate || 0) : undefined,
+            tax_amount: taxEnabled ? (i.tax_amount || 0) : undefined,
           })),
           reference, notes,
         }),
@@ -384,11 +412,117 @@ function NewInvoicePageContent() {
   }
 
   const handleWhatsAppWithPDF = async () => {
-    // ... (unchanged) ...
+    if (!selectedCustomer) return
+    const phone = (selectedCustomer.phone || "").replace(/\D/g, "")
+    if (!phone) { alert("No phone number for this customer."); return }
+    const invoiceLink = invoiceIdForLink
+      ? `https://www.oneaccountsbysiqbal.com/invoice/${invoiceIdForLink}`
+      : null
+    const customerDisplayName = selectedCustomer.name?.trim() || selectedCustomer.phone || "Customer"
+    const actualCompanyName = company?.name || company?.company_name || "OneAccounts"
+
+    const pdfData = {
+      companyName: actualCompanyName,
+      companyAddress: company?.address || "",
+      companyPhone: company?.phone || "",
+      companyEmail: company?.email || "",
+      companyTagline: company?.tagline || "",
+      logoUrl: company?.logo_url || null,
+      businessType: company?.business_type || "",
+      invoiceNo: "PREVIEW",
+      date: invoiceDate,
+      dueDate: dueDate,
+      customerName: customerDisplayName,
+      customerPhone: selectedCustomer.phone || "",
+      customerAddress: selectedCustomer.address || "",
+      customerEmail: selectedCustomer.email || "",
+      paymentTerms: selectedCustomer.payment_terms || null,
+      items: items.map(i => ({
+        description: i.description || "",
+        qty: i.qty || 0,
+        unit_price: i.unit_price || 0,
+        total: i.total || 0,
+        image_path: i.product_image || null,
+        product_id: i.product_id || null,
+        product_name: i.product_name || "",
+        tax_rate: i.tax_rate || 0,
+        tax_amount: i.tax_amount || 0,
+      })),
+      subtotal: totalAmount,
+      total: totalAmount + totalTaxAmount,
+      status: "Unpaid",
+      paid: 0,
+      balanceDue: totalAmount + totalTaxAmount,
+    }
+    const doc = await generateInvoicePDF(pdfData)
+    const blob = doc.output("blob")
+    const filePath = `invoices/${Date.now()}-${Math.random().toString(36).substr(2,5)}.pdf`
+    try {
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from("invoice-pdfs")
+        .upload(filePath, blob, { contentType: "application/pdf", upsert: false })
+      if (!uploadErr) {
+        const { data: publicUrlData } = supabase.storage
+          .from("invoice-pdfs")
+          .getPublicUrl(filePath)
+        const pdfLink = publicUrlData.publicUrl
+        const msg = [
+          `Dear ${customerDisplayName},`,
+          ``,
+          `Your invoice of PKR ${(totalAmount + totalTaxAmount).toLocaleString()} has been generated.`,
+          invoiceLink ? `📄 View Online: ${invoiceLink}` : "",
+          `📎 Download PDF: ${pdfLink}`,
+          `📅 Date: ${invoiceDate}`,
+          `📆 Due: ${dueDate}`,
+          ``,
+          `Thank you for your business.`,
+          `— ${actualCompanyName}`,
+        ].filter(line => line !== "").join("\n")
+        const waURL = `https://wa.me/${(selectedCustomer.country_code || "+92").replace(/\D/g, "")}${phone}?text=${encodeURIComponent(msg)}`
+        window.open(waURL, "_blank")
+        return
+      }
+    } catch (e) { console.warn("Upload failed, fallback to text only") }
+    window.open(waLink(), "_blank")
   }
 
   const handleBeforeSavePdf = async () => {
-    // ... (unchanged) ...
+    if (!selectedCustomer) return
+    const pdfData = {
+      companyName: company?.name || company?.company_name || "OneAccounts",
+      companyAddress: company?.address || "",
+      companyPhone: company?.phone || "",
+      companyEmail: company?.email || "",
+      companyTagline: company?.tagline || "",
+      logoUrl: company?.logo_url || null,
+      businessType: company?.business_type || "",
+      invoiceNo: "PREVIEW",
+      date: invoiceDate,
+      dueDate: dueDate,
+      customerName: selectedCustomer.name || "Customer",
+      customerPhone: selectedCustomer.phone || "",
+      customerAddress: selectedCustomer.address || "",
+      customerEmail: selectedCustomer.email || "",
+      paymentTerms: selectedCustomer.payment_terms || null,
+      items: items.map(i => ({
+        description: i.description || "",
+        qty: i.qty || 0,
+        unit_price: i.unit_price || 0,
+        total: i.total || 0,
+        image_path: i.product_image || null,
+        product_id: i.product_id || null,
+        product_name: i.product_name || "",
+        tax_rate: i.tax_rate || 0,
+        tax_amount: i.tax_amount || 0,
+      })),
+      subtotal: totalAmount,
+      total: totalAmount + totalTaxAmount,
+      status: "Unpaid",
+      paid: 0,
+      balanceDue: totalAmount + totalTaxAmount,
+    }
+    const doc = await generateInvoicePDF(pdfData)
+    doc.save(`invoice-preview.pdf`)
   }
 
   useEffect(() => {
@@ -416,12 +550,13 @@ function NewInvoicePageContent() {
     return don?.name || ""
   }
 
-  const itemGridCols = "30px 150px 3fr 80px 110px 110px 110px 30px"
+  const itemGridCols = taxEnabled
+    ? "30px 150px 3fr 80px 110px 80px 110px 110px 30px"
+    : "30px 150px 3fr 80px 110px 110px 110px 30px"
 
   return (
     <div className="invoice-page" style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        /* ── Desktop styles (unchanged) ── */
         .inv-shell { width: 100%; margin: 0; }
         .inv-title { font-size: 18px; font-weight: 700; color: var(--text); }
         .inv-card {
@@ -533,14 +668,12 @@ function NewInvoicePageContent() {
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
 
-        /* ── Desktop summary (always visible) ── */
         .desktop-summary {
           display: flex;
           flex-direction: column;
           gap: 12px;
         }
 
-        /* ── Mobile‑only overrides ── */
         .mobile-only { display: none; }
         .desktop-only { display: block; }
         .mobile-sticky-summary { display: none; }
@@ -549,7 +682,7 @@ function NewInvoicePageContent() {
           .desktop-only { display: none; }
           .mobile-only { display: block; }
           .header-grid { display: block; }
-          .desktop-summary { display: none; } /* hide desktop summary card on mobile */
+          .desktop-summary { display: none; }
           .mobile-sticky-summary {
             display: flex;
             position: sticky;
@@ -713,13 +846,18 @@ function NewInvoicePageContent() {
               </div>
             </div>
 
-            {/* Desktop summary card – hidden on mobile */}
+            {/* Desktop summary card (hidden on mobile) */}
             <div className="desktop-summary">
               <div className="inv-card">
                 <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
-                  <span>Total</span><span>PKR {totalAmount.toLocaleString()}</span>
+                  <span>Total</span><span>PKR {(totalAmount + totalTaxAmount).toLocaleString()}</span>
                 </div>
+                {taxEnabled && totalTaxAmount > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
+                    <span>Tax</span><span>PKR {totalTaxAmount.toLocaleString()}</span>
+                  </div>
+                )}
               </div>
               <div className="inv-card">
                 <button className="inv-btn" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={saving}>
@@ -737,6 +875,7 @@ function NewInvoicePageContent() {
             </div>
           </div>
 
+          {/* Items table */}
           <div className="inv-items-section" style={{ marginBottom: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
@@ -744,19 +883,21 @@ function NewInvoicePageContent() {
             {items.length > 0 && (
               <div className="inv-card" style={{ padding: "16px 12px" }}>
                 <div style={{ overflowX: "auto" }}>
-                  <div className="inv-item-header" style={{ minWidth: "600px" }}>
+                  <div className="inv-item-header" style={{ minWidth: taxEnabled ? 800 : 600 }}>
                     <span></span>
                     <span>{isNGO ? "Product/Project" : "Product"}</span>
                     <span>Description</span>
                     <span>Qty</span>
                     <span>Price</span>
+                    {taxEnabled && <span>Tax %</span>}
                     <span style={{ textAlign: "right" }}>Total</span>
+                    {taxEnabled && <span style={{ textAlign: "right" }}>Tax Amt</span>}
                     <span style={{ textAlign: "right" }}>Cost</span>
                     <span></span>
                   </div>
                   {items.map((item, idx) => (
                     <Fragment key={idx}>
-                      <div className="inv-item-row" style={{ minWidth: "600px" }}>
+                      <div className="inv-item-row" style={{ minWidth: taxEnabled ? 800 : 600 }}>
                         <div style={{ display: "flex", justifyContent: "center" }}>
                           {item.product_image ? (
                             <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
@@ -796,9 +937,48 @@ function NewInvoicePageContent() {
                         />
                         <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
                         <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+
+                        {/* Tax column */}
+                        {taxEnabled && (
+                          <select
+                            className="inv-select"
+                            style={{ height: 34, fontSize: 11 }}
+                            value={item.tax_code_id || ""}
+                            onChange={e => {
+                              const codeId = e.target.value || null
+                              if (codeId) {
+                                const taxCode = taxCodes.find((t: any) => t.id === codeId)
+                                if (taxCode) {
+                                  const taxRate = taxCode.rate
+                                  const taxAmt = (item.qty * item.unit_price * taxRate) / 100
+                                  updateItem(idx, "tax_code_id", codeId)
+                                  updateItem(idx, "tax_rate", taxRate)
+                                  updateItem(idx, "tax_amount", taxAmt)
+                                }
+                              } else {
+                                updateItem(idx, "tax_code_id", null)
+                                updateItem(idx, "tax_rate", 0)
+                                updateItem(idx, "tax_amount", 0)
+                              }
+                            }}
+                          >
+                            <option value="">No Tax</option>
+                            {taxCodes.map((tc: any) => (
+                              <option key={tc.id} value={tc.id}>{tc.code} ({tc.rate}%)</option>
+                            ))}
+                          </select>
+                        )}
+
                         <div className="inv-cell" style={{ justifyContent: "flex-end", fontWeight: 600 }}>
                           PKR {item.total.toLocaleString()}
                         </div>
+
+                        {taxEnabled && (
+                          <div className="inv-cell" style={{ justifyContent: "flex-end", color: "var(--text-muted)" }}>
+                            {item.tax_amount > 0 ? `PKR ${item.tax_amount.toLocaleString()}` : "—"}
+                          </div>
+                        )}
+
                         <div className="inv-cell" style={{ justifyContent: "flex-end", color: "var(--text-muted)" }}>
                           {item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}
                         </div>
@@ -828,7 +1008,10 @@ function NewInvoicePageContent() {
           <div className="mobile-sticky-summary">
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Total</div>
-              <div style={{ fontSize: 18, fontWeight: 800 }}>PKR {totalAmount.toLocaleString()}</div>
+              <div style={{ fontSize: 18, fontWeight: 800 }}>PKR {(totalAmount + totalTaxAmount).toLocaleString()}</div>
+              {taxEnabled && totalTaxAmount > 0 && (
+                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>incl. tax PKR {totalTaxAmount.toLocaleString()}</div>
+              )}
             </div>
             <button className="inv-btn" style={{ background: "var(--primary)", color: "var(--primary-text)", borderColor: "var(--primary)", padding: "12px 24px", fontWeight: 700 }} onClick={handleSubmit} disabled={saving}>
               {saving ? "Posting..." : "POST"}

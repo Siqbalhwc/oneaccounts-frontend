@@ -11,17 +11,14 @@ async function getAccount(supabase: any, code: string, companyId: string) {
   return data
 }
 
-// ✅ Helper that ensures a payable account (2100) exists, creates it if needed
+// ✅ Helper to ensure a payable account (2100) exists, creates it if needed
 async function getOrCreatePayableAccount(supabaseAdmin: any, companyId: string) {
-  // Try 2100 first
   let payable = await getAccount(supabaseAdmin, '2100', companyId)
   if (payable) return payable
 
-  // Fallback to 2001
   payable = await getAccount(supabaseAdmin, '2001', companyId)
   if (payable) return payable
 
-  // Create 2100 as Liability (Expenses Payable)
   const { data: newAccount, error } = await supabaseAdmin
     .from('accounts')
     .insert({
@@ -39,6 +36,26 @@ async function getOrCreatePayableAccount(supabaseAdmin: any, companyId: string) 
     return null
   }
   return newAccount
+}
+
+// ✅ Helper to check if tax_management feature is enabled for a company
+async function isTaxFeatureEnabled(supabase: any, companyId: string): Promise<boolean> {
+  const { data: featureRow } = await supabase
+    .from("features")
+    .select("id")
+    .eq("code", "tax_management")
+    .single()
+
+  if (!featureRow) return false
+
+  const { data: companyFeature } = await supabase
+    .from("company_features")
+    .select("enabled")
+    .eq("company_id", companyId)
+    .eq("feature_id", featureRow.id)
+    .maybeSingle()
+
+  return companyFeature?.enabled || false
 }
 
 async function createJE(
@@ -176,7 +193,6 @@ export async function POST(request: NextRequest) {
     }
   )
 
-  // Admin client for bypassing RLS (account creation)
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -201,6 +217,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: stockErr }, { status: 400 })
   }
 
+  // Tax feature flag
+  const taxEnabled = await isTaxFeatureEnabled(supabase, companyId)
+
   // Business type & automation
   const { data: company } = await supabase.from('companies')
     .select('business_type').eq('id', companyId).single()
@@ -212,7 +231,7 @@ export async function POST(request: NextRequest) {
     .eq('company_id', companyId).maybeSingle()
   const automationConfig = settings?.invoice_automation_config || {}
 
-  // ── Check if the invoice_automation feature is enabled ──
+  // Check invoice_automation feature
   const { data: featureRow } = await supabase
     .from("features")
     .select("id")
@@ -227,7 +246,6 @@ export async function POST(request: NextRequest) {
       .eq("company_id", companyId)
       .eq("feature_id", featureRow.id)
       .maybeSingle()
-
     automationAllowed = companyFeature?.enabled || false
   }
 
@@ -236,8 +254,9 @@ export async function POST(request: NextRequest) {
   const expenseRules = effectiveExpenseEnabled ? (automationConfig.expenseRules || []) : []
   const partners = effectiveProfitEnabled ? (automationConfig.partners || []) : []
 
-  // ── Enhance items with product cost_price if available ──
+  // Enhance items with product cost_price and tax info
   const enhancedItems = await Promise.all(items.map(async (item: any) => {
+    let cost_price = 0
     if (item.product_id) {
       const { data: product } = await supabase
         .from('products')
@@ -245,12 +264,42 @@ export async function POST(request: NextRequest) {
         .eq('id', item.product_id)
         .eq('company_id', companyId)
         .maybeSingle()
-      return { ...item, cost_price: product?.cost_price || 0 }
+      cost_price = product?.cost_price || 0
     }
-    return item
+
+    // Tax snapshot (if feature enabled and tax data provided)
+    let tax_code_snapshot = null
+    let tax_name_snapshot = null
+    let tax_rate = 0
+    let tax_amount = 0
+
+    if (taxEnabled && item.tax_code_id) {
+      const { data: taxCode } = await supabase
+        .from('tax_codes')
+        .select('code, name, rate')
+        .eq('id', item.tax_code_id)
+        .eq('company_id', companyId)
+        .maybeSingle()
+      if (taxCode) {
+        tax_code_snapshot = taxCode.code
+        tax_name_snapshot = taxCode.name
+        tax_rate = taxCode.rate
+        tax_amount = (item.qty || 0) * (item.unit_price || 0) * tax_rate / 100
+      }
+    }
+
+    return {
+      ...item,
+      cost_price,
+      tax_code_id: taxEnabled ? (item.tax_code_id || null) : null,
+      tax_code_snapshot,
+      tax_name_snapshot,
+      tax_rate: taxEnabled ? (item.tax_rate || tax_rate) : 0,
+      tax_amount: taxEnabled ? (item.tax_amount || tax_amount) : 0,
+    }
   }))
 
-  // ── Generate unique invoice number with retry ──
+  // Generate unique invoice number
   let invoice: any = null
   let invoiceNo = ''
   const MAX_RETRIES = 3
@@ -265,6 +314,7 @@ export async function POST(request: NextRequest) {
         date: invoice_date,
         due_date,
         total: 0,
+        total_tax: 0,
         paid: 0,
         status: 'Unpaid',
         reference,
@@ -281,7 +331,7 @@ export async function POST(request: NextRequest) {
   }
   if (!invoice) return NextResponse.json({ error: 'Could not generate unique invoice number' }, { status: 500 })
 
-  // Insert items (with project/donor for NGO)
+  // Insert items
   const itemRows = enhancedItems.map((item: any) => {
     const qty = Number(item.qty || 0)
     const unit_price = Number(item.unit_price || 0)
@@ -296,8 +346,14 @@ export async function POST(request: NextRequest) {
       project_id: isNGO ? (item.project_id || null) : null,
       donor_id: isNGO ? (item.donor_id || null) : null,
       company_id: companyId,
+      tax_code_id: item.tax_code_id || null,
+      tax_code_snapshot: item.tax_code_snapshot || null,
+      tax_name_snapshot: item.tax_name_snapshot || null,
+      tax_rate: item.tax_rate || 0,
+      tax_amount: item.tax_amount || 0,
     }
   })
+
   if (itemRows.length > 0) {
     const { error: itemsError } = await supabase.from('invoice_items').insert(itemRows)
     if (itemsError) {
@@ -306,21 +362,25 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // ── INSERT STOCK MOVES (outflow) ──
+  // Stock moves
   await recordStockMoves(supabase, companyId, enhancedItems, 'sale', invoice.id, 'out')
 
   const totalSalesAmount = itemRows.reduce((s: number, i: any) => s + (i.total || 0), 0)
+  const totalTaxAmount   = itemRows.reduce((s: number, i: any) => s + (i.tax_amount || 0), 0)
+
   const { data: updatedInv } = await supabase
     .from('invoices')
-    .update({ total: totalSalesAmount })
+    .update({ total: totalSalesAmount + totalTaxAmount, total_tax: totalTaxAmount })
     .eq('id', invoice.id)
     .select('*')
     .single()
 
-  // Update customer balance
+  // Update customer balance (includes tax)
   const { data: custBal } = await supabase.from('customers').select('balance').eq('id', party_id).single()
   if (custBal) {
-    await supabase.from('customers').update({ balance: custBal.balance + totalSalesAmount }).eq('id', party_id)
+    await supabase.from('customers')
+      .update({ balance: custBal.balance + totalSalesAmount + totalTaxAmount })
+      .eq('id', party_id)
   }
 
   try {
@@ -330,7 +390,7 @@ export async function POST(request: NextRequest) {
 
     const jeLines: any[] = []
 
-    // AR / Revenue for each item
+    // AR / Revenue for each item (net amount)
     for (const item of enhancedItems) {
       const lineTotal = Number(item.qty || 0) * Number(item.unit_price || 0)
       if (lineTotal <= 0) continue
@@ -386,7 +446,38 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Automation expenses – only if feature is enabled
+    // ── Tax lines ───────────────────────────────────────────
+    if (taxEnabled && totalTaxAmount > 0) {
+      // Group tax amounts by tax account
+      const taxByAccount: Record<number, number> = {}
+      for (const item of enhancedItems) {
+        if (item.tax_code_id && item.tax_amount > 0) {
+          const { data: taxCode } = await supabase
+            .from('tax_codes')
+            .select('tax_account_id')
+            .eq('id', item.tax_code_id)
+            .eq('company_id', companyId)
+            .single()
+          if (taxCode?.tax_account_id) {
+            taxByAccount[taxCode.tax_account_id] = (taxByAccount[taxCode.tax_account_id] || 0) + item.tax_amount
+          }
+        }
+      }
+      for (const [accountId, amount] of Object.entries(taxByAccount)) {
+        jeLines.push({
+          account_id: parseInt(accountId),
+          debit: totalTaxAmount,   // AR already debited with tax included; now credit the tax liability
+          credit: 0,
+        })
+        jeLines.push({
+          account_id: parseInt(accountId),
+          debit: 0,
+          credit: amount,
+        })
+      }
+    }
+
+    // Automation expenses (unchanged, but note: automation runs on net sales, not including tax)
     let totalAutomationExpense = 0
     if (effectiveExpenseEnabled && expenseRules.length > 0) {
       for (const rule of expenseRules) {
@@ -405,7 +496,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Profit allocation – only if feature is enabled
+    // Profit allocation (unchanged)
     if (effectiveProfitEnabled && partners.length > 0) {
       let netProfit = totalSalesAmount - totalAutomationExpense
       for (const item of enhancedItems) {
@@ -441,7 +532,7 @@ export async function POST(request: NextRequest) {
     await supabase.from('invoice_items').delete().eq('invoice_id', invoice.id)
     await supabase.from('invoices').delete().eq('id', invoice.id)
     if (custBal) {
-      await supabase.from('customers').update({ balance: custBal.balance - totalSalesAmount }).eq('id', party_id)
+      await supabase.from('customers').update({ balance: custBal.balance - (totalSalesAmount + totalTaxAmount) }).eq('id', party_id)
     }
     return NextResponse.json({ error: 'Journal entry failed: ' + e.message }, { status: 500 })
   }
@@ -451,7 +542,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ success: true, invoice: updatedInv })
 }
 
-// ── PUT (Update) – now includes full automation support ─────────────
+// ── PUT (Update) – now includes tax support ─────────────
 export async function PUT(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -485,13 +576,15 @@ export async function PUT(request: NextRequest) {
   const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
   const userEmail = user.email || 'system'
 
+  const taxEnabled = await isTaxFeatureEnabled(supabase, companyId)
+
   // Stock validation
   const stockErr = await validateStock(supabase, companyId, items)
   if (stockErr) {
     return NextResponse.json({ error: stockErr }, { status: 400 })
   }
 
-  // ✅ Check essential accounts BEFORE reversing anything
+  // Check essential accounts before reversing
   const arAccount = await getAccount(supabase, '1100', companyId)
   const revenueAccount = await getAccount(supabase, '4000', companyId)
   if (!arAccount || !revenueAccount) {
@@ -504,7 +597,7 @@ export async function PUT(request: NextRequest) {
     .select('*').eq('id', id).eq('company_id', companyId).single()
   if (!oldInv) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
 
-  // Reverse old JE (only the one for this specific invoice)
+  // Reverse old JE
   const { data: oldEntries } = await supabase.from('journal_entries')
     .select('id')
     .eq('company_id', companyId)
@@ -542,6 +635,7 @@ export async function PUT(request: NextRequest) {
   const isNGO = (company?.business_type || '') === 'ngo'
 
   const enhancedItems = await Promise.all((items || []).map(async (item: any) => {
+    let cost_price = 0
     if (item.product_id) {
       const { data: product } = await supabase
         .from('products')
@@ -549,9 +643,35 @@ export async function PUT(request: NextRequest) {
         .eq('id', item.product_id)
         .eq('company_id', companyId)
         .maybeSingle()
-      return { ...item, cost_price: product?.cost_price || 0 }
+      cost_price = product?.cost_price || 0
     }
-    return item
+
+    let tax_code_snapshot = null
+    let tax_name_snapshot = null
+    let tax_rate = 0
+    let tax_amount = 0
+
+    if (taxEnabled && item.tax_code_id) {
+      const { data: taxCode } = await supabase
+        .from('tax_codes')
+        .select('code, name, rate')
+        .eq('id', item.tax_code_id)
+        .eq('company_id', companyId)
+        .maybeSingle()
+      if (taxCode) {
+        tax_code_snapshot = taxCode.code
+        tax_name_snapshot = taxCode.name
+        tax_rate = taxCode.rate
+        tax_amount = (item.qty || 0) * (item.unit_price || 0) * tax_rate / 100
+      }
+    }
+
+    return { ...item, cost_price,
+      tax_code_id: taxEnabled ? (item.tax_code_id || null) : null,
+      tax_code_snapshot, tax_name_snapshot,
+      tax_rate: taxEnabled ? (item.tax_rate || tax_rate) : 0,
+      tax_amount: taxEnabled ? (item.tax_amount || tax_amount) : 0,
+    }
   }))
 
   const itemRows = enhancedItems.map((item: any) => {
@@ -568,13 +688,20 @@ export async function PUT(request: NextRequest) {
       project_id: isNGO ? (item.project_id || null) : null,
       donor_id: isNGO ? (item.donor_id || null) : null,
       company_id: companyId,
+      tax_code_id: item.tax_code_id || null,
+      tax_code_snapshot: item.tax_code_snapshot || null,
+      tax_name_snapshot: item.tax_name_snapshot || null,
+      tax_rate: item.tax_rate || 0,
+      tax_amount: item.tax_amount || 0,
     }
   })
+
   if (itemRows.length > 0) await supabase.from('invoice_items').insert(itemRows)
 
   await recordStockMoves(supabase, companyId, items, 'sale', id, 'out')
 
   const totalSalesAmount = itemRows.reduce((s: number, i: any) => s + (i.total || 0), 0)
+  const totalTaxAmount   = itemRows.reduce((s: number, i: any) => s + (i.tax_amount || 0), 0)
 
   const { data: updatedInv } = await supabase
     .from('invoices')
@@ -582,7 +709,8 @@ export async function PUT(request: NextRequest) {
       party_id,
       date: invoice_date,
       due_date,
-      total: totalSalesAmount,
+      total: totalSalesAmount + totalTaxAmount,
+      total_tax: totalTaxAmount,
       reference,
       notes,
       updated_by: userEmail,
@@ -597,11 +725,11 @@ export async function PUT(request: NextRequest) {
   if (party_id) {
     const { data: cust } = await supabase.from('customers').select('balance').eq('id', party_id).single()
     if (cust) {
-      await supabase.from('customers').update({ balance: cust.balance + totalSalesAmount }).eq('id', party_id)
+      await supabase.from('customers').update({ balance: cust.balance + totalSalesAmount + totalTaxAmount }).eq('id', party_id)
     }
   }
 
-  // ── Load automation config ──
+  // Load automation config
   const { data: settings } = await supabase.from('company_settings')
     .select('invoice_automation_config')
     .eq('company_id', companyId).maybeSingle()
@@ -629,7 +757,6 @@ export async function PUT(request: NextRequest) {
   const expenseRules = effectiveExpenseEnabled ? (automationConfig.expenseRules || []) : []
   const partners = effectiveProfitEnabled ? (automationConfig.partners || []) : []
 
-  // ✅ Build and insert the new journal entry (with automation)
   try {
     const jeLines: any[] = []
 
@@ -638,22 +765,14 @@ export async function PUT(request: NextRequest) {
       if (lineTotal <= 0) continue
 
       jeLines.push({
-        account_id: arAccount.id,
-        debit: lineTotal,
-        credit: 0,
+        account_id: arAccount.id, debit: lineTotal, credit: 0,
         project_id: isNGO ? (item.project_id || null) : null,
         donor_id: isNGO ? (item.donor_id || null) : null,
-        activity_id: null,
-        location_id: null,
       })
       jeLines.push({
-        account_id: revenueAccount.id,
-        debit: 0,
-        credit: lineTotal,
+        account_id: revenueAccount.id, debit: 0, credit: lineTotal,
         project_id: isNGO ? (item.project_id || null) : null,
         donor_id: isNGO ? (item.donor_id || null) : null,
-        activity_id: null,
-        location_id: null,
       })
     }
 
@@ -676,6 +795,36 @@ export async function PUT(request: NextRequest) {
           account_id: inventoryAccount.id, debit: 0, credit: cost,
           project_id: isNGO ? (item.project_id || null) : null,
           donor_id: isNGO ? (item.donor_id || null) : null,
+        })
+      }
+    }
+
+    // Tax lines
+    if (taxEnabled && totalTaxAmount > 0) {
+      const taxByAccount: Record<number, number> = {}
+      for (const item of enhancedItems) {
+        if (item.tax_code_id && item.tax_amount > 0) {
+          const { data: taxCode } = await supabase
+            .from('tax_codes')
+            .select('tax_account_id')
+            .eq('id', item.tax_code_id)
+            .eq('company_id', companyId)
+            .single()
+          if (taxCode?.tax_account_id) {
+            taxByAccount[taxCode.tax_account_id] = (taxByAccount[taxCode.tax_account_id] || 0) + item.tax_amount
+          }
+        }
+      }
+      for (const [accountId, amount] of Object.entries(taxByAccount)) {
+        jeLines.push({
+          account_id: parseInt(accountId),
+          debit: amount,
+          credit: 0,
+        })
+        jeLines.push({
+          account_id: parseInt(accountId),
+          debit: 0,
+          credit: amount,
         })
       }
     }
