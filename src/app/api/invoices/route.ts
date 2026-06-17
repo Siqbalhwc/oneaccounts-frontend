@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { logDataChange } from '@/lib/audit'
@@ -8,6 +9,36 @@ async function getAccount(supabase: any, code: string, companyId: string) {
   const { data } = await supabase.from('accounts')
     .select('id,balance').eq('code', code).eq('company_id', companyId).maybeSingle()
   return data
+}
+
+// ✅ Helper that ensures a payable account (2100) exists, creates it if needed
+async function getOrCreatePayableAccount(supabaseAdmin: any, companyId: string) {
+  // Try 2100 first
+  let payable = await getAccount(supabaseAdmin, '2100', companyId)
+  if (payable) return payable
+
+  // Fallback to 2001
+  payable = await getAccount(supabaseAdmin, '2001', companyId)
+  if (payable) return payable
+
+  // Create 2100 as Liability (Expenses Payable)
+  const { data: newAccount, error } = await supabaseAdmin
+    .from('accounts')
+    .insert({
+      code: '2100',
+      name: 'Expenses Payable',
+      type: 'Liability',
+      company_id: companyId,
+      balance: 0,
+    })
+    .select('id,balance')
+    .single()
+
+  if (error) {
+    console.error('Failed to create 2100 account:', error)
+    return null
+  }
+  return newAccount
 }
 
 async function createJE(
@@ -143,6 +174,13 @@ export async function POST(request: NextRequest) {
         },
       },
     }
+  )
+
+  // Admin client for bypassing RLS (account creation)
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false } }
   )
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -358,8 +396,12 @@ export async function POST(request: NextRequest) {
         jeLines.push({ account_id: rule.account_id, debit: amount, credit: 0 })
       }
       if (totalAutomationExpense > 0) {
-        const payableExpAccount = await getAccount(supabase, '2001', companyId)
-        if (payableExpAccount) jeLines.push({ account_id: payableExpAccount.id, debit: 0, credit: totalAutomationExpense })
+        const payableExpAccount = await getOrCreatePayableAccount(supabaseAdmin, companyId)
+        if (payableExpAccount) {
+          jeLines.push({ account_id: payableExpAccount.id, debit: 0, credit: totalAutomationExpense })
+        } else {
+          throw new Error('Could not find or create an Expenses Payable account (2100)')
+        }
       }
     }
 
@@ -409,7 +451,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ success: true, invoice: updatedInv })
 }
 
-// ── PUT (Update) – FIXED: now recreates the journal entry ─────────────
+// ── PUT (Update) – now includes full automation support ─────────────
 export async function PUT(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -425,6 +467,12 @@ export async function PUT(request: NextRequest) {
         },
       },
     }
+  )
+
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false } }
   )
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -493,7 +541,20 @@ export async function PUT(request: NextRequest) {
     .select('business_type').eq('id', companyId).single()
   const isNGO = (company?.business_type || '') === 'ngo'
 
-  const itemRows = (items || []).map((item: any) => {
+  const enhancedItems = await Promise.all((items || []).map(async (item: any) => {
+    if (item.product_id) {
+      const { data: product } = await supabase
+        .from('products')
+        .select('cost_price')
+        .eq('id', item.product_id)
+        .eq('company_id', companyId)
+        .maybeSingle()
+      return { ...item, cost_price: product?.cost_price || 0 }
+    }
+    return item
+  }))
+
+  const itemRows = enhancedItems.map((item: any) => {
     const qty = Number(item.qty || 0)
     const unit_price = Number(item.unit_price || 0)
     const lineTotal = qty * unit_price
@@ -540,7 +601,35 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  // ✅ Build and insert the new journal entry (guaranteed because we checked accounts above)
+  // ── Load automation config ──
+  const { data: settings } = await supabase.from('company_settings')
+    .select('invoice_automation_config')
+    .eq('company_id', companyId).maybeSingle()
+  const automationConfig = settings?.invoice_automation_config || {}
+
+  const { data: featureRow } = await supabase
+    .from("features")
+    .select("id")
+    .eq("code", "invoice_automation")
+    .single()
+
+  let automationAllowed = false
+  if (featureRow) {
+    const { data: companyFeature } = await supabase
+      .from("company_features")
+      .select("enabled")
+      .eq("company_id", companyId)
+      .eq("feature_id", featureRow.id)
+      .maybeSingle()
+    automationAllowed = companyFeature?.enabled || false
+  }
+
+  const effectiveExpenseEnabled = automationAllowed && (automationConfig.expenseEnabled ?? false)
+  const effectiveProfitEnabled = automationAllowed && (automationConfig.profitEnabled ?? false)
+  const expenseRules = effectiveExpenseEnabled ? (automationConfig.expenseRules || []) : []
+  const partners = effectiveProfitEnabled ? (automationConfig.partners || []) : []
+
+  // ✅ Build and insert the new journal entry (with automation)
   try {
     const jeLines: any[] = []
 
@@ -568,11 +657,11 @@ export async function PUT(request: NextRequest) {
       })
     }
 
-    // Optional: COGS lines for product items
+    // COGS
     const cogsAccount = await getAccount(supabase, '5000', companyId)
     const inventoryAccount = await getAccount(supabase, '1200', companyId)
     if (cogsAccount && inventoryAccount) {
-      for (const item of items) {
+      for (const item of enhancedItems) {
         if (!item.product_id) continue
         const qty = Number(item.qty || 0)
         const costPrice = Number(item.cost_price || 0)
@@ -588,6 +677,55 @@ export async function PUT(request: NextRequest) {
           project_id: isNGO ? (item.project_id || null) : null,
           donor_id: isNGO ? (item.donor_id || null) : null,
         })
+      }
+    }
+
+    // Automation expenses
+    let totalAutomationExpense = 0
+    if (effectiveExpenseEnabled && expenseRules.length > 0) {
+      for (const rule of expenseRules) {
+        const amount = (totalSalesAmount * rule.rate) / 100
+        if (amount <= 0 || !rule.account_id) continue
+        totalAutomationExpense += amount
+        jeLines.push({ account_id: rule.account_id, debit: amount, credit: 0 })
+      }
+      if (totalAutomationExpense > 0) {
+        const payableExpAccount = await getOrCreatePayableAccount(supabaseAdmin, companyId)
+        if (payableExpAccount) {
+          jeLines.push({ account_id: payableExpAccount.id, debit: 0, credit: totalAutomationExpense })
+        } else {
+          throw new Error('Could not find or create an Expenses Payable account (2100)')
+        }
+      }
+    }
+
+    // Profit allocation
+    if (effectiveProfitEnabled && partners.length > 0) {
+      let netProfit = totalSalesAmount - totalAutomationExpense
+      for (const item of enhancedItems) {
+        if (!item.product_id) continue
+        const cost = (Number(item.qty || 0) * Number(item.cost_price || 0))
+        netProfit -= cost
+      }
+      if (netProfit > 0) {
+        const retainedEarnings = await getAccount(supabase, '3000', companyId)
+        if (retainedEarnings) {
+          jeLines.push({ account_id: retainedEarnings.id, debit: netProfit, credit: 0 })
+
+          const activePartners = partners.filter((p: any) => p.account_id && p.percentage > 0)
+          if (activePartners.length > 0) {
+            let allocated = 0
+            for (let i = 0; i < activePartners.length - 1; i++) {
+              const p = activePartners[i]
+              const amount = Math.round((netProfit * p.percentage) / 100 * 100) / 100
+              allocated += amount
+              jeLines.push({ account_id: p.account_id, debit: 0, credit: amount })
+            }
+            const lastPartner = activePartners[activePartners.length - 1]
+            const lastAmount = netProfit - allocated
+            jeLines.push({ account_id: lastPartner.account_id, debit: 0, credit: lastAmount })
+          }
+        }
       }
     }
 
