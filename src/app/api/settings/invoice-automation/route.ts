@@ -13,13 +13,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Missing companyId or config' }, { status: 400 })
   }
 
-  // Upsert the automation config into company_settings
+  // Upsert with explicit conflict target to avoid duplicate key error
   const { error } = await supabaseAdmin
     .from('company_settings')
-    .upsert({
-      company_id: companyId,
-      invoice_automation_config: config,
-    })
+    .upsert(
+      {
+        company_id: companyId,
+        invoice_automation_config: config,
+      },
+      { onConflict: 'company_id' }
+    )
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
