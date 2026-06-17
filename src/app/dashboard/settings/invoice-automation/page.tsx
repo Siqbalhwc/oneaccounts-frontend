@@ -107,18 +107,22 @@ function InvoiceAutomationContent() {
       partners: partners.filter(p => p.account_id && p.percentage > 0),
     }
 
-    const { error } = await supabase
-      .from("company_settings")
-      .upsert({
-        company_id: companyId,
-        invoice_automation_config: config,
+    try {
+      const res = await fetch("/api/settings/invoice-automation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId, config }),
       })
-
-    if (error) {
-      setMessage("Error saving: " + error.message)
-    } else {
-      setMessage("✅ Automation settings saved!")
+      const result = await res.json()
+      if (result.success) {
+        setMessage("✅ Automation settings saved!")
+      } else {
+        setMessage("Error saving: " + (result.error || "Unknown error"))
+      }
+    } catch {
+      setMessage("Network error")
     }
+
     setSaving(false)
     setTimeout(() => setMessage(""), 3000)
   }
