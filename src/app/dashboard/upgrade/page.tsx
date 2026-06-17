@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { Check, Clock, ArrowRight, Plus, ShieldCheck, Zap, AlertTriangle, Star, TrendingUp, X } from "lucide-react"
+import { Check, Clock, ArrowRight, Plus, ShieldCheck, Zap, AlertTriangle, Star, TrendingUp, X, Minus } from "lucide-react"
 import { useCompany } from "@/contexts/CompanyContext"
 
 const BENCHMARK_NOTE =
@@ -15,6 +15,8 @@ const PLAN_PRICING: Record<string, { monthly: number; half_yearly: number; yearl
   ngo:     { monthly: 5000, half_yearly: 28000, yearly: 50000 },
 }
 
+const ADDITIONAL_USER_PRICE_MONTHLY = 500
+
 const TOPUP_PRICE_MONTHLY = 500
 
 function topupDiscountedPrice(baseMonthly: number, period: BillingPeriod): number {
@@ -23,44 +25,13 @@ function topupDiscountedPrice(baseMonthly: number, period: BillingPeriod): numbe
   return Math.round(baseMonthly * 12 * (30000 / 36000))
 }
 
-// ✅ Feature codes MUST match the `features.code` in the database
 const TOPUP_FEATURES = [
-  {
-    code: "asset_management",
-    name: "Fixed Asset Management",
-    icon: "🏗️",
-    desc: "Register assets, post depreciation automatically, record disposals, and run the asset schedule report.",
-  },
-  {
-    code: "purchase_orders",
-    name: "Purchase Orders",
-    icon: "📦",
-    desc: "Full PO workflow — raise, approve, receive (GRN), and auto-post supplier bills on receipt.",
-  },
-  {
-    code: "whatsapp_invoice",   // ✅ match the actual feature code
-    name: "WhatsApp Integration",
-    icon: "💬",
-    desc: "Send invoices, payment receipts, and overdue reminders directly to customers via WhatsApp.",
-  },
-  {
-    code: "invoice_automation",
-    name: "Invoice Automation",
-    icon: "⚡",
-    desc: "Set up recurring invoices and scheduled billing runs — OneAccounts posts them automatically.",
-  },
-  {
-    code: "profit_allocation",
-    name: "Profit Allocation",
-    icon: "💰",
-    desc: "Define partner or investor shares and allocate net profit to capital accounts in one click.",
-  },
-  {
-    code: "investors",
-    name: "Investors Module",
-    icon: "📈",
-    desc: "Track investor capital, returns, and statements. Generate investor-facing reports at any date.",
-  },
+  { code: "asset_management", name: "Fixed Asset Management", icon: "🏗️", desc: "Register assets, post depreciation automatically, record disposals, and run the asset schedule report." },
+  { code: "purchase_orders", name: "Purchase Orders", icon: "📦", desc: "Full PO workflow — raise, approve, receive (GRN), and auto-post supplier bills on receipt." },
+  { code: "whatsapp_invoice", name: "WhatsApp Integration", icon: "💬", desc: "Send invoices, payment receipts, and overdue reminders directly to customers via WhatsApp." },
+  { code: "invoice_automation", name: "Invoice Automation", icon: "⚡", desc: "Set up recurring invoices and scheduled billing runs — OneAccounts posts them automatically." },
+  { code: "profit_allocation", name: "Profit Allocation", icon: "💰", desc: "Define partner or investor shares and allocate net profit to capital accounts in one click." },
+  { code: "investors", name: "Investors Module", icon: "📈", desc: "Track investor capital, returns, and statements. Generate investor-facing reports at any date." },
 ]
 
 const PLAN_FEATURES = [
@@ -174,11 +145,13 @@ export default function UpgradePage() {
   const [isTrial, setIsTrial] = useState(false)
   const [isLifetime, setIsLifetime] = useState(false)
 
+  // Additional users state
+  const [additionalUsers, setAdditionalUsers] = useState(0)
+
   useEffect(() => {
     if (!companyId) return
     const fetchData = async () => {
       try {
-        // Company & plan
         const { data: company } = await supabase
           .from("companies")
           .select("business_type, is_trial, trial_ends_at, plans(code, name, monthly_price_per_user, half_yearly_price_per_user, yearly_price_per_user, trial_days)")
@@ -190,7 +163,6 @@ export default function UpgradePage() {
           setIsTrial(company.is_trial || false)
         }
 
-        // Latest active subscription
         const { data: sub } = await supabase
           .from("subscriptions")
           .select("*")
@@ -200,24 +172,21 @@ export default function UpgradePage() {
           .limit(1)
           .maybeSingle()
         setSubscription(sub)
+        setIsLifetime(sub && sub.end_date >= "9999-01-01")
 
-        if (sub && sub.end_date >= "9999-01-01") {
-          setIsLifetime(true)
-        } else {
-          setIsLifetime(false)
+        // If a paid subscription exists, default billing period to match existing
+        if (sub && sub.plan_type) {
+          // We don't have the actual billing period stored; assume based on price?
+          // Default to yearly for lifetime, else keep as selected
         }
 
-        // Active features from company_features (the single source of truth)
         const { data: cfRows } = await supabase
           .from("company_features")
           .select("features(code)")
           .eq("company_id", companyId)
           .eq("enabled", true)
 
-        const codes: string[] = (cfRows || [])
-          .map((r: any) => r.features?.code)
-          .filter(Boolean)
-        setActiveFeatureCodes(codes)
+        setActiveFeatureCodes((cfRows || []).map((r: any) => r.features?.code).filter(Boolean))
       } catch (e) {
         console.error(e)
       }
@@ -240,9 +209,18 @@ export default function UpgradePage() {
   }
 
   const getTopupPrice = (period: BillingPeriod): number => topupDiscountedPrice(TOPUP_PRICE_MONTHLY, period)
+  const additionalUserPrice = (period: BillingPeriod): number => {
+    if (period === "monthly") return ADDITIONAL_USER_PRICE_MONTHLY
+    if (period === "half_yearly") return ADDITIONAL_USER_PRICE_MONTHLY * 6
+    return ADDITIONAL_USER_PRICE_MONTHLY * 12
+  }
 
-  const totalPrice = (period: BillingPeriod): number =>
-    getBasePrice(period) + selectedTopups.length * getTopupPrice(period)
+  const totalPrice = (period: BillingPeriod): number => {
+    const base = getBasePrice(period)
+    const topups = selectedTopups.length * getTopupPrice(period)
+    const users = additionalUsers * additionalUserPrice(period)
+    return base + topups + users
+  }
 
   const animatedTotal = useAnimatedNumber(totalPrice(billingPeriod))
 
@@ -256,7 +234,7 @@ export default function UpgradePage() {
   const handleUpgrade = () => {
     const price = totalPrice(billingPeriod)
     const topupParams = selectedTopups.map(t => `topups[]=${t}`).join("&")
-    router.push(`/dashboard/upgrade/payment?amount=${price}&period=${billingPeriod}&plan=${plan?.code || ""}${topupParams ? "&" + topupParams : ""}`)
+    router.push(`/dashboard/upgrade/payment?amount=${price}&period=${billingPeriod}&plan=${plan?.code || ""}${additionalUsers > 0 ? `&additional_users=${additionalUsers}` : ""}${topupParams ? "&" + topupParams : ""}`)
   }
 
   const toggleTopup = (code: string) => {
@@ -265,7 +243,6 @@ export default function UpgradePage() {
     setTimeout(() => setHighlightCard(false), 600)
   }
 
-  // trial-related values (only for trial companies)
   const trialDaysLeft = subscription?.end_date
     ? Math.ceil((new Date(subscription.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
     : plan?.trial_days ?? 10
@@ -275,16 +252,8 @@ export default function UpgradePage() {
 
   if (loading) {
     return (
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "center",
-        minHeight: "60vh", gap: 12, color: "var(--text-muted)", fontSize: 14,
-        fontFamily: "'Inter', sans-serif",
-      }}>
-        <span style={{
-          width: 18, height: 18, border: "2px solid var(--border)",
-          borderTopColor: "var(--primary)", borderRadius: "50%",
-          display: "inline-block", animation: "spin 0.6s linear infinite",
-        }} />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh", gap: 12, color: "var(--text-muted)", fontSize: 14, fontFamily: "'Inter', sans-serif" }}>
+        <span style={{ width: 18, height: 18, border: "2px solid var(--border)", borderTopColor: "var(--primary)", borderRadius: "50%", display: "inline-block", animation: "spin 0.6s linear infinite" }} />
         Loading…
         <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       </div>
@@ -296,53 +265,35 @@ export default function UpgradePage() {
     @keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
     @keyframes pulse  { 0%,100% { box-shadow:0 0 0 0 rgba(23,64,200,0.18); } 50% { box-shadow:0 0 0 8px rgba(23,64,200,0); } }
 
-    .oa-page { padding:28px 28px 56px; background:var(--bg); min-height:100vh;
-               font-family:'Inter',sans-serif; }
-
+    .oa-page { padding:28px 28px 56px; background:var(--bg); min-height:100vh; font-family:'Inter',sans-serif; }
     .oa-h1  { font-size:26px; font-weight:800; color:var(--text); margin:0 0 5px; letter-spacing:-0.5px; }
     .oa-sub { font-size:14px; color:var(--text-muted); margin:0; display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
     .oa-dot { color:var(--text-muted); }
-
-    .banner { display:flex; align-items:center; gap:10px; padding:12px 16px;
-              border-radius:12px; font-size:13px; font-weight:600;
-              margin-bottom:20px; animation:fadeUp .35s ease; }
+    .banner { display:flex; align-items:center; gap:10px; padding:12px 16px; border-radius:12px; font-size:13px; font-weight:600; margin-bottom:20px; animation:fadeUp .35s ease; }
     .banner-warn  { background:var(--card); border:1px solid #F59E0B; color:#92400E; }
     .banner-error { background:var(--card); border:1px solid #EF4444; color:#DC2626; }
 
     .period-wrap  { margin-bottom:24px; }
-    .period-label { font-size:11px; font-weight:800; text-transform:uppercase;
-                    letter-spacing:.12em; color:var(--text-muted); margin-bottom:10px; }
-    .period-toggle { display:inline-flex; border:1.5px solid var(--border); border-radius:12px;
-                     overflow:hidden; background:var(--card); }
-    .period-btn   { padding:9px 18px; font-size:13px; font-weight:700; border:none;
-                    cursor:pointer; background:transparent; color:var(--text-muted);
-                    transition:all .18s; font-family:inherit; white-space:nowrap;
-                    display:flex; align-items:center; gap:6px; }
+    .period-label { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.12em; color:var(--text-muted); margin-bottom:10px; }
+    .period-toggle { display:inline-flex; border:1.5px solid var(--border); border-radius:12px; overflow:hidden; background:var(--card); }
+    .period-btn   { padding:9px 18px; font-size:13px; font-weight:700; border:none; cursor:pointer; background:transparent; color:var(--text-muted); transition:all .18s; font-family:inherit; white-space:nowrap; display:flex; align-items:center; gap:6px; }
     .period-btn:hover { background:var(--card-hover); color:var(--text); }
     .period-btn.active { background:var(--primary); color:var(--primary-text); border-radius:10px; }
-    .save-pill { background:rgba(255,255,255,.22); font-size:10px; font-weight:800;
-                 padding:2px 7px; border-radius:20px; }
+    .save-pill { background:rgba(255,255,255,.22); font-size:10px; font-weight:800; padding:2px 7px; border-radius:20px; }
 
-    .plan-grid { display:grid; grid-template-columns:1fr 1fr; gap:24px;
-                 align-items:stretch; margin-bottom:44px; }
+    .plan-grid { display:grid; grid-template-columns:1fr 1fr; gap:24px; align-items:stretch; margin-bottom:44px; }
     @media(max-width:640px){ .plan-grid { grid-template-columns:1fr; } }
 
-    .plan-card { background:var(--card); border-radius:20px; padding:28px;
-                 border:1.5px solid var(--border); display:flex; flex-direction:column;
-                 animation:fadeUp .4s ease; }
-    .plan-card-upgrade { border:2px solid var(--primary);
-                         box-shadow:0 8px 40px rgba(23,64,200,.10); }
+    .plan-card { background:var(--card); border-radius:20px; padding:28px; border:1.5px solid var(--border); display:flex; flex-direction:column; animation:fadeUp .4s ease; }
+    .plan-card-upgrade { border:2px solid var(--primary); box-shadow:0 8px 40px rgba(23,64,200,.10); }
     .plan-card-upgrade.highlight { animation:pulse .6s ease; }
 
-    .card-lbl        { font-size:10px; font-weight:800; text-transform:uppercase;
-                       letter-spacing:.13em; color:var(--text-muted); margin-bottom:5px; }
+    .card-lbl        { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.13em; color:var(--text-muted); margin-bottom:5px; }
     .card-lbl-blue   { color:var(--primary); }
-    .plan-name-text  { font-size:22px; font-weight:800; color:var(--text);
-                       letter-spacing:-.3px; margin:0 0 4px; }
+    .plan-name-text  { font-size:22px; font-weight:800; color:var(--text); letter-spacing:-.3px; margin:0 0 4px; }
     .plan-super      { font-size:13px; font-weight:500; color:var(--text-muted); vertical-align:super; }
 
-    .badge           { display:inline-flex; align-items:center; gap:4px;
-                       font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px; }
+    .badge           { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px; }
     .badge-green     { background:var(--bg-soft); color:#10B981; }
     .badge-red       { background:var(--bg-soft); color:#EF4444; }
     .badge-amber     { background:var(--bg-soft); color:#F59E0B; }
@@ -353,19 +304,13 @@ export default function UpgradePage() {
     .price-amount    { font-size:40px; font-weight:800; color:var(--text); letter-spacing:-1.5px; line-height:1; }
     .price-unit      { font-size:13px; color:var(--text-muted); }
 
-    .breakdown       { background:var(--bg); border-radius:10px; padding:10px 14px; margin:10px 0;
-                       font-size:12px; color:var(--text); display:flex; flex-direction:column; gap:4px; }
+    .breakdown       { background:var(--bg); border-radius:10px; padding:10px 14px; margin:10px 0; font-size:12px; color:var(--text); display:flex; flex-direction:column; gap:4px; }
     .breakdown-row   { display:flex; justify-content:space-between; }
     .breakdown-total { font-weight:700; color:var(--text); border-top:1px solid var(--border); padding-top:6px; margin-top:2px; }
 
-    .benchmark       { font-size:12px; color:var(--text); background:var(--bg); padding:10px 14px;
-                       border-radius:10px; border-left:3px solid var(--primary); margin:16px 0 20px; line-height:1.55; }
+    .benchmark       { font-size:12px; color:var(--text); background:var(--bg); padding:10px 14px; border-radius:10px; border-left:3px solid var(--primary); margin:16px 0 20px; line-height:1.55; }
 
-    .btn-upgrade     { width:100%; padding:14px; border-radius:13px;
-                       background:linear-gradient(135deg, var(--primary, #1740C8) 0%, var(--primary-dark, #071352) 100%);
-                       color:var(--primary-text, #fff); font-size:15px; font-weight:700; border:none;
-                       cursor:pointer; font-family:inherit; display:flex;
-                       align-items:center; justify-content:center; gap:8px; margin-top:auto; }
+    .btn-upgrade     { width:100%; padding:14px; border-radius:13px; background:linear-gradient(135deg, var(--primary, #1740C8) 0%, var(--primary-dark, #071352) 100%); color:var(--primary-text, #fff); font-size:15px; font-weight:700; border:none; cursor:pointer; font-family:inherit; display:flex; align-items:center; justify-content:center; gap:8px; margin-top:auto; }
     .btn-upgrade:hover  { opacity:.88; transform:translateY(-1px); }
     .btn-upgrade:active { transform:translateY(0); }
     .btn-upgrade:disabled { opacity:.4; cursor:not-allowed; transform:none; }
@@ -378,16 +323,12 @@ export default function UpgradePage() {
 
     .topup-grid      { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px; }
 
-    .topup-card      { background:var(--card); border-radius:16px; border:1.5px solid var(--border);
-                       padding:20px; transition:border-color .2s,box-shadow .2s,transform .2s;
-                       display:flex; flex-direction:column; cursor:pointer; }
+    .topup-card      { background:var(--card); border-radius:16px; border:1.5px solid var(--border); padding:20px; transition:border-color .2s,box-shadow .2s,transform .2s; display:flex; flex-direction:column; cursor:pointer; }
     .topup-card:hover { border-color:var(--primary); box-shadow:0 4px 20px rgba(23,64,200,.08); transform:translateY(-2px); }
     .topup-card.selected  { border-color:var(--primary); background:var(--bg-soft); }
     .topup-card.committed { border-color:#10B981; background:var(--bg-soft); }
 
-    .topup-icon      { font-size:22px; width:40px; height:40px; border-radius:10px;
-                       background:var(--bg); display:flex; align-items:center;
-                       justify-content:center; margin-bottom:12px; color:var(--text); }
+    .topup-icon      { font-size:22px; width:40px; height:40px; border-radius:10px; background:var(--bg); display:flex; align-items:center; justify-content:center; margin-bottom:12px; color:var(--text); }
     .topup-card.selected  .topup-icon { background:var(--card-hover); color:var(--primary); }
     .topup-card.committed .topup-icon { background:var(--card-hover); color:#10B981; }
 
@@ -396,25 +337,34 @@ export default function UpgradePage() {
     .topup-price-row { font-size:13px; color:var(--text); margin-bottom:12px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
     .topup-orig      { text-decoration:line-through; color:var(--text-muted); }
 
-    .btn-select      { width:100%; padding:8px; border-radius:9px; border:none; font-family:inherit;
-                       font-size:13px; font-weight:700; display:flex; align-items:center; justify-content:center;
-                       gap:6px; transition:all .15s; cursor:pointer; }
+    .btn-select      { width:100%; padding:8px; border-radius:9px; border:none; font-family:inherit; font-size:13px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:6px; transition:all .15s; cursor:pointer; }
     .btn-select-add  { background:var(--card-hover); color:var(--primary); }
     .btn-select-add:hover { background:var(--bg-soft); }
     .btn-select-rem  { background:rgba(239,68,68,0.15); color:#EF4444; }
     .btn-select-rem:hover { background:rgba(239,68,68,0.25); }
     .btn-select-done { background:rgba(16,185,129,0.15); color:#10B981; cursor:default; }
 
-    .topup-bar       { background:var(--card); border:1.5px solid var(--primary); border-radius:14px;
-                       padding:14px 18px; margin-bottom:24px; display:flex;
-                       align-items:center; gap:10px; flex-wrap:wrap; animation:fadeUp .3s ease; }
-    .topup-tag       { display:flex; align-items:center; gap:5px; background:var(--bg-soft);
-                       color:var(--primary); font-size:12px; font-weight:700;
-                       padding:4px 10px; border-radius:20px; }
+    .topup-bar       { background:var(--card); border:1.5px solid var(--primary); border-radius:14px; padding:14px 18px; margin-bottom:24px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; animation:fadeUp .3s ease; }
+    .topup-tag       { display:flex; align-items:center; gap:5px; background:var(--bg-soft); color:var(--primary); font-size:12px; font-weight:700; padding:4px 10px; border-radius:20px; }
     .topup-tag-x     { cursor:pointer; color:var(--text-muted); }
     .topup-tag-x:hover { color:var(--primary); }
 
+    .user-counter    { display:flex; align-items:center; gap:8px; margin:12px 0; }
+    .user-counter button { width:32px; height:32px; border-radius:8px; border:1.5px solid var(--border); background:var(--card); color:var(--text); font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+    .user-counter button:hover { background:var(--card-hover); }
+    .user-counter input { width:60px; height:32px; border-radius:8px; border:1.5px solid var(--border); background:var(--bg); color:var(--text); text-align:center; font-size:14px; font-weight:700; }
+
     hr.divider       { border:none; border-top:1px solid var(--border); margin:14px 0; }
+
+    .period-compare  { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin:12px 0; }
+    @media(max-width:640px){ .period-compare { grid-template-columns:1fr; } }
+    .period-option   { background:var(--bg); border:1.5px solid var(--border); border-radius:12px; padding:14px; text-align:center; cursor:pointer; transition:border-color .15s; }
+    .period-option:hover { border-color:var(--primary); }
+    .period-option.selected { border-color:var(--primary); background:var(--bg-soft); }
+    .period-option .period-name { font-size:13px; font-weight:700; color:var(--text); }
+    .period-option .period-price { font-size:20px; font-weight:800; color:var(--text); margin:6px 0; }
+    .period-option .period-save { font-size:11px; color:#10B981; font-weight:600; }
+    .period-option .period-monthly { font-size:11px; color:var(--text-muted); }
   `
 
   return (
@@ -467,17 +417,13 @@ export default function UpgradePage() {
 
       {selectedTopups.length > 0 && (
         <div className="topup-bar">
-          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--primary)", marginRight: 4 }}>
-            Selected add-ons:
-          </span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--primary)", marginRight: 4 }}>Selected add-ons:</span>
           {selectedTopups.map((code) => {
             const f = TOPUP_FEATURES.find((t) => t.code === code)!
             return (
               <span key={code} className="topup-tag">
                 {f.name}
-                <span className="topup-tag-x" onClick={() => toggleTopup(code)} title="Remove">
-                  <X size={12} />
-                </span>
+                <span className="topup-tag-x" onClick={() => toggleTopup(code)} title="Remove"><X size={12} /></span>
               </span>
             )
           })}
@@ -487,34 +433,29 @@ export default function UpgradePage() {
         </div>
       )}
 
-      <div className="period-wrap">
-        <div className="period-label">Billing period</div>
-        <div className="period-toggle">
-          {(["monthly", "half_yearly", "yearly"] as BillingPeriod[]).map((p) => {
-            const meta = PERIOD_META[p]
-            const pricingForPeriod = getBasePrice(p)
-            const fullMonthly = monthlyCost * meta.months
-            const pctOff = fullMonthly > 0 ? Math.round(((fullMonthly - pricingForPeriod) / fullMonthly) * 100) : 0
-            return (
-              <button
-                key={p}
-                className={`period-btn ${billingPeriod === p ? "active" : ""}`}
-                onClick={() => setBillingPeriod(p)}
-              >
-                {meta.label}
-                {pctOff > 0 && (
-                  <span className="save-pill">
-                    {billingPeriod === p ? `Save ${pctOff}%` : `-${pctOff}%`}
-                  </span>
-                )}
-              </button>
-            )
-          })}
+      {/* Billing period selector – shown for trial users only; paid users pick inside the card */}
+      {!subscription && (
+        <div className="period-wrap">
+          <div className="period-label">Billing period</div>
+          <div className="period-toggle">
+            {(["monthly", "half_yearly", "yearly"] as BillingPeriod[]).map((p) => {
+              const meta = PERIOD_META[p]
+              const pricingForPeriod = getBasePrice(p)
+              const fullMonthly = monthlyCost * meta.months
+              const pctOff = fullMonthly > 0 ? Math.round(((fullMonthly - pricingForPeriod) / fullMonthly) * 100) : 0
+              return (
+                <button key={p} className={`period-btn ${billingPeriod === p ? "active" : ""}`} onClick={() => setBillingPeriod(p)}>
+                  {meta.label}
+                  {pctOff > 0 && <span className="save-pill">{billingPeriod === p ? `Save ${pctOff}%` : `-${pctOff}%`}</span>}
+                </button>
+              )
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="plan-grid">
-        {/* Current Plan */}
+        {/* Left card: Current Plan */}
         <div className="plan-card">
           <div className="card-lbl">Current plan</div>
           <h2 className="plan-name-text">
@@ -543,7 +484,6 @@ export default function UpgradePage() {
             </span>
           )}
 
-          {/* Active top‑ups / features */}
           {activeFeatureCodes.length > 0 && (
             <>
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", marginTop: 12, marginBottom: 8 }}>
@@ -602,80 +542,216 @@ export default function UpgradePage() {
           </p>
         </div>
 
-        {/* Upgrade Card */}
-        <div className={`plan-card plan-card-upgrade${highlightCard ? " highlight" : ""}`}>
-          <div className="card-lbl card-lbl-blue">Upgrade to paid</div>
-          <h2 className="plan-name-text">{plan?.name || "Basic"}</h2>
-
-          <div className="price-wrap">
-            <span className="price-amount">PKR {animatedTotal.toLocaleString()}</span>
-            <span className="price-unit">/ user / {PERIOD_META[billingPeriod].unit}</span>
-          </div>
-
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 2 }}>
-            {billingPeriod === "yearly" && (
-              <span className="badge badge-amber"><Star size={10} /> Best offer</span>
-            )}
-            {savingPct > 0 && (
-              <span className="badge badge-green"><TrendingUp size={10} /> Save {savingPct}% vs monthly</span>
-            )}
-          </div>
-
-          {selectedTopups.length > 0 && (
-            <div className="breakdown">
-              <div className="breakdown-row">
-                <span>Base plan ({PERIOD_META[billingPeriod].label})</span>
-                <span>PKR {getBasePrice(billingPeriod).toLocaleString()}</span>
+        {/* Right card: depends on state */}
+        {subscription ? (
+          isLifetime ? (
+            <div className="plan-card">
+              <div className="card-lbl card-lbl-blue">Your plan</div>
+              <h2 className="plan-name-text">{plan?.name || "Basic"}</h2>
+              <div className="price-wrap">
+                <span className="price-amount">Lifetime</span>
+                <span className="price-unit">access</span>
               </div>
-              {selectedTopups.map((code) => {
-                const f = TOPUP_FEATURES.find((t) => t.code === code)!
-                return (
-                  <div key={code} className="breakdown-row">
-                    <span>{f.name}</span>
-                    <span>+PKR {getTopupPrice(billingPeriod).toLocaleString()}</span>
+              <span className="badge badge-green"><Star size={10} /> Lifetime</span>
+
+              {activeFeatureCodes.length > 0 && (
+                <>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", marginTop: 12, marginBottom: 6 }}>
+                    Included add‑ons
                   </div>
-                )
-              })}
-              <div className="breakdown-row breakdown-total">
-                <span>Total / user / {PERIOD_META[billingPeriod].unit}</span>
-                <span>PKR {totalPrice(billingPeriod).toLocaleString()}</span>
+                  <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 5 }}>
+                    {activeFeatureCodes.map((code) => {
+                      const feature = TOPUP_FEATURES.find((f) => f.code === code)
+                      const name = feature ? feature.name : code
+                      return (
+                        <li key={code} style={{ fontSize: 12, color: "var(--text)", display: "flex", alignItems: "center", gap: 7 }}>
+                          <span style={{ color: "#10B981", fontSize: 14 }}>✓</span> {name}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </>
+              )}
+              <div className="benchmark">
+                You have lifetime access to all core features. Enjoy!
               </div>
             </div>
-          )}
+          ) : (
+            /* Paid Basic (not lifetime) – show upgrade/add‑user card */
+            <div className={`plan-card plan-card-upgrade${highlightCard ? " highlight" : ""}`}>
+              <div className="card-lbl card-lbl-blue">Enhance Your Plan</div>
+              <h2 className="plan-name-text">{plan?.name || "Basic"}</h2>
 
-          <ul style={{ listStyle: "none", padding: 0, margin: "14px 0 0", fontSize: 13, color: "var(--text)", display: "flex", flexDirection: "column", gap: 5 }}>
-            {[
-              "Everything in your trial — no feature removed",
-              "Unlimited invoices, bills & transactions",
-              "Priority support",
-              "Data export (CSV & PDF)",
-            ].map((item) => (
-              <li key={item} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
-                <span style={{ width: 18, height: 18, borderRadius: "50%", background: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
-                  <Check size={10} color="#fff" />
-                </span>
-                {item}
-              </li>
-            ))}
-          </ul>
+              <div style={{ marginTop: 8, marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>
+                  👥 Additional Users
+                </div>
+                <div className="user-counter">
+                  <button onClick={() => setAdditionalUsers(Math.max(0, additionalUsers - 1))}>
+                    <Minus size={14} />
+                  </button>
+                  <input
+                    type="number"
+                    min="0"
+                    value={additionalUsers}
+                    onChange={(e) => setAdditionalUsers(Math.max(0, parseInt(e.target.value) || 0))}
+                  />
+                  <button onClick={() => setAdditionalUsers(additionalUsers + 1)}>
+                    <Plus size={14} />
+                  </button>
+                  <span style={{ fontSize: 13, color: "var(--text-muted)", marginLeft: 8 }}>
+                    × PKR {additionalUserPrice(billingPeriod).toLocaleString()} / user / {PERIOD_META[billingPeriod].unit}
+                  </span>
+                </div>
+              </div>
 
-          <div className="benchmark">{BENCHMARK_NOTE}</div>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>
+                  📅 Billing Period
+                </div>
+                <div className="period-compare">
+                  {(["monthly", "half_yearly", "yearly"] as BillingPeriod[]).map((p) => {
+                    const meta = PERIOD_META[p]
+                    const price = getBasePrice(p)
+                    const monthlyEquivalent = Math.round(price / meta.months)
+                    const fullMonthly = getBasePrice("monthly") * meta.months
+                    const pctSave = fullMonthly > 0 ? Math.round(((fullMonthly - price) / fullMonthly) * 100) : 0
+                    const isCurrent = billingPeriod === p
+                    return (
+                      <div
+                        key={p}
+                        className={`period-option ${isCurrent ? "selected" : ""}`}
+                        onClick={() => setBillingPeriod(p)}
+                      >
+                        <div className="period-name">{meta.label}</div>
+                        <div className="period-price">PKR {price.toLocaleString()}</div>
+                        <div className="period-monthly">PKR {monthlyEquivalent}/mo</div>
+                        {pctSave > 0 && <div className="period-save">Save {pctSave}%</div>}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
 
-          <button
-            className="btn-upgrade"
-            onClick={handleUpgrade}
-            disabled={getBasePrice(billingPeriod) === 0 || isLifetime}
-          >
-            {isLifetime ? "Already Lifetime" : `Upgrade Now — PKR ${animatedTotal.toLocaleString()}`}
-            {!isLifetime && <ArrowRight size={16} />}
-          </button>
+              {/* Total breakdown */}
+              <div className="breakdown">
+                <div className="breakdown-row">
+                  <span>Base plan ({PERIOD_META[billingPeriod].label})</span>
+                  <span>PKR {getBasePrice(billingPeriod).toLocaleString()}</span>
+                </div>
+                {additionalUsers > 0 && (
+                  <div className="breakdown-row">
+                    <span>+ {additionalUsers} additional user{additionalUsers > 1 ? "s" : ""}</span>
+                    <span>PKR {(additionalUsers * additionalUserPrice(billingPeriod)).toLocaleString()}</span>
+                  </div>
+                )}
+                {selectedTopups.map((code) => {
+                  const f = TOPUP_FEATURES.find((t) => t.code === code)!
+                  return (
+                    <div key={code} className="breakdown-row">
+                      <span>{f.name}</span>
+                      <span>+PKR {getTopupPrice(billingPeriod).toLocaleString()}</span>
+                    </div>
+                  )
+                })}
+                <div className="breakdown-row breakdown-total">
+                  <span>Total / user / {PERIOD_META[billingPeriod].unit}</span>
+                  <span>PKR {totalPrice(billingPeriod).toLocaleString()}</span>
+                </div>
+              </div>
 
-          <div className="trust-row">
-            <span className="trust-item"><ShieldCheck size={13} /> Secure payment</span>
-            <span className="trust-item"><Zap size={13} /> Activated in 2 hrs</span>
-            <span className="trust-item"><Clock size={13} /> 7-day refund policy</span>
+              <ul style={{ listStyle: "none", padding: 0, margin: "14px 0 0", fontSize: 13, color: "var(--text)", display: "flex", flexDirection: "column", gap: 5 }}>
+                {[
+                  "Everything in your current plan",
+                  "Unlimited invoices, bills & transactions",
+                  "Priority support",
+                  "Data export (CSV & PDF)",
+                ].map((item) => (
+                  <li key={item} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                    <span style={{ width: 18, height: 18, borderRadius: "50%", background: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                      <Check size={10} color="#fff" />
+                    </span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+
+              <div className="benchmark">
+                Switch to a longer billing period to save up to {savingPct}%. Adding more users? Each additional user costs Rs 500/month.
+              </div>
+
+              <button className="btn-upgrade" onClick={handleUpgrade}>
+                {additionalUsers > 0 || selectedTopups.length > 0 || billingPeriod !== "monthly"
+                  ? "Update Plan — PKR " + animatedTotal.toLocaleString()
+                  : "Change Plan"}
+                <ArrowRight size={16} />
+              </button>
+
+              <div className="trust-row">
+                <span className="trust-item"><ShieldCheck size={13} /> Secure payment</span>
+                <span className="trust-item"><Zap size={13} /> Activated in 2 hrs</span>
+                <span className="trust-item"><Clock size={13} /> 7-day refund policy</span>
+              </div>
+            </div>
+          )
+        ) : (
+          /* Trial – upgrade to paid */
+          <div className={`plan-card plan-card-upgrade${highlightCard ? " highlight" : ""}`}>
+            <div className="card-lbl card-lbl-blue">Upgrade to paid</div>
+            <h2 className="plan-name-text">{plan?.name || "Basic"}</h2>
+
+            <div className="price-wrap">
+              <span className="price-amount">PKR {animatedTotal.toLocaleString()}</span>
+              <span className="price-unit">/ user / {PERIOD_META[billingPeriod].unit}</span>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 2 }}>
+              {billingPeriod === "yearly" && <span className="badge badge-amber"><Star size={10} /> Best offer</span>}
+              {savingPct > 0 && <span className="badge badge-green"><TrendingUp size={10} /> Save {savingPct}% vs monthly</span>}
+            </div>
+
+            {selectedTopups.length > 0 && (
+              <div className="breakdown">
+                <div className="breakdown-row"><span>Base plan ({PERIOD_META[billingPeriod].label})</span><span>PKR {getBasePrice(billingPeriod).toLocaleString()}</span></div>
+                {selectedTopups.map((code) => {
+                  const f = TOPUP_FEATURES.find((t) => t.code === code)!
+                  return (
+                    <div key={code} className="breakdown-row"><span>{f.name}</span><span>+PKR {getTopupPrice(billingPeriod).toLocaleString()}</span></div>
+                  )
+                })}
+                <div className="breakdown-row breakdown-total"><span>Total / user / {PERIOD_META[billingPeriod].unit}</span><span>PKR {totalPrice(billingPeriod).toLocaleString()}</span></div>
+              </div>
+            )}
+
+            <ul style={{ listStyle: "none", padding: 0, margin: "14px 0 0", fontSize: 13, color: "var(--text)", display: "flex", flexDirection: "column", gap: 5 }}>
+              {[
+                "Everything in your trial — no feature removed",
+                "Unlimited invoices, bills & transactions",
+                "Priority support",
+                "Data export (CSV & PDF)",
+              ].map((item) => (
+                <li key={item} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                  <span style={{ width: 18, height: 18, borderRadius: "50%", background: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                    <Check size={10} color="#fff" />
+                  </span>
+                  {item}
+                </li>
+              ))}
+            </ul>
+
+            <div className="benchmark">{BENCHMARK_NOTE}</div>
+
+            <button className="btn-upgrade" onClick={handleUpgrade} disabled={getBasePrice(billingPeriod) === 0}>
+              Upgrade Now — PKR {animatedTotal.toLocaleString()} <ArrowRight size={16} />
+            </button>
+
+            <div className="trust-row">
+              <span className="trust-item"><ShieldCheck size={13} /> Secure payment</span>
+              <span className="trust-item"><Zap size={13} /> Activated in 2 hrs</span>
+              <span className="trust-item"><Clock size={13} /> 7-day refund policy</span>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div style={{ marginBottom: 20 }}>
@@ -702,31 +778,19 @@ export default function UpgradePage() {
               className={`topup-card ${isCommitted ? "committed" : isSelected ? "selected" : ""}`}
               onClick={() => !isCommitted && toggleTopup(topup.code)}
             >
-              <div className="topup-icon">
-                <span style={{ fontSize: 22, lineHeight: 1 }}>{topup.icon}</span>
-              </div>
+              <div className="topup-icon"><span style={{ fontSize: 22, lineHeight: 1 }}>{topup.icon}</span></div>
               <div className="topup-name">{topup.name}</div>
               <div className="topup-desc">{topup.desc}</div>
 
               <div className="topup-price-row">
-                {showDiscount && (
-                  <span className="topup-orig">PKR {topupMonthly * PERIOD_META[billingPeriod].months}</span>
-                )}
-                <span style={{ fontWeight: 700, color: "var(--text)" }}>
-                  PKR {topupPeriodic.toLocaleString()}
-                </span>
+                {showDiscount && <span className="topup-orig">PKR {topupMonthly * PERIOD_META[billingPeriod].months}</span>}
+                <span style={{ fontWeight: 700, color: "var(--text)" }}>PKR {topupPeriodic.toLocaleString()}</span>
                 <span style={{ fontSize: 11, color: "var(--text-muted)" }}>/ user / {PERIOD_META[billingPeriod].unit}</span>
-                {showDiscount && (
-                  <span className="badge badge-green" style={{ fontSize: 10, padding: "2px 7px" }}>
-                    -{savingPct}%
-                  </span>
-                )}
+                {showDiscount && <span className="badge badge-green" style={{ fontSize: 10, padding: "2px 7px" }}>-{savingPct}%</span>}
               </div>
 
               {isCommitted ? (
-                <div className="btn-select btn-select-done">
-                  <Check size={13} /> Active
-                </div>
+                <div className="btn-select btn-select-done"><Check size={13} /> Active</div>
               ) : isSelected ? (
                 <button className="btn-select btn-select-rem" onClick={(e) => { e.stopPropagation(); toggleTopup(topup.code) }}>
                   <X size={13} /> Remove
