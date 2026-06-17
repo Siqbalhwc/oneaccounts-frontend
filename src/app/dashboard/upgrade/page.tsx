@@ -6,8 +6,6 @@ import { createBrowserClient } from "@supabase/ssr"
 import { Check, Clock, ArrowRight, Plus, ShieldCheck, Zap, AlertTriangle, Star, TrendingUp, X } from "lucide-react"
 import { useCompany } from "@/contexts/CompanyContext"
 
-/* ─── Constants ──────────────────────────────────────────────── */
-
 const BENCHMARK_NOTE =
   "Competitor plans start at PKR 10,000+ / user / month (Odoo, QuickBooks, Zoho). You save up to 70% with OneAccounts."
 
@@ -25,6 +23,7 @@ function topupDiscountedPrice(baseMonthly: number, period: BillingPeriod): numbe
   return Math.round(baseMonthly * 12 * (30000 / 36000))
 }
 
+// ✅ Feature codes MUST match the `features.code` in the database
 const TOPUP_FEATURES = [
   {
     code: "asset_management",
@@ -39,7 +38,7 @@ const TOPUP_FEATURES = [
     desc: "Full PO workflow — raise, approve, receive (GRN), and auto-post supplier bills on receipt.",
   },
   {
-    code: "whatsapp",
+    code: "whatsapp_invoice",   // ✅ match the actual feature code
     name: "WhatsApp Integration",
     icon: "💬",
     desc: "Send invoices, payment receipts, and overdue reminders directly to customers via WhatsApp.",
@@ -166,41 +165,62 @@ export default function UpgradePage() {
 
   const [plan, setPlan] = useState<any>(null)
   const [subscription, setSubscription] = useState<any>(null)
-  const [activeTopups, setActiveTopups] = useState<string[]>([])
+  const [activeFeatureCodes, setActiveFeatureCodes] = useState<string[]>([])
   const [selectedTopups, setSelectedTopups] = useState<string[]>([])
   const [businessType, setBusinessType] = useState("")
   const [loading, setLoading] = useState(true)
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("yearly")
   const [highlightCard, setHighlightCard] = useState(false)
+  const [isTrial, setIsTrial] = useState(false)
+  const [isLifetime, setIsLifetime] = useState(false)
 
   useEffect(() => {
     if (!companyId) return
     const fetchData = async () => {
       try {
+        // Company & plan
         const { data: company } = await supabase
           .from("companies")
-          .select("business_type, plans(code, name, monthly_price_per_user, half_yearly_price_per_user, yearly_price_per_user, trial_days)")
+          .select("business_type, is_trial, trial_ends_at, plans(code, name, monthly_price_per_user, half_yearly_price_per_user, yearly_price_per_user, trial_days)")
           .eq("id", companyId)
           .single()
         if (company) {
           setPlan(Array.isArray(company.plans) ? company.plans[0] : company.plans)
           setBusinessType(company.business_type || "")
+          setIsTrial(company.is_trial || false)
         }
+
+        // Latest active subscription
         const { data: sub } = await supabase
           .from("subscriptions")
           .select("*")
           .eq("company_id", companyId)
+          .eq("status", "active")
+          .order("created_at", { ascending: false })
+          .limit(1)
           .maybeSingle()
         setSubscription(sub)
-        if (sub) {
-          const { data: topups } = await supabase
-            .from("subscription_topups")
-            .select("feature_code")
-            .eq("subscription_id", sub.id)
-            .eq("status", "active")
-          if (topups) setActiveTopups(topups.map((t) => t.feature_code))
+
+        if (sub && sub.end_date >= "9999-01-01") {
+          setIsLifetime(true)
+        } else {
+          setIsLifetime(false)
         }
-      } catch (e) { console.error(e) }
+
+        // Active features from company_features (the single source of truth)
+        const { data: cfRows } = await supabase
+          .from("company_features")
+          .select("features(code)")
+          .eq("company_id", companyId)
+          .eq("enabled", true)
+
+        const codes: string[] = (cfRows || [])
+          .map((r: any) => r.features?.code)
+          .filter(Boolean)
+        setActiveFeatureCodes(codes)
+      } catch (e) {
+        console.error(e)
+      }
       setLoading(false)
     }
     fetchData()
@@ -221,7 +241,8 @@ export default function UpgradePage() {
 
   const getTopupPrice = (period: BillingPeriod): number => topupDiscountedPrice(TOPUP_PRICE_MONTHLY, period)
 
-  const totalPrice = (period: BillingPeriod): number => getBasePrice(period) + selectedTopups.length * getTopupPrice(period)
+  const totalPrice = (period: BillingPeriod): number =>
+    getBasePrice(period) + selectedTopups.length * getTopupPrice(period)
 
   const animatedTotal = useAnimatedNumber(totalPrice(billingPeriod))
 
@@ -244,12 +265,12 @@ export default function UpgradePage() {
     setTimeout(() => setHighlightCard(false), 600)
   }
 
-  const daysLeft = subscription?.end_date
+  // trial-related values (only for trial companies)
+  const trialDaysLeft = subscription?.end_date
     ? Math.ceil((new Date(subscription.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
     : plan?.trial_days ?? 10
-
-  const isExpired = typeof daysLeft === "number" && daysLeft <= 0
-  const isUrgent = typeof daysLeft === "number" && daysLeft > 0 && daysLeft <= 5
+  const isExpired = isTrial && !subscription && trialDaysLeft <= 0
+  const isUrgent = isTrial && !subscription && trialDaysLeft > 0 && trialDaysLeft <= 5
   const userCount = subscription?.max_users || 1
 
   if (loading) {
@@ -406,11 +427,19 @@ export default function UpgradePage() {
           {fmtBizType(businessType)}
           {businessType && <span className="oa-dot">·</span>}
           {plan?.name || "Basic"}
-          {typeof daysLeft === "number" && daysLeft > 0 && (
+          {subscription && (
+            <>
+              <span className="oa-dot">·</span>
+              <span style={{ color: "#059669", fontWeight: 700 }}>
+                {isLifetime ? "Lifetime" : `Expires ${new Date(subscription.end_date).toLocaleDateString()}`}
+              </span>
+            </>
+          )}
+          {!subscription && isTrial && (
             <>
               <span className="oa-dot">·</span>
               <span style={{ color: isUrgent ? "#DC2626" : "#059669", fontWeight: 700 }}>
-                Trial ends in {daysLeft} day{daysLeft !== 1 ? "s" : ""}
+                Trial ends in {trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""}
               </span>
             </>
           )}
@@ -426,7 +455,7 @@ export default function UpgradePage() {
       {isUrgent && !isExpired && (
         <div className="banner banner-warn">
           <Clock size={16} />
-          Your trial expires in <strong>{daysLeft} day{daysLeft !== 1 ? "s" : ""}</strong>. Upgrade now to avoid any interruption.
+          Your trial expires in <strong>{trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""}</strong>. Upgrade now to avoid any interruption.
         </div>
       )}
       {isExpired && (
@@ -485,25 +514,57 @@ export default function UpgradePage() {
       </div>
 
       <div className="plan-grid">
+        {/* Current Plan */}
         <div className="plan-card">
           <div className="card-lbl">Current plan</div>
           <h2 className="plan-name-text">
-            Trial
-            <sup className="plan-super"> {plan?.trial_days || 10} days</sup>
+            {plan?.name || "Basic"}
+            {subscription ? (
+              <sup className="plan-super" style={{ color: "#059669" }}>
+                {isLifetime ? " Lifetime" : ` Active until ${new Date(subscription.end_date).toLocaleDateString()}`}
+              </sup>
+            ) : isTrial ? (
+              <sup className="plan-super"> Trial — {trialDaysLeft} days left</sup>
+            ) : (
+              <sup className="plan-super"> No active subscription</sup>
+            )}
           </h2>
 
-          {!isExpired && typeof daysLeft === "number" && (
-            <span className={`badge ${daysLeft <= 5 ? "badge-red" : "badge-green"}`} style={{ alignSelf: "flex-start", marginBottom: 6 }}>
-              <Clock size={11} />
-              {daysLeft} day{daysLeft !== 1 ? "s" : ""} {daysLeft <= 5 ? "— expiring soon" : "remaining"}
-            </span>
-          )}
-          {isExpired && (
-            <span className="badge badge-red" style={{ alignSelf: "flex-start", marginBottom: 6 }}>
-              Expired
+          {isLifetime && (
+            <span className="badge badge-green" style={{ alignSelf: "flex-start", marginBottom: 6 }}>
+              <Check size={11} /> Lifetime access
             </span>
           )}
 
+          {!subscription && isTrial && (
+            <span className={`badge ${trialDaysLeft <= 5 ? "badge-red" : "badge-green"}`} style={{ alignSelf: "flex-start", marginBottom: 6 }}>
+              <Clock size={11} />
+              {trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} remaining
+            </span>
+          )}
+
+          {/* Active top‑ups / features */}
+          {activeFeatureCodes.length > 0 && (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", marginTop: 12, marginBottom: 8 }}>
+                🔓 Active Add‑ons
+              </div>
+              <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 5 }}>
+                {activeFeatureCodes.map((code) => {
+                  const feature = TOPUP_FEATURES.find((f) => f.code === code)
+                  const name = feature ? feature.name : code
+                  return (
+                    <li key={code} style={{ fontSize: 12, color: "var(--text)", display: "flex", alignItems: "center", gap: 7 }}>
+                      <span style={{ color: "#10B981", fontSize: 14 }}>✓</span>
+                      {name}
+                    </li>
+                  )
+                })}
+              </ul>
+            </>
+          )}
+
+          <hr className="divider" />
           <ul className="feat-list">
             {PLAN_FEATURES.map((f) => (
               <FeatureRow key={f.label} feature={f} />
@@ -532,12 +593,16 @@ export default function UpgradePage() {
             )}
           </ul>
 
-          <hr className="divider" />
-          <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
-            Includes all features for the full {plan?.trial_days || 10}-day trial period.
+          <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "12px 0 0" }}>
+            {subscription
+              ? "You are on a paid plan. All core features are unlocked."
+              : isTrial
+                ? `Includes all features for the full ${plan?.trial_days || 10}-day trial period.`
+                : "No active plan. Subscribe to unlock all features."}
           </p>
         </div>
 
+        {/* Upgrade Card */}
         <div className={`plan-card plan-card-upgrade${highlightCard ? " highlight" : ""}`}>
           <div className="card-lbl card-lbl-blue">Upgrade to paid</div>
           <h2 className="plan-name-text">{plan?.name || "Basic"}</h2>
@@ -599,9 +664,10 @@ export default function UpgradePage() {
           <button
             className="btn-upgrade"
             onClick={handleUpgrade}
-            disabled={getBasePrice(billingPeriod) === 0}
+            disabled={getBasePrice(billingPeriod) === 0 || isLifetime}
           >
-            Upgrade Now — PKR {animatedTotal.toLocaleString()} <ArrowRight size={16} />
+            {isLifetime ? "Already Lifetime" : `Upgrade Now — PKR ${animatedTotal.toLocaleString()}`}
+            {!isLifetime && <ArrowRight size={16} />}
           </button>
 
           <div className="trust-row">
@@ -613,9 +679,9 @@ export default function UpgradePage() {
       </div>
 
       <div style={{ marginBottom: 20 }}>
-        <h2 className="sec-h">🔧 Optional Add-On Features</h2>
+        <h2 className="sec-h">🔧 Optional Add‑On Features</h2>
         <p className="sec-sub">
-          Select add-ons below — price updates instantly in the upgrade card above.
+          Select add‑ons below — price updates instantly in the upgrade card above.
           {billingPeriod !== "monthly" && (
             <> Same {savingPct}% discount applied as your {PERIOD_META[billingPeriod].label.toLowerCase()} plan.</>
           )}
@@ -624,7 +690,7 @@ export default function UpgradePage() {
 
       <div className="topup-grid">
         {TOPUP_FEATURES.map((topup) => {
-          const isCommitted = activeTopups.includes(topup.code)
+          const isCommitted = activeFeatureCodes.includes(topup.code)
           const isSelected  = selectedTopups.includes(topup.code)
           const topupMonthly = TOPUP_PRICE_MONTHLY
           const topupPeriodic = getTopupPrice(billingPeriod)
