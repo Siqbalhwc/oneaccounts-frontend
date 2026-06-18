@@ -76,9 +76,7 @@ function NewInvoicePageContent() {
   const isNGO = businessType === "ngo"
   const invoiceIdForLink = savedInvoiceId || (editId ? Number(editId) : null)
 
-  // ── All hooks and handlers unchanged ──
-  // (I'm including the complete code; the functions are identical to what you already have)
-
+  // ── All existing hooks and handlers (unchanged) ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -248,8 +246,8 @@ function NewInvoicePageContent() {
           .mobile-only { display: block; }
           .mobile-item-header {
             display: grid;
-            grid-template-columns: 28px 1fr 50px 70px 32px;
-            gap: 4px;
+            grid-template-columns: 24px 1fr 44px 64px 56px 30px;
+            gap: 3px;
             font-size: 7px;
             font-weight: 700;
             text-transform: uppercase;
@@ -259,11 +257,26 @@ function NewInvoicePageContent() {
           }
           .mobile-item-row {
             display: grid;
-            grid-template-columns: 28px 1fr 50px 70px 32px;
-            gap: 4px;
+            grid-template-columns: 24px 1fr 44px 64px 56px 30px;
+            gap: 3px;
             align-items: center;
             padding: 8px 0;
             border-bottom: 1px solid var(--border);
+          }
+          .mobile-item-row input {
+            height: 32px;
+            font-size: 12px;
+            padding: 0 4px;
+            text-align: center;
+          }
+          .mobile-item-row input[type="number"] {
+            -moz-appearance: textfield;
+          }
+          .mobile-total {
+            font-size: 12px;
+            font-weight: 600;
+            text-align: right;
+            white-space: nowrap;
           }
           .mobile-sticky-summary {
             display: flex;
@@ -310,7 +323,6 @@ function NewInvoicePageContent() {
               <div className="inv-card">
                 <label className="inv-label">Customer *</label>
                 <div className="cust-wrap" ref={customerRef}>
-                  {/* customer selection unchanged */}
                   {selectedCustomer ? (
                     <div className="cust-selected-badge" onClick={clearCustomer}>
                       <span>👤</span><span style={{ flex: 1 }}>{selectedCustomer.code} — {selectedCustomer.name}</span>
@@ -441,19 +453,39 @@ function NewInvoicePageContent() {
                 {/* MOBILE */}
                 <div className="mobile-only">
                   <div className="mobile-item-header">
-                    <span></span><span>Item</span><span>Qty</span><span>Price</span><span></span>
+                    <span></span><span>Item</span><span>Qty</span><span>Price</span><span>Total</span><span></span>
                   </div>
                   {items.map((item, idx) => (
                     <div key={idx} className="mobile-item-row">
                       <div style={{ display: "flex", justifyContent: "center" }}>
                         {item.product_image ? <img src={item.product_image} alt="" style={{ width: 20, height: 20, objectFit: "cover", borderRadius: 4 }} /> : <ImageIcon size={12} color="var(--text-muted)" />}
                       </div>
-                      <div style={{ fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {item.product_name || item.description || "Item"}
-                      </div>
-                      <input className="inv-input" type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} style={{ height: 32, fontSize: 12, textAlign: "center", padding: "0 4px" }} />
-                      <input className="inv-input" type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} style={{ height: 32, fontSize: 12, textAlign: "right", padding: "0 4px" }} />
-                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}><Trash2 size={14} /></button>
+                      <input
+                        className="inv-input"
+                        value={item.description}
+                        onChange={e => updateItem(idx, "description", e.target.value)}
+                        placeholder="Description"
+                        style={{ fontSize: 11, padding: "0 4px" }}
+                      />
+                      <input
+                        className="inv-input"
+                        type="number"
+                        value={item.qty}
+                        onChange={e => updateItem(idx, "qty", Number(e.target.value))}
+                        style={{ textAlign: "center" }}
+                      />
+                      <input
+                        className="inv-input"
+                        type="number"
+                        value={item.unit_price}
+                        onChange={e => updateItem(idx, "unit_price", Number(e.target.value))}
+                        style={{ textAlign: "right" }}
+                      />
+                      <span className="mobile-total">PKR {item.total.toLocaleString()}</span>
+                      <button
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }}
+                        onClick={() => removeItem(idx)}
+                      ><Trash2 size={14} /></button>
                     </div>
                   ))}
                 </div>
@@ -468,7 +500,9 @@ function NewInvoicePageContent() {
               <div style={{ fontSize: 18, fontWeight: 800 }}>PKR {(totalAmount + totalTaxAmount).toLocaleString()}</div>
               {taxEnabled && totalTaxAmount > 0 && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>incl. tax PKR {totalTaxAmount.toLocaleString()}</div>}
             </div>
-            <button className="inv-btn" style={{ background: "var(--primary)", color: "var(--primary-text)", borderColor: "var(--primary)", padding: "12px 24px", fontWeight: 700 }} onClick={handleSubmit} disabled={saving}>{saving ? "Posting..." : "POST"}</button>
+            <button className="inv-btn" style={{ background: "var(--primary)", color: "var(--primary-text)", borderColor: "var(--primary)", padding: "12px 24px", fontWeight: 700 }} onClick={handleSubmit} disabled={saving}>
+              {saving ? "Posting..." : "POST"}
+            </button>
           </div>
         </div>
 
