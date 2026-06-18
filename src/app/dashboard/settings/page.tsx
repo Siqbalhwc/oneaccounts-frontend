@@ -2,9 +2,11 @@
 
 import { useRouter } from "next/navigation"
 import { Settings, ArrowRight, Users } from "lucide-react"
+import { usePlan } from "@/contexts/PlanContext"
 
 export default function SettingsHubPage() {
   const router = useRouter()
+  const { hasFeature } = usePlan()
 
   const cards = [
     {
@@ -21,6 +23,18 @@ export default function SettingsHubPage() {
       href: "/dashboard/admin/users",
       color: "#10B981",
     },
+    // Tax Settings card – only shown when tax_management is enabled
+    ...(hasFeature("tax_management")
+      ? [
+          {
+            title: "Tax Settings",
+            desc: "Manage tax codes, rates, WHT, and company tax settings",
+            icon: <Settings size={22} />,
+            href: "/dashboard/settings/tax",
+            color: "#EF4444",
+          },
+        ]
+      : []),
   ]
 
   return (
