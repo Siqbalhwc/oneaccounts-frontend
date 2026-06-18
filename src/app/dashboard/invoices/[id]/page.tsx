@@ -281,7 +281,7 @@ export default function InvoiceDetailPage() {
         .value { color: var(--text); font-weight: 500; }
         .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         table { width: 100%; border-collapse: collapse; margin-top: 12px; min-width: 500px; }
-        th { text-align: left; padding: 10px 12px; background: var(--card-hover); font-weight: 700; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); }
+        th { text-align: left; padding: 10px 12px; background: var(--card-hover); font-weight: 700; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); white-space: nowrap; }
         td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); }
         tr:hover td { background: var(--card-hover); }
         .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; text-decoration: none; }
@@ -302,7 +302,8 @@ export default function InvoiceDetailPage() {
         @media (max-width: 640px) {
           .row { flex-direction: column; align-items: flex-start; }
           .label { margin-bottom: 2px; }
-          table { min-width: 480px; }
+          table { min-width: 480px; font-size: 12px; }
+          th, td { padding: 8px 10px; }
         }
       `}</style>
 
