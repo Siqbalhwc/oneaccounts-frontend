@@ -15,6 +15,7 @@ const FEATURE_CODES = [
   "email_reports",
   "purchase_orders",
   "asset_management",
+  "tax_management",   // ← Tax Management add‑on
 ]
 
 interface PlanContextType {
