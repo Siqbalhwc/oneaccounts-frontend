@@ -23,6 +23,8 @@ export interface BillItem {
   image_path?:  string | null
   product_id?:  string | null
   product_name?:string
+  tax_rate?:    number
+  tax_amount?:  number
 }
 
 export interface BillPDFData {
@@ -42,17 +44,17 @@ export interface BillPDFData {
   supplierPhone:   string
   supplierEmail?:  string
 
-  paymentTerms?:  string | null   // ✅ new field
+  paymentTerms?:  string | null
 
   notes?:         string | null
   status:         string
   items:          BillItem[]
   subtotal:       number
   total:          number
+  totalTax?:      number
   paid:           number
   balanceDue:     number
 
-  // WHT fields
   whtRate?:       number
   whtAmount?:     number
 }
@@ -74,7 +76,7 @@ const pkr = (n: number) => "PKR " + n.toLocaleString("en-PK", { minimumFractionD
 
 function filledRect(doc: jsPDF, x: number, y: number, w: number, h: number, fillRgb: [number,number,number]) {
   doc.setFillColor(...fillRgb)
-  doc.rect(x, y, w, h, "F")   // always square
+  doc.rect(x, y, w, h, "F")
 }
 
 export async function generateBillPDF(data: BillPDFData): Promise<jsPDF> {
@@ -97,17 +99,9 @@ export async function generateBillPDF(data: BillPDFData): Promise<jsPDF> {
   doc.text(data.companyTagline || "", textX, LOGO_Y + 13)
 
   let infoY = LOGO_Y + 18
-  if (data.companyAddress) {
-    doc.text(data.companyAddress, textX, infoY)
-    infoY += 4
-  }
-  if (data.companyPhone) {
-    doc.text("Phone: " + data.companyPhone, textX, infoY)
-    infoY += 4
-  }
-  if (data.companyEmail) {
-    doc.text("Email: " + data.companyEmail, textX, infoY)
-  }
+  if (data.companyAddress) { doc.text(data.companyAddress, textX, infoY); infoY += 4 }
+  if (data.companyPhone)   { doc.text("Phone: " + data.companyPhone, textX, infoY); infoY += 4 }
+  if (data.companyEmail)   { doc.text("Email: " + data.companyEmail, textX, infoY) }
 
   doc.setFont("helvetica", "bold").setFontSize(26).setTextColor(...NAVY)
   doc.text("BILL", PW - MR, LOGO_Y + 9, { align: "right" })
@@ -151,31 +145,33 @@ export async function generateBillPDF(data: BillPDFData): Promise<jsPDF> {
   doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...MUTED)
   doc.text("STATUS", PW - MR, statusLabelY, { align: "right" })
   const badgeW = 22, badgeH = 6, badgeX = PW - MR - badgeW, badgeY = statusLabelY + 2
-  filledRect(doc, badgeX, badgeY, badgeW, badgeH, badgeColor)   // square
+  filledRect(doc, badgeX, badgeY, badgeW, badgeH, badgeColor)
   doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...WHITE)
   doc.text(statusText, badgeX + badgeW / 2, badgeY + 4, { align: "center" })
 
   const divY = Math.max(Y, badgeY + badgeH) + 5
   doc.setDrawColor(...BORDER).setLineWidth(0.3).line(ML, divY, PW - MR, divY)
 
-  // ── TABLE HEADER (square, thin, with white separators) ──────────
+  // ── TABLE HEADER ───────────────────────────────────────────────────
   const tableY = divY + 4
   const ROW_H = 6
   const HEADER_ROW_H = ROW_H
 
+  const hasTax = data.totalTax && data.totalTax > 0
+
   // Column widths
   const COL_NUM_W  = 14
   const COL_QTY_W  = 16
-  const COL_PRICE_W = 32
-  const COL_AMT_W  = 34
-  const COL_DESC_W = CW - COL_NUM_W - COL_QTY_W - COL_PRICE_W - COL_AMT_W
+  const COL_PRICE_W = hasTax ? 28 : 32
+  const COL_TAX_W  = hasTax ? 18 : 0
+  const COL_AMT_W  = hasTax ? 28 : 34
+  const COL_DESC_W = CW - COL_NUM_W - COL_QTY_W - COL_PRICE_W - COL_TAX_W - COL_AMT_W
 
   // Navy background
   filledRect(doc, ML, tableY, CW, HEADER_ROW_H, NAVY)
 
   // White vertical separators
-  doc.setDrawColor(...WHITE)
-  doc.setLineWidth(0.2)
+  doc.setDrawColor(...WHITE).setLineWidth(0.2)
   let x = ML + COL_NUM_W
   doc.line(x, tableY, x, tableY + HEADER_ROW_H)
   x += COL_DESC_W
@@ -184,6 +180,10 @@ export async function generateBillPDF(data: BillPDFData): Promise<jsPDF> {
   doc.line(x, tableY, x, tableY + HEADER_ROW_H)
   x += COL_PRICE_W
   doc.line(x, tableY, x, tableY + HEADER_ROW_H)
+  if (hasTax) {
+    x += COL_TAX_W
+    doc.line(x, tableY, x, tableY + HEADER_ROW_H)
+  }
 
   // Header text
   const headerTextY = tableY + HEADER_ROW_H / 2 + 1.5
@@ -193,24 +193,47 @@ export async function generateBillPDF(data: BillPDFData): Promise<jsPDF> {
   const leftX2   = ML + COL_NUM_W + 2
   const centerX3 = ML + COL_NUM_W + COL_DESC_W + COL_QTY_W / 2
   const centerX4 = ML + COL_NUM_W + COL_DESC_W + COL_QTY_W + COL_PRICE_W / 2
-  const centerX5 = ML + COL_NUM_W + COL_DESC_W + COL_QTY_W + COL_PRICE_W + COL_AMT_W / 2
+  const taxCenterX = hasTax ? ML + COL_NUM_W + COL_DESC_W + COL_QTY_W + COL_PRICE_W + COL_TAX_W / 2 : 0
+  const amtCenterX = hasTax
+    ? ML + COL_NUM_W + COL_DESC_W + COL_QTY_W + COL_PRICE_W + COL_TAX_W + COL_AMT_W / 2
+    : ML + COL_NUM_W + COL_DESC_W + COL_QTY_W + COL_PRICE_W + COL_AMT_W / 2
 
   doc.text("#",          centerX1, headerTextY, { align: "center" })
   doc.text("Description", leftX2,   headerTextY, { align: "left" })
   doc.text("Qty",        centerX3, headerTextY, { align: "center" })
   doc.text("Unit Price", centerX4, headerTextY, { align: "center" })
-  doc.text("Amount",     centerX5, headerTextY, { align: "center" })
+  if (hasTax) doc.text("Tax", taxCenterX, headerTextY, { align: "center" })
+  doc.text("Amount",     amtCenterX, headerTextY, { align: "center" })
 
   // ── TABLE BODY ───────────────────────────────────────────────────
   const bodyStartY = tableY + HEADER_ROW_H
 
-  const tableRows = data.items.map((item, i) => [
-    i + 1,
-    item.description || "",
-    item.qty || 1,
-    pkr(item.unit_price || 0),
-    pkr(item.total || 0),
-  ])
+  const tableRows = data.items.map((item, i) => {
+    const row = [
+      i + 1,
+      item.description || "",
+      item.qty || 1,
+      pkr(item.unit_price || 0),
+    ]
+    if (hasTax) {
+      row.push(item.tax_amount && item.tax_amount > 0 ? pkr(item.tax_amount) : "—")
+    }
+    row.push(pkr(item.total || 0))
+    return row
+  })
+
+  const columnStyles: any = {
+    0: { cellWidth: COL_NUM_W,  halign: "center" },
+    1: { cellWidth: COL_DESC_W, halign: "left" },
+    2: { cellWidth: COL_QTY_W,  halign: "center" },
+    3: { cellWidth: COL_PRICE_W, halign: "right" },
+  }
+  if (hasTax) {
+    columnStyles[4] = { cellWidth: COL_TAX_W, halign: "right" }
+    columnStyles[5] = { cellWidth: COL_AMT_W, halign: "right", fontStyle: "bold" }
+  } else {
+    columnStyles[4] = { cellWidth: COL_AMT_W, halign: "right", fontStyle: "bold" }
+  }
 
   autoTable(doc, {
     startY: bodyStartY,
@@ -226,13 +249,7 @@ export async function generateBillPDF(data: BillPDFData): Promise<jsPDF> {
       minCellHeight: ROW_H,
     },
     alternateRowStyles: { fillColor: ROW_ALT },
-    columnStyles: {
-      0: { cellWidth: COL_NUM_W,  halign: "center" },
-      1: { cellWidth: COL_DESC_W, halign: "left" },
-      2: { cellWidth: COL_QTY_W,  halign: "center" },
-      3: { cellWidth: COL_PRICE_W, halign: "right" },
-      4: { cellWidth: COL_AMT_W,  halign: "right", fontStyle: "bold" },
-    },
+    columnStyles,
   })
 
   const afterTable = (doc as any).lastAutoTable.finalY as number
@@ -242,7 +259,7 @@ export async function generateBillPDF(data: BillPDFData): Promise<jsPDF> {
   doc.setLineWidth(0.3)
   doc.rect(ML, bodyStartY, CW, afterTable - bodyStartY, "S")
 
-  // ── SUBTOTAL / TAX / TOTAL (square) ─────────────────────────────
+  // ── SUBTOTAL / TAX / WHT / TOTAL ─────────────────────────────
   let SY = afterTable + 6
   const sumX = PW - MR - 70, valX = PW - MR
   const TOTAL_H = ROW_H
@@ -253,9 +270,25 @@ export async function generateBillPDF(data: BillPDFData): Promise<jsPDF> {
   doc.text(pkr(data.subtotal), valX, SY, { align: "right" })
   SY += 5.5
 
-  // If WHT exists, show it and then "Net Payable" total
+  // Tax row
+  if (hasTax) {
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(...MUTED)
+    doc.text("Tax", sumX, SY)
+    doc.setTextColor(...DARK)
+    doc.text(pkr(data.totalTax || 0), valX, SY, { align: "right" })
+    SY += 5.5
+  } else {
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(...MUTED)
+    doc.text("Tax (0%)", sumX, SY)
+    doc.setTextColor(...DARK)
+    doc.text(pkr(0), valX, SY, { align: "right" })
+    SY += 5.5
+  }
+
+  // WHT row (if applicable)
   if (data.whtAmount && data.whtAmount > 0) {
-    // WHT row
     doc.setFont("helvetica", "bold")
     doc.setTextColor(...MUTED)
     const whtLabel = `WHT (${data.whtRate || 0}%)`
@@ -272,13 +305,6 @@ export async function generateBillPDF(data: BillPDFData): Promise<jsPDF> {
     doc.text(pkr(netPayable), valX - 2, SY + TOTAL_H / 2 - 0.5, { align: "right" })
     SY += TOTAL_H + 2
   } else {
-    // Original tax row (no tax)
-    doc.setFont("helvetica", "bold").setTextColor(...MUTED)
-    doc.text("Tax (0%)", sumX, SY)
-    doc.setTextColor(...DARK)
-    doc.text(pkr(0), valX, SY, { align: "right" })
-    SY += 5.5
-
     // Total box
     filledRect(doc, sumX - 2, SY - 3, valX - sumX + 4, TOTAL_H, NAVY)
     doc.setFont("helvetica", "bold").setFontSize(9).setTextColor(...WHITE)
@@ -300,7 +326,7 @@ export async function generateBillPDF(data: BillPDFData): Promise<jsPDF> {
     SY += 5
   }
 
-  // ── NOTES & TERMS (actual payment terms) ────────────────────────
+  // ── NOTES & TERMS ────────────────────────────────────────────────
   SY += 6
   const terms = data.paymentTerms || "Payment is due within 30 days of bill date."
   const termsLines: string[] = [terms]

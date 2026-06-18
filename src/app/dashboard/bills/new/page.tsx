@@ -75,11 +75,14 @@ export default function NewBillPage() {
   // Combo cache: key = `${locationId}_${activityId}` -> array of {project_id, donor_id, projectName, donorName}
   const [comboCache, setComboCache] = useState<Record<string, { project_id: number; donor_id: number; projectName: string; donorName: string | null }[]>>({})
 
-  // Tax states
+  // WHT states
   const [whtTaxCodes, setWhtTaxCodes] = useState<any[]>([])
   const [selectedWhtTaxCodeId, setSelectedWhtTaxCodeId] = useState<string>("")
   const [whtRate, setWhtRate] = useState<number>(0)
   const [whtAmount, setWhtAmount] = useState<number>(0)
+
+  // Input tax codes (for line items)
+  const [inputTaxCodes, setInputTaxCodes] = useState<any[]>([])
 
   const fiscalYear = new Date().getFullYear()
 
@@ -164,7 +167,7 @@ export default function NewBillPage() {
     })
   }, [showProducts])
 
-  // Fetch WHT codes when tax enabled and companyId available
+  // Fetch WHT codes and input tax codes when tax enabled
   useEffect(() => {
     if (taxEnabled && companyId) {
       supabase.from("tax_codes")
@@ -173,6 +176,13 @@ export default function NewBillPage() {
         .eq("tax_category_code", "wht")
         .order("code")
         .then(r => { if (r.data) setWhtTaxCodes(r.data) })
+
+      supabase.from("tax_codes")
+        .select("id, code, name, rate")
+        .eq("company_id", companyId)
+        .in("tax_category_code", ["sales_tax", "vat", "gst"])
+        .order("code")
+        .then(r => { if (r.data) setInputTaxCodes(r.data) })
     }
   }, [taxEnabled, companyId])
 
@@ -288,8 +298,11 @@ export default function NewBillPage() {
             location_id: item.location_id || "",
             activity_id: item.activity_id || "",
             account_id: item.account_id || null,
-            project_id: null,   // we don't know original; let user re-select if needed
+            project_id: null,
             donor_id: null,
+            tax_code_id: item.tax_code_id || null,
+            tax_rate: item.tax_rate || 0,
+            tax_amount: item.tax_amount || 0,
           }))
           setItems(loaded)
 
@@ -379,6 +392,9 @@ export default function NewBillPage() {
       account_id: null,
       project_id: null,
       donor_id: null,
+      tax_code_id: null,
+      tax_rate: 0,
+      tax_amount: 0,
     }))
     setItems(poItems)
   }
@@ -400,6 +416,9 @@ export default function NewBillPage() {
       account_id: null,
       project_id: null,
       donor_id: null,
+      tax_code_id: null,
+      tax_rate: 0,
+      tax_amount: 0,
     }])
     setProductSearch("")
     setShowProductList(false)
@@ -417,6 +436,9 @@ export default function NewBillPage() {
       account_id: null,
       project_id: null,
       donor_id: null,
+      tax_code_id: null,
+      tax_rate: 0,
+      tax_amount: 0,
     }])
   }
 
@@ -425,12 +447,11 @@ export default function NewBillPage() {
     setItems(updated)
   }
 
-  // Fetch distinct (project_id, donor_id) combinations for a location+activity
   const fetchCombosForLine = async (locId: number, actId: number) => {
     const key = `${locId}_${actId}`
     if (comboCache[key] !== undefined) return
 
-    setComboCache(prev => ({ ...prev, [key]: [] }))  // placeholder
+    setComboCache(prev => ({ ...prev, [key]: [] }))
 
     const { data: rows } = await supabase
       .from("budgets")
@@ -446,7 +467,6 @@ export default function NewBillPage() {
       return
     }
 
-    // Deduplicate by project_id + donor_id pair
     const seen = new Set<string>()
     const combos: { project_id: number; donor_id: number; projectName: string; donorName: string | null }[] = []
 
@@ -468,33 +488,6 @@ export default function NewBillPage() {
     }
 
     setComboCache(prev => ({ ...prev, [key]: combos }))
-  }
-
-  // Auto‑select or show dropdown
-  const applyCombosToLine = (idx: number) => {
-    const item = items[idx]
-    if (!item.location_id || !item.activity_id) return
-
-    const key = `${item.location_id}_${item.activity_id}`
-    const combos = comboCache[key]
-
-    const updated = [...items]
-    if (!combos || combos.length === 0) {
-      // no combo
-      updated[idx] = { ...updated[idx], project_id: null, donor_id: null }
-    } else if (combos.length === 1) {
-      updated[idx] = { ...updated[idx], project_id: combos[0].project_id, donor_id: combos[0].donor_id }
-    } else {
-      // multiple combos – keep current selection if still valid, else clear
-      const current = updated[idx]
-      if (current.project_id) {
-        const stillValid = combos.some(c => c.project_id === current.project_id && c.donor_id === current.donor_id)
-        if (!stillValid) {
-          updated[idx] = { ...updated[idx], project_id: null, donor_id: null }
-        }
-      }
-    }
-    setItems(updated)
   }
 
   const fetchBudget = useCallback(async (
@@ -528,9 +521,7 @@ export default function NewBillPage() {
       if (locationId) spentQuery = spentQuery.eq("location_id", locationId)
       else spentQuery = spentQuery.is("location_id", null)
 
-      const { data: spentRows, error: spentError } = await spentQuery
-      if (spentError) console.error("Spent query error:", spentError)
-
+      const { data: spentRows } = await spentQuery
       const actualSpent = (spentRows || []).reduce(
         (sum: number, line: any) => sum + (line.debit || 0) - (line.credit || 0),
         0
@@ -577,14 +568,19 @@ export default function NewBillPage() {
 
     if (field === "qty" || field === "unit_price") {
       updated[idx].total = updated[idx].qty * updated[idx].unit_price
+      // Recalculate tax if tax_code_id is set
+      if (taxEnabled && updated[idx].tax_code_id) {
+        const tc = inputTaxCodes.find(t => t.id === updated[idx].tax_code_id)
+        if (tc) {
+          updated[idx].tax_rate = tc.rate
+          updated[idx].tax_amount = (updated[idx].qty * updated[idx].unit_price) * tc.rate / 100
+        }
+      }
     }
 
-    // Reset project/donor when location or activity changes
     if (field === "location_id" || field === "activity_id") {
       updated[idx].project_id = null
       updated[idx].donor_id = null
-
-      // Fetch new combos if both are set
       if (updated[idx].location_id && updated[idx].activity_id) {
         const locId = Number(updated[idx].location_id)
         const actId = Number(updated[idx].activity_id)
@@ -592,7 +588,6 @@ export default function NewBillPage() {
       }
     }
 
-    // Handle project selection from dropdown
     if (field === "project_select") {
       const selectedCombo = JSON.parse(value) as { project_id: number; donor_id: number }
       updated[idx].project_id = selectedCombo.project_id
@@ -609,7 +604,6 @@ export default function NewBillPage() {
     }
   }
 
-  // When combos arrive, auto‑select or clear
   useEffect(() => {
     items.forEach((item, idx) => {
       if (item.location_id && item.activity_id && item.project_id === null && item.donor_id === null) {
@@ -630,7 +624,9 @@ export default function NewBillPage() {
     checkBudgetOverrun()
   }, [items, budgetInfo, pendingByKey])
 
-  const totalAmount = items.reduce((s, i) => s + i.total, 0)
+  const netTotal = items.reduce((s, i) => s + i.total, 0)
+  const totalTaxAmount = items.reduce((s, i) => s + (i.tax_amount || 0), 0)
+  const grossTotal = netTotal + totalTaxAmount
 
   const handleSubmit = async () => {
     if (!supplierId) { setError("Please select a supplier"); return }
@@ -643,7 +639,6 @@ export default function NewBillPage() {
         if (showLoc && !item.location_id) { setError("Each manual line must have Location selected"); return }
         if (showAct && !item.activity_id) { setError("Each manual line must have Activity selected"); return }
         if (!item.account_id) { setError("Each manual line must have a GL Account selected"); return }
-        // If multiple combos, force project selection
         const key = `${item.location_id}_${item.activity_id}`
         const combos = comboCache[key]
         if (combos && combos.length > 1 && !item.project_id) {
@@ -653,7 +648,7 @@ export default function NewBillPage() {
     }
 
     if (budgetError) { setError("Cannot save: some lines exceed the available budget."); return }
-    if (poId && poRemaining > 0 && totalAmount > poRemaining) {
+    if (poId && poRemaining > 0 && grossTotal > poRemaining) {
       setError(`Bill total exceeds remaining PO balance.`)
       return
     }
@@ -670,6 +665,9 @@ export default function NewBillPage() {
       account_id: i.account_id || null,
       project_id: i.project_id || null,
       donor_id: i.donor_id || null,
+      tax_code_id: taxEnabled ? (i.tax_code_id || null) : undefined,
+      tax_rate: taxEnabled ? (i.tax_rate || 0) : undefined,
+      tax_amount: taxEnabled ? (i.tax_amount || 0) : undefined,
     }))
 
     const url = editId ? `/api/bills?id=${editId}` : "/api/bills"
@@ -688,7 +686,6 @@ export default function NewBillPage() {
           reference,
           notes,
           po_id: poId || null,
-          // WHT fields
           wht_tax_code_id: taxEnabled ? selectedWhtTaxCodeId || null : undefined,
           wht_rate: taxEnabled ? whtRate : undefined,
           wht_amount: taxEnabled ? whtAmount : undefined,
@@ -735,12 +732,15 @@ export default function NewBillPage() {
         qty: i.qty || 0,
         unit_price: i.unit_price || 0,
         total: i.total || 0,
+        tax_rate: i.tax_rate || 0,
+        tax_amount: i.tax_amount || 0,
       })),
-      subtotal: totalAmount,
-      total: totalAmount,
+      subtotal: netTotal,
+      total: grossTotal,
+      totalTax: totalTaxAmount,
       status: "Unpaid",
       paid: 0,
-      balanceDue: totalAmount,
+      balanceDue: grossTotal,
     }
     const doc = await generateInvoicePDF(pdfData)
     doc.save(`bill-preview-${billNo}.pdf`)
@@ -799,6 +799,15 @@ export default function NewBillPage() {
     return comboCache[key] || []
   }
 
+  const itemGridCols = () => {
+    let cols = "2fr 70px 90px "
+    if (taxEnabled) cols += "70px "  // tax column
+    cols += (isNGO || locations.length > 0 ? "110px " : "")
+    cols += (isNGO || activities.length > 0 ? "110px " : "")
+    cols += "120px 90px 30px"
+    return cols
+  }
+
   return (
     <div style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
@@ -812,8 +821,16 @@ export default function NewBillPage() {
         .inv-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; transition: all 0.15s; white-space: nowrap; }
         .inv-btn:hover { background: var(--card-hover); }
         .inv-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .inv-item-row { display: grid; grid-template-columns: ${isNGO || locations.length > 0 || activities.length > 0 ? "2fr 70px 90px 110px 110px 80px 90px 30px" : "2fr 70px 90px 120px 90px 30px"}; gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
-        .inv-item-header { display: grid; grid-template-columns: ${isNGO || locations.length > 0 || activities.length > 0 ? "2fr 70px 90px 110px 110px 80px 90px 30px" : "2fr 70px 90px 120px 90px 30px"}; gap: 6px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); padding-bottom: 6px; }
+        .inv-item-row {
+          display: grid;
+          grid-template-columns: ${itemGridCols()};
+          gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border);
+        }
+        .inv-item-header {
+          display: grid;
+          grid-template-columns: ${itemGridCols()};
+          gap: 6px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); padding-bottom: 6px;
+        }
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
         .cust-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; max-height: 220px; overflow-y: auto; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
@@ -1016,7 +1033,7 @@ export default function NewBillPage() {
                         const tc = whtTaxCodes.find(t => t.id === id)
                         if (tc) {
                           setWhtRate(tc.rate)
-                          setWhtAmount(totalAmount * (tc.rate / 100))
+                          setWhtAmount(grossTotal * (tc.rate / 100))
                         }
                       } else {
                         setWhtRate(0)
@@ -1037,7 +1054,7 @@ export default function NewBillPage() {
                     onChange={e => {
                       const r = Number(e.target.value)
                       setWhtRate(r)
-                      setWhtAmount(totalAmount * (r / 100))
+                      setWhtAmount(grossTotal * (r / 100))
                     }}
                     style={{ width: 100 }}
                   />
@@ -1052,7 +1069,7 @@ export default function NewBillPage() {
                 </div>
                 {whtAmount > 0 && (
                   <div style={{ fontSize: 12, marginTop: 6, color: "var(--text-muted)" }}>
-                    Net payable after WHT: PKR {(totalAmount - whtAmount).toLocaleString()}
+                    Net payable after WHT: PKR {(grossTotal - whtAmount).toLocaleString()}
                   </div>
                 )}
               </div>
@@ -1070,8 +1087,18 @@ export default function NewBillPage() {
             <div className="inv-card">
               <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px 0" }}>Summary</h3>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, fontWeight: 600 }}>
-                <span>Total</span>
-                <span>PKR {totalAmount.toLocaleString()}</span>
+                <span>Total (Net)</span>
+                <span>PKR {netTotal.toLocaleString()}</span>
+              </div>
+              {taxEnabled && totalTaxAmount > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
+                  <span>Input Tax</span>
+                  <span>PKR {totalTaxAmount.toLocaleString()}</span>
+                </div>
+              )}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, fontWeight: 600, marginTop: 4 }}>
+                <span>Gross Total</span>
+                <span>PKR {grossTotal.toLocaleString()}</span>
               </div>
               {whtAmount > 0 && (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
@@ -1082,7 +1109,7 @@ export default function NewBillPage() {
               {whtAmount > 0 && (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, fontWeight: 600, marginTop: 4, borderTop: "1px dashed var(--border)", paddingTop: 6 }}>
                   <span>Net Payable</span>
-                  <span>PKR {(totalAmount - whtAmount).toLocaleString()}</span>
+                  <span>PKR {(grossTotal - whtAmount).toLocaleString()}</span>
                 </div>
               )}
               {budgetError && (
@@ -1120,6 +1147,7 @@ export default function NewBillPage() {
                 <span>Description</span>
                 <span>Qty</span>
                 <span>Price</span>
+                {taxEnabled && <span>Tax %</span>}
                 {(isNGO || locations.length > 0) && <span>Location</span>}
                 {(isNGO || activities.length > 0) && <span>Activity</span>}
                 <span>GL Acc</span>
@@ -1130,7 +1158,6 @@ export default function NewBillPage() {
               {items.map((item, idx) => {
                 const budgetData = getLineBudgetData(item)
                 const overBudget = isLineOverBudget(item, budgetData)
-                const softAvail = getLineDisplayAvailable(item, budgetData)
                 const filteredActs = getFilteredActivities(item.location_id)
                 const combos = getCombosForLine(item)
                 const selectedProject = item.project_id
@@ -1166,6 +1193,37 @@ export default function NewBillPage() {
                         value={item.unit_price}
                         onChange={e => updateItem(idx, "unit_price", Number(e.target.value))}
                       />
+
+                      {/* Tax column */}
+                      {taxEnabled && (
+                        <select
+                          className="inv-select"
+                          style={{ height: 34, fontSize: 11 }}
+                          value={item.tax_code_id || ""}
+                          onChange={e => {
+                            const codeId = e.target.value || null
+                            if (codeId) {
+                              const taxCode = inputTaxCodes.find(t => t.id === codeId)
+                              if (taxCode) {
+                                const rate = taxCode.rate
+                                const taxAmt = (item.qty * item.unit_price * rate) / 100
+                                updateItem(idx, "tax_code_id", codeId)
+                                updateItem(idx, "tax_rate", rate)
+                                updateItem(idx, "tax_amount", taxAmt)
+                              }
+                            } else {
+                              updateItem(idx, "tax_code_id", null)
+                              updateItem(idx, "tax_rate", 0)
+                              updateItem(idx, "tax_amount", 0)
+                            }
+                          }}
+                        >
+                          <option value="">No Tax</option>
+                          {inputTaxCodes.map(tc => (
+                            <option key={tc.id} value={tc.id}>{tc.code} ({tc.rate}%)</option>
+                          ))}
+                        </select>
+                      )}
 
                       {item.product_id ? (
                         <>
@@ -1220,7 +1278,6 @@ export default function NewBillPage() {
 
                     {showInfoRow && (
                       <div className="line-info-row">
-                        {/* Project/Donor selection */}
                         {combos.length === 0 && (
                           <span className="line-info-chip" style={{ opacity: 0.5 }}>📁 No project linked</span>
                         )}
@@ -1255,7 +1312,6 @@ export default function NewBillPage() {
                           </>
                         )}
 
-                        {/* Budget chips */}
                         {budgetData && !budgetData.hasBudget && (
                           <span className="line-info-chip over-budget-chip">🚫 No budget defined</span>
                         )}
@@ -1263,11 +1319,11 @@ export default function NewBillPage() {
                           <>
                             <span className="line-info-chip">Budget: PKR {budgetData.budget.toLocaleString()}</span>
                             <span className="line-info-chip">Spent: PKR {budgetData.spent.toLocaleString()}</span>
-                            {softAvail !== null && (
+                            {getLineDisplayAvailable(item, budgetData) !== null && (
                               <span className={`line-info-chip ${overBudget ? "over-budget-chip" : "ok-budget-chip"}`}>
                                 {overBudget
-                                  ? "⚠️ Over by PKR " + (item.total - softAvail).toLocaleString()
-                                  : "✓ Available: PKR " + softAvail.toLocaleString()}
+                                  ? "⚠️ Over by PKR " + (item.total - getLineDisplayAvailable(item, budgetData)!).toLocaleString()
+                                  : "✓ Available: PKR " + getLineDisplayAvailable(item, budgetData)!.toLocaleString()}
                               </span>
                             )}
                           </>

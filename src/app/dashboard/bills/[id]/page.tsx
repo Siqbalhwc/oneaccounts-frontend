@@ -16,6 +16,11 @@ interface BillItem {
   qty: number
   unit_price: number
   total: number
+  tax_code_id?: string | null
+  tax_code_snapshot?: string
+  tax_name_snapshot?: string
+  tax_rate?: number
+  tax_amount?: number
 }
 
 interface Bill {
@@ -24,6 +29,7 @@ interface Bill {
   date: string
   due_date: string
   total: number
+  total_tax: number
   paid: number
   status: string
   reference?: string
@@ -145,7 +151,6 @@ export default function BillDetailPage() {
       })
   }, [companyId, billId, taxEnabled])
 
-  // Safe WhatsApp link
   const waLink = bill && bill.supplier
     ? getWhatsAppLink(
         bill.supplier.phone || "",
@@ -180,12 +185,14 @@ export default function BillDetailPage() {
         qty:          item.qty,
         unit_price:   item.unit_price,
         total:        item.total,
+        tax_rate:     item.tax_rate || 0,
+        tax_amount:   item.tax_amount || 0,
       })),
       subtotal:   subTotal,
       total:      bill.total,
+      totalTax:   bill.total_tax || 0,
       paid:       bill.paid || 0,
       balanceDue: bill.total - (bill.paid || 0),
-      // WHT fields for PDF
       whtRate:    whtData?.wht_rate,
       whtAmount:  whtData?.wht_amount,
     }
@@ -266,6 +273,12 @@ export default function BillDetailPage() {
             <div className="label">Total</div>
             <div className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B" }}>PKR {bill.total?.toLocaleString()}</div>
           </div>
+          {taxEnabled && bill.total_tax > 0 && (
+            <div>
+              <div className="label">Input Tax</div>
+              <div className="value">PKR {bill.total_tax?.toLocaleString()}</div>
+            </div>
+          )}
           <div>
             <div className="label">Paid</div>
             <div className="value">PKR {bill.paid?.toLocaleString()}</div>
@@ -315,7 +328,9 @@ export default function BillDetailPage() {
                 <th>Description</th>
                 <th style={{ textAlign: "center" }}>Qty</th>
                 <th style={{ textAlign: "right" }}>Unit Price</th>
+                {taxEnabled && <th style={{ textAlign: "right" }}>Tax Rate</th>}
                 <th style={{ textAlign: "right" }}>Total</th>
+                {taxEnabled && <th style={{ textAlign: "right" }}>Tax</th>}
               </tr>
             </thead>
             <tbody>
@@ -324,10 +339,28 @@ export default function BillDetailPage() {
                   <td>{item.description}</td>
                   <td style={{ textAlign: "center" }}>{item.qty}</td>
                   <td style={{ textAlign: "right" }}>PKR {item.unit_price?.toLocaleString()}</td>
+                  {taxEnabled && (
+                    <td style={{ textAlign: "right", color: "var(--text-muted)" }}>
+                      {(item.tax_rate ?? 0) > 0 ? `${item.tax_rate}%` : "—"}
+                    </td>
+                  )}
                   <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {item.total?.toLocaleString()}</td>
+                  {taxEnabled && (
+                    <td style={{ textAlign: "right", color: (item.tax_amount ?? 0) > 0 ? "#EF4444" : "var(--text-muted)" }}>
+                      {(item.tax_amount ?? 0) > 0 ? `PKR ${(item.tax_amount ?? 0).toLocaleString()}` : "—"}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
+            {taxEnabled && bill.total_tax > 0 && (
+              <tfoot>
+                <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
+                  <td colSpan={taxEnabled ? 5 : 3} style={{ textAlign: "right" }}>Total Tax</td>
+                  <td style={{ textAlign: "right", color: "#EF4444" }}>PKR {bill.total_tax.toLocaleString()}</td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       )}

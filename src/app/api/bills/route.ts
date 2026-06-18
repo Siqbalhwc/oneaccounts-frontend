@@ -41,7 +41,6 @@ async function isTaxFeatureEnabled(supabase: any, companyId: string): Promise<bo
 }
 
 async function getDefaultWHTTaxCodeId(supabase: any, companyId: string, supplierId?: number) {
-  // First check vendor default
   if (supplierId) {
     const { data: vendor } = await supabase
       .from("suppliers")
@@ -50,7 +49,6 @@ async function getDefaultWHTTaxCodeId(supabase: any, companyId: string, supplier
       .single()
     if (vendor?.default_wht_tax_code_id) return vendor.default_wht_tax_code_id
   }
-  // Fallback to company default
   const { data: settings } = await supabase
     .from("company_tax_settings")
     .select("default_wht_tax_code_id")
@@ -61,12 +59,7 @@ async function getDefaultWHTTaxCodeId(supabase: any, companyId: string, supplier
 
 // ── Record product‑line stock movements into stock_moves ────────
 async function recordStockMoves(
-  supabase: any,
-  companyId: string,
-  items: any[],
-  sourceType: string,
-  sourceId: number,
-  direction: 'in' | 'out'
+  supabase: any, companyId: string, items: any[], sourceType: string, sourceId: number, direction: 'in' | 'out'
 ) {
   const moves = items
     .filter((item: any) => item.product_id)
@@ -81,14 +74,13 @@ async function recordStockMoves(
       source_type: 'invoice',
       source_id: sourceId,
     }))
-
   if (moves.length > 0) {
     const { error } = await supabase.from('stock_moves').insert(moves)
     if (error) console.error('Failed to insert stock_moves:', error)
   }
 }
 
-// ── Create the journal entry for a purchase bill (with optional WHT) ──
+// ── Create the journal entry for a purchase bill (with optional tax and WHT) ──
 async function createBillJournalEntry(
   supabase: any,
   bill: any,
@@ -99,7 +91,8 @@ async function createBillJournalEntry(
   whtAccountId?: number | null
 ) {
   const debitLines: any[] = []
-  let totalDebit = 0
+  let totalNetAmount = 0
+  let totalTaxAmount = 0
   const isNGO = businessType === 'ngo'
 
   for (const item of items) {
@@ -108,21 +101,27 @@ async function createBillJournalEntry(
 
     let accountId = item.account_id || null
     if (!accountId && item.product_id) {
-      // fallback to inventory or expense
       const defaultCode = businessType === 'trading' ? '1200' : '5000'
       const { data: acc } = await supabase.from('accounts')
-        .select('id').eq('code', defaultCode)
-        .eq('company_id', companyId).maybeSingle()
+        .select('id').eq('code', defaultCode).eq('company_id', companyId).maybeSingle()
       if (acc) accountId = acc.id
     }
-    if (!accountId) {
-      throw new Error(`No expense account found for item "${item.description}".`)
+    if (!accountId) throw new Error(`No expense account found for item "${item.description}".`)
+
+    const taxAmount = item.tax_amount || 0
+    const isRecoverable = item.is_recoverable !== false   // default true
+    totalNetAmount += amount
+    totalTaxAmount += taxAmount
+
+    // Determine expense amount: if tax is non‑recoverable, it becomes part of the cost
+    let expenseAmount = amount
+    if (taxAmount > 0 && !isRecoverable) {
+      expenseAmount += taxAmount
     }
 
-    totalDebit += amount
     const line: any = {
       account_id: accountId,
-      debit: amount,
+      debit: expenseAmount,
       credit: 0,
       location_id: item.location_id || null,
       activity_id: item.activity_id || null,
@@ -152,6 +151,26 @@ async function createBillJournalEntry(
     }
 
     debitLines.push(line)
+
+    // Recoverable tax → separate debit to input tax receivable account
+    if (taxAmount > 0 && isRecoverable) {
+      const taxCode = await supabase.from('tax_codes')
+        .select('tax_account_id')
+        .eq('id', item.tax_code_id)
+        .eq('company_id', companyId)
+        .single()
+      if (taxCode?.data?.tax_account_id) {
+        debitLines.push({
+          account_id: taxCode.data.tax_account_id,
+          debit: taxAmount,
+          credit: 0,
+          location_id: item.location_id || null,
+          activity_id: item.activity_id || null,
+          project_id: null,
+          donor_id: null,
+        })
+      }
+    }
   }
 
   if (debitLines.length === 0) {
@@ -159,8 +178,9 @@ async function createBillJournalEntry(
   }
 
   const payableAccount = await getPayableAccount(supabase, companyId)
+  const grossPayable = totalNetAmount + totalTaxAmount   // before WHT
 
-  // Credit AP for (totalDebit - WHT) and credit WHT if applicable
+  // Credit AP for (gross - WHT) and credit WHT if applicable
   if (whtAmount > 0 && whtAccountId) {
     debitLines.push({
       account_id: whtAccountId,
@@ -171,11 +191,10 @@ async function createBillJournalEntry(
       project_id: null,
       donor_id: null,
     })
-    const apCredit = totalDebit - whtAmount
     debitLines.push({
       account_id: payableAccount.id,
       debit: 0,
-      credit: apCredit,
+      credit: grossPayable - whtAmount,
       location_id: null,
       activity_id: null,
       project_id: null,
@@ -185,7 +204,7 @@ async function createBillJournalEntry(
     debitLines.push({
       account_id: payableAccount.id,
       debit: 0,
-      credit: totalDebit,
+      credit: grossPayable,
       location_id: null,
       activity_id: null,
       project_id: null,
@@ -221,11 +240,8 @@ async function createBillJournalEntry(
   // ⚡ Batch update account balances
   const accountUpdates = debitLines.reduce((acc, l) => {
     const existing = acc.find((u: any) => u.account_id === l.account_id)
-    if (existing) {
-      existing.delta += (l.debit || 0) - (l.credit || 0)
-    } else {
-      acc.push({ account_id: l.account_id, delta: (l.debit || 0) - (l.credit || 0) })
-    }
+    if (existing) existing.delta += (l.debit || 0) - (l.credit || 0)
+    else acc.push({ account_id: l.account_id, delta: (l.debit || 0) - (l.credit || 0) })
     return acc
   }, [] as { account_id: number; delta: number }[])
 
@@ -267,11 +283,7 @@ export async function POST(request: NextRequest) {
     {
       cookies: {
         getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          )
-        },
+        setAll(cookiesToSet) { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) },
       },
     }
   )
@@ -293,10 +305,9 @@ export async function POST(request: NextRequest) {
 
   const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
   const userEmail = user.email || 'system'
-
   const taxEnabled = await isTaxFeatureEnabled(supabase, companyId)
 
-  // Determine actual WHT values
+  // Determine WHT values
   let actualWhtAmount = 0
   let actualWhtTaxCodeId: string | null = null
   let actualWhtRate = 0
@@ -306,7 +317,6 @@ export async function POST(request: NextRequest) {
     actualWhtRate = parseFloat(wht_rate) || 0
     actualWhtAmount = parseFloat(wht_amount) || 0
   } else if (taxEnabled) {
-    // auto‑resolve default WHT for this company / vendor
     const defaultId = await getDefaultWHTTaxCodeId(supabase, companyId, party_id)
     if (defaultId) {
       const { data: tc } = await supabase
@@ -317,7 +327,6 @@ export async function POST(request: NextRequest) {
       if (tc) {
         actualWhtTaxCodeId = defaultId
         actualWhtRate = tc.rate
-        // amount will be calculated after items total is known
       }
     }
   }
@@ -326,7 +335,7 @@ export async function POST(request: NextRequest) {
     .select('business_type').eq('id', companyId).single()
   const businessType = company?.business_type || ''
 
-  // ── NGO budget validation (same as before) ──────────────────────
+  // ── NGO budget validation (unchanged) ──────────────────────────
   if (businessType === 'ngo') {
     const today = new Date()
     const fiscalYear = today.getFullYear()
@@ -365,10 +374,36 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // ── Generate unique bill number with retry ──
+  // Enhance items with tax information
+  const enhancedItems = await Promise.all(items.map(async (item: any) => {
+    if (taxEnabled && item.tax_code_id) {
+      const { data: taxCode } = await supabase
+        .from('tax_codes')
+        .select('code, name, rate, is_recoverable')
+        .eq('id', item.tax_code_id)
+        .eq('company_id', companyId)
+        .maybeSingle()
+      if (taxCode) {
+        const rate = taxCode.rate || 0
+        const taxAmount = (item.qty || 0) * (item.unit_price || 0) * rate / 100
+        return {
+          ...item,
+          tax_code_snapshot: taxCode.code,
+          tax_name_snapshot: taxCode.name,
+          tax_rate: rate,
+          tax_amount: taxAmount,
+          is_recoverable: taxCode.is_recoverable,
+        }
+      }
+    }
+    return { ...item, tax_code_snapshot: null, tax_name_snapshot: null, tax_rate: 0, tax_amount: 0, is_recoverable: true }
+  }))
+
+  // Generate unique bill number with retry
   let billNo = ''
   let bill: any = null
   let total = 0
+  let totalTax = 0
 
   for (let attempt = 0; attempt < 3; attempt++) {
     billNo = await generateBillNo(supabase, companyId)
@@ -382,6 +417,7 @@ export async function POST(request: NextRequest) {
         date: invoice_date,
         due_date,
         total: 0,
+        total_tax: 0,
         paid: 0,
         status: 'Unpaid',
         reference,
@@ -404,23 +440,29 @@ export async function POST(request: NextRequest) {
 
   if (!bill) return NextResponse.json({ error: 'Could not generate unique bill number' }, { status: 500 })
 
-  // Insert items
-  const itemRows = items.map((item: any) => {
+  // Insert items with tax fields
+  const itemRows = enhancedItems.map((item: any) => {
     const qty = Number(item.qty || 0)
     const unit_price = Number(item.unit_price || 0)
     const lineTotal = qty * unit_price
     total += lineTotal
+    totalTax += (item.tax_amount || 0)
     return {
       invoice_id: bill.id,
       product_id: item.product_id || null,
       description: item.description,
       qty,
       unit_price,
-      total: lineTotal,
+      total: lineTotal + (item.tax_amount || 0),
       account_id: item.account_id || null,
       location_id: item.location_id || null,
       activity_id: item.activity_id || null,
       company_id: companyId,
+      tax_code_id: item.tax_code_id || null,
+      tax_code_snapshot: item.tax_code_snapshot || null,
+      tax_name_snapshot: item.tax_name_snapshot || null,
+      tax_rate: item.tax_rate || 0,
+      tax_amount: item.tax_amount || 0,
     }
   })
 
@@ -439,10 +481,11 @@ export async function POST(request: NextRequest) {
     actualWhtAmount = total * (actualWhtRate / 100)
   }
 
-  // Update bill total (gross)
+  // Update bill total (gross = net + tax)
+  const grossTotal = total + totalTax
   const { data: updatedBill, error: updateError } = await supabase
     .from('invoices')
-    .update({ total })
+    .update({ total: grossTotal, total_tax: totalTax })
     .eq('id', bill.id)
     .select('*')
     .single()
@@ -452,7 +495,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: updateError?.message || 'Failed to update total' }, { status: 500 })
   }
 
-  // ── Insert WHT record if applicable ──
+  // Insert WHT record if applicable
   if (taxEnabled && actualWhtAmount > 0 && actualWhtTaxCodeId) {
     await supabase.from('bill_withholding').insert({
       company_id: companyId,
@@ -475,7 +518,7 @@ export async function POST(request: NextRequest) {
     await createBillJournalEntry(
       supabase,
       updatedBill,
-      items,
+      enhancedItems,
       companyId,
       businessType,
       actualWhtAmount,
@@ -493,7 +536,7 @@ export async function POST(request: NextRequest) {
     .select('balance').eq('id', party_id).eq('company_id', companyId).single()
   if (supplier) {
     await supabase.from('suppliers')
-      .update({ balance: (supplier.balance || 0) + total })
+      .update({ balance: (supplier.balance || 0) + grossTotal })
       .eq('id', party_id).eq('company_id', companyId)
   }
 
@@ -511,11 +554,7 @@ export async function PUT(request: NextRequest) {
     {
       cookies: {
         getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          )
-        },
+        setAll(cookiesToSet) { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) },
       },
     }
   )
@@ -535,14 +574,13 @@ export async function PUT(request: NextRequest) {
 
   const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
   const userEmail = user.email || 'system'
-
   const taxEnabled = await isTaxFeatureEnabled(supabase, companyId)
 
   const { data: company } = await supabase.from('companies')
     .select('business_type').eq('id', companyId).single()
   const businessType = company?.business_type || ''
 
-  // ── NGO budget validation (repeat as in POST) ──────────────
+  // NGO budget validation (unchanged)
   if (businessType === 'ngo') {
     const today = new Date()
     const fiscalYear = today.getFullYear()
@@ -581,7 +619,6 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  // Fetch old bill
   const { data: oldBill } = await supabase.from('invoices')
     .select('*').eq('id', id).eq('company_id', companyId).single()
   if (!oldBill) return NextResponse.json({ error: 'Bill not found' }, { status: 404 })
@@ -651,24 +688,56 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  // Insert new items and compute total
+  // Enhance items with tax info
+  const enhancedItems = await Promise.all(items.map(async (item: any) => {
+    if (taxEnabled && item.tax_code_id) {
+      const { data: taxCode } = await supabase
+        .from('tax_codes')
+        .select('code, name, rate, is_recoverable')
+        .eq('id', item.tax_code_id)
+        .eq('company_id', companyId)
+        .maybeSingle()
+      if (taxCode) {
+        const rate = taxCode.rate || 0
+        const taxAmount = (item.qty || 0) * (item.unit_price || 0) * rate / 100
+        return {
+          ...item,
+          tax_code_snapshot: taxCode.code,
+          tax_name_snapshot: taxCode.name,
+          tax_rate: rate,
+          tax_amount: taxAmount,
+          is_recoverable: taxCode.is_recoverable,
+        }
+      }
+    }
+    return { ...item, tax_code_snapshot: null, tax_name_snapshot: null, tax_rate: 0, tax_amount: 0, is_recoverable: true }
+  }))
+
+  // Insert new items and compute totals
   let total = 0
-  const itemRows = items.map((item: any) => {
+  let totalTax = 0
+  const itemRows = enhancedItems.map((item: any) => {
     const qty = Number(item.qty || 0)
     const unit_price = Number(item.unit_price || 0)
     const lineTotal = qty * unit_price
     total += lineTotal
+    totalTax += (item.tax_amount || 0)
     return {
       invoice_id: id,
       product_id: item.product_id || null,
       description: item.description,
       qty,
       unit_price,
-      total: lineTotal,
+      total: lineTotal + (item.tax_amount || 0),
       account_id: item.account_id || null,
       location_id: item.location_id || null,
       activity_id: item.activity_id || null,
       company_id: companyId,
+      tax_code_id: item.tax_code_id || null,
+      tax_code_snapshot: item.tax_code_snapshot || null,
+      tax_name_snapshot: item.tax_name_snapshot || null,
+      tax_rate: item.tax_rate || 0,
+      tax_amount: item.tax_amount || 0,
     }
   })
 
@@ -683,14 +752,15 @@ export async function PUT(request: NextRequest) {
     actualWhtAmount = total * (actualWhtRate / 100)
   }
 
-  // Update bill header
+  const grossTotal = total + totalTax
   const { data: updatedBill, error: updateError } = await supabase
     .from('invoices')
     .update({
       party_id,
       date: invoice_date,
       due_date,
-      total,
+      total: grossTotal,
+      total_tax: totalTax,
       reference,
       notes,
       updated_by: userEmail,
@@ -728,7 +798,7 @@ export async function PUT(request: NextRequest) {
     await createBillJournalEntry(
       supabase,
       updatedBill,
-      items,
+      enhancedItems,
       companyId,
       businessType,
       actualWhtAmount,
@@ -744,7 +814,7 @@ export async function PUT(request: NextRequest) {
       .select('balance').eq('id', updatedBill.party_id).eq('company_id', companyId).single()
     if (supp) {
       await supabase.from('suppliers')
-        .update({ balance: (supp.balance || 0) + total })
+        .update({ balance: (supp.balance || 0) + grossTotal })
         .eq('id', updatedBill.party_id).eq('company_id', companyId)
     }
   }
@@ -763,11 +833,7 @@ export async function DELETE(request: NextRequest) {
     {
       cookies: {
         getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          )
-        },
+        setAll(cookiesToSet) { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) },
       },
     }
   )
