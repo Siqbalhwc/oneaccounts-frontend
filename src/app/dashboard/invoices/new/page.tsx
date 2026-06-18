@@ -76,65 +76,95 @@ function NewInvoicePageContent() {
   const isNGO = businessType === "ngo"
   const invoiceIdForLink = savedInvoiceId || (editId ? Number(editId) : null)
 
-  // ── All existing hooks and handlers (unchanged) ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
+
       supabase.from("companies").select("business_type").eq("id", cid).single()
         .then(({ data }) => { if (data) setBusinessType(data.business_type || "") })
+
       supabase.from("customers")
         .select("id,code,name,phone,balance,country_code,payment_terms")
-        .eq("company_id", cid).order("name")
+        .eq("company_id", cid)
+        .order("name")
         .then(r => { if (r.data) setCustomers(r.data) })
+
       if (showProducts) {
         supabase.from("products")
           .select("id,code,name,sale_price,cost_price,qty_on_hand,image_path")
-          .eq("company_id", cid).is("deleted_at", null).order("name")
+          .eq("company_id", cid)
+          .is("deleted_at", null)
+          .order("name")
           .then(r => r.data && setProducts(r.data))
       }
-      supabase.from("company_settings").select("*").eq("company_id", cid).single()
+
+      supabase.from("company_settings")
+        .select("*").eq("company_id", cid).single()
         .then(r => {
           if (r.data) setCompany(r.data)
           else {
-            supabase.from("companies").select("name, logo_url, tagline, address, business_type")
-              .eq("id", cid).single().then(r2 => r2.data && setCompany(r2.data))
+            supabase.from("companies")
+              .select("name, logo_url, tagline, address, business_type")
+              .eq("id", cid).single()
+              .then(r2 => r2.data && setCompany(r2.data))
           }
         })
+
       supabase.from("projects").select("id,name,donor_id").eq("company_id", cid).order("name")
         .then(r => r.data && setProjects(r.data))
       supabase.from("donors").select("id,name").eq("company_id", cid).order("name")
         .then(r => r.data && setDonors(r.data))
+
       if (taxEnabled) {
         supabase.from("tax_codes")
           .select("id, code, name, rate, tax_account_id")
-          .eq("company_id", cid).order("code")
+          .eq("company_id", cid)
+          .order("code")
           .then(r => r.data && setTaxCodes(r.data))
       }
+
       setLoading(false)
     })
   }, [showProducts, taxEnabled])
 
   useEffect(() => {
     if (!editId || !companyId) return
-    supabase.from("invoices").select("*").eq("id", editId).eq("company_id", companyId).single()
+    supabase.from("invoices")
+      .select("*")
+      .eq("id", editId)
+      .eq("company_id", companyId)
+      .single()
       .then(({ data: bill }) => {
         if (!bill) return
         setCustomerId(bill.party_id)
         const cust = customers.find((s: any) => s.id === bill.party_id)
         if (cust) { setSelectedCustomer(cust); setCustomerSearch(cust.name) }
-        setInvoiceDate(bill.date); setDueDate(bill.due_date)
-        setReference(bill.reference || ""); setNotes(bill.notes || "")
-        supabase.from("invoice_items").select("*").eq("invoice_id", bill.id).order("id")
+        setInvoiceDate(bill.date)
+        setDueDate(bill.due_date)
+        setReference(bill.reference || "")
+        setNotes(bill.notes || "")
+
+        supabase.from("invoice_items")
+          .select("*")
+          .eq("invoice_id", bill.id)
+          .order("id")
           .then(({ data: itemsData }) => {
             if (itemsData) {
               const loaded = itemsData.map((item: any) => ({
-                product_id: item.product_id, description: item.description,
-                product_name: "", product_image: null,
-                qty: item.qty, unit_price: item.unit_price,
-                cost_price: item.cost_price || 0, total: item.total,
-                project_id: item.project_id || null, donor_id: item.donor_id || null,
-                tax_code_id: item.tax_code_id || null, tax_rate: item.tax_rate || 0, tax_amount: item.tax_amount || 0,
+                product_id: item.product_id,
+                description: item.description,
+                product_name: "",
+                product_image: null,
+                qty: item.qty,
+                unit_price: item.unit_price,
+                cost_price: item.cost_price || 0,
+                total: item.total,
+                project_id: item.project_id || null,
+                donor_id: item.donor_id || null,
+                tax_code_id: item.tax_code_id || null,
+                tax_rate: item.tax_rate || 0,
+                tax_amount: item.tax_amount || 0,
               }))
               setItems(loaded)
             }
@@ -145,44 +175,377 @@ function NewInvoicePageContent() {
   useEffect(() => {
     if (!invoiceDate || !selectedCustomer) return
     const days = getCreditDays(selectedCustomer.payment_terms)
-    const dt = new Date(invoiceDate); dt.setDate(dt.getDate() + days)
+    const dt = new Date(invoiceDate)
+    dt.setDate(dt.getDate() + days)
     setDueDate(dt.toISOString().split("T")[0])
   }, [invoiceDate, selectedCustomer])
 
   useEffect(() => {
-    if (customerId && lastSelectedProduct) fetchPriceHistory(lastSelectedProduct.id, customerId)
+    if (customerId && lastSelectedProduct) {
+      fetchPriceHistory(lastSelectedProduct.id, customerId)
+    }
   }, [customerId])
 
   const refreshCustomers = () => {
-    if (!companyId) return; setRefreshingCustomers(true)
-    supabase.from("customers").select("id,code,name,phone,balance,country_code,payment_terms")
-      .eq("company_id", companyId).order("name")
-      .then(r => { if (r.data) setCustomers(r.data); setRefreshingCustomers(false); if (selectedCustomer) { const updated = r.data?.find((c: any) => c.id === selectedCustomer.id); if (updated) setSelectedCustomer(updated) } })
+    if (!companyId) return
+    setRefreshingCustomers(true)
+    supabase.from("customers")
+      .select("id,code,name,phone,balance,country_code,payment_terms")
+      .eq("company_id", companyId)
+      .order("name")
+      .then(r => {
+        if (r.data) setCustomers(r.data)
+        setRefreshingCustomers(false)
+        if (selectedCustomer) {
+          const updated = r.data?.find((c: any) => c.id === selectedCustomer.id)
+          if (updated) setSelectedCustomer(updated)
+        }
+      })
   }
-  const filteredCustomers = customers.filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase()) || c.code.toLowerCase().includes(customerSearch.toLowerCase()) || (c.phone || "").includes(customerSearch))
-  const selectCustomer = (c: any) => { setCustomerId(c.id); setSelectedCustomer(c); setCustomerSearch(c.name); setShowCustomerList(false) }
-  const clearCustomer = () => { setCustomerId(null); setSelectedCustomer(null); setCustomerSearch(""); setShowCustomerList(true) }
-  const filteredProducts = products.filter((p: any) => p.name.toLowerCase().includes(productSearch.toLowerCase()) || p.code.toLowerCase().includes(productSearch.toLowerCase()))
-  const addProductItem = (prod: any) => { setItems([...items, { product_id: prod.id, description: `${prod.code} - ${prod.name}`, product_name: prod.name, product_image: prod.image_path || null, qty: 1, unit_price: prod.sale_price, cost_price: prod.cost_price, total: prod.sale_price, project_id: null, donor_id: null, tax_code_id: null, tax_rate: 0, tax_amount: 0 }]); setProductSearch(""); setShowProductList(false); setLastSelectedProduct(prod); if (customerId) fetchPriceHistory(prod.id, customerId); else setShowHistory(false) }
-  const addManualItem = () => { setItems([...items, { product_id: null, description: "", product_name: "", product_image: null, qty: 1, unit_price: 0, cost_price: 0, total: 0, project_id: null, donor_id: null, tax_code_id: null, tax_rate: 0, tax_amount: 0 }]) }
-  const updateItem = (idx: number, field: string, value: any) => { const updated = [...items]; updated[idx] = { ...updated[idx], [field]: value }; if (field === "qty" || field === "unit_price") { updated[idx].total = updated[idx].qty * updated[idx].unit_price; if (updated[idx].tax_rate > 0) { updated[idx].tax_amount = (updated[idx].qty * updated[idx].unit_price * updated[idx].tax_rate) / 100 } else { updated[idx].tax_amount = 0 } }; if (field === "project_id" && value) { const project = projects.find(p => p.id == value); if (project) { updated[idx].donor_id = project.donor_id || null } else { updated[idx].donor_id = null } }; setItems(updated) }
+
+  const filteredCustomers = customers.filter(c =>
+    c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    c.code.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    (c.phone || "").includes(customerSearch)
+  )
+
+  const selectCustomer = (c: any) => {
+    setCustomerId(c.id)
+    setSelectedCustomer(c)
+    setCustomerSearch(c.name)
+    setShowCustomerList(false)
+  }
+
+  const clearCustomer = () => {
+    setCustomerId(null)
+    setSelectedCustomer(null)
+    setCustomerSearch("")
+    setShowCustomerList(true)
+  }
+
+  const filteredProducts = products.filter((p: any) =>
+    p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+    p.code.toLowerCase().includes(productSearch.toLowerCase())
+  )
+
+  const addProductItem = (prod: any) => {
+    setItems([...items, {
+      product_id: prod.id,
+      description: `${prod.code} - ${prod.name}`,
+      product_name: prod.name,
+      product_image: prod.image_path || null,
+      qty: 1,
+      unit_price: prod.sale_price,
+      cost_price: prod.cost_price,
+      total: prod.sale_price,
+      project_id: null,
+      donor_id: null,
+      tax_code_id: null,
+      tax_rate: 0,
+      tax_amount: 0,
+    }])
+    setProductSearch("")
+    setShowProductList(false)
+    setLastSelectedProduct(prod)
+    if (customerId) fetchPriceHistory(prod.id, customerId)
+    else setShowHistory(false)
+  }
+
+  const addManualItem = () => {
+    setItems([...items, {
+      product_id: null,
+      description: "",
+      product_name: "",
+      product_image: null,
+      qty: 1,
+      unit_price: 0,
+      cost_price: 0,
+      total: 0,
+      project_id: null,
+      donor_id: null,
+      tax_code_id: null,
+      tax_rate: 0,
+      tax_amount: 0,
+    }])
+  }
+
+  const updateItem = (idx: number, field: string, value: any) => {
+    const updated = [...items]
+    updated[idx] = { ...updated[idx], [field]: value }
+
+    if (field === "qty" || field === "unit_price") {
+      updated[idx].total = updated[idx].qty * updated[idx].unit_price
+      if (updated[idx].tax_rate > 0) {
+        updated[idx].tax_amount = (updated[idx].qty * updated[idx].unit_price * updated[idx].tax_rate) / 100
+      } else {
+        updated[idx].tax_amount = 0
+      }
+    }
+
+    if (field === "project_id" && value) {
+      const project = projects.find(p => p.id == value)
+      if (project) {
+        updated[idx].donor_id = project.donor_id || null
+      } else {
+        updated[idx].donor_id = null
+      }
+    }
+
+    setItems(updated)
+  }
+
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
-  const fetchPriceHistory = async (productId: number, custId: number) => { /* unchanged */ }
+
+  const fetchPriceHistory = async (productId: number, custId: number) => {
+    const { data: items } = await supabase
+      .from("invoice_items")
+      .select("id, invoice_id, unit_price")
+      .eq("product_id", productId)
+      .order("id", { ascending: false })
+      .limit(20)
+    if (!items || items.length === 0) { setPriceHistory([]); setShowHistory(true); return }
+    const invoiceIds = [...new Set(items.map((i: any) => i.invoice_id))]
+    const { data: invoices } = await supabase
+      .from("invoices")
+      .select("id, invoice_no, date")
+      .in("id", invoiceIds)
+      .eq("party_id", custId)
+    if (!invoices || invoices.length === 0) { setPriceHistory([]); setShowHistory(true); return }
+    const invMap: Record<number, any> = {}
+    invoices.forEach((inv: any) => { invMap[inv.id] = inv })
+    const history = items
+      .filter((item: any) => invMap[item.invoice_id])
+      .map((item: any) => ({
+        unit_price: item.unit_price,
+        invoice_no: invMap[item.invoice_id].invoice_no,
+        date: invMap[item.invoice_id].date,
+      }))
+      .slice(0, 5)
+    setPriceHistory(history)
+    setShowHistory(true)
+  }
 
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
   const totalTaxAmount = items.reduce((s, i) => s + (i.tax_amount || 0), 0)
 
-  const handleSubmit = async () => { /* unchanged */ }
-  const waLink = () => { /* unchanged */ return "" }
-  const handleWhatsAppWithPDF = async () => { /* unchanged */ }
-  const handleBeforeSavePdf = async () => { /* unchanged */ }
+  const handleSubmit = async () => {
+    if (!customerId) { setError("Please select a customer"); return }
+    if (items.length === 0) { setError("Add at least one item"); return }
 
-  useEffect(() => { const handler = (e: MouseEvent) => { if (customerRef.current && !customerRef.current.contains(e.target as Node)) setShowCustomerList(false) }; document.addEventListener("mousedown", handler); return () => document.removeEventListener("mousedown", handler) }, [])
+    setSaving(true); setError("")
 
-  if (loading) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>Loading invoice form…</div>
+    const url = editId ? `/api/invoices?id=${editId}` : "/api/invoices"
+    const method = editId ? "PUT" : "POST"
 
-  const getProjectName = (projectId: number | null) => { if (!projectId) return ""; const proj = projects.find(p => p.id == projectId); return proj?.name || "" }
-  const getDonorName = (donorId: number | null) => { if (!donorId) return ""; const don = donors.find(d => d.id == donorId); return don?.name || "" }
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editId || undefined,
+          party_id: customerId,
+          invoice_date: invoiceDate,
+          due_date: dueDate,
+          items: items.map(i => ({
+            product_id: i.product_id,
+            description: i.description,
+            qty: i.qty,
+            unit_price: i.unit_price,
+            cost_price: i.cost_price,
+            project_id: i.project_id || null,
+            donor_id: i.donor_id || null,
+            tax_code_id: taxEnabled ? (i.tax_code_id || null) : undefined,
+            tax_rate: taxEnabled ? (i.tax_rate || 0) : undefined,
+            tax_amount: taxEnabled ? (i.tax_amount || 0) : undefined,
+          })),
+          reference, notes,
+        }),
+      })
+      const result = await res.json()
+      if (!result.success) {
+        setError(result.error || "Failed to save invoice")
+        setSaving(false)
+        return
+      }
+
+      const newInvoiceId = result.invoice?.id
+      setSavedInvoiceId(newInvoiceId || null)
+      setFlash(`✅ Invoice ${editId ? "updated" : "saved"} successfully!`)
+
+      if (editId) {
+        router.push(`/dashboard/invoices/${editId}`)
+      } else {
+        setSaving(false)
+      }
+    } catch {
+      setError("Network error")
+      setSaving(false)
+    }
+  }
+
+  const waLink = () => {
+    if (!selectedCustomer) return ""
+    const code = (selectedCustomer.country_code || "+92").replace(/\D/g, "")
+    const phone = (selectedCustomer.phone || "").replace(/\D/g, "")
+    if (!phone) return ""
+    const invoiceLink = invoiceIdForLink
+      ? `https://www.oneaccountsbysiqbal.com/invoice/${invoiceIdForLink}`
+      : null
+    const customerDisplayName = selectedCustomer.name?.trim() || selectedCustomer.phone || "Customer"
+    const actualCompanyName = company?.name || company?.company_name || "OneAccounts"
+    const msg = [
+      `Dear ${customerDisplayName},`,
+      ``,
+      `Your invoice of PKR ${totalAmount.toLocaleString()} has been generated.`,
+      invoiceLink ? `` : `(Save the invoice first to get a link.)`,
+      invoiceLink ? `📄 View Online: ${invoiceLink}` : "",
+      `📅 Date: ${invoiceDate}`,
+      `📆 Due: ${dueDate}`,
+      ``,
+      `Thank you for your business.`,
+      `— ${actualCompanyName}`,
+    ].filter(line => line !== "").join("\n")
+    return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
+  }
+
+  const handleWhatsAppWithPDF = async () => {
+    if (!selectedCustomer) return
+    const phone = (selectedCustomer.phone || "").replace(/\D/g, "")
+    if (!phone) { alert("No phone number for this customer."); return }
+    const invoiceLink = invoiceIdForLink
+      ? `https://www.oneaccountsbysiqbal.com/invoice/${invoiceIdForLink}`
+      : null
+    const customerDisplayName = selectedCustomer.name?.trim() || selectedCustomer.phone || "Customer"
+    const actualCompanyName = company?.name || company?.company_name || "OneAccounts"
+
+    const pdfData = {
+      companyName: actualCompanyName,
+      companyAddress: company?.address || "",
+      companyPhone: company?.phone || "",
+      companyEmail: company?.email || "",
+      companyTagline: company?.tagline || "",
+      logoUrl: company?.logo_url || null,
+      businessType: company?.business_type || "",
+      invoiceNo: "PREVIEW",
+      date: invoiceDate,
+      dueDate: dueDate,
+      customerName: customerDisplayName,
+      customerPhone: selectedCustomer.phone || "",
+      customerAddress: selectedCustomer.address || "",
+      customerEmail: selectedCustomer.email || "",
+      paymentTerms: selectedCustomer.payment_terms || null,
+      items: items.map(i => ({
+        description: i.description || "",
+        qty: i.qty || 0,
+        unit_price: i.unit_price || 0,
+        total: i.total || 0,
+        image_path: i.product_image || null,
+        product_id: i.product_id || null,
+        product_name: i.product_name || "",
+        tax_rate: i.tax_rate || 0,
+        tax_amount: i.tax_amount || 0,
+      })),
+      subtotal: totalAmount,
+      total: totalAmount + totalTaxAmount,
+      status: "Unpaid",
+      paid: 0,
+      balanceDue: totalAmount + totalTaxAmount,
+    }
+    const doc = await generateInvoicePDF(pdfData)
+    const blob = doc.output("blob")
+    const filePath = `invoices/${Date.now()}-${Math.random().toString(36).substr(2,5)}.pdf`
+    try {
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from("invoice-pdfs")
+        .upload(filePath, blob, { contentType: "application/pdf", upsert: false })
+      if (!uploadErr) {
+        const { data: publicUrlData } = supabase.storage
+          .from("invoice-pdfs")
+          .getPublicUrl(filePath)
+        const pdfLink = publicUrlData.publicUrl
+        const msg = [
+          `Dear ${customerDisplayName},`,
+          ``,
+          `Your invoice of PKR ${(totalAmount + totalTaxAmount).toLocaleString()} has been generated.`,
+          invoiceLink ? `📄 View Online: ${invoiceLink}` : "",
+          `📎 Download PDF: ${pdfLink}`,
+          `📅 Date: ${invoiceDate}`,
+          `📆 Due: ${dueDate}`,
+          ``,
+          `Thank you for your business.`,
+          `— ${actualCompanyName}`,
+        ].filter(line => line !== "").join("\n")
+        const waURL = `https://wa.me/${(selectedCustomer.country_code || "+92").replace(/\D/g, "")}${phone}?text=${encodeURIComponent(msg)}`
+        window.open(waURL, "_blank")
+        return
+      }
+    } catch (e) { console.warn("Upload failed, fallback to text only") }
+    window.open(waLink(), "_blank")
+  }
+
+  const handleBeforeSavePdf = async () => {
+    if (!selectedCustomer) return
+    const pdfData = {
+      companyName: company?.name || company?.company_name || "OneAccounts",
+      companyAddress: company?.address || "",
+      companyPhone: company?.phone || "",
+      companyEmail: company?.email || "",
+      companyTagline: company?.tagline || "",
+      logoUrl: company?.logo_url || null,
+      businessType: company?.business_type || "",
+      invoiceNo: "PREVIEW",
+      date: invoiceDate,
+      dueDate: dueDate,
+      customerName: selectedCustomer.name || "Customer",
+      customerPhone: selectedCustomer.phone || "",
+      customerAddress: selectedCustomer.address || "",
+      customerEmail: selectedCustomer.email || "",
+      paymentTerms: selectedCustomer.payment_terms || null,
+      items: items.map(i => ({
+        description: i.description || "",
+        qty: i.qty || 0,
+        unit_price: i.unit_price || 0,
+        total: i.total || 0,
+        image_path: i.product_image || null,
+        product_id: i.product_id || null,
+        product_name: i.product_name || "",
+        tax_rate: i.tax_rate || 0,
+        tax_amount: i.tax_amount || 0,
+      })),
+      subtotal: totalAmount,
+      total: totalAmount + totalTaxAmount,
+      status: "Unpaid",
+      paid: 0,
+      balanceDue: totalAmount + totalTaxAmount,
+    }
+    const doc = await generateInvoicePDF(pdfData)
+    doc.save(`invoice-preview.pdf`)
+  }
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (customerRef.current && !customerRef.current.contains(e.target as Node)) {
+        setShowCustomerList(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
+
+  if (loading) {
+    return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>Loading invoice form…</div>
+  }
+
+  const getProjectName = (projectId: number | null) => {
+    if (!projectId) return ""
+    const proj = projects.find(p => p.id == projectId)
+    return proj?.name || ""
+  }
+  const getDonorName = (donorId: number | null) => {
+    if (!donorId) return ""
+    const don = donors.find(d => d.id == donorId)
+    return don?.name || ""
+  }
 
   const itemGridColsDesktop = taxEnabled
     ? "30px 150px 3fr 80px 110px 80px 110px 110px 30px"
@@ -204,7 +567,6 @@ function NewInvoicePageContent() {
         .inv-btn-success { background: #25D366; color: white; border-color: #25D366; }
         .inv-btn-success:hover { background: #22C55E; }
 
-        /* DESKTOP item grid */
         .inv-item-row { display: grid; grid-template-columns: ${itemGridColsDesktop}; gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
         .inv-item-header { display: grid; grid-template-columns: ${itemGridColsDesktop}; gap: 6px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); padding-bottom: 6px; }
 
@@ -236,60 +598,17 @@ function NewInvoicePageContent() {
         .mobile-item-row { display: none; }
         .mobile-sticky-summary { display: none; }
 
-        /* ── MOBILE (<768px) ── */
         @media (max-width: 768px) {
           .desktop-only { display: none; }
           .desktop-summary { display: none; }
           .inv-item-header { display: none; }
           .inv-item-row { display: none; }
-
           .mobile-only { display: block; }
-          .mobile-item-header {
-            display: grid;
-            grid-template-columns: 24px 1fr 44px 64px 56px 30px;
-            gap: 3px;
-            font-size: 7px;
-            font-weight: 700;
-            text-transform: uppercase;
-            color: var(--text-muted);
-            padding-bottom: 4px;
-            align-items: end;
-          }
-          .mobile-item-row {
-            display: grid;
-            grid-template-columns: 24px 1fr 44px 64px 56px 30px;
-            gap: 3px;
-            align-items: center;
-            padding: 8px 0;
-            border-bottom: 1px solid var(--border);
-          }
-          .mobile-item-row input {
-            height: 32px;
-            font-size: 12px;
-            padding: 0 4px;
-            text-align: center;
-          }
-          .mobile-item-row input[type="number"] {
-            -moz-appearance: textfield;
-          }
-          .mobile-total {
-            font-size: 12px;
-            font-weight: 600;
-            text-align: right;
-            white-space: nowrap;
-          }
-          .mobile-sticky-summary {
-            display: flex;
-            position: sticky;
-            bottom: 0; left: 0; right: 0;
-            background: var(--card);
-            border-top: 1px solid var(--border);
-            padding: 12px 16px;
-            align-items: center;
-            justify-content: space-between;
-            z-index: 50;
-            margin-top: 16px;
-          }
+          .mobile-item-header { display: grid; grid-template-columns: 24px 1fr 44px 64px 56px 30px; gap: 3px; font-size: 7px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); padding-bottom: 4px; align-items: end; }
+          .mobile-item-row { display: grid; grid-template-columns: 24px 1fr 44px 64px 56px 30px; gap: 3px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
+          .mobile-item-row input { height: 32px; font-size: 12px; padding: 0 4px; }
+          .mobile-total { font-size: 12px; font-weight: 600; text-align: right; white-space: nowrap; }
+          .mobile-sticky-summary { display: flex; position: sticky; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--border); padding: 12px 16px; align-items: center; justify-content: space-between; z-index: 50; margin-top: 16px; }
           .inv-card { padding: 12px; }
           .inv-input, .inv-select { height: 44px; font-size: 16px; }
           .inv-btn { padding: 10px 16px; font-size: 14px; }
@@ -299,7 +618,6 @@ function NewInvoicePageContent() {
       `}</style>
 
       <div className="inv-shell">
-        {/* Header */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
           <button className="inv-btn" onClick={() => router.push("/dashboard/invoices")}><ArrowLeft size={16} /></button>
           <div style={{ flex: 1 }}>
@@ -403,7 +721,6 @@ function NewInvoicePageContent() {
               </div>
             </div>
 
-            {/* Desktop summary */}
             <div className="desktop-summary">
               <div className="inv-card">
                 <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
@@ -418,14 +735,12 @@ function NewInvoicePageContent() {
             </div>
           </div>
 
-          {/* ── ITEMS TABLE ── */}
           <div className="inv-items-section" style={{ marginBottom: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
             </div>
             {items.length > 0 && (
               <div className="inv-card" style={{ padding: "16px 12px" }}>
-                {/* DESKTOP */}
                 <div className="desktop-only" style={{ overflowX: "auto" }}>
                   <div className="inv-item-header" style={{ minWidth: taxEnabled ? 800 : 600 }}>
                     <span></span><span>{isNGO ? "Product/Project" : "Product"}</span><span>Description</span><span>Qty</span><span>Price</span>
@@ -450,42 +765,18 @@ function NewInvoicePageContent() {
                   ))}
                 </div>
 
-                {/* MOBILE */}
                 <div className="mobile-only">
-                  <div className="mobile-item-header">
-                    <span></span><span>Item</span><span>Qty</span><span>Price</span><span>Total</span><span></span>
-                  </div>
+                  <div className="mobile-item-header"><span></span><span>Item</span><span>Qty</span><span>Price</span><span>Total</span><span></span></div>
                   {items.map((item, idx) => (
                     <div key={idx} className="mobile-item-row">
                       <div style={{ display: "flex", justifyContent: "center" }}>
                         {item.product_image ? <img src={item.product_image} alt="" style={{ width: 20, height: 20, objectFit: "cover", borderRadius: 4 }} /> : <ImageIcon size={12} color="var(--text-muted)" />}
                       </div>
-                      <input
-                        className="inv-input"
-                        value={item.description}
-                        onChange={e => updateItem(idx, "description", e.target.value)}
-                        placeholder="Description"
-                        style={{ fontSize: 11, padding: "0 4px" }}
-                      />
-                      <input
-                        className="inv-input"
-                        type="number"
-                        value={item.qty}
-                        onChange={e => updateItem(idx, "qty", Number(e.target.value))}
-                        style={{ textAlign: "center" }}
-                      />
-                      <input
-                        className="inv-input"
-                        type="number"
-                        value={item.unit_price}
-                        onChange={e => updateItem(idx, "unit_price", Number(e.target.value))}
-                        style={{ textAlign: "right" }}
-                      />
+                      <input className="inv-input" value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Desc" style={{ fontSize: 11, padding: "0 4px" }} />
+                      <input className="inv-input" type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} style={{ textAlign: "center" }} />
+                      <input className="inv-input" type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} style={{ textAlign: "right" }} />
                       <span className="mobile-total">PKR {item.total.toLocaleString()}</span>
-                      <button
-                        style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }}
-                        onClick={() => removeItem(idx)}
-                      ><Trash2 size={14} /></button>
+                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}><Trash2 size={14} /></button>
                     </div>
                   ))}
                 </div>
@@ -493,7 +784,6 @@ function NewInvoicePageContent() {
             )}
           </div>
 
-          {/* Mobile sticky summary */}
           <div className="mobile-sticky-summary">
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>Total</div>
