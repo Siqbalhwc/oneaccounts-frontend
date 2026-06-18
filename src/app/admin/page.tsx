@@ -16,7 +16,7 @@ const FEATURE_LABELS: Record<string, string> = {
   invoice_automation:"Invoice Automation", profit_allocation:"Profit Allocation",
   inventory:"Inventory", investors:"Investors", balance_sheet:"Balance Sheet",
   whatsapp_invoice:"WhatsApp Invoice", payment_reminders:"Payment Reminders",
-  csv_import_export:"CSV Import/Export", tax_management: "Tax Management", tax_management: "Tax Management", email_reports:"Email Reports",
+  csv_import_export:"CSV Import/Export", tax_management: "Tax Management", email_reports:"Email Reports",
   purchase_orders:"Purchase Orders",
 }
 const ADDON_FEATURES = ["whatsapp_invoice", "inventory", "purchase_orders"]
