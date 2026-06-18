@@ -42,6 +42,12 @@ interface Bill {
   updated_by?: string
 }
 
+interface WhtData {
+  wht_tax_code_id: string
+  wht_rate: number
+  wht_amount: number
+}
+
 export default function BillDetailPage() {
   const router = useRouter()
   const params = useParams()
@@ -52,9 +58,11 @@ export default function BillDetailPage() {
   )
 
   const { hasFeature } = usePlan()
+  const taxEnabled = hasFeature("tax_management")
   const { companyName, companyTagline, logoUrl } = useCompany()
 
   const [bill, setBill] = useState<Bill | null>(null)
+  const [whtData, setWhtData] = useState<WhtData | null>(null)
   const [loading, setLoading] = useState(true)
   const [companyId, setCompanyId] = useState<string>("")
 
@@ -102,9 +110,26 @@ export default function BillDetailPage() {
                 .then(({ data: items }) => {
                   b.items = items || []
                   setBill(b)
-                  setLoading(false)
                 })
             })
+
+          // Fetch WHT data if tax is enabled
+          if (taxEnabled) {
+            supabase
+              .from("bill_withholding")
+              .select("*")
+              .eq("bill_id", b.id)
+              .maybeSingle()
+              .then(({ data: wht }) => {
+                if (wht) {
+                  setWhtData({
+                    wht_tax_code_id: wht.wht_tax_code_id,
+                    wht_rate: wht.wht_rate,
+                    wht_amount: wht.wht_amount,
+                  })
+                }
+              })
+          }
         } else {
           supabase
             .from("invoice_items")
@@ -114,13 +139,13 @@ export default function BillDetailPage() {
             .then(({ data: items }) => {
               b.items = items || []
               setBill(b)
-              setLoading(false)
             })
         }
+        setLoading(false)
       })
-  }, [companyId, billId])
+  }, [companyId, billId, taxEnabled])
 
-  // Safe WhatsApp link via the helper
+  // Safe WhatsApp link
   const waLink = bill && bill.supplier
     ? getWhatsAppLink(
         bill.supplier.phone || "",
@@ -160,6 +185,9 @@ export default function BillDetailPage() {
       total:      bill.total,
       paid:       bill.paid || 0,
       balanceDue: bill.total - (bill.paid || 0),
+      // WHT fields for PDF
+      whtRate:    whtData?.wht_rate,
+      whtAmount:  whtData?.wht_amount,
     }
 
     const doc = await generateBillPDF(pdfData)
@@ -189,6 +217,7 @@ export default function BillDetailPage() {
         .btn-success { background: #25D366; color: white; border-color: #25D366; }
         .btn-success:hover { background: #22C55E; }
         .record-history { background: var(--bg-soft); border-radius: 8px; padding: 8px; }
+        .wht-card { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin-top: 12px; }
         @media (max-width: 640px) {
           .grid-2col { grid-template-columns: 1fr; }
         }
@@ -254,6 +283,27 @@ export default function BillDetailPage() {
           {bill.created_by && <div><div className="label">Created by</div><div className="value">{bill.created_by}</div></div>}
           {bill.updated_by && <div><div className="label">Last updated by</div><div className="value">{bill.updated_by}</div></div>}
         </div>
+
+        {/* WHT Details */}
+        {taxEnabled && whtData && (
+          <div className="wht-card">
+            <div className="label" style={{ marginBottom: 8, color: "#EF4444" }}>Withholding Tax (WHT)</div>
+            <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+              <div>
+                <div className="label">Rate</div>
+                <div className="value" style={{ color: "#EF4444", fontWeight: 600 }}>{whtData.wht_rate}%</div>
+              </div>
+              <div>
+                <div className="label">Amount</div>
+                <div className="value" style={{ color: "#EF4444", fontWeight: 600 }}>PKR {whtData.wht_amount.toLocaleString()}</div>
+              </div>
+              <div>
+                <div className="label">Net Payable</div>
+                <div className="value" style={{ color: "#10B981", fontWeight: 600 }}>PKR {(bill.total - whtData.wht_amount).toLocaleString()}</div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {bill.items && bill.items.length > 0 && (

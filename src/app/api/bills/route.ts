@@ -1,9 +1,16 @@
 import { createServerClient } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { logDataChange } from '@/lib/audit'
 
-// Helper: get the Accounts Payable account (or create it)
+// ── Helpers ───────────────────────────────────────────────────────────
+async function getAccount(supabase: any, code: string, companyId: string) {
+  const { data } = await supabase.from('accounts')
+    .select('id,balance').eq('code', code).eq('company_id', companyId).maybeSingle()
+  return data
+}
+
 async function getPayableAccount(supabase: any, companyId: string) {
   let { data: acc } = await supabase.from('accounts')
     .select('id,balance').eq('code','2000').eq('company_id', companyId).maybeSingle()
@@ -17,17 +24,39 @@ async function getPayableAccount(supabase: any, companyId: string) {
   return created
 }
 
-async function getDefaultExpenseAccount(supabase: any, companyId: string, type: string) {
-  if (type === 'trading') {
-    const { data: inv } = await supabase.from('accounts')
-      .select('id').eq('code','1200').eq('company_id', companyId).maybeSingle()
-    if (inv) return inv.id
-    return null
+async function isTaxFeatureEnabled(supabase: any, companyId: string): Promise<boolean> {
+  const { data: featureRow } = await supabase
+    .from("features")
+    .select("id")
+    .eq("code", "tax_management")
+    .single()
+  if (!featureRow) return false
+  const { data: companyFeature } = await supabase
+    .from("company_features")
+    .select("enabled")
+    .eq("company_id", companyId)
+    .eq("feature_id", featureRow.id)
+    .maybeSingle()
+  return companyFeature?.enabled || false
+}
+
+async function getDefaultWHTTaxCodeId(supabase: any, companyId: string, supplierId?: number) {
+  // First check vendor default
+  if (supplierId) {
+    const { data: vendor } = await supabase
+      .from("suppliers")
+      .select("default_wht_tax_code_id")
+      .eq("id", supplierId)
+      .single()
+    if (vendor?.default_wht_tax_code_id) return vendor.default_wht_tax_code_id
   }
-  const { data: exp } = await supabase.from('accounts')
-    .select('id').eq('code','5000').eq('company_id', companyId).maybeSingle()
-  if (exp) return exp.id
-  return null
+  // Fallback to company default
+  const { data: settings } = await supabase
+    .from("company_tax_settings")
+    .select("default_wht_tax_code_id")
+    .eq("company_id", companyId)
+    .single()
+  return settings?.default_wht_tax_code_id || null
 }
 
 // ── Record product‑line stock movements into stock_moves ────────
@@ -59,13 +88,15 @@ async function recordStockMoves(
   }
 }
 
-// ── Create the journal entry for a purchase bill ─────────────────
+// ── Create the journal entry for a purchase bill (with optional WHT) ──
 async function createBillJournalEntry(
   supabase: any,
   bill: any,
   items: any[],
   companyId: string,
-  businessType: string
+  businessType: string,
+  whtAmount: number = 0,
+  whtAccountId?: number | null
 ) {
   const debitLines: any[] = []
   let totalDebit = 0
@@ -77,26 +108,18 @@ async function createBillJournalEntry(
 
     let accountId = item.account_id || null
     if (!accountId && item.product_id) {
-      accountId = await getDefaultExpenseAccount(supabase, companyId, businessType)
-      if (!accountId) {
-        throw new Error(
-          `No default expense account found for product item "${item.description}". ` +
-          `Please create account code ${businessType === 'trading' ? '1200 (Inventory)' : '5000 (General Expenses)'}.`
-        )
-      }
+      // fallback to inventory or expense
+      const defaultCode = businessType === 'trading' ? '1200' : '5000'
+      const { data: acc } = await supabase.from('accounts')
+        .select('id').eq('code', defaultCode)
+        .eq('company_id', companyId).maybeSingle()
+      if (acc) accountId = acc.id
     }
     if (!accountId) {
-      accountId = await getDefaultExpenseAccount(supabase, companyId, businessType)
-      if (!accountId) {
-        throw new Error(
-          `No default expense account found for item "${item.description}". ` +
-          `Please create account code ${businessType === 'trading' ? '1200 (Inventory)' : '5000 (General Expenses)'}.`
-        )
-      }
+      throw new Error(`No expense account found for item "${item.description}".`)
     }
 
     totalDebit += amount
-
     const line: any = {
       account_id: accountId,
       debit: amount,
@@ -107,7 +130,7 @@ async function createBillJournalEntry(
       donor_id: null,
     }
 
-    // NGO‑only: project from activity, donor from budget
+    // NGO‑only: project & donor from activity / budget
     if (isNGO && item.activity_id) {
       const { data: actData } = await supabase.from('activities')
         .select('project_id')
@@ -136,15 +159,39 @@ async function createBillJournalEntry(
   }
 
   const payableAccount = await getPayableAccount(supabase, companyId)
-  debitLines.push({
-    account_id: payableAccount.id,
-    debit: 0,
-    credit: totalDebit,
-    location_id: null,
-    activity_id: null,
-    project_id: null,
-    donor_id: null,
-  })
+
+  // Credit AP for (totalDebit - WHT) and credit WHT if applicable
+  if (whtAmount > 0 && whtAccountId) {
+    debitLines.push({
+      account_id: whtAccountId,
+      debit: 0,
+      credit: whtAmount,
+      location_id: null,
+      activity_id: null,
+      project_id: null,
+      donor_id: null,
+    })
+    const apCredit = totalDebit - whtAmount
+    debitLines.push({
+      account_id: payableAccount.id,
+      debit: 0,
+      credit: apCredit,
+      location_id: null,
+      activity_id: null,
+      project_id: null,
+      donor_id: null,
+    })
+  } else {
+    debitLines.push({
+      account_id: payableAccount.id,
+      debit: 0,
+      credit: totalDebit,
+      location_id: null,
+      activity_id: null,
+      project_id: null,
+      donor_id: null,
+    })
+  }
 
   const { data: entry, error: entryErr } = await supabase.from('journal_entries').insert({
     company_id: companyId,
@@ -183,7 +230,9 @@ async function createBillJournalEntry(
   }, [] as { account_id: number; delta: number }[])
 
   if (accountUpdates.length > 0) {
-    await supabase.rpc('bulk_update_account_balances', { data: accountUpdates })
+    try {
+      await supabase.rpc('bulk_update_account_balances', { data: accountUpdates })
+    } catch {}
   }
 
   return entry.id
@@ -227,11 +276,17 @@ export async function POST(request: NextRequest) {
     }
   )
 
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  )
+
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
-  const { party_id, invoice_date, due_date, items, reference, notes, po_id } = body
+  const { party_id, invoice_date, due_date, items, reference, notes, po_id, wht_tax_code_id, wht_rate, wht_amount } = body
   if (!party_id || !items || items.length === 0) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
@@ -239,11 +294,39 @@ export async function POST(request: NextRequest) {
   const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
   const userEmail = user.email || 'system'
 
+  const taxEnabled = await isTaxFeatureEnabled(supabase, companyId)
+
+  // Determine actual WHT values
+  let actualWhtAmount = 0
+  let actualWhtTaxCodeId: string | null = null
+  let actualWhtRate = 0
+
+  if (taxEnabled && wht_tax_code_id) {
+    actualWhtTaxCodeId = wht_tax_code_id
+    actualWhtRate = parseFloat(wht_rate) || 0
+    actualWhtAmount = parseFloat(wht_amount) || 0
+  } else if (taxEnabled) {
+    // auto‑resolve default WHT for this company / vendor
+    const defaultId = await getDefaultWHTTaxCodeId(supabase, companyId, party_id)
+    if (defaultId) {
+      const { data: tc } = await supabase
+        .from('tax_codes')
+        .select('rate')
+        .eq('id', defaultId)
+        .single()
+      if (tc) {
+        actualWhtTaxCodeId = defaultId
+        actualWhtRate = tc.rate
+        // amount will be calculated after items total is known
+      }
+    }
+  }
+
   const { data: company } = await supabase.from('companies')
     .select('business_type').eq('id', companyId).single()
   const businessType = company?.business_type || ''
 
-  // ── Budget validation for NGO ─────────────────────────────────────
+  // ── NGO budget validation (same as before) ──────────────────────
   if (businessType === 'ngo') {
     const today = new Date()
     const fiscalYear = today.getFullYear()
@@ -322,7 +405,7 @@ export async function POST(request: NextRequest) {
   if (!bill) return NextResponse.json({ error: 'Could not generate unique bill number' }, { status: 500 })
 
   // Insert items
-  const itemRowsForDb = items.map((item: any) => {
+  const itemRows = items.map((item: any) => {
     const qty = Number(item.qty || 0)
     const unit_price = Number(item.unit_price || 0)
     const lineTotal = qty * unit_price
@@ -341,8 +424,8 @@ export async function POST(request: NextRequest) {
     }
   })
 
-  if (itemRowsForDb.length > 0) {
-    const { error: itemsError } = await supabase.from('invoice_items').insert(itemRowsForDb)
+  if (itemRows.length > 0) {
+    const { error: itemsError } = await supabase.from('invoice_items').insert(itemRows)
     if (itemsError) {
       await supabase.from('invoices').delete().eq('id', bill.id)
       return NextResponse.json({ error: itemsError.message }, { status: 500 })
@@ -351,6 +434,12 @@ export async function POST(request: NextRequest) {
 
   await recordStockMoves(supabase, companyId, items, 'purchase', bill.id, 'in')
 
+  // Calculate WHT amount if not provided but a default code is set
+  if (taxEnabled && actualWhtTaxCodeId && actualWhtAmount === 0) {
+    actualWhtAmount = total * (actualWhtRate / 100)
+  }
+
+  // Update bill total (gross)
   const { data: updatedBill, error: updateError } = await supabase
     .from('invoices')
     .update({ total })
@@ -363,15 +452,43 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: updateError?.message || 'Failed to update total' }, { status: 500 })
   }
 
+  // ── Insert WHT record if applicable ──
+  if (taxEnabled && actualWhtAmount > 0 && actualWhtTaxCodeId) {
+    await supabase.from('bill_withholding').insert({
+      company_id: companyId,
+      bill_id: bill.id,
+      wht_tax_code_id: actualWhtTaxCodeId,
+      wht_rate: actualWhtRate,
+      wht_amount: actualWhtAmount,
+    })
+  }
+
   try {
-    await createBillJournalEntry(supabase, updatedBill, items, companyId, businessType)
+    const whtAccountId = taxEnabled && actualWhtTaxCodeId
+      ? (await supabase.from('tax_codes')
+          .select('tax_account_id')
+          .eq('id', actualWhtTaxCodeId)
+          .single()
+        ).data?.tax_account_id
+      : null
+
+    await createBillJournalEntry(
+      supabase,
+      updatedBill,
+      items,
+      companyId,
+      businessType,
+      actualWhtAmount,
+      whtAccountId
+    )
   } catch (e: any) {
     await supabase.from('invoice_items').delete().eq('invoice_id', bill.id)
     await supabase.from('invoices').delete().eq('id', bill.id)
+    if (taxEnabled) await supabase.from('bill_withholding').delete().eq('bill_id', bill.id)
     return NextResponse.json({ error: 'Journal entry failed: ' + e.message }, { status: 500 })
   }
 
-  // Update supplier balance
+  // Update supplier balance (full gross amount)
   const { data: supplier } = await supabase.from('suppliers')
     .select('balance').eq('id', party_id).eq('company_id', companyId).single()
   if (supplier) {
@@ -403,20 +520,29 @@ export async function PUT(request: NextRequest) {
     }
   )
 
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  )
+
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
-  const { id, party_id, invoice_date, due_date, items, reference, notes, po_id } = body
+  const { id, party_id, invoice_date, due_date, items, reference, notes, po_id, wht_tax_code_id, wht_rate, wht_amount } = body
   if (!id) return NextResponse.json({ error: 'Bill ID required' }, { status: 400 })
 
   const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
   const userEmail = user.email || 'system'
 
+  const taxEnabled = await isTaxFeatureEnabled(supabase, companyId)
+
   const { data: company } = await supabase.from('companies')
     .select('business_type').eq('id', companyId).single()
   const businessType = company?.business_type || ''
 
+  // ── NGO budget validation (repeat as in POST) ──────────────
   if (businessType === 'ngo') {
     const today = new Date()
     const fiscalYear = today.getFullYear()
@@ -455,11 +581,12 @@ export async function PUT(request: NextRequest) {
     }
   }
 
+  // Fetch old bill
   const { data: oldBill } = await supabase.from('invoices')
     .select('*').eq('id', id).eq('company_id', companyId).single()
   if (!oldBill) return NextResponse.json({ error: 'Bill not found' }, { status: 404 })
 
-  // Reverse old journal entry – ONLY the one for this specific bill
+  // Reverse old journal entry
   const oldDescription = `Purchase Bill ${oldBill.invoice_no}`
   const { data: oldEntries } = await supabase.from('journal_entries')
     .select('id')
@@ -494,10 +621,39 @@ export async function PUT(request: NextRequest) {
     }
   }
 
+  // Delete old items and WHT record
   await supabase.from('invoice_items').delete().eq('invoice_id', id)
+  if (taxEnabled) {
+    await supabase.from('bill_withholding').delete().eq('bill_id', id)
+  }
 
+  // Determine new WHT values
+  let actualWhtAmount = 0
+  let actualWhtTaxCodeId: string | null = null
+  let actualWhtRate = 0
+
+  if (taxEnabled && wht_tax_code_id) {
+    actualWhtTaxCodeId = wht_tax_code_id
+    actualWhtRate = parseFloat(wht_rate) || 0
+    actualWhtAmount = parseFloat(wht_amount) || 0
+  } else if (taxEnabled) {
+    const defaultId = await getDefaultWHTTaxCodeId(supabase, companyId, party_id)
+    if (defaultId) {
+      const { data: tc } = await supabase
+        .from('tax_codes')
+        .select('rate')
+        .eq('id', defaultId)
+        .single()
+      if (tc) {
+        actualWhtTaxCodeId = defaultId
+        actualWhtRate = tc.rate
+      }
+    }
+  }
+
+  // Insert new items and compute total
   let total = 0
-  const itemRows = (items || []).map((item: any) => {
+  const itemRows = items.map((item: any) => {
     const qty = Number(item.qty || 0)
     const unit_price = Number(item.unit_price || 0)
     const lineTotal = qty * unit_price
@@ -522,6 +678,12 @@ export async function PUT(request: NextRequest) {
 
   await recordStockMoves(supabase, companyId, items, 'purchase', id, 'in')
 
+  // Calculate WHT amount if not provided but a default code is set
+  if (taxEnabled && actualWhtTaxCodeId && actualWhtAmount === 0) {
+    actualWhtAmount = total * (actualWhtRate / 100)
+  }
+
+  // Update bill header
   const { data: updatedBill, error: updateError } = await supabase
     .from('invoices')
     .update({
@@ -542,13 +704,41 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: updateError?.message || 'Update failed' }, { status: 500 })
   }
 
+  // Insert new WHT record
+  if (taxEnabled && actualWhtAmount > 0 && actualWhtTaxCodeId) {
+    await supabase.from('bill_withholding').insert({
+      company_id: companyId,
+      bill_id: id,
+      wht_tax_code_id: actualWhtTaxCodeId,
+      wht_rate: actualWhtRate,
+      wht_amount: actualWhtAmount,
+    })
+  }
+
+  // Rebuild journal entry
   try {
-    await createBillJournalEntry(supabase, updatedBill, items, companyId, businessType)
+    const whtAccountId = taxEnabled && actualWhtTaxCodeId
+      ? (await supabase.from('tax_codes')
+          .select('tax_account_id')
+          .eq('id', actualWhtTaxCodeId)
+          .single()
+        ).data?.tax_account_id
+      : null
+
+    await createBillJournalEntry(
+      supabase,
+      updatedBill,
+      items,
+      companyId,
+      businessType,
+      actualWhtAmount,
+      whtAccountId
+    )
   } catch (e: any) {
     return NextResponse.json({ error: 'Journal entry failed after update: ' + e.message }, { status: 500 })
   }
 
-  // Apply new supplier balance
+  // Update supplier balance
   if (updatedBill.party_id) {
     const { data: supp } = await supabase.from('suppliers')
       .select('balance').eq('id', updatedBill.party_id).eq('company_id', companyId).single()
@@ -590,7 +780,6 @@ export async function DELETE(request: NextRequest) {
 
   const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
 
-  // Fetch the bill first to get its invoice_no
   const { data: oldBill } = await supabase.from('invoices')
     .select('*').eq('id', id).eq('company_id', companyId).single()
 
@@ -598,7 +787,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Bill not found' }, { status: 404 })
   }
 
-  // Reverse JE – only the one for this specific bill
+  // Reverse JE
   const oldDescription = `Purchase Bill ${oldBill.invoice_no}`
   const { data: entries } = await supabase.from('journal_entries')
     .select('id')
@@ -632,6 +821,9 @@ export async function DELETE(request: NextRequest) {
         .eq('id', oldBill.party_id).eq('company_id', companyId)
     }
   }
+
+  // Delete WHT record if exists
+  await supabase.from('bill_withholding').delete().eq('bill_id', id)
 
   await supabase.from('invoice_items').delete().eq('invoice_id', id)
   const { error } = await supabase.from('invoices')

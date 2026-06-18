@@ -25,6 +25,7 @@ export default function NewBillPage() {
   const { hasFeature } = usePlan()
   const showProducts = hasFeature("inventory")
   const showPO = hasFeature("purchase_orders")
+  const taxEnabled = hasFeature("tax_management")
 
   const [companyId, setCompanyId] = useState("")
   const [businessType, setBusinessType] = useState("")
@@ -73,6 +74,12 @@ export default function NewBillPage() {
 
   // Combo cache: key = `${locationId}_${activityId}` -> array of {project_id, donor_id, projectName, donorName}
   const [comboCache, setComboCache] = useState<Record<string, { project_id: number; donor_id: number; projectName: string; donorName: string | null }[]>>({})
+
+  // Tax states
+  const [whtTaxCodes, setWhtTaxCodes] = useState<any[]>([])
+  const [selectedWhtTaxCodeId, setSelectedWhtTaxCodeId] = useState<string>("")
+  const [whtRate, setWhtRate] = useState<number>(0)
+  const [whtAmount, setWhtAmount] = useState<number>(0)
 
   const fiscalYear = new Date().getFullYear()
 
@@ -157,6 +164,18 @@ export default function NewBillPage() {
     })
   }, [showProducts])
 
+  // Fetch WHT codes when tax enabled and companyId available
+  useEffect(() => {
+    if (taxEnabled && companyId) {
+      supabase.from("tax_codes")
+        .select("id, code, name, rate")
+        .eq("company_id", companyId)
+        .eq("tax_category_code", "wht")
+        .order("code")
+        .then(r => { if (r.data) setWhtTaxCodes(r.data) })
+    }
+  }, [taxEnabled, companyId])
+
   const loadSuppliers = (cid?: string) => {
     const targetId = cid || companyId
     if (!targetId) return
@@ -239,6 +258,20 @@ export default function NewBillPage() {
         setNotes(bill.notes || "")
         setPoId(bill.po_id || null)
 
+        // Load existing WHT data if available
+        if (taxEnabled) {
+          const { data: wht } = await supabase
+            .from("bill_withholding")
+            .select("*")
+            .eq("bill_id", bill.id)
+            .maybeSingle()
+          if (wht) {
+            setSelectedWhtTaxCodeId(wht.wht_tax_code_id || "")
+            setWhtRate(wht.wht_rate || 0)
+            setWhtAmount(wht.wht_amount || 0)
+          }
+        }
+
         const { data: itemsData } = await supabase
           .from("invoice_items")
           .select("*")
@@ -271,7 +304,7 @@ export default function NewBillPage() {
           })
         }
       })
-  }, [editId, companyId, suppliers])
+  }, [editId, companyId, suppliers, taxEnabled])
 
   // AUTO‑COMPUTE DUE DATE
   useEffect(() => {
@@ -568,9 +601,6 @@ export default function NewBillPage() {
 
     setItems(updated)
 
-    // Apply auto‑selection after combos load (deferred via useEffect, but we also call applyCombosToLine)
-    // We'll rely on the combo fetch completion; apply via useEffect later.
-
     if ((field === "account_id" || field === "activity_id" || field === "location_id") && updated[idx].activity_id && updated[idx].account_id) {
       const actId = Number(updated[idx].activity_id)
       const accId = Number(updated[idx].account_id)
@@ -658,6 +688,10 @@ export default function NewBillPage() {
           reference,
           notes,
           po_id: poId || null,
+          // WHT fields
+          wht_tax_code_id: taxEnabled ? selectedWhtTaxCodeId || null : undefined,
+          wht_rate: taxEnabled ? whtRate : undefined,
+          wht_amount: taxEnabled ? whtAmount : undefined,
         }),
       })
       const result = await res.json()
@@ -966,6 +1000,64 @@ export default function NewBillPage() {
               )}
             </div>
 
+            {/* WHT Section */}
+            {taxEnabled && (
+              <div className="inv-card">
+                <label className="inv-label">Withholding Tax (WHT)</label>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <select
+                    className="inv-select"
+                    style={{ maxWidth: 200 }}
+                    value={selectedWhtTaxCodeId}
+                    onChange={e => {
+                      const id = e.target.value
+                      setSelectedWhtTaxCodeId(id)
+                      if (id) {
+                        const tc = whtTaxCodes.find(t => t.id === id)
+                        if (tc) {
+                          setWhtRate(tc.rate)
+                          setWhtAmount(totalAmount * (tc.rate / 100))
+                        }
+                      } else {
+                        setWhtRate(0)
+                        setWhtAmount(0)
+                      }
+                    }}
+                  >
+                    <option value="">No WHT</option>
+                    {whtTaxCodes.map(tc => (
+                      <option key={tc.id} value={tc.id}>{tc.code} ({tc.rate}%)</option>
+                    ))}
+                  </select>
+                  <input
+                    className="inv-input"
+                    type="number"
+                    placeholder="Rate %"
+                    value={whtRate}
+                    onChange={e => {
+                      const r = Number(e.target.value)
+                      setWhtRate(r)
+                      setWhtAmount(totalAmount * (r / 100))
+                    }}
+                    style={{ width: 100 }}
+                  />
+                  <span style={{ fontSize: 13, color: "var(--text-muted)" }}>Amount:</span>
+                  <input
+                    className="inv-input"
+                    type="number"
+                    value={whtAmount}
+                    onChange={e => setWhtAmount(Number(e.target.value))}
+                    style={{ width: 140, textAlign: "right" }}
+                  />
+                </div>
+                {whtAmount > 0 && (
+                  <div style={{ fontSize: 12, marginTop: 6, color: "var(--text-muted)" }}>
+                    Net payable after WHT: PKR {(totalAmount - whtAmount).toLocaleString()}
+                  </div>
+                )}
+              </div>
+            )}
+
             {editId && (
               <div className="inv-card" style={{ marginTop: 12 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
@@ -981,6 +1073,18 @@ export default function NewBillPage() {
                 <span>Total</span>
                 <span>PKR {totalAmount.toLocaleString()}</span>
               </div>
+              {whtAmount > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
+                  <span>WHT</span>
+                  <span>-PKR {whtAmount.toLocaleString()}</span>
+                </div>
+              )}
+              {whtAmount > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, fontWeight: 600, marginTop: 4, borderTop: "1px dashed var(--border)", paddingTop: 6 }}>
+                  <span>Net Payable</span>
+                  <span>PKR {(totalAmount - whtAmount).toLocaleString()}</span>
+                </div>
+              )}
               {budgetError && (
                 <div className="budget-warning" style={{ marginTop: 8 }}>⚠️ {budgetError}</div>
               )}

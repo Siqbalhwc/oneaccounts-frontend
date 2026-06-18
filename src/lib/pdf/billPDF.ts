@@ -51,6 +51,10 @@ export interface BillPDFData {
   total:          number
   paid:           number
   balanceDue:     number
+
+  // WHT fields
+  whtRate?:       number
+  whtAmount?:     number
 }
 
 async function loadImage(url: string): Promise<string | null> {
@@ -241,24 +245,59 @@ export async function generateBillPDF(data: BillPDFData): Promise<jsPDF> {
   // ── SUBTOTAL / TAX / TOTAL (square) ─────────────────────────────
   let SY = afterTable + 6
   const sumX = PW - MR - 70, valX = PW - MR
+  const TOTAL_H = ROW_H
 
   doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...MUTED)
-  doc.text("Subtotal", sumX, SY); doc.setTextColor(...DARK); doc.text(pkr(data.subtotal), valX, SY, { align:"right" }); SY += 5.5
-  doc.setFont("helvetica", "bold").setTextColor(...MUTED); doc.text("Tax (0%)", sumX, SY); doc.setTextColor(...DARK); doc.text(pkr(0), valX, SY, { align:"right" }); SY += 5.5
+  doc.text("Subtotal", sumX, SY)
+  doc.setTextColor(...DARK)
+  doc.text(pkr(data.subtotal), valX, SY, { align: "right" })
+  SY += 5.5
 
-  // Total box – same height as header
-  const TOTAL_H = ROW_H
-  filledRect(doc, sumX - 2, SY - 3, valX - sumX + 4, TOTAL_H, NAVY)   // square
-  doc.setFont("helvetica", "bold").setFontSize(9).setTextColor(...WHITE)
-  doc.text("Total", sumX + 2, SY + TOTAL_H / 2 - 0.5)
-  doc.text(pkr(data.total), valX - 2, SY + TOTAL_H / 2 - 0.5, { align:"right" })
-  SY += TOTAL_H + 2
+  // If WHT exists, show it and then "Net Payable" total
+  if (data.whtAmount && data.whtAmount > 0) {
+    // WHT row
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(...MUTED)
+    const whtLabel = `WHT (${data.whtRate || 0}%)`
+    doc.text(whtLabel, sumX, SY)
+    doc.setTextColor(...DARK)
+    doc.text("- " + pkr(data.whtAmount), valX, SY, { align: "right" })
+    SY += 5.5
+
+    // Net Payable box
+    filledRect(doc, sumX - 2, SY - 3, valX - sumX + 4, TOTAL_H, NAVY)
+    doc.setFont("helvetica", "bold").setFontSize(9).setTextColor(...WHITE)
+    doc.text("Net Payable", sumX + 2, SY + TOTAL_H / 2 - 0.5)
+    const netPayable = data.total - data.whtAmount
+    doc.text(pkr(netPayable), valX - 2, SY + TOTAL_H / 2 - 0.5, { align: "right" })
+    SY += TOTAL_H + 2
+  } else {
+    // Original tax row (no tax)
+    doc.setFont("helvetica", "bold").setTextColor(...MUTED)
+    doc.text("Tax (0%)", sumX, SY)
+    doc.setTextColor(...DARK)
+    doc.text(pkr(0), valX, SY, { align: "right" })
+    SY += 5.5
+
+    // Total box
+    filledRect(doc, sumX - 2, SY - 3, valX - sumX + 4, TOTAL_H, NAVY)
+    doc.setFont("helvetica", "bold").setFontSize(9).setTextColor(...WHITE)
+    doc.text("Total", sumX + 2, SY + TOTAL_H / 2 - 0.5)
+    doc.text(pkr(data.total), valX - 2, SY + TOTAL_H / 2 - 0.5, { align: "right" })
+    SY += TOTAL_H + 2
+  }
 
   if (data.paid > 0) {
-    SY += 2; doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...MUTED); doc.text("Amount Paid", sumX, SY)
-    doc.setTextColor(16,185,129); doc.text("- " + pkr(data.paid), valX, SY, { align:"right" }); SY += 5.5
-    doc.setFont("helvetica", "bold").setTextColor(...RED); doc.text("Balance Due", sumX, SY)
-    doc.text(pkr(data.balanceDue), valX, SY, { align:"right" }); SY += 5
+    SY += 2
+    doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...MUTED)
+    doc.text("Amount Paid", sumX, SY)
+    doc.setTextColor(16, 185, 129)
+    doc.text("- " + pkr(data.paid), valX, SY, { align: "right" })
+    SY += 5.5
+    doc.setFont("helvetica", "bold").setTextColor(...RED)
+    doc.text("Balance Due", sumX, SY)
+    doc.text(pkr(data.balanceDue), valX, SY, { align: "right" })
+    SY += 5
   }
 
   // ── NOTES & TERMS (actual payment terms) ────────────────────────
