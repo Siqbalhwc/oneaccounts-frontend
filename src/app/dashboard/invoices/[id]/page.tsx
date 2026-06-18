@@ -279,7 +279,8 @@ export default function InvoiceDetailPage() {
         .row { display: flex; margin-bottom: 10px; font-size: 14px; align-items: center; }
         .label { width: 130px; color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
         .value { color: var(--text); font-weight: 500; }
-        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; min-width: 500px; }
         th { text-align: left; padding: 10px 12px; background: var(--card-hover); font-weight: 700; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); }
         td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); }
         tr:hover td { background: var(--card-hover); }
@@ -301,6 +302,7 @@ export default function InvoiceDetailPage() {
         @media (max-width: 640px) {
           .row { flex-direction: column; align-items: flex-start; }
           .label { margin-bottom: 2px; }
+          table { min-width: 480px; }
         }
       `}</style>
 
@@ -370,90 +372,94 @@ export default function InvoiceDetailPage() {
       {invoice.items && invoice.items.length > 0 && (
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>Items</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th>Description</th>
-                <th style={{ textAlign: "center" }}>Qty</th>
-                <th style={{ textAlign: "right" }}>Unit Price</th>
-                {taxEnabled && <th style={{ textAlign: "right" }}>Tax Rate</th>}
-                <th style={{ textAlign: "right" }}>Total</th>
-                {taxEnabled && <th style={{ textAlign: "right" }}>Tax</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {invoice.items.map(item => (
-                <tr key={item.id}>
-                  <td style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    {item.product_image ? (
-                      <img src={item.product_image} alt="" style={{ width: 28, height: 28, objectFit: "cover", borderRadius: 4 }} />
-                    ) : (
-                      <div style={{ width: 28, height: 28, background: "var(--card-hover)", borderRadius: 4 }} />
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Description</th>
+                  <th style={{ textAlign: "center" }}>Qty</th>
+                  <th style={{ textAlign: "right" }}>Unit Price</th>
+                  {taxEnabled && <th style={{ textAlign: "right" }}>Tax Rate</th>}
+                  <th style={{ textAlign: "right" }}>Total</th>
+                  {taxEnabled && <th style={{ textAlign: "right" }}>Tax</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {invoice.items.map(item => (
+                  <tr key={item.id}>
+                    <td style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      {item.product_image ? (
+                        <img src={item.product_image} alt="" style={{ width: 28, height: 28, objectFit: "cover", borderRadius: 4 }} />
+                      ) : (
+                        <div style={{ width: 28, height: 28, background: "var(--card-hover)", borderRadius: 4 }} />
+                      )}
+                      <span style={{ fontWeight: 600 }}>{item.product_code ? `${item.product_code} – ${item.product_name || ""}` : item.description}</span>
+                    </td>
+                    <td style={{ color: "var(--text-muted)" }}>{item.product_code ? item.description : ""}</td>
+                    <td style={{ textAlign: "center" }}>{item.qty}</td>
+                    <td style={{ textAlign: "right" }}>PKR {item.unit_price?.toLocaleString()}</td>
+                    {taxEnabled && (
+                      <td style={{ textAlign: "right", color: "var(--text-muted)" }}>
+                        {(item.tax_rate ?? 0) > 0 ? `${item.tax_rate}%` : "—"}
+                      </td>
                     )}
-                    <span style={{ fontWeight: 600 }}>{item.product_code ? `${item.product_code} – ${item.product_name || ""}` : item.description}</span>
-                  </td>
-                  <td style={{ color: "var(--text-muted)" }}>{item.product_code ? item.description : ""}</td>
-                  <td style={{ textAlign: "center" }}>{item.qty}</td>
-                  <td style={{ textAlign: "right" }}>PKR {item.unit_price?.toLocaleString()}</td>
-                                    {taxEnabled && (
-                    <td style={{ textAlign: "right", color: "var(--text-muted)" }}>
-                      {(item.tax_rate ?? 0) > 0 ? `${item.tax_rate}%` : "—"}
-                    </td>
-                  )}
-                  <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {item.total?.toLocaleString()}</td>
-                  {taxEnabled && (
-                    <td style={{ textAlign: "right", color: (item.tax_amount ?? 0) > 0 ? "#EF4444" : "var(--text-muted)" }}>
-                      {(item.tax_amount ?? 0) > 0 ? `PKR ${(item.tax_amount ?? 0).toLocaleString()}` : "—"}
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-            {taxEnabled && invoice.total_tax > 0 && (
-              <tfoot>
-                <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
-                  <td colSpan={taxEnabled ? 6 : 4} style={{ textAlign: "right" }}>Total Tax</td>
-                  <td style={{ textAlign: "right", color: "#EF4444" }}>PKR {invoice.total_tax.toLocaleString()}</td>
-                </tr>
-              </tfoot>
-            )}
-          </table>
+                    <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {item.total?.toLocaleString()}</td>
+                    {taxEnabled && (
+                      <td style={{ textAlign: "right", color: (item.tax_amount ?? 0) > 0 ? "#EF4444" : "var(--text-muted)" }}>
+                        {(item.tax_amount ?? 0) > 0 ? `PKR ${(item.tax_amount ?? 0).toLocaleString()}` : "—"}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+              {taxEnabled && invoice.total_tax > 0 && (
+                <tfoot>
+                  <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
+                    <td colSpan={taxEnabled ? 6 : 4} style={{ textAlign: "right" }}>Total Tax</td>
+                    <td style={{ textAlign: "right", color: "#EF4444" }}>PKR {invoice.total_tax.toLocaleString()}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
         </div>
       )}
 
       {journalLines.length > 0 && (
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📒 Journal Entry</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Account</th>
-                <th style={{ textAlign: "right" }}>Debit (PKR)</th>
-                <th style={{ textAlign: "right" }}>Credit (PKR)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {journalLines.map((line, idx) => (
-                <tr key={idx}>
-                  <td>{line.account_code} – {line.account_name}</td>
-                  <td style={{ textAlign: "right", color: line.debit  > 0 ? "#F87171" : "var(--text-muted)" }}>
-                    {line.debit  > 0 ? line.debit.toLocaleString()  : "–"}
-                  </td>
-                  <td style={{ textAlign: "right", color: line.credit > 0 ? "#2DD4BF" : "var(--text-muted)" }}>
-                    {line.credit > 0 ? line.credit.toLocaleString() : "–"}
-                  </td>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Account</th>
+                  <th style={{ textAlign: "right" }}>Debit (PKR)</th>
+                  <th style={{ textAlign: "right" }}>Credit (PKR)</th>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
-                <td>Total</td>
-                <td style={{ textAlign: "right", color: "#F87171" }}>{totalDebit.toLocaleString()}</td>
-                <td style={{ textAlign: "right", color: "#2DD4BF" }}>{totalCredit.toLocaleString()}</td>
-              </tr>
-            </tfoot>
-          </table>
+              </thead>
+              <tbody>
+                {journalLines.map((line, idx) => (
+                  <tr key={idx}>
+                    <td>{line.account_code} – {line.account_name}</td>
+                    <td style={{ textAlign: "right", color: line.debit  > 0 ? "#F87171" : "var(--text-muted)" }}>
+                      {line.debit  > 0 ? line.debit.toLocaleString()  : "–"}
+                    </td>
+                    <td style={{ textAlign: "right", color: line.credit > 0 ? "#2DD4BF" : "var(--text-muted)" }}>
+                      {line.credit > 0 ? line.credit.toLocaleString() : "–"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
+                  <td>Total</td>
+                  <td style={{ textAlign: "right", color: "#F87171" }}>{totalDebit.toLocaleString()}</td>
+                  <td style={{ textAlign: "right", color: "#2DD4BF" }}>{totalCredit.toLocaleString()}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
       )}
 

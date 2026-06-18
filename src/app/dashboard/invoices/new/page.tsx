@@ -35,7 +35,7 @@ function NewInvoicePageContent() {
 
   const { hasFeature } = usePlan()
   const showProducts = hasFeature("inventory")
-  const taxEnabled = hasFeature("tax_management")   // tax feature flag
+  const taxEnabled = hasFeature("tax_management")
 
   const [companyId, setCompanyId] = useState("")
   const [businessType, setBusinessType] = useState("")
@@ -71,7 +71,6 @@ function NewInvoicePageContent() {
 
   const [savedInvoiceId, setSavedInvoiceId] = useState<number | null>(null)
 
-  // Tax codes list (fetched when tax is enabled)
   const [taxCodes, setTaxCodes] = useState<any[]>([])
 
   const isNGO = businessType === "ngo"
@@ -117,7 +116,6 @@ function NewInvoicePageContent() {
       supabase.from("donors").select("id,name").eq("company_id", cid).order("name")
         .then(r => r.data && setDonors(r.data))
 
-      // Fetch tax codes if feature is enabled
       if (taxEnabled) {
         supabase.from("tax_codes")
           .select("id, code, name, rate, tax_account_id")
@@ -277,7 +275,6 @@ function NewInvoicePageContent() {
 
     if (field === "qty" || field === "unit_price") {
       updated[idx].total = updated[idx].qty * updated[idx].unit_price
-      // Recalculate tax if tax_rate is set
       if (updated[idx].tax_rate > 0) {
         updated[idx].tax_amount = (updated[idx].qty * updated[idx].unit_price * updated[idx].tax_rate) / 100
       } else {
@@ -668,11 +665,7 @@ function NewInvoicePageContent() {
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
 
-        .desktop-summary {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-        }
+        .desktop-summary { display: flex; flex-direction: column; gap: 12px; }
 
         .mobile-only { display: none; }
         .desktop-only { display: block; }
@@ -701,19 +694,26 @@ function NewInvoicePageContent() {
           .inv-input, .inv-select { height: 44px; font-size: 16px; }
           .inv-btn { padding: 10px 16px; font-size: 14px; }
           .inv-item-row {
-            grid-template-columns: 24px 1fr 70px 90px 90px 24px;
-            gap: 4px;
+            grid-template-columns: 30px 1fr 60px 80px 0px 0px 0px 30px;
+            gap: 3px;
             padding: 8px 0;
           }
           .inv-item-header {
-            grid-template-columns: 24px 1fr 70px 90px 90px 24px;
-            font-size: 8px;
+            grid-template-columns: 30px 1fr 60px 80px 0px 0px 0px 30px;
+            font-size: 7px;
+            gap: 3px;
             padding-bottom: 4px;
           }
-          .inv-item-header span:nth-child(1),
-          .inv-item-row > :nth-child(1) { display: none; }
+          .inv-item-header span:nth-child(2),
+          .inv-item-row > :nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          .inv-item-header span:nth-child(5),
+          .inv-item-row > :nth-child(5) { display: none; }
           .inv-item-header span:nth-child(6),
           .inv-item-row > :nth-child(6) { display: none; }
+          .inv-item-header span:nth-child(7),
+          .inv-item-row > :nth-child(7) { display: none; }
+          .inv-item-header span:nth-child(8),
+          .inv-item-row > :nth-child(8) { display: none; }
           .cust-dropdown { max-height: 180px; }
         }
       `}</style>
