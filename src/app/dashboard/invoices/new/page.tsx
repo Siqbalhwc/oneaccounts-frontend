@@ -91,7 +91,6 @@ function NewInvoicePageContent() {
         .then(r => { if (r.data) setCustomers(r.data) })
 
       if (showProducts) {
-        // Fetch default_tax_code_id as a string for proper dropdown matching
         supabase.from("products")
           .select("id,code,name,sale_price,cost_price,qty_on_hand,image_path,default_tax_code_id")
           .eq("company_id", cid)
@@ -229,7 +228,6 @@ function NewInvoicePageContent() {
     p.code.toLowerCase().includes(productSearch.toLowerCase())
   )
 
-  // FIX 1: Convert default_tax_code_id to string for proper dropdown matching
   const addProductItem = (prod: any) => {
     let newTaxCodeId = prod.default_tax_code_id ? String(prod.default_tax_code_id) : null
     let newTaxRate = 0
@@ -582,9 +580,11 @@ function NewInvoicePageContent() {
         .inv-btn-success:hover { background: #22C55E; }
 
         .inv-items-table-wrapper { overflow-x: auto; }
-        .inv-item-row { display: grid; grid-template-columns: ${itemGridColsDesktop}; gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); min-width: ${taxEnabled ? '900px' : '750px'}; }
         
-        /* FIX 2 & 3: Header alignment with proper padding to match data cells */
+        /* FIX: Reduced vertical padding on rows */
+        .inv-item-row { display: grid; grid-template-columns: ${itemGridColsDesktop}; gap: 6px; align-items: center; padding: 2px 0; border-bottom: 1px solid var(--border); min-width: ${taxEnabled ? '900px' : '750px'}; }
+        
+        /* FIX: Reduced vertical spacing on header */
         .inv-item-header { 
           display: grid; 
           grid-template-columns: ${itemGridColsDesktop}; 
@@ -593,7 +593,7 @@ function NewInvoicePageContent() {
           font-weight: 700; 
           text-transform: uppercase; 
           color: var(--text-muted); 
-          padding-bottom: 6px; 
+          padding-bottom: 2px; 
           min-width: ${taxEnabled ? '900px' : '750px'}; 
           align-items: center;
         }
@@ -601,19 +601,16 @@ function NewInvoicePageContent() {
           display: flex; 
           align-items: center; 
           box-sizing: border-box; 
-          height: 38px;
+          /* height: 38px; */
         }
-        /* Left-aligned headers (Product, Description, Qty, Price, Tax%) - padding-left matches data cells */
         .inv-item-header .header-left { 
           padding-left: 12px; 
           justify-content: flex-start; 
         }
-        /* Right-aligned headers (Total, Tax Amt, Cost) - padding-right matches data cells */
         .inv-item-header .header-right { 
           padding-right: 12px; 
           justify-content: flex-end; 
         }
-        /* Center headers for image and delete columns */
         .inv-item-header .header-center { 
           justify-content: center; 
         }
@@ -646,7 +643,6 @@ function NewInvoicePageContent() {
         .mobile-item-row { display: none; }
         .mobile-sticky-summary { display: none; }
 
-        /* FIX 4: Mobile view - all cells (Item, Qty, Price, Total) have consistent boxes */
         @media (max-width: 768px) {
           .desktop-only { display: none; }
           .desktop-summary { display: none; }
@@ -655,9 +651,8 @@ function NewInvoicePageContent() {
           .mobile-only { display: block; }
           .mobile-item-header { display: grid; grid-template-columns: 24px 1fr 44px 64px 56px 30px; gap: 3px; font-size: 7px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); padding-bottom: 4px; align-items: end; }
           .mobile-item-header span { display: flex; align-items: center; justify-content: center; }
-          .mobile-item-row { display: grid; grid-template-columns: 24px 1fr 44px 64px 56px 30px; gap: 3px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
+          .mobile-item-row { display: grid; grid-template-columns: 24px 1fr 44px 64px 56px 30px; gap: 3px; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--border); }
           .mobile-item-row input { height: 32px; font-size: 12px; padding: 0 4px; }
-          /* Consistent bordered cell for Item name and Total */
           .mobile-cell-value { 
             height: 32px; 
             border: 1.5px solid var(--border); 
@@ -812,7 +807,6 @@ function NewInvoicePageContent() {
             {items.length > 0 && (
               <div className="inv-card" style={{ padding: "16px 12px" }}>
                 <div className="desktop-only inv-items-table-wrapper">
-                  {/* FIX 2 & 3: Headers with proper alignment classes */}
                   <div className="inv-item-header">
                     <span className="header-center"></span>
                     <span className="header-left">{isNGO ? "Product/Project" : "Product"}</span>
@@ -844,7 +838,6 @@ function NewInvoicePageContent() {
                   ))}
                 </div>
 
-                {/* FIX 4: Mobile view - all fields have consistent bordered boxes */}
                 <div className="mobile-only">
                   <div className="mobile-item-header">
                     <span></span><span>Item</span><span>Qty</span><span>Price</span><span>Total</span><span></span>
