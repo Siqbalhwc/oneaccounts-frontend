@@ -800,11 +800,11 @@ export default function NewBillPage() {
   }
 
   const itemGridCols = () => {
-    let cols = "2fr 70px 90px "
+    let cols = "1.5fr 70px 90px "
     if (taxEnabled) cols += "70px "  // tax column
     cols += (isNGO || locations.length > 0 ? "110px " : "")
     cols += (isNGO || activities.length > 0 ? "110px " : "")
-    cols += "120px 90px 30px"
+    cols += "120px 130px 30px"
     return cols
   }
 
