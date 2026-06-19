@@ -8,7 +8,7 @@ import { useRole } from "@/contexts/RoleContext"
 import { useCompany } from "@/contexts/CompanyContext"
 import { generateCustomerLedgerPDF } from "@/lib/pdf/customerLedgerPDF"
 
-type SortField = "date" | "description" | "debit" | "credit" | "running_balance"
+type SortField = "date" | "entry_no" | "description" | "debit" | "credit" | "running_balance"
 type SortDir = "asc" | "desc"
 
 export default function CustomerLedgerPage() {
@@ -76,7 +76,7 @@ export default function CustomerLedgerPage() {
       .then(({ data }) => data && setCustomer(data))
   }, [selectedCustomerId, companyId])
 
-  // ── LEDGER FETCH (kept identical to working version) ──
+  // ── LEDGER FETCH ──
   const fetchLedger = async () => {
     if (!selectedCustomerId || !companyId || !customer) return
     setLoading(true)
@@ -266,6 +266,7 @@ export default function CustomerLedgerPage() {
         .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
+        
         .ledger-header {
           display: grid;
           grid-template-columns: 90px 130px 1fr 110px 110px 130px;
@@ -291,6 +292,14 @@ export default function CustomerLedgerPage() {
         .ledger-row:hover { background: var(--card-hover); }
         .ledger-row:last-child { border-bottom: none; }
         .opening-row { background: var(--bg-soft); font-weight: 600; }
+        
+        /* No wrap text with ellipsis on all data cells */
+        .ledger-row .cell-no-wrap {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        
         .sort-btn {
           background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
           display: inline-flex; align-items: center; gap: 4px; padding: 0;
@@ -398,7 +407,7 @@ export default function CustomerLedgerPage() {
             <div className="ledger-card">
               <div className="ledger-header">
                 <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
-                <button className="sort-btn" onClick={() => handleSort("description")} style={{ textAlign: "left", justifyContent: "flex-start" }}>Entry # {getSortIcon("description")}</button>
+                <button className="sort-btn" onClick={() => handleSort("entry_no")}>Entry # {getSortIcon("entry_no")}</button>
                 <button className="sort-btn" onClick={() => handleSort("description")} style={{ textAlign: "left", justifyContent: "flex-start" }}>Description {getSortIcon("description")}</button>
                 <button className="sort-btn" onClick={() => handleSort("debit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
                 <button className="sort-btn" onClick={() => handleSort("credit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
@@ -406,16 +415,20 @@ export default function CustomerLedgerPage() {
               </div>
               {sortedLines.map((line, idx) => (
                 <div key={line.id || idx} className={`ledger-row ${line.isOpening ? "opening-row" : ""}`}>
-                  <span style={{ fontSize: 12 }}>{line.date}</span>
-                  <span style={{ color: "var(--primary)", fontSize: 12 }}>{line.entry_no}</span>
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line.description}</span>
-                  <span style={{ textAlign: "right", color: line.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit > 0 ? 600 : 400 }}>
+                  <span className="cell-no-wrap" style={{ fontSize: 12 }}>{line.date}</span>
+                  <span className="cell-no-wrap" style={{ color: "var(--primary)", fontSize: 12 }} title={line.entry_no || ""}>
+                    {line.entry_no || "—"}
+                  </span>
+                  <span className="cell-no-wrap" title={line.description} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {line.description}
+                  </span>
+                  <span className="cell-no-wrap" style={{ textAlign: "right", color: line.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit > 0 ? 600 : 400 }}>
                     {line.debit > 0 ? `PKR ${line.debit.toLocaleString()}` : "—"}
                   </span>
-                  <span style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.credit > 0 ? 600 : 400 }}>
+                  <span className="cell-no-wrap" style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.credit > 0 ? 600 : 400 }}>
                     {line.credit > 0 ? `PKR ${line.credit.toLocaleString()}` : "—"}
                   </span>
-                  <span style={{ textAlign: "right", fontWeight: 600, color: line.running_balance >= 0 ? "#10B981" : "#EF4444" }}>
+                  <span className="cell-no-wrap" style={{ textAlign: "right", fontWeight: 600, color: line.running_balance >= 0 ? "#10B981" : "#EF4444" }}>
                     PKR {line.running_balance.toLocaleString()}
                   </span>
                 </div>
