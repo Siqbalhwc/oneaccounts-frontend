@@ -824,12 +824,52 @@ export default function NewBillPage() {
         .inv-item-row {
           display: grid;
           grid-template-columns: ${itemGridCols()};
-          gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border);
+          gap: 6px; align-items: center; padding: 2px 0; border-bottom: 1px solid var(--border);
         }
         .inv-item-header {
           display: grid;
           grid-template-columns: ${itemGridCols()};
-          gap: 6px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); padding-bottom: 6px;
+          gap: 6px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); padding-bottom: 2px; align-items: center;
+        }
+        /* FIX: Header alignment with proper padding to match data cells */
+        .inv-item-header .header-left { 
+          padding-left: 12px; 
+          justify-content: flex-start; 
+          display: flex;
+          align-items: center;
+          box-sizing: border-box;
+        }
+        .inv-item-header .header-right { 
+          padding-right: 12px; 
+          justify-content: flex-end; 
+          display: flex;
+          align-items: center;
+          box-sizing: border-box;
+        }
+        .inv-item-header .header-center { 
+          justify-content: center; 
+          display: flex;
+          align-items: center;
+          box-sizing: border-box;
+        }
+        /* FIX: Box for Total column */
+        .inv-cell-total {
+          height: 38px;
+          border: 1.5px solid var(--border);
+          border-radius: 8px;
+          padding: 0 12px;
+          font-size: 13px;
+          font-weight: 600;
+          background: var(--bg);
+          color: var(--text);
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          box-sizing: border-box;
+          overflow: hidden;
+          white-space: nowrap;
+          text-overflow: ellipsis;
+          width: 100%;
         }
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
@@ -852,6 +892,10 @@ export default function NewBillPage() {
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
+        /* Reduce vertical padding on mobile rows too */
+        @media (max-width: 768px) {
+          .inv-item-row { padding: 4px 0; }
+        }
       `}</style>
 
       <div className="inv-shell">
@@ -1143,16 +1187,17 @@ export default function NewBillPage() {
           </div>
           {items.length > 0 && (
             <div className="inv-card" style={{ overflowX: "auto", padding: "16px 12px" }}>
+              {/* FIX: Added header-left and header-right classes */}
               <div className="inv-item-header">
-                <span>Description</span>
-                <span>Qty</span>
-                <span>Price</span>
-                {taxEnabled && <span>Tax %</span>}
-                {(isNGO || locations.length > 0) && <span>Location</span>}
-                {(isNGO || activities.length > 0) && <span>Activity</span>}
-                <span>GL Acc</span>
-                <span style={{ textAlign: "right" }}>Total</span>
-                <span></span>
+                <span className="header-left">Description</span>
+                <span className="header-left">Qty</span>
+                <span className="header-left">Price</span>
+                {taxEnabled && <span className="header-left">Tax %</span>}
+                {(isNGO || locations.length > 0) && <span className="header-left">Location</span>}
+                {(isNGO || activities.length > 0) && <span className="header-left">Activity</span>}
+                <span className="header-left">GL Acc</span>
+                <span className="header-right">Total</span>
+                <span className="header-center"></span>
               </div>
 
               {items.map((item, idx) => {
@@ -1267,9 +1312,10 @@ export default function NewBillPage() {
                         </>
                       )}
 
-                      <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13, whiteSpace: "nowrap", color: overBudget ? "#FCA5A5" : undefined }}>
+                      {/* FIX: Total column now has a box (inv-cell-total) */}
+                      <div className="inv-cell-total" style={{ color: overBudget ? "#FCA5A5" : undefined }}>
                         PKR {item.total.toLocaleString()}
-                      </span>
+                      </div>
                       <button
                         style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }}
                         onClick={() => removeItem(idx)}
