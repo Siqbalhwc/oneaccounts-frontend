@@ -801,17 +801,17 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         }
         .tsd .quick-actions {
           display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 12px;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 10px;
           flex: 1;
           align-items: stretch;
         }
         .tsd .quick-action-btn {
           background: var(--card); border: 1px solid var(--border); border-radius: 10px;
-          padding: 16px 8px; text-align: center;
-          font-size: 0.85rem; font-weight: 600; color: var(--text);
+          padding: 14px 8px; text-align: center;
+          font-size: 0.82rem; font-weight: 600; color: var(--text);
           cursor: pointer; transition: 0.15s;
-          display: flex; align-items: center; justify-content: center; gap: 8px;
+          display: flex; align-items: center; justify-content: center; gap: 6px;
         }
         .tsd .quick-action-btn:hover { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
 
@@ -838,16 +838,17 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         @media (max-width: 768px) {
           .tsd .hero-right { width: 100%; justify-content: space-between; }
           .tsd .bells-group { border-left: none; padding-left: 0; }
+          .tsd .quick-actions { grid-template-columns: repeat(2, 1fr); }
         }
         @media (max-width: 640px) {
           .tsd .kpi-row { grid-template-columns: 1fr 1fr; }
           .tsd .hero    { flex-direction: column; align-items: flex-start; }
           .customer-name { max-width: 120px; }
           .tsd .quick-action-btn { padding: 12px 8px; font-size: 0.75rem; }
-          .tsd .quick-actions { grid-template-columns: 1fr; }
         }
         @media (max-width: 380px) {
           .tsd .kpi-row { grid-template-columns: 1fr; }
+          .tsd .quick-actions { grid-template-columns: 1fr; }
         }
       `}</style>
 
@@ -974,6 +975,8 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
               <div className="quick-action-btn" onClick={() => router.push("/dashboard/bills/new")}>📦 New Bill</div>
               <div className="quick-action-btn" onClick={() => router.push("/dashboard/receipts/new")}>💰 Receive Payment</div>
               <div className="quick-action-btn" onClick={() => router.push("/dashboard/payments/new")}>💳 Record Payment</div>
+              <div className="quick-action-btn" onClick={() => router.push("/dashboard/customers/new")}>👤 Add Customer</div>
+              <div className="quick-action-btn" onClick={() => router.push("/dashboard/suppliers/new")}>🚚 Add Supplier</div>
             </div>
           </div>
         </div>
