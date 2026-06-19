@@ -91,8 +91,9 @@ function NewInvoicePageContent() {
         .then(r => { if (r.data) setCustomers(r.data) })
 
       if (showProducts) {
+        // FIX 1: Fetch default_tax_code_id from products so dropdown shows correct tax
         supabase.from("products")
-          .select("id,code,name,sale_price,cost_price,qty_on_hand,image_path")
+          .select("id,code,name,sale_price,cost_price,qty_on_hand,image_path,default_tax_code_id")
           .eq("company_id", cid)
           .is("deleted_at", null)
           .order("name")
@@ -228,7 +229,20 @@ function NewInvoicePageContent() {
     p.code.toLowerCase().includes(productSearch.toLowerCase())
   )
 
+  // FIX 1 (continued): auto-set tax_code_id from product's default_tax_code_id
   const addProductItem = (prod: any) => {
+    let newTaxCodeId = prod.default_tax_code_id || null
+    let newTaxRate = 0
+    let newTaxAmount = 0
+
+    if (newTaxCodeId && taxEnabled) {
+      const taxCode = taxCodes.find((t: any) => t.id === newTaxCodeId)
+      if (taxCode) {
+        newTaxRate = taxCode.rate
+        newTaxAmount = (prod.sale_price * newTaxRate) / 100 // qty is 1 initially
+      }
+    }
+
     setItems([...items, {
       product_id: prod.id,
       description: `${prod.code} - ${prod.name}`,
@@ -240,9 +254,9 @@ function NewInvoicePageContent() {
       total: prod.sale_price,
       project_id: null,
       donor_id: null,
-      tax_code_id: null,
-      tax_rate: 0,
-      tax_amount: 0,
+      tax_code_id: newTaxCodeId,
+      tax_rate: newTaxRate,
+      tax_amount: newTaxAmount,
     }])
     setProductSearch("")
     setShowProductList(false)
@@ -547,9 +561,10 @@ function NewInvoicePageContent() {
     return don?.name || ""
   }
 
+  // FIX 2 & 3: Equal columns for Total, Tax Amt, Cost using minmax(130px, 1fr) and wider delete column (50px)
   const itemGridColsDesktop = taxEnabled
-    ? "30px 150px 3fr 80px 110px 80px 110px 110px 30px"
-    : "30px 150px 3fr 80px 110px 110px 110px 30px"
+    ? "30px 150px 3fr 80px 110px 80px minmax(130px, 1fr) minmax(130px, 1fr) minmax(130px, 1fr) 50px"
+    : "30px 150px 3fr 80px 110px minmax(130px, 1fr) minmax(130px, 1fr) 50px"
 
   return (
     <div className="invoice-page" style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -567,8 +582,10 @@ function NewInvoicePageContent() {
         .inv-btn-success { background: #25D366; color: white; border-color: #25D366; }
         .inv-btn-success:hover { background: #22C55E; }
 
-        .inv-item-row { display: grid; grid-template-columns: ${itemGridColsDesktop}; gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
-        .inv-item-header { display: grid; grid-template-columns: ${itemGridColsDesktop}; gap: 6px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); padding-bottom: 6px; }
+        /* Desktop grid with equal columns and overflow scrolling */
+        .inv-items-table-wrapper { overflow-x: auto; }
+        .inv-item-row { display: grid; grid-template-columns: ${itemGridColsDesktop}; gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); min-width: ${taxEnabled ? '900px' : '750px'}; }
+        .inv-item-header { display: grid; grid-template-columns: ${itemGridColsDesktop}; gap: 6px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); padding-bottom: 6px; min-width: ${taxEnabled ? '900px' : '750px'}; }
 
         .inv-cell { height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: 13px; font-family: inherit; background: var(--bg); color: var(--text); display: flex; align-items: center; box-sizing: border-box; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
         .cust-wrap { position: relative; }
@@ -598,6 +615,7 @@ function NewInvoicePageContent() {
         .mobile-item-row { display: none; }
         .mobile-sticky-summary { display: none; }
 
+        /* FIX 4: Mobile view - clean product name, qty, rate, amount */
         @media (max-width: 768px) {
           .desktop-only { display: none; }
           .desktop-summary { display: none; }
@@ -607,6 +625,7 @@ function NewInvoicePageContent() {
           .mobile-item-header { display: grid; grid-template-columns: 24px 1fr 44px 64px 56px 30px; gap: 3px; font-size: 7px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); padding-bottom: 4px; align-items: end; }
           .mobile-item-row { display: grid; grid-template-columns: 24px 1fr 44px 64px 56px 30px; gap: 3px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
           .mobile-item-row input { height: 32px; font-size: 12px; padding: 0 4px; }
+          .mobile-product-name { font-size: 11px; font-weight: 500; color: var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
           .mobile-total { font-size: 12px; font-weight: 600; text-align: right; white-space: nowrap; }
           .mobile-sticky-summary { display: flex; position: sticky; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--border); padding: 12px 16px; align-items: center; justify-content: space-between; z-index: 50; margin-top: 16px; }
           .inv-card { padding: 12px; }
@@ -741,14 +760,14 @@ function NewInvoicePageContent() {
             </div>
             {items.length > 0 && (
               <div className="inv-card" style={{ padding: "16px 12px" }}>
-                <div className="desktop-only" style={{ overflowX: "auto" }}>
-                  <div className="inv-item-header" style={{ minWidth: taxEnabled ? 800 : 600 }}>
+                <div className="desktop-only inv-items-table-wrapper">
+                  <div className="inv-item-header">
                     <span></span><span>{isNGO ? "Product/Project" : "Product"}</span><span>Description</span><span>Qty</span><span>Price</span>
                     {taxEnabled && <span>Tax %</span>}<span style={{ textAlign: "right" }}>Total</span>{taxEnabled && <span style={{ textAlign: "right" }}>Tax Amt</span>}<span style={{ textAlign: "right" }}>Cost</span><span></span>
                   </div>
                   {items.map((item, idx) => (
                     <Fragment key={idx}>
-                      <div className="inv-item-row" style={{ minWidth: taxEnabled ? 800 : 600 }}>
+                      <div className="inv-item-row">
                         <div style={{ display: "flex", justifyContent: "center" }}>{item.product_image ? <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} /> : <ImageIcon size={14} color="var(--text-muted)" />}</div>
                         {item.product_id ? <div className="inv-cell" style={{ paddingLeft: 12 }}>{item.product_name || "—"}</div> : <div>{isNGO ? <select className="inv-select" style={{ height: 34, fontSize: 12 }} value={item.project_id ?? ""} onChange={e => updateItem(idx, "project_id", e.target.value ? Number(e.target.value) : null)}><option value="">— Select Project —</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select> : <div className="inv-cell" style={{ paddingLeft: 12 }}>—</div>}</div>}
                         <input className="inv-input" style={{ height: 34, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Description" />
@@ -758,13 +777,14 @@ function NewInvoicePageContent() {
                         <div className="inv-cell" style={{ justifyContent: "flex-end", fontWeight: 600 }}>PKR {item.total.toLocaleString()}</div>
                         {taxEnabled && <div className="inv-cell" style={{ justifyContent: "flex-end", color: "var(--text-muted)" }}>{item.tax_amount > 0 ? `PKR ${item.tax_amount.toLocaleString()}` : "—"}</div>}
                         <div className="inv-cell" style={{ justifyContent: "flex-end", color: "var(--text-muted)" }}>{item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}</div>
-                        <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
+                        <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2, whiteSpace: "nowrap" }} onClick={() => removeItem(idx)}><Trash2 size={14} /></button>
                       </div>
-                      {isNGO && !item.product_id && item.project_id && <div className="project-info-row" style={{ minWidth: "600px" }}><span className="project-chip">📁 {getProjectName(item.project_id)}{item.donor_id && <span style={{ color: "var(--primary)", marginLeft: 4 }}>· 🤝 {getDonorName(item.donor_id)}</span>}</span></div>}
+                      {isNGO && !item.product_id && item.project_id && <div className="project-info-row"><span className="project-chip">📁 {getProjectName(item.project_id)}{item.donor_id && <span style={{ color: "var(--primary)", marginLeft: 4 }}>· 🤝 {getDonorName(item.donor_id)}</span>}</span></div>}
                     </Fragment>
                   ))}
                 </div>
 
+                {/* FIX 4: Mobile view - show product name instead of description input */}
                 <div className="mobile-only">
                   <div className="mobile-item-header"><span></span><span>Item</span><span>Qty</span><span>Price</span><span>Total</span><span></span></div>
                   {items.map((item, idx) => (
@@ -772,7 +792,7 @@ function NewInvoicePageContent() {
                       <div style={{ display: "flex", justifyContent: "center" }}>
                         {item.product_image ? <img src={item.product_image} alt="" style={{ width: 20, height: 20, objectFit: "cover", borderRadius: 4 }} /> : <ImageIcon size={12} color="var(--text-muted)" />}
                       </div>
-                      <input className="inv-input" value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Desc" style={{ fontSize: 11, padding: "0 4px" }} />
+                      <span className="mobile-product-name">{item.product_name || item.description || "—"}</span>
                       <input className="inv-input" type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} style={{ textAlign: "center" }} />
                       <input className="inv-input" type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} style={{ textAlign: "right" }} />
                       <span className="mobile-total">PKR {item.total.toLocaleString()}</span>
