@@ -4,13 +4,19 @@ import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { Eye, EyeOff } from "lucide-react"
 
-// ── Login page for OneAccounts ──
-
-// ── Segment Outcome Data (lean: single line per segment) ──
+// ── Segment Outcome Data ──
 const OUTCOME_LINE = {
   ngo: "Track donor balances, enforce budgets, and generate audit-ready reports in real time.",
   trading: "Manage inventory, receivables, and tax — without manual spreadsheets.",
   service: "Bill clients accurately and see project profitability the moment it changes.",
+}
+
+// ── Dashboard Screenshot Paths (local public folder) ──
+const DASHBOARD_IMAGES = {
+  ngo: "/screenshots/ngo-dashboard.png",
+  trading: "/screenshots/trading-dashboard.png",
+  service: "/screenshots/trading-dashboard.png", // Service shares trading dashboard
+  manufacturing: null, // Coming soon
 }
 
 export default function LoginPage() {
@@ -98,7 +104,6 @@ export default function LoginPage() {
     window.location.href = "/dashboard"
   }
 
-  // ── Render ──
   return (
     <>
       <style>{`
@@ -112,7 +117,7 @@ export default function LoginPage() {
         }
 
         /* ═══════════════════════════════════════
-           BACKGROUND — deeper, richer navy-to-indigo
+           BACKGROUND
         ═══════════════════════════════════════ */
         .oa-shell {
           display: flex;
@@ -213,7 +218,7 @@ export default function LoginPage() {
         }
 
         /* ═══════════════════════════════════════
-           COLUMNS — balanced ratio, no dead space
+           COLUMNS
         ═══════════════════════════════════════ */
         .oa-columns {
           position: relative;
@@ -275,7 +280,7 @@ export default function LoginPage() {
           pointer-events: none; z-index: 0;
         }
 
-        /* Brand */
+        /* ── Brand ── */
         .oa-brand {
           display: flex; align-items: center; gap: 14px;
           position: relative; z-index: 2;
@@ -293,7 +298,7 @@ export default function LoginPage() {
           font-size: 11px; color: rgba(255,255,255,0.42); margin-top: 2px;
         }
 
-        /* Badge */
+        /* ── Badge ── */
         .oa-badge {
           display: inline-flex; align-items: center; gap: 7px;
           background: rgba(56,189,248,0.12);
@@ -315,7 +320,8 @@ export default function LoginPage() {
           font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
           text-transform: uppercase; color: #BAE6FD;
         }
-        /* Hero */
+
+        /* ── Hero ── */
         .oa-hero { position: relative; z-index: 2; }
         .oa-headline {
           font-size: 30px; font-weight: 800; color: white;
@@ -328,7 +334,7 @@ export default function LoginPage() {
           background-clip: text;
         }
 
-        /* Segments */
+        /* ── Segments ── */
         .oa-seg-label {
           font-size: 10px; color: rgba(255,255,255,0.42);
           font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
@@ -336,7 +342,7 @@ export default function LoginPage() {
         }
         .oa-segments {
           display: grid; grid-template-columns: repeat(4, 1fr);
-          gap: 8px; margin-bottom: 24px;
+          gap: 8px; margin-bottom: 18px;
         }
         .oa-seg {
           background: rgba(255,255,255,0.045);
@@ -368,26 +374,84 @@ export default function LoginPage() {
         .oa-seg.coming .oa-seg-title { color: rgba(255,255,255,0.3); }
         .oa-seg.coming .oa-seg-icon i { color: rgba(255,255,255,0.2); }
 
-        /* Outcome line — single sentence, swaps with active segment */
+        /* ── Outcome Line ── */
         .oa-outcome-line {
           font-size: 15px; line-height: 1.6; font-weight: 500;
           color: rgba(255,255,255,0.78);
           max-width: 460px;
           padding-left: 14px;
           border-left: 2.5px solid #38BDF8;
+          margin-bottom: 8px;
         }
 
-        /* Flexible spacer absorbs leftover height so footer sits naturally,
-           giving the column generous breathing room instead of dense stacked content */
-        .oa-left-spacer { flex: 1; min-height: 24px; }
+        /* ── How It Works (Left Column) ── */
+        .oa-left-steps {
+          margin-top: 16px;
+          padding: 14px 18px;
+          background: rgba(255,255,255,0.04);
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 12px;
+        }
+        .oa-left-steps-title {
+          font-size: 10px;
+          color: rgba(255,255,255,0.40);
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          margin-bottom: 8px;
+        }
+        .oa-left-step {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 12.5px;
+          color: rgba(255,255,255,0.80);
+          margin-bottom: 4px;
+          font-weight: 500;
+        }
+        .oa-left-step:last-child { margin-bottom: 0; }
+        .oa-left-step-num {
+          font-weight: 700;
+          color: rgba(147,197,253,0.7);
+          font-size: 13px;
+        }
+        .oa-left-step-arrow {
+          color: rgba(255,255,255,0.15);
+          font-size: 12px;
+          margin: 0 2px;
+        }
 
+        /* ── Dashboard Screenshot ── */
+        .oa-demo {
+          margin-top: 16px;
+          border-radius: 14px;
+          overflow: hidden;
+          border: 1px solid rgba(255,255,255,0.12);
+          background: rgba(255,255,255,0.04);
+          box-shadow: 0 12px 40px rgba(0,0,0,0.40);
+          transition: all 0.3s ease;
+        }
+        .oa-demo:hover {
+          border-color: rgba(56,189,248,0.3);
+          box-shadow: 0 16px 48px rgba(0,0,0,0.50);
+        }
+        .oa-demo-img {
+          width: 100%;
+          height: auto;
+          display: block;
+        }
+
+        /* ── Footer ── */
         .oa-footer-txt {
           font-size: 9px; color: rgba(255,255,255,0.16);
           position: relative; z-index: 2; margin-top: 12px;
         }
 
+        /* ── Spacer ── */
+        .oa-left-spacer { flex: 1; min-height: 12px; }
+
         /* ═══════════════════════════════════════
-           RIGHT PANEL — single card, contains EVERYTHING
+           RIGHT PANEL
         ═══════════════════════════════════════ */
         .oa-right {
           flex: 1;
@@ -555,37 +619,7 @@ export default function LoginPage() {
           font-size: 12px; color: #15803D; margin-bottom: 12px;
         }
 
-        /* Urgency banner — inside the card body, not floating below it */
-        .oa-urgency {
-          display: flex; align-items: center; gap: 7px;
-          background: linear-gradient(135deg, rgba(245,158,11,0.10), rgba(217,119,6,0.06));
-          border: 1px solid rgba(217,119,6,0.22);
-          border-radius: 9px;
-          padding: 8px 13px;
-          font-size: 10.5px; color: #92400E; font-weight: 600;
-          margin-top: 22px;
-          margin-bottom: 14px;
-        }
-        .oa-urgency i { font-size: 14px; color: #D97706; flex-shrink: 0; }
-
-        .oa-steps-block { padding: 0 0 14px; }
-        .oa-steps-label {
-          font-size: 9px; color: #94A3B8;
-          font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
-          text-align: center; margin-bottom: 8px;
-        }
-        .oa-steps { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
-        .oa-step { display: flex; align-items: center; gap: 6px; }
-        .oa-step-num {
-          width: 20px; height: 20px; border-radius: 50%;
-          background: linear-gradient(135deg, #1740C8, #0B1C6E);
-          display: flex; align-items: center; justify-content: center;
-          font-size: 9px; font-weight: 700; color: #fff; flex-shrink: 0;
-        }
-        .oa-step-text { font-size: 9.5px; color: #64748B; font-weight: 600; white-space: nowrap; }
-        .oa-step-arrow { color: #94A3B8; font-size: 13px; flex-shrink: 0; }
-
-        /* Card Foot — single contact set, no duplication */
+        /* ── Card Foot Contact ── */
         .oa-card-contact {
           display: flex; flex-wrap: wrap; justify-content: center;
           gap: 6px 14px;
@@ -632,9 +666,11 @@ export default function LoginPage() {
           .oa-right { padding: 0; flex: unset; border-radius: 0; box-shadow: none; }
           .oa-card-head, .oa-card-body, .oa-card-foot { padding-left: 18px; padding-right: 18px; }
           .oa-card-head { padding-top: 22px; }
-          .oa-steps .oa-step-text { font-size: 8px; }
           .oa-card-contact { gap: 5px 10px; }
           .oa-card-contact a { font-size: 9.5px; }
+          .oa-left-steps { padding: 12px 14px; }
+          .oa-left-step { font-size: 11.5px; }
+          .oa-demo { margin-top: 12px; }
         }
 
         @media (max-width: 480px) {
@@ -697,7 +733,7 @@ export default function LoginPage() {
       <div className="oa-shell">
         <div className="oa-columns">
 
-          {/* ══ LEFT PANEL — Marketing content ══ */}
+          {/* ══ LEFT PANEL ── */}
           <div className="oa-left">
             <div className="oa-dots" />
             <div className="oa-glow" />
@@ -763,8 +799,36 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* Outcome — single line, swaps with segment */}
+              {/* Outcome */}
               <p className="oa-outcome-line">{OUTCOME_LINE[activeSegment]}</p>
+
+              {/* ── How It Works ── */}
+              <div className="oa-left-steps">
+                <div className="oa-left-steps-title">How It Works</div>
+                <div className="oa-left-step">
+                  <span className="oa-left-step-num">①</span>
+                  Sign up free
+                  <span className="oa-left-step-arrow">→</span>
+                </div>
+                <div className="oa-left-step">
+                  <span className="oa-left-step-num">②</span>
+                  Import your data
+                  <span className="oa-left-step-arrow">→</span>
+                </div>
+                <div className="oa-left-step">
+                  <span className="oa-left-step-num">③</span>
+                  Go live today
+                </div>
+              </div>
+
+              {/* ── Dashboard Screenshot ── */}
+              <div className="oa-demo">
+                <img
+                  src={DASHBOARD_IMAGES[activeSegment] || "/screenshots/placeholder.png"}
+                  alt={`OneAccounts ${activeSegment.toUpperCase()} Dashboard Preview`}
+                  className="oa-demo-img"
+                />
+              </div>
 
               <div className="oa-left-spacer" />
 
@@ -773,7 +837,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* ══ RIGHT PANEL — login card. Everything lives inside this card now. ══ */}
+          {/* ══ RIGHT PANEL ── */}
           <div className="oa-right">
             <div className="oa-form-wrap">
               <div className="oa-card">
@@ -903,36 +967,9 @@ export default function LoginPage() {
                   </a>
                   <p className="oa-trial-note">No credit card required. Create your company in seconds.</p>
 
-                  {/* Urgency banner — now inside the card, not floating below it */}
-                  <div className="oa-urgency">
-                    <i className="ti ti-clock" aria-hidden="true" />
-                    <span>Founding offer — first 50 organizations get 3 months free on any plan.</span>
-                  </div>
-
-                  {/* Steps — now inside the card */}
-                  <div className="oa-steps-block">
-                    <div className="oa-steps-label">How it works</div>
-                    <div className="oa-steps">
-                      <div className="oa-step">
-                        <div className="oa-step-num">1</div>
-                        <span className="oa-step-text">Sign up free</span>
-                      </div>
-                      <span className="oa-step-arrow">→</span>
-                      <div className="oa-step">
-                        <div className="oa-step-num">2</div>
-                        <span className="oa-step-text">Import your data</span>
-                      </div>
-                      <span className="oa-step-arrow">→</span>
-                      <div className="oa-step">
-                        <div className="oa-step-num">3</div>
-                        <span className="oa-step-text">Go live today</span>
-                      </div>
-                    </div>
-                  </div>
-
                 </div>
 
-                {/* Foot — single contact set, duplicate phone number removed */}
+                {/* Foot */}
                 <div className="oa-card-foot">
                   <div style={{ fontSize: "10.5px", color: "#64748B", marginBottom: "6px", fontWeight: 600 }}>
                     Need help? We're here for you.
