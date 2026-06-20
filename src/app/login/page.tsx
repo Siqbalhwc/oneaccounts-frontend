@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { Eye, EyeOff } from "lucide-react"
 
+// ── Data ──
 const PILLS = [
   "Journal Entries", "Sales & Purchase", "Balance Sheet",
   "Customers & Vendors", "PKR Native", "100% Cloud",
@@ -15,16 +16,50 @@ const STATS = [
   { value: "Live", label: "Real-time" },
 ]
 
-export default function LoginPage() {
-  const [email,        setEmail]        = useState("")
-  const [password,     setPassword]     = useState("")
-  const [showPassword, setShowPassword] = useState(false)
-  const [loading,      setLoading]      = useState(false)
-  const [error,        setError]        = useState("")
-  const [isSignUp,     setIsSignUp]     = useState(false)
-  const [rememberMe,   setRememberMe]   = useState(false)
+// ── Segment Outcome Data ──
+const OUTCOME_DATA = {
+  ngo: {
+    label: "With OneAccounts, NGOs can",
+    items: [
+      "Track donor balances and fund utilization in real time across 100+ projects simultaneously.",
+      "Prevent budget overruns before they happen — with approval workflows and budget engine.",
+      "Generate donor reports, audit-ready financials in minutes.",
+      "Replace Excel sheets and manual processes with one secure cloud platform.",
+      "Stay compliant with complete audit logs and role-based access control.",
+    ],
+  },
+  trading: {
+    label: "With OneAccounts, trading businesses can",
+    items: [
+      "Manage 500+ SKUs with real-time stock levels, and purchase orders.",
+      "Control receivables and payables — see exactly who owes what and when it is due.",
+      "Calculate WHT and Sales Tax automatically — no manual spreadsheet reconciliation.",
+      "Track cash flow in real time and prevent overdue invoice surprises.",
+      "Generate profit & loss, balance sheet, in one click.",
+    ],
+  },
+  service: {
+    label: "With OneAccounts, service organizations can",
+    items: [
+      "Track costs, and profitability across multiple clients simultaneously.",
+      "Invoice customers accurately with time, expense, and milestone-based billing.",
+      "Monitor overdue payments and send reminders without leaving the platform.",
+      "Generate management accounts and client profitability reports instantly.",
+    ],
+  },
+}
 
-  // ── Invite token handling ─────────────────────────────────────────
+export default function LoginPage() {
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [isSignUp, setIsSignUp] = useState(false)
+  const [rememberMe, setRememberMe] = useState(false)
+  const [activeSegment, setActiveSegment] = useState<"ngo" | "trading" | "service">("ngo")
+
+  // ── Invite token handling ──
   const [inviteStatus, setInviteStatus] = useState<"idle" | "processing" | "expired">("idle")
 
   useEffect(() => {
@@ -32,9 +67,9 @@ export default function LoginPage() {
     if (!hash) return
 
     const params = new URLSearchParams(hash)
-    const accessToken  = params.get("access_token")
+    const accessToken = params.get("access_token")
     const refreshToken = params.get("refresh_token")
-    const type         = params.get("type")
+    const type = params.get("type")
 
     if (accessToken && refreshToken && type === "invite") {
       setInviteStatus("processing")
@@ -42,17 +77,19 @@ export default function LoginPage() {
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       )
-      supabase.auth.setSession({
-        access_token:  accessToken,
-        refresh_token: refreshToken,
-      }).then(({ error }) => {
-        if (error) {
-          setInviteStatus("expired")
-          window.history.replaceState(null, "", "/login")
-        } else {
-          window.location.href = "/dashboard"
-        }
-      })
+      supabase.auth
+        .setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        })
+        .then(({ error }) => {
+          if (error) {
+            setInviteStatus("expired")
+            window.history.replaceState(null, "", "/login")
+          } else {
+            window.location.href = "/dashboard"
+          }
+        })
     }
   }, [])
 
@@ -69,13 +106,15 @@ export default function LoginPage() {
       : await supabase.auth.signInWithPassword({
           email,
           password,
-          options: { persistSession: rememberMe } as any   // ✅ FIX: type assertion
+          options: { persistSession: rememberMe } as any,
         })
 
     if (authError) {
-      setError(isSignUp
-        ? "Sign up failed — this email may already be registered."
-        : "Incorrect email or password. Please try again.")
+      setError(
+        isSignUp
+          ? "Sign up failed — this email may already be registered."
+          : "Incorrect email or password. Please try again."
+      )
       setLoading(false)
       return
     }
@@ -95,9 +134,7 @@ export default function LoginPage() {
     window.location.href = "/dashboard"
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  // RETURN JSX (unchanged from your original – includes water background, etc.)
-  // ═══════════════════════════════════════════════════════════════════
+  // ── Render ──
   return (
     <>
       <style>{`
@@ -111,7 +148,7 @@ export default function LoginPage() {
         }
 
         /* ═══════════════════════════════════════
-           WATER WAVE BACKGROUND
+           WATER WAVE BACKGROUND (your original)
         ═══════════════════════════════════════ */
         .oa-shell {
           display: flex;
@@ -125,7 +162,6 @@ export default function LoginPage() {
           background: #0B1E5B;
         }
 
-        /* Animated water background */
         .oa-water-bg {
           position: fixed;
           inset: 0;
@@ -139,7 +175,6 @@ export default function LoginPage() {
               #091A54 100%);
         }
 
-        /* Water shimmer layers */
         .oa-water-bg::before {
           content: '';
           position: absolute;
@@ -173,7 +208,6 @@ export default function LoginPage() {
           animation: waterRipple 12s linear infinite;
         }
 
-        /* SVG wave overlays */
         .oa-waves {
           position: fixed;
           bottom: 0;
@@ -199,7 +233,6 @@ export default function LoginPage() {
           100% { transform: translateX(-50%); }
         }
 
-        /* Floating light particles */
         .oa-particle {
           position: fixed;
           border-radius: 50%;
@@ -216,7 +249,7 @@ export default function LoginPage() {
         }
 
         /* ═══════════════════════════════════════
-           COLUMNS CONTAINER
+           COLUMNS
         ═══════════════════════════════════════ */
         .oa-columns {
           position: relative;
@@ -226,11 +259,10 @@ export default function LoginPage() {
           gap: 5px;
           width: 100%;
           max-width: 1100px;
-          /* equal height: stretch both panels to the taller one */
         }
 
         /* ═══════════════════════════════════════
-           LEFT PANEL — floating, 2× width of right
+           LEFT PANEL — with rich content
         ═══════════════════════════════════════ */
         .oa-left {
           flex: 2;
@@ -245,13 +277,24 @@ export default function LoginPage() {
             inset 0 1px 0 rgba(255,255,255,0.08);
           display: flex;
           flex-direction: column;
-          justify-content: space-between;
-          padding: 32px 44px 28px;
+          padding: 28px 36px 24px;
           position: relative;
           overflow: hidden;
         }
 
-        /* Left panel inner glow */
+        .oa-left .oa-scroll {
+          overflow-y: auto;
+          flex: 1;
+          padding-right: 4px;
+        }
+        .oa-left .oa-scroll::-webkit-scrollbar {
+          width: 3px;
+        }
+        .oa-left .oa-scroll::-webkit-scrollbar-thumb {
+          background: rgba(255,255,255,0.15);
+          border-radius: 4px;
+        }
+
         .oa-dots {
           position: absolute; inset: 0;
           background-image: radial-gradient(rgba(255,255,255,0.04) 1.2px, transparent 1.2px);
@@ -272,10 +315,11 @@ export default function LoginPage() {
           pointer-events: none; z-index: 0;
         }
 
-        /* brand */
+        /* Brand */
         .oa-brand {
           display: flex; align-items: center; gap: 14px;
           position: relative; z-index: 2;
+          margin-bottom: 12px;
         }
         .oa-brand-logo {
           width: 48px; height: 48px;
@@ -289,13 +333,13 @@ export default function LoginPage() {
           font-size: 11px; color: rgba(255,255,255,0.42); margin-top: 2px;
         }
 
-        /* badge */
+        /* Badge */
         .oa-badge {
           display: inline-flex; align-items: center; gap: 7px;
           background: rgba(255,255,255,0.10);
           border: 1px solid rgba(255,255,255,0.20);
           border-radius: 100px; padding: 4px 13px;
-          margin-bottom: 12px; width: fit-content;
+          margin-bottom: 10px; width: fit-content;
         }
         .oa-badge-dot {
           width: 6px; height: 6px; border-radius: 50%; background: #60A5FA;
@@ -312,16 +356,14 @@ export default function LoginPage() {
           text-transform: uppercase; color: rgba(255,255,255,0.82);
         }
 
-        /* hero */
+        /* Hero */
         .oa-hero {
           position: relative; z-index: 2;
-          flex: 1; display: flex; flex-direction: column;
-          justify-content: center; padding: 20px 0;
         }
         .oa-headline {
-          font-size: 38px; font-weight: 800; color: white;
+          font-size: 32px; font-weight: 800; color: white;
           line-height: 1.10; letter-spacing: -0.8px;
-          margin-bottom: 10px;
+          margin-bottom: 8px;
         }
         .oa-headline-grad {
           background: linear-gradient(90deg, #93C5FD, #818CF8);
@@ -330,43 +372,166 @@ export default function LoginPage() {
         }
         .oa-desc {
           font-size: 13px; color: rgba(255,255,255,0.56);
-          line-height: 1.62; max-width: 400px; margin-bottom: 16px; font-weight: 400;
+          line-height: 1.62; max-width: 460px; margin-bottom: 12px; font-weight: 400;
         }
-        .oa-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+        .oa-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
         .oa-pill {
           background: rgba(255,255,255,0.09);
           border: 1px solid rgba(255,255,255,0.16);
-          border-radius: 8px; padding: 5px 11px;
-          font-size: 11px; color: rgba(255,255,255,0.82); font-weight: 500;
+          border-radius: 8px; padding: 4px 10px;
+          font-size: 10px; color: rgba(255,255,255,0.82); font-weight: 500;
         }
 
-        /* stats */
-        .oa-stats {
-          position: relative; z-index: 2;
-          border-top: 1px solid rgba(255,255,255,0.12);
-          padding-top: 14px;
-          display: grid; grid-template-columns: repeat(4, 1fr);
-          gap: 0;
+        /* Trust Bar */
+        .oa-trust-bar {
+          display: flex; flex-wrap: wrap; align-items: center;
+          gap: 6px 14px;
+          padding: 8px 12px;
+          background: rgba(255,255,255,0.05);
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 10px;
+          margin-bottom: 14px;
         }
-        .oa-stat { padding-right: 16px; }
+        .oa-trust-item {
+          display: flex; align-items: center; gap: 4px;
+          font-size: 10px; color: rgba(255,255,255,0.5); font-weight: 500;
+        }
+        .oa-trust-item i { font-size: 12px; color: rgba(147,197,253,0.6); }
+        .oa-trust-divider {
+          width: 1px; height: 12px; background: rgba(255,255,255,0.08);
+        }
+
+        /* Segments */
+        .oa-seg-label {
+          font-size: 10px; color: rgba(255,255,255,0.4);
+          font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px;
+          margin-bottom: 6px; display: block;
+        }
+        .oa-segments {
+          display: grid; grid-template-columns: repeat(4, 1fr);
+          gap: 6px; margin-bottom: 12px;
+        }
+        .oa-seg {
+          background: rgba(255,255,255,0.04);
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 10px; padding: 10px 8px;
+          cursor: pointer; transition: all 0.2s;
+          position: relative;
+        }
+        .oa-seg:hover { border-color: rgba(99,102,241,0.3); background: rgba(255,255,255,0.06); }
+        .oa-seg.active {
+          border-color: #60A5FA; background: rgba(96,165,250,0.10);
+          box-shadow: 0 0 30px rgba(96,165,250,0.05);
+        }
+        .oa-seg.coming { opacity: 0.4; cursor: default; }
+        .oa-seg.coming:hover { border-color: rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); }
+        .oa-seg-badge {
+          position: absolute; top: 4px; right: 5px;
+          font-size: 7px; font-weight: 600;
+          color: rgba(255,255,255,0.3);
+          background: rgba(255,255,255,0.06);
+          padding: 1px 6px; border-radius: 4px;
+        }
+        .oa-seg-icon i { font-size: 18px; color: rgba(147,197,253,0.7); }
+        .oa-seg-title {
+          font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.9);
+          margin-top: 4px; margin-bottom: 1px;
+        }
+        .oa-seg-desc {
+          font-size: 9px; color: rgba(255,255,255,0.35);
+          line-height: 1.3;
+        }
+        .oa-seg.coming .oa-seg-title { color: rgba(255,255,255,0.3); }
+        .oa-seg.coming .oa-seg-icon i { color: rgba(255,255,255,0.2); }
+
+        /* Outcomes */
+        .oa-outcomes-section { margin-bottom: 12px; }
+        .oa-outcomes-label {
+          font-size: 10px; color: rgba(255,255,255,0.4);
+          font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px;
+          margin-bottom: 4px; display: block;
+        }
+        .oa-outcomes {
+          display: flex; flex-direction: column; gap: 3px;
+        }
+        .oa-outcome {
+          display: flex; align-items: flex-start; gap: 6px;
+          font-size: 11px; color: rgba(255,255,255,0.6); line-height: 1.5;
+        }
+        .oa-outcome i { color: #4ADE80; font-size: 13px; margin-top: 1px; flex-shrink: 0; }
+
+        /* Stats */
+        .oa-stats {
+          border-top: 1px solid rgba(255,255,255,0.08);
+          padding-top: 10px; margin-top: 2px;
+          display: grid; grid-template-columns: repeat(4, 1fr);
+          gap: 0; margin-bottom: 10px;
+        }
+        .oa-stat { padding-right: 12px; }
         .oa-stat + .oa-stat {
-          padding-left: 16px;
-          border-left: 1px solid rgba(255,255,255,0.10);
+          padding-left: 12px;
+          border-left: 1px solid rgba(255,255,255,0.06);
         }
         .oa-stat-val {
-          font-size: 22px; font-weight: 800; color: white; line-height: 1;
+          font-size: 18px; font-weight: 800; color: white; line-height: 1;
         }
         .oa-stat-lbl {
-          font-size: 9.5px; color: rgba(255,255,255,0.36);
-          text-transform: uppercase; letter-spacing: 0.10em; margin-top: 4px;
+          font-size: 8.5px; color: rgba(255,255,255,0.3);
+          text-transform: uppercase; letter-spacing: 0.10em; margin-top: 2px;
         }
+
+        /* Why Cards */
+        .oa-why-label {
+          font-size: 10px; color: rgba(255,255,255,0.4);
+          font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px;
+          margin-bottom: 6px; display: block;
+        }
+        .oa-why-grid {
+          display: grid; grid-template-columns: 1fr 1fr;
+          gap: 6px; margin-bottom: 10px;
+        }
+        .oa-why {
+          display: flex; align-items: flex-start; gap: 8px;
+          padding: 8px 10px;
+          background: rgba(255,255,255,0.04);
+          border-left: 2px solid #60A5FA;
+          border-top: 0.5px solid rgba(255,255,255,0.06);
+          border-right: 0.5px solid rgba(255,255,255,0.06);
+          border-bottom: 0.5px solid rgba(255,255,255,0.06);
+          border-radius: 0 8px 8px 0;
+        }
+        .oa-why i { font-size: 14px; color: rgba(147,197,253,0.6); flex-shrink: 0; margin-top: 1px; }
+        .oa-why-title { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.85); }
+        .oa-why-desc { font-size: 9px; color: rgba(255,255,255,0.35); line-height: 1.4; }
+
+        /* Switch Row */
+        .oa-switch-row-bottom {
+          display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+          padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.06);
+        }
+        .oa-switch-label {
+          font-size: 10px; color: rgba(255,255,255,0.3);
+        }
+        .oa-switch-pill {
+          font-size: 9px; color: rgba(255,255,255,0.5);
+          background: rgba(255,255,255,0.06);
+          border: 1px solid rgba(255,255,255,0.06);
+          padding: 2px 8px; border-radius: 4px; font-weight: 500;
+        }
+        .oa-switch-arrow { color: rgba(255,255,255,0.15); font-size: 9px; }
+        .oa-switch-note {
+          font-size: 9px; color: rgba(255,255,255,0.2);
+          margin-left: 2px;
+        }
+
+        /* Footer text */
         .oa-footer-txt {
-          font-size: 10px; color: rgba(255,255,255,0.18);
-          position: relative; z-index: 2; margin-top: 10px;
+          font-size: 9px; color: rgba(255,255,255,0.12);
+          position: relative; z-index: 2; margin-top: 4px;
         }
 
         /* ═══════════════════════════════════════
-           RIGHT PANEL — floating, 1× width
+           RIGHT PANEL — your original login card
         ═══════════════════════════════════════ */
         .oa-right {
           flex: 1;
@@ -375,13 +540,8 @@ export default function LoginPage() {
           justify-content: center;
         }
 
-        .oa-form-wrap {
-          width: 100%;
-        }
+        .oa-form-wrap { width: 100%; }
 
-        /* ═══════════════════════════════════════
-           CARD — floating glass card
-        ═══════════════════════════════════════ */
         .oa-card {
           background: rgba(255, 255, 255, 0.97);
           border-radius: 18px;
@@ -405,7 +565,6 @@ export default function LoginPage() {
           text-align: center;
         }
 
-        /* card head content */
         .oa-card-logo {
           width: 48px; height: 48px; border-radius: 12px;
           object-fit: contain; margin: 0 auto 8px; display: block;
@@ -421,12 +580,11 @@ export default function LoginPage() {
           font-size: 19px; font-weight: 800; color: #0F172A;
           letter-spacing: -0.4px; margin-bottom: 3px;
         }
-        .oa-subtitle { font-size: 12px; color: #6B7280; }
+        .oa-subtitle {
+          font-size: 12px; color: #6B7280;
+        }
         .oa-subtitle strong { color: #1E3A8A; font-weight: 700; }
 
-        /* ═══════════════════════════════════════
-           FORM FIELDS
-        ═══════════════════════════════════════ */
         .oa-label {
           display: block; font-size: 10px; font-weight: 600;
           color: #6B7280; letter-spacing: 0.07em; text-transform: uppercase;
@@ -455,7 +613,6 @@ export default function LoginPage() {
         }
         .oa-eye:hover { color: #64748B; }
 
-        /* forgot row (modified to include remember me) */
         .oa-forgot-row {
           display: flex; justify-content: space-between; align-items: center;
           margin-top: -6px; margin-bottom: 12px;
@@ -467,9 +624,6 @@ export default function LoginPage() {
         }
         .oa-forgot:hover { text-decoration: underline; }
 
-        /* ═══════════════════════════════════════
-           BUTTONS
-        ═══════════════════════════════════════ */
         .oa-btn {
           width: 100%; height: 41px;
           background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
@@ -500,15 +654,13 @@ export default function LoginPage() {
           padding: 5px 0 0; text-align: center;
         }
 
-        /* divider */
         .oa-divider {
           display: flex; align-items: center; gap: 10px;
           margin: 10px 0;
         }
         .oa-div-line { flex: 1; height: 1px; background: #E8EDF5; }
-        .oa-div-txt  { font-size: 10.5px; color: #A0AEC0; font-weight: 500; }
+        .oa-div-txt { font-size: 10.5px; color: #A0AEC0; font-weight: 500; }
 
-        /* trial button */
         .oa-trial-btn {
           display: flex; align-items: center; justify-content: center;
           width: 100%; height: 41px;
@@ -528,13 +680,13 @@ export default function LoginPage() {
           margin-top: 5px; text-align: center;
         }
 
-        /* switch + alerts */
         .oa-switch-row { text-align: center; margin-top: 9px; }
         .oa-switch {
           background: none; border: none;
           font-size: 11.5px; color: #4F6EF7; font-weight: 600;
           cursor: pointer; font-family: inherit; text-decoration: underline;
         }
+
         .oa-error {
           background: #FEF2F2; border: 1px solid #FECACA;
           border-radius: 8px; padding: 8px 12px;
@@ -546,7 +698,6 @@ export default function LoginPage() {
           font-size: 12px; color: #15803D; margin-bottom: 11px;
         }
 
-        /* support links */
         .oa-support-lbl { font-size: 10.5px; color: #9CA3AF; margin-bottom: 6px; }
         .oa-support-links {
           display: flex; align-items: center; justify-content: center;
@@ -561,70 +712,129 @@ export default function LoginPage() {
         }
         .oa-support-link:hover { background: #EEF2FF; }
 
+        /* ── Urgency Banner ── */
+        .oa-urgency {
+          display: flex; align-items: center; gap: 6px;
+          background: rgba(245,158,11,0.10);
+          border: 1px solid rgba(245,158,11,0.18);
+          border-radius: 8px;
+          padding: 6px 12px;
+          font-size: 10px; color: #FCD34D;
+          margin-bottom: 10px;
+        }
+        .oa-urgency i { font-size: 13px; color: #F59E0B; flex-shrink: 0; }
+
+        /* ── Steps ── */
+        .oa-steps-label {
+          font-size: 9px; color: rgba(255,255,255,0.3);
+          font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px;
+          text-align: center; margin-bottom: 2px;
+        }
+        .oa-steps {
+          display: flex; align-items: center; gap: 0;
+          margin-bottom: 10px;
+        }
+        .oa-step {
+          display: flex; align-items: center; gap: 5px; flex: 1;
+        }
+        .oa-step-num {
+          width: 20px; height: 20px; border-radius: 50%;
+          background: linear-gradient(135deg, #1740C8, #071352);
+          display: flex; align-items: center; justify-content: center;
+          font-size: 9px; font-weight: 700; color: #fff; flex-shrink: 0;
+          font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+        .oa-step-text {
+          font-size: 9px; color: rgba(255,255,255,0.4); font-weight: 500;
+          white-space: nowrap;
+        }
+        .oa-step-line {
+          flex: 1; height: 1px; background: rgba(255,255,255,0.06);
+          margin: 0 3px;
+        }
+
+        /* ── Contact ── */
+        .oa-contact {
+          display: flex; flex-direction: column; gap: 3px;
+        }
+        .oa-contact-item {
+          display: flex; align-items: center; gap: 6px;
+          font-size: 10px; color: rgba(255,255,255,0.3);
+        }
+        .oa-contact-item i { font-size: 12px; color: rgba(147,197,253,0.4); width: 16px; text-align: center; flex-shrink: 0; }
+        .oa-contact-item.wa i { color: #4ADE80; }
+
         /* ═══════════════════════════════════════
-           RESPONSIVE — Tablet (768–1023px)
+           RESPONSIVE
         ═══════════════════════════════════════ */
         @media (max-width: 1023px) and (min-width: 768px) {
           .oa-columns { max-width: 900px; }
-          .oa-left { padding: 28px 28px; }
-          .oa-headline { font-size: 28px; }
-          .oa-glow { width: 240px; height: 240px; }
+          .oa-left { padding: 24px 24px; }
+          .oa-headline { font-size: 26px; }
+          .oa-glow { width: 200px; height: 200px; }
+          .oa-segments { grid-template-columns: repeat(2, 1fr); }
         }
 
-        /* ═══════════════════════════════════════
-           RESPONSIVE — Mobile (<768px)
-        ═══════════════════════════════════════ */
         @media (max-width: 767px) {
           .oa-shell { padding: 0; align-items: flex-start; }
           .oa-columns { flex-direction: column; gap: 0; max-width: 100%; border-radius: 0; }
 
-          /* left collapses to a top bar */
           .oa-left {
             border-radius: 0;
-            flex-direction: row; align-items: center;
-            padding: 14px 18px; gap: 12px;
             flex: unset; width: 100%;
+            padding: 14px 16px;
           }
-          .oa-hero, .oa-stats, .oa-footer-txt,
-          .oa-glow, .oa-glow2, .oa-dots { display: none; }
-          .oa-brand { margin: 0; }
-          .oa-brand-logo { width: 36px; height: 36px; }
+          .oa-left .oa-scroll { max-height: none; overflow-y: visible; }
+          .oa-brand { margin-bottom: 6px; }
+          .oa-brand-logo { width: 32px; height: 32px; }
           .oa-brand-name { font-size: 16px; }
-          .oa-brand-sub  { font-size: 10px; }
+          .oa-brand-sub { font-size: 9px; }
+          .oa-headline { font-size: 20px; }
+          .oa-desc { font-size: 11px; }
+          .oa-pills { gap: 4px; }
+          .oa-pill { font-size: 9px; padding: 3px 7px; }
+          .oa-trust-bar { gap: 4px 10px; padding: 6px 10px; }
+          .oa-trust-item { font-size: 9px; }
+          .oa-segments { grid-template-columns: repeat(2, 1fr); }
+          .oa-why-grid { grid-template-columns: 1fr; }
+          .oa-stats { grid-template-columns: repeat(2, 1fr); }
+          .oa-stat + .oa-stat { border-left: none; padding-left: 0; }
+          .oa-glow, .oa-glow2, .oa-dots { display: none; }
 
-          .oa-right {
-            padding: 20px 14px;
-            background: rgba(11,30,91,0.6);
-          }
+          .oa-right { padding: 16px 12px; background: rgba(11,30,91,0.6); }
           .oa-card { border-radius: 14px; }
           .oa-card-head, .oa-card-body, .oa-card-foot {
-            padding-left: 18px; padding-right: 18px;
+            padding-left: 16px; padding-right: 16px;
           }
+          .oa-steps .oa-step-text { font-size: 8px; }
+          .oa-contact-item { font-size: 9px; }
         }
 
-        /* ═══════════════════════════════════════
-           RESPONSIVE — Large (1400px+)
-        ═══════════════════════════════════════ */
+        @media (max-width: 480px) {
+          .oa-segments { grid-template-columns: 1fr 1fr; }
+          .oa-why-grid { grid-template-columns: 1fr; }
+          .oa-stats { grid-template-columns: 1fr 1fr; }
+          .oa-headline { font-size: 18px; }
+          .oa-left { padding: 12px 14px; }
+        }
+
         @media (min-width: 1400px) {
           .oa-columns { max-width: 1260px; }
-          .oa-left { padding: 44px 56px; }
-          .oa-headline { font-size: 46px; }
-          .oa-desc { font-size: 14.5px; }
+          .oa-left { padding: 36px 48px; }
+          .oa-headline { font-size: 40px; }
+          .oa-desc { font-size: 14px; }
         }
 
-        /* ═══════════════════════════════════════
-           RESPONSIVE — 4K (1920px+)
-        ═══════════════════════════════════════ */
         @media (min-width: 1920px) {
           .oa-columns { max-width: 1600px; }
-          .oa-left { padding: 60px 72px; }
-          .oa-headline { font-size: 56px; }
+          .oa-left { padding: 48px 64px; }
+          .oa-headline { font-size: 48px; }
           .oa-brand-name { font-size: 26px; }
-          .oa-brand-logo { width: 58px; height: 58px; }
+          .oa-brand-logo { width: 56px; height: 56px; }
           .oa-title { font-size: 24px; }
           .oa-btn, .oa-trial-btn { height: 50px; font-size: 15px; }
           .oa-input { height: 48px; font-size: 14px; }
-          .oa-stat-val { font-size: 30px; }
+          .oa-stat-val { font-size: 26px; }
         }
       `}</style>
 
@@ -664,57 +874,180 @@ export default function LoginPage() {
       <div className="oa-shell">
         <div className="oa-columns">
 
-          {/* ══ LEFT PANEL ══ */}
+          {/* ══ LEFT PANEL — Enriched Content ══ */}
           <div className="oa-left">
             <div className="oa-dots" />
             <div className="oa-glow" />
             <div className="oa-glow2" />
 
-            {/* Brand */}
-            <div className="oa-brand">
-              <img src="/logo.png" alt="OneAccounts" className="oa-brand-logo" />
-              <div>
-                <div className="oa-brand-name">OneAccounts</div>
-                <div className="oa-brand-sub">by Siqbal · PKR Suite</div>
-              </div>
-            </div>
+            <div className="oa-scroll">
 
-            {/* Hero */}
-            <div className="oa-hero">
+              {/* Brand */}
+              <div className="oa-brand">
+                <img src="/logo.png" alt="OneAccounts" className="oa-brand-logo" />
+                <div>
+                  <div className="oa-brand-name">OneAccounts</div>
+                  <div className="oa-brand-sub">by Siqbal · PKR Suite</div>
+                </div>
+              </div>
+
+              {/* Badge */}
               <div className="oa-badge">
                 <div className="oa-badge-dot" />
-                <span className="oa-badge-txt">Cloud Accounting Platform</span>
+                <span className="oa-badge-txt">Cloud Finance &amp; ERP · Built for Pakistan</span>
               </div>
-              <div className="oa-headline">
-                Smart Accounting,<br />
-                <span className="oa-headline-grad">Stronger Business.</span>
-              </div>
-              <div className="oa-desc">
-                Complete double-entry accounting, invoicing, inventory &amp; financial
-                reporting — purpose-built for Pakistani businesses.
-              </div>
-              <div className="oa-pills">
-                {PILLS.map(p => <span key={p} className="oa-pill">{p}</span>)}
-              </div>
-            </div>
 
-            {/* Stats + Footer */}
-            <div>
+              {/* Hero */}
+              <div className="oa-hero">
+                <div className="oa-headline">
+                  Control Your Finances.<br />
+                  <span className="oa-headline-grad">Grow Your Organization.</span>
+                </div>
+                <div className="oa-desc">
+                  Complete double-entry accounting, invoicing, inventory &amp; financial
+                  reporting — purpose-built for Pakistani businesses.
+                </div>
+                <div className="oa-pills">
+                  {PILLS.map((p) => (
+                    <span key={p} className="oa-pill">{p}</span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Trust Bar */}
+              <div className="oa-trust-bar">
+                <span className="oa-trust-item"><i className="ti ti-lock" aria-hidden="true"></i>256-bit SSL</span>
+                <span className="oa-trust-divider" />
+                <span className="oa-trust-item"><i className="ti ti-cloud" aria-hidden="true"></i>Secure cloud</span>
+                <span className="oa-trust-divider" />
+                <span className="oa-trust-item"><i className="ti ti-file-description" aria-hidden="true"></i>Audit logs</span>
+                <span className="oa-trust-divider" />
+                <span className="oa-trust-item"><i className="ti ti-map-pin" aria-hidden="true"></i>Built for Pakistan</span>
+                <span className="oa-trust-divider" />
+                <span className="oa-trust-item"><i className="ti ti-book" aria-hidden="true"></i>Double-entry</span>
+              </div>
+
+              {/* Segments */}
+              <span className="oa-seg-label">Who is it for — select your organization</span>
+              <div className="oa-segments">
+                <div
+                  className={`oa-seg ${activeSegment === "ngo" ? "active" : ""}`}
+                  onClick={() => setActiveSegment("ngo")}
+                >
+                  <div className="oa-seg-icon"><i className="ti ti-building-community" aria-hidden="true"></i></div>
+                  <div className="oa-seg-title">NGOs &amp; Development</div>
+                  <div className="oa-seg-desc">Donors, budgets, fund utilization</div>
+                </div>
+                <div
+                  className={`oa-seg ${activeSegment === "trading" ? "active" : ""}`}
+                  onClick={() => setActiveSegment("trading")}
+                >
+                  <div className="oa-seg-icon"><i className="ti ti-package" aria-hidden="true"></i></div>
+                  <div className="oa-seg-title">Trading Businesses</div>
+                  <div className="oa-seg-desc">Inventory, taxes, cash flow</div>
+                </div>
+                <div
+                  className={`oa-seg ${activeSegment === "service" ? "active" : ""}`}
+                  onClick={() => setActiveSegment("service")}
+                >
+                  <div className="oa-seg-icon"><i className="ti ti-tool" aria-hidden="true"></i></div>
+                  <div className="oa-seg-title">Service Organizations</div>
+                  <div className="oa-seg-desc">Projects, billing, profitability</div>
+                </div>
+                <div className="oa-seg coming">
+                  <span className="oa-seg-badge">Soon</span>
+                  <div className="oa-seg-icon"><i className="ti ti-building-factory" aria-hidden="true"></i></div>
+                  <div className="oa-seg-title">Manufacturing</div>
+                  <div className="oa-seg-desc">Production, costing, MRP</div>
+                </div>
+              </div>
+
+              {/* Outcomes */}
+              <div className="oa-outcomes-section">
+                <span className="oa-outcomes-label">{OUTCOME_DATA[activeSegment].label}</span>
+                <div className="oa-outcomes">
+                  {OUTCOME_DATA[activeSegment].items.map((item, idx) => (
+                    <div key={idx} className="oa-outcome">
+                      <i className="ti ti-circle-check" aria-hidden="true" />
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Stats */}
               <div className="oa-stats">
-                {STATS.map(s => (
+                {STATS.map((s) => (
                   <div key={s.label} className="oa-stat">
                     <div className="oa-stat-val">{s.value}</div>
                     <div className="oa-stat-lbl">{s.label}</div>
                   </div>
                 ))}
               </div>
-              <div className="oa-footer-txt">© 2025 OneAccounts by Siqbal. All rights reserved.</div>
+
+              {/* Why Cards */}
+              <span className="oa-why-label">Why organizations choose OneAccounts</span>
+              <div className="oa-why-grid">
+                <div className="oa-why">
+                  <i className="ti ti-map-pin" aria-hidden="true" />
+                  <div>
+                    <div className="oa-why-title">Built for Pakistan</div>
+                    <div className="oa-why-desc">Local tax workflows — WHT, Sales Tax, and business processes designed for Pakistani organizations.</div>
+                  </div>
+                </div>
+                <div className="oa-why">
+                  <i className="ti ti-cash" aria-hidden="true" />
+                  <div>
+                    <div className="oa-why-title">Budget control built-in</div>
+                    <div className="oa-why-desc">Prevent overspending before it happens. PO approvals, budget engine, and real-time alerts included.</div>
+                  </div>
+                </div>
+                <div className="oa-why">
+                  <i className="ti ti-bolt" aria-hidden="true" />
+                  <div>
+                    <div className="oa-why-title">No implementation required</div>
+                    <div className="oa-why-desc">Sign up and start using immediately. Import your existing data via Excel or CSV.</div>
+                  </div>
+                </div>
+                <div className="oa-why">
+                  <i className="ti ti-dashboard" aria-hidden="true" />
+                  <div>
+                    <div className="oa-why-title">Real-time visibility</div>
+                    <div className="oa-why-desc">Monitor receivables, payables, donor balances, and project profitability on one dashboard.</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Switch Row */}
+              <div className="oa-switch-row-bottom">
+                <span className="oa-switch-label">Switching from</span>
+                <span className="oa-switch-pill">Excel</span>
+                <span className="oa-switch-arrow">→</span>
+                <span className="oa-switch-pill">QuickBooks</span>
+                <span className="oa-switch-arrow">→</span>
+                <span className="oa-switch-pill">Odoo</span>
+                <span className="oa-switch-arrow">→</span>
+                <span className="oa-switch-pill">Zoho</span>
+                <span className="oa-switch-arrow">→</span>
+                <span className="oa-switch-pill">Manual accounting</span>
+                <span className="oa-switch-note">Import existing data in minutes.</span>
+              </div>
+
+              <div className="oa-footer-txt">© 2026 OneAccounts by Siqbal. All rights reserved.</div>
+
             </div>
           </div>
 
-          {/* ══ RIGHT PANEL ══ */}
+          {/* ══ RIGHT PANEL — Your original login card ══ */}
           <div className="oa-right">
             <div className="oa-form-wrap">
+
+              {/* Urgency Banner */}
+              <div className="oa-urgency">
+                <i className="ti ti-clock" aria-hidden="true" />
+                <span>Founding offer — first 50 organizations get 3 months free on any plan.</span>
+              </div>
+
               <div className="oa-card">
 
                 {/* Card Head */}
@@ -731,7 +1064,7 @@ export default function LoginPage() {
                 {/* Card Body */}
                 <div className="oa-card-body">
 
-                  {/* Invite processing / expired banners */}
+                  {/* Invite banners */}
                   {inviteStatus === "processing" && (
                     <div className="oa-success">⏳ Verifying your invitation… please wait.</div>
                   )}
@@ -754,10 +1087,15 @@ export default function LoginPage() {
                     <label className="oa-label" htmlFor="email">Email Address</label>
                     <div className="oa-input-wrap">
                       <input
-                        id="email" type="email" className="oa-input"
+                        id="email"
+                        type="email"
+                        className="oa-input"
                         placeholder="you@company.com"
-                        value={email} onChange={e => setEmail(e.target.value)}
-                        autoComplete="email" autoFocus required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        autoComplete="email"
+                        autoFocus
+                        required
                       />
                     </div>
 
@@ -768,12 +1106,16 @@ export default function LoginPage() {
                         type={showPassword ? "text" : "password"}
                         className="oa-input"
                         placeholder={isSignUp ? "Create a strong password" : "Enter your password"}
-                        value={password} onChange={e => setPassword(e.target.value)}
-                        autoComplete={isSignUp ? "new-password" : "current-password"} required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        autoComplete={isSignUp ? "new-password" : "current-password"}
+                        required
                       />
                       <button
-                        type="button" className="oa-eye"
-                        onClick={() => setShowPassword(p => !p)} tabIndex={-1}
+                        type="button"
+                        className="oa-eye"
+                        onClick={() => setShowPassword((p) => !p)}
+                        tabIndex={-1}
                       >
                         {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                       </button>
@@ -795,10 +1137,15 @@ export default function LoginPage() {
                     )}
 
                     <button type="submit" className="oa-btn" disabled={loading}>
-                      {loading
-                        ? <><div className="oa-spinner" /> Please wait…</>
-                        : isSignUp ? "Create Account →" : "Sign In →"
-                      }
+                      {loading ? (
+                        <>
+                          <div className="oa-spinner" /> Please wait…
+                        </>
+                      ) : isSignUp ? (
+                        "Create Account →"
+                      ) : (
+                        "Sign In →"
+                      )}
                     </button>
 
                     <div className="oa-ssl">🔒 256-bit SSL encrypted · Your data is safe</div>
@@ -807,7 +1154,10 @@ export default function LoginPage() {
                   <div className="oa-switch-row">
                     <button
                       className="oa-switch"
-                      onClick={() => { setIsSignUp(s => !s); setError("") }}
+                      onClick={() => {
+                        setIsSignUp((s) => !s)
+                        setError("")
+                      }}
                     >
                       {isSignUp
                         ? "Already have an account? Sign in"
@@ -832,12 +1182,40 @@ export default function LoginPage() {
                 <div className="oa-card-foot">
                   <div className="oa-support-lbl">Need help? We're here for you.</div>
                   <div className="oa-support-links">
-                    <a href="tel:03117798157"            className="oa-support-link">📞 0311-7798157</a>
+                    <a href="tel:03117798157" className="oa-support-link">📞 0311-7798157</a>
                     <a href="mailto:siqbalhwc@gmail.com" className="oa-support-link">✉ siqbalhwc@gmail.com</a>
                   </div>
                 </div>
 
               </div>
+
+              {/* Steps */}
+              <span className="oa-steps-label">How it works</span>
+              <div className="oa-steps">
+                <div className="oa-step">
+                  <div className="oa-step-num">1</div>
+                  <span className="oa-step-text">Sign up free</span>
+                </div>
+                <div className="oa-step-line" />
+                <div className="oa-step">
+                  <div className="oa-step-num">2</div>
+                  <span className="oa-step-text">Import your data</span>
+                </div>
+                <div className="oa-step-line" />
+                <div className="oa-step">
+                  <div className="oa-step-num">3</div>
+                  <span className="oa-step-text">Go live today</span>
+                </div>
+              </div>
+
+              {/* Contact */}
+              <div className="oa-contact">
+                <div className="oa-contact-item wa"><i className="ti ti-brand-whatsapp" aria-hidden="true" />+92 311 7798157</div>
+                <div className="oa-contact-item"><i className="ti ti-phone" aria-hidden="true" />0311-7798157</div>
+                <div className="oa-contact-item"><i className="ti ti-mail" aria-hidden="true" />siqbalhwc@gmail.com</div>
+                <div className="oa-contact-item"><i className="ti ti-world" aria-hidden="true" />oneaccountsbysiqbal.com</div>
+              </div>
+
             </div>
           </div>
 
