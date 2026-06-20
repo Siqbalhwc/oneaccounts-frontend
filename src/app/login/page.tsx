@@ -261,11 +261,9 @@ export default function LoginPage() {
           max-width: 1100px;
         }
 
-        /* ═══════════════════════════════════════
-           LEFT PANEL — with rich content
-        ═══════════════════════════════════════ */
+        /* ── FIX 1: Left column wider ── */
         .oa-left {
-          flex: 2;
+          flex: 2.4;
           background: rgba(7, 19, 82, 0.82);
           backdrop-filter: blur(18px) saturate(1.4);
           -webkit-backdrop-filter: blur(18px) saturate(1.4);
@@ -504,23 +502,31 @@ export default function LoginPage() {
         .oa-why-title { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.85); }
         .oa-why-desc { font-size: 9px; color: rgba(255,255,255,0.35); line-height: 1.4; }
 
-        /* Switch Row */
+        /* ── FIX 5: "Switching from" row more visible ── */
         .oa-switch-row-bottom {
           display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
-          padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.06);
+          padding: 8px 12px;
+          background: rgba(255,255,255,0.06);
+          border: 1px solid rgba(255,255,255,0.10);
+          border-radius: 8px;
+          margin-top: 4px;
         }
         .oa-switch-label {
-          font-size: 10px; color: rgba(255,255,255,0.3);
+          font-size: 10px; color: rgba(255,255,255,0.6);
+          font-weight: 500;
         }
         .oa-switch-pill {
-          font-size: 9px; color: rgba(255,255,255,0.5);
-          background: rgba(255,255,255,0.06);
-          border: 1px solid rgba(255,255,255,0.06);
+          font-size: 9px; color: rgba(255,255,255,0.8);
+          background: rgba(255,255,255,0.08);
+          border: 1px solid rgba(255,255,255,0.12);
           padding: 2px 8px; border-radius: 4px; font-weight: 500;
         }
-        .oa-switch-arrow { color: rgba(255,255,255,0.15); font-size: 9px; }
+        .oa-switch-arrow {
+          color: rgba(255,255,255,0.2);
+          font-size: 9px;
+        }
         .oa-switch-note {
-          font-size: 9px; color: rgba(255,255,255,0.2);
+          font-size: 9px; color: rgba(255,255,255,0.4);
           margin-left: 2px;
         }
 
@@ -536,12 +542,18 @@ export default function LoginPage() {
         .oa-right {
           flex: 1;
           display: flex;
-          align-items: center;
-          justify-content: center;
+          flex-direction: column;
+          justify-content: stretch;
         }
 
-        .oa-form-wrap { width: 100%; }
+        .oa-form-wrap {
+          width: 100%;
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+        }
 
+        /* ── FIX 2: Card fills full height ── */
         .oa-card {
           background: rgba(255, 255, 255, 0.97);
           border-radius: 18px;
@@ -551,18 +563,27 @@ export default function LoginPage() {
             0 2px 8px rgba(0,0,0,0.25),
             inset 0 1px 0 rgba(255,255,255,0.9);
           overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          flex: 1;
         }
         .oa-card-head {
           padding: 18px 28px 14px;
           border-bottom: 1px solid #F0F2F9;
           text-align: center;
+          flex-shrink: 0;
         }
-        .oa-card-body { padding: 16px 28px 18px; }
+        .oa-card-body {
+          padding: 16px 28px 18px;
+          flex: 1;
+          overflow-y: auto;
+        }
         .oa-card-foot {
           padding: 12px 28px 14px;
           border-top: 1px solid #F0F2F9;
           background: #F8FAFF;
           text-align: center;
+          flex-shrink: 0;
         }
 
         .oa-card-logo {
@@ -698,21 +719,24 @@ export default function LoginPage() {
           font-size: 12px; color: #15803D; margin-bottom: 11px;
         }
 
-        .oa-support-lbl { font-size: 10.5px; color: #9CA3AF; margin-bottom: 6px; }
-        .oa-support-links {
-          display: flex; align-items: center; justify-content: center;
-          gap: 8px; flex-wrap: wrap;
+        /* ── FIX 4: Contact info inside card footer ── */
+        .oa-card-contact {
+          display: flex; flex-wrap: wrap; justify-content: center;
+          gap: 6px 12px;
+          margin-top: 2px;
         }
-        .oa-support-link {
-          display: inline-flex; align-items: center; gap: 5px;
-          font-size: 11px; color: #4F6EF7; font-weight: 600;
-          text-decoration: none; padding: 5px 11px;
-          border-radius: 8px; background: #F5F7FF;
-          border: 1px solid #DBEAFE; transition: all 0.15s;
+        .oa-card-contact a {
+          display: inline-flex; align-items: center; gap: 4px;
+          font-size: 10.5px; color: #4B5563; text-decoration: none;
+          font-weight: 500;
+          transition: color 0.15s;
         }
-        .oa-support-link:hover { background: #EEF2FF; }
+        .oa-card-contact a:hover { color: #1F2937; }
+        .oa-card-contact .wa { color: #059669; }
+        .oa-card-contact .wa:hover { color: #047857; }
+        .oa-card-contact i { font-size: 13px; margin-right: 2px; }
 
-        /* ── Urgency Banner ── */
+        /* ── FIX 3 & 5: Urgency banner moved to bottom ── */
         .oa-urgency {
           display: flex; align-items: center; gap: 6px;
           background: rgba(245,158,11,0.10);
@@ -720,7 +744,8 @@ export default function LoginPage() {
           border-radius: 8px;
           padding: 6px 12px;
           font-size: 10px; color: #FCD34D;
-          margin-bottom: 10px;
+          margin-top: 8px;
+          flex-shrink: 0;
         }
         .oa-urgency i { font-size: 13px; color: #F59E0B; flex-shrink: 0; }
 
@@ -732,7 +757,7 @@ export default function LoginPage() {
         }
         .oa-steps {
           display: flex; align-items: center; gap: 0;
-          margin-bottom: 10px;
+          margin-bottom: 4px;
         }
         .oa-step {
           display: flex; align-items: center; gap: 5px; flex: 1;
@@ -753,23 +778,14 @@ export default function LoginPage() {
           margin: 0 3px;
         }
 
-        /* ── Contact ── */
-        .oa-contact {
-          display: flex; flex-direction: column; gap: 3px;
-        }
-        .oa-contact-item {
-          display: flex; align-items: center; gap: 6px;
-          font-size: 10px; color: rgba(255,255,255,0.3);
-        }
-        .oa-contact-item i { font-size: 12px; color: rgba(147,197,253,0.4); width: 16px; text-align: center; flex-shrink: 0; }
-        .oa-contact-item.wa i { color: #4ADE80; }
+        /* Contact removed from bottom – now inside card */
 
         /* ═══════════════════════════════════════
            RESPONSIVE
         ═══════════════════════════════════════ */
         @media (max-width: 1023px) and (min-width: 768px) {
           .oa-columns { max-width: 900px; }
-          .oa-left { padding: 24px 24px; }
+          .oa-left { padding: 24px 24px; flex: 2; } /* slightly less on tablet */
           .oa-headline { font-size: 26px; }
           .oa-glow { width: 200px; height: 200px; }
           .oa-segments { grid-template-columns: repeat(2, 1fr); }
@@ -801,13 +817,15 @@ export default function LoginPage() {
           .oa-stat + .oa-stat { border-left: none; padding-left: 0; }
           .oa-glow, .oa-glow2, .oa-dots { display: none; }
 
-          .oa-right { padding: 16px 12px; background: rgba(11,30,91,0.6); }
+          .oa-right { padding: 16px 12px; background: rgba(11,30,91,0.6); flex: unset; }
           .oa-card { border-radius: 14px; }
           .oa-card-head, .oa-card-body, .oa-card-foot {
             padding-left: 16px; padding-right: 16px;
           }
           .oa-steps .oa-step-text { font-size: 8px; }
-          .oa-contact-item { font-size: 9px; }
+          .oa-switch-row-bottom { padding: 6px 10px; }
+          .oa-card-contact { gap: 4px 10px; }
+          .oa-card-contact a { font-size: 9px; }
         }
 
         @media (max-width: 480px) {
@@ -1018,7 +1036,7 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* Switch Row */}
+              {/* ── FIX 5: "Switching from" row more visible ── */}
               <div className="oa-switch-row-bottom">
                 <span className="oa-switch-label">Switching from</span>
                 <span className="oa-switch-pill">Excel</span>
@@ -1041,12 +1059,6 @@ export default function LoginPage() {
           {/* ══ RIGHT PANEL — Your original login card ══ */}
           <div className="oa-right">
             <div className="oa-form-wrap">
-
-              {/* Urgency Banner */}
-              <div className="oa-urgency">
-                <i className="ti ti-clock" aria-hidden="true" />
-                <span>Founding offer — first 50 organizations get 3 months free on any plan.</span>
-              </div>
 
               <div className="oa-card">
 
@@ -1178,18 +1190,30 @@ export default function LoginPage() {
 
                 </div>
 
-                {/* Card Foot */}
+                {/* ── FIX 4: Card Foot with Contact Info ── */}
                 <div className="oa-card-foot">
-                  <div className="oa-support-lbl">Need help? We're here for you.</div>
-                  <div className="oa-support-links">
-                    <a href="tel:03117798157" className="oa-support-link">📞 0311-7798157</a>
-                    <a href="mailto:siqbalhwc@gmail.com" className="oa-support-link">✉ siqbalhwc@gmail.com</a>
+                  <div style={{ fontSize: "10.5px", color: "#6B7280", marginBottom: "4px", fontWeight: 500 }}>
+                    Need help? We're here for you.
+                  </div>
+                  <div className="oa-card-contact">
+                    <a href="https://wa.me/923117798157" target="_blank" className="wa">
+                      <i className="ti ti-brand-whatsapp" aria-hidden="true"></i> +92 311 7798157
+                    </a>
+                    <a href="tel:03117798157">
+                      <i className="ti ti-phone" aria-hidden="true"></i> 0311-7798157
+                    </a>
+                    <a href="mailto:siqbalhwc@gmail.com">
+                      <i className="ti ti-mail" aria-hidden="true"></i> siqbalhwc@gmail.com
+                    </a>
+                    <a href="https://www.oneaccountsbysiqbal.com" target="_blank">
+                      <i className="ti ti-world" aria-hidden="true"></i> oneaccountsbysiqbal.com
+                    </a>
                   </div>
                 </div>
 
               </div>
 
-              {/* Steps */}
+              {/* ── Steps ── */}
               <span className="oa-steps-label">How it works</span>
               <div className="oa-steps">
                 <div className="oa-step">
@@ -1208,12 +1232,10 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* Contact */}
-              <div className="oa-contact">
-                <div className="oa-contact-item wa"><i className="ti ti-brand-whatsapp" aria-hidden="true" />+92 311 7798157</div>
-                <div className="oa-contact-item"><i className="ti ti-phone" aria-hidden="true" />0311-7798157</div>
-                <div className="oa-contact-item"><i className="ti ti-mail" aria-hidden="true" />siqbalhwc@gmail.com</div>
-                <div className="oa-contact-item"><i className="ti ti-world" aria-hidden="true" />oneaccountsbysiqbal.com</div>
+              {/* ── FIX 3: Founding offer moved to bottom ── */}
+              <div className="oa-urgency">
+                <i className="ti ti-clock" aria-hidden="true" />
+                <span>Founding offer — first 50 organizations get 3 months free on any plan.</span>
               </div>
 
             </div>
