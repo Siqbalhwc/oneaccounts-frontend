@@ -138,7 +138,7 @@ export default function LoginPage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html, body {
@@ -148,7 +148,7 @@ export default function LoginPage() {
         }
 
         /* ═══════════════════════════════════════
-           WATER WAVE BACKGROUND (your original)
+           BACKGROUND — deeper, richer navy-to-indigo
         ═══════════════════════════════════════ */
         .oa-shell {
           display: flex;
@@ -159,7 +159,7 @@ export default function LoginPage() {
           padding: 24px 20px;
           position: relative;
           overflow: hidden;
-          background: #0B1E5B;
+          background: #060F38;
         }
 
         .oa-water-bg {
@@ -167,12 +167,12 @@ export default function LoginPage() {
           inset: 0;
           z-index: 0;
           background:
-            linear-gradient(180deg,
-              #0B1E5B 0%,
-              #0F2A7A 25%,
-              #0D3B9E 50%,
-              #0B2E80 75%,
-              #091A54 100%);
+            linear-gradient(160deg,
+              #060F38 0%,
+              #0A1B5E 22%,
+              #0E2C8C 48%,
+              #122E78 72%,
+              #060F38 100%);
         }
 
         .oa-water-bg::before {
@@ -180,10 +180,10 @@ export default function LoginPage() {
           position: absolute;
           inset: 0;
           background:
-            radial-gradient(ellipse 80% 40% at 20% 60%, rgba(30,85,232,0.25) 0%, transparent 60%),
-            radial-gradient(ellipse 60% 30% at 80% 40%, rgba(23,64,200,0.20) 0%, transparent 55%),
-            radial-gradient(ellipse 100% 50% at 50% 80%, rgba(15,34,128,0.30) 0%, transparent 65%);
-          animation: waterShimmer 8s ease-in-out infinite alternate;
+            radial-gradient(ellipse 70% 38% at 18% 18%, rgba(99,140,255,0.22) 0%, transparent 60%),
+            radial-gradient(ellipse 55% 30% at 85% 30%, rgba(56,189,248,0.14) 0%, transparent 55%),
+            radial-gradient(ellipse 90% 46% at 50% 92%, rgba(20,40,140,0.35) 0%, transparent 65%);
+          animation: waterShimmer 9s ease-in-out infinite alternate;
         }
 
         .oa-water-bg::after {
@@ -195,15 +195,15 @@ export default function LoginPage() {
               0deg,
               transparent,
               transparent 60px,
-              rgba(255,255,255,0.018) 60px,
-              rgba(255,255,255,0.018) 61px
+              rgba(255,255,255,0.016) 60px,
+              rgba(255,255,255,0.016) 61px
             ),
             repeating-linear-gradient(
               90deg,
               transparent,
               transparent 80px,
-              rgba(255,255,255,0.012) 80px,
-              rgba(255,255,255,0.012) 81px
+              rgba(255,255,255,0.01) 80px,
+              rgba(255,255,255,0.01) 81px
             );
           animation: waterRipple 12s linear infinite;
         }
@@ -214,7 +214,7 @@ export default function LoginPage() {
           left: 0;
           width: 100%;
           z-index: 0;
-          opacity: 0.18;
+          opacity: 0.16;
         }
         .oa-waves .wave1 { animation: waveMove 7s linear infinite; }
         .oa-waves .wave2 { animation: waveMove 10s linear infinite reverse; opacity: 0.6; }
@@ -236,7 +236,7 @@ export default function LoginPage() {
         .oa-particle {
           position: fixed;
           border-radius: 50%;
-          background: rgba(147, 197, 253, 0.12);
+          background: rgba(125, 211, 252, 0.14);
           animation: particleFloat linear infinite;
           z-index: 0;
           pointer-events: none;
@@ -249,33 +249,32 @@ export default function LoginPage() {
         }
 
         /* ═══════════════════════════════════════
-           COLUMNS
+           COLUMNS — balanced ratio, no dead space
         ═══════════════════════════════════════ */
         .oa-columns {
           position: relative;
           z-index: 2;
           display: flex;
           align-items: stretch;
-          gap: 5px;
+          gap: 0;
           width: 100%;
-          max-width: 1100px;
+          max-width: 1080px;
+          border-radius: 22px;
+          overflow: hidden;
+          box-shadow:
+            0 24px 70px rgba(0,0,0,0.55),
+            0 4px 16px rgba(0,0,0,0.35);
         }
 
-        /* ── FIX 1: Left column wider ── */
         .oa-left {
-          flex: 2.4;
-          background: rgba(7, 19, 82, 0.82);
+          flex: 1.55;
+          background: rgba(8, 20, 74, 0.86);
           backdrop-filter: blur(18px) saturate(1.4);
           -webkit-backdrop-filter: blur(18px) saturate(1.4);
-          border: 1px solid rgba(255,255,255,0.13);
-          border-radius: 20px;
-          box-shadow:
-            0 8px 32px rgba(0,0,0,0.45),
-            0 2px 8px rgba(0,0,0,0.3),
-            inset 0 1px 0 rgba(255,255,255,0.08);
+          border: 1px solid rgba(255,255,255,0.10);
           display: flex;
           flex-direction: column;
-          padding: 28px 36px 24px;
+          padding: 30px 38px;
           position: relative;
           overflow: hidden;
         }
@@ -285,9 +284,7 @@ export default function LoginPage() {
           flex: 1;
           padding-right: 4px;
         }
-        .oa-left .oa-scroll::-webkit-scrollbar {
-          width: 3px;
-        }
+        .oa-left .oa-scroll::-webkit-scrollbar { width: 3px; }
         .oa-left .oa-scroll::-webkit-scrollbar-thumb {
           background: rgba(255,255,255,0.15);
           border-radius: 4px;
@@ -298,18 +295,17 @@ export default function LoginPage() {
           background-image: radial-gradient(rgba(255,255,255,0.04) 1.2px, transparent 1.2px);
           background-size: 28px 28px;
           pointer-events: none; z-index: 0;
-          border-radius: 20px;
         }
         .oa-glow {
           position: absolute; top: -100px; right: -100px;
           width: 380px; height: 380px; border-radius: 50%;
-          background: radial-gradient(circle, rgba(100,149,255,0.16) 0%, transparent 68%);
+          background: radial-gradient(circle, rgba(56,189,248,0.18) 0%, transparent 68%);
           pointer-events: none; z-index: 0;
         }
         .oa-glow2 {
           position: absolute; bottom: -80px; left: -50px;
           width: 280px; height: 280px; border-radius: 50%;
-          background: radial-gradient(circle, rgba(55,80,200,0.14) 0%, transparent 68%);
+          background: radial-gradient(circle, rgba(99,140,255,0.16) 0%, transparent 68%);
           pointer-events: none; z-index: 0;
         }
 
@@ -317,15 +313,15 @@ export default function LoginPage() {
         .oa-brand {
           display: flex; align-items: center; gap: 14px;
           position: relative; z-index: 2;
-          margin-bottom: 12px;
+          margin-bottom: 14px;
         }
         .oa-brand-logo {
-          width: 48px; height: 48px;
+          width: 46px; height: 46px;
           border-radius: 12px; object-fit: contain; flex-shrink: 0;
           box-shadow: 0 4px 16px rgba(0,0,0,0.3);
         }
         .oa-brand-name {
-          font-size: 22px; font-weight: 800; color: white; line-height: 1.2;
+          font-size: 21px; font-weight: 800; color: white; line-height: 1.2;
         }
         .oa-brand-sub {
           font-size: 11px; color: rgba(255,255,255,0.42); margin-top: 2px;
@@ -334,48 +330,46 @@ export default function LoginPage() {
         /* Badge */
         .oa-badge {
           display: inline-flex; align-items: center; gap: 7px;
-          background: rgba(255,255,255,0.10);
-          border: 1px solid rgba(255,255,255,0.20);
+          background: rgba(56,189,248,0.12);
+          border: 1px solid rgba(56,189,248,0.28);
           border-radius: 100px; padding: 4px 13px;
-          margin-bottom: 10px; width: fit-content;
+          margin-bottom: 12px; width: fit-content;
         }
         .oa-badge-dot {
-          width: 6px; height: 6px; border-radius: 50%; background: #60A5FA;
-          box-shadow: 0 0 0 3px rgba(96,165,250,0.28);
+          width: 6px; height: 6px; border-radius: 50%; background: #38BDF8;
+          box-shadow: 0 0 0 3px rgba(56,189,248,0.28);
           flex-shrink: 0;
           animation: badgePulse 2.4s ease-in-out infinite;
         }
         @keyframes badgePulse {
-          0%,100% { box-shadow: 0 0 0 3px rgba(96,165,250,0.28); }
-          50%      { box-shadow: 0 0 0 6px rgba(96,165,250,0.10); }
+          0%,100% { box-shadow: 0 0 0 3px rgba(56,189,248,0.28); }
+          50%      { box-shadow: 0 0 0 6px rgba(56,189,248,0.10); }
         }
         .oa-badge-txt {
-          font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
-          text-transform: uppercase; color: rgba(255,255,255,0.82);
+          font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+          text-transform: uppercase; color: #BAE6FD;
         }
 
         /* Hero */
-        .oa-hero {
-          position: relative; z-index: 2;
-        }
+        .oa-hero { position: relative; z-index: 2; }
         .oa-headline {
-          font-size: 32px; font-weight: 800; color: white;
-          line-height: 1.10; letter-spacing: -0.8px;
-          margin-bottom: 8px;
+          font-size: 30px; font-weight: 800; color: white;
+          line-height: 1.12; letter-spacing: -0.8px;
+          margin-bottom: 9px;
         }
         .oa-headline-grad {
-          background: linear-gradient(90deg, #93C5FD, #818CF8);
+          background: linear-gradient(90deg, #7DD3FC, #A5B4FC);
           -webkit-background-clip: text; -webkit-text-fill-color: transparent;
           background-clip: text;
         }
         .oa-desc {
-          font-size: 13px; color: rgba(255,255,255,0.56);
-          line-height: 1.62; max-width: 460px; margin-bottom: 12px; font-weight: 400;
+          font-size: 13px; color: rgba(255,255,255,0.58);
+          line-height: 1.62; max-width: 460px; margin-bottom: 13px; font-weight: 400;
         }
-        .oa-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+        .oa-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 13px; }
         .oa-pill {
-          background: rgba(255,255,255,0.09);
-          border: 1px solid rgba(255,255,255,0.16);
+          background: rgba(255,255,255,0.08);
+          border: 1px solid rgba(255,255,255,0.15);
           border-radius: 8px; padding: 4px 10px;
           font-size: 10px; color: rgba(255,255,255,0.82); font-weight: 500;
         }
@@ -384,246 +378,213 @@ export default function LoginPage() {
         .oa-trust-bar {
           display: flex; flex-wrap: wrap; align-items: center;
           gap: 6px 14px;
-          padding: 8px 12px;
-          background: rgba(255,255,255,0.05);
-          border: 1px solid rgba(255,255,255,0.08);
+          padding: 9px 12px;
+          background: rgba(56,189,248,0.06);
+          border: 1px solid rgba(56,189,248,0.14);
           border-radius: 10px;
-          margin-bottom: 14px;
+          margin-bottom: 16px;
         }
         .oa-trust-item {
           display: flex; align-items: center; gap: 4px;
-          font-size: 10px; color: rgba(255,255,255,0.5); font-weight: 500;
+          font-size: 10px; color: rgba(255,255,255,0.55); font-weight: 500;
         }
-        .oa-trust-item i { font-size: 12px; color: rgba(147,197,253,0.6); }
-        .oa-trust-divider {
-          width: 1px; height: 12px; background: rgba(255,255,255,0.08);
-        }
+        .oa-trust-item i { font-size: 12px; color: #7DD3FC; }
+        .oa-trust-divider { width: 1px; height: 12px; background: rgba(255,255,255,0.1); }
 
         /* Segments */
         .oa-seg-label {
-          font-size: 10px; color: rgba(255,255,255,0.4);
-          font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px;
-          margin-bottom: 6px; display: block;
+          font-size: 10px; color: rgba(255,255,255,0.42);
+          font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
+          margin-bottom: 7px; display: block;
         }
         .oa-segments {
           display: grid; grid-template-columns: repeat(4, 1fr);
-          gap: 6px; margin-bottom: 12px;
+          gap: 7px; margin-bottom: 14px;
         }
         .oa-seg {
-          background: rgba(255,255,255,0.04);
-          border: 1px solid rgba(255,255,255,0.08);
+          background: rgba(255,255,255,0.045);
+          border: 1px solid rgba(255,255,255,0.09);
           border-radius: 10px; padding: 10px 8px;
           cursor: pointer; transition: all 0.2s;
           position: relative;
         }
-        .oa-seg:hover { border-color: rgba(99,102,241,0.3); background: rgba(255,255,255,0.06); }
+        .oa-seg:hover { border-color: rgba(56,189,248,0.35); background: rgba(255,255,255,0.07); }
         .oa-seg.active {
-          border-color: #60A5FA; background: rgba(96,165,250,0.10);
-          box-shadow: 0 0 30px rgba(96,165,250,0.05);
+          border-color: #38BDF8; background: rgba(56,189,248,0.13);
+          box-shadow: 0 0 24px rgba(56,189,248,0.10);
         }
         .oa-seg.coming { opacity: 0.4; cursor: default; }
-        .oa-seg.coming:hover { border-color: rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); }
+        .oa-seg.coming:hover { border-color: rgba(255,255,255,0.09); background: rgba(255,255,255,0.045); }
         .oa-seg-badge {
           position: absolute; top: 4px; right: 5px;
-          font-size: 7px; font-weight: 600;
-          color: rgba(255,255,255,0.3);
-          background: rgba(255,255,255,0.06);
+          font-size: 7px; font-weight: 700;
+          color: rgba(255,255,255,0.35);
+          background: rgba(255,255,255,0.07);
           padding: 1px 6px; border-radius: 4px;
         }
-        .oa-seg-icon i { font-size: 18px; color: rgba(147,197,253,0.7); }
+        .oa-seg-icon i { font-size: 18px; color: #7DD3FC; }
         .oa-seg-title {
-          font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.9);
-          margin-top: 4px; margin-bottom: 1px;
+          font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.92);
+          margin-top: 5px; margin-bottom: 1px;
         }
-        .oa-seg-desc {
-          font-size: 9px; color: rgba(255,255,255,0.35);
-          line-height: 1.3;
-        }
+        .oa-seg-desc { font-size: 9px; color: rgba(255,255,255,0.38); line-height: 1.3; }
         .oa-seg.coming .oa-seg-title { color: rgba(255,255,255,0.3); }
         .oa-seg.coming .oa-seg-icon i { color: rgba(255,255,255,0.2); }
 
         /* Outcomes */
-        .oa-outcomes-section { margin-bottom: 12px; }
+        .oa-outcomes-section { margin-bottom: 14px; }
         .oa-outcomes-label {
-          font-size: 10px; color: rgba(255,255,255,0.4);
-          font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px;
-          margin-bottom: 4px; display: block;
+          font-size: 10px; color: rgba(255,255,255,0.42);
+          font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
+          margin-bottom: 6px; display: block;
         }
-        .oa-outcomes {
-          display: flex; flex-direction: column; gap: 3px;
-        }
+        .oa-outcomes { display: flex; flex-direction: column; gap: 4px; }
         .oa-outcome {
-          display: flex; align-items: flex-start; gap: 6px;
-          font-size: 11px; color: rgba(255,255,255,0.6); line-height: 1.5;
+          display: flex; align-items: flex-start; gap: 7px;
+          font-size: 11.5px; color: rgba(255,255,255,0.64); line-height: 1.5;
         }
         .oa-outcome i { color: #4ADE80; font-size: 13px; margin-top: 1px; flex-shrink: 0; }
 
         /* Stats */
         .oa-stats {
-          border-top: 1px solid rgba(255,255,255,0.08);
-          padding-top: 10px; margin-top: 2px;
+          border-top: 1px solid rgba(255,255,255,0.09);
+          border-bottom: 1px solid rgba(255,255,255,0.09);
+          padding: 12px 0; margin-bottom: 14px;
           display: grid; grid-template-columns: repeat(4, 1fr);
-          gap: 0; margin-bottom: 10px;
         }
         .oa-stat { padding-right: 12px; }
-        .oa-stat + .oa-stat {
-          padding-left: 12px;
-          border-left: 1px solid rgba(255,255,255,0.06);
-        }
+        .oa-stat + .oa-stat { padding-left: 12px; border-left: 1px solid rgba(255,255,255,0.07); }
         .oa-stat-val {
-          font-size: 18px; font-weight: 800; color: white; line-height: 1;
+          font-size: 19px; font-weight: 800; line-height: 1;
+          background: linear-gradient(90deg, #ffffff, #BAE6FD);
+          -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+          background-clip: text;
         }
         .oa-stat-lbl {
-          font-size: 8.5px; color: rgba(255,255,255,0.3);
-          text-transform: uppercase; letter-spacing: 0.10em; margin-top: 2px;
+          font-size: 8.5px; color: rgba(255,255,255,0.34);
+          text-transform: uppercase; letter-spacing: 0.10em; margin-top: 3px;
         }
 
         /* Why Cards */
         .oa-why-label {
-          font-size: 10px; color: rgba(255,255,255,0.4);
-          font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px;
-          margin-bottom: 6px; display: block;
+          font-size: 10px; color: rgba(255,255,255,0.42);
+          font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
+          margin-bottom: 7px; display: block;
         }
-        .oa-why-grid {
-          display: grid; grid-template-columns: 1fr 1fr;
-          gap: 6px; margin-bottom: 10px;
-        }
+        .oa-why-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 14px; }
         .oa-why {
           display: flex; align-items: flex-start; gap: 8px;
-          padding: 8px 10px;
+          padding: 9px 10px;
           background: rgba(255,255,255,0.04);
-          border-left: 2px solid #60A5FA;
+          border-left: 2.5px solid #38BDF8;
           border-top: 0.5px solid rgba(255,255,255,0.06);
           border-right: 0.5px solid rgba(255,255,255,0.06);
           border-bottom: 0.5px solid rgba(255,255,255,0.06);
           border-radius: 0 8px 8px 0;
         }
-        .oa-why i { font-size: 14px; color: rgba(147,197,253,0.6); flex-shrink: 0; margin-top: 1px; }
-        .oa-why-title { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.85); }
-        .oa-why-desc { font-size: 9px; color: rgba(255,255,255,0.35); line-height: 1.4; }
+        .oa-why i { font-size: 14px; color: #7DD3FC; flex-shrink: 0; margin-top: 1px; }
+        .oa-why-title { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.88); }
+        .oa-why-desc { font-size: 9px; color: rgba(255,255,255,0.38); line-height: 1.4; }
 
-        /* ── FIX 5: "Switching from" row more visible ── */
         .oa-switch-row-bottom {
           display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
-          padding: 8px 12px;
-          background: rgba(255,255,255,0.06);
-          border: 1px solid rgba(255,255,255,0.10);
+          padding: 9px 12px;
+          background: rgba(255,255,255,0.05);
+          border: 1px solid rgba(255,255,255,0.09);
           border-radius: 8px;
-          margin-top: 4px;
         }
-        .oa-switch-label {
-          font-size: 10px; color: rgba(255,255,255,0.6);
-          font-weight: 500;
-        }
+        .oa-switch-label { font-size: 10px; color: rgba(255,255,255,0.62); font-weight: 500; }
         .oa-switch-pill {
-          font-size: 9px; color: rgba(255,255,255,0.8);
+          font-size: 9px; color: rgba(255,255,255,0.82);
           background: rgba(255,255,255,0.08);
           border: 1px solid rgba(255,255,255,0.12);
           padding: 2px 8px; border-radius: 4px; font-weight: 500;
         }
-        .oa-switch-arrow {
-          color: rgba(255,255,255,0.2);
-          font-size: 9px;
-        }
-        .oa-switch-note {
-          font-size: 9px; color: rgba(255,255,255,0.4);
-          margin-left: 2px;
-        }
+        .oa-switch-arrow { color: rgba(255,255,255,0.22); font-size: 9px; }
+        .oa-switch-note { font-size: 9px; color: rgba(255,255,255,0.42); margin-left: 2px; }
 
-        /* Footer text */
         .oa-footer-txt {
-          font-size: 9px; color: rgba(255,255,255,0.12);
-          position: relative; z-index: 2; margin-top: 4px;
+          font-size: 9px; color: rgba(255,255,255,0.16);
+          position: relative; z-index: 2; margin-top: 12px;
         }
 
         /* ═══════════════════════════════════════
-           RIGHT PANEL — your original login card
+           RIGHT PANEL — single card, contains EVERYTHING
         ═══════════════════════════════════════ */
         .oa-right {
           flex: 1;
           display: flex;
-          flex-direction: column;
-          justify-content: stretch;
+          background: linear-gradient(165deg, #f7f9ff 0%, #eef2fb 100%);
         }
 
         .oa-form-wrap {
           width: 100%;
-          flex: 1;
           display: flex;
           flex-direction: column;
         }
 
-        /* ── FIX 2: Card fills full height ── */
         .oa-card {
-          background: rgba(255, 255, 255, 0.97);
-          border-radius: 18px;
-          border: 1px solid rgba(255,255,255,0.5);
-          box-shadow:
-            0 8px 32px rgba(0,0,0,0.40),
-            0 2px 8px rgba(0,0,0,0.25),
-            inset 0 1px 0 rgba(255,255,255,0.9);
-          overflow: hidden;
+          background: transparent;
           display: flex;
           flex-direction: column;
           flex: 1;
+          height: 100%;
         }
         .oa-card-head {
-          padding: 18px 28px 14px;
-          border-bottom: 1px solid #F0F2F9;
+          padding: 28px 34px 16px;
           text-align: center;
           flex-shrink: 0;
         }
         .oa-card-body {
-          padding: 16px 28px 18px;
+          padding: 4px 34px 0;
           flex: 1;
-          overflow-y: auto;
+          display: flex;
+          flex-direction: column;
         }
         .oa-card-foot {
-          padding: 12px 28px 14px;
-          border-top: 1px solid #F0F2F9;
-          background: #F8FAFF;
+          padding: 16px 34px 18px;
+          border-top: 1px solid #E3E8F5;
+          background: rgba(23,64,200,0.025);
           text-align: center;
           flex-shrink: 0;
         }
 
         .oa-card-logo {
-          width: 48px; height: 48px; border-radius: 12px;
-          object-fit: contain; margin: 0 auto 8px; display: block;
+          width: 44px; height: 44px; border-radius: 12px;
+          object-fit: contain; margin: 0 auto 10px; display: block;
         }
         .oa-secure-badge {
           display: inline-flex; align-items: center; gap: 5px;
-          background: linear-gradient(135deg, #EEF2FF, #E8EFFE);
+          background: linear-gradient(135deg, #EEF2FF, #E0EAFE);
           border: 1px solid #C7D2FE; border-radius: 100px;
-          padding: 3px 10px; margin-bottom: 7px;
-          font-size: 9.5px; color: #4338CA; font-weight: 700; letter-spacing: 0.05em;
+          padding: 3px 11px; margin-bottom: 9px;
+          font-size: 9.5px; color: #3730A3; font-weight: 700; letter-spacing: 0.05em;
         }
         .oa-title {
-          font-size: 19px; font-weight: 800; color: #0F172A;
-          letter-spacing: -0.4px; margin-bottom: 3px;
+          font-size: 21px; font-weight: 800; color: #0F172A;
+          letter-spacing: -0.4px; margin-bottom: 4px;
         }
-        .oa-subtitle {
-          font-size: 12px; color: #6B7280;
-        }
-        .oa-subtitle strong { color: #1E3A8A; font-weight: 700; }
+        .oa-subtitle { font-size: 12.5px; color: #64748B; }
+        .oa-subtitle strong { color: #1740C8; font-weight: 700; }
 
         .oa-label {
-          display: block; font-size: 10px; font-weight: 600;
-          color: #6B7280; letter-spacing: 0.07em; text-transform: uppercase;
-          margin-bottom: 4px;
+          display: block; font-size: 10px; font-weight: 700;
+          color: #64748B; letter-spacing: 0.07em; text-transform: uppercase;
+          margin-bottom: 5px;
         }
-        .oa-input-wrap { position: relative; margin-bottom: 11px; }
+        .oa-input-wrap { position: relative; margin-bottom: 13px; }
         .oa-input {
-          width: 100%; height: 39px;
-          border: 1.5px solid #E5EAF2; border-radius: 9px;
-          padding: 0 40px 0 13px;
-          font-size: 13px; font-family: inherit;
-          color: #111827; background: #FAFBFF;
+          width: 100%; height: 42px;
+          border: 1.5px solid #E2E8F5; border-radius: 10px;
+          padding: 0 40px 0 14px;
+          font-size: 13.5px; font-family: inherit;
+          color: #0F172A; background: #FBFCFF;
           transition: border-color 0.18s, box-shadow 0.18s;
           outline: none;
         }
         .oa-input:focus {
           border-color: #1740C8;
-          box-shadow: 0 0 0 3px rgba(23,64,200,0.10);
+          box-shadow: 0 0 0 3.5px rgba(23,64,200,0.10);
           background: white;
         }
         .oa-input::placeholder { color: #C1CBDA; font-size: 12.5px; }
@@ -632,33 +593,33 @@ export default function LoginPage() {
           background: none; border: none; cursor: pointer;
           color: #94A3B8; display: flex; align-items: center; padding: 4px;
         }
-        .oa-eye:hover { color: #64748B; }
+        .oa-eye:hover { color: #475569; }
 
         .oa-forgot-row {
           display: flex; justify-content: space-between; align-items: center;
-          margin-top: -6px; margin-bottom: 12px;
+          margin-top: -5px; margin-bottom: 15px;
         }
         .oa-forgot {
-          font-size: 11px; color: #4F6EF7; font-weight: 500;
+          font-size: 11.5px; color: #1740C8; font-weight: 600;
           text-decoration: none; background: none; border: none;
           cursor: pointer; font-family: inherit;
         }
         .oa-forgot:hover { text-decoration: underline; }
 
         .oa-btn {
-          width: 100%; height: 41px;
-          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
-          border: none; border-radius: 9px;
-          font-size: 13.5px; font-weight: 700; color: white;
+          width: 100%; height: 44px;
+          background: linear-gradient(135deg, #1E55E8 0%, #0B1C6E 100%);
+          border: none; border-radius: 10px;
+          font-size: 14px; font-weight: 700; color: white;
           font-family: inherit; cursor: pointer;
-          box-shadow: 0 4px 14px rgba(7,19,82,0.34);
+          box-shadow: 0 6px 18px rgba(11,28,110,0.32);
           transition: all 0.2s;
           display: flex; align-items: center; justify-content: center; gap: 8px;
         }
         .oa-btn:hover:not(:disabled) {
-          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
+          background: linear-gradient(135deg, #2D63F6 0%, #102590 100%);
           transform: translateY(-1px);
-          box-shadow: 0 6px 20px rgba(7,19,82,0.44);
+          box-shadow: 0 8px 22px rgba(11,28,110,0.40);
         }
         .oa-btn:disabled { opacity: 0.68; cursor: not-allowed; }
 
@@ -670,146 +631,123 @@ export default function LoginPage() {
         }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        .oa-ssl {
-          font-size: 10px; color: #9CA3AF;
-          padding: 5px 0 0; text-align: center;
-        }
+        .oa-ssl { font-size: 10px; color: #94A3B8; padding: 7px 0 0; text-align: center; }
 
-        .oa-divider {
-          display: flex; align-items: center; gap: 10px;
-          margin: 10px 0;
-        }
-        .oa-div-line { flex: 1; height: 1px; background: #E8EDF5; }
-        .oa-div-txt { font-size: 10.5px; color: #A0AEC0; font-weight: 500; }
+        .oa-divider { display: flex; align-items: center; gap: 10px; margin: 14px 0; }
+        .oa-div-line { flex: 1; height: 1px; background: #E3E8F5; }
+        .oa-div-txt { font-size: 10.5px; color: #98A6BD; font-weight: 600; }
 
         .oa-trial-btn {
           display: flex; align-items: center; justify-content: center;
-          width: 100%; height: 41px;
+          width: 100%; height: 44px;
           background: linear-gradient(135deg, #10B981 0%, #047857 100%);
-          border: none; border-radius: 9px;
+          border: none; border-radius: 10px;
           font-size: 12.5px; font-weight: 700; color: white;
           font-family: inherit; cursor: pointer; text-decoration: none;
-          box-shadow: 0 4px 12px rgba(5,150,105,0.28);
+          box-shadow: 0 6px 16px rgba(5,150,105,0.30);
           transition: all 0.2s;
         }
         .oa-trial-btn:hover {
           transform: translateY(-1px);
-          box-shadow: 0 6px 18px rgba(5,150,105,0.38);
+          box-shadow: 0 8px 20px rgba(5,150,105,0.40);
         }
-        .oa-trial-note {
-          font-size: 10px; color: #9CA3AF;
-          margin-top: 5px; text-align: center;
-        }
+        .oa-trial-note { font-size: 10px; color: #94A3B8; margin-top: 6px; text-align: center; }
 
-        .oa-switch-row { text-align: center; margin-top: 9px; }
+        .oa-switch-row { text-align: center; margin-top: 11px; }
         .oa-switch {
           background: none; border: none;
-          font-size: 11.5px; color: #4F6EF7; font-weight: 600;
+          font-size: 12px; color: #1740C8; font-weight: 600;
           cursor: pointer; font-family: inherit; text-decoration: underline;
         }
 
         .oa-error {
           background: #FEF2F2; border: 1px solid #FECACA;
-          border-radius: 8px; padding: 8px 12px;
-          font-size: 12px; color: #B91C1C; margin-bottom: 11px;
+          border-radius: 8px; padding: 9px 12px;
+          font-size: 12px; color: #B91C1C; margin-bottom: 12px;
         }
         .oa-success {
           background: #F0FDF4; border: 1px solid #BBF7D0;
-          border-radius: 8px; padding: 8px 12px;
-          font-size: 12px; color: #15803D; margin-bottom: 11px;
+          border-radius: 8px; padding: 9px 12px;
+          font-size: 12px; color: #15803D; margin-bottom: 12px;
         }
 
-        /* ── FIX 4: Contact info inside card footer ── */
+        /* Spacer pushes urgency banner + steps to the bottom of the card,
+           eliminating dead white space without it floating outside the card */
+        .oa-spacer { flex: 1; }
+
+        /* Steps — inside the card, above the foot */
+        .oa-steps-block { padding: 0 0 14px; }
+        .oa-steps-label {
+          font-size: 9px; color: #94A3B8;
+          font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
+          text-align: center; margin-bottom: 8px;
+        }
+        .oa-steps { display: flex; align-items: center; gap: 0; }
+        .oa-step { display: flex; align-items: center; gap: 6px; flex: 1; }
+        .oa-step-num {
+          width: 20px; height: 20px; border-radius: 50%;
+          background: linear-gradient(135deg, #1740C8, #0B1C6E);
+          display: flex; align-items: center; justify-content: center;
+          font-size: 9px; font-weight: 700; color: #fff; flex-shrink: 0;
+        }
+        .oa-step-text { font-size: 9.5px; color: #64748B; font-weight: 600; white-space: nowrap; }
+        .oa-step-line { flex: 1; height: 1px; background: #E3E8F5; margin: 0 4px; }
+
+        /* Urgency banner — inside the card body, not floating below it */
+        .oa-urgency {
+          display: flex; align-items: center; gap: 7px;
+          background: linear-gradient(135deg, rgba(245,158,11,0.10), rgba(217,119,6,0.06));
+          border: 1px solid rgba(217,119,6,0.22);
+          border-radius: 9px;
+          padding: 8px 13px;
+          font-size: 10.5px; color: #92400E; font-weight: 600;
+          margin-bottom: 14px;
+        }
+        .oa-urgency i { font-size: 14px; color: #D97706; flex-shrink: 0; }
+
+        /* Card Foot — single contact set, no duplication */
         .oa-card-contact {
           display: flex; flex-wrap: wrap; justify-content: center;
-          gap: 6px 12px;
+          gap: 6px 14px;
           margin-top: 2px;
         }
         .oa-card-contact a {
           display: inline-flex; align-items: center; gap: 4px;
-          font-size: 10.5px; color: #4B5563; text-decoration: none;
-          font-weight: 500;
+          font-size: 10.5px; color: #475569; text-decoration: none;
+          font-weight: 600;
           transition: color 0.15s;
         }
-        .oa-card-contact a:hover { color: #1F2937; }
+        .oa-card-contact a:hover { color: #1E293B; }
         .oa-card-contact .wa { color: #059669; }
         .oa-card-contact .wa:hover { color: #047857; }
         .oa-card-contact i { font-size: 13px; margin-right: 2px; }
-
-        /* ── FIX 3 & 5: Urgency banner moved to bottom ── */
-        .oa-urgency {
-          display: flex; align-items: center; gap: 6px;
-          background: rgba(245,158,11,0.10);
-          border: 1px solid rgba(245,158,11,0.18);
-          border-radius: 8px;
-          padding: 6px 12px;
-          font-size: 10px; color: #FCD34D;
-          margin-top: 8px;
-          flex-shrink: 0;
-        }
-        .oa-urgency i { font-size: 13px; color: #F59E0B; flex-shrink: 0; }
-
-        /* ── Steps ── */
-        .oa-steps-label {
-          font-size: 9px; color: rgba(255,255,255,0.3);
-          font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px;
-          text-align: center; margin-bottom: 2px;
-        }
-        .oa-steps {
-          display: flex; align-items: center; gap: 0;
-          margin-bottom: 4px;
-        }
-        .oa-step {
-          display: flex; align-items: center; gap: 5px; flex: 1;
-        }
-        .oa-step-num {
-          width: 20px; height: 20px; border-radius: 50%;
-          background: linear-gradient(135deg, #1740C8, #071352);
-          display: flex; align-items: center; justify-content: center;
-          font-size: 9px; font-weight: 700; color: #fff; flex-shrink: 0;
-          font-family: 'Plus Jakarta Sans', sans-serif;
-        }
-        .oa-step-text {
-          font-size: 9px; color: rgba(255,255,255,0.4); font-weight: 500;
-          white-space: nowrap;
-        }
-        .oa-step-line {
-          flex: 1; height: 1px; background: rgba(255,255,255,0.06);
-          margin: 0 3px;
-        }
-
-        /* Contact removed from bottom – now inside card */
 
         /* ═══════════════════════════════════════
            RESPONSIVE
         ═══════════════════════════════════════ */
         @media (max-width: 1023px) and (min-width: 768px) {
           .oa-columns { max-width: 900px; }
-          .oa-left { padding: 24px 24px; flex: 2; } /* slightly less on tablet */
-          .oa-headline { font-size: 26px; }
+          .oa-left { padding: 24px 24px; flex: 1.3; }
+          .oa-headline { font-size: 24px; }
           .oa-glow { width: 200px; height: 200px; }
           .oa-segments { grid-template-columns: repeat(2, 1fr); }
         }
 
         @media (max-width: 767px) {
           .oa-shell { padding: 0; align-items: flex-start; }
-          .oa-columns { flex-direction: column; gap: 0; max-width: 100%; border-radius: 0; }
+          .oa-columns { flex-direction: column; max-width: 100%; border-radius: 0; }
 
-          .oa-left {
-            border-radius: 0;
-            flex: unset; width: 100%;
-            padding: 14px 16px;
-          }
+          .oa-left { flex: unset; width: 100%; padding: 16px 18px; }
           .oa-left .oa-scroll { max-height: none; overflow-y: visible; }
-          .oa-brand { margin-bottom: 6px; }
+          .oa-brand { margin-bottom: 8px; }
           .oa-brand-logo { width: 32px; height: 32px; }
           .oa-brand-name { font-size: 16px; }
           .oa-brand-sub { font-size: 9px; }
-          .oa-headline { font-size: 20px; }
-          .oa-desc { font-size: 11px; }
+          .oa-headline { font-size: 21px; }
+          .oa-desc { font-size: 11.5px; }
           .oa-pills { gap: 4px; }
           .oa-pill { font-size: 9px; padding: 3px 7px; }
-          .oa-trust-bar { gap: 4px 10px; padding: 6px 10px; }
+          .oa-trust-bar { gap: 4px 10px; padding: 7px 10px; }
           .oa-trust-item { font-size: 9px; }
           .oa-segments { grid-template-columns: repeat(2, 1fr); }
           .oa-why-grid { grid-template-columns: 1fr; }
@@ -817,39 +755,37 @@ export default function LoginPage() {
           .oa-stat + .oa-stat { border-left: none; padding-left: 0; }
           .oa-glow, .oa-glow2, .oa-dots { display: none; }
 
-          .oa-right { padding: 16px 12px; background: rgba(11,30,91,0.6); flex: unset; }
-          .oa-card { border-radius: 14px; }
-          .oa-card-head, .oa-card-body, .oa-card-foot {
-            padding-left: 16px; padding-right: 16px;
-          }
+          .oa-right { padding: 0; flex: unset; }
+          .oa-card-head, .oa-card-body, .oa-card-foot { padding-left: 18px; padding-right: 18px; }
+          .oa-card-head { padding-top: 22px; }
           .oa-steps .oa-step-text { font-size: 8px; }
-          .oa-switch-row-bottom { padding: 6px 10px; }
-          .oa-card-contact { gap: 4px 10px; }
-          .oa-card-contact a { font-size: 9px; }
+          .oa-switch-row-bottom { padding: 7px 10px; }
+          .oa-card-contact { gap: 5px 10px; }
+          .oa-card-contact a { font-size: 9.5px; }
         }
 
         @media (max-width: 480px) {
           .oa-segments { grid-template-columns: 1fr 1fr; }
           .oa-why-grid { grid-template-columns: 1fr; }
           .oa-stats { grid-template-columns: 1fr 1fr; }
-          .oa-headline { font-size: 18px; }
-          .oa-left { padding: 12px 14px; }
+          .oa-headline { font-size: 19px; }
+          .oa-left { padding: 14px 16px; }
         }
 
         @media (min-width: 1400px) {
-          .oa-columns { max-width: 1260px; }
-          .oa-left { padding: 36px 48px; }
-          .oa-headline { font-size: 40px; }
+          .oa-columns { max-width: 1220px; }
+          .oa-left { padding: 38px 50px; }
+          .oa-headline { font-size: 38px; }
           .oa-desc { font-size: 14px; }
         }
 
         @media (min-width: 1920px) {
-          .oa-columns { max-width: 1600px; }
-          .oa-left { padding: 48px 64px; }
-          .oa-headline { font-size: 48px; }
-          .oa-brand-name { font-size: 26px; }
-          .oa-brand-logo { width: 56px; height: 56px; }
-          .oa-title { font-size: 24px; }
+          .oa-columns { max-width: 1560px; }
+          .oa-left { padding: 50px 66px; }
+          .oa-headline { font-size: 46px; }
+          .oa-brand-name { font-size: 25px; }
+          .oa-brand-logo { width: 54px; height: 54px; }
+          .oa-title { font-size: 25px; }
           .oa-btn, .oa-trial-btn { height: 50px; font-size: 15px; }
           .oa-input { height: 48px; font-size: 14px; }
           .oa-stat-val { font-size: 26px; }
@@ -892,7 +828,7 @@ export default function LoginPage() {
       <div className="oa-shell">
         <div className="oa-columns">
 
-          {/* ══ LEFT PANEL — Enriched Content ══ */}
+          {/* ══ LEFT PANEL — Marketing content ══ */}
           <div className="oa-left">
             <div className="oa-dots" />
             <div className="oa-glow" />
@@ -1036,7 +972,7 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* ── FIX 5: "Switching from" row more visible ── */}
+              {/* Switching from */}
               <div className="oa-switch-row-bottom">
                 <span className="oa-switch-label">Switching from</span>
                 <span className="oa-switch-pill">Excel</span>
@@ -1056,13 +992,12 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* ══ RIGHT PANEL — Your original login card ══ */}
+          {/* ══ RIGHT PANEL — login card. Everything lives inside this card now. ══ */}
           <div className="oa-right">
             <div className="oa-form-wrap">
-
               <div className="oa-card">
 
-                {/* Card Head */}
+                {/* Head */}
                 <div className="oa-card-head">
                   <img src="/logo.png" alt="OneAccounts" className="oa-card-logo" />
                   <div className="oa-secure-badge">🔒 SECURE LOGIN</div>
@@ -1073,10 +1008,9 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                {/* Card Body */}
+                {/* Body */}
                 <div className="oa-card-body">
 
-                  {/* Invite banners */}
                   {inviteStatus === "processing" && (
                     <div className="oa-success">⏳ Verifying your invitation… please wait.</div>
                   )}
@@ -1135,7 +1069,7 @@ export default function LoginPage() {
 
                     {!isSignUp && (
                       <div className="oa-forgot-row">
-                        <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "#6B7280", cursor: "pointer" }}>
+                        <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "#64748B", cursor: "pointer" }}>
                           <input
                             type="checkbox"
                             checked={rememberMe}
@@ -1188,16 +1122,46 @@ export default function LoginPage() {
                   </a>
                   <p className="oa-trial-note">No credit card required. Create your company in seconds.</p>
 
+                  {/* Spacer absorbs leftover height so nothing floats outside the card */}
+                  <div className="oa-spacer" />
+
+                  {/* Urgency banner — now inside the card, not floating below it */}
+                  <div className="oa-urgency">
+                    <i className="ti ti-clock" aria-hidden="true" />
+                    <span>Founding offer — first 50 organizations get 3 months free on any plan.</span>
+                  </div>
+
+                  {/* Steps — now inside the card */}
+                  <div className="oa-steps-block">
+                    <div className="oa-steps-label">How it works</div>
+                    <div className="oa-steps">
+                      <div className="oa-step">
+                        <div className="oa-step-num">1</div>
+                        <span className="oa-step-text">Sign up free</span>
+                      </div>
+                      <div className="oa-step-line" />
+                      <div className="oa-step">
+                        <div className="oa-step-num">2</div>
+                        <span className="oa-step-text">Import your data</span>
+                      </div>
+                      <div className="oa-step-line" />
+                      <div className="oa-step">
+                        <div className="oa-step-num">3</div>
+                        <span className="oa-step-text">Go live today</span>
+                      </div>
+                    </div>
+                  </div>
+
                 </div>
 
-                {/* ── FIX 4: Card Foot with Contact Info ── */}
+                {/* Foot — single contact set, duplicate phone number removed */}
                 <div className="oa-card-foot">
-                  <div style={{ fontSize: "10.5px", color: "#6B7280", marginBottom: "4px", fontWeight: 500 }}>
+                  <div style={{ fontSize: "10.5px", color: "#64748B", marginBottom: "6px", fontWeight: 600 }}>
                     Need help? We're here for you.
                   </div>
                   <div className="oa-card-contact">
                     <a href="https://wa.me/923117798157" target="_blank" className="wa">
-                      <i className="ti ti-brand-whatsapp" aria-hidden="true"></i> +92 311 7798157
+                      <i className="ti ti-brand-whatsapp" aria-hidden="true"></i> WhatsApp
                     </a>
                     <a href="tel:03117798157">
                       <i className="ti ti-phone" aria-hidden="true"></i> 0311-7798157
@@ -1212,32 +1176,6 @@ export default function LoginPage() {
                 </div>
 
               </div>
-
-              {/* ── Steps ── */}
-              <span className="oa-steps-label">How it works</span>
-              <div className="oa-steps">
-                <div className="oa-step">
-                  <div className="oa-step-num">1</div>
-                  <span className="oa-step-text">Sign up free</span>
-                </div>
-                <div className="oa-step-line" />
-                <div className="oa-step">
-                  <div className="oa-step-num">2</div>
-                  <span className="oa-step-text">Import your data</span>
-                </div>
-                <div className="oa-step-line" />
-                <div className="oa-step">
-                  <div className="oa-step-num">3</div>
-                  <span className="oa-step-text">Go live today</span>
-                </div>
-              </div>
-
-              {/* ── FIX 3: Founding offer moved to bottom ── */}
-              <div className="oa-urgency">
-                <i className="ti ti-clock" aria-hidden="true" />
-                <span>Founding offer — first 50 organizations get 3 months free on any plan.</span>
-              </div>
-
             </div>
           </div>
 
