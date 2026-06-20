@@ -6,37 +6,11 @@ import { Eye, EyeOff } from "lucide-react"
 
 // ── Login page for OneAccounts ──
 
-// ── Segment Outcome Data ──
-const OUTCOME_DATA = {
-  ngo: {
-    label: "With OneAccounts, NGOs can",
-    items: [
-      "Track donor balances and fund utilization in real time across 100+ projects simultaneously.",
-      "Prevent budget overruns before they happen — with approval workflows and budget engine.",
-      "Generate donor reports, audit-ready financials in minutes.",
-      "Replace Excel sheets and manual processes with one secure cloud platform.",
-      "Stay compliant with complete audit logs and role-based access control.",
-    ],
-  },
-  trading: {
-    label: "With OneAccounts, trading businesses can",
-    items: [
-      "Manage 500+ SKUs with real-time stock levels, and purchase orders.",
-      "Control receivables and payables — see exactly who owes what and when it is due.",
-      "Calculate WHT and Sales Tax automatically — no manual spreadsheet reconciliation.",
-      "Track cash flow in real time and prevent overdue invoice surprises.",
-      "Generate profit & loss, balance sheet, in one click.",
-    ],
-  },
-  service: {
-    label: "With OneAccounts, service organizations can",
-    items: [
-      "Track costs, and profitability across multiple clients simultaneously.",
-      "Invoice customers accurately with time, expense, and milestone-based billing.",
-      "Monitor overdue payments and send reminders without leaving the platform.",
-      "Generate management accounts and client profitability reports instantly.",
-    ],
-  },
+// ── Segment Outcome Data (lean: single line per segment) ──
+const OUTCOME_LINE = {
+  ngo: "Track donor balances, enforce budgets, and generate audit-ready reports in real time.",
+  trading: "Manage inventory, receivables, and tax — without manual spreadsheets.",
+  service: "Bill clients accurately and see project profitability the moment it changes.",
 }
 
 export default function LoginPage() {
@@ -273,6 +247,8 @@ export default function LoginPage() {
           overflow-y: auto;
           flex: 1;
           padding-right: 4px;
+          display: flex;
+          flex-direction: column;
         }
         .oa-left .oa-scroll::-webkit-scrollbar { width: 3px; }
         .oa-left .oa-scroll::-webkit-scrollbar-thumb {
@@ -360,12 +336,12 @@ export default function LoginPage() {
         }
         .oa-segments {
           display: grid; grid-template-columns: repeat(4, 1fr);
-          gap: 8px; margin-bottom: 18px;
+          gap: 8px; margin-bottom: 24px;
         }
         .oa-seg {
           background: rgba(255,255,255,0.045);
           border: 1px solid rgba(255,255,255,0.09);
-          border-radius: 10px; padding: 10px 8px;
+          border-radius: 10px; padding: 13px 10px;
           cursor: pointer; transition: all 0.2s;
           position: relative;
         }
@@ -392,57 +368,18 @@ export default function LoginPage() {
         .oa-seg.coming .oa-seg-title { color: rgba(255,255,255,0.3); }
         .oa-seg.coming .oa-seg-icon i { color: rgba(255,255,255,0.2); }
 
-        /* Outcomes */
-        .oa-outcomes-section { margin-bottom: 20px; }
-        .oa-outcomes-label {
-          font-size: 10px; color: rgba(255,255,255,0.42);
-          font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
-          margin-bottom: 8px; display: block;
-        }
-        .oa-outcomes { display: flex; flex-direction: column; gap: 6px; }
-        .oa-outcome {
-          display: flex; align-items: flex-start; gap: 7px;
-          font-size: 12px; color: rgba(255,255,255,0.66); line-height: 1.55;
-        }
-        .oa-outcome i { color: #4ADE80; font-size: 13px; margin-top: 1px; flex-shrink: 0; }
-
-        /* Why Cards */
-        .oa-why-label {
-          font-size: 10px; color: rgba(255,255,255,0.42);
-          font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
-          margin-bottom: 9px; display: block;
-        }
-        .oa-why-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 18px; }
-        .oa-why {
-          display: flex; align-items: flex-start; gap: 9px;
-          padding: 12px 13px;
-          background: rgba(255,255,255,0.04);
+        /* Outcome line — single sentence, swaps with active segment */
+        .oa-outcome-line {
+          font-size: 15px; line-height: 1.6; font-weight: 500;
+          color: rgba(255,255,255,0.78);
+          max-width: 460px;
+          padding-left: 14px;
           border-left: 2.5px solid #38BDF8;
-          border-top: 0.5px solid rgba(255,255,255,0.06);
-          border-right: 0.5px solid rgba(255,255,255,0.06);
-          border-bottom: 0.5px solid rgba(255,255,255,0.06);
-          border-radius: 0 8px 8px 0;
         }
-        .oa-why i { font-size: 15px; color: #7DD3FC; flex-shrink: 0; margin-top: 1px; }
-        .oa-why-title { font-size: 11.5px; font-weight: 700; color: rgba(255,255,255,0.88); margin-bottom: 2px; }
-        .oa-why-desc { font-size: 9.5px; color: rgba(255,255,255,0.4); line-height: 1.45; }
 
-        .oa-switch-row-bottom {
-          display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
-          padding: 9px 12px;
-          background: rgba(255,255,255,0.05);
-          border: 1px solid rgba(255,255,255,0.09);
-          border-radius: 8px;
-        }
-        .oa-switch-label { font-size: 10px; color: rgba(255,255,255,0.62); font-weight: 500; }
-        .oa-switch-pill {
-          font-size: 9px; color: rgba(255,255,255,0.82);
-          background: rgba(255,255,255,0.08);
-          border: 1px solid rgba(255,255,255,0.12);
-          padding: 2px 8px; border-radius: 4px; font-weight: 500;
-        }
-        .oa-switch-arrow { color: rgba(255,255,255,0.22); font-size: 9px; }
-        .oa-switch-note { font-size: 9px; color: rgba(255,255,255,0.42); margin-left: 2px; }
+        /* Flexible spacer absorbs leftover height so footer sits naturally,
+           giving the column generous breathing room instead of dense stacked content */
+        .oa-left-spacer { flex: 1; min-height: 24px; }
 
         .oa-footer-txt {
           font-size: 9px; color: rgba(255,255,255,0.16);
@@ -682,27 +619,26 @@ export default function LoginPage() {
 
           .oa-left { flex: unset; width: 100%; padding: 16px 18px; border-radius: 0; box-shadow: none; }
           .oa-left .oa-scroll { max-height: none; overflow-y: visible; }
+          .oa-left-spacer { display: none; }
           .oa-brand { margin-bottom: 8px; }
           .oa-brand-logo { width: 32px; height: 32px; }
           .oa-brand-name { font-size: 16px; }
           .oa-brand-sub { font-size: 9px; }
           .oa-headline { font-size: 21px; }
+          .oa-outcome-line { font-size: 13px; margin-top: 4px; }
           .oa-segments { grid-template-columns: repeat(2, 1fr); }
-          .oa-why-grid { grid-template-columns: 1fr; }
           .oa-glow, .oa-glow2, .oa-dots { display: none; }
 
           .oa-right { padding: 0; flex: unset; border-radius: 0; box-shadow: none; }
           .oa-card-head, .oa-card-body, .oa-card-foot { padding-left: 18px; padding-right: 18px; }
           .oa-card-head { padding-top: 22px; }
           .oa-steps .oa-step-text { font-size: 8px; }
-          .oa-switch-row-bottom { padding: 7px 10px; }
           .oa-card-contact { gap: 5px 10px; }
           .oa-card-contact a { font-size: 9.5px; }
         }
 
         @media (max-width: 480px) {
           .oa-segments { grid-template-columns: 1fr 1fr; }
-          .oa-why-grid { grid-template-columns: 1fr; }
           .oa-headline { font-size: 19px; }
           .oa-left { padding: 14px 16px; }
         }
@@ -827,66 +763,10 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* Outcomes */}
-              <div className="oa-outcomes-section">
-                <span className="oa-outcomes-label">{OUTCOME_DATA[activeSegment].label}</span>
-                <div className="oa-outcomes">
-                  {OUTCOME_DATA[activeSegment].items.map((item, idx) => (
-                    <div key={idx} className="oa-outcome">
-                      <i className="ti ti-circle-check" aria-hidden="true" />
-                      {item}
-                    </div>
-                  ))}
-                </div>
-              </div>
+              {/* Outcome — single line, swaps with segment */}
+              <p className="oa-outcome-line">{OUTCOME_LINE[activeSegment]}</p>
 
-              {/* Why Cards */}
-              <span className="oa-why-label">Why organizations choose OneAccounts</span>
-              <div className="oa-why-grid">
-                <div className="oa-why">
-                  <i className="ti ti-map-pin" aria-hidden="true" />
-                  <div>
-                    <div className="oa-why-title">Built for Pakistan</div>
-                    <div className="oa-why-desc">Local tax workflows — WHT, Sales Tax, and business processes designed for Pakistani organizations.</div>
-                  </div>
-                </div>
-                <div className="oa-why">
-                  <i className="ti ti-cash" aria-hidden="true" />
-                  <div>
-                    <div className="oa-why-title">Budget control built-in</div>
-                    <div className="oa-why-desc">Prevent overspending before it happens. PO approvals, budget engine, and real-time alerts included.</div>
-                  </div>
-                </div>
-                <div className="oa-why">
-                  <i className="ti ti-bolt" aria-hidden="true" />
-                  <div>
-                    <div className="oa-why-title">No implementation required</div>
-                    <div className="oa-why-desc">Sign up and start using immediately. Import your existing data via Excel or CSV.</div>
-                  </div>
-                </div>
-                <div className="oa-why">
-                  <i className="ti ti-dashboard" aria-hidden="true" />
-                  <div>
-                    <div className="oa-why-title">Real-time visibility</div>
-                    <div className="oa-why-desc">Monitor receivables, payables, donor balances, and project profitability on one dashboard.</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Switching from */}
-              <div className="oa-switch-row-bottom">
-                <span className="oa-switch-label">Switching from</span>
-                <span className="oa-switch-pill">Excel</span>
-                <span className="oa-switch-arrow">→</span>
-                <span className="oa-switch-pill">QuickBooks</span>
-                <span className="oa-switch-arrow">→</span>
-                <span className="oa-switch-pill">Odoo</span>
-                <span className="oa-switch-arrow">→</span>
-                <span className="oa-switch-pill">Zoho</span>
-                <span className="oa-switch-arrow">→</span>
-                <span className="oa-switch-pill">Manual accounting</span>
-                <span className="oa-switch-note">Import existing data in minutes.</span>
-              </div>
+              <div className="oa-left-spacer" />
 
               <div className="oa-footer-txt">© 2026 OneAccounts by Siqbal. All rights reserved.</div>
 
