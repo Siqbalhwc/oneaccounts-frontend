@@ -246,14 +246,10 @@ export default function LoginPage() {
           z-index: 2;
           display: flex;
           align-items: stretch;
-          gap: 0;
+          gap: 4px;
           width: 100%;
           max-width: 1140px;
           border-radius: 22px;
-          overflow: hidden;
-          box-shadow:
-            0 24px 70px rgba(0,0,0,0.55),
-            0 4px 16px rgba(0,0,0,0.35);
         }
 
         .oa-left {
@@ -262,6 +258,10 @@ export default function LoginPage() {
           backdrop-filter: blur(18px) saturate(1.4);
           -webkit-backdrop-filter: blur(18px) saturate(1.4);
           border: 1px solid rgba(255,255,255,0.10);
+          border-radius: 22px;
+          box-shadow:
+            0 24px 70px rgba(0,0,0,0.45),
+            0 4px 16px rgba(0,0,0,0.30);
           display: flex;
           flex-direction: column;
           padding: 30px 38px;
@@ -344,34 +344,13 @@ export default function LoginPage() {
         .oa-headline {
           font-size: 30px; font-weight: 800; color: white;
           line-height: 1.12; letter-spacing: -0.8px;
-          margin-bottom: 9px;
+          margin-bottom: 22px;
         }
         .oa-headline-grad {
           background: linear-gradient(90deg, #7DD3FC, #A5B4FC);
           -webkit-background-clip: text; -webkit-text-fill-color: transparent;
           background-clip: text;
         }
-        .oa-desc {
-          font-size: 13px; color: rgba(255,255,255,0.58);
-          line-height: 1.62; max-width: 480px; margin-bottom: 16px; font-weight: 400;
-        }
-
-        /* Trust Bar */
-        .oa-trust-bar {
-          display: flex; flex-wrap: wrap; align-items: center;
-          gap: 7px 16px;
-          padding: 11px 14px;
-          background: rgba(56,189,248,0.06);
-          border: 1px solid rgba(56,189,248,0.14);
-          border-radius: 10px;
-          margin-bottom: 20px;
-        }
-        .oa-trust-item {
-          display: flex; align-items: center; gap: 4px;
-          font-size: 10px; color: rgba(255,255,255,0.55); font-weight: 500;
-        }
-        .oa-trust-item i { font-size: 12px; color: #7DD3FC; }
-        .oa-trust-divider { width: 1px; height: 12px; background: rgba(255,255,255,0.1); }
 
         /* Segments */
         .oa-seg-label {
@@ -477,6 +456,11 @@ export default function LoginPage() {
           flex: 1;
           display: flex;
           background: linear-gradient(165deg, #f7f9ff 0%, #eef2fb 100%);
+          border-radius: 22px;
+          box-shadow:
+            0 24px 70px rgba(0,0,0,0.45),
+            0 4px 16px rgba(0,0,0,0.30);
+          overflow: hidden;
         }
 
         .oa-form-wrap {
@@ -493,7 +477,7 @@ export default function LoginPage() {
           height: 100%;
         }
         .oa-card-head {
-          padding: 28px 34px 16px;
+          padding: 32px 34px 18px;
           text-align: center;
           flex-shrink: 0;
         }
@@ -694,23 +678,20 @@ export default function LoginPage() {
 
         @media (max-width: 767px) {
           .oa-shell { padding: 0; align-items: flex-start; }
-          .oa-columns { flex-direction: column; max-width: 100%; border-radius: 0; }
+          .oa-columns { flex-direction: column; max-width: 100%; gap: 0; border-radius: 0; }
 
-          .oa-left { flex: unset; width: 100%; padding: 16px 18px; }
+          .oa-left { flex: unset; width: 100%; padding: 16px 18px; border-radius: 0; box-shadow: none; }
           .oa-left .oa-scroll { max-height: none; overflow-y: visible; }
           .oa-brand { margin-bottom: 8px; }
           .oa-brand-logo { width: 32px; height: 32px; }
           .oa-brand-name { font-size: 16px; }
           .oa-brand-sub { font-size: 9px; }
           .oa-headline { font-size: 21px; }
-          .oa-desc { font-size: 11.5px; }
-          .oa-trust-bar { gap: 4px 10px; padding: 7px 10px; }
-          .oa-trust-item { font-size: 9px; }
           .oa-segments { grid-template-columns: repeat(2, 1fr); }
           .oa-why-grid { grid-template-columns: 1fr; }
           .oa-glow, .oa-glow2, .oa-dots { display: none; }
 
-          .oa-right { padding: 0; flex: unset; }
+          .oa-right { padding: 0; flex: unset; border-radius: 0; box-shadow: none; }
           .oa-card-head, .oa-card-body, .oa-card-foot { padding-left: 18px; padding-right: 18px; }
           .oa-card-head { padding-top: 22px; }
           .oa-steps .oa-step-text { font-size: 8px; }
@@ -730,7 +711,6 @@ export default function LoginPage() {
           .oa-columns { max-width: 1220px; }
           .oa-left { padding: 38px 50px; }
           .oa-headline { font-size: 38px; }
-          .oa-desc { font-size: 14px; }
         }
 
         @media (min-width: 1920px) {
@@ -810,23 +790,6 @@ export default function LoginPage() {
                   Control Your Finances.<br />
                   <span className="oa-headline-grad">Grow Your Organization.</span>
                 </div>
-                <div className="oa-desc">
-                  Complete double-entry accounting, invoicing, inventory &amp; financial
-                  reporting — purpose-built for Pakistani businesses.
-                </div>
-              </div>
-
-              {/* Trust Bar */}
-              <div className="oa-trust-bar">
-                <span className="oa-trust-item"><i className="ti ti-lock" aria-hidden="true"></i>256-bit SSL</span>
-                <span className="oa-trust-divider" />
-                <span className="oa-trust-item"><i className="ti ti-cloud" aria-hidden="true"></i>Secure cloud</span>
-                <span className="oa-trust-divider" />
-                <span className="oa-trust-item"><i className="ti ti-file-description" aria-hidden="true"></i>Audit logs</span>
-                <span className="oa-trust-divider" />
-                <span className="oa-trust-item"><i className="ti ti-map-pin" aria-hidden="true"></i>Built for Pakistan</span>
-                <span className="oa-trust-divider" />
-                <span className="oa-trust-item"><i className="ti ti-book" aria-hidden="true"></i>Double-entry</span>
               </div>
 
               {/* Segments */}
