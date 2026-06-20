@@ -4,17 +4,7 @@ import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { Eye, EyeOff } from "lucide-react"
 
-// ── Data ──
-const PILLS = [
-  "Journal Entries", "Sales & Purchase", "Balance Sheet",
-  "Customers & Vendors", "PKR Native", "100% Cloud",
-]
-const STATS = [
-  { value: "14+",  label: "Modules"   },
-  { value: "100%", label: "Cloud"     },
-  { value: "PKR",  label: "Currency"  },
-  { value: "Live", label: "Real-time" },
-]
+// ── Login page for OneAccounts ──
 
 // ── Segment Outcome Data ──
 const OUTCOME_DATA = {
@@ -156,7 +146,7 @@ export default function LoginPage() {
           min-height: 100dvh;
           align-items: center;
           justify-content: center;
-          padding: 24px 20px;
+          padding: 24px;
           position: relative;
           overflow: hidden;
           background: #060F38;
@@ -258,7 +248,7 @@ export default function LoginPage() {
           align-items: stretch;
           gap: 0;
           width: 100%;
-          max-width: 1080px;
+          max-width: 1140px;
           border-radius: 22px;
           overflow: hidden;
           box-shadow:
@@ -267,7 +257,7 @@ export default function LoginPage() {
         }
 
         .oa-left {
-          flex: 1.55;
+          flex: 1.85;
           background: rgba(8, 20, 74, 0.86);
           backdrop-filter: blur(18px) saturate(1.4);
           -webkit-backdrop-filter: blur(18px) saturate(1.4);
@@ -313,7 +303,7 @@ export default function LoginPage() {
         .oa-brand {
           display: flex; align-items: center; gap: 14px;
           position: relative; z-index: 2;
-          margin-bottom: 14px;
+          margin-bottom: 18px;
         }
         .oa-brand-logo {
           width: 46px; height: 46px;
@@ -333,7 +323,7 @@ export default function LoginPage() {
           background: rgba(56,189,248,0.12);
           border: 1px solid rgba(56,189,248,0.28);
           border-radius: 100px; padding: 4px 13px;
-          margin-bottom: 12px; width: fit-content;
+          margin-bottom: 16px; width: fit-content;
         }
         .oa-badge-dot {
           width: 6px; height: 6px; border-radius: 50%; background: #38BDF8;
@@ -349,7 +339,6 @@ export default function LoginPage() {
           font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
           text-transform: uppercase; color: #BAE6FD;
         }
-
         /* Hero */
         .oa-hero { position: relative; z-index: 2; }
         .oa-headline {
@@ -364,25 +353,18 @@ export default function LoginPage() {
         }
         .oa-desc {
           font-size: 13px; color: rgba(255,255,255,0.58);
-          line-height: 1.62; max-width: 460px; margin-bottom: 13px; font-weight: 400;
-        }
-        .oa-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 13px; }
-        .oa-pill {
-          background: rgba(255,255,255,0.08);
-          border: 1px solid rgba(255,255,255,0.15);
-          border-radius: 8px; padding: 4px 10px;
-          font-size: 10px; color: rgba(255,255,255,0.82); font-weight: 500;
+          line-height: 1.62; max-width: 480px; margin-bottom: 16px; font-weight: 400;
         }
 
         /* Trust Bar */
         .oa-trust-bar {
           display: flex; flex-wrap: wrap; align-items: center;
-          gap: 6px 14px;
-          padding: 9px 12px;
+          gap: 7px 16px;
+          padding: 11px 14px;
           background: rgba(56,189,248,0.06);
           border: 1px solid rgba(56,189,248,0.14);
           border-radius: 10px;
-          margin-bottom: 16px;
+          margin-bottom: 20px;
         }
         .oa-trust-item {
           display: flex; align-items: center; gap: 4px;
@@ -399,7 +381,7 @@ export default function LoginPage() {
         }
         .oa-segments {
           display: grid; grid-template-columns: repeat(4, 1fr);
-          gap: 7px; margin-bottom: 14px;
+          gap: 8px; margin-bottom: 18px;
         }
         .oa-seg {
           background: rgba(255,255,255,0.045);
@@ -432,49 +414,29 @@ export default function LoginPage() {
         .oa-seg.coming .oa-seg-icon i { color: rgba(255,255,255,0.2); }
 
         /* Outcomes */
-        .oa-outcomes-section { margin-bottom: 14px; }
+        .oa-outcomes-section { margin-bottom: 20px; }
         .oa-outcomes-label {
           font-size: 10px; color: rgba(255,255,255,0.42);
           font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
-          margin-bottom: 6px; display: block;
+          margin-bottom: 8px; display: block;
         }
-        .oa-outcomes { display: flex; flex-direction: column; gap: 4px; }
+        .oa-outcomes { display: flex; flex-direction: column; gap: 6px; }
         .oa-outcome {
           display: flex; align-items: flex-start; gap: 7px;
-          font-size: 11.5px; color: rgba(255,255,255,0.64); line-height: 1.5;
+          font-size: 12px; color: rgba(255,255,255,0.66); line-height: 1.55;
         }
         .oa-outcome i { color: #4ADE80; font-size: 13px; margin-top: 1px; flex-shrink: 0; }
-
-        /* Stats */
-        .oa-stats {
-          border-top: 1px solid rgba(255,255,255,0.09);
-          border-bottom: 1px solid rgba(255,255,255,0.09);
-          padding: 12px 0; margin-bottom: 14px;
-          display: grid; grid-template-columns: repeat(4, 1fr);
-        }
-        .oa-stat { padding-right: 12px; }
-        .oa-stat + .oa-stat { padding-left: 12px; border-left: 1px solid rgba(255,255,255,0.07); }
-        .oa-stat-val {
-          font-size: 19px; font-weight: 800; line-height: 1;
-          background: linear-gradient(90deg, #ffffff, #BAE6FD);
-          -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-          background-clip: text;
-        }
-        .oa-stat-lbl {
-          font-size: 8.5px; color: rgba(255,255,255,0.34);
-          text-transform: uppercase; letter-spacing: 0.10em; margin-top: 3px;
-        }
 
         /* Why Cards */
         .oa-why-label {
           font-size: 10px; color: rgba(255,255,255,0.42);
           font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
-          margin-bottom: 7px; display: block;
+          margin-bottom: 9px; display: block;
         }
-        .oa-why-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 14px; }
+        .oa-why-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 18px; }
         .oa-why {
-          display: flex; align-items: flex-start; gap: 8px;
-          padding: 9px 10px;
+          display: flex; align-items: flex-start; gap: 9px;
+          padding: 12px 13px;
           background: rgba(255,255,255,0.04);
           border-left: 2.5px solid #38BDF8;
           border-top: 0.5px solid rgba(255,255,255,0.06);
@@ -482,9 +444,9 @@ export default function LoginPage() {
           border-bottom: 0.5px solid rgba(255,255,255,0.06);
           border-radius: 0 8px 8px 0;
         }
-        .oa-why i { font-size: 14px; color: #7DD3FC; flex-shrink: 0; margin-top: 1px; }
-        .oa-why-title { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.88); }
-        .oa-why-desc { font-size: 9px; color: rgba(255,255,255,0.38); line-height: 1.4; }
+        .oa-why i { font-size: 15px; color: #7DD3FC; flex-shrink: 0; margin-top: 1px; }
+        .oa-why-title { font-size: 11.5px; font-weight: 700; color: rgba(255,255,255,0.88); margin-bottom: 2px; }
+        .oa-why-desc { font-size: 9.5px; color: rgba(255,255,255,0.4); line-height: 1.45; }
 
         .oa-switch-row-bottom {
           display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
@@ -540,6 +502,7 @@ export default function LoginPage() {
           flex: 1;
           display: flex;
           flex-direction: column;
+          justify-content: center;
         }
         .oa-card-foot {
           padding: 16px 34px 18px;
@@ -671,28 +634,6 @@ export default function LoginPage() {
           font-size: 12px; color: #15803D; margin-bottom: 12px;
         }
 
-        /* Spacer pushes urgency banner + steps to the bottom of the card,
-           eliminating dead white space without it floating outside the card */
-        .oa-spacer { flex: 1; }
-
-        /* Steps — inside the card, above the foot */
-        .oa-steps-block { padding: 0 0 14px; }
-        .oa-steps-label {
-          font-size: 9px; color: #94A3B8;
-          font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
-          text-align: center; margin-bottom: 8px;
-        }
-        .oa-steps { display: flex; align-items: center; gap: 0; }
-        .oa-step { display: flex; align-items: center; gap: 6px; flex: 1; }
-        .oa-step-num {
-          width: 20px; height: 20px; border-radius: 50%;
-          background: linear-gradient(135deg, #1740C8, #0B1C6E);
-          display: flex; align-items: center; justify-content: center;
-          font-size: 9px; font-weight: 700; color: #fff; flex-shrink: 0;
-        }
-        .oa-step-text { font-size: 9.5px; color: #64748B; font-weight: 600; white-space: nowrap; }
-        .oa-step-line { flex: 1; height: 1px; background: #E3E8F5; margin: 0 4px; }
-
         /* Urgency banner — inside the card body, not floating below it */
         .oa-urgency {
           display: flex; align-items: center; gap: 7px;
@@ -701,9 +642,27 @@ export default function LoginPage() {
           border-radius: 9px;
           padding: 8px 13px;
           font-size: 10.5px; color: #92400E; font-weight: 600;
+          margin-top: 22px;
           margin-bottom: 14px;
         }
         .oa-urgency i { font-size: 14px; color: #D97706; flex-shrink: 0; }
+
+        .oa-steps-block { padding: 0 0 14px; }
+        .oa-steps-label {
+          font-size: 9px; color: #94A3B8;
+          font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
+          text-align: center; margin-bottom: 8px;
+        }
+        .oa-steps { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+        .oa-step { display: flex; align-items: center; gap: 6px; }
+        .oa-step-num {
+          width: 20px; height: 20px; border-radius: 50%;
+          background: linear-gradient(135deg, #1740C8, #0B1C6E);
+          display: flex; align-items: center; justify-content: center;
+          font-size: 9px; font-weight: 700; color: #fff; flex-shrink: 0;
+        }
+        .oa-step-text { font-size: 9.5px; color: #64748B; font-weight: 600; white-space: nowrap; }
+        .oa-step-arrow { color: #94A3B8; font-size: 13px; flex-shrink: 0; }
 
         /* Card Foot — single contact set, no duplication */
         .oa-card-contact {
@@ -745,14 +704,10 @@ export default function LoginPage() {
           .oa-brand-sub { font-size: 9px; }
           .oa-headline { font-size: 21px; }
           .oa-desc { font-size: 11.5px; }
-          .oa-pills { gap: 4px; }
-          .oa-pill { font-size: 9px; padding: 3px 7px; }
           .oa-trust-bar { gap: 4px 10px; padding: 7px 10px; }
           .oa-trust-item { font-size: 9px; }
           .oa-segments { grid-template-columns: repeat(2, 1fr); }
           .oa-why-grid { grid-template-columns: 1fr; }
-          .oa-stats { grid-template-columns: repeat(2, 1fr); }
-          .oa-stat + .oa-stat { border-left: none; padding-left: 0; }
           .oa-glow, .oa-glow2, .oa-dots { display: none; }
 
           .oa-right { padding: 0; flex: unset; }
@@ -767,7 +722,6 @@ export default function LoginPage() {
         @media (max-width: 480px) {
           .oa-segments { grid-template-columns: 1fr 1fr; }
           .oa-why-grid { grid-template-columns: 1fr; }
-          .oa-stats { grid-template-columns: 1fr 1fr; }
           .oa-headline { font-size: 19px; }
           .oa-left { padding: 14px 16px; }
         }
@@ -788,7 +742,6 @@ export default function LoginPage() {
           .oa-title { font-size: 25px; }
           .oa-btn, .oa-trial-btn { height: 50px; font-size: 15px; }
           .oa-input { height: 48px; font-size: 14px; }
-          .oa-stat-val { font-size: 26px; }
         }
       `}</style>
 
@@ -861,11 +814,6 @@ export default function LoginPage() {
                   Complete double-entry accounting, invoicing, inventory &amp; financial
                   reporting — purpose-built for Pakistani businesses.
                 </div>
-                <div className="oa-pills">
-                  {PILLS.map((p) => (
-                    <span key={p} className="oa-pill">{p}</span>
-                  ))}
-                </div>
               </div>
 
               {/* Trust Bar */}
@@ -927,16 +875,6 @@ export default function LoginPage() {
                     </div>
                   ))}
                 </div>
-              </div>
-
-              {/* Stats */}
-              <div className="oa-stats">
-                {STATS.map((s) => (
-                  <div key={s.label} className="oa-stat">
-                    <div className="oa-stat-val">{s.value}</div>
-                    <div className="oa-stat-lbl">{s.label}</div>
-                  </div>
-                ))}
               </div>
 
               {/* Why Cards */}
@@ -1122,9 +1060,6 @@ export default function LoginPage() {
                   </a>
                   <p className="oa-trial-note">No credit card required. Create your company in seconds.</p>
 
-                  {/* Spacer absorbs leftover height so nothing floats outside the card */}
-                  <div className="oa-spacer" />
-
                   {/* Urgency banner — now inside the card, not floating below it */}
                   <div className="oa-urgency">
                     <i className="ti ti-clock" aria-hidden="true" />
@@ -1139,12 +1074,12 @@ export default function LoginPage() {
                         <div className="oa-step-num">1</div>
                         <span className="oa-step-text">Sign up free</span>
                       </div>
-                      <div className="oa-step-line" />
+                      <span className="oa-step-arrow">→</span>
                       <div className="oa-step">
                         <div className="oa-step-num">2</div>
                         <span className="oa-step-text">Import your data</span>
                       </div>
-                      <div className="oa-step-line" />
+                      <span className="oa-step-arrow">→</span>
                       <div className="oa-step">
                         <div className="oa-step-num">3</div>
                         <span className="oa-step-text">Go live today</span>
