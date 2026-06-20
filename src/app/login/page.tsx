@@ -787,8 +787,8 @@ export default function LoginPage() {
               {/* Hero */}
               <div className="oa-hero">
                 <div className="oa-headline">
-                  Smart Accounting,<br />
-                  <span className="oa-headline-grad">Stronger Business.</span>
+                  Control Your Finances.<br />
+                  <span className="oa-headline-grad">Grow Your Organization.</span>
                 </div>
               </div>
 
