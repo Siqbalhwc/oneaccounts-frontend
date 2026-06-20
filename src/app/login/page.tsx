@@ -11,12 +11,12 @@ const OUTCOME_LINE = {
   service: "Bill clients accurately and see project profitability the moment it changes.",
 }
 
-// ── Dashboard Screenshot Paths (local public folder) ──
+// ── Dashboard Screenshot Paths ──
 const DASHBOARD_IMAGES = {
   ngo: "/screenshots/ngo-dashboard.png",
   trading: "/screenshots/trading-dashboard.png",
-  service: "/screenshots/trading-dashboard.png", // Service shares trading dashboard
-  manufacturing: null, // Coming soon
+  service: "/screenshots/trading-dashboard.png",
+  manufacturing: null,
 }
 
 export default function LoginPage() {
@@ -384,13 +384,18 @@ export default function LoginPage() {
           margin-bottom: 8px;
         }
 
-        /* ── How It Works (Left Column) ── */
+        /* ── How It Works (Left Column - Horizontal Row) ── */
         .oa-left-steps {
           margin-top: 16px;
-          padding: 14px 18px;
+          padding: 12px 18px;
           background: rgba(255,255,255,0.04);
           border: 1px solid rgba(255,255,255,0.08);
           border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 6px;
         }
         .oa-left-steps-title {
           font-size: 10px;
@@ -398,22 +403,22 @@ export default function LoginPage() {
           font-weight: 700;
           text-transform: uppercase;
           letter-spacing: 1px;
-          margin-bottom: 8px;
+          margin-right: 8px;
+          white-space: nowrap;
         }
         .oa-left-step {
           display: flex;
           align-items: center;
-          gap: 10px;
-          font-size: 12.5px;
+          gap: 6px;
+          font-size: 12px;
           color: rgba(255,255,255,0.80);
-          margin-bottom: 4px;
           font-weight: 500;
+          white-space: nowrap;
         }
-        .oa-left-step:last-child { margin-bottom: 0; }
         .oa-left-step-num {
           font-weight: 700;
           color: rgba(147,197,253,0.7);
-          font-size: 13px;
+          font-size: 12px;
         }
         .oa-left-step-arrow {
           color: rgba(255,255,255,0.15);
@@ -619,6 +624,53 @@ export default function LoginPage() {
           font-size: 12px; color: #15803D; margin-bottom: 12px;
         }
 
+        /* ── NEW: Exciting Addons ── */
+        .oa-addons {
+          margin-top: 18px;
+          padding: 14px 16px;
+          background: linear-gradient(135deg, rgba(56,189,248,0.06), rgba(99,102,241,0.04));
+          border: 1px solid rgba(56,189,248,0.12);
+          border-radius: 12px;
+        }
+        .oa-addons-title {
+          font-size: 10px;
+          color: #64748B;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.8px;
+          text-align: center;
+          margin-bottom: 10px;
+        }
+        .oa-addons-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 6px;
+        }
+        .oa-addon-item {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 10px;
+          background: rgba(255,255,255,0.6);
+          border-radius: 8px;
+          border: 1px solid rgba(255,255,255,0.8);
+          font-size: 11px;
+          font-weight: 600;
+          color: #1E293B;
+          transition: all 0.15s;
+        }
+        .oa-addon-item:hover {
+          background: white;
+          border-color: #38BDF8;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+        }
+        .oa-addon-item i {
+          font-size: 14px;
+          color: #38BDF8;
+          flex-shrink: 0;
+        }
+
         /* ── Card Foot Contact ── */
         .oa-card-contact {
           display: flex; flex-wrap: wrap; justify-content: center;
@@ -668,15 +720,18 @@ export default function LoginPage() {
           .oa-card-head { padding-top: 22px; }
           .oa-card-contact { gap: 5px 10px; }
           .oa-card-contact a { font-size: 9.5px; }
-          .oa-left-steps { padding: 12px 14px; }
-          .oa-left-step { font-size: 11.5px; }
+          .oa-left-steps { padding: 10px 14px; flex-direction: column; align-items: flex-start; gap: 4px; }
+          .oa-left-step { font-size: 11px; }
           .oa-demo { margin-top: 12px; }
+          .oa-addons-grid { grid-template-columns: 1fr 1fr; }
+          .oa-addon-item { font-size: 10px; padding: 4px 8px; }
         }
 
         @media (max-width: 480px) {
           .oa-segments { grid-template-columns: 1fr 1fr; }
           .oa-headline { font-size: 19px; }
           .oa-left { padding: 14px 16px; }
+          .oa-addons-grid { grid-template-columns: 1fr; }
         }
 
         @media (min-width: 1400px) {
@@ -802,22 +857,19 @@ export default function LoginPage() {
               {/* Outcome */}
               <p className="oa-outcome-line">{OUTCOME_LINE[activeSegment]}</p>
 
-              {/* ── How It Works ── */}
+              {/* ── How It Works (Horizontal Row) ── */}
               <div className="oa-left-steps">
-                <div className="oa-left-steps-title">How It Works</div>
+                <span className="oa-left-steps-title">How It Works</span>
                 <div className="oa-left-step">
-                  <span className="oa-left-step-num">①</span>
-                  Sign up free
-                  <span className="oa-left-step-arrow">→</span>
+                  <span className="oa-left-step-num">①</span> Sign up free
                 </div>
+                <span className="oa-left-step-arrow">→</span>
                 <div className="oa-left-step">
-                  <span className="oa-left-step-num">②</span>
-                  Import your data
-                  <span className="oa-left-step-arrow">→</span>
+                  <span className="oa-left-step-num">②</span> Import your data
                 </div>
+                <span className="oa-left-step-arrow">→</span>
                 <div className="oa-left-step">
-                  <span className="oa-left-step-num">③</span>
-                  Go live today
+                  <span className="oa-left-step-num">③</span> Go live today
                 </div>
               </div>
 
@@ -966,6 +1018,29 @@ export default function LoginPage() {
                     🚀 Start Free Trial (10 days · Professional Plan)
                   </a>
                   <p className="oa-trial-note">No credit card required. Create your company in seconds.</p>
+
+                  {/* ── NEW: Exciting Addons ── */}
+                  <div className="oa-addons">
+                    <div className="oa-addons-title">✨ Exciting Addons</div>
+                    <div className="oa-addons-grid">
+                      <div className="oa-addon-item">
+                        <i className="ti ti-brand-whatsapp" aria-hidden="true"></i>
+                        WhatsApp Integration
+                      </div>
+                      <div className="oa-addon-item">
+                        <i className="ti ti-box" aria-hidden="true"></i>
+                        Fixed Assets
+                      </div>
+                      <div className="oa-addon-item">
+                        <i className="ti ti-shopping-cart" aria-hidden="true"></i>
+                        Purchase Order
+                      </div>
+                      <div className="oa-addon-item">
+                        <i className="ti ti-settings" aria-hidden="true"></i>
+                        User Gadgets
+                      </div>
+                    </div>
+                  </div>
 
                 </div>
 
