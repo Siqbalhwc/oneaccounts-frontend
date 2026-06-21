@@ -209,7 +209,6 @@ function NewInvoicePageContent() {
     (c.phone || "").includes(customerSearch)
   )
 
-  // ── FIX: Add missing customer selection functions ──
   const selectCustomer = (c: any) => {
     setCustomerId(c.id)
     setSelectedCustomer(c)
@@ -223,7 +222,6 @@ function NewInvoicePageContent() {
     setCustomerSearch("")
     setShowCustomerList(true)
   }
-  // ──────────────────────────────────────────────
 
   const filteredProducts = products.filter((p: any) =>
     p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
@@ -565,12 +563,8 @@ function NewInvoicePageContent() {
     ? "30px 150px 3fr 80px 110px 80px minmax(130px, 1fr) minmax(130px, 1fr) minmax(130px, 1fr) 50px"
     : "30px 150px 3fr 80px 110px minmax(130px, 1fr) minmax(130px, 1fr) 50px"
 
-  // Mobile grid columns based on taxEnabled
-  const mobileGridCols = taxEnabled
-    ? "24px 1fr 44px 64px 50px 60px 30px"
-    : "24px 1fr 44px 64px 56px 30px"
-
-  const mobileMinWidth = taxEnabled ? "380px" : "280px"
+  // ── Mobile grid: removed tax columns, Total and Item both use 1fr ──
+  const mobileGridCols = "24px 1fr 44px 64px 1fr 34px"
 
   return (
     <div className="invoice-page" style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -670,7 +664,7 @@ function NewInvoicePageContent() {
             color: var(--text-muted);
             padding-bottom: 4px;
             align-items: end;
-            min-width: ${mobileMinWidth};
+            min-width: 280px;
           }
           .mobile-item-header span {
             display: flex;
@@ -685,7 +679,7 @@ function NewInvoicePageContent() {
             align-items: center;
             padding: 4px 0;
             border-bottom: 1px solid var(--border);
-            min-width: ${mobileMinWidth};
+            min-width: 280px;
           }
           .mobile-item-row input,
           .mobile-item-row .mobile-cell-value {
@@ -726,19 +720,26 @@ function NewInvoicePageContent() {
             justify-content: flex-end;
             font-weight: 600;
           }
-          .mobile-tax-rate {
-            font-size: 10px;
-            font-weight: 600;
-            color: var(--text-muted);
-            text-align: center;
+
+          /* ── Delete button – never wrap ── */
+          .mobile-delete-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #EF4444;
+            padding: 2px;
+            display: flex;
+            align-items: center;
             justify-content: center;
+            flex-shrink: 0;
+            white-space: nowrap;
+            width: 100%;
+            min-width: 30px;
           }
-          .mobile-tax-amount {
-            font-size: 11px;
-            font-weight: 600;
-            color: var(--text-muted);
-            text-align: right;
-            justify-content: flex-end;
+          .mobile-delete-btn svg {
+            width: 14px;
+            height: 14px;
+            flex-shrink: 0;
           }
 
           .mobile-sticky-summary {
@@ -951,15 +952,13 @@ function NewInvoicePageContent() {
                   ))}
                 </div>
 
-                {/* ── Mobile items (with horizontal scroll and tax columns) ── */}
+                {/* ── Mobile items (no tax columns, Total equal to Item) ── */}
                 <div className="mobile-only mobile-items-scroll">
                   <div className="mobile-item-header">
                     <span></span>
                     <span>Item</span>
                     <span>Qty</span>
                     <span>Price</span>
-                    {taxEnabled && <span>Tax %</span>}
-                    {taxEnabled && <span>Tax Amt</span>}
                     <span>Total</span>
                     <span></span>
                   </div>
@@ -971,18 +970,8 @@ function NewInvoicePageContent() {
                       <div className="mobile-cell-value">{item.product_name || item.description || "—"}</div>
                       <input className="inv-input" type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} style={{ textAlign: "center" }} />
                       <input className="inv-input" type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} style={{ textAlign: "right" }} />
-                      {taxEnabled && (
-                        <span className="mobile-cell-value mobile-tax-rate">
-                          {item.tax_rate > 0 ? `${item.tax_rate}%` : "—"}
-                        </span>
-                      )}
-                      {taxEnabled && (
-                        <span className="mobile-cell-value mobile-tax-amount">
-                          {item.tax_amount > 0 ? `PKR ${item.tax_amount.toLocaleString()}` : "—"}
-                        </span>
-                      )}
                       <div className="mobile-cell-value mobile-total-box">PKR {item.total.toLocaleString()}</div>
-                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}><Trash2 size={14} /></button>
+                      <button className="mobile-delete-btn" onClick={() => removeItem(idx)}><Trash2 size={14} /></button>
                     </div>
                   ))}
                 </div>
