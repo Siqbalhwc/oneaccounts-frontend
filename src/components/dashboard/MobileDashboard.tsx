@@ -13,7 +13,6 @@ function formatPKR(v: number): string {
   return `PKR ${abs.toLocaleString()}`
 }
 
-// ── Monthly profit interface ──
 interface MonthlyProfit {
   month: string
   profit: number
@@ -91,7 +90,10 @@ export default function MobileDashboard({
   }, [companyId])
 
   const grossProfit = revenueTotal - expenseTotal
-  const maxProfit = Math.max(...monthlyProfit.map((m) => Math.abs(m.profit)), 1)
+
+  // ── NEW: Get only the last 6 months for mobile ──
+  const last6Months = monthlyProfit.slice(-6)
+  const maxProfit = Math.max(...last6Months.map((m) => Math.abs(m.profit)), 1)
 
   if (loading) {
     return (
@@ -223,8 +225,8 @@ export default function MobileDashboard({
         ))}
       </div>
 
-      {/* ── Monthly Profit Trend Graph ── */}
-      {monthlyProfit.length > 0 ? (
+      {/* ── Monthly Profit Trend Graph (Last 6 Months) ── */}
+      {last6Months.length > 0 ? (
         <div
           style={{
             background: "var(--card)",
@@ -243,10 +245,10 @@ export default function MobileDashboard({
             }}
           >
             <span style={{ fontWeight: 700, fontSize: "0.9rem", color: "var(--text)" }}>
-              📊 Monthly Profit Trend
+              📊 Monthly Profit (Last 6 Months)
             </span>
             <span style={{ fontSize: "0.6rem", color: "var(--text-muted)" }}>
-              {monthlyProfit.length} months
+              {last6Months.length} months
             </span>
           </div>
 
@@ -258,10 +260,10 @@ export default function MobileDashboard({
                 gap: "10px",
                 height: "140px",
                 padding: "0 4px",
-                minWidth: `${Math.max(monthlyProfit.length * 50, 280)}px`,
+                minWidth: `${Math.max(last6Months.length * 50, 280)}px`,
               }}
             >
-              {monthlyProfit.map((m, i) => {
+              {last6Months.map((m, i) => {
                 const barHeight = maxProfit > 0 ? (Math.abs(m.profit) / maxProfit) * 110 + 6 : 6
                 const isNegative = m.profit < 0
 
@@ -315,7 +317,7 @@ export default function MobileDashboard({
           </div>
 
           {/* ── Summary Stats ── */}
-          {monthlyProfit.length > 0 && (
+          {last6Months.length > 0 && (
             <div
               style={{
                 display: "flex",
@@ -334,7 +336,7 @@ export default function MobileDashboard({
                 📈 Best:{" "}
                 <strong style={{ color: "var(--text)" }}>
                   {
-                    monthlyProfit.reduce((a, b) => (a.profit > b.profit ? a : b))
+                    last6Months.reduce((a, b) => (a.profit > b.profit ? a : b))
                       .month
                   }
                 </strong>
@@ -343,7 +345,7 @@ export default function MobileDashboard({
                 📉 Worst:{" "}
                 <strong style={{ color: "var(--text)" }}>
                   {
-                    monthlyProfit.reduce((a, b) => (a.profit < b.profit ? a : b))
+                    last6Months.reduce((a, b) => (a.profit < b.profit ? a : b))
                       .month
                   }
                 </strong>
@@ -352,8 +354,8 @@ export default function MobileDashboard({
                 📊 Avg:{" "}
                 <strong style={{ color: "var(--text)" }}>
                   {formatPKR(
-                    monthlyProfit.reduce((s, m) => s + m.profit, 0) /
-                      monthlyProfit.length
+                    last6Months.reduce((s, m) => s + m.profit, 0) /
+                      last6Months.length
                   )}
                 </strong>
               </span>
