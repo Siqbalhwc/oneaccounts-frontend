@@ -6,17 +6,17 @@ import { createBrowserClient } from "@supabase/ssr"
 import { useCompany } from "@/contexts/CompanyContext"
 import { useTheme } from "@/contexts/ThemeContext"
 
+function formatPKR(v: number): string {
+  const abs = Math.abs(v)
+  if (abs >= 1_000_000) return `PKR ${(abs / 1_000_000).toFixed(1)}M`
+  if (abs >= 1_000) return `PKR ${(abs / 1_000).toFixed(1)}K`
+  return `PKR ${abs.toLocaleString()}`
+}
+
+// ── Monthly profit interface ──
 interface MonthlyProfit {
   month: string
   profit: number
-}
-
-function formatPKR(v: number): string {
-  const sign = v < 0 ? "-" : ""
-  const abs = Math.abs(v)
-  if (abs >= 1_000_000) return `${sign}PKR ${(abs / 1_000_000).toFixed(1)}M`
-  if (abs >= 1_000) return `${sign}PKR ${(abs / 1_000).toFixed(1)}K`
-  return `${sign}PKR ${abs.toLocaleString()}`
 }
 
 export default function MobileDashboard({
@@ -46,6 +46,7 @@ export default function MobileDashboard({
   const [totalPayables, setTotalPayables] = useState(0)
   const [monthlyProfit, setMonthlyProfit] = useState<MonthlyProfit[]>([])
 
+  // ── Greeting & User name ──
   useEffect(() => {
     const h = new Date().getHours()
     setGreeting(h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening")
@@ -62,6 +63,7 @@ export default function MobileDashboard({
     })
   }, [])
 
+  // ── Dashboard metrics ──
   useEffect(() => {
     if (!companyId) return
     const fetchData = async () => {
@@ -69,8 +71,6 @@ export default function MobileDashboard({
       try {
         const { data, error } = await supabase.rpc("get_dashboard_metrics", {
           p_company_id: companyId,
-          p_date_from: null,
-          p_date_to: null,
         })
 
         if (!error && data) {
@@ -296,7 +296,6 @@ export default function MobileDashboard({
                           : "linear-gradient(180deg, #6366f1, #818cf8)",
                         borderRadius: "4px 4px 0 0",
                         minHeight: "4px",
-                        transition: "height 0.3s ease",
                       }}
                     />
                     <div
