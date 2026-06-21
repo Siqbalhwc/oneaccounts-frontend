@@ -6,6 +6,7 @@ import { ArrowLeft, Download, Search, X, Check } from "lucide-react"
 import { useRouter } from "next/navigation"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
+import { useCompany } from "@/contexts/CompanyContext"
 
 interface AgingRow {
   supplierName: string
@@ -23,10 +24,11 @@ interface AgingRow {
 
 export default function APAgingPage() {
   const router = useRouter()
+  const { companyId } = useCompany()
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+
   const [data, setData] = useState<AgingRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [companyId, setCompanyId] = useState("")
 
   const today = new Date().toISOString().split("T")[0]
   const [asOfDate, setAsOfDate] = useState(today)
@@ -36,13 +38,7 @@ export default function APAgingPage() {
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(false)
   const supplierDropdownRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      const cid = (user?.app_metadata as any)?.company_id
-      if (cid) setCompanyId(cid)
-    })
-  }, [])
-
+  // Fetch suppliers list
   useEffect(() => {
     if (!companyId) return
     supabase
@@ -54,8 +50,12 @@ export default function APAgingPage() {
       .then(({ data }) => data && setSuppliers(data))
   }, [companyId])
 
+  // Fetch invoices when filters change
   useEffect(() => {
-    if (!companyId) return
+    if (!companyId) {
+      setLoading(false)
+      return
+    }
     setLoading(true)
 
     let query = supabase
@@ -70,8 +70,16 @@ export default function APAgingPage() {
       query = query.in("party_id", selectedSupplierIds)
     }
 
-    query.then(({ data: invoices }) => {
-      if (!invoices) {
+    query.then(({ data: invoices, error }) => {
+      if (error) {
+        console.error("AP Aging query error:", error)
+        setData([])
+        setLoading(false)
+        return
+      }
+      console.log(`AP Aging: ${invoices?.length || 0} unpaid purchase invoices found`)
+
+      if (!invoices || invoices.length === 0) {
         setData([])
         setLoading(false)
         return
@@ -106,6 +114,7 @@ export default function APAgingPage() {
         })
         .filter(Boolean) as AgingRow[]
 
+      // Group by supplier
       const grouped: AgingRow[] = []
       let currentSuppId = -1
       let subCurrent = 0, sub1to30 = 0, sub31to60 = 0, sub61to90 = 0, subOver90 = 0, subTotal = 0
@@ -158,6 +167,7 @@ export default function APAgingPage() {
     })
   }, [companyId, asOfDate, selectedSupplierIds])
 
+  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (supplierDropdownRef.current && !supplierDropdownRef.current.contains(e.target as Node)) {
@@ -193,6 +203,7 @@ export default function APAgingPage() {
   }
 
   const handleDownloadPDF = () => {
+    if (data.length === 0) return alert("No data to export")
     const doc = new jsPDF({ orientation: "landscape" })
     doc.setFontSize(16)
     doc.text("AP Aging Report", 14, 20)
@@ -237,7 +248,8 @@ export default function APAgingPage() {
 
   const format = (v: number) => v ? `PKR ${v.toLocaleString()}` : "–"
 
-  if (loading && data.length === 0) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>Loading AP Aging…</div>
+  if (!companyId) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading company…</div>
+  if (loading && data.length === 0) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading AP Aging…</div>
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
