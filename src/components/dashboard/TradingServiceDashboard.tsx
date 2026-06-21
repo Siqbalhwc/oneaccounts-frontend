@@ -1,4 +1,4 @@
-"use client"
+ "use client"
 
 import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
@@ -835,20 +835,40 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           .tsd .two-col { grid-template-columns: 1fr; gap: 16px; }
           .customer-name { max-width: 140px; }
         }
+
+        /* ── MOBILE FIX: Show all 6 action buttons ── */
         @media (max-width: 768px) {
           .tsd .hero-right { width: 100%; justify-content: space-between; }
           .tsd .bells-group { border-left: none; padding-left: 0; }
-          .tsd .quick-actions { grid-template-columns: repeat(2, 1fr); }
+
+          .tsd .quick-actions { 
+            grid-template-columns: repeat(2, 1fr);
+            grid-auto-rows: auto;
+            gap: 8px;
+            flex: none;
+          }
+          .tsd .quick-action-btn {
+            padding: 10px 6px;
+            font-size: 0.72rem;
+          }
         }
+
         @media (max-width: 640px) {
           .tsd .kpi-row { grid-template-columns: 1fr 1fr; }
           .tsd .hero    { flex-direction: column; align-items: flex-start; }
           .customer-name { max-width: 120px; }
-          .tsd .quick-action-btn { padding: 12px 8px; font-size: 0.75rem; }
         }
+
         @media (max-width: 380px) {
           .tsd .kpi-row { grid-template-columns: 1fr; }
-          .tsd .quick-actions { grid-template-columns: 1fr; }
+          .tsd .quick-actions { 
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+          }
+          .tsd .quick-action-btn {
+            padding: 8px 4px;
+            font-size: 0.65rem;
+          }
         }
       `}</style>
 
