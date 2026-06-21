@@ -1,4 +1,4 @@
- "use client"
+"use client"
 
 import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
@@ -803,7 +803,6 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
           gap: 10px;
-          flex: 1;
           align-items: stretch;
         }
         .tsd .quick-action-btn {
@@ -862,7 +861,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         @media (max-width: 380px) {
           .tsd .kpi-row { grid-template-columns: 1fr; }
           .tsd .quick-actions { 
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(2, 1fr);
             gap: 6px;
           }
           .tsd .quick-action-btn {
