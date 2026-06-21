@@ -233,7 +233,6 @@ function OdooLoader({ isDark }: { isDark: boolean }) {
         }
       `}</style>
 
-      {/* Logo / brand mark */}
       <div style={{ marginBottom: 36, textAlign: "center" }}>
         <div style={{
           width: 72, height: 72,
@@ -261,7 +260,6 @@ function OdooLoader({ isDark }: { isDark: boolean }) {
         </div>
       </div>
 
-      {/* Animated bar chart decoration */}
       <div style={{
         display: "flex", alignItems: "flex-end", gap: 5,
         height: 48, marginBottom: 36,
@@ -281,7 +279,6 @@ function OdooLoader({ isDark }: { isDark: boolean }) {
         ))}
       </div>
 
-      {/* Spinner ring */}
       <div style={{
         width: 44, height: 44,
         borderRadius: "50%",
@@ -291,7 +288,6 @@ function OdooLoader({ isDark }: { isDark: boolean }) {
         marginBottom: 28,
       }} />
 
-      {/* Animated step text */}
       <div
         key={stepIdx}
         style={{
@@ -311,7 +307,6 @@ function OdooLoader({ isDark }: { isDark: boolean }) {
         </div>
       </div>
 
-      {/* Progress dots */}
       <div style={{ display: "flex", gap: 6, marginTop: 32 }}>
         {LOADING_STEPS.map((_, i) => (
           <div
@@ -327,7 +322,6 @@ function OdooLoader({ isDark }: { isDark: boolean }) {
         ))}
       </div>
 
-      {/* Subtext */}
       <div style={{
         marginTop: 24,
         fontSize: "0.75rem",
@@ -392,7 +386,6 @@ function NewCompanyEmptyState({
         }
       `}</style>
 
-      {/* Welcome hero */}
       <div
         className="setup-card"
         style={{
@@ -415,7 +408,6 @@ function NewCompanyEmptyState({
         </p>
       </div>
 
-      {/* Setup checklist */}
       <div className="setup-card" style={{ marginBottom: 12 }}>
         <div style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: 12 }}>
           ⚡ Quick Setup — 4 steps to your first dashboard
@@ -468,7 +460,6 @@ function NewCompanyEmptyState({
         </div>
       ))}
 
-      {/* Tip */}
       <div
         className="setup-card"
         style={{
@@ -736,6 +727,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           padding: 20px; box-shadow: var(--shadow-sm);
           transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
           cursor: pointer; display: flex; flex-direction: column;
+          min-height: 0; /* prevents flex children's grid content (quick-actions) from being clipped on mobile */
         }
         .tsd .card:hover {
           transform: translateY(-2px);
@@ -842,9 +834,10 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
 
           .tsd .quick-actions { 
             grid-template-columns: repeat(2, 1fr);
-            grid-auto-rows: auto;
+            grid-auto-rows: minmax(0, auto);
             gap: 8px;
-            flex: none;
+            flex: 1 0 auto;
+            height: auto;
           }
           .tsd .quick-action-btn {
             padding: 10px 6px;
