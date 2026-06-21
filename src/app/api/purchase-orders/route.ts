@@ -3,9 +3,55 @@ import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from "next/server"
 import { logDataChange } from "@/lib/audit"
 
+// ── GET: List all purchase orders for the current company ──
+export async function GET(request: NextRequest) {
+  try {
+    const cookieStore = await cookies()
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { return cookieStore.getAll() },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            )
+          },
+        },
+      }
+    )
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const companyId = (user?.app_metadata as any)?.company_id
+    if (!companyId) return NextResponse.json({ error: 'No company linked' }, { status: 400 })
+
+    // ── Fetch purchase orders for this company only ──
+    const { data: purchaseOrders, error } = await supabase
+      .from("purchase_orders")
+      .select(`
+        *,
+        suppliers!inner(code, name)
+      `)
+      .eq("company_id", companyId)   // ← CRITICAL: Isolate to current company
+      .is("deleted_at", null)
+      .order("po_no", { ascending: false })
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ data: purchaseOrders })
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 })
+  }
+}
+
+// ── POST: Create a new purchase order ──
 export async function POST(request: NextRequest) {
   try {
-    // 1. Authenticate and get company from session – ignore client‑sent company_id
     const cookieStore = await cookies()
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -132,6 +178,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// ── PUT: Update an existing purchase order ──
 export async function PUT(request: NextRequest) {
   try {
     const cookieStore = await cookies()
@@ -170,7 +217,7 @@ export async function PUT(request: NextRequest) {
 
     const { supplier_id, date, expected_delivery, notes, items } = JSON.parse(dataStr)
 
-    // Update header
+    // Update header – ensure it belongs to the current company
     const { error: poError } = await supabase
       .from("purchase_orders")
       .update({
@@ -182,7 +229,7 @@ export async function PUT(request: NextRequest) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
-      .eq("company_id", companyId)
+      .eq("company_id", companyId)   // ← CRITICAL: Ensure company ownership
 
     if (poError) {
       return NextResponse.json({ success: false, error: poError.message }, { status: 500 })
@@ -238,6 +285,62 @@ export async function PUT(request: NextRequest) {
       id,
       "UPDATE",
       { supplier_id, date, notes },
+      user.email || "system"
+    )
+
+    return NextResponse.json({ success: true })
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message || "Internal server error" }, { status: 500 })
+  }
+}
+
+// ── DELETE: Soft-delete a purchase order ──
+export async function DELETE(request: NextRequest) {
+  try {
+    const cookieStore = await cookies()
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { return cookieStore.getAll() },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            )
+          },
+        },
+      }
+    )
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const companyId = (user?.app_metadata as any)?.company_id
+    if (!companyId) return NextResponse.json({ error: 'No company linked' }, { status: 400 })
+
+    const url = new URL(request.url)
+    const id = url.searchParams.get("id")
+    if (!id) {
+      return NextResponse.json({ success: false, error: "Missing id" }, { status: 400 })
+    }
+
+    // Soft-delete – ensure it belongs to the current company
+    const { error } = await supabase
+      .from("purchase_orders")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("company_id", companyId)   // ← CRITICAL: Ensure company ownership
+
+    if (error) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    }
+
+    await logDataChange(
+      "purchase_orders",
+      id,
+      "DELETE",
+      { deleted_at: new Date().toISOString() },
       user.email || "system"
     )
 

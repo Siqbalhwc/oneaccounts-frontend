@@ -99,7 +99,6 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     loadFeatures()
   }, [loadFeatures])
 
-  // ── Log when context is ready ──
   useEffect(() => {
     if (!loading && features.length > 0) {
       console.log('✅ PlanContext loaded with features:', features)
@@ -109,11 +108,12 @@ export function PlanProvider({ children }: { children: ReactNode }) {
 
   const hasFeature = (code: string) => {
     if (code === "balance_sheet") return true
-    if (loading) return true // avoid flash while loading
+    if (loading) return true
 
-    // Trading companies get inventory and purchase orders by default
+    // ✅ Inventory is always enabled for trading companies
     if (code === "inventory" && businessType === "trading") return true
-    if (code === "purchase_orders" && businessType === "trading") return true
+
+    // ❌ Purchase Orders fallback REMOVED – it is an add‑on, must be explicitly enabled
 
     return features.includes(code)
   }
@@ -127,10 +127,6 @@ export function PlanProvider({ children }: { children: ReactNode }) {
 
     if (code === "inventory" && businessType === "trading") {
       console.warn("Inventory cannot be disabled for trading companies")
-      return
-    }
-    if (code === "purchase_orders" && businessType === "trading") {
-      console.warn("Purchase Orders cannot be disabled for trading companies")
       return
     }
 
@@ -167,7 +163,6 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // ── Listen for auth changes to reload features ──
   useEffect(() => {
     const { data: authListener } = supabase.auth.onAuthStateChange(() => {
       loadFeatures()
