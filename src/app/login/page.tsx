@@ -35,6 +35,7 @@ const DASHBOARD_IMAGES = {
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
+  const [confirmEmail, setConfirmEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -42,6 +43,7 @@ export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [activeSegment, setActiveSegment] = useState<"ngo" | "trading" | "service">("ngo")
+  const [signUpSuccess, setSignUpSuccess] = useState(false)
 
   // ── Invite token handling ──
   const [inviteStatus, setInviteStatus] = useState<"idle" | "processing" | "expired">("idle")
@@ -81,30 +83,59 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     setError("")
+    setSignUpSuccess(false)
+
     const supabase = createBrowserClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
-    const { error: authError } = isSignUp
-      ? await supabase.auth.signUp({ email, password })
-      : await supabase.auth.signInWithPassword({
-          email,
-          password,
-          options: { persistSession: rememberMe } as any,
-        })
 
-    if (authError) {
-      setError(
-        isSignUp
-          ? "Sign up failed — this email may already be registered."
-          : "Incorrect email or password. Please try again."
-      )
+    // ── SIGN UP with email verification ──
+    if (isSignUp) {
+      // Check if emails match
+      if (email !== confirmEmail) {
+        setError("Email addresses do not match. Please confirm your email.")
+        setLoading(false)
+        return
+      }
+
+      const { error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: window.location.origin + "/login",
+        },
+      })
+
+      if (signUpError) {
+        setError(signUpError.message || "Sign up failed. Please try again.")
+        setLoading(false)
+        return
+      }
+
+      // Show success message and keep user on login page
+      setSignUpSuccess(true)
+      setError("")
       setLoading(false)
+      setIsSignUp(false) // Switch back to sign-in mode
       return
     }
-    if (isSignUp) {
-      setError("✅ Account created! Check your email to confirm, then sign in.")
-      setIsSignUp(false)
+
+    // ── SIGN IN ──
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+      options: { persistSession: rememberMe } as any,
+    })
+
+    if (authError) {
+      if (authError.message.includes("Email not confirmed")) {
+        setError(
+          "⚠️ Please verify your email address first. Check your inbox for the confirmation link."
+        )
+      } else {
+        setError("Incorrect email or password. Please try again.")
+      }
       setLoading(false)
       return
     }
@@ -619,7 +650,7 @@ export default function LoginPage() {
           font-size: 12px; color: #15803D; margin-bottom: 12px;
         }
 
-        /* ── Trial mini-link (de-emphasized, lives under the divider) ── */
+        /* ── Trial mini-link ── */
         .oa-trial-divider { display: flex; align-items: center; gap: 10px; margin: 16px 0 12px; }
         .oa-trial-divider .oa-div-line { flex: 1; height: 1px; background: #E3E8F5; }
         .oa-trial-divider .oa-div-txt { font-size: 10.5px; color: #98A6BD; font-weight: 600; }
@@ -662,7 +693,7 @@ export default function LoginPage() {
         .oa-card-contact .wa:hover { color: #047857; }
         .oa-card-contact svg { margin-right: 2px; vertical-align: -2px; }
 
-        /* ── Addons strip (lives in the credentials column, below the trial link) ── */
+        /* ── Addons strip ── */
         .oa-addons-strip {
           margin-top: 16px;
           padding-top: 14px;
@@ -708,6 +739,23 @@ export default function LoginPage() {
           font-size: 11px; font-weight: 600;
           color: #334155;
           line-height: 1.25;
+        }
+
+        /* ── Email confirmation message ── */
+        .oa-confirm-message {
+          background: #F0FDF4;
+          border: 1px solid #BBF7D0;
+          border-radius: 10px;
+          padding: 14px 16px;
+          text-align: center;
+          margin-bottom: 14px;
+        }
+        .oa-confirm-message .oa-confirm-icon { font-size: 24px; margin-bottom: 4px; }
+        .oa-confirm-message .oa-confirm-title {
+          font-size: 14px; font-weight: 700; color: #065F46;
+        }
+        .oa-confirm-message .oa-confirm-text {
+          font-size: 12px; color: #047857; margin-top: 2px; line-height: 1.5;
         }
 
         /* ═══════════════════════════════════════
@@ -903,8 +951,6 @@ export default function LoginPage() {
                 />
               </div>
 
-
-
               <div className="oa-footer-txt">© 2026 OneAccounts by Siqbal. All rights reserved.</div>
 
             </div>
@@ -947,8 +993,22 @@ export default function LoginPage() {
                     </div>
                   )}
 
+                  {signUpSuccess && (
+                    <div className="oa-confirm-message">
+                      <div className="oa-confirm-icon">📧</div>
+                      <div className="oa-confirm-title">Check Your Email</div>
+                      <div className="oa-confirm-text">
+                        We sent a confirmation link to <strong>{email}</strong>.<br />
+                        Please click the link to verify your email address, then sign in.
+                      </div>
+                    </div>
+                  )}
+
                   <form onSubmit={handleAuth} noValidate>
-                    <label className="oa-label" htmlFor="email">Email Address</label>
+
+                    <label className="oa-label" htmlFor="email">
+                      {isSignUp ? "Email Address" : "Email Address"}
+                    </label>
                     <div className="oa-input-wrap">
                       <input
                         id="email"
@@ -963,13 +1023,31 @@ export default function LoginPage() {
                       />
                     </div>
 
+                    {isSignUp && (
+                      <>
+                        <label className="oa-label" htmlFor="confirmEmail">Confirm Email Address</label>
+                        <div className="oa-input-wrap">
+                          <input
+                            id="confirmEmail"
+                            type="email"
+                            className="oa-input"
+                            placeholder="Confirm your email address"
+                            value={confirmEmail}
+                            onChange={(e) => setConfirmEmail(e.target.value)}
+                            autoComplete="off"
+                            required
+                          />
+                        </div>
+                      </>
+                    )}
+
                     <label className="oa-label" htmlFor="password">Password</label>
                     <div className="oa-input-wrap">
                       <input
                         id="password"
                         type={showPassword ? "text" : "password"}
                         className="oa-input"
-                        placeholder={isSignUp ? "Create a strong password" : "Enter your password"}
+                        placeholder={isSignUp ? "Create a strong password (min 6 chars)" : "Enter your password"}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         autoComplete={isSignUp ? "new-password" : "current-password"}
@@ -1021,6 +1099,8 @@ export default function LoginPage() {
                       onClick={() => {
                         setIsSignUp((s) => !s)
                         setError("")
+                        setSignUpSuccess(false)
+                        setConfirmEmail("")
                       }}
                     >
                       {isSignUp ? (
@@ -1047,7 +1127,7 @@ export default function LoginPage() {
                     </>
                   )}
 
-                  {/* ── Addons strip (fills the column, keeps both panels balanced in height) ── */}
+                  {/* ── Addons strip ── */}
                   <div className="oa-addons-strip">
                     <div className="oa-addons-strip-label">Available Add-ons</div>
                     <div className="oa-addons-list">
