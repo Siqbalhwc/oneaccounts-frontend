@@ -76,22 +76,496 @@ function NewInvoicePageContent() {
   const isNGO = businessType === "ngo"
   const invoiceIdForLink = savedInvoiceId || (editId ? Number(editId) : null)
 
-  // ── All existing useEffects, handlers, and helper functions ──
-  // (They are exactly the same as your original file – unchanged)
-  // To save space in the response, I will include them in the final code block.
-  // For this answer snippet, I'm showing only the key parts that changed.
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
+      setCompanyId(cid)
 
-  // ── The following is the exact same code you had before ──
-  // (I am not duplicating it here for brevity, but will include it in the final output)
+      supabase.from("companies").select("business_type").eq("id", cid).single()
+        .then(({ data }) => { if (data) setBusinessType(data.business_type || "") })
 
-  // ... (all your existing code remains unchanged up to the return statement) ...
+      supabase.from("customers")
+        .select("id,code,name,phone,balance,country_code,payment_terms")
+        .eq("company_id", cid)
+        .order("name")
+        .then(r => { if (r.data) setCustomers(r.data) })
 
-  // ── The itemGridColsDesktop function stays the same ──
+      if (showProducts) {
+        supabase.from("products")
+          .select("id,code,name,sale_price,cost_price,qty_on_hand,image_path,default_tax_code_id")
+          .eq("company_id", cid)
+          .is("deleted_at", null)
+          .order("name")
+          .then(r => r.data && setProducts(r.data))
+      }
+
+      supabase.from("company_settings")
+        .select("*").eq("company_id", cid).single()
+        .then(r => {
+          if (r.data) setCompany(r.data)
+          else {
+            supabase.from("companies")
+              .select("name, logo_url, tagline, address, business_type")
+              .eq("id", cid).single()
+              .then(r2 => r2.data && setCompany(r2.data))
+          }
+        })
+
+      supabase.from("projects").select("id,name,donor_id").eq("company_id", cid).order("name")
+        .then(r => r.data && setProjects(r.data))
+      supabase.from("donors").select("id,name").eq("company_id", cid).order("name")
+        .then(r => r.data && setDonors(r.data))
+
+      if (taxEnabled) {
+        supabase.from("tax_codes")
+          .select("id, code, name, rate, tax_account_id")
+          .eq("company_id", cid)
+          .order("code")
+          .then(r => r.data && setTaxCodes(r.data))
+      }
+
+      setLoading(false)
+    })
+  }, [showProducts, taxEnabled])
+
+  useEffect(() => {
+    if (!editId || !companyId) return
+    supabase.from("invoices")
+      .select("*")
+      .eq("id", editId)
+      .eq("company_id", companyId)
+      .single()
+      .then(({ data: bill }) => {
+        if (!bill) return
+        setCustomerId(bill.party_id)
+        const cust = customers.find((s: any) => s.id === bill.party_id)
+        if (cust) { setSelectedCustomer(cust); setCustomerSearch(cust.name) }
+        setInvoiceDate(bill.date)
+        setDueDate(bill.due_date)
+        setReference(bill.reference || "")
+        setNotes(bill.notes || "")
+
+        supabase.from("invoice_items")
+          .select("*")
+          .eq("invoice_id", bill.id)
+          .order("id")
+          .then(({ data: itemsData }) => {
+            if (itemsData) {
+              const loaded = itemsData.map((item: any) => ({
+                product_id: item.product_id,
+                description: item.description,
+                product_name: "",
+                product_image: null,
+                qty: item.qty,
+                unit_price: item.unit_price,
+                cost_price: item.cost_price || 0,
+                total: item.total,
+                project_id: item.project_id || null,
+                donor_id: item.donor_id || null,
+                tax_code_id: item.tax_code_id ? String(item.tax_code_id) : null,
+                tax_rate: item.tax_rate || 0,
+                tax_amount: item.tax_amount || 0,
+              }))
+              setItems(loaded)
+            }
+          })
+      })
+  }, [editId, companyId, customers])
+
+  useEffect(() => {
+    if (!invoiceDate || !selectedCustomer) return
+    const days = getCreditDays(selectedCustomer.payment_terms)
+    const dt = new Date(invoiceDate)
+    dt.setDate(dt.getDate() + days)
+    setDueDate(dt.toISOString().split("T")[0])
+  }, [invoiceDate, selectedCustomer])
+
+  useEffect(() => {
+    if (customerId && lastSelectedProduct) {
+      fetchPriceHistory(lastSelectedProduct.id, customerId)
+    }
+  }, [customerId])
+
+  const refreshCustomers = () => {
+    if (!companyId) return
+    setRefreshingCustomers(true)
+    supabase.from("customers")
+      .select("id,code,name,phone,balance,country_code,payment_terms")
+      .eq("company_id", companyId)
+      .order("name")
+      .then(r => {
+        if (r.data) setCustomers(r.data)
+        setRefreshingCustomers(false)
+        if (selectedCustomer) {
+          const updated = r.data?.find((c: any) => c.id === selectedCustomer.id)
+          if (updated) setSelectedCustomer(updated)
+        }
+      })
+  }
+
+  const filteredCustomers = customers.filter(c =>
+    c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    c.code.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    (c.phone || "").includes(customerSearch)
+  )
+
+  // ── FIX: Add missing customer selection functions ──
+  const selectCustomer = (c: any) => {
+    setCustomerId(c.id)
+    setSelectedCustomer(c)
+    setCustomerSearch(c.name)
+    setShowCustomerList(false)
+  }
+
+  const clearCustomer = () => {
+    setCustomerId(null)
+    setSelectedCustomer(null)
+    setCustomerSearch("")
+    setShowCustomerList(true)
+  }
+  // ──────────────────────────────────────────────
+
+  const filteredProducts = products.filter((p: any) =>
+    p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+    p.code.toLowerCase().includes(productSearch.toLowerCase())
+  )
+
+  const addProductItem = (prod: any) => {
+    let newTaxCodeId = prod.default_tax_code_id ? String(prod.default_tax_code_id) : null
+    let newTaxRate = 0
+    let newTaxAmount = 0
+
+    if (newTaxCodeId && taxEnabled) {
+      const taxCode = taxCodes.find((t: any) => String(t.id) === newTaxCodeId)
+      if (taxCode) {
+        newTaxRate = taxCode.rate
+        newTaxAmount = (prod.sale_price * newTaxRate) / 100
+      }
+    }
+
+    setItems([...items, {
+      product_id: prod.id,
+      description: `${prod.code} - ${prod.name}`,
+      product_name: prod.name,
+      product_image: prod.image_path || null,
+      qty: 1,
+      unit_price: prod.sale_price,
+      cost_price: prod.cost_price,
+      total: prod.sale_price,
+      project_id: null,
+      donor_id: null,
+      tax_code_id: newTaxCodeId,
+      tax_rate: newTaxRate,
+      tax_amount: newTaxAmount,
+    }])
+    setProductSearch("")
+    setShowProductList(false)
+    setLastSelectedProduct(prod)
+    if (customerId) fetchPriceHistory(prod.id, customerId)
+    else setShowHistory(false)
+  }
+
+  const addManualItem = () => {
+    setItems([...items, {
+      product_id: null,
+      description: "",
+      product_name: "",
+      product_image: null,
+      qty: 1,
+      unit_price: 0,
+      cost_price: 0,
+      total: 0,
+      project_id: null,
+      donor_id: null,
+      tax_code_id: null,
+      tax_rate: 0,
+      tax_amount: 0,
+    }])
+  }
+
+  const updateItem = (idx: number, field: string, value: any) => {
+    const updated = [...items]
+    updated[idx] = { ...updated[idx], [field]: value }
+
+    if (field === "qty" || field === "unit_price") {
+      updated[idx].total = updated[idx].qty * updated[idx].unit_price
+      if (updated[idx].tax_rate > 0) {
+        updated[idx].tax_amount = (updated[idx].qty * updated[idx].unit_price * updated[idx].tax_rate) / 100
+      } else {
+        updated[idx].tax_amount = 0
+      }
+    }
+
+    if (field === "project_id" && value) {
+      const project = projects.find(p => p.id == value)
+      if (project) {
+        updated[idx].donor_id = project.donor_id || null
+      } else {
+        updated[idx].donor_id = null
+      }
+    }
+
+    setItems(updated)
+  }
+
+  const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
+
+  const fetchPriceHistory = async (productId: number, custId: number) => {
+    const { data: items } = await supabase
+      .from("invoice_items")
+      .select("id, invoice_id, unit_price")
+      .eq("product_id", productId)
+      .order("id", { ascending: false })
+      .limit(20)
+    if (!items || items.length === 0) { setPriceHistory([]); setShowHistory(true); return }
+    const invoiceIds = [...new Set(items.map((i: any) => i.invoice_id))]
+    const { data: invoices } = await supabase
+      .from("invoices")
+      .select("id, invoice_no, date")
+      .in("id", invoiceIds)
+      .eq("party_id", custId)
+    if (!invoices || invoices.length === 0) { setPriceHistory([]); setShowHistory(true); return }
+    const invMap: Record<number, any> = {}
+    invoices.forEach((inv: any) => { invMap[inv.id] = inv })
+    const history = items
+      .filter((item: any) => invMap[item.invoice_id])
+      .map((item: any) => ({
+        unit_price: item.unit_price,
+        invoice_no: invMap[item.invoice_id].invoice_no,
+        date: invMap[item.invoice_id].date,
+      }))
+      .slice(0, 5)
+    setPriceHistory(history)
+    setShowHistory(true)
+  }
+
+  const totalAmount = items.reduce((s, i) => s + i.total, 0)
+  const totalTaxAmount = items.reduce((s, i) => s + (i.tax_amount || 0), 0)
+
+  const handleSubmit = async () => {
+    if (!customerId) { setError("Please select a customer"); return }
+    if (items.length === 0) { setError("Add at least one item"); return }
+
+    setSaving(true); setError("")
+
+    const url = editId ? `/api/invoices?id=${editId}` : "/api/invoices"
+    const method = editId ? "PUT" : "POST"
+
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editId || undefined,
+          party_id: customerId,
+          invoice_date: invoiceDate,
+          due_date: dueDate,
+          items: items.map(i => ({
+            product_id: i.product_id,
+            description: i.description,
+            qty: i.qty,
+            unit_price: i.unit_price,
+            cost_price: i.cost_price,
+            project_id: i.project_id || null,
+            donor_id: i.donor_id || null,
+            tax_code_id: taxEnabled ? (i.tax_code_id || null) : undefined,
+            tax_rate: taxEnabled ? (i.tax_rate || 0) : undefined,
+            tax_amount: taxEnabled ? (i.tax_amount || 0) : undefined,
+          })),
+          reference, notes,
+        }),
+      })
+      const result = await res.json()
+      if (!result.success) {
+        setError(result.error || "Failed to save invoice")
+        setSaving(false)
+        return
+      }
+
+      const newInvoiceId = result.invoice?.id
+      setSavedInvoiceId(newInvoiceId || null)
+      setFlash(`✅ Invoice ${editId ? "updated" : "saved"} successfully!`)
+
+      if (editId) {
+        router.push(`/dashboard/invoices/${editId}`)
+      } else {
+        setSaving(false)
+      }
+    } catch {
+      setError("Network error")
+      setSaving(false)
+    }
+  }
+
+  const waLink = () => {
+    if (!selectedCustomer) return ""
+    const code = (selectedCustomer.country_code || "+92").replace(/\D/g, "")
+    const phone = (selectedCustomer.phone || "").replace(/\D/g, "")
+    if (!phone) return ""
+    const invoiceLink = invoiceIdForLink
+      ? `https://www.oneaccountsbysiqbal.com/invoice/${invoiceIdForLink}`
+      : null
+    const customerDisplayName = selectedCustomer.name?.trim() || selectedCustomer.phone || "Customer"
+    const actualCompanyName = company?.name || company?.company_name || "OneAccounts"
+    const msg = [
+      `Dear ${customerDisplayName},`,
+      ``,
+      `Your invoice of PKR ${totalAmount.toLocaleString()} has been generated.`,
+      invoiceLink ? `` : `(Save the invoice first to get a link.)`,
+      invoiceLink ? `📄 View Online: ${invoiceLink}` : "",
+      `📅 Date: ${invoiceDate}`,
+      `📆 Due: ${dueDate}`,
+      ``,
+      `Thank you for your business.`,
+      `— ${actualCompanyName}`,
+    ].filter(line => line !== "").join("\n")
+    return `https://wa.me/${code}${phone}?text=${encodeURIComponent(msg)}`
+  }
+
+  const handleWhatsAppWithPDF = async () => {
+    if (!selectedCustomer) return
+    const phone = (selectedCustomer.phone || "").replace(/\D/g, "")
+    if (!phone) { alert("No phone number for this customer."); return }
+    const invoiceLink = invoiceIdForLink
+      ? `https://www.oneaccountsbysiqbal.com/invoice/${invoiceIdForLink}`
+      : null
+    const customerDisplayName = selectedCustomer.name?.trim() || selectedCustomer.phone || "Customer"
+    const actualCompanyName = company?.name || company?.company_name || "OneAccounts"
+
+    const pdfData = {
+      companyName: actualCompanyName,
+      companyAddress: company?.address || "",
+      companyPhone: company?.phone || "",
+      companyEmail: company?.email || "",
+      companyTagline: company?.tagline || "",
+      logoUrl: company?.logo_url || null,
+      businessType: company?.business_type || "",
+      invoiceNo: "PREVIEW",
+      date: invoiceDate,
+      dueDate: dueDate,
+      customerName: customerDisplayName,
+      customerPhone: selectedCustomer.phone || "",
+      customerAddress: selectedCustomer.address || "",
+      customerEmail: selectedCustomer.email || "",
+      paymentTerms: selectedCustomer.payment_terms || null,
+      items: items.map(i => ({
+        description: i.description || "",
+        qty: i.qty || 0,
+        unit_price: i.unit_price || 0,
+        total: i.total || 0,
+        image_path: i.product_image || null,
+        product_id: i.product_id || null,
+        product_name: i.product_name || "",
+        tax_rate: i.tax_rate || 0,
+        tax_amount: i.tax_amount || 0,
+      })),
+      subtotal: totalAmount,
+      total: totalAmount + totalTaxAmount,
+      status: "Unpaid",
+      paid: 0,
+      balanceDue: totalAmount + totalTaxAmount,
+    }
+    const doc = await generateInvoicePDF(pdfData)
+    const blob = doc.output("blob")
+    const filePath = `invoices/${Date.now()}-${Math.random().toString(36).substr(2,5)}.pdf`
+    try {
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from("invoice-pdfs")
+        .upload(filePath, blob, { contentType: "application/pdf", upsert: false })
+      if (!uploadErr) {
+        const { data: publicUrlData } = supabase.storage
+          .from("invoice-pdfs")
+          .getPublicUrl(filePath)
+        const pdfLink = publicUrlData.publicUrl
+        const msg = [
+          `Dear ${customerDisplayName},`,
+          ``,
+          `Your invoice of PKR ${(totalAmount + totalTaxAmount).toLocaleString()} has been generated.`,
+          invoiceLink ? `📄 View Online: ${invoiceLink}` : "",
+          `📎 Download PDF: ${pdfLink}`,
+          `📅 Date: ${invoiceDate}`,
+          `📆 Due: ${dueDate}`,
+          ``,
+          `Thank you for your business.`,
+          `— ${actualCompanyName}`,
+        ].filter(line => line !== "").join("\n")
+        const waURL = `https://wa.me/${(selectedCustomer.country_code || "+92").replace(/\D/g, "")}${phone}?text=${encodeURIComponent(msg)}`
+        window.open(waURL, "_blank")
+        return
+      }
+    } catch (e) { console.warn("Upload failed, fallback to text only") }
+    window.open(waLink(), "_blank")
+  }
+
+  const handleBeforeSavePdf = async () => {
+    if (!selectedCustomer) return
+    const pdfData = {
+      companyName: company?.name || company?.company_name || "OneAccounts",
+      companyAddress: company?.address || "",
+      companyPhone: company?.phone || "",
+      companyEmail: company?.email || "",
+      companyTagline: company?.tagline || "",
+      logoUrl: company?.logo_url || null,
+      businessType: company?.business_type || "",
+      invoiceNo: "PREVIEW",
+      date: invoiceDate,
+      dueDate: dueDate,
+      customerName: selectedCustomer.name || "Customer",
+      customerPhone: selectedCustomer.phone || "",
+      customerAddress: selectedCustomer.address || "",
+      customerEmail: selectedCustomer.email || "",
+      paymentTerms: selectedCustomer.payment_terms || null,
+      items: items.map(i => ({
+        description: i.description || "",
+        qty: i.qty || 0,
+        unit_price: i.unit_price || 0,
+        total: i.total || 0,
+        image_path: i.product_image || null,
+        product_id: i.product_id || null,
+        product_name: i.product_name || "",
+        tax_rate: i.tax_rate || 0,
+        tax_amount: i.tax_amount || 0,
+      })),
+      subtotal: totalAmount,
+      total: totalAmount + totalTaxAmount,
+      status: "Unpaid",
+      paid: 0,
+      balanceDue: totalAmount + totalTaxAmount,
+    }
+    const doc = await generateInvoicePDF(pdfData)
+    doc.save(`invoice-preview.pdf`)
+  }
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (customerRef.current && !customerRef.current.contains(e.target as Node)) {
+        setShowCustomerList(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
+
+  if (loading) {
+    return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>Loading invoice form…</div>
+  }
+
+  const getProjectName = (projectId: number | null) => {
+    if (!projectId) return ""
+    const proj = projects.find(p => p.id == projectId)
+    return proj?.name || ""
+  }
+  const getDonorName = (donorId: number | null) => {
+    if (!donorId) return ""
+    const don = donors.find(d => d.id == donorId)
+    return don?.name || ""
+  }
+
   const itemGridColsDesktop = taxEnabled
     ? "30px 150px 3fr 80px 110px 80px minmax(130px, 1fr) minmax(130px, 1fr) minmax(130px, 1fr) 50px"
     : "30px 150px 3fr 80px 110px minmax(130px, 1fr) minmax(130px, 1fr) 50px"
 
-  // ── The mobile grid column strings (new) ──
+  // Mobile grid columns based on taxEnabled
   const mobileGridCols = taxEnabled
     ? "24px 1fr 44px 64px 50px 60px 30px"
     : "24px 1fr 44px 64px 56px 30px"
@@ -179,7 +653,6 @@ function NewInvoicePageContent() {
           .inv-item-header { display: none; }
           .inv-item-row { display: none; }
 
-          /* ── Mobile items scroll wrapper ── */
           .mobile-items-scroll {
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
