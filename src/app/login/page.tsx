@@ -648,23 +648,24 @@ export default function LoginPage() {
         .oa-card-contact .wa:hover { color: #047857; }
         .oa-card-contact i { font-size: 13px; margin-right: 2px; }
 
-        /* ── Addons strip (moved below the card, outside the credentials flow) ── */
+        /* ── Addons strip (lives in the credentials column, below the trial link) ── */
         .oa-addons-strip {
-          margin-top: 14px;
+          margin-top: 16px;
           padding-top: 14px;
-          border-top: 1px solid rgba(255,255,255,0.08);
+          border-top: 1px solid #E3E8F5;
         }
         .oa-addons-strip-label {
           font-size: 10px;
-          color: rgba(255,255,255,0.38);
+          color: #94A3B8;
           font-weight: 700;
           text-transform: uppercase;
           letter-spacing: 0.8px;
           margin-bottom: 10px;
+          text-align: center;
         }
         .oa-addons-list {
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
+          grid-template-columns: repeat(2, 1fr);
           gap: 8px;
         }
         .oa-addon-pill {
@@ -672,25 +673,26 @@ export default function LoginPage() {
           align-items: center;
           gap: 8px;
           padding: 9px 11px;
-          background: rgba(255,255,255,0.04);
-          border: 1px solid rgba(255,255,255,0.09);
+          background: #FBFCFF;
+          border: 1px solid #E2E8F5;
           border-radius: 9px;
           transition: all 0.18s;
         }
         .oa-addon-pill:hover {
-          background: rgba(255,255,255,0.07);
-          border-color: rgba(56,189,248,0.3);
+          background: white;
+          border-color: #1740C8;
+          box-shadow: 0 4px 12px rgba(23,64,200,0.08);
         }
         .oa-addon-icon {
           width: 24px; height: 24px; flex-shrink: 0;
           border-radius: 7px;
-          background: rgba(56,189,248,0.14);
+          background: #EEF2FF;
           display: flex; align-items: center; justify-content: center;
         }
-        .oa-addon-icon i { font-size: 13px; color: #7DD3FC; }
+        .oa-addon-icon i { font-size: 13px; color: #1740C8; }
         .oa-addon-pill span {
           font-size: 11px; font-weight: 600;
-          color: rgba(255,255,255,0.75);
+          color: #334155;
           line-height: 1.25;
         }
 
@@ -887,30 +889,7 @@ export default function LoginPage() {
                 />
               </div>
 
-              {/* ── Addons strip (moved here, off the credentials column entirely) ── */}
-              <div className="oa-addons-strip">
-                <div className="oa-addons-strip-label">Available add-ons</div>
-                <div className="oa-addons-list">
-                  <div className="oa-addon-pill">
-                    <div className="oa-addon-icon"><i className="ti ti-brand-whatsapp" aria-hidden="true"></i></div>
-                    <span>WhatsApp Integration</span>
-                  </div>
-                  <div className="oa-addon-pill">
-                    <div className="oa-addon-icon"><i className="ti ti-building-bank" aria-hidden="true"></i></div>
-                    <span>Fixed Assets</span>
-                  </div>
-                  <div className="oa-addon-pill">
-                    <div className="oa-addon-icon"><i className="ti ti-shopping-cart" aria-hidden="true"></i></div>
-                    <span>Purchase Order</span>
-                  </div>
-                  <div className="oa-addon-pill">
-                    <div className="oa-addon-icon"><i className="ti ti-receipt-tax" aria-hidden="true"></i></div>
-                    <span>Tax Module</span>
-                  </div>
-                </div>
-              </div>
 
-              <div className="oa-left-spacer" />
 
               <div className="oa-footer-txt">© 2026 OneAccounts by Siqbal. All rights reserved.</div>
 
@@ -1053,6 +1032,29 @@ export default function LoginPage() {
                       <p className="oa-trial-note">Professional Plan · Create your company in seconds.</p>
                     </>
                   )}
+
+                  {/* ── Addons strip (fills the column, keeps both panels balanced in height) ── */}
+                  <div className="oa-addons-strip">
+                    <div className="oa-addons-strip-label">Available Add-ons</div>
+                    <div className="oa-addons-list">
+                      <div className="oa-addon-pill">
+                        <div className="oa-addon-icon"><i className="ti ti-brand-whatsapp" aria-hidden="true"></i></div>
+                        <span>WhatsApp Integration</span>
+                      </div>
+                      <div className="oa-addon-pill">
+                        <div className="oa-addon-icon"><i className="ti ti-building-bank" aria-hidden="true"></i></div>
+                        <span>Fixed Assets</span>
+                      </div>
+                      <div className="oa-addon-pill">
+                        <div className="oa-addon-icon"><i className="ti ti-shopping-cart" aria-hidden="true"></i></div>
+                        <span>Purchase Order</span>
+                      </div>
+                      <div className="oa-addon-pill">
+                        <div className="oa-addon-icon"><i className="ti ti-receipt-tax" aria-hidden="true"></i></div>
+                        <span>Tax Module</span>
+                      </div>
+                    </div>
+                  </div>
 
                 </div>
 
