@@ -2,7 +2,21 @@
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { Eye, EyeOff } from "lucide-react"
+import {
+  Eye,
+  EyeOff,
+  Building2,
+  Package,
+  Wrench,
+  Factory,
+  MessageCircle,
+  Landmark,
+  ShoppingCart,
+  ReceiptText,
+  Phone,
+  Mail,
+  Globe,
+} from "lucide-react"
 
 // ── Segment Outcome Data ──
 const OUTCOME_LINE = {
@@ -365,14 +379,14 @@ export default function LoginPage() {
           background: rgba(255,255,255,0.07);
           padding: 1px 6px; border-radius: 4px;
         }
-        .oa-seg-icon i { font-size: 18px; color: #7DD3FC; }
+        .oa-seg-icon svg { color: #7DD3FC; }
         .oa-seg-title {
           font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.92);
           margin-top: 5px; margin-bottom: 1px;
         }
         .oa-seg-desc { font-size: 9px; color: rgba(255,255,255,0.38); line-height: 1.3; }
         .oa-seg.coming .oa-seg-title { color: rgba(255,255,255,0.3); }
-        .oa-seg.coming .oa-seg-icon i { color: rgba(255,255,255,0.2); }
+        .oa-seg.coming .oa-seg-icon svg { color: rgba(255,255,255,0.2); }
 
         /* ── Outcome Line ── */
         .oa-outcome-line {
@@ -646,7 +660,7 @@ export default function LoginPage() {
         .oa-card-contact a:hover { color: #1E293B; }
         .oa-card-contact .wa { color: #059669; }
         .oa-card-contact .wa:hover { color: #047857; }
-        .oa-card-contact i { font-size: 13px; margin-right: 2px; }
+        .oa-card-contact svg { margin-right: 2px; vertical-align: -2px; }
 
         /* ── Addons strip (lives in the credentials column, below the trial link) ── */
         .oa-addons-strip {
@@ -689,7 +703,7 @@ export default function LoginPage() {
           background: #EEF2FF;
           display: flex; align-items: center; justify-content: center;
         }
-        .oa-addon-icon i { font-size: 13px; color: #1740C8; }
+        .oa-addon-icon svg { color: #1740C8; }
         .oa-addon-pill span {
           font-size: 11px; font-weight: 600;
           color: #334155;
@@ -833,7 +847,7 @@ export default function LoginPage() {
                   className={`oa-seg ${activeSegment === "ngo" ? "active" : ""}`}
                   onClick={() => setActiveSegment("ngo")}
                 >
-                  <div className="oa-seg-icon"><i className="ti ti-building-community" aria-hidden="true"></i></div>
+                  <div className="oa-seg-icon"><Building2 size={18} strokeWidth={1.8} /></div>
                   <div className="oa-seg-title">NGOs &amp; Development</div>
                   <div className="oa-seg-desc">Donors, budgets, fund utilization</div>
                 </div>
@@ -841,7 +855,7 @@ export default function LoginPage() {
                   className={`oa-seg ${activeSegment === "trading" ? "active" : ""}`}
                   onClick={() => setActiveSegment("trading")}
                 >
-                  <div className="oa-seg-icon"><i className="ti ti-package" aria-hidden="true"></i></div>
+                  <div className="oa-seg-icon"><Package size={18} strokeWidth={1.8} /></div>
                   <div className="oa-seg-title">Trading Businesses</div>
                   <div className="oa-seg-desc">Inventory, taxes, cash flow</div>
                 </div>
@@ -849,13 +863,13 @@ export default function LoginPage() {
                   className={`oa-seg ${activeSegment === "service" ? "active" : ""}`}
                   onClick={() => setActiveSegment("service")}
                 >
-                  <div className="oa-seg-icon"><i className="ti ti-tool" aria-hidden="true"></i></div>
+                  <div className="oa-seg-icon"><Wrench size={18} strokeWidth={1.8} /></div>
                   <div className="oa-seg-title">Service Organizations</div>
                   <div className="oa-seg-desc">Projects, billing, profitability</div>
                 </div>
                 <div className="oa-seg coming">
                   <span className="oa-seg-badge">Soon</span>
-                  <div className="oa-seg-icon"><i className="ti ti-building-factory" aria-hidden="true"></i></div>
+                  <div className="oa-seg-icon"><Factory size={18} strokeWidth={1.8} /></div>
                   <div className="oa-seg-title">Manufacturing</div>
                   <div className="oa-seg-desc">Production, costing, MRP</div>
                 </div>
@@ -1038,19 +1052,19 @@ export default function LoginPage() {
                     <div className="oa-addons-strip-label">Available Add-ons</div>
                     <div className="oa-addons-list">
                       <div className="oa-addon-pill">
-                        <div className="oa-addon-icon"><i className="ti ti-brand-whatsapp" aria-hidden="true"></i></div>
+                        <div className="oa-addon-icon"><MessageCircle size={14} strokeWidth={1.8} /></div>
                         <span>WhatsApp Integration</span>
                       </div>
                       <div className="oa-addon-pill">
-                        <div className="oa-addon-icon"><i className="ti ti-building-bank" aria-hidden="true"></i></div>
+                        <div className="oa-addon-icon"><Landmark size={14} strokeWidth={1.8} /></div>
                         <span>Fixed Assets</span>
                       </div>
                       <div className="oa-addon-pill">
-                        <div className="oa-addon-icon"><i className="ti ti-shopping-cart" aria-hidden="true"></i></div>
+                        <div className="oa-addon-icon"><ShoppingCart size={14} strokeWidth={1.8} /></div>
                         <span>Purchase Order</span>
                       </div>
                       <div className="oa-addon-pill">
-                        <div className="oa-addon-icon"><i className="ti ti-receipt-tax" aria-hidden="true"></i></div>
+                        <div className="oa-addon-icon"><ReceiptText size={14} strokeWidth={1.8} /></div>
                         <span>Tax Module</span>
                       </div>
                     </div>
@@ -1065,16 +1079,16 @@ export default function LoginPage() {
                   </div>
                   <div className="oa-card-contact">
                     <a href="https://wa.me/923117798157" target="_blank" className="wa">
-                      <i className="ti ti-brand-whatsapp" aria-hidden="true"></i> WhatsApp
+                      <MessageCircle size={13} strokeWidth={1.8} /> WhatsApp
                     </a>
                     <a href="tel:03117798157">
-                      <i className="ti ti-phone" aria-hidden="true"></i> 0311-7798157
+                      <Phone size={13} strokeWidth={1.8} /> 0311-7798157
                     </a>
                     <a href="mailto:siqbalhwc@gmail.com">
-                      <i className="ti ti-mail" aria-hidden="true"></i> siqbalhwc@gmail.com
+                      <Mail size={13} strokeWidth={1.8} /> siqbalhwc@gmail.com
                     </a>
                     <a href="https://www.oneaccountsbysiqbal.com" target="_blank">
-                      <i className="ti ti-world" aria-hidden="true"></i> oneaccountsbysiqbal.com
+                      <Globe size={13} strokeWidth={1.8} /> oneaccountsbysiqbal.com
                     </a>
                   </div>
                 </div>
