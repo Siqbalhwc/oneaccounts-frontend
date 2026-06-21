@@ -79,7 +79,7 @@ export default function DashboardSidebar({
 }: { email: string; initial: string; logoUrl: string; companyName: string; companyTagline: string }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { hasFeature } = usePlan()
+  const { hasFeature, features, loading } = usePlan()
   const { role } = useRole()
   const { theme } = useTheme()
 
@@ -92,6 +92,15 @@ export default function DashboardSidebar({
     if (typeof window !== "undefined") return localStorage.getItem("sidebarCollapsed") === "true"
     return false
   })
+
+  // ── Force a re‑render when PlanContext finishes loading ──
+  const [dummy, setDummy] = useState(0)
+  useEffect(() => {
+    if (!loading && features.length > 0) {
+      // This triggers a re‑render when loading becomes false
+      setDummy(prev => prev + 1)
+    }
+  }, [loading, features])
 
   // Fetch business type
   const [businessType, setBusinessType] = useState<string>("")
@@ -262,6 +271,7 @@ export default function DashboardSidebar({
     <motion.aside
       className="dl-sidebar"
       id="dl-sidebar"
+      key={`sidebar-${dummy}`} // ← Force remount when dummy changes
       style={{
         width: collapsed ? 68 : 240,
         minWidth: collapsed ? 68 : 240,
@@ -269,7 +279,7 @@ export default function DashboardSidebar({
         margin: GAP,
         marginRight: 0,
         borderRadius: 24,
-        background: "transparent",                     // ✅ transparent – blur is on child
+        background: "transparent",
         boxShadow: shadow,
         border: `1px solid ${borderColor}`,
         position: "fixed",
@@ -280,7 +290,7 @@ export default function DashboardSidebar({
       animate={{ width: collapsed ? 68 : 240 }}
       transition={{ duration: 0.35, ease: [0.25, 0.8, 0.25, 1] }}
     >
-      {/* ✅ Blurred background – separate layer, does NOT affect content */}
+      {/* Blurred background – separate layer, does NOT affect content */}
       <div
         style={{
           position: "absolute",

@@ -3,7 +3,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 
-// balance_sheet removed from the toggleable list – it is always enabled
 const FEATURE_CODES = [
   "inventory",
   "investors",
@@ -47,7 +46,6 @@ export function PlanProvider({ children }: { children: ReactNode }) {
       const cid = (user?.app_metadata as any)?.company_id
       if (!cid) { setLoading(false); return }
 
-      // ── NEW: Fetch business type ──
       const { data: companyData } = await supabase
         .from("companies")
         .select("business_type")
@@ -101,16 +99,20 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     loadFeatures()
   }, [loadFeatures])
 
-  // ── FIX: hasFeature with fallback for trading companies ──
+  // ── Log when context is ready ──
+  useEffect(() => {
+    if (!loading && features.length > 0) {
+      console.log('✅ PlanContext loaded with features:', features)
+      console.log('✅ Business type:', businessType)
+    }
+  }, [loading, features, businessType])
+
   const hasFeature = (code: string) => {
-    // Balance Sheet is always available
     if (code === "balance_sheet") return true
     if (loading) return true // avoid flash while loading
 
-    // ✅ Inventory is always enabled for trading companies
+    // Trading companies get inventory and purchase orders by default
     if (code === "inventory" && businessType === "trading") return true
-
-    // ✅ Purchase Orders are always enabled for trading companies
     if (code === "purchase_orders" && businessType === "trading") return true
 
     return features.includes(code)
@@ -121,10 +123,8 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   }
 
   const setFeatureState = async (code: string, enabled: boolean) => {
-    // balance_sheet can't be toggled, ignore
     if (code === "balance_sheet") return
 
-    // Don't allow disabling inventory for trading companies
     if (code === "inventory" && businessType === "trading") {
       console.warn("Inventory cannot be disabled for trading companies")
       return
@@ -166,6 +166,16 @@ export function PlanProvider({ children }: { children: ReactNode }) {
       loadFeatures()
     }
   }
+
+  // ── Listen for auth changes to reload features ──
+  useEffect(() => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(() => {
+      loadFeatures()
+    })
+    return () => {
+      authListener?.subscription?.unsubscribe()
+    }
+  }, [loadFeatures])
 
   return (
     <PlanContext.Provider value={{ hasFeature, features, loading, refreshFeatures, setFeatureState }}>
