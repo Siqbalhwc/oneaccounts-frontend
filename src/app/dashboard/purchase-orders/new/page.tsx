@@ -19,6 +19,7 @@ export default function NewPurchaseOrderPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
+  const { hasFeature } = usePlan()
   const [companyId, setCompanyId] = useState("")
   const [loading, setLoading] = useState(true)
 
@@ -42,19 +43,23 @@ export default function NewPurchaseOrderPage() {
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // ── Load data ──
+  // ── Load data (only if feature is enabled) ──
   useEffect(() => {
+    if (!hasFeature("purchase_orders")) {
+      setLoading(false)
+      return
+    }
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
       loadSuppliers(cid)
       setLoading(false)
     })
-  }, [])
+  }, [hasFeature])
 
   // If editing, load existing PO
   useEffect(() => {
-    if (!editId || !companyId) return
+    if (!editId || !companyId || !hasFeature("purchase_orders")) return
     supabase.from("purchase_orders")
       .select("*, items:purchase_order_items(*)")
       .eq("id", editId)
@@ -78,11 +83,11 @@ export default function NewPurchaseOrderPage() {
         }))
         setItems(loadedItems)
       })
-  }, [editId, companyId, suppliers])
+  }, [editId, companyId, suppliers, hasFeature])
 
   const loadSuppliers = (cid?: string) => {
     const targetId = cid || companyId
-    if (!targetId) return
+    if (!targetId || !hasFeature("purchase_orders")) return
     supabase.from("suppliers")
       .select("id,code,name,phone,balance")
       .eq("company_id", targetId)
@@ -206,6 +211,16 @@ export default function NewPurchaseOrderPage() {
     document.addEventListener("mousedown", handler)
     return () => document.removeEventListener("mousedown", handler)
   }, [])
+
+  // ── Feature guard ──
+  if (!hasFeature("purchase_orders")) {
+    return (
+      <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>
+        <h2>Purchase Orders feature is not enabled.</h2>
+        <p>Enable it in the Feature Manager.</p>
+      </div>
+    )
+  }
 
   if (loading) {
     return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>Loading form…</div>
