@@ -15,7 +15,7 @@ const FEATURE_CODES = [
   "email_reports",
   "purchase_orders",
   "asset_management",
-  "tax_management",   // ← Tax Management add‑on
+  "tax_management",
 ]
 
 interface PlanContextType {
@@ -37,6 +37,7 @@ const PlanContext = createContext<PlanContextType>({
 export function PlanProvider({ children }: { children: ReactNode }) {
   const [features, setFeatures] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+  const [businessType, setBusinessType] = useState<string>("")
   const supabase = createClient()
 
   const loadFeatures = useCallback(async () => {
@@ -45,6 +46,17 @@ export function PlanProvider({ children }: { children: ReactNode }) {
       const { data: { user } } = await supabase.auth.getUser()
       const cid = (user?.app_metadata as any)?.company_id
       if (!cid) { setLoading(false); return }
+
+      // ── NEW: Fetch business type ──
+      const { data: companyData } = await supabase
+        .from("companies")
+        .select("business_type")
+        .eq("id", cid)
+        .single()
+
+      if (companyData) {
+        setBusinessType(companyData.business_type || "")
+      }
 
       const { data: featureRows } = await supabase
         .from("features")
@@ -89,10 +101,18 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     loadFeatures()
   }, [loadFeatures])
 
+  // ── FIX: hasFeature with fallback for trading companies ──
   const hasFeature = (code: string) => {
     // Balance Sheet is always available
     if (code === "balance_sheet") return true
-    if (loading) return true   // avoid flash while loading
+    if (loading) return true // avoid flash while loading
+
+    // ✅ Inventory is always enabled for trading companies
+    if (code === "inventory" && businessType === "trading") return true
+
+    // ✅ Purchase Orders are always enabled for trading companies
+    if (code === "purchase_orders" && businessType === "trading") return true
+
     return features.includes(code)
   }
 
@@ -103,6 +123,16 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   const setFeatureState = async (code: string, enabled: boolean) => {
     // balance_sheet can't be toggled, ignore
     if (code === "balance_sheet") return
+
+    // Don't allow disabling inventory for trading companies
+    if (code === "inventory" && businessType === "trading") {
+      console.warn("Inventory cannot be disabled for trading companies")
+      return
+    }
+    if (code === "purchase_orders" && businessType === "trading") {
+      console.warn("Purchase Orders cannot be disabled for trading companies")
+      return
+    }
 
     setFeatures(prev => {
       if (enabled) {
