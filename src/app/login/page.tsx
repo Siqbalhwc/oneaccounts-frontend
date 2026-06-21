@@ -540,7 +540,7 @@ export default function LoginPage() {
           box-shadow: 0 0 0 3.5px rgba(23,64,200,0.10);
           background: white;
         }
-        .oa-input::placeholder { color: #C1CBDA; font-size: 12.5px; }
+        .oa-input::placeholder { color: #94A3B8; font-size: 12.5px; }
         .oa-eye {
           position: absolute; right: 11px; top: 50%; transform: translateY(-50%);
           background: none; border: none; cursor: pointer;
@@ -586,32 +586,13 @@ export default function LoginPage() {
 
         .oa-ssl { font-size: 10px; color: #94A3B8; padding: 7px 0 0; text-align: center; }
 
-        .oa-divider { display: flex; align-items: center; gap: 10px; margin: 14px 0; }
-        .oa-div-line { flex: 1; height: 1px; background: #E3E8F5; }
-        .oa-div-txt { font-size: 10.5px; color: #98A6BD; font-weight: 600; }
-
-        .oa-trial-btn {
-          display: flex; align-items: center; justify-content: center;
-          width: 100%; height: 44px;
-          background: linear-gradient(135deg, #10B981 0%, #047857 100%);
-          border: none; border-radius: 10px;
-          font-size: 12.5px; font-weight: 700; color: white;
-          font-family: inherit; cursor: pointer; text-decoration: none;
-          box-shadow: 0 6px 16px rgba(5,150,105,0.30);
-          transition: all 0.2s;
-        }
-        .oa-trial-btn:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 8px 20px rgba(5,150,105,0.40);
-        }
-        .oa-trial-note { font-size: 10px; color: #94A3B8; margin-top: 6px; text-align: center; }
-
-        .oa-switch-row { text-align: center; margin-top: 11px; }
+        .oa-switch-row { text-align: center; margin-top: 14px; }
         .oa-switch {
           background: none; border: none;
-          font-size: 12px; color: #1740C8; font-weight: 600;
-          cursor: pointer; font-family: inherit; text-decoration: underline;
+          font-size: 12px; color: #64748B; font-weight: 600;
+          cursor: pointer; font-family: inherit;
         }
+        .oa-switch strong { color: #1740C8; font-weight: 700; text-decoration: underline; }
 
         .oa-error {
           background: #FEF2F2; border: 1px solid #FECACA;
@@ -624,52 +605,31 @@ export default function LoginPage() {
           font-size: 12px; color: #15803D; margin-bottom: 12px;
         }
 
-        /* ── NEW: Exciting Addons ── */
-        .oa-addons {
-          margin-top: 18px;
-          padding: 14px 16px;
-          background: linear-gradient(135deg, rgba(56,189,248,0.06), rgba(99,102,241,0.04));
-          border: 1px solid rgba(56,189,248,0.12);
-          border-radius: 12px;
+        /* ── Trial mini-link (de-emphasized, lives under the divider) ── */
+        .oa-trial-divider { display: flex; align-items: center; gap: 10px; margin: 16px 0 12px; }
+        .oa-trial-divider .oa-div-line { flex: 1; height: 1px; background: #E3E8F5; }
+        .oa-trial-divider .oa-div-txt { font-size: 10.5px; color: #98A6BD; font-weight: 600; }
+
+        .oa-trial-link {
+          display: flex; align-items: center; justify-content: center; gap: 6px;
+          width: 100%; padding: 10px 14px;
+          background: #FFFFFF;
+          border: 1.5px solid #D9E0F3; border-radius: 10px;
+          font-size: 12.5px; font-weight: 700; color: #0F172A;
+          font-family: inherit; cursor: pointer; text-decoration: none;
+          transition: all 0.18s;
         }
-        .oa-addons-title {
-          font-size: 10px;
-          color: #64748B;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.8px;
-          text-align: center;
-          margin-bottom: 10px;
+        .oa-trial-link:hover {
+          border-color: #10B981;
+          background: #F0FDF4;
         }
-        .oa-addons-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 6px;
+        .oa-trial-link .oa-trial-tag {
+          font-size: 9px; font-weight: 800; letter-spacing: 0.03em;
+          color: #047857; background: #D1FAE5;
+          padding: 2px 7px; border-radius: 100px;
+          margin-left: 4px;
         }
-        .oa-addon-item {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          padding: 6px 10px;
-          background: rgba(255,255,255,0.6);
-          border-radius: 8px;
-          border: 1px solid rgba(255,255,255,0.8);
-          font-size: 11px;
-          font-weight: 600;
-          color: #1E293B;
-          transition: all 0.15s;
-        }
-        .oa-addon-item:hover {
-          background: white;
-          border-color: #38BDF8;
-          transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(0,0,0,0.06);
-        }
-        .oa-addon-item i {
-          font-size: 14px;
-          color: #38BDF8;
-          flex-shrink: 0;
-        }
+        .oa-trial-note { font-size: 10px; color: #94A3B8; margin-top: 7px; text-align: center; }
 
         /* ── Card Foot Contact ── */
         .oa-card-contact {
@@ -687,6 +647,52 @@ export default function LoginPage() {
         .oa-card-contact .wa { color: #059669; }
         .oa-card-contact .wa:hover { color: #047857; }
         .oa-card-contact i { font-size: 13px; margin-right: 2px; }
+
+        /* ── Addons strip (moved below the card, outside the credentials flow) ── */
+        .oa-addons-strip {
+          margin-top: 14px;
+          padding-top: 14px;
+          border-top: 1px solid rgba(255,255,255,0.08);
+        }
+        .oa-addons-strip-label {
+          font-size: 10px;
+          color: rgba(255,255,255,0.38);
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.8px;
+          margin-bottom: 10px;
+        }
+        .oa-addons-list {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 8px;
+        }
+        .oa-addon-pill {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 9px 11px;
+          background: rgba(255,255,255,0.04);
+          border: 1px solid rgba(255,255,255,0.09);
+          border-radius: 9px;
+          transition: all 0.18s;
+        }
+        .oa-addon-pill:hover {
+          background: rgba(255,255,255,0.07);
+          border-color: rgba(56,189,248,0.3);
+        }
+        .oa-addon-icon {
+          width: 24px; height: 24px; flex-shrink: 0;
+          border-radius: 7px;
+          background: rgba(56,189,248,0.14);
+          display: flex; align-items: center; justify-content: center;
+        }
+        .oa-addon-icon i { font-size: 13px; color: #7DD3FC; }
+        .oa-addon-pill span {
+          font-size: 11px; font-weight: 600;
+          color: rgba(255,255,255,0.75);
+          line-height: 1.25;
+        }
 
         /* ═══════════════════════════════════════
            RESPONSIVE
@@ -723,15 +729,14 @@ export default function LoginPage() {
           .oa-left-steps { padding: 10px 14px; flex-direction: column; align-items: flex-start; gap: 4px; }
           .oa-left-step { font-size: 11px; }
           .oa-demo { margin-top: 12px; }
-          .oa-addons-grid { grid-template-columns: 1fr 1fr; }
-          .oa-addon-item { font-size: 10px; padding: 4px 8px; }
+          .oa-addons-list { grid-template-columns: 1fr 1fr; }
         }
 
         @media (max-width: 480px) {
           .oa-segments { grid-template-columns: 1fr 1fr; }
           .oa-headline { font-size: 19px; }
           .oa-left { padding: 14px 16px; }
-          .oa-addons-grid { grid-template-columns: 1fr; }
+          .oa-addons-list { grid-template-columns: 1fr; }
         }
 
         @media (min-width: 1400px) {
@@ -747,7 +752,7 @@ export default function LoginPage() {
           .oa-brand-name { font-size: 25px; }
           .oa-brand-logo { width: 54px; height: 54px; }
           .oa-title { font-size: 25px; }
-          .oa-btn, .oa-trial-btn { height: 50px; font-size: 15px; }
+          .oa-btn, .oa-trial-link { height: 50px; font-size: 15px; }
           .oa-input { height: 48px; font-size: 14px; }
         }
       `}</style>
@@ -882,6 +887,29 @@ export default function LoginPage() {
                 />
               </div>
 
+              {/* ── Addons strip (moved here, off the credentials column entirely) ── */}
+              <div className="oa-addons-strip">
+                <div className="oa-addons-strip-label">Available add-ons</div>
+                <div className="oa-addons-list">
+                  <div className="oa-addon-pill">
+                    <div className="oa-addon-icon"><i className="ti ti-brand-whatsapp" aria-hidden="true"></i></div>
+                    <span>WhatsApp Integration</span>
+                  </div>
+                  <div className="oa-addon-pill">
+                    <div className="oa-addon-icon"><i className="ti ti-building-bank" aria-hidden="true"></i></div>
+                    <span>Fixed Assets</span>
+                  </div>
+                  <div className="oa-addon-pill">
+                    <div className="oa-addon-icon"><i className="ti ti-shopping-cart" aria-hidden="true"></i></div>
+                    <span>Purchase Order</span>
+                  </div>
+                  <div className="oa-addon-pill">
+                    <div className="oa-addon-icon"><i className="ti ti-receipt-tax" aria-hidden="true"></i></div>
+                    <span>Tax Module</span>
+                  </div>
+                </div>
+              </div>
+
               <div className="oa-left-spacer" />
 
               <div className="oa-footer-txt">© 2026 OneAccounts by Siqbal. All rights reserved.</div>
@@ -1002,45 +1030,29 @@ export default function LoginPage() {
                         setError("")
                       }}
                     >
-                      {isSignUp
-                        ? "Already have an account? Sign in"
-                        : "Don't have an account? Sign up"}
+                      {isSignUp ? (
+                        <>Already have an account? <strong>Sign in</strong></>
+                      ) : (
+                        <>New to OneAccounts? <strong>Create an account</strong></>
+                      )}
                     </button>
                   </div>
 
-                  <div className="oa-divider">
-                    <div className="oa-div-line" />
-                    <span className="oa-div-txt">or</span>
-                    <div className="oa-div-line" />
-                  </div>
+                  {!isSignUp && (
+                    <>
+                      <div className="oa-trial-divider">
+                        <div className="oa-div-line" />
+                        <span className="oa-div-txt">or</span>
+                        <div className="oa-div-line" />
+                      </div>
 
-                  <a href="/signup" className="oa-trial-btn">
-                    🚀 Start Free Trial (10 days · Professional Plan)
-                  </a>
-                  <p className="oa-trial-note">No credit card required. Create your company in seconds.</p>
-
-                  {/* ── NEW: Exciting Addons ── */}
-                  <div className="oa-addons">
-                    <div className="oa-addons-title">✨ Exciting Addons</div>
-                    <div className="oa-addons-grid">
-                      <div className="oa-addon-item">
-                        <i className="ti ti-brand-whatsapp" aria-hidden="true"></i>
-                        WhatsApp Integration
-                      </div>
-                      <div className="oa-addon-item">
-                        <i className="ti ti-box" aria-hidden="true"></i>
-                        Fixed Assets
-                      </div>
-                      <div className="oa-addon-item">
-                        <i className="ti ti-shopping-cart" aria-hidden="true"></i>
-                        Purchase Order
-                      </div>
-                      <div className="oa-addon-item">
-                        <i className="ti ti-settings" aria-hidden="true"></i>
-                        User Gadgets
-                      </div>
-                    </div>
-                  </div>
+                      <a href="/signup" className="oa-trial-link">
+                        Start a free trial
+                        <span className="oa-trial-tag">10 DAYS · NO CARD</span>
+                      </a>
+                      <p className="oa-trial-note">Professional Plan · Create your company in seconds.</p>
+                    </>
+                  )}
 
                 </div>
 
