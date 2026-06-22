@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { Eye, EyeOff } from "lucide-react"
+import { normalizePhone } from "@/lib/whatsapp"
 
 export default function SignupPage() {
   const router = useRouter()
@@ -17,10 +18,18 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [companyName, setCompanyName] = useState("")
   const [businessType, setBusinessType] = useState("ngo")
+  const [phone, setPhone] = useState("")
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState("")
   const [hasExistingSession, setHasExistingSession] = useState(false)
-  const [isCreating, setIsCreating] = useState(false)   // ✅ full‑screen loading state
+  const [isCreating, setIsCreating] = useState(false)
+
+  // ── Phone validation using your normalizePhone helper ──
+  const validatePakistanPhone = (raw: string): boolean => {
+    const normalized = normalizePhone(raw) // returns e.g., "3123456789"
+    // Must be exactly 10 digits and start with '3' (Pakistan mobile prefix)
+    return /^3\d{9}$/.test(normalized)
+  }
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -33,6 +42,21 @@ export default function SignupPage() {
     setLoading(true)
     setErrorMsg("")
 
+    // ── Validate phone ──
+    if (!phone) {
+      setErrorMsg("Phone number is required.")
+      setLoading(false)
+      return
+    }
+    if (!validatePakistanPhone(phone)) {
+      setErrorMsg("Please enter a valid Pakistan mobile number (e.g., 0311-1234567 or +92311-1234567)")
+      setLoading(false)
+      return
+    }
+
+    // Normalize phone for storage (03XXXXXXXXX)
+    const normalizedPhone = "03" + normalizePhone(phone)
+
     if (hasExistingSession) {
       setErrorMsg("You are already logged in. Please sign out or use an incognito window to create a separate trial company.")
       setLoading(false)
@@ -43,6 +67,14 @@ export default function SignupPage() {
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        emailRedirectTo: window.location.origin + "/auth/callback",
+        data: {
+          company_name: companyName,
+          business_type: businessType,
+          phone: normalizedPhone,
+        },
+      },
     })
 
     if (authError) {
@@ -58,20 +90,46 @@ export default function SignupPage() {
       return
     }
 
+    // ── If email confirmation is required, show message ──
     if (!authData.session) {
-      setErrorMsg("✅ Account created! Please check your email to confirm, then sign in to create your company.")
+      // ── Create company record with phone before verification ──
+      try {
+        const res = await fetch("/api/trial/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            companyName,
+            businessType,
+            email,
+            phone: normalizedPhone,
+          }),
+        })
+        const data = await res.json()
+        if (!data.success) {
+          console.error("Company creation error (pre-verification):", data.error)
+        }
+      } catch (e) {
+        console.error("Failed to create company:", e)
+      }
+
+      setErrorMsg("✅ Account created! Please check your email to confirm, then sign in to access your company.")
       setLoading(false)
       return
     }
 
     // ── 2. Create company (API call) ──────────────────────
-    setIsCreating(true)   // ✅ show full‑screen loader
+    setIsCreating(true)
 
     try {
       const res = await fetch("/api/trial/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyName, businessType }),
+        body: JSON.stringify({
+          companyName,
+          businessType,
+          email,
+          phone: normalizedPhone,
+        }),
       })
       const data = await res.json()
 
@@ -84,7 +142,6 @@ export default function SignupPage() {
 
       // ── 3. Refresh session so the new company_id is loaded ──
       await supabase.auth.refreshSession()
-      // Give Supabase a moment to propagate the new JWT claims
       await new Promise(resolve => setTimeout(resolve, 800))
 
       // ── 4. Redirect to dashboard ─────────────────────────
@@ -96,7 +153,7 @@ export default function SignupPage() {
     }
   }
 
-  // ✅ Full‑screen loading overlay while company is being created
+  // ── Full‑screen loading overlay ──
   if (isCreating) {
     return (
       <div style={{
@@ -237,6 +294,27 @@ export default function SignupPage() {
             <option value="service">Service Business</option>
             <option value="trading">Trading Business</option>
           </select>
+
+          {/* ── NEW: Phone Field ── */}
+          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>
+            Phone Number <span style={{ fontSize: 11, fontWeight: 400, color: "#94A3B8" }}>(Pakistan, for WhatsApp follow-up)</span>
+          </label>
+          <input
+            type="tel"
+            placeholder="0311-1234567 or +92311-1234567"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            required
+            style={{
+              width: "100%",
+              padding: "8px 12px",
+              border: "1px solid #E2E8F0",
+              borderRadius: 6,
+              fontSize: 13,
+              marginBottom: 12,
+              boxSizing: "border-box",
+            }}
+          />
 
           <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>
             Email
