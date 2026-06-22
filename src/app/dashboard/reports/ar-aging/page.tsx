@@ -8,6 +8,13 @@ import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import { useCompany } from "@/contexts/CompanyContext"
 
+const NAVY = [7, 8, 91] as [number, number, number]
+const DARK = [17, 24, 39] as [number, number, number]
+const MUTED = [107, 114, 128] as [number, number, number]
+const BORDER = [229, 231, 235] as [number, number, number]
+const WHITE = [255, 255, 255] as [number, number, number]
+const ROW_ALT = [248, 249, 252] as [number, number, number]
+
 interface AgingRow {
   customerName: string
   customerId: number
@@ -34,9 +41,26 @@ interface ARInvoice {
   customer_id: number
 }
 
+const pkr = (n: number) => "PKR " + n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+async function loadImage(url: string): Promise<string | null> {
+  try {
+    const r = await fetch(url)
+    if (!r.ok) return null
+    const b = await r.blob()
+    return new Promise((res) => {
+      const reader = new FileReader()
+      reader.onload = () => res(reader.result as string)
+      reader.onerror = () => res("")
+      reader.readAsDataURL(b)
+    })
+  } catch { return null }
+}
+
 export default function ARAgingPage() {
   const router = useRouter()
   const { companyId } = useCompany()
+  const { companyName, companyTagline, logoUrl, companyAddress, companyPhone, companyEmail } = useCompany()
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
   const [data, setData] = useState<AgingRow[]>([])
@@ -243,38 +267,58 @@ export default function ARAgingPage() {
     setCustomerSearch("")
   }
 
-  // ── PDF Export – Customer Ledger Template Format ──
-  const handleDownloadPDF = () => {
+  // ── PDF Export – Customer Ledger Header Format ──
+  const handleDownloadPDF = async () => {
     if (data.length === 0) return alert("No data to export")
 
-    const doc = new jsPDF({ orientation: "landscape" })
-    const pageWidth = doc.internal.pageSize.getWidth()
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" })
+    const PW = 297, ML = 14, MR = 14
+    const LOGO_SIZE = 20, LOGO_X = ML, LOGO_Y = 7
 
-    // ── Header ──
-    doc.setFontSize(16)
-    doc.setTextColor(30, 58, 138)
-    doc.text("AR Aging Report", 14, 20)
+    // ── Load Logo ──
+    let logoData: string | null = null
+    if (logoUrl) logoData = await loadImage(logoUrl)
+    if (logoData) doc.addImage(logoData, "PNG", LOGO_X, LOGO_Y, LOGO_SIZE, LOGO_SIZE)
 
-    doc.setFontSize(10)
-    doc.setTextColor(100, 100, 100)
-    doc.text(`As of ${asOfDate}`, 14, 28)
+    // ── Left Side: Company Info ──
+    const textX = logoData ? LOGO_X + LOGO_SIZE + 5 : ML
+    doc.setTextColor(...NAVY).setFont("helvetica", "bold").setFontSize(14)
+    doc.text(companyName || "", textX, LOGO_Y + 7)
+    doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...MUTED)
+    doc.text(companyTagline || "", textX, LOGO_Y + 13)
 
-    // ── Currency note (right aligned) ──
-    doc.setFontSize(8)
-    doc.setTextColor(150, 150, 150)
-    doc.text("Amounts in PKR", pageWidth - 14, 28, { align: "right" })
+    let infoY = LOGO_Y + 19
+    if (companyAddress) { doc.text(companyAddress, textX, infoY); infoY += 4 }
+    if (companyPhone) { doc.text("Phone: " + companyPhone, textX, infoY); infoY += 4 }
+    if (companyEmail) { doc.text("Email: " + companyEmail, textX, infoY) }
 
-    // ── Table Headers ──
-    const head = [["Customer", "Invoice #", "Inv Date", "Current", "1-30", "31-60", "61-90", ">90", "Total"]]
+    // ── Right Side: Report Title & Filters ──
+    doc.setFont("helvetica", "bold").setFontSize(24).setTextColor(...NAVY)
+    doc.text("AR AGING REPORT", PW - MR, LOGO_Y + 8, { align: "right" })
 
-    // ── Build Table Body ──
-    const body: any[] = []
+    const customerFilter = selectedCustomerIds.length === 1
+      ? customers.find(c => c.id === selectedCustomerIds[0])?.name || "Selected Customer"
+      : "All Customers"
+
+    doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...MUTED)
+    doc.text(`Customer: ${customerFilter}`, PW - MR, LOGO_Y + 16, { align: "right" })
+    doc.text(`As of: ${asOfDate}`, PW - MR, LOGO_Y + 21, { align: "right" })
+
+    // ── Header Line ──
+    const HEADER_BOTTOM = LOGO_Y + LOGO_SIZE + 5
+    doc.setDrawColor(...NAVY).setLineWidth(0.6).line(ML, HEADER_BOTTOM, PW - MR, HEADER_BOTTOM)
+
+    // ── Table ──
+    let Y = HEADER_BOTTOM + 6
+    const headers = ["Customer", "Invoice #", "Inv Date", "Current", "1-30", "31-60", "61-90", ">90", "Total"]
+
+    const rows: any[] = []
     data.forEach((row) => {
       const isSubtotal = row.invoiceNo === "Subtotal"
       const isCustomerHeader = !isSubtotal && row.customerName && row.customerName.length > 0
 
       if (isCustomerHeader) {
-        body.push([
+        rows.push([
           { content: row.customerName, styles: { fontStyle: "bold", fillColor: [245, 247, 250] } },
           "",
           "",
@@ -286,7 +330,7 @@ export default function ARAgingPage() {
           "",
         ])
       } else {
-        body.push([
+        rows.push([
           isSubtotal ? "Subtotal" : "",
           isSubtotal ? "" : row.invoiceNo,
           isSubtotal ? "" : row.invoiceDate,
@@ -300,9 +344,9 @@ export default function ARAgingPage() {
       }
     })
 
-    // ── Grand Total Row ──
-    body.push([
-      { content: "Grand Total", styles: { fontStyle: "bold", fillColor: [30, 58, 138], textColor: [255, 255, 255] } },
+    // Grand Total
+    rows.push([
+      { content: "Grand Total", styles: { fontStyle: "bold", fillColor: NAVY, textColor: WHITE } },
       "",
       "",
       totals.current > 0 ? totals.current.toLocaleString() : "",
@@ -313,18 +357,25 @@ export default function ARAgingPage() {
       { content: totals.total > 0 ? totals.total.toLocaleString() : "", styles: { fontStyle: "bold" } },
     ])
 
-    // ── Render Table ──
     autoTable(doc, {
-      startY: 35,
-      head: head,
-      body: body,
-      theme: "striped",
+      startY: Y,
+      margin: { left: ML, right: MR },
+      head: [headers],
+      body: rows,
       styles: {
-        fontSize: 8,
-        cellPadding: 3,
-        overflow: "linebreak",
-        halign: "right",
+        fontSize: 7.5,
+        cellPadding: { top: 2, bottom: 2, left: 2, right: 2 },
+        textColor: DARK,
+        lineColor: BORDER,
+        lineWidth: 0.2,
       },
+      headStyles: {
+        fillColor: NAVY,
+        textColor: WHITE,
+        fontStyle: "bold",
+        fontSize: 8,
+      },
+      alternateRowStyles: { fillColor: ROW_ALT },
       columnStyles: {
         0: { cellWidth: 45, halign: "left" },
         1: { cellWidth: 30, halign: "left" },
@@ -336,23 +387,32 @@ export default function ARAgingPage() {
         7: { cellWidth: 25, halign: "right" },
         8: { cellWidth: 30, halign: "right" },
       },
-      headStyles: {
-        fillColor: [30, 58, 138],
-        textColor: [255, 255, 255],
-        fontSize: 8,
-        fontStyle: "bold",
-      },
-      didParseCell: (data) => {
-        if (data.section === "body") {
-          const row = data.row.raw
+      didParseCell: (hookData) => {
+        // Center header text for numeric columns
+        if (hookData.section === 'head' && hookData.column.index >= 3) {
+          hookData.cell.styles.halign = 'center'
+        }
+        // Subtotal row styling
+        if (hookData.section === 'body') {
+          const row = hookData.row.raw
           if (row && Array.isArray(row) && row[0] === "Subtotal") {
-            data.cell.styles.fillColor = [240, 242, 245]
-            data.cell.styles.fontStyle = "bold"
+            hookData.cell.styles.fillColor = [240, 242, 245]
+            hookData.cell.styles.fontStyle = "bold"
           }
         }
       },
-      margin: { left: 14, right: 14 },
     })
+
+    // ── Footer ──
+    const PH = 210
+    doc.setDrawColor(...NAVY).setLineWidth(0.4).line(ML, PH - 14, PW - MR, PH - 14)
+    doc.setFont("helvetica", "normal").setFontSize(7.5).setTextColor(...MUTED)
+    doc.text(
+      `Generated by ${companyName || "OneAccounts"}  ·  ${companyTagline || ""}`,
+      PW / 2,
+      PH - 8,
+      { align: "center" }
+    )
 
     doc.save("ar-aging-report.pdf")
   }
