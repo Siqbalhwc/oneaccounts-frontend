@@ -91,7 +91,7 @@ export default function ARAgingPage() {
 
         let filteredInvoices: ARInvoice[] = invoices
         if (selectedCustomerIds.length > 0) {
-          filteredInvoices = invoices.filter((inv: ARInvoice) => 
+          filteredInvoices = invoices.filter((inv: ARInvoice) =>
             selectedCustomerIds.includes(inv.customer_id)
           )
         }
@@ -129,8 +129,10 @@ export default function ARAgingPage() {
         const grouped: AgingRow[] = []
         let currentCustId = -1
         let subCurrent = 0, sub1to30 = 0, sub31to60 = 0, sub61to90 = 0, subOver90 = 0, subTotal = 0
+
         rows.forEach((row, idx) => {
           if (row.customerId !== currentCustId) {
+            // Push subtotal for previous customer
             if (currentCustId !== -1) {
               grouped.push({
                 customerName: "",
@@ -147,15 +149,48 @@ export default function ARAgingPage() {
               })
               subCurrent = sub1to30 = sub31to60 = sub61to90 = subOver90 = subTotal = 0
             }
+            // Start new customer group
             currentCustId = row.customerId
+
+            // Push customer header row (with customer name)
+            grouped.push({
+              customerName: row.customerName,
+              customerId: row.customerId,
+              invoiceNo: "",
+              invoiceDate: "",
+              dueDate: "",
+              current: 0,
+              days1to30: 0,
+              days31to60: 0,
+              days61to90: 0,
+              over90: 0,
+              total: 0,
+            })
           }
-          grouped.push(row)
+
+          // Push invoice row (without customer name)
+          grouped.push({
+            customerName: "",
+            customerId: row.customerId,
+            invoiceNo: row.invoiceNo,
+            invoiceDate: row.invoiceDate,
+            dueDate: row.dueDate,
+            current: row.current,
+            days1to30: row.days1to30,
+            days31to60: row.days31to60,
+            days61to90: row.days61to90,
+            over90: row.over90,
+            total: row.total,
+          })
+
           subCurrent += row.current
           sub1to30 += row.days1to30
           sub31to60 += row.days31to60
           sub61to90 += row.days61to90
           subOver90 += row.over90
           subTotal += row.total
+
+          // Push final subtotal
           if (idx === rows.length - 1) {
             grouped.push({
               customerName: "",
@@ -323,7 +358,6 @@ export default function ARAgingPage() {
           min-width: 70px;
         }
 
-        /* ── All numeric columns equal width ── */
         .aging-table th:nth-child(4),
         .aging-table th:nth-child(5),
         .aging-table th:nth-child(6),
@@ -344,60 +378,50 @@ export default function ARAgingPage() {
           text-overflow: ellipsis;
         }
 
-        .aging-table td:first-child {
-          text-align: left;
-          font-weight: 600;
-          color: var(--text);
-        }
-
-        .aging-table td:nth-child(2),
-        .aging-table td:nth-child(3) {
-          text-align: left;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        /* ── Customer header row (first row of each customer) ── */
+        /* ── Customer header row ── */
         .aging-table tr.customer-header td {
           font-weight: 700;
-          font-size: 13px;
-          color: var(--text);
-          padding-top: 14px;
-          padding-bottom: 6px;
-          border-bottom: 1px solid var(--border);
-          background: var(--bg);
-        }
-
-        .aging-table tr.customer-header td:first-child {
           font-size: 14px;
           color: var(--primary);
+          padding-top: 16px;
+          padding-bottom: 4px;
+          border-bottom: 1.5px solid var(--border);
+          background: var(--bg);
         }
-
-        /* ── Invoice rows (indented, no customer name) ── */
-        .aging-table tr.invoice-row td:first-child {
-          font-weight: 400;
+        .aging-table tr.customer-header td:first-child {
+          font-size: 14px;
+        }
+        .aging-table tr.customer-header td:not(:first-child) {
           color: var(--text-muted);
-          padding-left: 24px;
+          font-weight: 400;
           font-size: 11px;
         }
 
+        /* ── Invoice rows (indented, normal weight) ── */
         .aging-table tr.invoice-row td {
+          font-weight: 400;
           font-size: 11.5px;
+          color: var(--text);
+        }
+        .aging-table tr.invoice-row td:first-child {
+          padding-left: 24px;
+          font-weight: 400;
+          color: var(--text-muted);
+          font-size: 11px;
         }
 
-        /* ── Subtotal row (slightly different shade, bold) ── */
+        /* ── Subtotal row (bold, shaded) ── */
         .aging-table tr.subtotal-row td {
-          font-weight: 700;
+          font-weight: 700 !important;
+          font-size: 12px;
           background: var(--bg-soft);
           border-top: 1.5px solid var(--border);
           border-bottom: 2px solid var(--border);
           padding-top: 6px;
           padding-bottom: 6px;
-          font-size: 12px;
         }
-
         .aging-table tr.subtotal-row td:first-child {
-          font-weight: 700;
+          font-weight: 700 !important;
           color: var(--text);
           padding-left: 8px;
           font-size: 12px;
@@ -663,16 +687,16 @@ export default function ARAgingPage() {
                 const isCustomerHeader = !isSubtotal && row.customerName && row.customerName.length > 0
 
                 return (
-                  <tr 
-                    key={i} 
+                  <tr
+                    key={i}
                     className={
-                      isSubtotal ? "subtotal-row" : 
-                      isCustomerHeader ? "customer-header" : 
+                      isSubtotal ? "subtotal-row" :
+                      isCustomerHeader ? "customer-header" :
                       "invoice-row"
                     }
                   >
                     <td title={row.customerName || (isSubtotal ? "Subtotal" : "")}>
-                      {isSubtotal ? "Subtotal" : row.customerName}
+                      {isCustomerHeader ? row.customerName : (isSubtotal ? "Subtotal" : "")}
                     </td>
                     <td title={isSubtotal ? "" : row.invoiceNo}>
                       {isSubtotal ? "" : row.invoiceNo}
