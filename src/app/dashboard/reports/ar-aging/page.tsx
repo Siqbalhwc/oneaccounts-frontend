@@ -83,8 +83,6 @@ export default function ARAgingPage() {
           return
         }
 
-        console.log(`AR Aging: ${invoices?.length || 0} unpaid invoices found`)
-
         if (!invoices || invoices.length === 0) {
           setData([])
           setLoading(false)
@@ -311,18 +309,30 @@ export default function ARAgingPage() {
 
         .aging-table th:first-child {
           text-align: left;
-          width: 30%;
+          width: 28%;
           min-width: 120px;
         }
         .aging-table th:nth-child(2) {
           text-align: left;
-          width: 12%;
+          width: 14%;
           min-width: 80px;
         }
         .aging-table th:nth-child(3) {
           text-align: left;
           width: 10%;
           min-width: 70px;
+        }
+
+        /* ── All numeric columns equal width ── */
+        .aging-table th:nth-child(4),
+        .aging-table th:nth-child(5),
+        .aging-table th:nth-child(6),
+        .aging-table th:nth-child(7),
+        .aging-table th:nth-child(8),
+        .aging-table th:nth-child(9) {
+          width: 8%;
+          min-width: 70px;
+          text-align: right;
         }
 
         .aging-table td {
@@ -334,7 +344,12 @@ export default function ARAgingPage() {
           text-overflow: ellipsis;
         }
 
-        .aging-table td:first-child,
+        .aging-table td:first-child {
+          text-align: left;
+          font-weight: 600;
+          color: var(--text);
+        }
+
         .aging-table td:nth-child(2),
         .aging-table td:nth-child(3) {
           text-align: left;
@@ -342,17 +357,60 @@ export default function ARAgingPage() {
           text-overflow: ellipsis;
         }
 
-        .aging-table tr.subtotal td {
+        /* ── Customer header row (first row of each customer) ── */
+        .aging-table tr.customer-header td {
           font-weight: 700;
-          background: var(--bg-soft);
-          border-top: 2px solid var(--border);
+          font-size: 13px;
+          color: var(--text);
+          padding-top: 14px;
+          padding-bottom: 6px;
+          border-bottom: 1px solid var(--border);
+          background: var(--bg);
         }
 
+        .aging-table tr.customer-header td:first-child {
+          font-size: 14px;
+          color: var(--primary);
+        }
+
+        /* ── Invoice rows (indented, no customer name) ── */
+        .aging-table tr.invoice-row td:first-child {
+          font-weight: 400;
+          color: var(--text-muted);
+          padding-left: 24px;
+          font-size: 11px;
+        }
+
+        .aging-table tr.invoice-row td {
+          font-size: 11.5px;
+        }
+
+        /* ── Subtotal row (slightly different shade, bold) ── */
+        .aging-table tr.subtotal-row td {
+          font-weight: 700;
+          background: var(--bg-soft);
+          border-top: 1.5px solid var(--border);
+          border-bottom: 2px solid var(--border);
+          padding-top: 6px;
+          padding-bottom: 6px;
+          font-size: 12px;
+        }
+
+        .aging-table tr.subtotal-row td:first-child {
+          font-weight: 700;
+          color: var(--text);
+          padding-left: 8px;
+          font-size: 12px;
+        }
+
+        /* ── Grand total row ── */
         .aging-table tr.grand-total td {
           font-weight: 800;
           background: var(--primary);
           color: var(--primary-text);
           border-top: 2px solid var(--border);
+          padding: 10px 8px;
+          font-size: 13px;
         }
 
         .aging-summary {
@@ -472,7 +530,7 @@ export default function ARAgingPage() {
           }
           .aging-table th,
           .aging-table td {
-            padding: 6px 6px;
+            padding: 6px 4px;
           }
           .aging-table th:first-child {
             min-width: 80px;
@@ -483,8 +541,20 @@ export default function ARAgingPage() {
           .aging-table th:nth-child(3) {
             min-width: 60px;
           }
+          .aging-table th:nth-child(4),
+          .aging-table th:nth-child(5),
+          .aging-table th:nth-child(6),
+          .aging-table th:nth-child(7),
+          .aging-table th:nth-child(8),
+          .aging-table th:nth-child(9) {
+            min-width: 50px;
+          }
           .aging-summary {
             grid-template-columns: repeat(2, 1fr);
+          }
+          .aging-table tr.invoice-row td:first-child {
+            padding-left: 12px;
+            font-size: 10px;
           }
         }
 
@@ -547,7 +617,7 @@ export default function ARAgingPage() {
         </div>
       </div>
 
-      {/* Summary Cards – PKR in superscript */}
+      {/* Summary Cards – PKR in smaller font */}
       <div className="aging-summary">
         {[
           { label: "Current", value: totals.current, color: "#10B981" },
@@ -590,11 +660,26 @@ export default function ARAgingPage() {
             ) : (
               data.map((row, i) => {
                 const isSubtotal = row.invoiceNo === "Subtotal"
+                const isCustomerHeader = !isSubtotal && row.customerName && row.customerName.length > 0
+
                 return (
-                  <tr key={i} className={isSubtotal ? "subtotal" : ""}>
-                    <td title={row.customerName || ""}>{row.customerName || (isSubtotal ? "Subtotal" : "")}</td>
-                    <td title={isSubtotal ? "" : row.invoiceNo}>{isSubtotal ? "" : row.invoiceNo}</td>
-                    <td title={row.invoiceDate}>{row.invoiceDate}</td>
+                  <tr 
+                    key={i} 
+                    className={
+                      isSubtotal ? "subtotal-row" : 
+                      isCustomerHeader ? "customer-header" : 
+                      "invoice-row"
+                    }
+                  >
+                    <td title={row.customerName || (isSubtotal ? "Subtotal" : "")}>
+                      {isSubtotal ? "Subtotal" : row.customerName}
+                    </td>
+                    <td title={isSubtotal ? "" : row.invoiceNo}>
+                      {isSubtotal ? "" : row.invoiceNo}
+                    </td>
+                    <td title={isSubtotal ? "" : row.invoiceDate}>
+                      {isSubtotal ? "" : row.invoiceDate}
+                    </td>
                     <td title={format(row.current)}>{format(row.current)}</td>
                     <td title={format(row.days1to30)}>{format(row.days1to30)}</td>
                     <td title={format(row.days31to60)}>{format(row.days31to60)}</td>
