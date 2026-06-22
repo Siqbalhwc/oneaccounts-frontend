@@ -22,6 +22,19 @@ interface AgingRow {
   total: number
 }
 
+// ── Type for the RPC result ──
+interface ARInvoice {
+  invoice_id: number
+  invoice_no: string
+  date: string
+  due_date: string
+  total: number
+  paid: number
+  party_id: number
+  customer_name: string
+  customer_id: number
+}
+
 export default function ARAgingPage() {
   const router = useRouter()
   const { companyId } = useCompany()
@@ -80,16 +93,16 @@ export default function ARAgingPage() {
         }
 
         // Apply customer filter (client-side since RPC doesn't support it)
-        let filteredInvoices = invoices
+        let filteredInvoices: ARInvoice[] = invoices
         if (selectedCustomerIds.length > 0) {
-          filteredInvoices = invoices.filter(inv => 
+          filteredInvoices = invoices.filter((inv: ARInvoice) => 
             selectedCustomerIds.includes(inv.customer_id)
           )
         }
 
         const refDate = new Date(asOfDate)
         const rows: AgingRow[] = filteredInvoices
-          .map((inv: any) => {
+          .map((inv: ARInvoice) => {
             const bal = (inv.total || 0) - (inv.paid || 0)
             if (bal <= 0) return null
             const due = new Date(inv.due_date)
