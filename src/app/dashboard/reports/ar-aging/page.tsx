@@ -243,45 +243,114 @@ export default function ARAgingPage() {
     setCustomerSearch("")
   }
 
+  // ── PDF Export ──
   const handleDownloadPDF = () => {
     if (data.length === 0) return alert("No data to export")
+
     const doc = new jsPDF({ orientation: "landscape" })
+    const pageWidth = doc.internal.pageSize.getWidth()
+
+    // Header
     doc.setFontSize(16)
+    doc.setTextColor(30, 58, 138)
     doc.text("AR Aging Report", 14, 20)
+
     doc.setFontSize(10)
+    doc.setTextColor(100, 100, 100)
     doc.text(`As of ${asOfDate}`, 14, 28)
 
+    // Currency note
+    doc.setFontSize(8)
+    doc.setTextColor(150, 150, 150)
+    doc.text("Amounts in PKR", pageWidth - 14, 28, { align: "right" })
+
+    // ── Table ──
     const head = [["Customer", "Invoice #", "Inv Date", "Current", "1-30", "31-60", "61-90", ">90", "Total"]]
-    const body = data.map(d => [
-      d.customerName || (d.invoiceNo === "Subtotal" ? "Subtotal" : ""),
-      d.invoiceNo === "Subtotal" ? "" : d.invoiceNo,
-      d.invoiceDate,
-      d.current.toLocaleString(),
-      d.days1to30.toLocaleString(),
-      d.days31to60.toLocaleString(),
-      d.days61to90.toLocaleString(),
-      d.over90.toLocaleString(),
-      d.total.toLocaleString(),
+
+    const body: any[] = []
+    data.forEach((row) => {
+      const isSubtotal = row.invoiceNo === "Subtotal"
+      const isCustomerHeader = !isSubtotal && row.customerName && row.customerName.length > 0
+
+      if (isCustomerHeader) {
+        body.push([
+          { content: row.customerName, styles: { fontStyle: "bold", fillColor: [245, 247, 250] } },
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+        ])
+      } else {
+        body.push([
+          isSubtotal ? "Subtotal" : "",
+          isSubtotal ? "" : row.invoiceNo,
+          isSubtotal ? "" : row.invoiceDate,
+          row.current > 0 ? row.current.toLocaleString() : "",
+          row.days1to30 > 0 ? row.days1to30.toLocaleString() : "",
+          row.days31to60 > 0 ? row.days31to60.toLocaleString() : "",
+          row.days61to90 > 0 ? row.days61to90.toLocaleString() : "",
+          row.over90 > 0 ? row.over90.toLocaleString() : "",
+          row.total > 0 ? row.total.toLocaleString() : "",
+        ])
+      }
+    })
+
+    // Grand Total row
+    body.push([
+      { content: "Grand Total", styles: { fontStyle: "bold", fillColor: [30, 58, 138], textColor: [255, 255, 255] } },
+      "",
+      "",
+      totals.current > 0 ? totals.current.toLocaleString() : "",
+      totals.days1to30 > 0 ? totals.days1to30.toLocaleString() : "",
+      totals.days31to60 > 0 ? totals.days31to60.toLocaleString() : "",
+      totals.days61to90 > 0 ? totals.days61to90.toLocaleString() : "",
+      totals.over90 > 0 ? totals.over90.toLocaleString() : "",
+      { content: totals.total > 0 ? totals.total.toLocaleString() : "", styles: { fontStyle: "bold" } },
     ])
 
     autoTable(doc, {
       startY: 35,
-      head,
-      body,
-      theme: "grid",
-      headStyles: { fillColor: [30, 58, 138] },
-      styles: { fontSize: 8 },
-      columnStyles: {
-        0: { cellWidth: 40 },
-        1: { cellWidth: 25 },
-        2: { cellWidth: 20 },
-        3: { cellWidth: 20 },
-        4: { cellWidth: 20 },
-        5: { cellWidth: 20 },
-        6: { cellWidth: 20 },
-        7: { cellWidth: 20 },
-        8: { cellWidth: 20 },
+      head: head,
+      body: body,
+      theme: "striped",
+      styles: {
+        fontSize: 8,
+        cellPadding: 3,
+        overflow: "linebreak",
+        halign: "right",
       },
+      columnStyles: {
+        0: { cellWidth: 45, halign: "left" },
+        1: { cellWidth: 30, halign: "left" },
+        2: { cellWidth: 25, halign: "left" },
+        3: { cellWidth: 25, halign: "right" },
+        4: { cellWidth: 25, halign: "right" },
+        5: { cellWidth: 25, halign: "right" },
+        6: { cellWidth: 25, halign: "right" },
+        7: { cellWidth: 25, halign: "right" },
+        8: { cellWidth: 30, halign: "right" },
+      },
+      headStyles: {
+        fillColor: [30, 58, 138],
+        textColor: [255, 255, 255],
+        fontSize: 8,
+        fontStyle: "bold",
+      },
+      didParseCell: (data) => {
+        // Highlight subtotal rows with a different background
+        if (data.section === "body") {
+          const row = data.row.raw
+          if (row && Array.isArray(row) && row[0] === "Subtotal") {
+            data.cell.styles.fillColor = [240, 242, 245]
+            data.cell.styles.fontStyle = "bold"
+          }
+        }
+      },
+      margin: { left: 14, right: 14 },
     })
 
     doc.save("ar-aging-report.pdf")
@@ -337,7 +406,6 @@ export default function ARAgingPage() {
           letter-spacing: 0.04em;
         }
 
-        /* ── Customer column: 14% (reduced from 28%) ── */
         .aging-table th:first-child {
           text-align: left;
           width: 14%;
@@ -354,7 +422,6 @@ export default function ARAgingPage() {
           min-width: 75px;
         }
 
-        /* ── Amount columns: wider, no ellipsis ── */
         .aging-table th:nth-child(4),
         .aging-table th:nth-child(5),
         .aging-table th:nth-child(6),
@@ -389,7 +456,6 @@ export default function ARAgingPage() {
           text-overflow: ellipsis;
         }
 
-        /* ── Customer header row ── */
         .aging-table tr.customer-header td {
           font-weight: 700;
           font-size: 14px;
@@ -410,7 +476,6 @@ export default function ARAgingPage() {
           text-align: right !important;
         }
 
-        /* ── Invoice rows (indented, normal weight) ── */
         .aging-table tr.invoice-row td {
           font-weight: 400;
           font-size: 11.5px;
@@ -423,7 +488,6 @@ export default function ARAgingPage() {
           font-size: 11px;
         }
 
-        /* ── Subtotal row (bold, shaded) ── */
         .aging-table tr.subtotal-row td {
           font-weight: 700 !important;
           font-size: 12px;
@@ -442,7 +506,6 @@ export default function ARAgingPage() {
           font-size: 12px;
         }
 
-        /* ── Grand total row ── */
         .aging-table tr.grand-total td {
           font-weight: 800;
           background: var(--primary);
@@ -664,7 +727,6 @@ export default function ARAgingPage() {
         </div>
       </div>
 
-      {/* Summary Cards – PKR in smaller font */}
       <div className="aging-summary">
         {[
           { label: "Current", value: totals.current, color: "#10B981" },
@@ -683,7 +745,6 @@ export default function ARAgingPage() {
         ))}
       </div>
 
-      {/* Currency note above table */}
       <div className="currency-note">Amounts in PKR</div>
 
       <div className="aging-table-wrapper">
