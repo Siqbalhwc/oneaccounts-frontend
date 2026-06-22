@@ -50,7 +50,7 @@ export default function ARAgingPage() {
       .then(({ data }) => data && setCustomers(data))
   }, [companyId])
 
-  // Fetch invoices when filters change
+  // ── Fetch invoices using RPC ──
   useEffect(() => {
     if (!companyId) {
       setLoading(false)
@@ -58,69 +58,96 @@ export default function ARAgingPage() {
     }
     setLoading(true)
 
-    let query = supabase
-      .from("invoices")
-      .select("id, invoice_no, date, due_date, total, paid, party_id, customers!inner(name)")
-      .eq("company_id", companyId)
-      .eq("type", "sale")
-      .neq("status", "Paid")
-      .order("due_date")
+    supabase
+      .rpc('get_ar_aging', {
+        p_company_id: companyId,
+        p_as_of_date: asOfDate
+      })
+      .then(({ data: invoices, error }) => {
+        if (error) {
+          console.error("AR Aging RPC error:", error)
+          setData([])
+          setLoading(false)
+          return
+        }
 
-    if (selectedCustomerIds.length > 0) {
-      query = query.in("party_id", selectedCustomerIds)
-    }
+        console.log(`AR Aging: ${invoices?.length || 0} unpaid invoices found`)
 
-    query.then(({ data: invoices, error }) => {
-      if (error) {
-        console.error("AR Aging query error:", error)
-        setData([])
-        setLoading(false)
-        return
-      }
-      console.log(`AR Aging: ${invoices?.length || 0} unpaid invoices found`)
+        if (!invoices || invoices.length === 0) {
+          setData([])
+          setLoading(false)
+          return
+        }
 
-      if (!invoices || invoices.length === 0) {
-        setData([])
-        setLoading(false)
-        return
-      }
+        // Apply customer filter (client-side since RPC doesn't support it)
+        let filteredInvoices = invoices
+        if (selectedCustomerIds.length > 0) {
+          filteredInvoices = invoices.filter(inv => 
+            selectedCustomerIds.includes(inv.customer_id)
+          )
+        }
 
-      const refDate = new Date(asOfDate)
-      const rows: AgingRow[] = invoices
-        .map((inv: any) => {
-          const bal = (inv.total || 0) - (inv.paid || 0)
-          if (bal <= 0) return null
-          const due = new Date(inv.due_date)
-          const days = Math.floor((refDate.getTime() - due.getTime()) / 86400000)
-          let current = 0, d1to30 = 0, d31to60 = 0, d61to90 = 0, over90 = 0
-          if (days <= 0) current = bal
-          else if (days <= 30) d1to30 = bal
-          else if (days <= 60) d31to60 = bal
-          else if (days <= 90) d61to90 = bal
-          else over90 = bal
-          return {
-            customerName: inv.customers?.name || "Unknown",
-            customerId: inv.party_id,
-            invoiceNo: inv.invoice_no,
-            invoiceDate: inv.date,
-            dueDate: inv.due_date,
-            current,
-            days1to30: d1to30,
-            days31to60: d31to60,
-            days61to90: d61to90,
-            over90,
-            total: bal,
+        const refDate = new Date(asOfDate)
+        const rows: AgingRow[] = filteredInvoices
+          .map((inv: any) => {
+            const bal = (inv.total || 0) - (inv.paid || 0)
+            if (bal <= 0) return null
+            const due = new Date(inv.due_date)
+            const days = Math.floor((refDate.getTime() - due.getTime()) / 86400000)
+            let current = 0, d1to30 = 0, d31to60 = 0, d61to90 = 0, over90 = 0
+            if (days <= 0) current = bal
+            else if (days <= 30) d1to30 = bal
+            else if (days <= 60) d31to60 = bal
+            else if (days <= 90) d61to90 = bal
+            else over90 = bal
+            return {
+              customerName: inv.customer_name || "Unknown",
+              customerId: inv.customer_id || inv.party_id,
+              invoiceNo: inv.invoice_no,
+              invoiceDate: inv.date,
+              dueDate: inv.due_date,
+              current,
+              days1to30: d1to30,
+              days31to60: d31to60,
+              days61to90: d61to90,
+              over90,
+              total: bal,
+            }
+          })
+          .filter(Boolean) as AgingRow[]
+
+        // Group by customer
+        const grouped: AgingRow[] = []
+        let currentCustId = -1
+        let subCurrent = 0, sub1to30 = 0, sub31to60 = 0, sub61to90 = 0, subOver90 = 0, subTotal = 0
+        rows.forEach((row, idx) => {
+          if (row.customerId !== currentCustId) {
+            if (currentCustId !== -1) {
+              grouped.push({
+                customerName: "",
+                customerId: -1,
+                invoiceNo: "Subtotal",
+                invoiceDate: "",
+                dueDate: "",
+                current: subCurrent,
+                days1to30: sub1to30,
+                days31to60: sub31to60,
+                days61to90: sub61to90,
+                over90: subOver90,
+                total: subTotal,
+              })
+              subCurrent = sub1to30 = sub31to60 = sub61to90 = subOver90 = subTotal = 0
+            }
+            currentCustId = row.customerId
           }
-        })
-        .filter(Boolean) as AgingRow[]
-
-      // Group by customer – keep the existing grouping logic
-      const grouped: AgingRow[] = []
-      let currentCustId = -1
-      let subCurrent = 0, sub1to30 = 0, sub31to60 = 0, sub61to90 = 0, subOver90 = 0, subTotal = 0
-      rows.forEach((row, idx) => {
-        if (row.customerId !== currentCustId) {
-          if (currentCustId !== -1) {
+          grouped.push(row)
+          subCurrent += row.current
+          sub1to30 += row.days1to30
+          sub31to60 += row.days31to60
+          sub61to90 += row.days61to90
+          subOver90 += row.over90
+          subTotal += row.total
+          if (idx === rows.length - 1) {
             grouped.push({
               customerName: "",
               customerId: -1,
@@ -134,37 +161,12 @@ export default function ARAgingPage() {
               over90: subOver90,
               total: subTotal,
             })
-            subCurrent = sub1to30 = sub31to60 = sub61to90 = subOver90 = subTotal = 0
           }
-          currentCustId = row.customerId
-        }
-        grouped.push(row)
-        subCurrent += row.current
-        sub1to30 += row.days1to30
-        sub31to60 += row.days31to60
-        sub61to90 += row.days61to90
-        subOver90 += row.over90
-        subTotal += row.total
-        if (idx === rows.length - 1) {
-          grouped.push({
-            customerName: "",
-            customerId: -1,
-            invoiceNo: "Subtotal",
-            invoiceDate: "",
-            dueDate: "",
-            current: subCurrent,
-            days1to30: sub1to30,
-            days31to60: sub31to60,
-            days61to90: sub61to90,
-            over90: subOver90,
-            total: subTotal,
-          })
-        }
-      })
+        })
 
-      setData(grouped)
-      setLoading(false)
-    })
+        setData(grouped)
+        setLoading(false)
+      })
   }, [companyId, asOfDate, selectedCustomerIds])
 
   // Close dropdown on outside click
