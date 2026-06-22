@@ -22,7 +22,6 @@ interface AgingRow {
   total: number
 }
 
-// ── Type for the RPC result ──
 interface ARInvoice {
   invoice_id: number
   invoice_no: string
