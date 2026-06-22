@@ -132,7 +132,6 @@ export default function ARAgingPage() {
 
         rows.forEach((row, idx) => {
           if (row.customerId !== currentCustId) {
-            // Push subtotal for previous customer
             if (currentCustId !== -1) {
               grouped.push({
                 customerName: "",
@@ -149,10 +148,8 @@ export default function ARAgingPage() {
               })
               subCurrent = sub1to30 = sub31to60 = sub61to90 = subOver90 = subTotal = 0
             }
-            // Start new customer group
             currentCustId = row.customerId
 
-            // Push customer header row (with customer name)
             grouped.push({
               customerName: row.customerName,
               customerId: row.customerId,
@@ -168,7 +165,6 @@ export default function ARAgingPage() {
             })
           }
 
-          // Push invoice row (without customer name)
           grouped.push({
             customerName: "",
             customerId: row.customerId,
@@ -190,7 +186,6 @@ export default function ARAgingPage() {
           subOver90 += row.over90
           subTotal += row.total
 
-          // Push final subtotal
           if (idx === rows.length - 1) {
             grouped.push({
               customerName: "",
@@ -322,7 +317,7 @@ export default function ARAgingPage() {
 
         .aging-table {
           width: 100%;
-          min-width: 800px;
+          min-width: 900px;
           border-collapse: collapse;
           font-size: 12px;
           background: var(--card);
@@ -342,30 +337,32 @@ export default function ARAgingPage() {
           letter-spacing: 0.04em;
         }
 
+        /* ── Customer column: 14% (reduced from 28%) ── */
         .aging-table th:first-child {
           text-align: left;
-          width: 28%;
-          min-width: 120px;
+          width: 14%;
+          min-width: 100px;
         }
         .aging-table th:nth-child(2) {
           text-align: left;
-          width: 14%;
+          width: 12%;
           min-width: 80px;
         }
         .aging-table th:nth-child(3) {
           text-align: left;
           width: 10%;
-          min-width: 70px;
+          min-width: 75px;
         }
 
+        /* ── Amount columns: wider, no ellipsis ── */
         .aging-table th:nth-child(4),
         .aging-table th:nth-child(5),
         .aging-table th:nth-child(6),
         .aging-table th:nth-child(7),
         .aging-table th:nth-child(8),
         .aging-table th:nth-child(9) {
-          width: 8%;
-          min-width: 70px;
+          width: 11%;
+          min-width: 90px;
           text-align: right;
         }
 
@@ -374,6 +371,20 @@ export default function ARAgingPage() {
           border-bottom: 1px solid var(--border);
           text-align: right;
           white-space: nowrap;
+          overflow: visible;
+        }
+
+        .aging-table td:first-child {
+          text-align: left;
+          font-weight: 600;
+          color: var(--text);
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .aging-table td:nth-child(2),
+        .aging-table td:nth-child(3) {
+          text-align: left;
           overflow: hidden;
           text-overflow: ellipsis;
         }
@@ -387,6 +398,7 @@ export default function ARAgingPage() {
           padding-bottom: 4px;
           border-bottom: 1.5px solid var(--border);
           background: var(--bg);
+          text-align: left !important;
         }
         .aging-table tr.customer-header td:first-child {
           font-size: 14px;
@@ -395,6 +407,7 @@ export default function ARAgingPage() {
           color: var(--text-muted);
           font-weight: 400;
           font-size: 11px;
+          text-align: right !important;
         }
 
         /* ── Invoice rows (indented, normal weight) ── */
@@ -419,11 +432,13 @@ export default function ARAgingPage() {
           border-bottom: 2px solid var(--border);
           padding-top: 6px;
           padding-bottom: 6px;
+          text-align: right !important;
         }
         .aging-table tr.subtotal-row td:first-child {
           font-weight: 700 !important;
           color: var(--text);
           padding-left: 8px;
+          text-align: left !important;
           font-size: 12px;
         }
 
@@ -435,6 +450,13 @@ export default function ARAgingPage() {
           border-top: 2px solid var(--border);
           padding: 10px 8px;
           font-size: 13px;
+          text-align: right !important;
+        }
+        .aging-table tr.grand-total td:first-child {
+          text-align: left !important;
+        }
+        .aging-table tr.grand-total td:not(:first-child) {
+          text-align: right !important;
         }
 
         .aging-summary {
@@ -550,20 +572,21 @@ export default function ARAgingPage() {
 
         @media (max-width: 768px) {
           .aging-table {
-            font-size: 11px;
+            font-size: 10px;
+            min-width: 700px;
           }
           .aging-table th,
           .aging-table td {
-            padding: 6px 4px;
+            padding: 5px 4px;
           }
           .aging-table th:first-child {
-            min-width: 80px;
+            min-width: 70px;
           }
           .aging-table th:nth-child(2) {
-            min-width: 60px;
+            min-width: 50px;
           }
           .aging-table th:nth-child(3) {
-            min-width: 60px;
+            min-width: 50px;
           }
           .aging-table th:nth-child(4),
           .aging-table th:nth-child(5),
@@ -571,14 +594,14 @@ export default function ARAgingPage() {
           .aging-table th:nth-child(7),
           .aging-table th:nth-child(8),
           .aging-table th:nth-child(9) {
-            min-width: 50px;
+            min-width: 60px;
           }
           .aging-summary {
             grid-template-columns: repeat(2, 1fr);
           }
           .aging-table tr.invoice-row td:first-child {
             padding-left: 12px;
-            font-size: 10px;
+            font-size: 9px;
           }
         }
 
