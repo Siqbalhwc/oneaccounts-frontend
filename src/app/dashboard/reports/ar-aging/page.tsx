@@ -60,7 +60,7 @@ async function loadImage(url: string): Promise<string | null> {
 export default function ARAgingPage() {
   const router = useRouter()
   const { companyId } = useCompany()
-  const { companyName, companyTagline, logoUrl, companyAddress, companyPhone, companyEmail } = useCompany()
+  const { companyName, companyTagline, logoUrl } = useCompany()
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
   const [data, setData] = useState<AgingRow[]>([])
@@ -267,7 +267,7 @@ export default function ARAgingPage() {
     setCustomerSearch("")
   }
 
-  // ── PDF Export – Customer Ledger Header Format ──
+  // ── PDF Export ──
   const handleDownloadPDF = async () => {
     if (data.length === 0) return alert("No data to export")
 
@@ -286,11 +286,6 @@ export default function ARAgingPage() {
     doc.text(companyName || "", textX, LOGO_Y + 7)
     doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...MUTED)
     doc.text(companyTagline || "", textX, LOGO_Y + 13)
-
-    let infoY = LOGO_Y + 19
-    if (companyAddress) { doc.text(companyAddress, textX, infoY); infoY += 4 }
-    if (companyPhone) { doc.text("Phone: " + companyPhone, textX, infoY); infoY += 4 }
-    if (companyEmail) { doc.text("Email: " + companyEmail, textX, infoY) }
 
     // ── Right Side: Report Title & Filters ──
     doc.setFont("helvetica", "bold").setFontSize(24).setTextColor(...NAVY)
@@ -388,11 +383,9 @@ export default function ARAgingPage() {
         8: { cellWidth: 30, halign: "right" },
       },
       didParseCell: (hookData) => {
-        // Center header text for numeric columns
         if (hookData.section === 'head' && hookData.column.index >= 3) {
           hookData.cell.styles.halign = 'center'
         }
-        // Subtotal row styling
         if (hookData.section === 'body') {
           const row = hookData.row.raw
           if (row && Array.isArray(row) && row[0] === "Subtotal") {
