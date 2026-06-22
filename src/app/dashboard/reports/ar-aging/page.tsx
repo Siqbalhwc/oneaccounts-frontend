@@ -91,7 +91,6 @@ export default function ARAgingPage() {
           return
         }
 
-        // Apply customer filter (client-side since RPC doesn't support it)
         let filteredInvoices: ARInvoice[] = invoices
         if (selectedCustomerIds.length > 0) {
           filteredInvoices = invoices.filter((inv: ARInvoice) => 
@@ -260,7 +259,7 @@ export default function ARAgingPage() {
     doc.save("ar-aging-report.pdf")
   }
 
-  const format = (v: number) => v ? `PKR ${v.toLocaleString()}` : "–"
+  const format = (v: number) => v ? v.toLocaleString() : "–"
 
   if (!companyId) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading company…</div>
   if (loading && data.length === 0) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading AR Aging…</div>
@@ -273,6 +272,7 @@ export default function ARAgingPage() {
         }
         .aging-title { font-size: 22px; font-weight: 800; color: var(--text); }
         .aging-subtitle { font-size: 13px; color: var(--text-muted); }
+
         .aging-btn {
           display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px;
           border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;
@@ -280,70 +280,220 @@ export default function ARAgingPage() {
           font-family: inherit;
         }
         .aging-btn:hover { background: var(--card-hover); }
+
+        .aging-table-wrapper {
+          overflow-x: auto;
+          border-radius: 10px;
+          border: 1px solid var(--border);
+        }
+
         .aging-table {
-          width: 100%; border-collapse: collapse; font-size: 13px;
-          background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+          width: 100%;
+          min-width: 800px;
+          border-collapse: collapse;
+          font-size: 12px;
+          background: var(--card);
+          table-layout: fixed;
         }
+
         .aging-table th {
-          text-align: right; padding: 12px 16px; background: var(--card-hover);
-          font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
-          border-bottom: 1px solid var(--border);
+          padding: 10px 8px;
+          background: var(--card-hover);
+          font-size: 9px;
+          font-weight: 700;
+          text-transform: uppercase;
+          color: var(--text-muted);
+          border-bottom: 2px solid var(--border);
+          white-space: nowrap;
+          text-align: right;
+          letter-spacing: 0.04em;
         }
-        .aging-table th:first-child, .aging-table th:nth-child(2), .aging-table th:nth-child(3) {
+
+        .aging-table th:first-child {
           text-align: left;
+          width: 30%;
+          min-width: 120px;
         }
+        .aging-table th:nth-child(2) {
+          text-align: left;
+          width: 12%;
+          min-width: 80px;
+        }
+        .aging-table th:nth-child(3) {
+          text-align: left;
+          width: 10%;
+          min-width: 70px;
+        }
+
         .aging-table td {
-          text-align: right; padding: 10px 16px; border-bottom: 1px solid var(--border);
+          padding: 8px 8px;
+          border-bottom: 1px solid var(--border);
+          text-align: right;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
-        .aging-table td:first-child, .aging-table td:nth-child(2), .aging-table td:nth-child(3) {
+
+        .aging-table td:first-child,
+        .aging-table td:nth-child(2),
+        .aging-table td:nth-child(3) {
           text-align: left;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
+
         .aging-table tr.subtotal td {
-          font-weight: 700; background: var(--bg-soft);
+          font-weight: 700;
+          background: var(--bg-soft);
+          border-top: 2px solid var(--border);
         }
+
         .aging-table tr.grand-total td {
-          font-weight: 800; background: var(--primary); color: var(--primary-text);
+          font-weight: 800;
+          background: var(--primary);
+          color: var(--primary-text);
+          border-top: 2px solid var(--border);
         }
+
         .aging-summary {
-          display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px;
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+          gap: 10px;
+          margin-bottom: 20px;
         }
+
         .aging-summary-card {
-          background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; text-align: center;
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 12px 14px;
+          text-align: center;
         }
-        .aging-summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
-        .aging-summary-value { font-size: 18px; font-weight: 800; }
+
+        .aging-summary-label {
+          font-size: 9px;
+          font-weight: 700;
+          text-transform: uppercase;
+          color: var(--text-muted);
+          margin-bottom: 2px;
+        }
+
+        .aging-summary-value {
+          font-size: 18px;
+          font-weight: 800;
+        }
+
+        .aging-summary-value .currency-prefix {
+          font-size: 11px;
+          font-weight: 600;
+          color: var(--text-muted);
+          margin-right: 2px;
+        }
+
         .filter-row {
-          display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 16px;
+          flex-wrap: wrap;
         }
+
         .date-input {
-          height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px;
-          font-size: 13px; background: var(--card); color: var(--text); font-family: inherit;
+          height: 38px;
+          border: 1.5px solid var(--border);
+          border-radius: 8px;
+          padding: 0 12px;
+          font-size: 13px;
+          background: var(--card);
+          color: var(--text);
+          font-family: inherit;
         }
+
         .multi-select {
-          position: relative; flex: 1; min-width: 200px; max-width: 400px;
+          position: relative;
+          flex: 1;
+          min-width: 200px;
+          max-width: 400px;
         }
+
         .multi-select-trigger {
-          display: flex; align-items: center; justify-content: space-between;
-          height: 38px; border: 1.5px solid var(--border); border-radius: 8px;
-          padding: 0 12px; font-size: 13px; background: var(--card); color: var(--text);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          height: 38px;
+          border: 1.5px solid var(--border);
+          border-radius: 8px;
+          padding: 0 12px;
+          font-size: 13px;
+          background: var(--card);
+          color: var(--text);
           cursor: pointer;
         }
+
         .multi-select-dropdown {
-          position: absolute; top: 100%; left: 0; right: 0;
-          background: var(--card); border: 1px solid var(--border); border-radius: 8px;
-          max-height: 220px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+          position: absolute;
+          top: 100%;
+          left: 0;
+          right: 0;
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          max-height: 220px;
+          overflow-y: auto;
+          z-index: 100;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
+
         .multi-select-option {
-          display: flex; align-items: center; gap: 8px; padding: 8px 12px;
-          cursor: pointer; font-size: 13px; color: var(--text);
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 12px;
+          cursor: pointer;
+          font-size: 13px;
+          color: var(--text);
         }
-        .multi-select-option:hover { background: var(--card-hover); }
+
+        .multi-select-option:hover {
+          background: var(--card-hover);
+        }
+
         .multi-select-search {
-          position: sticky; top: 0; background: var(--card); padding: 8px 12px;
+          position: sticky;
+          top: 0;
+          background: var(--card);
+          padding: 8px 12px;
           border-bottom: 1px solid var(--border);
         }
+
         @media (max-width: 768px) {
-          .aging-table th, .aging-table td { padding: 8px 10px; font-size: 11px; }
+          .aging-table {
+            font-size: 11px;
+          }
+          .aging-table th,
+          .aging-table td {
+            padding: 6px 6px;
+          }
+          .aging-table th:first-child {
+            min-width: 80px;
+          }
+          .aging-table th:nth-child(2) {
+            min-width: 60px;
+          }
+          .aging-table th:nth-child(3) {
+            min-width: 60px;
+          }
+          .aging-summary {
+            grid-template-columns: repeat(2, 1fr);
+          }
+        }
+
+        .currency-note {
+          font-size: 10px;
+          color: var(--text-muted);
+          text-align: right;
+          padding: 4px 8px 0 0;
+          font-weight: 500;
         }
       `}</style>
 
@@ -397,6 +547,7 @@ export default function ARAgingPage() {
         </div>
       </div>
 
+      {/* Summary Cards – PKR in superscript */}
       <div className="aging-summary">
         {[
           { label: "Current", value: totals.current, color: "#10B981" },
@@ -409,60 +560,65 @@ export default function ARAgingPage() {
           <div key={s.label} className="aging-summary-card">
             <div className="aging-summary-label">{s.label}</div>
             <div className="aging-summary-value" style={{ color: s.color }}>
-              {format(s.value)}
+              <span className="currency-prefix">PKR</span> {format(s.value)}
             </div>
           </div>
         ))}
       </div>
 
-      <table className="aging-table">
-        <thead>
-          <tr>
-            <th>Customer</th>
-            <th>Invoice #</th>
-            <th>Inv Date</th>
-            <th>Current</th>
-            <th>1-30</th>
-            <th>31-60</th>
-            <th>61-90</th>
-            <th>&gt;90</th>
-            <th>Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.length === 0 ? (
-            <tr><td colSpan={9} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>No outstanding receivables</td></tr>
-          ) : (
-            data.map((row, i) => {
-              const isSubtotal = row.invoiceNo === "Subtotal"
-              return (
-                <tr key={i} className={isSubtotal ? "subtotal" : ""}>
-                  <td>{row.customerName}</td>
-                  <td>{isSubtotal ? "" : row.invoiceNo}</td>
-                  <td>{row.invoiceDate}</td>
-                  <td>{format(row.current)}</td>
-                  <td>{format(row.days1to30)}</td>
-                  <td>{format(row.days31to60)}</td>
-                  <td>{format(row.days61to90)}</td>
-                  <td>{format(row.over90)}</td>
-                  <td>{format(row.total)}</td>
-                </tr>
-              )
-            })
-          )}
-        </tbody>
-        <tfoot>
-          <tr className="grand-total">
-            <td colSpan={3}>Grand Total</td>
-            <td>{format(totals.current)}</td>
-            <td>{format(totals.days1to30)}</td>
-            <td>{format(totals.days31to60)}</td>
-            <td>{format(totals.days61to90)}</td>
-            <td>{format(totals.over90)}</td>
-            <td>{format(totals.total)}</td>
-          </tr>
-        </tfoot>
-      </table>
+      {/* Currency note above table */}
+      <div className="currency-note">Amounts in PKR</div>
+
+      <div className="aging-table-wrapper">
+        <table className="aging-table">
+          <thead>
+            <tr>
+              <th>Customer</th>
+              <th>Invoice #</th>
+              <th>Inv Date</th>
+              <th>Current</th>
+              <th>1-30</th>
+              <th>31-60</th>
+              <th>61-90</th>
+              <th>&gt;90</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.length === 0 ? (
+              <tr><td colSpan={9} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>No outstanding receivables</td></tr>
+            ) : (
+              data.map((row, i) => {
+                const isSubtotal = row.invoiceNo === "Subtotal"
+                return (
+                  <tr key={i} className={isSubtotal ? "subtotal" : ""}>
+                    <td title={row.customerName || ""}>{row.customerName || (isSubtotal ? "Subtotal" : "")}</td>
+                    <td title={isSubtotal ? "" : row.invoiceNo}>{isSubtotal ? "" : row.invoiceNo}</td>
+                    <td title={row.invoiceDate}>{row.invoiceDate}</td>
+                    <td title={format(row.current)}>{format(row.current)}</td>
+                    <td title={format(row.days1to30)}>{format(row.days1to30)}</td>
+                    <td title={format(row.days31to60)}>{format(row.days31to60)}</td>
+                    <td title={format(row.days61to90)}>{format(row.days61to90)}</td>
+                    <td title={format(row.over90)}>{format(row.over90)}</td>
+                    <td title={format(row.total)}>{format(row.total)}</td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+          <tfoot>
+            <tr className="grand-total">
+              <td colSpan={3}>Grand Total</td>
+              <td title={format(totals.current)}>{format(totals.current)}</td>
+              <td title={format(totals.days1to30)}>{format(totals.days1to30)}</td>
+              <td title={format(totals.days31to60)}>{format(totals.days31to60)}</td>
+              <td title={format(totals.days61to90)}>{format(totals.days61to90)}</td>
+              <td title={format(totals.over90)}>{format(totals.over90)}</td>
+              <td title={format(totals.total)}>{format(totals.total)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
     </div>
   )
 }
