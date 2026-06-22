@@ -267,9 +267,10 @@ export default function CustomerLedgerPage() {
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
         
+        /* ── Updated grid with wider numeric columns ── */
         .ledger-header {
           display: grid;
-          grid-template-columns: 90px 130px 1fr 110px 110px 130px;
+          grid-template-columns: 90px 130px 1fr 140px 140px 160px;
           padding: 12px 16px;
           background: var(--card-hover);
           font-size: 12px;
@@ -283,18 +284,24 @@ export default function CustomerLedgerPage() {
         }
         .ledger-row {
           display: grid;
-          grid-template-columns: 90px 130px 1fr 110px 110px 130px;
+          grid-template-columns: 90px 130px 1fr 140px 140px 160px;
           padding: 12px 16px;
           border-bottom: 1px solid var(--border);
-          font-size: 13px; align-items: center;
+          font-size: 13px;
+          align-items: center;
           transition: background 0.15s;
         }
         .ledger-row:hover { background: var(--card-hover); }
         .ledger-row:last-child { border-bottom: none; }
         .opening-row { background: var(--bg-soft); font-weight: 600; }
         
-        /* No wrap text with ellipsis on all data cells */
+        /* ── No wrap, no ellipsis on amounts ── */
         .ledger-row .cell-no-wrap {
+          white-space: nowrap;
+          overflow: visible;
+          text-overflow: clip;
+        }
+        .ledger-row .cell-description {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -323,7 +330,13 @@ export default function CustomerLedgerPage() {
         }
         .customer-select:focus { border-color: var(--primary); }
         @media (max-width: 640px) {
-          .ledger-header, .ledger-row { grid-template-columns: 70px 90px 1fr 80px 80px 100px; }
+          .ledger-header, .ledger-row {
+            grid-template-columns: 70px 90px 1fr 100px 100px 120px;
+          }
+          .ledger-row .cell-no-wrap {
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
         }
       `}</style>
 
@@ -419,7 +432,7 @@ export default function CustomerLedgerPage() {
                   <span className="cell-no-wrap" style={{ color: "var(--primary)", fontSize: 12 }} title={line.entry_no || ""}>
                     {line.entry_no || "—"}
                   </span>
-                  <span className="cell-no-wrap" title={line.description} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span className="cell-description" title={line.description} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {line.description}
                   </span>
                   <span className="cell-no-wrap" style={{ textAlign: "right", color: line.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit > 0 ? 600 : 400 }}>
