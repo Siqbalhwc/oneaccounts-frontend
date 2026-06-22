@@ -243,14 +243,14 @@ export default function ARAgingPage() {
     setCustomerSearch("")
   }
 
-  // ── PDF Export ──
+  // ── PDF Export – Customer Ledger Template Format ──
   const handleDownloadPDF = () => {
     if (data.length === 0) return alert("No data to export")
 
     const doc = new jsPDF({ orientation: "landscape" })
     const pageWidth = doc.internal.pageSize.getWidth()
 
-    // Header
+    // ── Header ──
     doc.setFontSize(16)
     doc.setTextColor(30, 58, 138)
     doc.text("AR Aging Report", 14, 20)
@@ -259,14 +259,15 @@ export default function ARAgingPage() {
     doc.setTextColor(100, 100, 100)
     doc.text(`As of ${asOfDate}`, 14, 28)
 
-    // Currency note
+    // ── Currency note (right aligned) ──
     doc.setFontSize(8)
     doc.setTextColor(150, 150, 150)
     doc.text("Amounts in PKR", pageWidth - 14, 28, { align: "right" })
 
-    // ── Table ──
+    // ── Table Headers ──
     const head = [["Customer", "Invoice #", "Inv Date", "Current", "1-30", "31-60", "61-90", ">90", "Total"]]
 
+    // ── Build Table Body ──
     const body: any[] = []
     data.forEach((row) => {
       const isSubtotal = row.invoiceNo === "Subtotal"
@@ -299,7 +300,7 @@ export default function ARAgingPage() {
       }
     })
 
-    // Grand Total row
+    // ── Grand Total Row ──
     body.push([
       { content: "Grand Total", styles: { fontStyle: "bold", fillColor: [30, 58, 138], textColor: [255, 255, 255] } },
       "",
@@ -312,6 +313,7 @@ export default function ARAgingPage() {
       { content: totals.total > 0 ? totals.total.toLocaleString() : "", styles: { fontStyle: "bold" } },
     ])
 
+    // ── Render Table ──
     autoTable(doc, {
       startY: 35,
       head: head,
@@ -341,7 +343,6 @@ export default function ARAgingPage() {
         fontStyle: "bold",
       },
       didParseCell: (data) => {
-        // Highlight subtotal rows with a different background
         if (data.section === "body") {
           const row = data.row.raw
           if (row && Array.isArray(row) && row[0] === "Subtotal") {

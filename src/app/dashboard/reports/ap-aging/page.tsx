@@ -243,14 +243,14 @@ export default function APAgingPage() {
     setSupplierSearch("")
   }
 
-  // ── PDF Export ──
+  // ── PDF Export – Customer Ledger Template Format ──
   const handleDownloadPDF = () => {
     if (data.length === 0) return alert("No data to export")
 
     const doc = new jsPDF({ orientation: "landscape" })
     const pageWidth = doc.internal.pageSize.getWidth()
 
-    // Header
+    // ── Header ──
     doc.setFontSize(16)
     doc.setTextColor(30, 58, 138)
     doc.text("AP Aging Report", 14, 20)
@@ -259,14 +259,15 @@ export default function APAgingPage() {
     doc.setTextColor(100, 100, 100)
     doc.text(`As of ${asOfDate}`, 14, 28)
 
-    // Currency note
+    // ── Currency note (right aligned) ──
     doc.setFontSize(8)
     doc.setTextColor(150, 150, 150)
     doc.text("Amounts in PKR", pageWidth - 14, 28, { align: "right" })
 
-    // ── Table ──
+    // ── Table Headers ──
     const head = [["Supplier", "Invoice #", "Inv Date", "Current", "1-30", "31-60", "61-90", ">90", "Total"]]
 
+    // ── Build Table Body ──
     const body: any[] = []
     data.forEach((row) => {
       const isSubtotal = row.invoiceNo === "Subtotal"
@@ -299,7 +300,7 @@ export default function APAgingPage() {
       }
     })
 
-    // Grand Total row
+    // ── Grand Total Row ──
     body.push([
       { content: "Grand Total", styles: { fontStyle: "bold", fillColor: [30, 58, 138], textColor: [255, 255, 255] } },
       "",
@@ -312,6 +313,7 @@ export default function APAgingPage() {
       { content: totals.total > 0 ? totals.total.toLocaleString() : "", styles: { fontStyle: "bold" } },
     ])
 
+    // ── Render Table ──
     autoTable(doc, {
       startY: 35,
       head: head,
