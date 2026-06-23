@@ -36,6 +36,7 @@ function NewInvoicePageContent() {
   const { hasFeature } = usePlan()
   const showProducts = hasFeature("inventory")
   const taxEnabled = hasFeature("tax_management")
+  const automationFeatureEnabled = hasFeature("invoice_automation")
 
   const [companyId, setCompanyId] = useState("")
   const [businessType, setBusinessType] = useState("")
@@ -340,57 +341,122 @@ function NewInvoicePageContent() {
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
   const totalTaxAmount = items.reduce((s, i) => s + (i.tax_amount || 0), 0)
 
+  // ── NEW: handleSubmit using RPC for new invoices, API for updates ──
   const handleSubmit = async () => {
     if (!customerId) { setError("Please select a customer"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
 
     setSaving(true); setError("")
 
-    const url = editId ? `/api/invoices?id=${editId}` : "/api/invoices"
-    const method = editId ? "PUT" : "POST"
+    // ── If editing, use the existing API route (PUT) ──
+    if (editId) {
+      try {
+        const url = `/api/invoices?id=${editId}`
+        const res = await fetch(url, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: editId,
+            party_id: customerId,
+            invoice_date: invoiceDate,
+            due_date: dueDate,
+            items: items.map(i => ({
+              product_id: i.product_id,
+              description: i.description,
+              qty: i.qty,
+              unit_price: i.unit_price,
+              cost_price: i.cost_price,
+              project_id: i.project_id || null,
+              donor_id: i.donor_id || null,
+              tax_code_id: taxEnabled ? (i.tax_code_id || null) : undefined,
+              tax_rate: taxEnabled ? (i.tax_rate || 0) : undefined,
+              tax_amount: taxEnabled ? (i.tax_amount || 0) : undefined,
+            })),
+            reference,
+            notes,
+          }),
+        })
+        const result = await res.json()
+        if (!result.success) {
+          setError(result.error || "Failed to update invoice")
+          setSaving(false)
+          return
+        }
+        const newInvoiceId = result.invoice?.id
+        setSavedInvoiceId(newInvoiceId || null)
+        setFlash(`✅ Invoice updated successfully!`)
+        router.push(`/dashboard/invoices/${editId}`)
+      } catch {
+        setError("Network error")
+        setSaving(false)
+      }
+      return
+    }
 
+    // ── NEW INVOICE: Use RPC for performance ──
     try {
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: editId || undefined,
-          party_id: customerId,
-          invoice_date: invoiceDate,
-          due_date: dueDate,
-          items: items.map(i => ({
-            product_id: i.product_id,
-            description: i.description,
-            qty: i.qty,
-            unit_price: i.unit_price,
-            cost_price: i.cost_price,
-            project_id: i.project_id || null,
-            donor_id: i.donor_id || null,
-            tax_code_id: taxEnabled ? (i.tax_code_id || null) : undefined,
-            tax_rate: taxEnabled ? (i.tax_rate || 0) : undefined,
-            tax_amount: taxEnabled ? (i.tax_amount || 0) : undefined,
-          })),
-          reference, notes,
-        }),
+      // Fetch automation config (if feature is enabled)
+      let automationConfig = {}
+      let automationAllowed = false
+      if (automationFeatureEnabled) {
+        const { data: settings } = await supabase
+          .from("company_settings")
+          .select("invoice_automation_config")
+          .eq("company_id", companyId)
+          .maybeSingle()
+        automationConfig = settings?.invoice_automation_config || {}
+        automationAllowed = true
+      }
+
+      // Prepare items payload
+      const payloadItems = items.map(i => ({
+        product_id: i.product_id || null,
+        description: i.description,
+        qty: i.qty,
+        unit_price: i.unit_price,
+        cost_price: i.cost_price || 0,
+        project_id: i.project_id || null,
+        donor_id: i.donor_id || null,
+        tax_code_id: taxEnabled ? (i.tax_code_id || null) : null,
+        tax_rate: taxEnabled ? (i.tax_rate || 0) : 0,
+        tax_amount: taxEnabled ? (i.tax_amount || 0) : 0,
+      }))
+
+      // Call the RPC function
+      const { data, error: rpcError } = await supabase.rpc('create_invoice_transaction', {
+        p_company_id: companyId,
+        p_party_id: customerId,
+        p_invoice_date: invoiceDate,
+        p_due_date: dueDate,
+        p_items: payloadItems,
+        p_reference: reference || '',
+        p_notes: notes || '',
+        p_user_email: selectedCustomer?.email || 'system',
+        p_tax_enabled: taxEnabled,
+        p_automation_config: automationConfig,
+        p_automation_allowed: automationAllowed,
+        p_business_type: businessType,
       })
-      const result = await res.json()
-      if (!result.success) {
-        setError(result.error || "Failed to save invoice")
+
+      if (rpcError) {
+        setError(rpcError.message || "Failed to save invoice")
         setSaving(false)
         return
       }
 
-      const newInvoiceId = result.invoice?.id
-      setSavedInvoiceId(newInvoiceId || null)
-      setFlash(`✅ Invoice ${editId ? "updated" : "saved"} successfully!`)
-
-      if (editId) {
-        router.push(`/dashboard/invoices/${editId}`)
-      } else {
+      if (!data || !data.success) {
+        setError(data?.error || "Failed to save invoice")
         setSaving(false)
+        return
       }
-    } catch {
-      setError("Network error")
+
+      const newInvoiceId = data.invoice_id
+      setSavedInvoiceId(newInvoiceId || null)
+      setFlash(`✅ Invoice saved successfully!`)
+      setSaving(false)
+
+    } catch (err: any) {
+      setError(err.message || "Network error")
       setSaving(false)
     }
   }
@@ -563,7 +629,7 @@ function NewInvoicePageContent() {
     ? "30px 150px 3fr 80px 110px 80px minmax(130px, 1fr) minmax(130px, 1fr) minmax(130px, 1fr) 50px"
     : "30px 150px 3fr 80px 110px minmax(130px, 1fr) minmax(130px, 1fr) 50px"
 
-  // ── Mobile grid: removed tax columns, Total and Item both use 1fr ──
+  // ── Mobile grid ──
   const mobileGridCols = "24px 1fr 44px 64px 1fr 34px"
 
   return (
@@ -721,7 +787,6 @@ function NewInvoicePageContent() {
             font-weight: 600;
           }
 
-          /* ── Delete button – never wrap ── */
           .mobile-delete-btn {
             background: none;
             border: none;
@@ -952,7 +1017,7 @@ function NewInvoicePageContent() {
                   ))}
                 </div>
 
-                {/* ── Mobile items (no tax columns, Total equal to Item) ── */}
+                {/* ── Mobile items ── */}
                 <div className="mobile-only mobile-items-scroll">
                   <div className="mobile-item-header">
                     <span></span>
