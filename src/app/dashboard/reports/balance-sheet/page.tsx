@@ -29,18 +29,9 @@ function getCategory(account: any): string {
 function fmt(n: number) {
   return Math.abs(n).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
-
-function sign(n: number) {
-  return n < 0 ? "-" : ""
-}
-
-function fmtPos(n: number) {
-  return Math.abs(n).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-function fmtSigned(n: number) {
-  return (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+function sign(n: number) { return n < 0 ? "-" : "" }
+function fmtPos(n: number) { return Math.abs(n).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
+function fmtSigned(n: number) { return (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
 
 const CURRENT_ASSET_CATS = ["Cash & Bank", "Accounts Receivable", "Inventory", "Other Current Assets"]
 const FIXED_ASSET_CATS = ["Fixed Assets", "Vehicles"]
@@ -50,16 +41,14 @@ function PlaceholderRow() {
   return <div style={{ height: 40, opacity: 0, pointerEvents: "none" }}>&nbsp;</div>
 }
 
-// ── AccountRow with sign support ──
-function AccountRow({ account, showAbsolute, getBalance, onClick }: {
+// ── AccountRow ──
+function AccountRow({ account, value, onClick }: {
   account: any
-  showAbsolute: boolean
-  getBalance: (a: any) => number
+  value: number
   onClick: (id: number) => void
 }) {
-  const bal = getBalance(account)
-  const rounded = Math.round(bal)
-  const display = showAbsolute ? `PKR ${fmtPos(rounded)}` : `${sign(rounded)}PKR ${fmt(rounded)}`
+  const rounded = Math.round(value)
+  const display = `${sign(rounded)}PKR ${fmt(rounded)}`
   return (
     <div className="acc-row" onClick={() => onClick(account.id)}>
       <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 50 }}>{account.code}</span>
@@ -69,14 +58,13 @@ function AccountRow({ account, showAbsolute, getBalance, onClick }: {
   )
 }
 
-function CategoryHeader({ cat, total, showAbsolute, onClick }: {
+function CategoryHeader({ cat, total, onClick }: {
   cat: string
   total: number
-  showAbsolute: boolean
   onClick: () => void
 }) {
   const rounded = Math.round(total)
-  const display = showAbsolute ? `PKR ${fmtPos(rounded)}` : `${sign(rounded)}PKR ${fmt(rounded)}`
+  const display = `${sign(rounded)}PKR ${fmt(rounded)}`
   return (
     <div className="cat-header" onClick={onClick}>
       <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", flex: 1 }}>{cat}</span>
@@ -85,9 +73,9 @@ function CategoryHeader({ cat, total, showAbsolute, onClick }: {
   )
 }
 
-function SubtotalBand({ label, value, showAbsolute }: { label: string; value: number; showAbsolute: boolean }) {
+function SubtotalBand({ label, value }: { label: string; value: number }) {
   const rounded = Math.round(value)
-  const display = showAbsolute ? `PKR ${fmtPos(rounded)}` : `${sign(rounded)}PKR ${fmt(rounded)}`
+  const display = `${sign(rounded)}PKR ${fmt(rounded)}`
   return (
     <div className="subtotal-band">
       <span>{label}</span>
@@ -96,9 +84,9 @@ function SubtotalBand({ label, value, showAbsolute }: { label: string; value: nu
   )
 }
 
-function TotalBand({ label, value, showAbsolute }: { label: string; value: number; showAbsolute: boolean }) {
+function TotalBand({ label, value }: { label: string; value: number }) {
   const rounded = Math.round(value)
-  const display = showAbsolute ? `PKR ${fmtPos(rounded)}` : `${sign(rounded)}PKR ${fmt(rounded)}`
+  const display = `${sign(rounded)}PKR ${fmt(rounded)}`
   return (
     <div className="total-band">
       <span>{label}</span>
@@ -148,10 +136,6 @@ function BalanceSheetContent() {
   const isDarkTheme = themeMode === "dark"
   const isOneAccounts = themeMode === "oneaccounts"
   const isLightStyle = themeMode === "light" || isOneAccounts
-  const headerBg = isOneAccounts ? "#07085B" : (isDarkTheme ? "#000000" : "#07085B")
-  const rowLight = isLightStyle ? "#FFFFFF" : "#1E293B"
-  const rowDark  = isLightStyle ? "#F8F9FC" : "#111827"
-  const textMuted = isLightStyle ? "#64748B" : "#94A3B8"
   const reportTextColor = isOneAccounts ? "#1E293B" : "var(--text)"
   const reportMutedColor = isOneAccounts ? "#64748B" : "var(--text-muted)"
 
@@ -167,7 +151,7 @@ function BalanceSheetContent() {
         name: row.name,
         type: row.type,
         category: row.category || getCategory({ code: row.code }),
-        net: Number(row.net),
+        net: Number(row.net), // raw net (debit - credit)
       }))
       setAccounts(mapped)
     } catch (e) {
@@ -181,7 +165,15 @@ function BalanceSheetContent() {
     fetchBalanceSheet()
   }, [])
 
-  const getBalance = (account: any) => account.net
+  // ── Get display value: for assets, net; for liabilities/equity, -net ──
+  const getDisplayValue = (account: any): number => {
+    if (account.type === "Asset") {
+      return account.net
+    } else {
+      // Liability or Equity: flip sign so credit balances are positive
+      return -account.net
+    }
+  }
 
   const grouped = accounts.reduce((acc: Record<string, any[]>, a) => {
     const cat = getCategory(a)
@@ -190,28 +182,30 @@ function BalanceSheetContent() {
     return acc
   }, {})
 
-  const catTotal = (cat: string) => (grouped[cat] || []).reduce((s, a) => s + getBalance(a), 0)
+  // ── Category total: sum of display values ──
+  const catTotal = (cat: string) => (grouped[cat] || []).reduce((s, a) => s + getDisplayValue(a), 0)
 
   const totalCurrentAssets = CURRENT_ASSET_CATS.reduce((s, c) => s + catTotal(c), 0)
   const totalFixedAssets = FIXED_ASSET_CATS.reduce((s, c) => s + catTotal(c), 0)
   const otherAssetAccounts = accounts.filter(a => a.type === "Asset" && ![...CURRENT_ASSET_CATS, ...FIXED_ASSET_CATS].includes(getCategory(a)))
-  const totalOtherAssets = otherAssetAccounts.reduce((s, a) => s + getBalance(a), 0)
+  const totalOtherAssets = otherAssetAccounts.reduce((s, a) => s + getDisplayValue(a), 0)
   const totalAssets = totalCurrentAssets + totalFixedAssets + totalOtherAssets
 
-  // ── FIX: Liabilities – use actual signed sum (not absolute) ──
   const totalCurrentLiabilities = LIABILITY_CATS.reduce((s, c) => s + catTotal(c), 0)
   const otherLiabilityAccounts = accounts.filter(a => a.type === "Liability" && !LIABILITY_CATS.includes(getCategory(a)))
-  const totalOtherLiabilities = otherLiabilityAccounts.reduce((s, a) => s + getBalance(a), 0)
+  const totalOtherLiabilities = otherLiabilityAccounts.reduce((s, a) => s + getDisplayValue(a), 0)
   const totalLiabilities = totalCurrentLiabilities + totalOtherLiabilities
 
   const equityAccounts = accounts.filter(a => a.type === "Equity")
   const retainedEarningsAccount = equityAccounts.find(a => a.code === "3100")
   const otherEquityAccounts = equityAccounts.filter(a => a.code !== "3100")
-  const totalOtherEquity = otherEquityAccounts.reduce((s, a) => s + getBalance(a), 0)
+  const totalOtherEquity = otherEquityAccounts.reduce((s, a) => s + getDisplayValue(a), 0)
 
-  const revenue = accounts.filter(a => a.type === "Revenue").reduce((s, a) => s + Math.abs(getBalance(a)), 0)
-  const expenses = accounts.filter(a => a.type === "Expense").reduce((s, a) => s + Math.abs(getBalance(a)), 0)
+  const revenue = accounts.filter(a => a.type === "Revenue").reduce((s, a) => s + Math.abs(getDisplayValue(a)), 0)
+  const expenses = accounts.filter(a => a.type === "Expense").reduce((s, a) => s + Math.abs(getDisplayValue(a)), 0)
   const netProfit = revenue - expenses
+
+  // For equity: retained earnings (net profit) is shown as positive if profit, negative if loss
   const totalEquity = totalOtherEquity + netProfit
   const totalLiabEquity = totalLiabilities + totalEquity
   const isBalanced = Math.abs(totalAssets - totalLiabEquity) < 1
@@ -241,21 +235,21 @@ function BalanceSheetContent() {
         const total = catTotal(cat)
         sections.push({ text: cat, amount: total, isHeader: true, indent: 0 })
         items.forEach(a => {
-          sections.push({ text: `${a.code} – ${a.name}`, amount: getBalance(a), isHeader: false, indent: 8 })
+          sections.push({ text: `${a.code} – ${a.name}`, amount: getDisplayValue(a), isHeader: false, indent: 8 })
         })
       })
       return sections
     }
 
-    const buildCreditSections = (cats: string[]) => {
+    const buildLiabilitySections = (cats: string[]) => {
       const sections: any[] = []
       cats.forEach(cat => {
         const items = grouped[cat] || []
         if (items.length === 0) return
-        const total = -catTotal(cat)   // flip sign for display (credit positive)
+        const total = catTotal(cat) // already flipped sign for display
         sections.push({ text: cat, amount: total, isHeader: true, indent: 0 })
         items.forEach(a => {
-          sections.push({ text: `${a.code} – ${a.name}`, amount: -getBalance(a), isHeader: false, indent: 8 })
+          sections.push({ text: `${a.code} – ${a.name}`, amount: getDisplayValue(a), isHeader: false, indent: 8 })
         })
       })
       return sections
@@ -263,17 +257,16 @@ function BalanceSheetContent() {
 
     const equityItems = otherEquityAccounts.map(a => ({
       text: `${a.code} – ${a.name}`,
-      amount: -getBalance(a),
+      amount: getDisplayValue(a),
       isHeader: false,
       indent: 8,
     }))
 
-    const retainedAmount = netProfit
     equityItems.push({
       text: retainedEarningsAccount
         ? `${retainedEarningsAccount.code} – ${retainedEarningsAccount.name}`
         : "Retained Earnings (Net P&L)",
-      amount: retainedAmount,
+      amount: netProfit,
       isHeader: false,
       indent: 8,
     })
@@ -288,7 +281,7 @@ function BalanceSheetContent() {
       fixedAssetSections: buildAssetSections(FIXED_ASSET_CATS),
       totalFixedAssets,
       totalAssets,
-      liabilitySections: buildCreditSections(LIABILITY_CATS),
+      liabilitySections: buildLiabilitySections(LIABILITY_CATS),
       totalLiabilities,
       equitySections: [
         { text: "Equity", amount: totalEquity, isHeader: true, indent: 0 },
@@ -311,61 +304,61 @@ function BalanceSheetContent() {
       ["", "", ""],
       ["ASSETS", "", ""],
     ]
-    const addSection = (title: string, cats: string[], showAbsolute: boolean) => {
+    const addSection = (title: string, cats: string[], getValue: (a: any) => number) => {
       sheetData.push([title, "", ""])
       for (const cat of cats) {
         const items = grouped[cat] || []
         if (items.length === 0) continue
-        const total = catTotal(cat)
-        const display = showAbsolute ? `PKR ${fmtPos(total)}` : `${sign(total)}PKR ${fmt(total)}`
-        sheetData.push([`  ${cat}`, "", display])
+        const total = items.reduce((s, a) => s + getValue(a), 0)
+        sheetData.push([`  ${cat}`, "", `${sign(total)}PKR ${fmt(total)}`])
         for (const a of items) {
-          const bal = getBalance(a)
-          sheetData.push([`    ${a.code} - ${a.name}`, "", `${sign(bal)}PKR ${fmt(bal)}`])
+          const val = getValue(a)
+          sheetData.push([`    ${a.code} - ${a.name}`, "", `${sign(val)}PKR ${fmt(val)}`])
         }
       }
     }
-    addSection("Current Assets", CURRENT_ASSET_CATS, false)
+    addSection("Current Assets", CURRENT_ASSET_CATS, getDisplayValue)
     if (otherAssetAccounts.length > 0) {
       sheetData.push(["Other Assets", "", ""])
       otherAssetAccounts.forEach(a => {
-        sheetData.push([`  ${a.code} - ${a.name}`, "", `${sign(getBalance(a))}PKR ${fmt(getBalance(a))}`])
+        const val = getDisplayValue(a)
+        sheetData.push([`  ${a.code} - ${a.name}`, "", `${sign(val)}PKR ${fmt(val)}`])
       })
     }
     sheetData.push(["Total Current Assets", "", `${sign(totalCurrentAssets)}PKR ${fmt(totalCurrentAssets)}`])
     sheetData.push(["", "", ""])
-    addSection("Fixed Assets", FIXED_ASSET_CATS, false)
+    addSection("Fixed Assets", FIXED_ASSET_CATS, getDisplayValue)
     sheetData.push(["Total Fixed Assets", "", `${sign(totalFixedAssets)}PKR ${fmt(totalFixedAssets)}`])
     sheetData.push(["", "", ""])
     sheetData.push(["TOTAL ASSETS", "", `${sign(totalAssets)}PKR ${fmt(totalAssets)}`])
     sheetData.push(["", "", ""])
     sheetData.push(["LIABILITIES & EQUITY", "", ""])
-    // Liabilities: show signed amounts (credit positive, debit negative)
+    // Liabilities
     for (const cat of LIABILITY_CATS) {
       const items = grouped[cat] || []
       if (items.length === 0) continue
-      const total = catTotal(cat)
-      const display = `${sign(total)}PKR ${fmt(total)}`
-      sheetData.push([`  ${cat}`, "", display])
+      const total = items.reduce((s, a) => s + getDisplayValue(a), 0)
+      sheetData.push([`  ${cat}`, "", `${sign(total)}PKR ${fmt(total)}`])
       for (const a of items) {
-        const bal = getBalance(a)
-        sheetData.push([`    ${a.code} - ${a.name}`, "", `${sign(bal)}PKR ${fmt(bal)}`])
+        const val = getDisplayValue(a)
+        sheetData.push([`    ${a.code} - ${a.name}`, "", `${sign(val)}PKR ${fmt(val)}`])
       }
     }
     if (otherLiabilityAccounts.length > 0) {
       sheetData.push(["Other Liabilities", "", ""])
       otherLiabilityAccounts.forEach(a => {
-        sheetData.push([`  ${a.code} - ${a.name}`, "", `${sign(getBalance(a))}PKR ${fmt(getBalance(a))}`])
+        const val = getDisplayValue(a)
+        sheetData.push([`  ${a.code} - ${a.name}`, "", `${sign(val)}PKR ${fmt(val)}`])
       })
     }
     sheetData.push(["Total Liabilities", "", `${sign(totalLiabilities)}PKR ${fmt(totalLiabilities)}`])
     sheetData.push(["", "", ""])
     sheetData.push(["Equity", "", ""])
     otherEquityAccounts.forEach(a => {
-      sheetData.push([`  ${a.code} - ${a.name}`, "", `${sign(getBalance(a))}PKR ${fmt(getBalance(a))}`])
+      const val = getDisplayValue(a)
+      sheetData.push([`  ${a.code} - ${a.name}`, "", `${sign(val)}PKR ${fmt(val)}`])
     })
-    const retainedDisplay = `${sign(netProfit)}PKR ${fmt(netProfit)}`
-    sheetData.push([retainedEarningsAccount ? `  ${retainedEarningsAccount.code} - ${retainedEarningsAccount.name}` : "  Retained Earnings (Net P&L)", "", retainedDisplay])
+    sheetData.push([retainedEarningsAccount ? `  ${retainedEarningsAccount.code} - ${retainedEarningsAccount.name}` : "  Retained Earnings (Net P&L)", "", `${sign(netProfit)}PKR ${fmt(netProfit)}`])
     sheetData.push(["Total Equity", "", `${sign(totalEquity)}PKR ${fmt(totalEquity)}`])
     sheetData.push(["", "", ""])
     sheetData.push(["TOTAL LIABILITIES + EQUITY", "", `${sign(totalLiabEquity)}PKR ${fmt(totalLiabEquity)}`])
@@ -385,21 +378,21 @@ function BalanceSheetContent() {
     if (items.length === 0) return
     const total = catTotal(cat)
     currentAssetRows.push(
-      <CategoryHeader key={`ca-${cat}`} cat={cat} total={total} showAbsolute={false} onClick={() => navigateToTrialBalance("Asset", cat)} />
+      <CategoryHeader key={`ca-${cat}`} cat={cat} total={total} onClick={() => navigateToTrialBalance("Asset", cat)} />
     )
     items.forEach(a => {
       currentAssetRows.push(
-        <AccountRow key={a.id} account={a} showAbsolute={false} getBalance={getBalance} onClick={openLedger} />
+        <AccountRow key={a.id} account={a} value={getDisplayValue(a)} onClick={openLedger} />
       )
     })
   })
   if (otherAssetAccounts.length > 0) {
     currentAssetRows.push(
-      <CategoryHeader key="other-assets" cat="Other Assets" total={totalOtherAssets} showAbsolute={false} onClick={() => navigateToTrialBalance("Asset")} />
+      <CategoryHeader key="other-assets" cat="Other Assets" total={totalOtherAssets} onClick={() => navigateToTrialBalance("Asset")} />
     )
     otherAssetAccounts.forEach(a => {
       currentAssetRows.push(
-        <AccountRow key={a.id} account={a} showAbsolute={false} getBalance={getBalance} onClick={openLedger} />
+        <AccountRow key={a.id} account={a} value={getDisplayValue(a)} onClick={openLedger} />
       )
     })
   }
@@ -407,27 +400,26 @@ function BalanceSheetContent() {
   const currentLiabilityRows: React.ReactElement[] = [
     <h3 key="h3cl" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>Current Liabilities</h3>
   ]
-  // ── FIX: Use showAbsolute={false} for liabilities to show sign ──
   LIABILITY_CATS.forEach(cat => {
     const items = grouped[cat] || []
     if (items.length === 0) return
     const total = catTotal(cat)
     currentLiabilityRows.push(
-      <CategoryHeader key={`cl-${cat}`} cat={cat} total={total} showAbsolute={false} onClick={() => navigateToTrialBalance("Liability", cat)} />
+      <CategoryHeader key={`cl-${cat}`} cat={cat} total={total} onClick={() => navigateToTrialBalance("Liability", cat)} />
     )
     items.forEach(a => {
       currentLiabilityRows.push(
-        <AccountRow key={a.id} account={a} showAbsolute={false} getBalance={getBalance} onClick={openLedger} />
+        <AccountRow key={a.id} account={a} value={getDisplayValue(a)} onClick={openLedger} />
       )
     })
   })
   if (otherLiabilityAccounts.length > 0) {
     currentLiabilityRows.push(
-      <CategoryHeader key="other-liab" cat="Other Liabilities" total={totalOtherLiabilities} showAbsolute={false} onClick={() => navigateToTrialBalance("Liability")} />
+      <CategoryHeader key="other-liab" cat="Other Liabilities" total={totalOtherLiabilities} onClick={() => navigateToTrialBalance("Liability")} />
     )
     otherLiabilityAccounts.forEach(a => {
       currentLiabilityRows.push(
-        <AccountRow key={a.id} account={a} showAbsolute={false} getBalance={getBalance} onClick={openLedger} />
+        <AccountRow key={a.id} account={a} value={getDisplayValue(a)} onClick={openLedger} />
       )
     })
   }
@@ -448,8 +440,8 @@ function BalanceSheetContent() {
 
   const currentSection = buildSection(
     currentAssetRows, currentLiabilityRows,
-    <SubtotalBand label="Total Current Assets" value={totalCurrentAssets} showAbsolute={false} />,
-    <SubtotalBand label="Total Current Liabilities" value={totalCurrentLiabilities} showAbsolute={false} />
+    <SubtotalBand label="Total Current Assets" value={totalCurrentAssets} />,
+    <SubtotalBand label="Total Current Liabilities" value={totalCurrentLiabilities} />
   )
 
   const fixedAssetRows: React.ReactElement[] = [
@@ -460,11 +452,11 @@ function BalanceSheetContent() {
     if (items.length === 0) return
     const total = catTotal(cat)
     fixedAssetRows.push(
-      <CategoryHeader key={`fa-${cat}`} cat={cat} total={total} showAbsolute={false} onClick={() => navigateToTrialBalance("Asset", cat)} />
+      <CategoryHeader key={`fa-${cat}`} cat={cat} total={total} onClick={() => navigateToTrialBalance("Asset", cat)} />
     )
     items.forEach(a => {
       fixedAssetRows.push(
-        <AccountRow key={a.id} account={a} showAbsolute={false} getBalance={getBalance} onClick={openLedger} />
+        <AccountRow key={a.id} account={a} value={getDisplayValue(a)} onClick={openLedger} />
       )
     })
   })
@@ -472,10 +464,9 @@ function BalanceSheetContent() {
   const equityRows: React.ReactElement[] = [
     <h3 key="h3eq" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>Equity</h3>
   ]
-  // Equity uses showAbsolute={false} to show sign (credit positive)
   otherEquityAccounts.forEach(a => {
     equityRows.push(
-      <AccountRow key={a.id} account={a} showAbsolute={false} getBalance={getBalance} onClick={openLedger} />
+      <AccountRow key={a.id} account={a} value={getDisplayValue(a)} onClick={openLedger} />
     )
   })
   equityRows.push(
@@ -494,17 +485,17 @@ function BalanceSheetContent() {
 
   const fixedVsEquitySection = buildSection(
     fixedAssetRows, equityRows,
-    <SubtotalBand label="Total Fixed Assets" value={totalFixedAssets} showAbsolute={false} />,
-    <SubtotalBand label="Total Equity" value={totalEquity} showAbsolute={false} />
+    <SubtotalBand label="Total Fixed Assets" value={totalFixedAssets} />,
+    <SubtotalBand label="Total Equity" value={totalEquity} />
   )
 
   const grandTotals = (
     <React.Fragment key="gt">
       <div style={{ borderRight: "1px solid var(--border)", padding: "0 24px" }}>
-        <TotalBand label="TOTAL ASSETS" value={totalAssets} showAbsolute={false} />
+        <TotalBand label="TOTAL ASSETS" value={totalAssets} />
       </div>
       <div style={{ padding: "0 24px" }}>
-        <TotalBand label="TOTAL LIABILITIES + EQUITY" value={totalLiabEquity} showAbsolute={false} />
+        <TotalBand label="TOTAL LIABILITIES + EQUITY" value={totalLiabEquity} />
       </div>
     </React.Fragment>
   )
@@ -713,7 +704,6 @@ function BalanceSheetContent() {
         </div>
       </div>
 
-      {/* KPI Cards with superscript PKR */}
       <div className="kpi-row">
         <div className="kpi-card">
           <div className="kpi-label">Total Assets</div>
