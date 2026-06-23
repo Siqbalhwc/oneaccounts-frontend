@@ -219,9 +219,8 @@ function BalanceSheetContent() {
     router.push(`/dashboard/reports/profit-loss?startDate=${now.getFullYear()}-01-01&endDate=${asOfDate}`)
   }
 
-  // ── PDF export with correct signs for liabilities & equity ──────
+  // ── PDF export ──
   const handleExportPDF = async () => {
-    // Assets: keep raw values (debit balances are positive)
     const buildAssetSections = (cats: string[]) => {
       const sections: any[] = []
       cats.forEach(cat => {
@@ -236,13 +235,12 @@ function BalanceSheetContent() {
       return sections
     }
 
-    // Liabilities & Equity: flip sign (credit balances → positive)
     const buildCreditSections = (cats: string[]) => {
       const sections: any[] = []
       cats.forEach(cat => {
         const items = grouped[cat] || []
         if (items.length === 0) return
-        const total = -catTotal(cat)   // positive total
+        const total = -catTotal(cat)
         sections.push({ text: cat, amount: total, isHeader: true, indent: 0 })
         items.forEach(a => {
           sections.push({ text: `${a.code} – ${a.name}`, amount: -getBalance(a), isHeader: false, indent: 8 })
@@ -251,7 +249,6 @@ function BalanceSheetContent() {
       return sections
     }
 
-    // Equity items (including retained earnings) – also positive
     const equityItems = otherEquityAccounts.map(a => ({
       text: `${a.code} – ${a.name}`,
       amount: -getBalance(a),
@@ -259,7 +256,6 @@ function BalanceSheetContent() {
       indent: 8,
     }))
 
-    // Retained earnings – always positive for display
     const retainedAmount = netProfit
     equityItems.push({
       text: retainedEarningsAccount
@@ -281,7 +277,7 @@ function BalanceSheetContent() {
       totalFixedAssets,
       totalAssets,
       liabilitySections: buildCreditSections(LIABILITY_CATS),
-      totalLiabilities,                     // already positive
+      totalLiabilities,
       equitySections: [
         { text: "Equity", amount: totalEquityAbs, isHeader: true, indent: 0 },
         ...equityItems,
@@ -354,7 +350,7 @@ function BalanceSheetContent() {
     XLSX.writeFile(wb, `Balance_Sheet_${asOfDate}.xlsx`)
   }
 
-  // ── Build rows for UI ──────────────────────────────────────────
+  // ── Build rows for UI ──
   const currentAssetRows: React.ReactElement[] = [
     <h3 key="h3ca" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>Current Assets</h3>
   ]
@@ -500,7 +496,7 @@ function BalanceSheetContent() {
       <style>{`
         * { box-sizing: border-box; }
 
-        /* ── Report Header (same as Trial Balance / P&L) ── */
+        /* ── Report Header ── */
         .report-header {
           background: var(--card);
           border-bottom: 1px solid var(--border);
@@ -544,15 +540,30 @@ function BalanceSheetContent() {
         .kpi-card {
           background: var(--card);
           border: 1px solid var(--border);
-          border-radius: 12px; padding: 18px 24px;
-          min-width: 170px; box-shadow: var(--shadow-sm); flex: 1;
+          border-radius: 12px; padding: 16px 20px;
+          min-width: 150px; box-shadow: var(--shadow-sm); flex: 1;
         }
         .kpi-label {
-          font-size: 10px; font-weight: 700;
-          text-transform: uppercase; letter-spacing: 0.08em;
-          color: var(--text-muted); margin-bottom: 6px;
+          font-size: 9px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          color: var(--text-muted);
+          margin-bottom: 4px;
         }
-        .kpi-value { font-size: 26px; font-weight: 800; }
+        .kpi-value {
+          font-size: 20px;
+          font-weight: 800;
+          line-height: 1.2;
+          white-space: nowrap;
+        }
+        .kpi-value .currency-prefix {
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--text-muted);
+          vertical-align: super;
+          margin-right: 1px;
+        }
 
         /* ── Filter bar ── */
         .filter-bar {
@@ -579,7 +590,7 @@ function BalanceSheetContent() {
         }
         .date-input:focus { border-color: var(--primary); }
 
-        /* ── Report body (same as P&L) ── */
+        /* ── Report body ── */
         .section { margin: 0 32px 16px; }
         .section-head {
           display: flex; align-items: center; gap: 8px;
@@ -591,23 +602,53 @@ function BalanceSheetContent() {
           letter-spacing: 0.08em; color: var(--text-muted);
           transition: color 0.15s;
         }
+
+        /* ── Account row ── */
         .acc-row {
           display: flex; justify-content: space-between; align-items: center;
-          padding: 10px 12px; border-bottom: 1px solid var(--border);
+          padding: 8px 12px;
+          border-bottom: 1px solid var(--border);
           cursor: pointer; transition: background 0.1s;
         }
         .acc-row:hover { background: var(--card-hover); }
+
+        /* ── Category Header ── */
+        .cat-header {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 8px 12px;
+          margin: 4px 0;
+          border-radius: 4px;
+          font-size: 12px; font-weight: 600;
+          background: var(--bg-soft);
+          border-left: 3px solid var(--primary);
+          cursor: pointer;
+          transition: background 0.15s;
+        }
+        .cat-header:hover { background: var(--card-hover); }
+
+        /* ── Subtotal band ── */
         .subtotal-band {
           display: flex; justify-content: space-between; align-items: center;
-          padding: 14px 12px; border-radius: 6px; margin: 8px 0;
+          padding: 10px 12px;
+          border-radius: 4px;
+          margin: 6px 0;
           font-size: 13px; font-weight: 600;
-          background: var(--card-hover); color: var(--text);
+          background: var(--bg-soft);
+          color: var(--text);
+          border-top: 1.5px solid var(--border);
+          border-bottom: 1.5px solid var(--border);
         }
+
+        /* ── Total band ── */
         .total-band {
           display: flex; justify-content: space-between; align-items: center;
-          padding: 14px 16px; border-radius: 8px; margin-top: 16px;
+          padding: 12px 16px;
+          border-radius: 6px;
+          margin-top: 12px;
           font-size: 15px; font-weight: 700;
-          background: var(--card-hover); color: var(--text);
+          background: var(--bg-soft);
+          color: var(--text);
+          border: 1.5px solid var(--border);
         }
 
         /* ── Grid for paired sections ── */
@@ -633,7 +674,7 @@ function BalanceSheetContent() {
         }
       `}</style>
 
-      {/* ── Report Header (same as Trial Balance / P&L) ── */}
+      {/* ── Report Header ── */}
       <div className="report-header">
         <div className="report-header-left">
           <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}>
@@ -666,29 +707,35 @@ function BalanceSheetContent() {
         </div>
       </div>
 
-      {/* ── KPI cards ── */}
+      {/* ── KPI cards with superscript PKR ── */}
       <div className="kpi-row">
         <div className="kpi-card">
           <div className="kpi-label">Total Assets</div>
-          <div className="kpi-value" style={{ color: "#3B82F6" }}>PKR {fmt(totalAssets)}</div>
+          <div className="kpi-value" style={{ color: "#3B82F6" }}>
+            <span className="currency-prefix">PKR</span> {fmt(totalAssets)}
+          </div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Total Liabilities</div>
-          <div className="kpi-value" style={{ color: "#EF4444" }}>PKR {fmtPos(totalLiabilities)}</div>
+          <div className="kpi-value" style={{ color: "#EF4444" }}>
+            <span className="currency-prefix">PKR</span> {fmtPos(totalLiabilities)}
+          </div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Total Equity</div>
-          <div className="kpi-value" style={{ color: "#A78BFA" }}>PKR {fmtPos(totalEquityAbs)}</div>
+          <div className="kpi-value" style={{ color: "#A78BFA" }}>
+            <span className="currency-prefix">PKR</span> {fmtPos(totalEquityAbs)}
+          </div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Balanced?</div>
-          <div className="kpi-value" style={{ color: isBalanced ? "#10B981" : "#EF4444", fontSize: 20 }}>
+          <div className="kpi-value" style={{ color: isBalanced ? "#10B981" : "#EF4444", fontSize: 18 }}>
             {isBalanced ? "✓ In Balance" : "✗ Imbalance"}
           </div>
         </div>
       </div>
 
-      {/* ── Filter bar (just buttons) ── */}
+      {/* ── Filter bar ── */}
       <div className="filter-bar">
         <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
           <button className="btn btn-outline" onClick={handleExportExcel}><Download size={13} /> Excel</button>
