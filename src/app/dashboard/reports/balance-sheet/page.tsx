@@ -26,10 +26,21 @@ function getCategory(account: any): string {
   return "Other"
 }
 
-function fmt(n: number) { return Math.abs(n).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
-function sign(n: number) { return n < 0 ? "-" : "" }
-function fmtPos(n: number) { return Math.abs(n).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
-function fmtSigned(n: number) { return (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
+function fmt(n: number) {
+  return Math.abs(n).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function sign(n: number) {
+  return n < 0 ? "-" : ""
+}
+
+function fmtPos(n: number) {
+  return Math.abs(n).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function fmtSigned(n: number) {
+  return (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
 
 const CURRENT_ASSET_CATS = ["Cash & Bank", "Accounts Receivable", "Inventory", "Other Current Assets"]
 const FIXED_ASSET_CATS = ["Fixed Assets", "Vehicles"]
@@ -39,6 +50,7 @@ function PlaceholderRow() {
   return <div style={{ height: 40, opacity: 0, pointerEvents: "none" }}>&nbsp;</div>
 }
 
+// ── AccountRow with sign support ──
 function AccountRow({ account, showAbsolute, getBalance, onClick }: {
   account: any
   showAbsolute: boolean
@@ -47,13 +59,12 @@ function AccountRow({ account, showAbsolute, getBalance, onClick }: {
 }) {
   const bal = getBalance(account)
   const rounded = Math.round(bal)
+  const display = showAbsolute ? `PKR ${fmtPos(rounded)}` : `${sign(rounded)}PKR ${fmt(rounded)}`
   return (
     <div className="acc-row" onClick={() => onClick(account.id)}>
       <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 50 }}>{account.code}</span>
       <span style={{ fontSize: 12, color: "var(--text)", flex: 1, paddingLeft: 8 }}>{account.name}</span>
-      <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-        {showAbsolute ? `PKR ${fmtPos(rounded)}` : `${sign(rounded)}PKR ${fmt(rounded)}`}
-      </span>
+      <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{display}</span>
     </div>
   )
 }
@@ -65,32 +76,33 @@ function CategoryHeader({ cat, total, showAbsolute, onClick }: {
   onClick: () => void
 }) {
   const rounded = Math.round(total)
+  const display = showAbsolute ? `PKR ${fmtPos(rounded)}` : `${sign(rounded)}PKR ${fmt(rounded)}`
   return (
     <div className="cat-header" onClick={onClick}>
       <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", flex: 1 }}>{cat}</span>
-      <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>
-        {showAbsolute ? `PKR ${fmtPos(rounded)}` : `${sign(rounded)}PKR ${fmt(rounded)}`}
-      </span>
+      <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{display}</span>
     </div>
   )
 }
 
 function SubtotalBand({ label, value, showAbsolute }: { label: string; value: number; showAbsolute: boolean }) {
   const rounded = Math.round(value)
+  const display = showAbsolute ? `PKR ${fmtPos(rounded)}` : `${sign(rounded)}PKR ${fmt(rounded)}`
   return (
     <div className="subtotal-band">
       <span>{label}</span>
-      <span>{showAbsolute ? `PKR ${fmtPos(rounded)}` : `${sign(rounded)}PKR ${fmt(rounded)}`}</span>
+      <span>{display}</span>
     </div>
   )
 }
 
 function TotalBand({ label, value, showAbsolute }: { label: string; value: number; showAbsolute: boolean }) {
   const rounded = Math.round(value)
+  const display = showAbsolute ? `PKR ${fmtPos(rounded)}` : `${sign(rounded)}PKR ${fmt(rounded)}`
   return (
     <div className="total-band">
       <span>{label}</span>
-      <span>{showAbsolute ? `PKR ${fmtPos(rounded)}` : `${sign(rounded)}PKR ${fmt(rounded)}`}</span>
+      <span>{display}</span>
     </div>
   )
 }
@@ -186,22 +198,22 @@ function BalanceSheetContent() {
   const totalOtherAssets = otherAssetAccounts.reduce((s, a) => s + getBalance(a), 0)
   const totalAssets = totalCurrentAssets + totalFixedAssets + totalOtherAssets
 
-  const totalCurrentLiabilities = Math.abs(LIABILITY_CATS.reduce((s, c) => s + catTotal(c), 0))
+  // ── FIX: Liabilities – use actual signed sum (not absolute) ──
+  const totalCurrentLiabilities = LIABILITY_CATS.reduce((s, c) => s + catTotal(c), 0)
   const otherLiabilityAccounts = accounts.filter(a => a.type === "Liability" && !LIABILITY_CATS.includes(getCategory(a)))
-  const totalOtherLiabilities = Math.abs(otherLiabilityAccounts.reduce((s, a) => s + getBalance(a), 0))
+  const totalOtherLiabilities = otherLiabilityAccounts.reduce((s, a) => s + getBalance(a), 0)
   const totalLiabilities = totalCurrentLiabilities + totalOtherLiabilities
 
   const equityAccounts = accounts.filter(a => a.type === "Equity")
   const retainedEarningsAccount = equityAccounts.find(a => a.code === "3100")
   const otherEquityAccounts = equityAccounts.filter(a => a.code !== "3100")
-  const totalOtherEquity = Math.abs(otherEquityAccounts.reduce((s, a) => s + getBalance(a), 0))
+  const totalOtherEquity = otherEquityAccounts.reduce((s, a) => s + getBalance(a), 0)
 
   const revenue = accounts.filter(a => a.type === "Revenue").reduce((s, a) => s + Math.abs(getBalance(a)), 0)
   const expenses = accounts.filter(a => a.type === "Expense").reduce((s, a) => s + Math.abs(getBalance(a)), 0)
   const netProfit = revenue - expenses
   const totalEquity = totalOtherEquity + netProfit
-  const totalEquityAbs = Math.abs(totalEquity)
-  const totalLiabEquity = totalLiabilities + totalEquityAbs
+  const totalLiabEquity = totalLiabilities + totalEquity
   const isBalanced = Math.abs(totalAssets - totalLiabEquity) < 1
 
   const navigateToTrialBalance = (type: string, category?: string) => {
@@ -240,7 +252,7 @@ function BalanceSheetContent() {
       cats.forEach(cat => {
         const items = grouped[cat] || []
         if (items.length === 0) return
-        const total = -catTotal(cat)
+        const total = -catTotal(cat)   // flip sign for display (credit positive)
         sections.push({ text: cat, amount: total, isHeader: true, indent: 0 })
         items.forEach(a => {
           sections.push({ text: `${a.code} – ${a.name}`, amount: -getBalance(a), isHeader: false, indent: 8 })
@@ -279,11 +291,11 @@ function BalanceSheetContent() {
       liabilitySections: buildCreditSections(LIABILITY_CATS),
       totalLiabilities,
       equitySections: [
-        { text: "Equity", amount: totalEquityAbs, isHeader: true, indent: 0 },
+        { text: "Equity", amount: totalEquity, isHeader: true, indent: 0 },
         ...equityItems,
       ],
       netProfit,
-      totalEquity: totalEquityAbs,
+      totalEquity,
       totalLiabEquity,
     }
 
@@ -304,7 +316,9 @@ function BalanceSheetContent() {
       for (const cat of cats) {
         const items = grouped[cat] || []
         if (items.length === 0) continue
-        sheetData.push([`  ${cat}`, "", `PKR ${fmt(catTotal(cat))}`])
+        const total = catTotal(cat)
+        const display = showAbsolute ? `PKR ${fmtPos(total)}` : `${sign(total)}PKR ${fmt(total)}`
+        sheetData.push([`  ${cat}`, "", display])
         for (const a of items) {
           const bal = getBalance(a)
           sheetData.push([`    ${a.code} - ${a.name}`, "", `${sign(bal)}PKR ${fmt(bal)}`])
@@ -326,23 +340,35 @@ function BalanceSheetContent() {
     sheetData.push(["TOTAL ASSETS", "", `${sign(totalAssets)}PKR ${fmt(totalAssets)}`])
     sheetData.push(["", "", ""])
     sheetData.push(["LIABILITIES & EQUITY", "", ""])
-    addSection("Current Liabilities", LIABILITY_CATS, true)
+    // Liabilities: show signed amounts (credit positive, debit negative)
+    for (const cat of LIABILITY_CATS) {
+      const items = grouped[cat] || []
+      if (items.length === 0) continue
+      const total = catTotal(cat)
+      const display = `${sign(total)}PKR ${fmt(total)}`
+      sheetData.push([`  ${cat}`, "", display])
+      for (const a of items) {
+        const bal = getBalance(a)
+        sheetData.push([`    ${a.code} - ${a.name}`, "", `${sign(bal)}PKR ${fmt(bal)}`])
+      }
+    }
     if (otherLiabilityAccounts.length > 0) {
       sheetData.push(["Other Liabilities", "", ""])
       otherLiabilityAccounts.forEach(a => {
-        sheetData.push([`  ${a.code} - ${a.name}`, "", `PKR ${fmtPos(getBalance(a))}`])
+        sheetData.push([`  ${a.code} - ${a.name}`, "", `${sign(getBalance(a))}PKR ${fmt(getBalance(a))}`])
       })
     }
-    sheetData.push(["Total Liabilities", "", `PKR ${fmtPos(totalLiabilities)}`])
+    sheetData.push(["Total Liabilities", "", `${sign(totalLiabilities)}PKR ${fmt(totalLiabilities)}`])
     sheetData.push(["", "", ""])
     sheetData.push(["Equity", "", ""])
     otherEquityAccounts.forEach(a => {
-      sheetData.push([`  ${a.code} - ${a.name}`, "", `PKR ${fmtPos(getBalance(a))}`])
+      sheetData.push([`  ${a.code} - ${a.name}`, "", `${sign(getBalance(a))}PKR ${fmt(getBalance(a))}`])
     })
-    sheetData.push([retainedEarningsAccount ? `  ${retainedEarningsAccount.code} - ${retainedEarningsAccount.name}` : "  Retained Earnings (Net P&L)", "", `PKR ${fmtPos(netProfit)}`])
-    sheetData.push(["Total Equity", "", `PKR ${fmtPos(totalEquityAbs)}`])
+    const retainedDisplay = `${sign(netProfit)}PKR ${fmt(netProfit)}`
+    sheetData.push([retainedEarningsAccount ? `  ${retainedEarningsAccount.code} - ${retainedEarningsAccount.name}` : "  Retained Earnings (Net P&L)", "", retainedDisplay])
+    sheetData.push(["Total Equity", "", `${sign(totalEquity)}PKR ${fmt(totalEquity)}`])
     sheetData.push(["", "", ""])
-    sheetData.push(["TOTAL LIABILITIES + EQUITY", "", `PKR ${fmtPos(totalLiabEquity)}`])
+    sheetData.push(["TOTAL LIABILITIES + EQUITY", "", `${sign(totalLiabEquity)}PKR ${fmt(totalLiabEquity)}`])
 
     const ws = XLSX.utils.aoa_to_sheet(sheetData)
     ws["!cols"] = [{ wch: 40 }, { wch: 5 }, { wch: 20 }]
@@ -381,26 +407,27 @@ function BalanceSheetContent() {
   const currentLiabilityRows: React.ReactElement[] = [
     <h3 key="h3cl" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>Current Liabilities</h3>
   ]
+  // ── FIX: Use showAbsolute={false} for liabilities to show sign ──
   LIABILITY_CATS.forEach(cat => {
     const items = grouped[cat] || []
     if (items.length === 0) return
     const total = catTotal(cat)
     currentLiabilityRows.push(
-      <CategoryHeader key={`cl-${cat}`} cat={cat} total={total} showAbsolute={true} onClick={() => navigateToTrialBalance("Liability", cat)} />
+      <CategoryHeader key={`cl-${cat}`} cat={cat} total={total} showAbsolute={false} onClick={() => navigateToTrialBalance("Liability", cat)} />
     )
     items.forEach(a => {
       currentLiabilityRows.push(
-        <AccountRow key={a.id} account={a} showAbsolute={true} getBalance={getBalance} onClick={openLedger} />
+        <AccountRow key={a.id} account={a} showAbsolute={false} getBalance={getBalance} onClick={openLedger} />
       )
     })
   })
   if (otherLiabilityAccounts.length > 0) {
     currentLiabilityRows.push(
-      <CategoryHeader key="other-liab" cat="Other Liabilities" total={totalOtherLiabilities} showAbsolute={true} onClick={() => navigateToTrialBalance("Liability")} />
+      <CategoryHeader key="other-liab" cat="Other Liabilities" total={totalOtherLiabilities} showAbsolute={false} onClick={() => navigateToTrialBalance("Liability")} />
     )
     otherLiabilityAccounts.forEach(a => {
       currentLiabilityRows.push(
-        <AccountRow key={a.id} account={a} showAbsolute={true} getBalance={getBalance} onClick={openLedger} />
+        <AccountRow key={a.id} account={a} showAbsolute={false} getBalance={getBalance} onClick={openLedger} />
       )
     })
   }
@@ -422,7 +449,7 @@ function BalanceSheetContent() {
   const currentSection = buildSection(
     currentAssetRows, currentLiabilityRows,
     <SubtotalBand label="Total Current Assets" value={totalCurrentAssets} showAbsolute={false} />,
-    <SubtotalBand label="Total Current Liabilities" value={totalCurrentLiabilities} showAbsolute={true} />
+    <SubtotalBand label="Total Current Liabilities" value={totalCurrentLiabilities} showAbsolute={false} />
   )
 
   const fixedAssetRows: React.ReactElement[] = [
@@ -445,9 +472,10 @@ function BalanceSheetContent() {
   const equityRows: React.ReactElement[] = [
     <h3 key="h3eq" style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: "0 0 16px" }}>Equity</h3>
   ]
+  // Equity uses showAbsolute={false} to show sign (credit positive)
   otherEquityAccounts.forEach(a => {
     equityRows.push(
-      <AccountRow key={a.id} account={a} showAbsolute={true} getBalance={getBalance} onClick={openLedger} />
+      <AccountRow key={a.id} account={a} showAbsolute={false} getBalance={getBalance} onClick={openLedger} />
     )
   })
   equityRows.push(
@@ -467,7 +495,7 @@ function BalanceSheetContent() {
   const fixedVsEquitySection = buildSection(
     fixedAssetRows, equityRows,
     <SubtotalBand label="Total Fixed Assets" value={totalFixedAssets} showAbsolute={false} />,
-    <SubtotalBand label="Total Equity" value={totalEquityAbs} showAbsolute={true} />
+    <SubtotalBand label="Total Equity" value={totalEquity} showAbsolute={false} />
   )
 
   const grandTotals = (
@@ -476,7 +504,7 @@ function BalanceSheetContent() {
         <TotalBand label="TOTAL ASSETS" value={totalAssets} showAbsolute={false} />
       </div>
       <div style={{ padding: "0 24px" }}>
-        <TotalBand label="TOTAL LIABILITIES + EQUITY" value={totalLiabEquity} showAbsolute={true} />
+        <TotalBand label="TOTAL LIABILITIES + EQUITY" value={totalLiabEquity} showAbsolute={false} />
       </div>
     </React.Fragment>
   )
@@ -496,7 +524,6 @@ function BalanceSheetContent() {
       <style>{`
         * { box-sizing: border-box; }
 
-        /* ── Report Header ── */
         .report-header {
           background: var(--card);
           border-bottom: 1px solid var(--border);
@@ -532,7 +559,6 @@ function BalanceSheetContent() {
           font-size: 12px;
         }
 
-        /* ── KPI cards ── */
         .kpi-row {
           display: flex; gap: 16px;
           padding: 24px 32px; flex-wrap: wrap;
@@ -565,7 +591,6 @@ function BalanceSheetContent() {
           margin-right: 1px;
         }
 
-        /* ── Filter bar ── */
         .filter-bar {
           display: flex; align-items: center; gap: 12px;
           padding: 0 32px 20px; flex-wrap: wrap;
@@ -590,20 +615,6 @@ function BalanceSheetContent() {
         }
         .date-input:focus { border-color: var(--primary); }
 
-        /* ── Report body ── */
-        .section { margin: 0 32px 16px; }
-        .section-head {
-          display: flex; align-items: center; gap: 8px;
-          margin-bottom: 4px; padding: 8px 0; cursor: pointer;
-        }
-        .section-head:hover .section-title-text { color: var(--primary); }
-        .section-title-text {
-          font-size: 12px; font-weight: 700; text-transform: uppercase;
-          letter-spacing: 0.08em; color: var(--text-muted);
-          transition: color 0.15s;
-        }
-
-        /* ── Account row ── */
         .acc-row {
           display: flex; justify-content: space-between; align-items: center;
           padding: 8px 12px;
@@ -612,7 +623,6 @@ function BalanceSheetContent() {
         }
         .acc-row:hover { background: var(--card-hover); }
 
-        /* ── Category Header ── */
         .cat-header {
           display: flex; justify-content: space-between; align-items: center;
           padding: 8px 12px;
@@ -626,7 +636,6 @@ function BalanceSheetContent() {
         }
         .cat-header:hover { background: var(--card-hover); }
 
-        /* ── Subtotal band ── */
         .subtotal-band {
           display: flex; justify-content: space-between; align-items: center;
           padding: 10px 12px;
@@ -639,7 +648,6 @@ function BalanceSheetContent() {
           border-bottom: 1.5px solid var(--border);
         }
 
-        /* ── Total band ── */
         .total-band {
           display: flex; justify-content: space-between; align-items: center;
           padding: 12px 16px;
@@ -651,7 +659,6 @@ function BalanceSheetContent() {
           border: 1.5px solid var(--border);
         }
 
-        /* ── Grid for paired sections ── */
         .bs-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
@@ -674,7 +681,6 @@ function BalanceSheetContent() {
         }
       `}</style>
 
-      {/* ── Report Header ── */}
       <div className="report-header">
         <div className="report-header-left">
           <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}>
@@ -707,7 +713,7 @@ function BalanceSheetContent() {
         </div>
       </div>
 
-      {/* ── KPI cards with superscript PKR ── */}
+      {/* KPI Cards with superscript PKR */}
       <div className="kpi-row">
         <div className="kpi-card">
           <div className="kpi-label">Total Assets</div>
@@ -718,13 +724,13 @@ function BalanceSheetContent() {
         <div className="kpi-card">
           <div className="kpi-label">Total Liabilities</div>
           <div className="kpi-value" style={{ color: "#EF4444" }}>
-            <span className="currency-prefix">PKR</span> {fmtPos(totalLiabilities)}
+            <span className="currency-prefix">PKR</span> {fmt(totalLiabilities)}
           </div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Total Equity</div>
           <div className="kpi-value" style={{ color: "#A78BFA" }}>
-            <span className="currency-prefix">PKR</span> {fmtPos(totalEquityAbs)}
+            <span className="currency-prefix">PKR</span> {fmt(totalEquity)}
           </div>
         </div>
         <div className="kpi-card">
@@ -735,7 +741,6 @@ function BalanceSheetContent() {
         </div>
       </div>
 
-      {/* ── Filter bar ── */}
       <div className="filter-bar">
         <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
           <button className="btn btn-outline" onClick={handleExportExcel}><Download size={13} /> Excel</button>
@@ -743,7 +748,6 @@ function BalanceSheetContent() {
         </div>
       </div>
 
-      {/* ── Synchronized Report Body ── */}
       <div className="bs-grid">
         {syncedRows}
       </div>
