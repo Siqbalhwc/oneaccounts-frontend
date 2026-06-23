@@ -23,11 +23,11 @@ export default function SignupPage() {
   const [errorMsg, setErrorMsg] = useState("")
   const [hasExistingSession, setHasExistingSession] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
+  const [signupSuccess, setSignupSuccess] = useState(false)
 
   // ── Phone validation using your normalizePhone helper ──
   const validatePakistanPhone = (raw: string): boolean => {
-    const normalized = normalizePhone(raw) // returns e.g., "3123456789"
-    // Must be exactly 10 digits and start with '3' (Pakistan mobile prefix)
+    const normalized = normalizePhone(raw)
     return /^3\d{9}$/.test(normalized)
   }
 
@@ -54,21 +54,20 @@ export default function SignupPage() {
       return
     }
 
-    // Normalize phone for storage (03XXXXXXXXX)
     const normalizedPhone = "03" + normalizePhone(phone)
 
     if (hasExistingSession) {
-      setErrorMsg("You are already logged in. Please sign out or use an incognito window to create a separate trial company.")
+      setErrorMsg("You are already logged in. Please sign out or use an incognito window.")
       setLoading(false)
       return
     }
 
-    // ── 1. Create auth user ──────────────────────────────
+    // ── 1. Create auth user with email confirmation ──
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: window.location.origin + "/auth/callback",
+        emailRedirectTo: window.location.origin + "/auth/callback", // ✅ Explicit redirect
         data: {
           company_name: companyName,
           business_type: businessType,
@@ -78,11 +77,8 @@ export default function SignupPage() {
     })
 
     if (authError) {
-      if (
-        authError.message.toLowerCase().includes("already registered") ||
-        authError.message.toLowerCase().includes("already exists")
-      ) {
-        setErrorMsg("An account with this email already exists. Please log in instead, or use a different email.")
+      if (authError.message.toLowerCase().includes("already registered")) {
+        setErrorMsg("An account with this email already exists. Please log in instead.")
       } else {
         setErrorMsg(authError.message)
       }
@@ -90,36 +86,7 @@ export default function SignupPage() {
       return
     }
 
-    // ── If email confirmation is required, show message ──
-    if (!authData.session) {
-      // ── Create company record with phone before verification ──
-      try {
-        const res = await fetch("/api/trial/signup", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            companyName,
-            businessType,
-            email,
-            phone: normalizedPhone,
-          }),
-        })
-        const data = await res.json()
-        if (!data.success) {
-          console.error("Company creation error (pre-verification):", data.error)
-        }
-      } catch (e) {
-        console.error("Failed to create company:", e)
-      }
-
-      setErrorMsg("✅ Account created! Please check your email to confirm, then sign in to access your company.")
-      setLoading(false)
-      return
-    }
-
-    // ── 2. Create company (API call) ──────────────────────
-    setIsCreating(true)
-
+    // ── 2. Create company record (even if email not yet verified) ──
     try {
       const res = await fetch("/api/trial/signup", {
         method: "POST",
@@ -132,25 +99,69 @@ export default function SignupPage() {
         }),
       })
       const data = await res.json()
-
       if (!data.success) {
-        setErrorMsg(data.error || "Failed to create company.")
-        setIsCreating(false)
-        setLoading(false)
-        return
+        console.error("Company creation error:", data.error)
       }
-
-      // ── 3. Refresh session so the new company_id is loaded ──
-      await supabase.auth.refreshSession()
-      await new Promise(resolve => setTimeout(resolve, 800))
-
-      // ── 4. Redirect to dashboard ─────────────────────────
-      router.push("/dashboard")
     } catch (e) {
-      setErrorMsg("Network error. Please try again.")
-      setIsCreating(false)
-      setLoading(false)
+      console.error("Failed to create company:", e)
     }
+
+    setSignupSuccess(true)
+    setLoading(false)
+  }
+
+  // ── Show success screen after signup ──
+  if (signupSuccess) {
+    return (
+      <div style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "#EFF4FB",
+        fontFamily: "Arial",
+      }}>
+        <div style={{
+          background: "white",
+          padding: 40,
+          borderRadius: 12,
+          border: "1px solid #E2E8F0",
+          maxWidth: 420,
+          width: "100%",
+          textAlign: "center",
+        }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>📧</div>
+          <h2 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", marginBottom: 8 }}>
+            Check Your Email
+          </h2>
+          <p style={{ fontSize: 14, color: "#64748B", lineHeight: 1.6, marginBottom: 8 }}>
+            We sent a confirmation link to <strong>{email}</strong>.
+          </p>
+          <p style={{ fontSize: 13, color: "#94A3B8", lineHeight: 1.6, marginBottom: 24 }}>
+            Please click the link in your email to verify your address and activate your free trial.
+          </p>
+          <button
+            onClick={() => router.push("/login")}
+            style={{
+              background: "#1D4ED8",
+              color: "white",
+              border: "none",
+              borderRadius: 8,
+              padding: "10px 32px",
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            Go to Login
+          </button>
+          <p style={{ fontSize: 12, color: "#94A3B8", marginTop: 16 }}>
+            Didn't receive the email? Check your spam folder.
+          </p>
+        </div>
+      </div>
+    )
   }
 
   // ── Full‑screen loading overlay ──
@@ -224,9 +235,7 @@ export default function SignupPage() {
             }}
           >
             <strong>⚠️ You are already logged in</strong><br />
-            Creating a new trial here will <strong>sign you out</strong> of your current company in all open tabs.
-            <br />
-            <strong>Recommendation:</strong> Use a separate browser profile (Incognito / Guest) for each company to keep them completely isolated.
+            Please sign out or use incognito mode to create a separate trial.
           </div>
         )}
 
@@ -295,7 +304,6 @@ export default function SignupPage() {
             <option value="trading">Trading Business</option>
           </select>
 
-          {/* ── NEW: Phone Field ── */}
           <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>
             Phone Number <span style={{ fontSize: 11, fontWeight: 400, color: "#94A3B8" }}>(Pakistan, for WhatsApp follow-up)</span>
           </label>
