@@ -153,9 +153,9 @@ export default function NewReceiptPage() {
         .select("id, invoice_no, date, due_date, total, paid, status")
         .eq("company_id", companyId)
         .eq("party_id", customerId)
-        .eq("type", "sale")                  // ← only sale invoices
+        .eq("type", "sale")
         .in("status", ["Unpaid", "Partial"])
-        .neq("status", "Returned")           // ← exclude fully returned
+        .neq("status", "Returned")
         .order("date")
 
       if (!invs || invs.length === 0) {
@@ -267,7 +267,7 @@ export default function NewReceiptPage() {
   const totalAmount = Number(receiptAmount || 0)
   const unallocated = totalAmount - totalAllocated
 
-  // ── Save / Update ──
+  // ── Save / Update using RPC (optimized) ──
   const handleSubmit = async () => {
     if (!companyId) { setError("Company not loaded"); return }
     if (!selectedBankId) { setError("Please select a bank account"); return }
@@ -283,41 +283,51 @@ export default function NewReceiptPage() {
 
     setLoading(true); setError("")
 
-    const url = editId ? `/api/receipts?id=${editId}` : "/api/receipts"
-    const method = editId ? "PUT" : "POST"
+    // Build allocations array for RPC (excluding opening)
+    const allocationsArray = Object.entries(allocations)
+      .filter(([key, amount]) => key !== "opening" && amount > 0)
+      .map(([invId, amount]) => ({
+        invoice_id: parseInt(invId),
+        amount: amount,
+      }))
+
+    const openingAllocAmount = allocations["opening"] || 0
 
     try {
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          party_id: customerId,
-          amount: totalAmount,
-          unallocated_amount: 0,
-          payment_method: "Bank Transfer",
-          bank_account_id: selectedBankId,
-          income_account_id: isDonation ? selectedIncomeAccountId : null,
-          date: receiptDate,
-          reference,
-          notes,
-          allocations: Object.entries(allocations)
-            .filter(([key, allocAmt]) => key !== "opening" && allocAmt > 0)
-            .map(([invId, allocAmt]) => ({
-              invoice_id: parseInt(invId), amount: allocAmt
-            })),
-        }),
+      // ── Call the RPC instead of the API ──
+      const { data, error: rpcError } = await supabase.rpc('create_receipt_transaction', {
+        p_company_id: companyId,
+        p_party_id: customerId,
+        p_receipt_date: receiptDate,
+        p_amount: totalAmount,
+        p_bank_account_id: selectedBankId,
+        p_income_account_id: isDonation ? selectedIncomeAccountId : null,
+        p_reference: reference || null,
+        p_notes: notes || null,
+        p_allocations: allocationsArray,
+        p_user_email: 'system',
+        p_is_donation: isDonation,
+        p_opening_allocation: openingAllocAmount,
       })
-      const result = await res.json()
-      if (!result.success) {
-        setError(result.error || "Failed")
+
+      if (rpcError) {
+        setError(rpcError.message || "Failed to save receipt")
+        setLoading(false)
+        return
+      }
+
+      if (!data || !data.success) {
+        setError(data?.error || "Failed to save receipt")
         setLoading(false)
         return
       }
 
       setFlash(`✅ Receipt ${editId ? "updated" : "saved"} successfully!`)
+
       if (editId) {
         setTimeout(() => router.push("/dashboard/receipts"), 1500)
       } else {
+        // Reset form
         setCustomerId(null)
         setSelectedCustomer(null)
         setCustomerSearch("")
@@ -335,8 +345,9 @@ export default function NewReceiptPage() {
         setTimeout(() => loadCustomers(), 500)
       }
       setTimeout(() => setFlash(null), 4000)
-    } catch {
-      setError("Network error")
+
+    } catch (err: any) {
+      setError(err.message || "Network error")
       setLoading(false)
     }
   }
