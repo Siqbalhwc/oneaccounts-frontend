@@ -383,7 +383,6 @@ function NewInvoicePageContent() {
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
   const totalTaxAmount = items.reduce((s, i) => s + (i.tax_amount || 0), 0)
 
-  // ── Check if any stock errors exist ──
   const hasStockErrors = Object.keys(stockErrors).length > 0
 
   const handleSubmit = async () => {
@@ -668,8 +667,7 @@ function NewInvoicePageContent() {
     return don?.name || ""
   }
 
-  // ── UNIFIED TABLE: Fixed columns, all visible, scrollable ──
-  // Columns: Image (60px) | Product (220px) | Description (320px) | Qty (80px) | Price (120px) | Tax% (120px) | Total (140px) | Tax Amt (140px) | Cost (120px) | Delete (50px)
+  // ── UNIFIED TABLE ──
   const tableCols = taxEnabled
     ? "60px 220px 320px 80px 120px 120px 140px 140px 120px 50px"
     : "60px 220px 320px 80px 120px 140px 120px 50px"
@@ -680,7 +678,7 @@ function NewInvoicePageContent() {
         /* ── Reset & Shell ── */
         .inv-shell { width: 100%; margin: 0; }
         .inv-title { font-size: 18px; font-weight: 700; color: var(--text); }
-        .inv-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 16px 20px; box-shadow: var(--shadow-sm); margin-bottom: 12px; overflow: hidden; }
+        .inv-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 16px 20px; box-shadow: var(--shadow-sm); margin-bottom: 12px; overflow: visible; }
         .inv-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block; }
         .inv-input, .inv-select { width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: 13px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box; }
         input[type="date"] { color-scheme: dark; }
@@ -694,7 +692,7 @@ function NewInvoicePageContent() {
         /* ── Customer Dropdown ── */
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
-        .cust-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; max-height: 220px; overflow-y: auto; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
+        .cust-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; max-height: 220px; overflow-y: auto; z-index: 9999; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
         .cust-option { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
         .cust-option:last-child { border-bottom: none; }
         .cust-option:hover { background: var(--card-hover); }
@@ -931,6 +929,20 @@ function NewInvoicePageContent() {
         .desktop-summary { display: flex; flex-direction: column; gap: 12px; }
 
         /* ── Responsive ── */
+        .header-grid {
+          display: grid;
+          grid-template-columns: 1fr 280px;
+          gap: 16px;
+          align-items: start;
+          overflow: visible;
+        }
+        .inv-customer-section {
+          overflow: visible;
+        }
+        .inv-content-wrapper {
+          overflow: visible;
+        }
+
         @media (min-width: 1025px) {
           .desktop-summary { display: flex; flex-direction: column; gap: 12px; }
           .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
