@@ -206,7 +206,7 @@ export default function NewBillPage() {
       .then(r => r.data && setProducts(r.data))
   }
 
-  // PO logic (unchanged)
+  // PO logic
   useEffect(() => {
     if (!companyId || !supplierId || !showPO) {
       setOpenPOs([])
@@ -560,6 +560,32 @@ export default function NewBillPage() {
     setBudgetError(overBudget ? "⚠️ Some lines exceed the available budget" : "")
   }
 
+  // ── Single tax update (batched) ──
+  const updateTax = (idx: number, codeId: string | null) => {
+    const updated = [...items]
+    if (codeId) {
+      const taxCode = inputTaxCodes.find((t: any) => String(t.id) === codeId)
+      if (taxCode) {
+        const taxRate = taxCode.rate
+        const taxAmt = (updated[idx].qty * updated[idx].unit_price * taxRate) / 100
+        updated[idx] = {
+          ...updated[idx],
+          tax_code_id: codeId,
+          tax_rate: taxRate,
+          tax_amount: taxAmt,
+        }
+      }
+    } else {
+      updated[idx] = {
+        ...updated[idx],
+        tax_code_id: null,
+        tax_rate: 0,
+        tax_amount: 0,
+      }
+    }
+    setItems(updated)
+  }
+
   const updateItem = async (idx: number, field: string, value: any) => {
     const updated = [...items]
     updated[idx] = { ...updated[idx], [field]: value }
@@ -625,14 +651,13 @@ export default function NewBillPage() {
   const totalTaxAmount = items.reduce((s, i) => s + (i.tax_amount || 0), 0)
   const grossTotal = netTotal + totalTaxAmount
 
-  // ── NEW: handleSubmit using RPC for new bills, API for updates ──
+  // ── handleSubmit using RPC for new bills, API for updates ──
   const handleSubmit = async () => {
     if (!supplierId) { setError("Please select a supplier"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
 
     // ── If editing, use the existing API route (PUT) ──
     if (editId) {
-      // Existing PUT flow – unchanged
       for (const item of items) {
         if (!item.product_id) {
           const showLoc = isNGO || locations.length > 0
@@ -704,7 +729,6 @@ export default function NewBillPage() {
     }
 
     // ── NEW BILL: Use RPC for performance ──
-    // Validate manual lines (same as before)
     for (const item of items) {
       if (!item.product_id) {
         const showLoc = isNGO || locations.length > 0
@@ -728,7 +752,6 @@ export default function NewBillPage() {
 
     setSaving(true); setError("")
 
-    // Prepare items for RPC
     const payloadItems = items.map(i => ({
       product_id: i.product_id || null,
       description: i.description,
@@ -740,10 +763,9 @@ export default function NewBillPage() {
       tax_code_id: taxEnabled ? (i.tax_code_id || null) : null,
       tax_rate: taxEnabled ? (i.tax_rate || 0) : 0,
       tax_amount: taxEnabled ? (i.tax_amount || 0) : 0,
-      is_recoverable: true, // default – will be overridden if tax code has flag
+      is_recoverable: true,
     }))
 
-    // Call RPC
     try {
       const { data, error: rpcError } = await supabase.rpc('create_bill_transaction', {
         p_company_id: companyId,
@@ -874,22 +896,34 @@ export default function NewBillPage() {
     return comboCache[key] || []
   }
 
-  const itemGridCols = () => {
-    let cols = "1.5fr 70px 90px "
-    if (taxEnabled) cols += "70px "
-    cols += (isNGO || locations.length > 0 ? "110px " : "")
-    cols += (isNGO || activities.length > 0 ? "110px " : "")
-    cols += "120px 130px 30px"
+  // ── UNIFIED TABLE: Fixed columns, professional design ──
+  // Columns: Description | Qty | Price | Tax% | Location | Activity | GL Acc | Total | Delete
+  const tableCols = () => {
+    let cols = "280px 80px 120px "
+    if (taxEnabled) cols += "120px "
+    if (isNGO || locations.length > 0) cols += "120px "
+    if (isNGO || activities.length > 0) cols += "120px "
+    cols += "140px 140px 50px"
+    return cols
+  }
+
+  // Fixed column widths for professional alignment
+  const fixedCols = () => {
+    let cols = "minmax(200px, 280px) 80px 120px "
+    if (taxEnabled) cols += "120px "
+    if (isNGO || locations.length > 0) cols += "120px "
+    if (isNGO || activities.length > 0) cols += "120px "
+    cols += "140px 140px 50px"
     return cols
   }
 
   return (
-    <div style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
-      {/* Styles and JSX are exactly as you had them – unchanged */}
+    <div style={{ padding: "12px 16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
+        /* ── Reset & Shell ── */
         .inv-shell { max-width: 100%; margin: 0 auto; }
         .inv-title { font-size: 18px; font-weight: 700; color: var(--text); }
-        .inv-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 16px 20px; box-shadow: var(--shadow-sm); margin-bottom: 12px; }
+        .inv-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 16px 20px; box-shadow: var(--shadow-sm); margin-bottom: 12px; overflow: visible; }
         .inv-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block; }
         .inv-input, .inv-select { width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: 13px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box; }
         .inv-input:focus, .inv-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
@@ -897,81 +931,264 @@ export default function NewBillPage() {
         .inv-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; transition: all 0.15s; white-space: nowrap; }
         .inv-btn:hover { background: var(--card-hover); }
         .inv-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .inv-item-row {
-          display: grid;
-          grid-template-columns: ${itemGridCols()};
-          gap: 6px; align-items: center; padding: 2px 0; border-bottom: 1px solid var(--border);
-        }
-        .inv-item-header {
-          display: grid;
-          grid-template-columns: ${itemGridCols()};
-          gap: 6px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); padding-bottom: 2px; align-items: center;
-        }
-        .inv-item-header .header-left { 
-          padding-left: 12px; 
-          justify-content: flex-start; 
-          display: flex;
-          align-items: center;
-          box-sizing: border-box;
-        }
-        .inv-item-header .header-right { 
-          padding-right: 12px; 
-          justify-content: flex-end; 
-          display: flex;
-          align-items: center;
-          box-sizing: border-box;
-        }
-        .inv-item-header .header-center { 
-          justify-content: center; 
-          display: flex;
-          align-items: center;
-          box-sizing: border-box;
-        }
-        .inv-cell-total {
-          height: 38px;
-          border: 1.5px solid var(--border);
-          border-radius: 8px;
-          padding: 0 12px;
-          font-size: 13px;
-          font-weight: 600;
-          background: var(--bg);
-          color: var(--text);
-          display: flex;
-          align-items: center;
-          justify-content: flex-end;
-          box-sizing: border-box;
-          overflow: hidden;
-          white-space: nowrap;
-          text-overflow: ellipsis;
-          width: 100%;
-        }
+
+        /* ── Customer/Supplier Dropdown ── */
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
-        .cust-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; max-height: 220px; overflow-y: auto; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
+        .cust-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; max-height: 220px; overflow-y: auto; z-index: 9999; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
         .cust-option { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
         .cust-option:last-child { border-bottom: none; }
         .cust-option:hover { background: var(--card-hover); }
         .cust-option-name { font-size: 13px; font-weight: 600; color: var(--text); }
         .cust-option-meta { font-size: 11px; color: var(--text-muted); }
         .cust-option-bal { font-size: 12px; font-weight: 600; color: var(--primary); white-space: nowrap; }
-        .cust-selected-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 600; color: var(--text); width: 100%; cursor: pointer; }
-        .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
-        @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
+        .cust-selected-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 600; color: var(--text); width: 100%; cursor: pointer; overflow: hidden; }
+        .cust-selected-badge .cust-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+        /* ── Header Grid ── */
+        .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; overflow: visible; }
+        .inv-customer-section { overflow: visible; }
+        .inv-content-wrapper { overflow: visible; }
+
+        /* ── Budget Warnings ── */
         .budget-warning { background: var(--card); border: 1px solid #EF4444; color: #FCA5A5; padding: 8px 12px; border-radius: 6px; font-size: 12px; display: flex; align-items: center; gap: 6px; }
+
+        /* ── UNIFIED TABLE ── */
+        .table-scroll-wrap {
+          overflow-x: auto;
+          width: 100%;
+          padding-bottom: 4px;
+        }
+        .table-scroll-wrap::-webkit-scrollbar {
+          height: 10px;
+        }
+        .table-scroll-wrap::-webkit-scrollbar-track {
+          background: var(--bg);
+          border-radius: 8px;
+        }
+        .table-scroll-wrap::-webkit-scrollbar-thumb {
+          background: var(--border);
+          border-radius: 8px;
+        }
+        .table-scroll-wrap::-webkit-scrollbar-thumb:hover {
+          background: var(--text-muted);
+        }
+        .table-scroll-wrap {
+          scrollbar-color: var(--border) var(--bg);
+          scrollbar-width: thin;
+        }
+
+        .inv-item-header,
+        .inv-item-row {
+          display: grid;
+          grid-template-columns: ${fixedCols()};
+          gap: 6px;
+          align-items: center;
+          padding: 6px 4px;
+        }
+        .inv-item-header {
+          font-size: 9px;
+          font-weight: 700;
+          text-transform: uppercase;
+          color: var(--text-muted);
+          border-bottom: 2px solid var(--border);
+          letter-spacing: 0.04em;
+          padding-bottom: 8px;
+          margin-bottom: 4px;
+        }
+        .inv-item-header span {
+          display: flex;
+          align-items: center;
+          padding: 0 8px;
+        }
+        .inv-item-header .header-right {
+          justify-content: flex-end;
+          text-align: right;
+        }
+        .inv-item-header .header-center {
+          justify-content: center;
+          text-align: center;
+        }
+
+        .inv-item-row {
+          border-bottom: 1px solid var(--border);
+          padding: 6px 4px;
+        }
+        .inv-item-row > * {
+          padding: 0 8px;
+          min-height: 34px;
+          display: flex;
+          align-items: center;
+        }
+        .inv-item-row .inv-cell {
+          border: 1.5px solid var(--border);
+          border-radius: 8px;
+          padding: 0 8px;
+          font-size: 12px;
+          font-family: inherit;
+          background: var(--bg);
+          color: var(--text);
+          overflow: hidden;
+          white-space: nowrap;
+          text-overflow: ellipsis;
+          box-sizing: border-box;
+          height: 34px;
+          width: 100%;
+        }
+        .inv-item-row input,
+        .inv-item-row select {
+          height: 34px;
+          border: 1.5px solid var(--border);
+          border-radius: 8px;
+          padding: 0 8px;
+          font-size: 12px;
+          font-family: inherit;
+          background: var(--bg);
+          color: var(--text);
+          outline: none;
+          box-sizing: border-box;
+          width: 100%;
+        }
+        .inv-item-row input:focus,
+        .inv-item-row select:focus {
+          border-color: var(--primary);
+        }
+        .inv-item-row .inv-cell-total {
+          justify-content: flex-end;
+          font-weight: 600;
+        }
+        .inv-item-row .inv-cell-tax {
+          justify-content: flex-end;
+          color: var(--text-muted);
+          font-size: 11px;
+        }
+
+        .inv-item-row .delete-btn {
+          background: none;
+          border: none;
+          cursor: pointer;
+          color: #EF4444;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 4px;
+          min-height: 34px;
+        }
+        .inv-item-row .delete-btn:hover {
+          color: #DC2626;
+        }
+
+        /* ── Tax Badge ── */
+        .tax-wrapper {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          width: 100%;
+        }
+        .tax-wrapper select {
+          flex: 1;
+          min-width: 60px;
+        }
+        .tax-badge {
+          font-size: 10px;
+          font-weight: 600;
+          padding: 2px 10px;
+          border-radius: 12px;
+          background: rgba(56, 189, 248, 0.15);
+          color: #38BDF8;
+          border: 1px solid rgba(56, 189, 248, 0.2);
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+        .tax-badge.no-tax {
+          background: rgba(255, 255, 255, 0.04);
+          color: var(--text-muted);
+          border-color: var(--border);
+        }
+
+        /* ── Budget/Project Info ── */
         .line-info-row { font-size: 10px; color: var(--text-muted); margin-left: 4px; display: flex; gap: 14px; padding: 3px 0 5px 0; flex-wrap: wrap; align-items: center; }
         .line-info-chip { display: inline-flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 10px; }
         .over-budget-chip { border-color: #EF4444 !important; color: #FCA5A5 !important; }
         .ok-budget-chip { border-color: #059669 !important; color: #6EE7B7 !important; }
         .project-select-small { height: 24px; font-size: 10px; padding: 0 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); margin-left: 6px; }
+
+        /* ── Mobile Sticky Summary ── */
+        .mobile-sticky-summary {
+          display: none;
+          position: sticky;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          background: var(--card);
+          border-top: 1px solid var(--border);
+          padding: 12px 16px;
+          align-items: center;
+          justify-content: space-between;
+          z-index: 50;
+          margin-top: 16px;
+        }
+        .mobile-sticky-summary .total-left {
+          flex: 1;
+          min-width: 0;
+        }
+        .mobile-sticky-summary .total-amount {
+          font-size: 18px;
+          font-weight: 800;
+          color: var(--text);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .mobile-sticky-summary .total-label {
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          color: var(--text-muted);
+        }
+        .mobile-sticky-summary .post-btn {
+          flex-shrink: 0;
+          margin-left: 12px;
+          background: var(--primary);
+          color: var(--primary-text);
+          border-color: var(--primary);
+          padding: 12px 24px;
+          font-weight: 700;
+        }
+
+        .desktop-summary { display: flex; flex-direction: column; gap: 12px; }
+
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
-        @media (max-width: 768px) {
-          .inv-item-row { padding: 4px 0; }
+
+        /* ── Responsive ── */
+        @media (min-width: 1025px) {
+          .desktop-summary { display: flex; flex-direction: column; gap: 12px; }
+          .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
+          .mobile-sticky-summary { display: none !important; }
+        }
+        @media (max-width: 1024px) {
+          .header-grid { display: block; }
+          .desktop-summary { display: none !important; }
+          .mobile-sticky-summary { display: flex !important; }
+          .inv-card { padding: 12px; }
+          .inv-input, .inv-select { height: 44px; font-size: 16px; }
+          .inv-btn { padding: 10px 16px; font-size: 14px; }
+          .cust-dropdown { max-height: 180px; }
+          .inv-item-header, .inv-item-row {
+            min-width: 750px;
+          }
+        }
+        @media (max-width: 640px) {
+          .inv-row {
+            grid-template-columns: 1fr;
+          }
         }
       `}</style>
 
       <div className="inv-shell">
+        {/* ── Header ── */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
           <button className="inv-btn" onClick={() => router.push("/dashboard/bills")}><ArrowLeft size={16} /></button>
           <div style={{ flex: 1 }}>
@@ -992,464 +1209,499 @@ export default function NewBillPage() {
           </div>
         )}
 
-        <div className="header-grid">
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div className="inv-card">
-              <label className="inv-label">Supplier *</label>
-              <div className="cust-wrap" ref={supplierRef}>
-                {selectedSupplier ? (
-                  <div className="cust-selected-badge" onClick={clearSupplier}>
-                    <span>🚚</span>
-                    <span style={{ flex: 1 }}>{selectedSupplier.code} — {selectedSupplier.name}</span>
-                    <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Bal: PKR {(selectedSupplier.balance || 0).toLocaleString()}</span>
-                    <button
-                      style={{ marginLeft: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
-                      onClick={(e) => { e.stopPropagation(); clearSupplier() }}
-                    ><X size={14} /></button>
-                    <button
-                      style={{ marginLeft: 2, background: "none", border: "none", color: "var(--primary)", cursor: "pointer" }}
-                      onClick={(e) => { e.stopPropagation(); refreshSuppliers() }}
-                      title="Refresh"
-                    ><RefreshCw size={13} /></button>
-                  </div>
-                ) : (
-                  <>
-                    <div className="cust-input-row">
-                      <Search size={14} style={{ position: "absolute", left: 10, color: "var(--text-muted)" }} />
-                      <input
-                        className="inv-input"
-                        style={{ paddingLeft: 32, paddingRight: 32 }}
-                        placeholder="Search by name, code or phone..."
-                        value={supplierSearch}
-                        onChange={e => { setSupplierSearch(e.target.value); setShowSupplierList(true) }}
-                        onFocus={() => setShowSupplierList(true)}
-                        onClick={() => setShowSupplierList(true)}
-                        autoComplete="off"
-                      />
-                      {supplierSearch && (
-                        <button onClick={() => setSupplierSearch("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
-                          <X size={13} />
-                        </button>
-                      )}
+        <div className="inv-content-wrapper">
+          <div className="header-grid inv-customer-section">
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div className="inv-card">
+                {/* ── Supplier selection ── */}
+                <label className="inv-label">Supplier *</label>
+                <div className="cust-wrap" ref={supplierRef}>
+                  {selectedSupplier ? (
+                    <div className="cust-selected-badge" onClick={clearSupplier}>
+                      <span>🚚</span>
+                      <span className="cust-name">{selectedSupplier.code} — {selectedSupplier.name}</span>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>Bal: PKR {(selectedSupplier.balance || 0).toLocaleString()}</span>
+                      <button
+                        style={{ marginLeft: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", flexShrink: 0 }}
+                        onClick={(e) => { e.stopPropagation(); clearSupplier() }}
+                      ><X size={14} /></button>
+                      <button
+                        style={{ marginLeft: 2, background: "none", border: "none", color: "var(--primary)", cursor: "pointer", flexShrink: 0 }}
+                        onClick={(e) => { e.stopPropagation(); refreshSuppliers() }}
+                        title="Refresh"
+                      ><RefreshCw size={13} /></button>
                     </div>
-                    {showSupplierList && (
-                      <div className="cust-dropdown">
-                        {filteredSuppliers.length === 0 ? (
-                          <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: 13 }}>No suppliers found</div>
-                        ) : (
-                          filteredSuppliers.map(s => (
-                            <div key={s.id} className="cust-option" onMouseDown={() => selectSupplier(s)}>
-                              <div>
-                                <div className="cust-option-name">{s.name}</div>
-                                <div className="cust-option-meta">{s.code}{s.phone ? ` · ${s.phone}` : ""}</div>
-                              </div>
-                              <div className="cust-option-bal">PKR {(s.balance || 0).toLocaleString()}</div>
-                            </div>
-                          ))
+                  ) : (
+                    <>
+                      <div className="cust-input-row">
+                        <Search size={14} style={{ position: "absolute", left: 10, color: "var(--text-muted)" }} />
+                        <input
+                          className="inv-input"
+                          style={{ paddingLeft: 32, paddingRight: 32 }}
+                          placeholder="Search by name, code or phone..."
+                          value={supplierSearch}
+                          onChange={e => { setSupplierSearch(e.target.value); setShowSupplierList(true) }}
+                          onFocus={() => setShowSupplierList(true)}
+                          onClick={() => setShowSupplierList(true)}
+                          autoComplete="off"
+                        />
+                        {supplierSearch && (
+                          <button onClick={() => setSupplierSearch("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
+                            <X size={13} />
+                          </button>
                         )}
                       </div>
+                      {showSupplierList && (
+                        <div className="cust-dropdown">
+                          {filteredSuppliers.length === 0 ? (
+                            <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: 13 }}>No suppliers found</div>
+                          ) : (
+                            filteredSuppliers.map(s => (
+                              <div key={s.id} className="cust-option" onMouseDown={() => selectSupplier(s)}>
+                                <div>
+                                  <div className="cust-option-name">{s.name}</div>
+                                  <div className="cust-option-meta">{s.code}{s.phone ? ` · ${s.phone}` : ""}</div>
+                                </div>
+                                <div className="cust-option-bal">PKR {(s.balance || 0).toLocaleString()}</div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* ── PO Linking ── */}
+                {showPO && selectedSupplier && openPOs.length > 0 && (
+                  <div style={{ marginTop: 14 }}>
+                    <label className="inv-label">Link to Purchase Order (optional)</label>
+                    <select className="inv-select" value={poId ?? ""} onChange={(e) => handleSelectPO(e.target.value ? Number(e.target.value) : null)}>
+                      <option value="">— None —</option>
+                      {openPOs.map(po => (
+                        <option key={po.id} value={po.id}>{po.po_no} — Remaining: PKR {po.remaining.toLocaleString()}</option>
+                      ))}
+                    </select>
+                    {poId && poRemaining > 0 && (
+                      <div style={{ fontSize: 12, marginTop: 4, color: "var(--text-muted)" }}>
+                        PO balance remaining: PKR <strong>{poRemaining.toLocaleString()}</strong>
+                      </div>
                     )}
-                  </>
+                  </div>
+                )}
+
+                {/* ── Date fields ── */}
+                <div className="inv-row" style={{ marginTop: 14 }}>
+                  <div>
+                    <label className="inv-label">Bill Date *</label>
+                    <input className="inv-input" type="date" value={billDate} onChange={e => setBillDate(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="inv-label">Due Date</label>
+                    <input className="inv-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+                  </div>
+                </div>
+                <div className="inv-row" style={{ marginTop: 10 }}>
+                  <div>
+                    <label className="inv-label">Reference</label>
+                    <input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="Supplier Invoice #" />
+                  </div>
+                  <div>
+                    <label className="inv-label">Notes</label>
+                    <input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" />
+                  </div>
+                </div>
+
+                {/* ── Add Item ── */}
+                {showProducts ? (
+                  <div style={{ marginTop: 14 }}>
+                    <label className="inv-label">Add Item</label>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <div style={{ position: "relative", flex: 1 }}>
+                        <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "var(--text-muted)" }} />
+                        <input
+                          className="inv-input"
+                          style={{ paddingLeft: 36 }}
+                          placeholder="Search product..."
+                          value={productSearch}
+                          onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
+                          onFocus={() => setShowProductList(true)}
+                          onBlur={() => setTimeout(() => setShowProductList(false), 200)}
+                        />
+                        {showProductList && (
+                          <div className="cust-dropdown" style={{ marginTop: 4 }}>
+                            {filteredProducts.map((p: any) => (
+                              <div key={p.id} className="cust-option" onMouseDown={() => addProductItem(p)}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                  {p.image_path && <img src={p.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />}
+                                  <div>
+                                    <div className="cust-option-name">{p.code} - {p.name}</div>
+                                    <div className="cust-option-meta">Cost: PKR {p.cost_price} | Stock: {p.qty_on_hand}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 14 }}>
+                    <label className="inv-label">Add Item</label>
+                    <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
+                  </div>
                 )}
               </div>
 
-              {showPO && selectedSupplier && openPOs.length > 0 && (
-                <div style={{ marginTop: 14 }}>
-                  <label className="inv-label">Link to Purchase Order (optional)</label>
-                  <select className="inv-select" value={poId ?? ""} onChange={(e) => handleSelectPO(e.target.value ? Number(e.target.value) : null)}>
-                    <option value="">— None —</option>
-                    {openPOs.map(po => (
-                      <option key={po.id} value={po.id}>{po.po_no} — Remaining: PKR {po.remaining.toLocaleString()}</option>
-                    ))}
-                  </select>
-                  {poId && poRemaining > 0 && (
-                    <div style={{ fontSize: 12, marginTop: 4, color: "var(--text-muted)" }}>
-                      PO balance remaining: PKR <strong>{poRemaining.toLocaleString()}</strong>
+              {/* ── WHT Section ── */}
+              {taxEnabled && (
+                <div className="inv-card">
+                  <label className="inv-label">Withholding Tax (WHT)</label>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <select
+                      className="inv-select"
+                      style={{ maxWidth: 200 }}
+                      value={selectedWhtTaxCodeId}
+                      onChange={e => {
+                        const id = e.target.value
+                        setSelectedWhtTaxCodeId(id)
+                        if (id) {
+                          const tc = whtTaxCodes.find(t => t.id === id)
+                          if (tc) {
+                            setWhtRate(tc.rate)
+                            setWhtAmount(grossTotal * (tc.rate / 100))
+                          }
+                        } else {
+                          setWhtRate(0)
+                          setWhtAmount(0)
+                        }
+                      }}
+                    >
+                      <option value="">No WHT</option>
+                      {whtTaxCodes.map(tc => (
+                        <option key={tc.id} value={tc.id}>{tc.code} ({tc.rate}%)</option>
+                      ))}
+                    </select>
+                    <input
+                      className="inv-input"
+                      type="number"
+                      placeholder="Rate %"
+                      value={whtRate}
+                      onChange={e => {
+                        const r = Number(e.target.value)
+                        setWhtRate(r)
+                        setWhtAmount(grossTotal * (r / 100))
+                      }}
+                      style={{ width: 100 }}
+                    />
+                    <span style={{ fontSize: 13, color: "var(--text-muted)" }}>Amount:</span>
+                    <input
+                      className="inv-input"
+                      type="number"
+                      value={whtAmount}
+                      onChange={e => setWhtAmount(Number(e.target.value))}
+                      style={{ width: 140, textAlign: "right" }}
+                    />
+                  </div>
+                  {whtAmount > 0 && (
+                    <div style={{ fontSize: 12, marginTop: 6, color: "var(--text-muted)" }}>
+                      Net payable after WHT: PKR {(grossTotal - whtAmount).toLocaleString()}
                     </div>
                   )}
                 </div>
               )}
 
-              <div className="inv-row" style={{ marginTop: 14 }}>
-                <div>
-                  <label className="inv-label">Bill Date *</label>
-                  <input className="inv-input" type="date" value={billDate} onChange={e => setBillDate(e.target.value)} />
-                </div>
-                <div>
-                  <label className="inv-label">Due Date</label>
-                  <input className="inv-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
-                </div>
-              </div>
-              <div className="inv-row" style={{ marginTop: 10 }}>
-                <div>
-                  <label className="inv-label">Reference</label>
-                  <input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="Supplier Invoice #" />
-                </div>
-                <div>
-                  <label className="inv-label">Notes</label>
-                  <input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" />
-                </div>
-              </div>
-
-              {showProducts ? (
-                <div style={{ marginTop: 14 }}>
-                  <label className="inv-label">Add Item</label>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <div style={{ position: "relative", flex: 1 }}>
-                      <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "var(--text-muted)" }} />
-                      <input
-                        className="inv-input"
-                        style={{ paddingLeft: 36 }}
-                        placeholder="Search product..."
-                        value={productSearch}
-                        onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
-                        onFocus={() => setShowProductList(true)}
-                        onBlur={() => setTimeout(() => setShowProductList(false), 200)}
-                      />
-                      {showProductList && (
-                        <div className="cust-dropdown" style={{ marginTop: 4 }}>
-                          {filteredProducts.map((p: any) => (
-                            <div key={p.id} className="cust-option" onMouseDown={() => addProductItem(p)}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                {p.image_path && <img src={p.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />}
-                                <div>
-                                  <div className="cust-option-name">{p.code} - {p.name}</div>
-                                  <div className="cust-option-meta">Cost: PKR {p.cost_price} | Stock: {p.qty_on_hand}</div>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ marginTop: 14 }}>
-                  <label className="inv-label">Add Item</label>
-                  <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
+              {editId && (
+                <div className="inv-card" style={{ marginTop: 12 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
+                  <RecordHistory tableName="invoices" recordId={editId} />
                 </div>
               )}
             </div>
 
-            {/* WHT Section */}
-            {taxEnabled && (
+            {/* ── Desktop Summary ── */}
+            <div className="desktop-summary">
               <div className="inv-card">
-                <label className="inv-label">Withholding Tax (WHT)</label>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  <select
-                    className="inv-select"
-                    style={{ maxWidth: 200 }}
-                    value={selectedWhtTaxCodeId}
-                    onChange={e => {
-                      const id = e.target.value
-                      setSelectedWhtTaxCodeId(id)
-                      if (id) {
-                        const tc = whtTaxCodes.find(t => t.id === id)
-                        if (tc) {
-                          setWhtRate(tc.rate)
-                          setWhtAmount(grossTotal * (tc.rate / 100))
-                        }
-                      } else {
-                        setWhtRate(0)
-                        setWhtAmount(0)
-                      }
-                    }}
-                  >
-                    <option value="">No WHT</option>
-                    {whtTaxCodes.map(tc => (
-                      <option key={tc.id} value={tc.id}>{tc.code} ({tc.rate}%)</option>
-                    ))}
-                  </select>
-                  <input
-                    className="inv-input"
-                    type="number"
-                    placeholder="Rate %"
-                    value={whtRate}
-                    onChange={e => {
-                      const r = Number(e.target.value)
-                      setWhtRate(r)
-                      setWhtAmount(grossTotal * (r / 100))
-                    }}
-                    style={{ width: 100 }}
-                  />
-                  <span style={{ fontSize: 13, color: "var(--text-muted)" }}>Amount:</span>
-                  <input
-                    className="inv-input"
-                    type="number"
-                    value={whtAmount}
-                    onChange={e => setWhtAmount(Number(e.target.value))}
-                    style={{ width: 140, textAlign: "right" }}
-                  />
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px 0" }}>Summary</h3>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, fontWeight: 600 }}>
+                  <span>Total (Net)</span>
+                  <span>PKR {netTotal.toLocaleString()}</span>
                 </div>
-                {whtAmount > 0 && (
-                  <div style={{ fontSize: 12, marginTop: 6, color: "var(--text-muted)" }}>
-                    Net payable after WHT: PKR {(grossTotal - whtAmount).toLocaleString()}
+                {taxEnabled && totalTaxAmount > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
+                    <span>Input Tax</span>
+                    <span>PKR {totalTaxAmount.toLocaleString()}</span>
                   </div>
                 )}
-              </div>
-            )}
-
-            {editId && (
-              <div className="inv-card" style={{ marginTop: 12 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
-                <RecordHistory tableName="invoices" recordId={editId} />
-              </div>
-            )}
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div className="inv-card">
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px 0" }}>Summary</h3>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, fontWeight: 600 }}>
-                <span>Total (Net)</span>
-                <span>PKR {netTotal.toLocaleString()}</span>
-              </div>
-              {taxEnabled && totalTaxAmount > 0 && (
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-                  <span>Input Tax</span>
-                  <span>PKR {totalTaxAmount.toLocaleString()}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, fontWeight: 600, marginTop: 4 }}>
+                  <span>Gross Total</span>
+                  <span>PKR {grossTotal.toLocaleString()}</span>
                 </div>
-              )}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, fontWeight: 600, marginTop: 4 }}>
-                <span>Gross Total</span>
-                <span>PKR {grossTotal.toLocaleString()}</span>
+                {whtAmount > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
+                    <span>WHT</span>
+                    <span>-PKR {whtAmount.toLocaleString()}</span>
+                  </div>
+                )}
+                {whtAmount > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, fontWeight: 600, marginTop: 4, borderTop: "1px dashed var(--border)", paddingTop: 6 }}>
+                    <span>Net Payable</span>
+                    <span>PKR {(grossTotal - whtAmount).toLocaleString()}</span>
+                  </div>
+                )}
+                {budgetError && (
+                  <div className="budget-warning" style={{ marginTop: 8 }}>⚠️ {budgetError}</div>
+                )}
               </div>
-              {whtAmount > 0 && (
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-                  <span>WHT</span>
-                  <span>-PKR {whtAmount.toLocaleString()}</span>
-                </div>
-              )}
-              {whtAmount > 0 && (
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, fontWeight: 600, marginTop: 4, borderTop: "1px dashed var(--border)", paddingTop: 6 }}>
-                  <span>Net Payable</span>
-                  <span>PKR {(grossTotal - whtAmount).toLocaleString()}</span>
-                </div>
-              )}
-              {budgetError && (
-                <div className="budget-warning" style={{ marginTop: 8 }}>⚠️ {budgetError}</div>
-              )}
-            </div>
-            <div className="inv-card">
-              <button
-                className="inv-btn"
-                style={{ justifyContent: "center", padding: 10, width: "100%" }}
-                onClick={handleSubmit}
-                disabled={saving || budgetError !== ""}
-              >
-                {saving ? "Posting..." : editId ? "💾 UPDATE Bill" : "💾 POST Bill"}
-              </button>
-              <button
-                className="inv-btn"
-                style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }}
-                onClick={handleBeforeSavePdf}
-              >
-                <Download size={14} /> PDF Preview
-              </button>
+              <div className="inv-card">
+                <button
+                  className="inv-btn"
+                  style={{ justifyContent: "center", padding: 10, width: "100%" }}
+                  onClick={handleSubmit}
+                  disabled={saving || budgetError !== ""}
+                >
+                  {saving ? "Posting..." : editId ? "💾 UPDATE Bill" : "💾 POST Bill"}
+                </button>
+                <button
+                  className="inv-btn"
+                  style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }}
+                  onClick={handleBeforeSavePdf}
+                >
+                  <Download size={14} /> PDF Preview
+                </button>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Items table */}
-        <div style={{ marginTop: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
-          </div>
-          {items.length > 0 && (
-            <div className="inv-card" style={{ overflowX: "auto", padding: "16px 12px" }}>
-              <div className="inv-item-header">
-                <span className="header-left">Description</span>
-                <span className="header-left">Qty</span>
-                <span className="header-left">Price</span>
-                {taxEnabled && <span className="header-left">Tax %</span>}
-                {(isNGO || locations.length > 0) && <span className="header-left">Location</span>}
-                {(isNGO || activities.length > 0) && <span className="header-left">Activity</span>}
-                <span className="header-left">GL Acc</span>
-                <span className="header-right">Total</span>
-                <span className="header-center"></span>
-              </div>
+          {/* ── Items Section ── */}
+          <div style={{ marginTop: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
+            </div>
+            {items.length > 0 && (
+              <div className="inv-card" style={{ padding: "16px 12px" }}>
+                <div className="table-scroll-wrap">
+                  <div className="inv-item-header">
+                    <span>Description</span>
+                    <span className="header-center">Qty</span>
+                    <span className="header-right">Price</span>
+                    {taxEnabled && <span className="header-center">Tax %</span>}
+                    {(isNGO || locations.length > 0) && <span>Location</span>}
+                    {(isNGO || activities.length > 0) && <span>Activity</span>}
+                    <span>GL Acc</span>
+                    <span className="header-right">Total</span>
+                    <span className="header-center"></span>
+                  </div>
 
-              {items.map((item, idx) => {
-                const budgetData = getLineBudgetData(item)
-                const overBudget = isLineOverBudget(item, budgetData)
-                const filteredActs = getFilteredActivities(item.location_id)
-                const combos = getCombosForLine(item)
-                const selectedProject = item.project_id
-                  ? allProjects.find(p => p.id === item.project_id)
-                  : null
-                const selectedDonor = item.donor_id
-                  ? allDonors.find(d => d.id === item.donor_id)
-                  : null
+                  {items.map((item, idx) => {
+                    const budgetData = getLineBudgetData(item)
+                    const overBudget = isLineOverBudget(item, budgetData)
+                    const filteredActs = getFilteredActivities(item.location_id)
+                    const combos = getCombosForLine(item)
+                    const selectedProject = item.project_id
+                      ? allProjects.find(p => p.id === item.project_id)
+                      : null
+                    const selectedDonor = item.donor_id
+                      ? allDonors.find(d => d.id === item.donor_id)
+                      : null
 
-                const showInfoRow = isNGO && !item.product_id && !!item.activity_id
+                    const showInfoRow = isNGO && !item.product_id && !!item.activity_id
+                    const taxBadge = taxEnabled && item.tax_code_id ? `${item.tax_rate}%` : null
 
-                return (
-                  <div key={idx}>
-                    <div className="inv-item-row" style={overBudget ? { background: "rgba(239,68,68,0.04)", borderRadius: 6 } : {}}>
-                      <input
-                        className="inv-input"
-                        style={{ height: 34, fontSize: 12 }}
-                        value={item.description}
-                        onChange={e => updateItem(idx, "description", e.target.value)}
-                        placeholder="Description"
-                      />
-                      <input
-                        className="inv-input"
-                        style={{ height: 34, fontSize: 12, textAlign: "center" }}
-                        type="number"
-                        value={item.qty}
-                        onChange={e => updateItem(idx, "qty", Number(e.target.value))}
-                      />
-                      <input
-                        className="inv-input"
-                        style={{ height: 34, fontSize: 12, textAlign: "right" }}
-                        type="number"
-                        value={item.unit_price}
-                        onChange={e => updateItem(idx, "unit_price", Number(e.target.value))}
-                      />
+                    return (
+                      <Fragment key={idx}>
+                        <div className="inv-item-row" style={overBudget ? { background: "rgba(239,68,68,0.04)", borderRadius: 6 } : {}}>
+                          {/* Description */}
+                          <input
+                            className="inv-input"
+                            style={{ height: 34, fontSize: 12 }}
+                            value={item.description}
+                            onChange={e => updateItem(idx, "description", e.target.value)}
+                            placeholder="Description"
+                          />
 
-                      {taxEnabled && (
-                        <select
-                          className="inv-select"
-                          style={{ height: 34, fontSize: 11 }}
-                          value={item.tax_code_id || ""}
-                          onChange={e => {
-                            const codeId = e.target.value || null
-                            if (codeId) {
-                              const taxCode = inputTaxCodes.find(t => t.id === codeId)
-                              if (taxCode) {
-                                const rate = taxCode.rate
-                                const taxAmt = (item.qty * item.unit_price * rate) / 100
-                                updateItem(idx, "tax_code_id", codeId)
-                                updateItem(idx, "tax_rate", rate)
-                                updateItem(idx, "tax_amount", taxAmt)
-                              }
-                            } else {
-                              updateItem(idx, "tax_code_id", null)
-                              updateItem(idx, "tax_rate", 0)
-                              updateItem(idx, "tax_amount", 0)
-                            }
-                          }}
-                        >
-                          <option value="">No Tax</option>
-                          {inputTaxCodes.map(tc => (
-                            <option key={tc.id} value={tc.id}>{tc.code} ({tc.rate}%)</option>
-                          ))}
-                        </select>
-                      )}
+                          {/* Qty */}
+                          <input
+                            className="inv-input"
+                            style={{ height: 34, fontSize: 12, textAlign: "center" }}
+                            type="number"
+                            value={item.qty}
+                            onChange={e => updateItem(idx, "qty", Number(e.target.value))}
+                          />
 
-                      {item.product_id ? (
-                        <>
-                          {(isNGO || locations.length > 0) && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>—</span>}
-                          {(isNGO || activities.length > 0) && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>—</span>}
-                          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Inventory</span>
-                        </>
-                      ) : (
-                        <>
-                          {(isNGO || locations.length > 0) && (
-                            <select
-                              className="inv-select"
-                              style={{ height: 34, fontSize: 11 }}
-                              value={item.location_id}
-                              onChange={e => updateItem(idx, "location_id", e.target.value)}
-                            >
-                              <option value="">—</option>
-                              {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                            </select>
-                          )}
-                          {(isNGO || activities.length > 0) && (
-                            <select
-                              className="inv-select"
-                              style={{ height: 34, fontSize: 11 }}
-                              value={item.activity_id}
-                              onChange={e => updateItem(idx, "activity_id", e.target.value)}
-                            >
-                              <option value="">—</option>
-                              {filteredActs.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                            </select>
-                          )}
-                          <select
-                            className="inv-select"
-                            style={{ height: 34, fontSize: 11, borderColor: overBudget ? "#EF4444" : undefined }}
-                            value={item.account_id ?? ""}
-                            onChange={e => updateItem(idx, "account_id", e.target.value ? Number(e.target.value) : null)}
-                          >
-                            <option value="">—</option>
-                            {allAccounts.map(a => <option key={a.id} value={a.id}>{a.code}</option>)}
-                          </select>
-                        </>
-                      )}
+                          {/* Price */}
+                          <input
+                            className="inv-input"
+                            style={{ height: 34, fontSize: 12, textAlign: "right" }}
+                            type="number"
+                            value={item.unit_price}
+                            onChange={e => updateItem(idx, "unit_price", Number(e.target.value))}
+                          />
 
-                      <div className="inv-cell-total" style={{ color: overBudget ? "#FCA5A5" : undefined }}>
-                        PKR {item.total.toLocaleString()}
-                      </div>
-                      <button
-                        style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }}
-                        onClick={() => removeItem(idx)}
-                      ><Trash2 size={12} /></button>
-                    </div>
-
-                    {showInfoRow && (
-                      <div className="line-info-row">
-                        {combos.length === 0 && (
-                          <span className="line-info-chip" style={{ opacity: 0.5 }}>📁 No project linked</span>
-                        )}
-                        {combos.length === 1 && (
-                          <span className="line-info-chip">
-                            📁 {combos[0].projectName}
-                            {combos[0].donorName && (
-                              <span style={{ color: "var(--primary)", marginLeft: 4 }}>· 🤝 {combos[0].donorName}</span>
-                            )}
-                          </span>
-                        )}
-                        {combos.length > 1 && (
-                          <>
-                            <span className="line-info-chip" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                              📁
+                          {/* Tax % with badge */}
+                          {taxEnabled && (
+                            <div className="tax-wrapper">
                               <select
-                                className="project-select-small"
-                                value={item.project_id ? JSON.stringify({ project_id: item.project_id, donor_id: item.donor_id }) : ""}
-                                onChange={e => updateItem(idx, "project_select", e.target.value)}
+                                className="inv-select"
+                                style={{ height: 34, fontSize: 11, flex: 1, minWidth: 60 }}
+                                value={item.tax_code_id || ""}
+                                onChange={e => updateTax(idx, e.target.value || null)}
                               >
-                                <option value="">Select project…</option>
-                                {combos.map((c, i) => (
-                                  <option key={i} value={JSON.stringify({ project_id: c.project_id, donor_id: c.donor_id })}>
-                                    {c.projectName}{c.donorName ? ` (${c.donorName})` : ""}
-                                  </option>
+                                <option value="">No Tax</option>
+                                {inputTaxCodes.map(tc => (
+                                  <option key={tc.id} value={tc.id}>{tc.code} ({tc.rate}%)</option>
                                 ))}
                               </select>
-                              {selectedDonor && (
-                                <span style={{ color: "var(--primary)", marginLeft: 4 }}>· 🤝 {selectedDonor.name}</span>
+                              {taxBadge ? (
+                                <span className="tax-badge">{taxBadge}</span>
+                              ) : (
+                                <span className="tax-badge no-tax">No Tax</span>
                               )}
-                            </span>
-                          </>
-                        )}
+                            </div>
+                          )}
 
-                        {budgetData && !budgetData.hasBudget && (
-                          <span className="line-info-chip over-budget-chip">🚫 No budget defined</span>
-                        )}
-                        {budgetData && budgetData.hasBudget && (
-                          <>
-                            <span className="line-info-chip">Budget: PKR {budgetData.budget.toLocaleString()}</span>
-                            <span className="line-info-chip">Spent: PKR {budgetData.spent.toLocaleString()}</span>
-                            {getLineDisplayAvailable(item, budgetData) !== null && (
-                              <span className={`line-info-chip ${overBudget ? "over-budget-chip" : "ok-budget-chip"}`}>
-                                {overBudget
-                                  ? "⚠️ Over by PKR " + (item.total - getLineDisplayAvailable(item, budgetData)!).toLocaleString()
-                                  : "✓ Available: PKR " + getLineDisplayAvailable(item, budgetData)!.toLocaleString()}
+                          {/* Location */}
+                          {(isNGO || locations.length > 0) && (
+                            item.product_id ? (
+                              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>—</span>
+                            ) : (
+                              <select
+                                className="inv-select"
+                                style={{ height: 34, fontSize: 11 }}
+                                value={item.location_id}
+                                onChange={e => updateItem(idx, "location_id", e.target.value)}
+                              >
+                                <option value="">—</option>
+                                {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                              </select>
+                            )
+                          )}
+
+                          {/* Activity */}
+                          {(isNGO || activities.length > 0) && (
+                            item.product_id ? (
+                              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>—</span>
+                            ) : (
+                              <select
+                                className="inv-select"
+                                style={{ height: 34, fontSize: 11 }}
+                                value={item.activity_id}
+                                onChange={e => updateItem(idx, "activity_id", e.target.value)}
+                              >
+                                <option value="">—</option>
+                                {filteredActs.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                              </select>
+                            )
+                          )}
+
+                          {/* GL Account */}
+                          {item.product_id ? (
+                            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Inventory</span>
+                          ) : (
+                            <select
+                              className="inv-select"
+                              style={{ height: 34, fontSize: 11, borderColor: overBudget ? "#EF4444" : undefined }}
+                              value={item.account_id ?? ""}
+                              onChange={e => updateItem(idx, "account_id", e.target.value ? Number(e.target.value) : null)}
+                            >
+                              <option value="">—</option>
+                              {allAccounts.map(a => <option key={a.id} value={a.id}>{a.code}</option>)}
+                            </select>
+                          )}
+
+                          {/* Total */}
+                          <div className="inv-cell inv-cell-total" style={{ color: overBudget ? "#FCA5A5" : undefined }}>
+                            PKR {item.total.toLocaleString()}
+                          </div>
+
+                          {/* Delete */}
+                          <button
+                            className="delete-btn"
+                            onClick={() => removeItem(idx)}
+                          ><Trash2 size={14} /></button>
+                        </div>
+
+                        {/* ── Budget / Project Info Row ── */}
+                        {showInfoRow && (
+                          <div className="line-info-row">
+                            {combos.length === 0 && (
+                              <span className="line-info-chip" style={{ opacity: 0.5 }}>📁 No project linked</span>
+                            )}
+                            {combos.length === 1 && (
+                              <span className="line-info-chip">
+                                📁 {combos[0].projectName}
+                                {combos[0].donorName && (
+                                  <span style={{ color: "var(--primary)", marginLeft: 4 }}>· 🤝 {combos[0].donorName}</span>
+                                )}
                               </span>
                             )}
-                          </>
+                            {combos.length > 1 && (
+                              <>
+                                <span className="line-info-chip" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                  📁
+                                  <select
+                                    className="project-select-small"
+                                    value={item.project_id ? JSON.stringify({ project_id: item.project_id, donor_id: item.donor_id }) : ""}
+                                    onChange={e => updateItem(idx, "project_select", e.target.value)}
+                                  >
+                                    <option value="">Select project…</option>
+                                    {combos.map((c, i) => (
+                                      <option key={i} value={JSON.stringify({ project_id: c.project_id, donor_id: c.donor_id })}>
+                                        {c.projectName}{c.donorName ? ` (${c.donorName})` : ""}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {selectedDonor && (
+                                    <span style={{ color: "var(--primary)", marginLeft: 4 }}>· 🤝 {selectedDonor.name}</span>
+                                  )}
+                                </span>
+                              </>
+                            )}
+
+                            {budgetData && !budgetData.hasBudget && (
+                              <span className="line-info-chip over-budget-chip">🚫 No budget defined</span>
+                            )}
+                            {budgetData && budgetData.hasBudget && (
+                              <>
+                                <span className="line-info-chip">Budget: PKR {budgetData.budget.toLocaleString()}</span>
+                                <span className="line-info-chip">Spent: PKR {budgetData.spent.toLocaleString()}</span>
+                                {getLineDisplayAvailable(item, budgetData) !== null && (
+                                  <span className={`line-info-chip ${overBudget ? "over-budget-chip" : "ok-budget-chip"}`}>
+                                    {overBudget
+                                      ? "⚠️ Over by PKR " + (item.total - getLineDisplayAvailable(item, budgetData)!).toLocaleString()
+                                      : "✓ Available: PKR " + getLineDisplayAvailable(item, budgetData)!.toLocaleString()}
+                                  </span>
+                                )}
+                              </>
+                            )}
+                          </div>
                         )}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+                      </Fragment>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Mobile Sticky Summary ── */}
+          <div className="mobile-sticky-summary">
+            <div className="total-left">
+              <div className="total-label">Total</div>
+              <div className="total-amount">PKR {(netTotal + totalTaxAmount).toLocaleString()}</div>
+              {taxEnabled && totalTaxAmount > 0 && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>incl. tax PKR {totalTaxAmount.toLocaleString()}</div>}
+              {budgetError && <div style={{ fontSize: 10, color: "#EF4444" }}>⚠️ Budget overrun</div>}
             </div>
-          )}
+            <button
+              className="inv-btn post-btn"
+              onClick={handleSubmit}
+              disabled={saving || budgetError !== ""}
+            >
+              {saving ? "Posting..." : "POST"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
