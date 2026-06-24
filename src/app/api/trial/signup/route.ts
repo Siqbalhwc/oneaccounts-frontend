@@ -1,4 +1,3 @@
-import { createClient as createSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
@@ -18,18 +17,40 @@ function getPlanCode(businessType: string): string {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { userId, email, companyName, businessType } = await request.json()
 
-  const { companyName, businessType } = await request.json()
+  // ── 1. Basic input validation ──
+  if (!userId || typeof userId !== 'string') {
+    return NextResponse.json({ error: 'Missing or invalid userId' }, { status: 400 })
+  }
+  if (!email || typeof email !== 'string') {
+    return NextResponse.json({ error: 'Missing or invalid email' }, { status: 400 })
+  }
   if (!companyName?.trim()) {
     return NextResponse.json({ error: 'Company name is required' }, { status: 400 })
   }
 
-  // ── Prevent duplicate trials – only count ACTIVE companies ──
+  // ── 2. Verify the user actually exists AND that the email matches ──
+  // This is the critical security check. Without it, anyone who knows
+  // (or guesses) a userId could create a company linked to a stranger's
+  // account. By requiring the email to match too, an attacker would need
+  // to already know both the userId AND the email of the victim's brand
+  // new, not-yet-linked account — which is not exposed anywhere in the UI.
+  const { data: userCheck, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId)
+
+  if (userError || !userCheck?.user) {
+    return NextResponse.json({ error: 'Invalid user' }, { status: 401 })
+  }
+
+  const user = userCheck.user
+
+  if (user.email?.toLowerCase() !== email.toLowerCase()) {
+    return NextResponse.json({ error: 'User/email mismatch' }, { status: 401 })
+  }
+
+  // ── 3. Prevent linking a company to a user that's already linked ──
+  // (covers both the "already has an active company" case AND blocks
+  // someone from replaying this request to attach a 2nd company)
   const { count } = await supabaseAdmin
     .from('user_roles')
     .select('*, companies!inner(deleted_at)', { count: 'exact', head: true })
@@ -56,10 +77,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `Plan "${planCode}" not found` }, { status: 500 })
   }
 
-  // Create company
+  // ── 4. Create company ──
   const trialEnd = new Date(
     Date.now() + (plan.trial_days || 10) * 24 * 60 * 60 * 1000
   ).toISOString()
+
   const { data: company, error: companyError } = await supabaseAdmin
     .from('companies')
     .insert({
@@ -79,14 +101,17 @@ export async function POST(request: Request) {
     )
   }
 
-  // Seed chart of accounts
-  await supabaseAdmin.rpc('seed_accounts_for_company', {
+  // ── 5. Seed chart of accounts ──
+  const { error: seedError } = await supabaseAdmin.rpc('seed_accounts_for_company', {
     target_company_id: company.id,
     business_type: type,
   })
+  if (seedError) {
+    console.error('Failed to seed accounts:', seedError)
+  }
 
-  // Insert subscription
-  await supabaseAdmin.from('subscriptions').insert({
+  // ── 6. Insert subscription ──
+  const { error: subError } = await supabaseAdmin.from('subscriptions').insert({
     company_id: company.id,
     plan_type: planCode,
     status: 'trial',
@@ -96,16 +121,30 @@ export async function POST(request: Request) {
     trial_count: 1,
     payment_status: 'pending',
   })
+  if (subError) {
+    console.error('Failed to insert subscription:', subError)
+  }
 
-  // Assign admin role to the creator
-  await supabaseAdmin.from('user_roles').insert({
+  // ── 7. Assign admin role to the creator (THE critical linking step) ──
+  const { error: roleError } = await supabaseAdmin.from('user_roles').insert({
     user_id: user.id,
     company_id: company.id,
     role: 'admin',
     is_active: true,
   })
 
-  // ✅ Enable default features per business type
+  if (roleError) {
+    // This is the row that actually links the user to the company.
+    // If it fails, the whole signup is broken even if "company" was
+    // created — so we treat this as a hard failure and report it.
+    console.error('Failed to insert user_roles:', roleError)
+    return NextResponse.json(
+      { error: 'Could not link user to company' },
+      { status: 500 }
+    )
+  }
+
+  // ── 8. Enable default features per business type ──
   if (type === 'trading') {
     const { data: feature } = await supabaseAdmin
       .from('features')
@@ -114,14 +153,17 @@ export async function POST(request: Request) {
       .single()
 
     if (feature) {
-      await supabaseAdmin.from('company_features').upsert(
+      const { error: featureError } = await supabaseAdmin.from('company_features').upsert(
         { company_id: company.id, feature_id: feature.id, enabled: true },
         { onConflict: 'company_id,feature_id' }
       )
+      if (featureError) {
+        console.error('Failed to enable feature:', featureError)
+      }
     }
   }
 
-  // ✅ DIRECTLY UPDATE USER'S app_metadata – no Edge Function needed
+  // ── 9. Directly update user's app_metadata – no Edge Function needed ──
   const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
     user.id,
     {
@@ -134,6 +176,9 @@ export async function POST(request: Request) {
 
   if (updateError) {
     console.error('Failed to update JWT claims:', updateError)
+    // Not a hard failure: user_roles already has the link, and your
+    // app's fallback (company_id from user_roles when app_metadata is
+    // empty) will still work correctly at login.
   }
 
   return NextResponse.json({

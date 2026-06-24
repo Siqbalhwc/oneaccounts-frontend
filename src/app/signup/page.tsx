@@ -86,24 +86,45 @@ export default function SignupPage() {
       return
     }
 
-    // ── 2. Create company record (even if email not yet verified) ──
+    if (!authData.user) {
+      setErrorMsg("Something went wrong creating your account. Please try again.")
+      setLoading(false)
+      return
+    }
+
+    // ── 2. Create company record, linked via the new user's ID ──
+    // NOTE: At this point there is NO session yet (email confirmation is
+    // required), so we explicitly pass userId + email. The API route
+    // verifies both server-side before creating anything.
     try {
       const res = await fetch("/api/trial/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          userId: authData.user.id,
+          email,
           companyName,
           businessType,
-          email,
           phone: normalizedPhone,
         }),
       })
       const data = await res.json()
       if (!data.success) {
         console.error("Company creation error:", data.error)
+        setErrorMsg(
+          "Your account was created, but we couldn't finish setting up your company. Please contact support and mention this email: " +
+            email
+        )
+        setLoading(false)
+        return
       }
     } catch (e) {
       console.error("Failed to create company:", e)
+      setErrorMsg(
+        "Your account was created, but we couldn't reach our servers to finish setup. Please contact support."
+      )
+      setLoading(false)
+      return
     }
 
     setSignupSuccess(true)
