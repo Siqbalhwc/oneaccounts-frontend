@@ -77,6 +77,9 @@ function NewInvoicePageContent() {
   const isNGO = businessType === "ngo"
   const invoiceIdForLink = savedInvoiceId || (editId ? Number(editId) : null)
 
+  // ── Stock validation state ──
+  const [stockErrors, setStockErrors] = useState<Record<number, string>>({})
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -128,6 +131,20 @@ function NewInvoicePageContent() {
       setLoading(false)
     })
   }, [showProducts, taxEnabled])
+
+  // ── Live stock validation ──
+  useEffect(() => {
+    const errors: Record<number, string> = {}
+    items.forEach((item, idx) => {
+      if (item.product_id && item.qty > 0) {
+        const product = products.find(p => p.id === item.product_id)
+        if (product && item.qty > (product.qty_on_hand || 0)) {
+          errors[idx] = `Insufficient stock: available ${product.qty_on_hand}`
+        }
+      }
+    })
+    setStockErrors(errors)
+  }, [items, products])
 
   useEffect(() => {
     if (!editId || !companyId) return
@@ -307,6 +324,31 @@ function NewInvoicePageContent() {
     setItems(updated)
   }
 
+  const updateTax = (idx: number, codeId: string | null) => {
+    const updated = [...items]
+    if (codeId) {
+      const taxCode = taxCodes.find((t: any) => String(t.id) === codeId)
+      if (taxCode) {
+        const taxRate = taxCode.rate
+        const taxAmt = (updated[idx].qty * updated[idx].unit_price * taxRate) / 100
+        updated[idx] = {
+          ...updated[idx],
+          tax_code_id: codeId,
+          tax_rate: taxRate,
+          tax_amount: taxAmt,
+        }
+      }
+    } else {
+      updated[idx] = {
+        ...updated[idx],
+        tax_code_id: null,
+        tax_rate: 0,
+        tax_amount: 0,
+      }
+    }
+    setItems(updated)
+  }
+
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
 
   const fetchPriceHistory = async (productId: number, custId: number) => {
@@ -341,14 +383,19 @@ function NewInvoicePageContent() {
   const totalAmount = items.reduce((s, i) => s + i.total, 0)
   const totalTaxAmount = items.reduce((s, i) => s + (i.tax_amount || 0), 0)
 
-  // ── NEW: handleSubmit using RPC for new invoices, API for updates ──
+  // ── Check if any stock errors exist ──
+  const hasStockErrors = Object.keys(stockErrors).length > 0
+
   const handleSubmit = async () => {
     if (!customerId) { setError("Please select a customer"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
+    if (hasStockErrors) {
+      setError("Cannot save: some items have insufficient stock. Please adjust quantities.");
+      return
+    }
 
     setSaving(true); setError("")
 
-    // ── If editing, use the existing API route (PUT) ──
     if (editId) {
       try {
         const url = `/api/invoices?id=${editId}`
@@ -393,9 +440,7 @@ function NewInvoicePageContent() {
       return
     }
 
-    // ── NEW INVOICE: Use RPC for performance ──
     try {
-      // Fetch automation config (if feature is enabled)
       let automationConfig = {}
       let automationAllowed = false
       if (automationFeatureEnabled) {
@@ -408,7 +453,6 @@ function NewInvoicePageContent() {
         automationAllowed = true
       }
 
-      // Prepare items payload
       const payloadItems = items.map(i => ({
         product_id: i.product_id || null,
         description: i.description,
@@ -422,7 +466,6 @@ function NewInvoicePageContent() {
         tax_amount: taxEnabled ? (i.tax_amount || 0) : 0,
       }))
 
-      // Call the RPC function
       const { data, error: rpcError } = await supabase.rpc('create_invoice_transaction', {
         p_company_id: companyId,
         p_party_id: customerId,
@@ -625,19 +668,19 @@ function NewInvoicePageContent() {
     return don?.name || ""
   }
 
-  const itemGridColsDesktop = taxEnabled
-    ? "30px 150px 3fr 80px 110px 80px minmax(130px, 1fr) minmax(130px, 1fr) minmax(130px, 1fr) 50px"
-    : "30px 150px 3fr 80px 110px minmax(130px, 1fr) minmax(130px, 1fr) 50px"
-
-  // ── Mobile grid ──
-  const mobileGridCols = "24px 1fr 44px 64px 1fr 34px"
+  // ── UNIFIED TABLE: Fixed columns, all visible, scrollable ──
+  // Columns: Image (60px) | Product (220px) | Description (320px) | Qty (80px) | Price (120px) | Tax% (120px) | Total (140px) | Tax Amt (140px) | Cost (120px) | Delete (50px)
+  const tableCols = taxEnabled
+    ? "60px 220px 320px 80px 120px 120px 140px 140px 120px 50px"
+    : "60px 220px 320px 80px 120px 140px 120px 50px"
 
   return (
-    <div className="invoice-page" style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+    <div className="invoice-page" style={{ padding: "12px 16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
+        /* ── Reset & Shell ── */
         .inv-shell { width: 100%; margin: 0; }
         .inv-title { font-size: 18px; font-weight: 700; color: var(--text); }
-        .inv-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 16px 20px; box-shadow: var(--shadow-sm); margin-bottom: 12px; }
+        .inv-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 16px 20px; box-shadow: var(--shadow-sm); margin-bottom: 12px; overflow: hidden; }
         .inv-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block; }
         .inv-input, .inv-select { width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: 13px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box; }
         input[type="date"] { color-scheme: dark; }
@@ -648,38 +691,7 @@ function NewInvoicePageContent() {
         .inv-btn-success { background: #25D366; color: white; border-color: #25D366; }
         .inv-btn-success:hover { background: #22C55E; }
 
-        .inv-items-table-wrapper { overflow-x: auto; }
-        .inv-item-row { display: grid; grid-template-columns: ${itemGridColsDesktop}; gap: 6px; align-items: center; padding: 2px 0; border-bottom: 1px solid var(--border); min-width: ${taxEnabled ? '900px' : '750px'}; }
-        .inv-item-header { 
-          display: grid; 
-          grid-template-columns: ${itemGridColsDesktop}; 
-          gap: 6px; 
-          font-size: 9px; 
-          font-weight: 700; 
-          text-transform: uppercase; 
-          color: var(--text-muted); 
-          padding-bottom: 2px; 
-          min-width: ${taxEnabled ? '900px' : '750px'}; 
-          align-items: center;
-        }
-        .inv-item-header span { 
-          display: flex; 
-          align-items: center; 
-          box-sizing: border-box; 
-        }
-        .inv-item-header .header-left { 
-          padding-left: 12px; 
-          justify-content: flex-start; 
-        }
-        .inv-item-header .header-right { 
-          padding-right: 12px; 
-          justify-content: flex-end; 
-        }
-        .inv-item-header .header-center { 
-          justify-content: center; 
-        }
-
-        .inv-cell { height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: 13px; font-family: inherit; background: var(--bg); color: var(--text); display: flex; align-items: center; box-sizing: border-box; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        /* ── Customer Dropdown ── */
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
         .cust-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; max-height: 220px; overflow-y: auto; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
@@ -689,168 +701,254 @@ function NewInvoicePageContent() {
         .cust-option-name { font-size: 13px; font-weight: 600; color: var(--text); }
         .cust-option-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
         .cust-option-bal { font-size: 12px; font-weight: 600; color: var(--primary); white-space: nowrap; }
-        .cust-selected-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 600; color: var(--text); width: 100%; cursor: pointer; position: relative; }
-        .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
-        .inv-content-wrapper { display: flex; flex-direction: column; }
-        @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } .inv-items-section { order: 2; } .inv-customer-section { order: 1; } .inv-summary-section { order: 3; } }
+        .cust-selected-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 600; color: var(--text); width: 100%; cursor: pointer; position: relative; overflow: hidden; }
+        .cust-selected-badge .cust-name {
+          flex: 1;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          min-width: 0;
+        }
+
+        /* ── UNIFIED TABLE ── */
+        .table-scroll-wrap {
+          overflow-x: auto;
+          width: 100%;
+          padding-bottom: 4px;
+        }
+        .table-scroll-wrap::-webkit-scrollbar {
+          height: 10px;
+        }
+        .table-scroll-wrap::-webkit-scrollbar-track {
+          background: var(--bg);
+          border-radius: 8px;
+        }
+        .table-scroll-wrap::-webkit-scrollbar-thumb {
+          background: var(--border);
+          border-radius: 8px;
+        }
+        .table-scroll-wrap::-webkit-scrollbar-thumb:hover {
+          background: var(--text-muted);
+        }
+        .table-scroll-wrap {
+          scrollbar-color: var(--border) var(--bg);
+          scrollbar-width: thin;
+        }
+
+        .inv-item-header,
+        .inv-item-row {
+          display: grid;
+          grid-template-columns: ${tableCols};
+          gap: 6px;
+          align-items: center;
+          min-width: ${taxEnabled ? '1450px' : '1200px'};
+          padding: 6px 4px;
+        }
+
+        .inv-item-header {
+          font-size: 9px;
+          font-weight: 700;
+          text-transform: uppercase;
+          color: var(--text-muted);
+          border-bottom: 2px solid var(--border);
+          letter-spacing: 0.04em;
+          padding-bottom: 8px;
+          margin-bottom: 4px;
+        }
+        .inv-item-header span {
+          display: flex;
+          align-items: center;
+          padding: 0 8px;
+        }
+        .inv-item-header .header-right {
+          justify-content: flex-end;
+          text-align: right;
+        }
+        .inv-item-header .header-center {
+          justify-content: center;
+          text-align: center;
+        }
+
+        .inv-item-row {
+          border-bottom: 1px solid var(--border);
+          padding: 6px 4px;
+        }
+        .inv-item-row > * {
+          padding: 0 8px;
+          min-height: 34px;
+          display: flex;
+          align-items: center;
+        }
+        .inv-item-row .inv-cell {
+          border: 1.5px solid var(--border);
+          border-radius: 8px;
+          padding: 0 8px;
+          font-size: 12px;
+          font-family: inherit;
+          background: var(--bg);
+          color: var(--text);
+          overflow: hidden;
+          white-space: nowrap;
+          text-overflow: ellipsis;
+          box-sizing: border-box;
+          height: 34px;
+          width: 100%;
+        }
+        .inv-item-row input,
+        .inv-item-row select {
+          height: 34px;
+          border: 1.5px solid var(--border);
+          border-radius: 8px;
+          padding: 0 8px;
+          font-size: 12px;
+          font-family: inherit;
+          background: var(--bg);
+          color: var(--text);
+          outline: none;
+          box-sizing: border-box;
+          width: 100%;
+        }
+        .inv-item-row input:focus,
+        .inv-item-row select:focus {
+          border-color: var(--primary);
+        }
+        .inv-item-row .inv-cell-total {
+          justify-content: flex-end;
+          font-weight: 600;
+        }
+        .inv-item-row .inv-cell-tax {
+          justify-content: flex-end;
+          color: var(--text-muted);
+          font-size: 11px;
+        }
+        .inv-item-row .inv-cell-cost {
+          justify-content: flex-end;
+          color: var(--text-muted);
+          font-size: 11px;
+        }
+        .inv-item-row .delete-btn {
+          background: none;
+          border: none;
+          cursor: pointer;
+          color: #EF4444;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 4px;
+          min-height: 34px;
+        }
+        .inv-item-row .delete-btn:hover {
+          color: #DC2626;
+        }
+        .inv-item-row .tax-wrapper {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          width: 100%;
+        }
+        .inv-item-row .tax-wrapper select {
+          flex: 1;
+          min-width: 60px;
+        }
+        .tax-badge {
+          font-size: 10px;
+          font-weight: 600;
+          padding: 2px 10px;
+          border-radius: 12px;
+          background: rgba(56, 189, 248, 0.15);
+          color: #38BDF8;
+          border: 1px solid rgba(56, 189, 248, 0.2);
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+        .tax-badge.no-tax {
+          background: rgba(255, 255, 255, 0.04);
+          color: var(--text-muted);
+          border-color: var(--border);
+        }
+        .stock-warning {
+          color: #EF4444;
+          font-size: 10px;
+          font-weight: 600;
+          white-space: nowrap;
+          background: rgba(239, 68, 68, 0.1);
+          padding: 2px 8px;
+          border-radius: 12px;
+          border: 1px solid rgba(239, 68, 68, 0.2);
+          flex-shrink: 0;
+        }
+
+        /* ── Mobile Sticky Summary ── */
+        .mobile-sticky-summary {
+          display: none;
+          position: sticky;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          background: var(--card);
+          border-top: 1px solid var(--border);
+          padding: 12px 16px;
+          align-items: center;
+          justify-content: space-between;
+          z-index: 50;
+          margin-top: 16px;
+        }
+        .mobile-sticky-summary .total-left {
+          flex: 1;
+          min-width: 0;
+        }
+        .mobile-sticky-summary .total-amount {
+          font-size: 18px;
+          font-weight: 800;
+          color: var(--text);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .mobile-sticky-summary .total-label {
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          color: var(--text-muted);
+        }
+        .mobile-sticky-summary .post-btn {
+          flex-shrink: 0;
+          margin-left: 12px;
+          background: var(--primary);
+          color: var(--primary-text);
+          border-color: var(--primary);
+          padding: 12px 24px;
+          font-weight: 700;
+        }
+
+        /* ── Other ── */
         .price-history { background: var(--card); border-radius: 8px; padding: 10px 14px; margin-top: 12px; font-size: 12px; border: 1px solid var(--border); }
         .price-history-item { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--border); }
         .project-info-row { font-size: 10px; color: var(--text-muted); margin-top: 2px; padding-left: 8px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
         .project-chip { display: inline-flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 10px; }
         input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
-
         .desktop-summary { display: flex; flex-direction: column; gap: 12px; }
-        .desktop-only { display: block; }
-        .mobile-only { display: block; }
-        .mobile-item-header { display: none; }
-        .mobile-item-row { display: none; }
-        .mobile-sticky-summary { display: none; }
 
-        @media (max-width: 768px) {
-          .desktop-only { display: none; }
-          .desktop-summary { display: none; }
-          .inv-item-header { display: none; }
-          .inv-item-row { display: none; }
-
-          .mobile-items-scroll {
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-            margin: 0 -4px;
-            padding: 0 4px;
-          }
-
-          .mobile-item-header {
-            display: grid;
-            grid-template-columns: ${mobileGridCols};
-            gap: 3px;
-            font-size: 7px;
-            font-weight: 700;
-            text-transform: uppercase;
-            color: var(--text-muted);
-            padding-bottom: 4px;
-            align-items: end;
-            min-width: 280px;
-          }
-          .mobile-item-header span {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-          }
-          .mobile-item-row {
-            display: grid;
-            grid-template-columns: ${mobileGridCols};
-            gap: 3px;
-            align-items: center;
-            padding: 4px 0;
-            border-bottom: 1px solid var(--border);
-            min-width: 280px;
-          }
-          .mobile-item-row input,
-          .mobile-item-row .mobile-cell-value {
-            height: 32px;
-            font-size: 12px;
-            padding: 0 4px;
-          }
-          .mobile-item-row input {
-            border: 1.5px solid var(--border);
-            border-radius: 8px;
-            background: var(--bg);
-            color: var(--text);
-            outline: none;
-            box-sizing: border-box;
-            width: 100%;
-            text-align: center;
-          }
-          .mobile-item-row input:focus {
-            border-color: var(--primary);
-          }
-          .mobile-cell-value {
-            display: flex;
-            align-items: center;
-            border: 1.5px solid var(--border);
-            border-radius: 8px;
-            padding: 0 8px;
-            font-size: 12px;
-            background: var(--bg);
-            color: var(--text);
-            overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
-            box-sizing: border-box;
-            width: 100%;
-            height: 32px;
-          }
-          .mobile-total-box {
-            justify-content: flex-end;
-            font-weight: 600;
-          }
-
-          .mobile-delete-btn {
-            background: none;
-            border: none;
-            cursor: pointer;
-            color: #EF4444;
-            padding: 2px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            white-space: nowrap;
-            width: 100%;
-            min-width: 30px;
-          }
-          .mobile-delete-btn svg {
-            width: 14px;
-            height: 14px;
-            flex-shrink: 0;
-          }
-
-          .mobile-sticky-summary {
-            display: flex;
-            position: sticky;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: var(--card);
-            border-top: 1px solid var(--border);
-            padding: 12px 16px;
-            align-items: center;
-            justify-content: space-between;
-            z-index: 50;
-            margin-top: 16px;
-          }
-          .mobile-sticky-summary .total-left {
-            flex: 1;
-            min-width: 0;
-            overflow: hidden;
-          }
-          .mobile-sticky-summary .total-amount {
-            font-size: 18px;
-            font-weight: 800;
-            color: var(--text);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 100%;
-          }
-          .mobile-sticky-summary .total-label {
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            color: var(--text-muted);
-          }
-          .mobile-sticky-summary .post-btn {
-            flex-shrink: 0;
-            margin-left: 12px;
-          }
-
+        /* ── Responsive ── */
+        @media (min-width: 1025px) {
+          .desktop-summary { display: flex; flex-direction: column; gap: 12px; }
+          .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
+          .mobile-sticky-summary { display: none !important; }
+        }
+        @media (max-width: 1024px) {
+          .header-grid { display: block; }
+          .desktop-summary { display: none !important; }
+          .mobile-sticky-summary { display: flex !important; }
           .inv-card { padding: 12px; }
           .inv-input, .inv-select { height: 44px; font-size: 16px; }
           .inv-btn { padding: 10px 16px; font-size: 14px; }
           .cust-dropdown { max-height: 180px; }
-          .header-grid { display: block; }
+        }
+        @media (max-width: 640px) {
+          .inv-row {
+            grid-template-columns: 1fr;
+          }
         }
       `}</style>
 
@@ -862,7 +960,7 @@ function NewInvoicePageContent() {
             <div className="inv-title">{editId ? "✏️ Edit Sales Invoice" : "🧾 New Sales Invoice"}</div>
             <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{editId ? "Modify invoice details and items" : "Create invoice with full accounting automation"}</div>
           </div>
-          <button className="inv-btn desktop-only" onClick={() => router.push("/dashboard/invoices")}>View List</button>
+          <button className="inv-btn" onClick={() => router.push("/dashboard/invoices")}>View List</button>
         </div>
 
         {error && <div style={{ background: "var(--card)", border: "1px solid #EF4444", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
@@ -882,10 +980,11 @@ function NewInvoicePageContent() {
                 <div className="cust-wrap" ref={customerRef}>
                   {selectedCustomer ? (
                     <div className="cust-selected-badge" onClick={clearCustomer}>
-                      <span>👤</span><span style={{ flex: 1 }}>{selectedCustomer.code} — {selectedCustomer.name}</span>
-                      <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
-                      <button style={{ marginLeft: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); clearCustomer(); }}><X size={14} /></button>
-                      <button style={{ marginLeft: 2, background: "none", border: "none", color: "var(--primary)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); refreshCustomers(); }} title="Refresh"><RefreshCw size={13} /></button>
+                      <span>👤</span>
+                      <span className="cust-name">{selectedCustomer.code} — {selectedCustomer.name}</span>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
+                      <button style={{ marginLeft: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", flexShrink: 0 }} onClick={(e) => { e.stopPropagation(); clearCustomer(); }}><X size={14} /></button>
+                      <button style={{ marginLeft: 2, background: "none", border: "none", color: "var(--primary)", cursor: "pointer", flexShrink: 0 }} onClick={(e) => { e.stopPropagation(); refreshCustomers(); }} title="Refresh"><RefreshCw size={13} /></button>
                     </div>
                   ) : (
                     <>
@@ -968,9 +1067,16 @@ function NewInvoicePageContent() {
                 <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}><span>Total</span><span>PKR {(totalAmount + totalTaxAmount).toLocaleString()}</span></div>
                 {taxEnabled && totalTaxAmount > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}><span>Tax</span><span>PKR {totalTaxAmount.toLocaleString()}</span></div>}
+                {hasStockErrors && (
+                  <div style={{ marginTop: 8, padding: "6px 10px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, color: "#EF4444", fontSize: 11 }}>
+                    ⚠️ Some items have insufficient stock
+                  </div>
+                )}
               </div>
               <div className="inv-card">
-                <button className="inv-btn" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={saving}>{saving ? "Posting..." : editId ? "💾 UPDATE Invoice" : "💾 POST Invoice"}</button>
+                <button className="inv-btn" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={saving || hasStockErrors}>
+                  {saving ? "Posting..." : editId ? "💾 UPDATE Invoice" : "💾 POST Invoice"}
+                </button>
                 <button className="inv-btn" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleBeforeSavePdf}><Download size={14} /> PDF Preview</button>
                 {selectedCustomer && hasFeature("whatsapp_invoice") && <button className="inv-btn inv-btn-success" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleWhatsAppWithPDF}><Send size={14} /> WhatsApp (PDF)</button>}
               </div>
@@ -984,61 +1090,109 @@ function NewInvoicePageContent() {
             </div>
             {items.length > 0 && (
               <div className="inv-card" style={{ padding: "16px 12px" }}>
-                {/* ── Desktop items ── */}
-                <div className="desktop-only inv-items-table-wrapper">
+                <div className="table-scroll-wrap">
+                  {/* ── Header ── */}
                   <div className="inv-item-header">
                     <span className="header-center"></span>
-                    <span className="header-left">{isNGO ? "Product/Project" : "Product"}</span>
-                    <span className="header-left">Description</span>
-                    <span className="header-left">Qty</span>
-                    <span className="header-left">Price</span>
-                    {taxEnabled && <span className="header-left">Tax %</span>}
+                    <span>Product</span>
+                    <span>Description</span>
+                    <span className="header-center">Qty</span>
+                    <span className="header-right">Price</span>
+                    {taxEnabled && <span className="header-center">Tax %</span>}
                     <span className="header-right">Total</span>
                     {taxEnabled && <span className="header-right">Tax Amt</span>}
                     <span className="header-right">Cost</span>
                     <span className="header-center"></span>
                   </div>
-                  {items.map((item, idx) => (
-                    <Fragment key={idx}>
-                      <div className="inv-item-row">
-                        <div style={{ display: "flex", justifyContent: "center" }}>{item.product_image ? <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} /> : <ImageIcon size={14} color="var(--text-muted)" />}</div>
-                        {item.product_id ? <div className="inv-cell" style={{ paddingLeft: 12 }}>{item.product_name || "—"}</div> : <div>{isNGO ? <select className="inv-select" style={{ height: 34, fontSize: 12 }} value={item.project_id ?? ""} onChange={e => updateItem(idx, "project_id", e.target.value ? Number(e.target.value) : null)}><option value="">— Select Project —</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select> : <div className="inv-cell" style={{ paddingLeft: 12 }}>—</div>}</div>}
-                        <input className="inv-input" style={{ height: 34, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Description" />
-                        <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                        <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                        {taxEnabled && <select className="inv-select" style={{ height: 34, fontSize: 11 }} value={item.tax_code_id || ""} onChange={e => { const codeId = e.target.value || null; if (codeId) { const taxCode = taxCodes.find((t: any) => String(t.id) === codeId); if (taxCode) { const taxRate = taxCode.rate; const taxAmt = (item.qty * item.unit_price * taxRate) / 100; updateItem(idx, "tax_code_id", codeId); updateItem(idx, "tax_rate", taxRate); updateItem(idx, "tax_amount", taxAmt) } } else { updateItem(idx, "tax_code_id", null); updateItem(idx, "tax_rate", 0); updateItem(idx, "tax_amount", 0) } }}><option value="">No Tax</option>{taxCodes.map((tc: any) => <option key={tc.id} value={String(tc.id)}>{tc.code} ({tc.rate}%)</option>)}</select>}
-                        <div className="inv-cell" style={{ justifyContent: "flex-end", fontWeight: 600 }}>PKR {item.total.toLocaleString()}</div>
-                        {taxEnabled && <div className="inv-cell" style={{ justifyContent: "flex-end", color: "var(--text-muted)" }}>{item.tax_amount > 0 ? `PKR ${item.tax_amount.toLocaleString()}` : "—"}</div>}
-                        <div className="inv-cell" style={{ justifyContent: "flex-end", color: "var(--text-muted)" }}>{item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}</div>
-                        <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2, whiteSpace: "nowrap" }} onClick={() => removeItem(idx)}><Trash2 size={14} /></button>
-                      </div>
-                      {isNGO && !item.product_id && item.project_id && <div className="project-info-row"><span className="project-chip">📁 {getProjectName(item.project_id)}{item.donor_id && <span style={{ color: "var(--primary)", marginLeft: 4 }}>· 🤝 {getDonorName(item.donor_id)}</span>}</span></div>}
-                    </Fragment>
-                  ))}
-                </div>
 
-                {/* ── Mobile items ── */}
-                <div className="mobile-only mobile-items-scroll">
-                  <div className="mobile-item-header">
-                    <span></span>
-                    <span>Item</span>
-                    <span>Qty</span>
-                    <span>Price</span>
-                    <span>Total</span>
-                    <span></span>
-                  </div>
-                  {items.map((item, idx) => (
-                    <div key={idx} className="mobile-item-row">
-                      <div style={{ display: "flex", justifyContent: "center" }}>
-                        {item.product_image ? <img src={item.product_image} alt="" style={{ width: 20, height: 20, objectFit: "cover", borderRadius: 4 }} /> : <ImageIcon size={12} color="var(--text-muted)" />}
-                      </div>
-                      <div className="mobile-cell-value">{item.product_name || item.description || "—"}</div>
-                      <input className="inv-input" type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} style={{ textAlign: "center" }} />
-                      <input className="inv-input" type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} style={{ textAlign: "right" }} />
-                      <div className="mobile-cell-value mobile-total-box">PKR {item.total.toLocaleString()}</div>
-                      <button className="mobile-delete-btn" onClick={() => removeItem(idx)}><Trash2 size={14} /></button>
-                    </div>
-                  ))}
+                  {/* ── Rows ── */}
+                  {items.map((item, idx) => {
+                    const stockError = stockErrors[idx]
+                    const taxBadge = taxEnabled && item.tax_code_id ? `${item.tax_rate}%` : null
+
+                    return (
+                      <Fragment key={idx}>
+                        <div className="inv-item-row" style={stockError ? { background: "rgba(239,68,68,0.05)", borderRadius: "6px" } : {}}>
+                          {/* Image */}
+                          <div style={{ display: "flex", justifyContent: "center" }}>
+                            {item.product_image ? <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} /> : <ImageIcon size={14} color="var(--text-muted)" />}
+                          </div>
+
+                          {/* Product */}
+                          {item.product_id ? (
+                            <div className="inv-cell" style={{ paddingLeft: 8 }}>{item.product_name || "—"}</div>
+                          ) : (
+                            <div>
+                              {isNGO ? (
+                                <select className="inv-select" style={{ height: 32, fontSize: 12, width: "100%" }} value={item.project_id ?? ""} onChange={e => updateItem(idx, "project_id", e.target.value ? Number(e.target.value) : null)}>
+                                  <option value="">— Select Project —</option>
+                                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                </select>
+                              ) : (
+                                <div className="inv-cell" style={{ paddingLeft: 8 }}>—</div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Description */}
+                          <input className="inv-input" style={{ height: 32, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Description" />
+
+                          {/* Qty */}
+                          <input className="inv-input" style={{ height: 32, fontSize: 12, textAlign: "center", borderColor: stockError ? "#EF4444" : undefined }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+
+                          {/* Price */}
+                          <input className="inv-input" style={{ height: 32, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+
+                          {/* Tax % with badge */}
+                          {taxEnabled && (
+                            <div className="tax-wrapper">
+                              <select className="inv-select" style={{ height: 32, fontSize: 11, flex: 1, minWidth: 60 }} value={item.tax_code_id || ""} onChange={e => updateTax(idx, e.target.value || null)}>
+                                <option value="">No Tax</option>
+                                {taxCodes.map((tc: any) => <option key={tc.id} value={String(tc.id)}>{tc.code} ({tc.rate}%)</option>)}
+                              </select>
+                              {taxBadge ? (
+                                <span className="tax-badge">{taxBadge}</span>
+                              ) : (
+                                <span className="tax-badge no-tax">No Tax</span>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Total */}
+                          <div className="inv-cell inv-cell-total">PKR {item.total.toLocaleString()}</div>
+
+                          {/* Tax Amount */}
+                          {taxEnabled && (
+                            <div className="inv-cell inv-cell-tax">
+                              {item.tax_amount > 0 ? `PKR ${item.tax_amount.toLocaleString()}` : "—"}
+                            </div>
+                          )}
+
+                          {/* Cost */}
+                          <div className="inv-cell inv-cell-cost">
+                            {item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}
+                          </div>
+
+                          {/* Delete */}
+                          <button className="delete-btn" onClick={() => removeItem(idx)}><Trash2 size={14} /></button>
+                        </div>
+
+                        {/* ── Stock Warning ── */}
+                        {stockError && (
+                          <div style={{ fontSize: 11, color: "#EF4444", padding: "2px 0 4px 8px", background: "rgba(239,68,68,0.05)", borderRadius: "0 0 6px 6px" }}>
+                            ⚠️ {stockError}
+                          </div>
+                        )}
+
+                        {/* ── NGO Project Info Row ── */}
+                        {isNGO && !item.product_id && item.project_id && (
+                          <div className="project-info-row">
+                            <span className="project-chip">📁 {getProjectName(item.project_id)}{item.donor_id && <span style={{ color: "var(--primary)", marginLeft: 4 }}>· 🤝 {getDonorName(item.donor_id)}</span>}</span>
+                          </div>
+                        )}
+                      </Fragment>
+                    )
+                  })}
                 </div>
               </div>
             )}
@@ -1050,8 +1204,9 @@ function NewInvoicePageContent() {
               <div className="total-label">Total</div>
               <div className="total-amount">PKR {(totalAmount + totalTaxAmount).toLocaleString()}</div>
               {taxEnabled && totalTaxAmount > 0 && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>incl. tax PKR {totalTaxAmount.toLocaleString()}</div>}
+              {hasStockErrors && <div style={{ fontSize: 10, color: "#EF4444" }}>⚠️ Stock issues</div>}
             </div>
-            <button className="inv-btn post-btn" style={{ background: "var(--primary)", color: "var(--primary-text)", borderColor: "var(--primary)", padding: "12px 24px", fontWeight: 700 }} onClick={handleSubmit} disabled={saving}>
+            <button className="inv-btn post-btn" onClick={handleSubmit} disabled={saving || hasStockErrors}>
               {saving ? "Posting..." : "POST"}
             </button>
           </div>
