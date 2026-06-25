@@ -315,20 +315,21 @@ export default function StockRegisterPage() {
         .stock-table { min-width: 1200px; }
 
         @media (max-width: 640px) {
-          .page-wrap { padding: 12px !important; }
-          .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
-          .page-header {
-            flex-direction: column;
-            align-items: stretch !important;
-          }
-          .page-header .right-actions {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 8px;
-            margin-top: 8px;
-          }
-        }
+  .page-wrap { padding: 12px !important; }
+  .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
+  .page-header {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+  .page-header .right-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-end;   /* ← ADD THIS LINE */
+    margin-top: 8px;
+  }
+}
 
         .filter-bar {
           display: flex;

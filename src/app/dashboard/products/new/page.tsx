@@ -287,7 +287,7 @@ export default function ProductFormPage() {
           </div>
 
           {/* Right: Summary only */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div className="summary-side" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="card">
               <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
