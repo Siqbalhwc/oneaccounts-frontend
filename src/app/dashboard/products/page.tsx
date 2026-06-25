@@ -183,7 +183,7 @@ export default function StockRegisterPage() {
   const totalStockValue = products.reduce((sum, p) => sum + (p.qty_on_hand * (p.cost_price || 0)), 0)
   const totalProducts = total
 
-  // ── EXACT SAME HEADER STYLES AS INVOICE LIST ──
+  // ── EXACT SAME HEADER STYLES AS INVOICE LIST (unchanged) ──
   const thStyle: React.CSSProperties = {
     padding: "12px 16px",
     background: "var(--card-hover)",
@@ -203,7 +203,6 @@ export default function StockRegisterPage() {
     verticalAlign: "middle",
   }
 
-  // ── EXACT SAME SORT HEADER COMPONENT AS INVOICE LIST ──
   const SortTh = ({ field, children, style }: { field: SortField; children: React.ReactNode; style?: React.CSSProperties }) => (
     <th style={{ ...thStyle, ...style }}>
       <button
@@ -300,20 +299,41 @@ export default function StockRegisterPage() {
           border-radius: 12px; overflow: hidden;
           box-shadow: var(--shadow-sm);
         }
+
+        /* ── DARK SCROLLBAR & WIDE TABLE ── */
         .table-scroll {
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
           scrollbar-width: thin;
-          scrollbar-color: var(--border) transparent;
+          scrollbar-color: var(--border) var(--bg);
         }
-        .table-scroll::-webkit-scrollbar { height: 4px; }
-        .table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-        .stock-table { min-width: 900px; }
+        .table-scroll::-webkit-scrollbar {
+          height: 8px;
+        }
+        .table-scroll::-webkit-scrollbar-track {
+          background: var(--bg);
+          border-radius: 4px;
+        }
+        .table-scroll::-webkit-scrollbar-thumb {
+          background: var(--border);
+          border-radius: 4px;
+        }
+        .table-scroll::-webkit-scrollbar-thumb:hover {
+          background: var(--text-muted);
+        }
+
+        /* ── WIDER TABLE MIN-WIDTH TO FORCE SCROLL ── */
+        .stock-table {
+          min-width: 1200px;
+        }
 
         @media (max-width: 480px) {
           .page-wrap { padding: 12px !important; }
           .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
+          .filter-bar { flex-direction: column; align-items: stretch; }
+          .filter-bar > div { max-width: 100% !important; }
         }
+
         .filter-bar {
           display: flex;
           flex-wrap: wrap;
@@ -365,17 +385,18 @@ export default function StockRegisterPage() {
       <div className="card">
         <div className="table-scroll">
           <table className="stock-table">
+            {/* ── WIDER COLUMN WIDTHS ── */}
             <colgroup>
-              <col style={{ width: 120 }} />  {/* Code */}
-              <col />                         {/* Name */}
-              <col style={{ width: 80 }} />   {/* Cost */}
-              <col style={{ width: 80 }} />   {/* Sale */}
-              <col style={{ width: 70 }} />   {/* Opening */}
-              <col style={{ width: 70 }} />   {/* Inflow */}
-              <col style={{ width: 70 }} />   {/* Outflow */}
-              <col style={{ width: 80 }} />   {/* Closing */}
-              <col style={{ width: 50 }} />   {/* Img */}
-              <col style={{ width: 130 }} />  {/* Actions */}
+              <col style={{ minWidth: "150px" }} />  {/* Code */}
+              <col style={{ minWidth: "250px" }} />  {/* Name */}
+              <col style={{ minWidth: "100px" }} />  {/* Cost */}
+              <col style={{ minWidth: "100px" }} />  {/* Sale */}
+              <col style={{ minWidth: "90px" }} />   {/* Opening */}
+              <col style={{ minWidth: "90px" }} />   {/* Inflow */}
+              <col style={{ minWidth: "90px" }} />   {/* Outflow */}
+              <col style={{ minWidth: "100px" }} />  {/* Closing */}
+              <col style={{ minWidth: "60px" }} />   {/* Img */}
+              <col style={{ minWidth: "150px" }} />  {/* Actions */}
             </colgroup>
             <thead>
               <tr>
