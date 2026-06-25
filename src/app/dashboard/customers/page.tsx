@@ -332,7 +332,7 @@ export default function CustomersPage() {
               align-items: stretch !important;
             }
             .cust-header .title-area {
-              text-align: center;
+              text-align: left;
               margin-bottom: 8px;
             }
             .toolbar-row {
