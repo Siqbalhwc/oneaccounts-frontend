@@ -47,8 +47,8 @@ export interface InvoiceItem {
   image_path?:   string | null
   product_id?:   string | null
   product_name?: string
-  tax_rate?:     number    // ← new
-  tax_amount?:   number    // ← new
+  tax_rate?:     number
+  tax_amount?:   number
 }
 
 export interface InvoicePDFData {
@@ -77,11 +77,19 @@ export interface InvoicePDFData {
   items:      InvoiceItem[]
   subtotal:   number
   total:      number
-  totalTax?:  number    // ← new
+  totalTax?:  number
   paid:       number
   balanceDue: number
 
   reference?: string
+
+  // bank accounts to show at the bottom of the invoice
+  bankAccounts?: {
+    bankName:       string
+    accountTitle:   string
+    accountNumber:  string
+    showOnInvoice?: boolean
+  }[]
 }
 
 export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
@@ -222,16 +230,15 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   const ROW_H = 9
   const HEADER_ROW_H = ROW_H
 
-  // Determine if any item has tax (for column visibility)
   const hasTax = data.totalTax && data.totalTax > 0
 
-  // Column widths (adjust if tax column present)
+  // Column widths – new proportions with Tax and Amount equal
   const COL_IMG_W  = 18
   const COL_NUM_W  = 8
+  const COL_AMT_W  = 36            // wider, shared by Tax and Amount
+  const COL_TAX_W  = hasTax ? COL_AMT_W : 0
+  const COL_PRICE_W = hasTax ? 26 : 32
   const COL_QTY_W  = 16
-  const COL_PRICE_W = hasTax ? 28 : 32
-  const COL_TAX_W  = hasTax ? 18 : 0
-  const COL_AMT_W  = hasTax ? 28 : 34
   const COL_DESC_W = CW - COL_IMG_W - COL_NUM_W - COL_QTY_W - COL_PRICE_W - COL_TAX_W - COL_AMT_W
 
   // Navy background
@@ -323,7 +330,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     return row
   })
 
-  // Adjust column styles if tax is present
+  // Adjust column styles
   const columnStyles: any = {
     0: { cellWidth: COL_IMG_W, halign: "center", cellPadding: { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 } },
     1: { cellWidth: COL_NUM_W, halign: "center" },
@@ -374,37 +381,51 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setLineWidth(0.3)
   doc.rect(ML, bodyStartY, CW, afterTable - bodyStartY, "S")
 
-  // ── SUBTOTAL / TAX / TOTAL ──────────────────────────────────────
+  // ── SUBTOTAL / TAX / TOTAL – aligned with table columns ──────────
+  const amtRightX = PW - MR                           // right edge of amount column
+  const amtLeftX  = amtRightX - COL_AMT_W             // left edge of amount column
+  const descLeft  = ML + COL_IMG_W + COL_NUM_W        // left edge of description column (for labels)
+
   let SY = afterTable + 6
 
-  const sumX = PW - MR - 70
-  const valX = PW - MR
-
+  // Subtotal
   doc.setFont("helvetica", "normal")
   doc.setFontSize(9)
   doc.setTextColor(...MUTED)
-  doc.text("Subtotal", sumX, SY)
+  doc.text("Subtotal", descLeft, SY)
   doc.setTextColor(...DARK)
-  doc.text(pkr(data.subtotal), valX, SY, { align: "right" })
+  doc.text(pkr(data.subtotal), amtRightX, SY, { align: "right" })
   SY += 5.5
 
-  // Tax row – actual value now
+  // Tax label with rate if available
+  let effectiveRate: number | null = null
+  if (hasTax && data.items.length > 0) {
+    const rates = new Set<number>()
+    data.items.forEach(i => {
+      if (i.tax_rate && i.tax_rate > 0) rates.add(i.tax_rate)
+    })
+    if (rates.size === 1) effectiveRate = rates.values().next().value
+  }
+  const taxLabel = hasTax
+    ? (effectiveRate ? `Tax (${effectiveRate}%)` : "Tax")
+    : "Tax (0%)"
+
   doc.setFont("helvetica", "bold")
   doc.setTextColor(...MUTED)
-  const taxLabel = hasTax ? "Tax" : "Tax (0%)"
-  doc.text(taxLabel, sumX, SY)
+  doc.text(taxLabel, descLeft, SY)
   doc.setTextColor(...DARK)
-  doc.text(pkr(data.totalTax || 0), valX, SY, { align: "right" })
+  doc.text(pkr(data.totalTax || 0), amtRightX, SY, { align: "right" })
   SY += 5.5
 
   // Total box
   const TOTAL_H = ROW_H
-  filledRect(doc, sumX - 2, SY - 3, valX - sumX + 4, TOTAL_H, NAVY)
+  const boxX = amtLeftX - 2
+  filledRect(doc, boxX, SY - 3, amtRightX - boxX + 2, TOTAL_H, NAVY)
   doc.setFont("helvetica", "bold")
   doc.setFontSize(9)
   doc.setTextColor(...WHITE)
-  doc.text("Total", sumX + 2, SY + TOTAL_H / 2 - 0.5)
-  doc.text(pkr(data.total), valX - 2, SY + TOTAL_H / 2 - 0.5, { align: "right" })
+  doc.text("Total", descLeft, SY + TOTAL_H / 2 - 0.5)
+  doc.text(pkr(data.total), amtRightX, SY + TOTAL_H / 2 - 0.5, { align: "right" })
   SY += TOTAL_H + 2
 
   if (data.paid > 0) {
@@ -412,15 +433,15 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     doc.setFont("helvetica", "normal")
     doc.setFontSize(9)
     doc.setTextColor(...MUTED)
-    doc.text("Amount Paid", sumX, SY)
+    doc.text("Amount Paid", descLeft, SY)
     doc.setTextColor(16, 185, 129)
-    doc.text("- " + pkr(data.paid), valX, SY, { align: "right" })
+    doc.text("- " + pkr(data.paid), amtRightX, SY, { align: "right" })
     SY += 5.5
 
     doc.setFont("helvetica", "bold")
     doc.setTextColor(...RED)
-    doc.text("Balance Due", sumX, SY)
-    doc.text(pkr(data.balanceDue), valX, SY, { align: "right" })
+    doc.text("Balance Due", descLeft, SY)
+    doc.text(pkr(data.balanceDue), amtRightX, SY, { align: "right" })
     SY += 5
   }
 
@@ -442,6 +463,28 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setTextColor(...DARK)
   const noteLines = doc.splitTextToSize(termsLines.join("\n"), CW)
   doc.text(noteLines, ML, SY)
+
+  // ── BANK ACCOUNTS ───────────────────────────────────────────────
+  if (data.bankAccounts && data.bankAccounts.length > 0) {
+    const visibleBanks = data.bankAccounts.filter(b => b.showOnInvoice !== false)
+    if (visibleBanks.length > 0) {
+      SY += 8
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(7.5)
+      doc.setTextColor(...MUTED)
+      doc.text("BANK ACCOUNTS", ML, SY)
+      SY += 4
+      doc.setFont("helvetica", "normal")
+      doc.setFontSize(8.5)
+      doc.setTextColor(...DARK)
+      visibleBanks.forEach((bank, idx) => {
+        if (idx > 0) SY += 1
+        const line = `${bank.bankName} | ${bank.accountTitle} | ${bank.accountNumber}`
+        doc.text(line, ML, SY, { maxWidth: CW })
+        SY += 4
+      })
+    }
+  }
 
   // ── FOOTER ───────────────────────────────────────────────────────
   doc.setDrawColor(...BORDER)
