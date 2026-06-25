@@ -28,8 +28,8 @@ type SortDir = "asc" | "desc"
 function SkeletonRow() {
   return (
     <tr>
-      {[80, 120, 80, 80, 70, 70, 70, 70, 50, 120].map((w, i) => (
-        <td key={i} style={{ padding: "12px 8px" }}>
+      {[60, 70, 40, 40, 50, 50, 50, 50, 60, 60, 60].map((w, i) => (
+        <td key={i} style={{ padding: "12px 16px" }}>
           <div style={{
             width: `${w}%`,
             height: 12,
@@ -183,6 +183,44 @@ export default function StockRegisterPage() {
   const totalStockValue = products.reduce((sum, p) => sum + (p.qty_on_hand * (p.cost_price || 0)), 0)
   const totalProducts = total
 
+  // ── EXACT SAME HEADER STYLES AS INVOICE LIST ──
+  const thStyle: React.CSSProperties = {
+    padding: "12px 16px",
+    background: "var(--card-hover)",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 12,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    color: "var(--text-muted)",
+    whiteSpace: "nowrap",
+    userSelect: "none",
+  }
+  const tdStyle: React.CSSProperties = {
+    padding: "12px 16px",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 13,
+    verticalAlign: "middle",
+  }
+
+  // ── EXACT SAME SORT HEADER COMPONENT AS INVOICE LIST ──
+  const SortTh = ({ field, children, style }: { field: SortField; children: React.ReactNode; style?: React.CSSProperties }) => (
+    <th style={{ ...thStyle, ...style }}>
+      <button
+        onClick={() => handleSort(field)}
+        style={{
+          background: "none", border: "none", cursor: "pointer",
+          font: "inherit", fontSize: 12, fontWeight: 700,
+          textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-muted)",
+          display: "inline-flex", alignItems: "center", gap: 4, padding: 0,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {children} {getSortIcon(field)}
+      </button>
+    </th>
+  )
+
   if (roleLoading || !role) {
     return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
   }
@@ -194,125 +232,21 @@ export default function StockRegisterPage() {
   }
 
   return (
-    <div className="page-wrap" style={{ padding: "16px 20px", background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+    <div className="page-wrap" style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         @keyframes shimmer {
           0%   { opacity: 0.4; }
           50%  { opacity: 0.8; }
           100% { opacity: 0.4; }
         }
-
-        /* ── Scrollable Table ── */
-        .table-scroll {
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-          padding-bottom: 4px;
-        }
-        .table-scroll::-webkit-scrollbar {
-          height: 10px;
-        }
-        .table-scroll::-webkit-scrollbar-track {
-          background: var(--bg);
-          border-radius: 8px;
-        }
-        .table-scroll::-webkit-scrollbar-thumb {
-          background: var(--border);
-          border-radius: 8px;
-        }
-        .table-scroll::-webkit-scrollbar-thumb:hover {
-          background: var(--text-muted);
-        }
-        .table-scroll {
-          scrollbar-color: var(--border) var(--bg);
-          scrollbar-width: thin;
-        }
-
-        .stock-table {
-          width: 100%;
-          border-collapse: collapse;
-          min-width: 1200px;
-        }
-        .stock-table thead th {
-          padding: 12px 8px;
-          background: var(--card-hover);
-          border-bottom: 2px solid var(--border);
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-          color: var(--text-muted);
-          white-space: nowrap;
-          user-select: none;
-          text-align: left;
-        }
-        .stock-table thead th .sort-btn {
-          background: none;
-          border: none;
-          cursor: pointer;
-          font: inherit;
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-          color: var(--text-muted);
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          padding: 0;
-          white-space: nowrap;
-        }
-        .stock-table thead th .sort-btn:hover {
-          color: var(--text);
-        }
-        .stock-table thead th.text-center {
-          text-align: center;
-        }
-        .stock-table thead th.text-right {
-          text-align: right;
-        }
-
-        .stock-table tbody td {
-          padding: 10px 8px;
-          border-bottom: 1px solid var(--border);
-          font-size: 13px;
-          vertical-align: middle;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .stock-table tbody td.text-center {
-          text-align: center;
-        }
-        .stock-table tbody td.text-right {
-          text-align: right;
-        }
-        .stock-table tbody tr:hover td {
-          background: var(--card-hover);
-        }
-
-        .product-image {
-          width: 28px;
-          height: 28px;
-          object-fit: cover;
-          border-radius: 6px;
-          display: block;
-          margin: 0 auto;
-        }
-
+        .stock-table { width: 100%; border-collapse: collapse; }
+        .stock-table tbody tr:last-child td { border-bottom: none; }
+        .stock-table tbody tr:hover td { background: var(--card-hover); }
         .btn {
-          padding: 8px 16px;
-          border-radius: 8px;
-          font-size: 13px;
-          font-weight: 600;
-          cursor: pointer;
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
+          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
           background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
-          color: white;
-          border: none;
-          transition: all 0.2s;
-          font-family: inherit;
+          color: white; border: none; transition: all 0.2s;
         }
         .btn:hover {
           background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
@@ -320,9 +254,7 @@ export default function StockRegisterPage() {
           box-shadow: 0 6px 20px rgba(7,19,82,0.45);
         }
         .btn-outline {
-          background: transparent;
-          color: var(--text-muted);
-          border: 1.5px solid var(--border);
+          background: transparent; color: var(--text-muted); border: 1.5px solid var(--border);
         }
         .btn-outline:hover {
           background: var(--card-hover);
@@ -330,44 +262,19 @@ export default function StockRegisterPage() {
           box-shadow: none;
         }
         .btn-icon {
-          background: transparent;
-          border: 1.5px solid var(--border);
-          color: var(--text-muted);
-          padding: 4px 6px;
-          border-radius: 6px;
-          cursor: pointer;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-          line-height: 1;
-          transition: all 0.15s;
+          background: transparent; border: 1.5px solid var(--border);
+          color: var(--text-muted); padding: 5px; border-radius: 6px;
+          cursor: pointer; display: inline-flex; align-items: center;
+          justify-content: center; flex-shrink: 0; line-height: 1;
         }
-        .btn-icon:hover {
-          background: var(--card-hover);
-          border-color: var(--primary);
-        }
-        .btn-icon.danger:hover {
-          border-color: #EF4444;
-          color: #EF4444;
-        }
-
+        .btn-icon:hover { background: var(--card-hover); }
         .search-input {
-          width: 100%;
-          height: 38px;
-          border: 1.5px solid var(--border);
-          border-radius: 8px;
-          padding: 0 12px 0 36px;
-          font-size: 13px;
-          background: var(--card);
-          color: var(--text);
-          outline: none;
+          width: 100%; height: 38px; border: 1.5px solid var(--border);
+          border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px;
+          background: var(--card); color: var(--text); outline: none;
           box-sizing: border-box;
         }
-        .search-input:focus {
-          border-color: var(--primary);
-        }
-
+        .search-input:focus { border-color: var(--primary); }
         .filter-select {
           height: 38px;
           border: 1.5px solid var(--border);
@@ -376,37 +283,37 @@ export default function StockRegisterPage() {
           font-size: 13px;
           background: var(--card);
           color: var(--text);
-          outline: none;
         }
-        .filter-select:focus {
-          border-color: var(--primary);
-        }
-
         .summary-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-          gap: 12px;
-          margin-bottom: 20px;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: 12px; margin-bottom: 20px;
         }
         .summary-item {
-          background: var(--card);
-          border: 1px solid var(--border);
-          border-radius: 12px;
-          padding: 16px;
+          background: var(--card); border: 1px solid var(--border);
+          border-radius: 12px; padding: 16px;
         }
-        .summary-label {
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-          color: var(--text-muted);
-          margin-bottom: 4px;
+        .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+        .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
+        .card {
+          background: var(--card); border: 1px solid var(--border);
+          border-radius: 12px; overflow: hidden;
+          box-shadow: var(--shadow-sm);
         }
-        .summary-value {
-          font-size: 22px;
-          font-weight: 800;
-          color: var(--text);
+        .table-scroll {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: thin;
+          scrollbar-color: var(--border) transparent;
         }
+        .table-scroll::-webkit-scrollbar { height: 4px; }
+        .table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .stock-table { min-width: 900px; }
 
+        @media (max-width: 480px) {
+          .page-wrap { padding: 12px !important; }
+          .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        }
         .filter-bar {
           display: flex;
           flex-wrap: wrap;
@@ -414,35 +321,8 @@ export default function StockRegisterPage() {
           align-items: center;
           margin-bottom: 16px;
         }
-
-        .card {
-          background: var(--card);
-          border: 1px solid var(--border);
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: var(--shadow-sm);
-          padding: 0;
-        }
-
-        .pagination {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-top: 16px;
-          font-size: 13px;
-          color: var(--text-muted);
-        }
-
-        @media (max-width: 640px) {
-          .page-wrap { padding: 12px !important; }
-          .summary-grid { grid-template-columns: 1fr 1fr !important; }
-          .filter-bar { flex-direction: column; align-items: stretch; }
-          .filter-bar > div { max-width: 100% !important; }
-          .pagination { flex-direction: column; gap: 8px; align-items: stretch; }
-        }
       `}</style>
 
-      {/* ── Header ── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📦 Stock Register</h1>
@@ -455,30 +335,21 @@ export default function StockRegisterPage() {
         )}
       </div>
 
-      {/* ── Summary ── */}
       <div className="summary-grid">
-        <div className="summary-item">
-          <div className="summary-label">Total Products</div>
-          <div className="summary-value">{totalProducts}</div>
-        </div>
-        <div className="summary-item">
-          <div className="summary-label">Closing Stock Value</div>
-          <div className="summary-value" style={{ color: "#10B981" }}>PKR {totalStockValue.toLocaleString()}</div>
-        </div>
+        <div className="summary-item"><div className="summary-label">Total Products</div><div className="summary-value">{totalProducts}</div></div>
+        <div className="summary-item"><div className="summary-label">Closing Stock Value</div><div className="summary-value" style={{ color: "#10B981" }}>PKR {totalStockValue.toLocaleString()}</div></div>
       </div>
 
-      {/* ── Flash ── */}
       {flash && (
         <div style={{ background: "var(--card)", border: flash.startsWith("Error") ? "1px solid #EF4444" : "1px solid #065F46", color: flash.startsWith("Error") ? "#FCA5A5" : "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
           {flash}
         </div>
       )}
 
-      {/* ── Filters ── */}
       <div className="filter-bar">
         <div style={{ position: "relative", flex: 1, maxWidth: 320 }}>
           <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-          <input className="search-input" placeholder="Search by name or code..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
+          <input className="search-input" placeholder="Search by name or code..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} style={{ width: "100%" }} />
         </div>
         <select className="filter-select" value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); setPage(1) }}>
           <option value="">All Categories</option>
@@ -491,66 +362,33 @@ export default function StockRegisterPage() {
         )}
       </div>
 
-      {/* ── Table ── */}
       <div className="card">
         <div className="table-scroll">
           <table className="stock-table">
             <colgroup>
-              <col style={{ minWidth: "120px" }} />  {/* Code */}
-              <col style={{ minWidth: "200px" }} />  {/* Name */}
-              <col style={{ minWidth: "80px" }} />   {/* Cost */}
-              <col style={{ minWidth: "80px" }} />   {/* Sale */}
-              <col style={{ minWidth: "70px" }} />   {/* Opening */}
-              <col style={{ minWidth: "70px" }} />   {/* Inflow */}
-              <col style={{ minWidth: "70px" }} />   {/* Outflow */}
-              <col style={{ minWidth: "80px" }} />   {/* Closing */}
-              <col style={{ minWidth: "50px" }} />   {/* Img */}
-              <col style={{ minWidth: "130px" }} />  {/* Actions */}
+              <col style={{ width: 120 }} />  {/* Code */}
+              <col />                         {/* Name */}
+              <col style={{ width: 80 }} />   {/* Cost */}
+              <col style={{ width: 80 }} />   {/* Sale */}
+              <col style={{ width: 70 }} />   {/* Opening */}
+              <col style={{ width: 70 }} />   {/* Inflow */}
+              <col style={{ width: 70 }} />   {/* Outflow */}
+              <col style={{ width: 80 }} />   {/* Closing */}
+              <col style={{ width: 50 }} />   {/* Img */}
+              <col style={{ width: 130 }} />  {/* Actions */}
             </colgroup>
             <thead>
               <tr>
-                <th>
-                  <button className="sort-btn" onClick={() => handleSort("code")}>
-                    Code {getSortIcon("code")}
-                  </button>
-                </th>
-                <th>
-                  <button className="sort-btn" onClick={() => handleSort("name")}>
-                    Name {getSortIcon("name")}
-                  </button>
-                </th>
-                <th className="text-center">
-                  <button className="sort-btn" onClick={() => handleSort("cost_price")}>
-                    Cost {getSortIcon("cost_price")}
-                  </button>
-                </th>
-                <th className="text-center">
-                  <button className="sort-btn" onClick={() => handleSort("sale_price")}>
-                    Sale {getSortIcon("sale_price")}
-                  </button>
-                </th>
-                <th className="text-center">
-                  <button className="sort-btn" onClick={() => handleSort("opening_qty")}>
-                    Opening {getSortIcon("opening_qty")}
-                  </button>
-                </th>
-                <th className="text-center">
-                  <button className="sort-btn" onClick={() => handleSort("total_inflow")}>
-                    Inflow {getSortIcon("total_inflow")}
-                  </button>
-                </th>
-                <th className="text-center">
-                  <button className="sort-btn" onClick={() => handleSort("total_outflow")}>
-                    Outflow {getSortIcon("total_outflow")}
-                  </button>
-                </th>
-                <th className="text-center">
-                  <button className="sort-btn" onClick={() => handleSort("qty_on_hand")}>
-                    Closing {getSortIcon("qty_on_hand")}
-                  </button>
-                </th>
-                <th className="text-center">Img</th>
-                <th className="text-center">Actions</th>
+                <SortTh field="code">Code</SortTh>
+                <SortTh field="name" style={{ textAlign: "left" }}>Name</SortTh>
+                <SortTh field="cost_price" style={{ textAlign: "right" }}>Cost</SortTh>
+                <SortTh field="sale_price" style={{ textAlign: "right" }}>Sale</SortTh>
+                <SortTh field="opening_qty" style={{ textAlign: "right" }}>Opening</SortTh>
+                <SortTh field="total_inflow" style={{ textAlign: "right" }}>Inflow</SortTh>
+                <SortTh field="total_outflow" style={{ textAlign: "right" }}>Outflow</SortTh>
+                <SortTh field="qty_on_hand" style={{ textAlign: "right" }}>Closing</SortTh>
+                <th style={{ ...thStyle, textAlign: "center" }}>Img</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -558,7 +396,7 @@ export default function StockRegisterPage() {
                 [1, 2, 3, 4, 5].map(i => <SkeletonRow key={i} />)
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: "center", color: "var(--text-muted)", padding: 40 }}>
+                  <td colSpan={10} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>
                     No products found. {canEdit && "Add a product to get started."}
                   </td>
                 </tr>
@@ -569,25 +407,25 @@ export default function StockRegisterPage() {
                   const closing = prod.qty_on_hand
                   return (
                     <tr key={prod.id}>
-                      <td><span style={{ fontWeight: 600, color: "var(--primary)" }}>{prod.code}</span></td>
-                      <td style={{ maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{prod.name}</td>
-                      <td className="text-center">PKR {prod.cost_price?.toLocaleString()}</td>
-                      <td className="text-center">PKR {prod.sale_price?.toLocaleString()}</td>
-                      <td className="text-center">{prod.opening_qty}</td>
-                      <td className="text-center" style={{ color: "#10B981" }}>{inflow}</td>
-                      <td className="text-center" style={{ color: "#EF4444" }}>{outflow}</td>
-                      <td className="text-center" style={{ fontWeight: 600 }}>{closing}</td>
-                      <td className="text-center">
+                      <td style={tdStyle}><span style={{ fontWeight: 600, color: "var(--primary)" }}>{prod.code}</span></td>
+                      <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{prod.name}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>PKR {prod.cost_price?.toLocaleString()}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>PKR {prod.sale_price?.toLocaleString()}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>{prod.opening_qty}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: "#10B981" }}>{inflow}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: "#EF4444" }}>{outflow}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", fontWeight: 600 }}>{closing}</td>
+                      <td style={{ ...tdStyle, textAlign: "center" }}>
                         {prod.image_path ? (
-                          <img src={prod.image_path} alt="" className="product-image" />
+                          <img src={prod.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
                         ) : "—"}
                       </td>
-                      <td className="text-center">
+                      <td style={{ ...tdStyle, textAlign: "center" }}>
                         <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
                           <button className="btn-icon" onClick={() => router.push(`/dashboard/products/new?id=${prod.id}`)} title="Edit">
                             <Edit size={13} />
                           </button>
-                          <button className="btn-icon danger" onClick={() => handleDelete(prod.id)} title="Delete">
+                          <button className="btn-icon" onClick={() => handleDelete(prod.id)} style={{ color: "#EF4444" }} title="Delete">
                             <Trash2 size={13} />
                           </button>
                           <button className="btn-icon" onClick={() => router.push(`/dashboard/reports/product-ledger?productId=${prod.id}`)} title="View Ledger">
@@ -604,9 +442,8 @@ export default function StockRegisterPage() {
         </div>
       </div>
 
-      {/* ── Pagination ── */}
       {total > pageSize && (
-        <div className="pagination">
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16, fontSize: 13, color: "var(--text-muted)" }}>
           <span>Showing {Math.min(pageSize, total - (page-1)*pageSize)} of {total}</span>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn-outline" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</button>
