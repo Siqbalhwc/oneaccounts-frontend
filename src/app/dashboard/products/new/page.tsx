@@ -191,23 +191,29 @@ export default function ProductFormPage() {
           background: transparent; color: var(--text-muted); transition: 0.2s;
         }
         .btn:hover { background: var(--card-hover); }
+        .btn-back {
+          /* keep back button small, same as customer form */
+          padding: 6px 12px;
+        }
         .inline-group { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
 
-        /* ── RESPONSIVE BREAKPOINTS ── */
         @media (max-width: 900px) {
           .header-grid { grid-template-columns: 1fr; }
         }
         @media (max-width: 600px) {
           .inline-group { grid-template-columns: 1fr; }
           .page-wrap { padding: 12px !important; }
-          .btn { width: 100%; justify-content: center; }
-          .header-grid > div:last-child { order: -1; } /* summary above form on mobile */
+          /* Only the submit button at the bottom should be full width */
+          .btn-submit {
+            width: 100% !important;
+            justify-content: center !important;
+          }
         }
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-        <button className="btn" onClick={() => router.push("/dashboard/products")}><ArrowLeft size={16} /></button>
+        <button className="btn btn-back" onClick={() => router.push("/dashboard/products")}><ArrowLeft size={16} /></button>
         <div style={{ flex: 1 }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>
             {editId ? "✏️ Edit Product" : "📦 Add New Product"}
@@ -268,9 +274,19 @@ export default function ProductFormPage() {
                 )}
               </div>
             </div>
+
+            {/* Submit button moved here, after all form fields */}
+            <button
+              className="btn btn-submit"
+              type="submit"
+              disabled={loading}
+              style={{ marginTop: 16, width: "100%", justifyContent: "center" }}
+            >
+              {loading ? "Saving..." : editId ? <><Save size={16} /> Update Product</> : <><Plus size={16} /> Create Product</>}
+            </button>
           </div>
 
-          {/* Right: Summary + Save */}
+          {/* Right: Summary only */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="card">
               <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
@@ -282,11 +298,6 @@ export default function ProductFormPage() {
                 <span>Total Cost</span>
                 <span style={{ color: "#F59E0B" }}>PKR {totalCost.toLocaleString()}</span>
               </div>
-            </div>
-            <div className="card">
-              <button className="btn" type="submit" disabled={loading} style={{ width: "100%", justifyContent: "center" }}>
-                {loading ? "Saving..." : editId ? <><Save size={16} /> Update Product</> : <><Plus size={16} /> Create Product</>}
-              </button>
             </div>
           </div>
         </div>
