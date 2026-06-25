@@ -7,6 +7,7 @@ import {
 } from "lucide-react"
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
+import * as Papa from "papaparse"
 
 // ---------- DB‑validated active company ID ----------
 async function getActiveCompanyId(supabase: any): Promise<string> {
@@ -107,23 +108,34 @@ export default function DataManagementPage() {
     }
   }
 
-  // ----- CSV Import handlers (unchanged) -----
+  // ----- CSV Import handlers (now using Papa Parse) -----
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     setImportFile(file)
+
     try {
       const text = await file.text()
-      const rows = text.split("\n").filter(line => line.trim() !== "")
-      if (rows.length === 0) { showMessage("File is empty."); return }
-      const headers = rows[0].split(",").map(h => h.trim())
-      const data = rows.slice(1).map(row => {
-        const values = row.split(",")
-        const obj: Record<string, string> = {}
-        headers.forEach((h, i) => { obj[h] = values[i]?.trim() || "" })
-        return obj
+      // Use Papa Parse to robustly parse CSV (handles commas in quotes, etc.)
+      const result = Papa.parse<Record<string, string>>(text, {
+        header: true,               // first row becomes headers
+        skipEmptyLines: true,       // ignore blank lines
+        transformHeader: (h: string) => h.trim(),  // trim whitespace from header names
       })
-      setImportPreview(data)
+
+      if (result.errors.length > 0) {
+        console.warn("CSV parse warnings:", result.errors)
+      }
+
+      if (result.data.length === 0) {
+        showMessage("File is empty or has no valid rows.")
+        return
+      }
+
+      setImportPreview(result.data)
+
+      // Auto‑map columns based on header names
+      const headers = Object.keys(result.data[0])
       const autoMap: Record<string, string> = {}
       headers.forEach(h => {
         const lower = h.toLowerCase().replace(/\s/g, "")
@@ -138,7 +150,9 @@ export default function DataManagementPage() {
         if (lower.includes("qty") || lower.includes("quantity")) autoMap.qty_on_hand = h
       })
       setColumnMap(autoMap)
-    } catch { showMessage("Error reading file.") }
+    } catch (err) {
+      showMessage("Error reading file: " + (err as Error).message)
+    }
   }
 
   const handleImport = async () => {
@@ -273,7 +287,7 @@ export default function DataManagementPage() {
             { key: "customers",        title: "Delete Customers",          desc: "Remove all customers & related invoices.",     entity: "customers",        successMsg: "Customers and related invoices deleted." },
             { key: "suppliers",        title: "Delete Suppliers",          desc: "Remove all suppliers & related bills.",        entity: "suppliers",        successMsg: "Suppliers and related bills deleted." },
             { key: "products",         title: "Delete Products",           desc: "Remove all products, stock moves & invoice items.", entity: "products",    successMsg: "Products deleted." },
-            { key: "reset_balances",   title: "Reset Balances",            desc: "Set all account balances to zero.",            entity: null,                // special case – uses resetBalances()
+            { key: "reset_balances",   title: "Reset Balances",            desc: "Set all account balances to zero.",            entity: null,
               fn: () => { resetBalances(); setConfirmSection(null) } },
             { key: "nuke",             title: "Complete Reset (NUKE)",     desc: "Delete ALL data except chart of accounts.",   entity: "all",              successMsg: "Company completely reset." },
           ].map(item => (
@@ -288,7 +302,6 @@ export default function DataManagementPage() {
                       className="dm-btn dm-btn-danger"
                       onClick={() => {
                         if (item.entity === 'all') {
-                          // NUKE uses dedicated endpoint
                           fetch('/api/admin/nuke-company', { method: 'POST' })
                             .then(r => r.json())
                             .then(data => {
@@ -301,7 +314,6 @@ export default function DataManagementPage() {
                         } else if (item.key === 'reset_balances') {
                           resetBalances()
                         }
-                        // confirmation will be hidden inside success handlers
                       }}
                     >
                       ✅ Yes
