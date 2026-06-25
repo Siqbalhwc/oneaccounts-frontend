@@ -453,10 +453,6 @@ export default function SuppliersPage() {
         .table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
         .sup-table { min-width: 700px; }
 
-        @media (max-width: 480px) {
-          .page-wrap { padding: 12px !important; }
-          .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
-        }
         .message { padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
         .pr-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
         .pr-modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; color: var(--text); }
@@ -468,35 +464,75 @@ export default function SuppliersPage() {
         }
         .input:focus, .select:focus { border-color: var(--primary); outline: none; }
         label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; display: block; }
+
+        /* ── MOBILE ONLY ── */
+        @media (max-width: 640px) {
+          .page-wrap { padding: 12px !important; }
+          .summary-grid { grid-template-columns: 1fr 1fr; }
+
+          .sup-header {
+            flex-direction: column;
+            align-items: stretch !important;
+          }
+          .sup-header .title-area {
+            text-align: left;
+            margin-bottom: 8px;
+          }
+          .toolbar-row {
+            display: flex;
+            width: 100%;
+            justify-content: space-between;
+            margin-bottom: 12px;
+          }
+          .search-row {
+            display: flex;
+            width: 100%;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+          }
+          .search-row .input-wrap {
+            flex: 1;
+            max-width: 100%;
+          }
+        }
       `}</style>
 
       {/* ── Page header ── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
-        <div>
+      <div className="sup-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+        <div className="title-area">
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>🚚 Suppliers</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Manage your supplier accounts</p>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {showImportExport && (
-            <>
-              <button className="btn btn-outline" onClick={downloadTemplate} title="Download CSV template">
-                <FileText size={14} /> Template
-              </button>
-              <label className="btn btn-outline" style={{ cursor: "pointer" }}>
-                <Upload size={14} /> Import
-                <input type="file" accept=".csv" onChange={handleImport} ref={fileInputRef} style={{ display: "none" }} />
-              </label>
-              <button className="btn btn-outline" onClick={handleExport} title="Export to CSV">
-                <Download size={14} /> Export
-              </button>
-            </>
-          )}
-          {canEdit && (
-            <button className="btn" onClick={openNew}>
-              <Plus size={16} /> Add Supplier
+        {/* CSV buttons will be in the toolbar row below on mobile, but visible here on desktop as well */}
+        {showImportExport && (
+          <div className="toolbar-row" style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-outline" onClick={downloadTemplate} title="Download CSV template">
+              <FileText size={14} /> Template
             </button>
-          )}
+            <label className="btn btn-outline" style={{ cursor: "pointer" }}>
+              <Upload size={14} /> Import
+              <input type="file" accept=".csv" onChange={handleImport} ref={fileInputRef} style={{ display: "none" }} />
+            </label>
+            <button className="btn btn-outline" onClick={handleExport} title="Export to CSV">
+              <Download size={14} /> Export
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Second row: search left, add supplier right */}
+      <div className="search-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 16 }}>
+        <div className="input-wrap" style={{ position: "relative", flex: 1, maxWidth: 320 }}>
+          <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+          <input className="search-input" placeholder="Search by code, name, or phone..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
         </div>
+        {canEdit && (
+          <button className="btn" onClick={openNew}>
+            <Plus size={16} /> Add Supplier
+          </button>
+        )}
       </div>
 
       {importMessage && (
@@ -516,12 +552,6 @@ export default function SuppliersPage() {
           {flash}
         </div>
       )}
-
-      {/* ── Search ── */}
-      <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
-        <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-        <input className="search-input" placeholder="Search by code, name, or phone..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
-      </div>
 
       {/* ── Table ── */}
       <div className="card">
@@ -602,7 +632,7 @@ export default function SuppliersPage() {
         </div>
       )}
 
-      {/* Modal for add/edit (unchanged, but kept) */}
+      {/* Modal for add/edit (unchanged) */}
       {showModal && canEdit && (
         <div className="pr-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="pr-modal" onClick={e => e.stopPropagation()}>
