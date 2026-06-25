@@ -18,7 +18,7 @@ export default function ProductFormPage() {
   const [companyId, setCompanyId] = useState("")
   const [productCode, setProductCode] = useState("")
   const [name, setName] = useState("")
-  const [category, setCategory] = useState("")        // ← NEW category field
+  const [category, setCategory] = useState("")
   const [salePrice, setSalePrice] = useState("")
   const [costPrice, setCostPrice] = useState("")
   const [openingQty, setOpeningQty] = useState("")
@@ -29,7 +29,6 @@ export default function ProductFormPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  // For summary calculation
   const qty = parseFloat(openingQty) || 0
   const cost = parseFloat(costPrice) || 0
   const totalCost = qty * cost
@@ -50,7 +49,7 @@ export default function ProductFormPage() {
         if (product) {
           setProductCode(product.code)
           setName(product.name)
-          setCategory(product.category || "")        // ← NEW
+          setCategory(product.category || "")
           setSalePrice(String(product.sale_price || ""))
           setCostPrice(String(product.cost_price || ""))
           setOpeningQty(String(product.opening_qty || ""))
@@ -118,7 +117,7 @@ export default function ProductFormPage() {
       company_id: companyId,
       code: productCode,
       name: name.trim(),
-      category: category.trim() || null,        // ← NEW
+      category: category.trim() || null,
       sale_price: parseFloat(salePrice) || 0,
       cost_price: parseFloat(costPrice) || 0,
       opening_qty: parseFloat(openingQty) || 0,
@@ -143,7 +142,7 @@ export default function ProductFormPage() {
 
     if (!editId) {
       setName("")
-      setCategory("")        // ← NEW
+      setCategory("")
       setSalePrice("")
       setCostPrice("")
       setOpeningQty("")
@@ -194,13 +193,22 @@ export default function ProductFormPage() {
         .btn:hover { background: var(--card-hover); }
         .inline-group { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
-        @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
-        @media (max-width: 600px) { .inline-group { grid-template-columns: 1fr; } }
+
+        /* ── RESPONSIVE BREAKPOINTS ── */
+        @media (max-width: 900px) {
+          .header-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 600px) {
+          .inline-group { grid-template-columns: 1fr; }
+          .page-wrap { padding: 12px !important; }
+          .btn { width: 100%; justify-content: center; }
+          .header-grid > div:last-child { order: -1; } /* summary above form on mobile */
+        }
       `}</style>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
         <button className="btn" onClick={() => router.push("/dashboard/products")}><ArrowLeft size={16} /></button>
-        <div>
+        <div style={{ flex: 1 }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>
             {editId ? "✏️ Edit Product" : "📦 Add New Product"}
           </h1>
@@ -227,7 +235,6 @@ export default function ProductFormPage() {
               <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Widget A" />
             </div>
 
-            {/* Category field */}
             <div style={{ marginBottom: 16 }}>
               <label className="label">Category (optional)</label>
               <input className="input" value={category} onChange={e => setCategory(e.target.value)} placeholder="e.g. Cabinet Handles, Cabinet Knobs" />

@@ -183,7 +183,7 @@ export default function StockRegisterPage() {
   const totalStockValue = products.reduce((sum, p) => sum + (p.qty_on_hand * (p.cost_price || 0)), 0)
   const totalProducts = total
 
-  // ── EXACT SAME HEADER STYLES AS INVOICE LIST (unchanged) ──
+  // ── EXACT SAME HEADER STYLES AS INVOICE LIST ──
   const thStyle: React.CSSProperties = {
     padding: "12px 16px",
     background: "var(--card-hover)",
@@ -300,12 +300,14 @@ export default function StockRegisterPage() {
           box-shadow: var(--shadow-sm);
         }
 
-        /* ── DARK SCROLLBAR & WIDE TABLE ── */
+        /* ── ENHANCED SCROLL AREA ── */
         .table-scroll {
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
           scrollbar-width: thin;
           scrollbar-color: var(--border) var(--bg);
+          /* Ensure the container itself doesn't force a max width */
+          width: 100%;
         }
         .table-scroll::-webkit-scrollbar {
           height: 8px;
@@ -327,11 +329,17 @@ export default function StockRegisterPage() {
           min-width: 1200px;
         }
 
-        @media (max-width: 480px) {
+        /* ── MOBILE ADJUSTMENTS ── */
+        @media (max-width: 640px) {
           .page-wrap { padding: 12px !important; }
           .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
           .filter-bar { flex-direction: column; align-items: stretch; }
           .filter-bar > div { max-width: 100% !important; }
+          /* Make the top action bar wrap nicely */
+          .page-header {
+            flex-direction: column;
+            align-items: flex-start;
+          }
         }
 
         .filter-bar {
@@ -343,7 +351,7 @@ export default function StockRegisterPage() {
         }
       `}</style>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+      <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📦 Stock Register</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Manage inventory, view opening / inflow / outflow / closing</p>
@@ -367,7 +375,7 @@ export default function StockRegisterPage() {
       )}
 
       <div className="filter-bar">
-        <div style={{ position: "relative", flex: 1, maxWidth: 320 }}>
+        <div style={{ position: "relative", flex: 1, maxWidth: 320, width: "100%" }}>
           <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
           <input className="search-input" placeholder="Search by name or code..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} style={{ width: "100%" }} />
         </div>
@@ -376,27 +384,26 @@ export default function StockRegisterPage() {
           {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
         </select>
         {categoryFilter && (
-          <button className="btn btn-outline" onClick={() => { setCategoryFilter(""); setPage(1); }} style={{ padding: "6px 12px" }}>
+          <button className="btn btn-outline" onClick={() => { setCategoryFilter(""); setPage(1); }} style={{ padding: "6px 12px", whiteSpace: "nowrap" }}>
             Clear Filter
           </button>
         )}
       </div>
 
-      <div className="card">
+      <div className="card" style={{ overflowX: "auto" }}>
         <div className="table-scroll">
           <table className="stock-table">
-            {/* ── WIDER COLUMN WIDTHS ── */}
             <colgroup>
-              <col style={{ minWidth: "150px" }} />  {/* Code */}
-              <col style={{ minWidth: "250px" }} />  {/* Name */}
-              <col style={{ minWidth: "100px" }} />  {/* Cost */}
-              <col style={{ minWidth: "100px" }} />  {/* Sale */}
-              <col style={{ minWidth: "90px" }} />   {/* Opening */}
-              <col style={{ minWidth: "90px" }} />   {/* Inflow */}
-              <col style={{ minWidth: "90px" }} />   {/* Outflow */}
-              <col style={{ minWidth: "100px" }} />  {/* Closing */}
-              <col style={{ minWidth: "60px" }} />   {/* Img */}
-              <col style={{ minWidth: "150px" }} />  {/* Actions */}
+              <col style={{ minWidth: "150px" }} />
+              <col style={{ minWidth: "250px" }} />
+              <col style={{ minWidth: "100px" }} />
+              <col style={{ minWidth: "100px" }} />
+              <col style={{ minWidth: "90px" }} />
+              <col style={{ minWidth: "90px" }} />
+              <col style={{ minWidth: "90px" }} />
+              <col style={{ minWidth: "100px" }} />
+              <col style={{ minWidth: "60px" }} />
+              <col style={{ minWidth: "150px" }} />
             </colgroup>
             <thead>
               <tr>
