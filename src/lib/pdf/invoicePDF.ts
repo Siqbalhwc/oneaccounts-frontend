@@ -381,10 +381,11 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setLineWidth(0.3)
   doc.rect(ML, bodyStartY, CW, afterTable - bodyStartY, "S")
 
-  // ── SUBTOTAL / TAX / TOTAL – aligned with table columns ──────────
-  const amtRightX = PW - MR                           // right edge of amount column
-  const amtLeftX  = amtRightX - COL_AMT_W             // left edge of amount column
-  const descLeft  = ML + COL_IMG_W + COL_NUM_W        // left edge of description column (for labels)
+  // ── SUBTOTAL / TAX / TOTAL – aligned with amount column, labels near amount ──
+  const amtRightX = PW - MR                       // right edge of the table
+  const amtLeftX  = amtRightX - COL_AMT_W         // left edge of amount column
+  // Position labels just to the left of the amount column (similar to original sumX)
+  const labelX = amtLeftX - 25                     // labels 25mm left of amount column
 
   let SY = afterTable + 6
 
@@ -392,7 +393,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setFont("helvetica", "normal")
   doc.setFontSize(9)
   doc.setTextColor(...MUTED)
-  doc.text("Subtotal", descLeft, SY)
+  doc.text("Subtotal", labelX, SY)
   doc.setTextColor(...DARK)
   doc.text(pkr(data.subtotal), amtRightX, SY, { align: "right" })
   SY += 5.5
@@ -415,7 +416,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
 
   doc.setFont("helvetica", "bold")
   doc.setTextColor(...MUTED)
-  doc.text(taxLabel, descLeft, SY)
+  doc.text(taxLabel, labelX, SY)
   doc.setTextColor(...DARK)
   doc.text(pkr(data.totalTax || 0), amtRightX, SY, { align: "right" })
   SY += 5.5
@@ -427,7 +428,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setFont("helvetica", "bold")
   doc.setFontSize(9)
   doc.setTextColor(...WHITE)
-  doc.text("Total", descLeft, SY + TOTAL_H / 2 - 0.5)
+  doc.text("Total", labelX, SY + TOTAL_H / 2 - 0.5)
   doc.text(pkr(data.total), amtRightX, SY + TOTAL_H / 2 - 0.5, { align: "right" })
   SY += TOTAL_H + 2
 
@@ -436,14 +437,14 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     doc.setFont("helvetica", "normal")
     doc.setFontSize(9)
     doc.setTextColor(...MUTED)
-    doc.text("Amount Paid", descLeft, SY)
+    doc.text("Amount Paid", labelX, SY)
     doc.setTextColor(16, 185, 129)
     doc.text("- " + pkr(data.paid), amtRightX, SY, { align: "right" })
     SY += 5.5
 
     doc.setFont("helvetica", "bold")
     doc.setTextColor(...RED)
-    doc.text("Balance Due", descLeft, SY)
+    doc.text("Balance Due", labelX, SY)
     doc.text(pkr(data.balanceDue), amtRightX, SY, { align: "right" })
     SY += 5
   }
