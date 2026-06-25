@@ -13,37 +13,47 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { entity } = await request.json()
+  const { entity, targetCompanyId: reqCompanyId } = await request.json()
   if (!entity) return NextResponse.json({ error: 'entity is required' }, { status: 400 })
 
-  // 1. Find the user's active admin company
-  const { data: activeRole } = await supabaseAdmin
-    .from('user_roles')
-    .select('company_id, role')
+  // Check if user is a super admin
+  const { data: superAdmin } = await supabaseAdmin
+    .from('super_admins')
+    .select('user_id')
     .eq('user_id', user.id)
-    .eq('is_active', true)
     .maybeSingle()
 
   let targetCompanyId: string | null = null
-  if (activeRole?.role === 'admin') {
-    targetCompanyId = activeRole.company_id
+
+  if (superAdmin && reqCompanyId) {
+    // Super admin can target any company
+    targetCompanyId = reqCompanyId
   } else {
-    // fallback: any company where the user is admin
-    const { data: anyAdmin } = await supabaseAdmin
+    // Normal flow: use user's active admin company
+    const { data: activeRole } = await supabaseAdmin
       .from('user_roles')
-      .select('company_id')
+      .select('company_id, role')
       .eq('user_id', user.id)
-      .eq('role', 'admin')
-      .limit(1)
+      .eq('is_active', true)
       .maybeSingle()
-    if (anyAdmin) targetCompanyId = anyAdmin.company_id
+
+    if (activeRole?.role === 'admin') {
+      targetCompanyId = activeRole.company_id
+    } else {
+      const { data: anyAdmin } = await supabaseAdmin
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .limit(1)
+        .maybeSingle()
+      if (anyAdmin) targetCompanyId = anyAdmin.company_id
+    }
   }
 
   if (!targetCompanyId) {
     return NextResponse.json({ error: 'No admin company found' }, { status: 403 })
   }
-
-  // ✅ No more template company block – admins can clean their own test data
 
   try {
     const { error } = await supabaseAdmin.rpc('delete_company_entity', {

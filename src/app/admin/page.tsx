@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import {
   Trash2, ToggleLeft, ToggleRight, Plus, X, LogIn, CreditCard,
-  AlertTriangle, ChevronDown, ChevronRight,
+  AlertTriangle, ChevronDown, ChevronRight, Download,
 } from "lucide-react"
 
 const FEATURE_CODES = [
@@ -25,6 +25,16 @@ const ADDON_LABELS: Record<string, string> = {
   inventory: "Inventory",
   purchase_orders: "Purchase Orders",
 }
+
+const CLEANUP_ENTITIES = [
+  { entity: "journal", label: "Delete Journal Entries" },
+  { entity: "all_invoices", label: "Delete All Invoices" },
+  { entity: "sales_invoices", label: "Delete Sales Invoices" },
+  { entity: "purchase_bills", label: "Delete Purchase Bills" },
+  { entity: "customers", label: "Delete Customers" },
+  { entity: "suppliers", label: "Delete Suppliers" },
+  { entity: "products", label: "Delete Products" },
+]
 
 interface Subscription {
   plan_type: string
@@ -263,6 +273,60 @@ export default function SuperAdminPage() {
     setSavingSubscription(false)
   }
 
+  // --- Data Cleanup Helpers ---
+  const handleCleanupEntity = async (companyId: string, entity: string) => {
+    if (!confirm(`Are you sure you want to delete "${entity}" for this company?`)) return
+    const res = await fetch("/api/admin/delete-entity", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entity, targetCompanyId: companyId }),
+    })
+    const data = await res.json()
+    if (data.success) showMessage(`✅ ${entity} deleted successfully.`)
+    else showMessage(`❌ ${data.error || "Failed"}`)
+  }
+
+  const handleNukeCompany = async (companyId: string) => {
+    if (!confirm("This will DELETE ALL operational data for this company (keeps chart of accounts). Are you absolutely sure?")) return
+    const res = await fetch("/api/admin/nuke-company", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetCompanyId: companyId }),
+    })
+    const data = await res.json()
+    if (data.success) showMessage("✅ Company data has been wiped completely.")
+    else showMessage(`❌ ${data.error || "Failed"}`)
+  }
+
+  const handleBackup = async (company: Company) => {
+    showMessage("⏳ Generating backup...")
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { showMessage("Not authenticated", true); return }
+      const token = (await supabase.auth.getSession()).data.session?.access_token
+      const res = await fetch(`/api/super-admin/backup?companyId=${company.id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: "Unknown error" }))
+        showMessage(`❌ ${errData.error || "Backup failed"}`, true)
+        return
+      }
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `backup_${company.name.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+      showMessage("✅ Backup downloaded.")
+    } catch (err: any) {
+      showMessage("❌ Network error: " + (err.message || ""))
+    }
+  }
+
   const isExpiringSoon = (sub: Subscription | null) => {
     if (!sub || !sub.end_date) return false
     const expiry = new Date(sub.end_date)
@@ -398,6 +462,38 @@ export default function SuperAdminPage() {
                   <div>
                     <div className="sa-expanded-label">Users</div>
                     <div>{company.user_count}</div>
+                  </div>
+                </div>
+
+                {/* NEW: Data Cleanup & Backup Section */}
+                <div style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                  <div className="sa-expanded-label" style={{ marginBottom: 8 }}>🗄️ Data Cleanup & Backup</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                    {CLEANUP_ENTITIES.map(item => (
+                      <button
+                        key={item.entity}
+                        className="sa-btn sa-btn-danger"
+                        style={{ fontSize: 10 }}
+                        onClick={() => handleCleanupEntity(company.id, item.entity)}
+                        title={item.label}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                    <button
+                      className="sa-btn sa-btn-danger"
+                      style={{ fontWeight: 700, fontSize: 11 }}
+                      onClick={() => handleNukeCompany(company.id)}
+                    >
+                      💣 Complete Nuke
+                    </button>
+                    <button
+                      className="sa-btn"
+                      style={{ background: '#2563EB', color: 'white', borderColor: '#2563EB', marginLeft: 8, fontSize: 11 }}
+                      onClick={() => handleBackup(company)}
+                    >
+                      <Download size={12} /> Backup Excel
+                    </button>
                   </div>
                 </div>
               </div>
