@@ -316,22 +316,61 @@ export default function CustomersPage() {
           .table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
           .cust-table { min-width: 650px; }
 
-          @media (max-width: 480px) {
-            .page-wrap { padding: 12px !important; }
-            .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
-          }
           .message { padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
+
+          /* ── MOBILE ONLY ── */
+          @media (max-width: 640px) {
+            .page-wrap { padding: 12px !important; }
+            .summary-grid { grid-template-columns: 1fr 1fr; }
+
+            /* Hide the Active card on mobile */
+            .summary-card-active { display: none; }
+
+            /* Header restructure */
+            .cust-header {
+              flex-direction: column;
+              align-items: stretch !important;
+            }
+            .cust-header .title-area {
+              text-align: center;
+              margin-bottom: 8px;
+            }
+            .toolbar-row {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 12px;
+            }
+            .toolbar-row .csv-buttons {
+              display: flex;
+              width: 100%;
+              justify-content: space-between;
+            }
+            .search-row {
+              display: flex;
+              width: 100%;
+              justify-content: space-between;
+              align-items: center;
+              gap: 8px;
+              margin-bottom: 12px;
+            }
+            .search-row .input {
+              margin-bottom: 0;
+            }
+            /* Hide CSV buttons on mobile if you prefer, but we'll keep them all */
+          }
         `}</style>
 
         {/* ── Page header ── */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
-          <div>
+        <div className="cust-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+          <div className="title-area">
             <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>👥 Customers</h1>
             <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Manage your customer accounts</p>
           </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {/* On mobile, these become the toolbar row */}
+          <div className="toolbar-row">
             {showImportExport && (
-              <>
+              <div className="csv-buttons" style={{ display: "flex", gap: 8 }}>
                 <button className="btn btn-outline" onClick={downloadTemplate} title="Download CSV template">
                   <FileText size={14} /> Template
                 </button>
@@ -342,14 +381,22 @@ export default function CustomersPage() {
                 <button className="btn btn-outline" onClick={handleExport} title="Export to CSV">
                   <Download size={14} /> Export
                 </button>
-              </>
-            )}
-            {canEdit && (
-              <button className="btn" onClick={() => router.push("/dashboard/customers/new")}>
-                <Plus size={16} /> Add Customer
-              </button>
+              </div>
             )}
           </div>
+        </div>
+
+        {/* Second row for mobile: search left, add customer right */}
+        <div className="search-row">
+          <div style={{ position: "relative", flex: 1, maxWidth: 320 }}>
+            <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+            <input className="input" placeholder="Search by code, name, phone, email..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+          {canEdit && (
+            <button className="btn" onClick={() => router.push("/dashboard/customers/new")}>
+              <Plus size={16} /> Add Customer
+            </button>
+          )}
         </div>
 
         {importMessage && (
@@ -362,13 +409,7 @@ export default function CustomersPage() {
         <div className="summary-grid">
           <div className="summary-item"><div className="summary-label">Total Customers</div><div className="summary-value">{totalCustomers}</div></div>
           <div className="summary-item"><div className="summary-label">Total Receivables</div><div className="summary-value" style={{ color: totalReceivables >= 0 ? "#10B981" : "#EF4444" }}>PKR {totalReceivables.toLocaleString()}</div></div>
-          <div className="summary-item"><div className="summary-label">Active</div><div className="summary-value" style={{ color: "#10B981" }}>{activeCustomers}</div></div>
-        </div>
-
-        {/* ── Search ── */}
-        <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
-          <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-          <input className="input" placeholder="Search by code, name, phone, email..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          <div className="summary-item summary-card-active"><div className="summary-label">Active</div><div className="summary-value" style={{ color: "#10B981" }}>{activeCustomers}</div></div>
         </div>
 
         {/* ── Table ── */}
