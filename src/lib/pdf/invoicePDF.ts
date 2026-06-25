@@ -407,6 +407,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     if (rates.size === 1) {
       const val = rates.values().next().value
       effectiveRate = val !== undefined ? val : null
+    }
   }
   const taxLabel = hasTax
     ? (effectiveRate ? `Tax (${effectiveRate}%)` : "Tax")
