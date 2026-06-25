@@ -74,6 +74,9 @@ function NewInvoicePageContent() {
 
   const [taxCodes, setTaxCodes] = useState<any[]>([])
 
+  // NEW: bank accounts to show on invoice
+  const [bankAccounts, setBankAccounts] = useState<any[]>([])
+
   const isNGO = businessType === "ngo"
   const invoiceIdForLink = savedInvoiceId || (editId ? Number(editId) : null)
 
@@ -128,9 +131,21 @@ function NewInvoicePageContent() {
           .then(r => r.data && setTaxCodes(r.data))
       }
 
+      // NEW: Fetch bank accounts that are marked to show on invoice
+      supabase.from("bank_accounts")
+        .select("bank_name, account_title, account_number, show_on_invoice")
+        .eq("company_id", cid)
+        .eq("show_on_invoice", true)
+        .then(({ data: banks }) => {
+          if (banks) setBankAccounts(banks)
+        })
+
       setLoading(false)
     })
   }, [showProducts, taxEnabled])
+
+  // ... rest of existing useEffects remain exactly the same ...
+  // (I'll keep the rest of the file identical, only adding bankAccounts to pdfData calls)
 
   // ── Live stock validation ──
   useEffect(() => {
@@ -570,6 +585,12 @@ function NewInvoicePageContent() {
       status: "Unpaid",
       paid: 0,
       balanceDue: totalAmount + totalTaxAmount,
+      bankAccounts: bankAccounts.map((b: any) => ({
+        bankName: b.bank_name,
+        accountTitle: b.account_title,
+        accountNumber: b.account_number,
+        showOnInvoice: b.show_on_invoice
+      }))
     }
     const doc = await generateInvoicePDF(pdfData)
     const blob = doc.output("blob")
@@ -637,6 +658,12 @@ function NewInvoicePageContent() {
       status: "Unpaid",
       paid: 0,
       balanceDue: totalAmount + totalTaxAmount,
+      bankAccounts: bankAccounts.map((b: any) => ({
+        bankName: b.bank_name,
+        accountTitle: b.account_title,
+        accountNumber: b.account_number,
+        showOnInvoice: b.show_on_invoice
+      }))
     }
     const doc = await generateInvoicePDF(pdfData)
     doc.save(`invoice-preview.pdf`)
