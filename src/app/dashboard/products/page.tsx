@@ -314,55 +314,39 @@ export default function StockRegisterPage() {
         .table-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
         .stock-table { min-width: 1200px; }
 
-        @media (max-width: 640px) {
-  .page-wrap { padding: 12px !important; }
-  .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
-  .page-header {
-    flex-direction: column;
-    align-items: stretch !important;
-  }
-  .page-header .right-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    justify-content: flex-end;   /* ← ADD THIS LINE */
-    margin-top: 8px;
-  }
-}
-
-        .filter-bar {
+        /* ── Header actions row – filter left, button right ── */
+        .header-actions {
           display: flex;
-          flex-wrap: wrap;
-          gap: 12px;
+          justify-content: space-between;
           align-items: center;
+          width: 100%;
+          gap: 12px;
           margin-bottom: 16px;
+        }
+        .header-actions .left-group {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        @media (max-width: 640px) {
+          .page-wrap { padding: 12px !important; }
+          .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
+          .header-actions {
+            flex-wrap: wrap;
+            gap: 8px;
+          }
+          .header-actions .left-group {
+            flex: 1;
+            justify-content: flex-start;
+          }
         }
       `}</style>
 
-      {/* Header: Title on left, Add Product + Category filter together on right */}
-      <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📦 Stock Register</h1>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Manage inventory, view opening / inflow / outflow / closing</p>
-        </div>
-        {/* On mobile, this group will stay on the right; we'll also include the category filter here */}
-        <div className="right-actions" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <select className="filter-select" value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); setPage(1) }} style={{ minWidth: 140 }}>
-            <option value="">All Categories</option>
-            {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-          </select>
-          {categoryFilter && (
-            <button className="btn btn-outline" onClick={() => { setCategoryFilter(""); setPage(1); }} style={{ padding: "6px 12px", whiteSpace: "nowrap" }}>
-              Clear
-            </button>
-          )}
-          {canEdit && (
-            <button className="btn" onClick={() => router.push("/dashboard/products/new")}>
-              <Plus size={16} /> Add Product
-            </button>
-          )}
-        </div>
+      {/* Title */}
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📦 Stock Register</h1>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Manage inventory, view opening / inflow / outflow / closing</p>
       </div>
 
       {/* Summary cards with PKR superscript fix */}
@@ -382,12 +366,33 @@ export default function StockRegisterPage() {
         </div>
       )}
 
-      {/* Search remains in its own row */}
+      {/* Filter + Add Product row – filter left, button right */}
+      <div className="header-actions">
+        <div className="left-group">
+          <select className="filter-select" value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); setPage(1) }} style={{ minWidth: 160 }}>
+            <option value="">All Categories</option>
+            {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+          </select>
+          {categoryFilter && (
+            <button className="btn btn-outline" onClick={() => { setCategoryFilter(""); setPage(1); }} style={{ padding: "6px 12px", whiteSpace: "nowrap" }}>
+              Clear
+            </button>
+          )}
+        </div>
+        {canEdit && (
+          <button className="btn" onClick={() => router.push("/dashboard/products/new")}>
+            <Plus size={16} /> Add Product
+          </button>
+        )}
+      </div>
+
+      {/* Search */}
       <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
         <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
         <input className="search-input" placeholder="Search by name or code..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} style={{ width: "100%" }} />
       </div>
 
+      {/* Table */}
       <div className="card" style={{ overflowX: "auto" }}>
         <div className="table-scroll">
           <table className="stock-table">

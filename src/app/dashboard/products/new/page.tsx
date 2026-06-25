@@ -191,24 +191,19 @@ export default function ProductFormPage() {
           background: transparent; color: var(--text-muted); transition: 0.2s;
         }
         .btn:hover { background: var(--card-hover); }
-        .btn-back {
-          /* keep back button small, same as customer form */
-          padding: 6px 12px;
-        }
+        .btn-back { padding: 6px 12px; }
+        .btn-submit { width: 100%; justify-content: center; }
         .inline-group { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
 
+        /* Summary side will jump above form on mobile */
         @media (max-width: 900px) {
           .header-grid { grid-template-columns: 1fr; }
+          .summary-side { order: -1; }
         }
         @media (max-width: 600px) {
           .inline-group { grid-template-columns: 1fr; }
           .page-wrap { padding: 12px !important; }
-          /* Only the submit button at the bottom should be full width */
-          .btn-submit {
-            width: 100% !important;
-            justify-content: center !important;
-          }
         }
       `}</style>
 
@@ -275,18 +270,12 @@ export default function ProductFormPage() {
               </div>
             </div>
 
-            {/* Submit button moved here, after all form fields */}
-            <button
-              className="btn btn-submit"
-              type="submit"
-              disabled={loading}
-              style={{ marginTop: 16, width: "100%", justifyContent: "center" }}
-            >
+            <button className="btn btn-submit" type="submit" disabled={loading} style={{ marginTop: 16 }}>
               {loading ? "Saving..." : editId ? <><Save size={16} /> Update Product</> : <><Plus size={16} /> Create Product</>}
             </button>
           </div>
 
-          {/* Right: Summary only */}
+          {/* Right: Summary – will jump above form on mobile */}
           <div className="summary-side" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="card">
               <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
