@@ -465,74 +465,81 @@ export default function SuppliersPage() {
         .input:focus, .select:focus { border-color: var(--primary); outline: none; }
         label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; display: block; }
 
+        /* ── DESKTOP: original header layout ── */
+        .header-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 20px;
+          flex-wrap: wrap;
+          gap: 12px;
+        }
+        .header-row .title-area {
+          flex: 1;
+        }
+        .header-row .actions {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        /* search section below summary */
+        .search-section {
+          margin-bottom: 16px;
+          max-width: 320px;
+          position: relative;
+        }
+
         /* ── MOBILE ONLY ── */
         @media (max-width: 640px) {
           .page-wrap { padding: 12px !important; }
           .summary-grid { grid-template-columns: 1fr 1fr; }
 
-          .sup-header {
+          .header-row {
             flex-direction: column;
-            align-items: stretch !important;
+            align-items: stretch;
           }
-          .sup-header .title-area {
-            text-align: left;
+          .header-row .title-area {
             margin-bottom: 8px;
+            text-align: left;
           }
-          .toolbar-row {
-            display: flex;
+          .header-row .actions {
             width: 100%;
             justify-content: space-between;
-            margin-bottom: 12px;
           }
-          .search-row {
-            display: flex;
-            width: 100%;
-            justify-content: space-between;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 12px;
-          }
-          .search-row .input-wrap {
-            flex: 1;
+          .search-section {
             max-width: 100%;
           }
         }
       `}</style>
 
-      {/* ── Page header ── */}
-      <div className="sup-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+      {/* ── HEADER ROW: title left, all buttons right ── */}
+      <div className="header-row">
         <div className="title-area">
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>🚚 Suppliers</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Manage your supplier accounts</p>
         </div>
-        {/* CSV buttons will be in the toolbar row below on mobile, but visible here on desktop as well */}
-        {showImportExport && (
-          <div className="toolbar-row" style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-outline" onClick={downloadTemplate} title="Download CSV template">
-              <FileText size={14} /> Template
+        <div className="actions">
+          {showImportExport && (
+            <>
+              <button className="btn btn-outline" onClick={downloadTemplate} title="Download CSV template">
+                <FileText size={14} /> Template
+              </button>
+              <label className="btn btn-outline" style={{ cursor: "pointer" }}>
+                <Upload size={14} /> Import
+                <input type="file" accept=".csv" onChange={handleImport} ref={fileInputRef} style={{ display: "none" }} />
+              </label>
+              <button className="btn btn-outline" onClick={handleExport} title="Export to CSV">
+                <Download size={14} /> Export
+              </button>
+            </>
+          )}
+          {canEdit && (
+            <button className="btn" onClick={openNew}>
+              <Plus size={16} /> Add Supplier
             </button>
-            <label className="btn btn-outline" style={{ cursor: "pointer" }}>
-              <Upload size={14} /> Import
-              <input type="file" accept=".csv" onChange={handleImport} ref={fileInputRef} style={{ display: "none" }} />
-            </label>
-            <button className="btn btn-outline" onClick={handleExport} title="Export to CSV">
-              <Download size={14} /> Export
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Second row: search left, add supplier right */}
-      <div className="search-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 16 }}>
-        <div className="input-wrap" style={{ position: "relative", flex: 1, maxWidth: 320 }}>
-          <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-          <input className="search-input" placeholder="Search by code, name, or phone..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
+          )}
         </div>
-        {canEdit && (
-          <button className="btn" onClick={openNew}>
-            <Plus size={16} /> Add Supplier
-          </button>
-        )}
       </div>
 
       {importMessage && (
@@ -545,6 +552,12 @@ export default function SuppliersPage() {
       <div className="summary-grid">
         <div className="summary-item"><div className="summary-label">Total Suppliers</div><div className="summary-value">{total}</div></div>
         <div className="summary-item"><div className="summary-label">Total Payables</div><div className="summary-value" style={{ color: totalPayables >= 0 ? "#10B981" : "#EF4444" }}>PKR {totalPayables.toLocaleString()}</div></div>
+      </div>
+
+      {/* ── Search (below summary) ── */}
+      <div className="search-section">
+        <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+        <input className="search-input" placeholder="Search by code, name, or phone..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
       </div>
 
       {flash && (

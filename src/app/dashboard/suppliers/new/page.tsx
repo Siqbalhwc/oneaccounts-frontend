@@ -234,7 +234,7 @@ export default function NewSupplierPage() {
 
       <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
         <div className="header-grid">
-          {/* Left: Form fields */}
+          {/* Left: Form fields (no button) */}
           <div className="card">
             <div style={{ marginBottom: 16 }}>
               <label className="label">Supplier Code</label>
@@ -304,14 +304,9 @@ export default function NewSupplierPage() {
                 {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
             </div>
-
-            {/* Submit button at bottom of form, identical style to customer/product pages */}
-            <button className="btn btn-submit" type="submit" disabled={loading} style={{ marginTop: 16 }}>
-              {loading ? "Saving..." : <><Plus size={16} /> Create Supplier</>}
-            </button>
           </div>
 
-          {/* Right: Summary – jumps above on mobile */}
+          {/* Right: Summary card and Save button card stacked */}
           <div className="summary-side" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="card">
               <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
@@ -323,6 +318,11 @@ export default function NewSupplierPage() {
                 <span>Total Payables</span>
                 <span style={{ color: totalPayables >= 0 ? "#10B981" : "#EF4444" }}>PKR {totalPayables.toLocaleString()}</span>
               </div>
+            </div>
+            <div className="card" style={{ padding: "16px" }}>
+              <button className="btn btn-submit" type="submit" disabled={loading}>
+                {loading ? "Saving..." : <><Plus size={16} /> Create Supplier</>}
+              </button>
             </div>
           </div>
         </div>
