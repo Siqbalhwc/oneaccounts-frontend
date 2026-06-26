@@ -101,11 +101,26 @@ async function createBillJournalEntry(
 
     let accountId = item.account_id || null
     if (!accountId && item.product_id) {
-      const defaultCode = businessType === 'trading' ? '1200' : '5000'
+      // ✅ FIX: Default to Inventory (1200) for product purchases
+      const defaultCode = '1200'
       const { data: acc } = await supabase.from('accounts')
         .select('id').eq('code', defaultCode).eq('company_id', companyId).maybeSingle()
-      if (acc) accountId = acc.id
+      if (acc) {
+        accountId = acc.id
+      } else {
+        // Fallback to any Asset account
+        const { data: anyAsset } = await supabase.from('accounts')
+          .select('id').eq('type','Asset').eq('company_id', companyId).limit(1).maybeSingle()
+        if (anyAsset) accountId = anyAsset.id
+        else {
+          // Last resort: Expense
+          const { data: anyExpense } = await supabase.from('accounts')
+            .select('id').eq('type','Expense').eq('company_id', companyId).limit(1).maybeSingle()
+          if (anyExpense) accountId = anyExpense.id
+        }
+      }
     }
+
     if (!accountId) throw new Error(`No expense account found for item "${item.description}".`)
 
     const taxAmount = item.tax_amount || 0
