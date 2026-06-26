@@ -39,7 +39,6 @@ export default function VendorLedgerPage() {
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
-  // Fetch company ID and all suppliers
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
@@ -76,14 +75,12 @@ export default function VendorLedgerPage() {
       .then(({ data }) => data && setSupplier(data))
   }, [selectedSupplierId, companyId])
 
-  // ── LEDGER FETCH (with opening balance) ──
   const fetchLedger = async () => {
     if (!selectedSupplierId || !companyId || !supplier) return
     setLoading(true)
     setErrorMsg("")
 
     try {
-      // 1. All bills
       const { data: allBills } = await supabase
         .from("invoices")
         .select("id, total, invoice_no, date")
@@ -92,15 +89,14 @@ export default function VendorLedgerPage() {
         .is("deleted_at", null)
         .order("date", { ascending: true })
 
-      // 2. All payments
+      // Fetch payments with gross_amount (added via earlier SQL)
       const { data: allPayments } = await supabase
         .from("payments")
-        .select("id, amount, payment_no, payment_date")
+        .select("id, amount, gross_amount, payment_no, payment_date")
         .eq("party_id", selectedSupplierId)
         .eq("party_type", "supplier")
         .order("payment_date", { ascending: true })
 
-      // 3. Real opening balance entry
       let openingLine = null
       try {
         const apiRes = await fetch(`/api/vendor-ledger/opening-balance?supplierId=${selectedSupplierId}`)
@@ -110,11 +106,8 @@ export default function VendorLedgerPage() {
             openingLine = { ...apiData.entry, running_balance: 0, isOpening: true }
           }
         }
-      } catch (apiErr) {
-        // ignore
-      }
+      } catch (apiErr) {}
 
-      // 4. Period lines
       const periodLines: any[] = []
       for (const bill of allBills || []) {
         if (bill.date < startDate || bill.date > endDate) continue
@@ -128,26 +121,44 @@ export default function VendorLedgerPage() {
           running_balance: 0,
         })
       }
+
       for (const payment of allPayments || []) {
         if (payment.payment_date < startDate || payment.payment_date > endDate) continue
+        const gross = payment.gross_amount ?? payment.amount
+        const net = payment.amount || 0
+        const wht = gross - net
+
+        // Bank payment line (net amount)
         periodLines.push({
           id: `payment-${payment.id}`,
           entry_no: `PAY-${payment.payment_no}`,
           date: payment.payment_date,
-          description: `Payment ${payment.payment_no}`,
-          debit: payment.amount || 0,
+          description: `Payment ${payment.payment_no} (Bank)`,
+          debit: net,
           credit: 0,
           running_balance: 0,
         })
+
+        // WHT line (if any)
+        if (wht > 0) {
+          periodLines.push({
+            id: `wht-${payment.id}`,
+            entry_no: `PAY-${payment.payment_no}`,
+            date: payment.payment_date,
+            description: `WHT Deducted on ${payment.payment_no}`,
+            debit: wht,
+            credit: 0,
+            running_balance: 0,
+          })
+        }
       }
+
       periodLines.sort((a, b) => a.date.localeCompare(b.date))
 
-      // 5. Fallback opening – CORRECTED FORMULA
       if (!openingLine) {
         const periodDebits = periodLines.reduce((s: number, l: any) => s + l.debit, 0)
         const periodCredits = periodLines.reduce((s: number, l: any) => s + l.credit, 0)
         const currentBalance = Number(supplier.balance || 0)
-        // For vendor: credits (bills) increase AP, debits (payments) decrease AP
         const openingBalance = currentBalance + periodDebits - periodCredits
         openingLine = {
           id: "opening-calc",
@@ -161,10 +172,7 @@ export default function VendorLedgerPage() {
         }
       }
 
-      // 6. Combine
       const allLines = [openingLine, ...periodLines]
-
-      // 7. Running balance
       let running = 0
       for (const line of allLines) {
         running += (line.debit || 0) - (line.credit || 0)
@@ -183,7 +191,6 @@ export default function VendorLedgerPage() {
     if (selectedSupplierId && companyId && supplier) fetchLedger()
   }, [selectedSupplierId, companyId, startDate, endDate, supplier])
 
-  // Sorting
   const sortedLines = useMemo(() => {
     const list = [...ledgerLines]
     list.sort((a, b) => {
@@ -250,8 +257,6 @@ export default function VendorLedgerPage() {
         .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
-        
-        /* Grid columns for ledger header and rows */
         .ledger-header {
           display: grid;
           grid-template-columns: 90px 130px 1fr 110px 110px 130px;
@@ -277,13 +282,11 @@ export default function VendorLedgerPage() {
         .ledger-row:hover { background: var(--card-hover); }
         .ledger-row:last-child { border-bottom: none; }
         .opening-row { background: var(--bg-soft); font-weight: 600; }
-        
         .ledger-row .cell-no-wrap {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
-        
         .sort-btn {
           background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
           display: inline-flex; align-items: center; gap: 4px; padding: 0;
