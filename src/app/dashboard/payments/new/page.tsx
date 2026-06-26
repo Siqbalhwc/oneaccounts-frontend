@@ -5,6 +5,38 @@ import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Search, X, CheckCircle, RefreshCw } from "lucide-react"
 
+// ── WHT math helpers ──────────────────────────────────────────────
+// A bill carries ONE flat WHT rate (set at invoice time). At payment time we
+// either (a) auto-fill the NET amount that fully settles the bill, or
+// (b) let the user type a NET amount and back-solve the gross allocation.
+//
+//   net  = gross - wht                = gross * (1 - rate/100)
+//   gross = net / (1 - rate/100)
+//   wht   = gross - net  (rounded the same way the backend rounds it)
+
+function whtFromGross(gross: number, rate: number) {
+  return Math.round(gross * (rate / 100))
+}
+
+function netFromGross(gross: number, rate: number) {
+  return gross - whtFromGross(gross, rate)
+}
+
+function grossFromNet(net: number, rate: number) {
+  if (rate <= 0) return net
+  // First pass estimate, then nudge so netFromGross(gross) reconciles exactly
+  // with what the backend will compute (avoids 1-rupee drift from rounding).
+  let gross = Math.round(net / (1 - rate / 100))
+  // Correct rounding drift: adjust gross by ±1 until net matches exactly,
+  // bounded so we never loop more than a couple of rupees either side.
+  for (let i = 0; i < 3; i++) {
+    const impliedNet = netFromGross(gross, rate)
+    if (impliedNet === net) break
+    gross += impliedNet < net ? 1 : -1
+  }
+  return gross
+}
+
 export default function NewPaymentPage() {
   const router = useRouter()
   const supabase = createBrowserClient(
@@ -29,7 +61,9 @@ export default function NewPaymentPage() {
   const [selectedExpenseAccountId, setSelectedExpenseAccountId] = useState<number | null>(null)
 
   const [bills, setBills] = useState<any[]>([])
-  const [allocations, setAllocations] = useState<Record<string, number>>({})
+  // allocations now store the NET amount the user wants to pay against each bill.
+  // Gross + WHT are always derived from this via grossFromNet().
+  const [netAllocations, setNetAllocations] = useState<Record<string, number>>({})
 
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split("T")[0])
   const [paymentAmount, setPaymentAmount] = useState<number | "">("")
@@ -82,26 +116,26 @@ export default function NewPaymentPage() {
       .then(r => r.data && setBanks(r.data.map((b: any) => ({ id: b.id, name: b.bank_name, glCode: b.accounts?.code }))))
     loadSuppliers()
     supabase.from("accounts").select("id, code, name")
-      .in("type", ["Expense","Asset"]).eq("company_id", companyId).order("code")
+      .in("type", ["Expense", "Asset"]).eq("company_id", companyId).order("code")
       .then(r => r.data && setExpenseAccounts(r.data))
   }, [companyId])
 
   useEffect(() => {
     if (!companyId || !supplierId || isDonation) {
       setBills([])
-      setAllocations(prev => {
+      setNetAllocations(prev => {
         const copy = { ...prev }
         delete copy["opening"]
         return copy
       })
       return
     }
-    // Fetch unpaid/partial bills + their WHT data
+    // Fetch unpaid/partial bills + their WHT data (rate stored at invoice time)
     supabase.from("invoices")
       .select("id, invoice_no, date, due_date, total, paid, status")
       .eq("company_id", companyId).eq("party_id", supplierId)
       .eq("type", "purchase")
-      .in("status", ["Unpaid","Partial"])
+      .in("status", ["Unpaid", "Partial"])
       .order("date")
       .then(async (r) => {
         const invs = r.data || []
@@ -120,13 +154,13 @@ export default function NewPaymentPage() {
         const enriched = invs.map(inv => ({
           ...inv,
           wht_rate: whtMap[inv.id]?.wht_rate || 0,
-          wht_amount: whtMap[inv.id]?.wht_amount || 0,
+          wht_tax_code_id: whtMap[inv.id]?.wht_tax_code_id || null,
         }))
 
         setBills(enriched)
         const initAlloc: Record<string, number> = { opening: 0 }
         enriched.forEach(inv => { initAlloc[String(inv.id)] = 0 })
-        setAllocations(prev => ({ ...initAlloc, ...prev }))
+        setNetAllocations(prev => ({ ...initAlloc, ...prev }))
       })
   }, [companyId, supplierId, isDonation])
 
@@ -160,52 +194,63 @@ export default function NewPaymentPage() {
     setSupplierSearch("")
     setShowSupplierList(true)
     setBills([])
-    setAllocations({})
+    setNetAllocations({})
     setSupplierOpeningBalance(0)
   }
 
-  const toggleBill = (invId: number, due: number) => {
-    const key = String(invId)
-    setAllocations(prev => {
+  // Checkbox click = shortcut for "fully settle this bill now" → auto-fill NET amount.
+  // Unchecking clears it back to 0.
+  const toggleBill = (bill: any) => {
+    const due = bill.total - (bill.paid || 0)
+    const key = String(bill.id)
+    setNetAllocations(prev => {
       const current = prev[key] || 0
-      const newVal = current > 0 ? 0 : due
+      const fullNet = netFromGross(due, bill.wht_rate || 0)
+      const newVal = current > 0 ? 0 : fullNet
       return { ...prev, [key]: newVal }
     })
   }
 
-  const updateAllocation = (invId: number, value: number, due: number) => {
-    const clamped = Math.min(Math.max(value, 0), due)
-    setAllocations(prev => ({ ...prev, [String(invId)]: clamped }))
+  // Manual edit of the NET field = partial (or custom) payment against this bill.
+  // We clamp in GROSS terms (can't allocate more gross than is due), then re-derive
+  // the net figure from the clamped gross so the displayed numbers always agree.
+  const updateNetAllocation = (bill: any, typedNet: number) => {
+    const due = bill.total - (bill.paid || 0)
+    const rate = bill.wht_rate || 0
+    const safeNet = Math.max(typedNet, 0)
+    let gross = grossFromNet(safeNet, rate)
+    gross = Math.min(gross, due)
+    const clampedNet = netFromGross(gross, rate)
+    setNetAllocations(prev => ({ ...prev, [String(bill.id)]: clampedNet }))
   }
 
   const toggleOpeningAllocation = () => {
-    setAllocations(prev => {
+    setNetAllocations(prev => {
       const current = prev["opening"] || 0
       const newVal = current > 0 ? 0 : supplierOpeningBalance
       return { ...prev, opening: newVal }
     })
   }
 
-  const totalAllocatedToBills = Object.entries(allocations)
-    .filter(([key]) => key !== "opening")
-    .reduce((s, [_, v]) => s + v, 0)
+  // ── Derived totals (all reconciled from netAllocations) ──────────
+  const billRows = bills.map(bill => {
+    const due = bill.total - (bill.paid || 0)
+    const rate = bill.wht_rate || 0
+    const net = netAllocations[String(bill.id)] || 0
+    const gross = net > 0 ? Math.min(grossFromNet(net, rate), due) : 0
+    const wht = whtFromGross(gross, rate)
+    const remainingGross = due - gross
+    const remainingWht = whtFromGross(remainingGross, rate)
+    const isFullySettled = gross >= due && due > 0
+    return { ...bill, due, rate, net, gross, wht, remainingGross, remainingWht, isFullySettled }
+  })
 
-  const openingAllocation = allocations["opening"] || 0
-  const totalGrossAllocated = totalAllocatedToBills + openingAllocation
+  const openingNet = netAllocations["opening"] || 0 // opening balance has no WHT
 
-  // Compute total WHT from bill allocations (gross‑based, not payment‑based)
-  const totalWhtDeducted = Object.entries(allocations)
-    .filter(([key]) => key !== "opening")
-    .reduce((sum, [billId, allocAmt]) => {
-      const bill = bills.find(b => b.id === Number(billId))
-      if (bill && bill.wht_amount > 0 && bill.total > 0) {
-        const proportion = allocAmt / bill.total
-        sum += Math.round(bill.wht_amount * proportion)
-      }
-      return sum
-    }, 0)
+  const totalGrossAllocated = billRows.reduce((s, b) => s + b.gross, 0) + openingNet
+  const totalWhtDeducted = billRows.reduce((s, b) => s + b.wht, 0)
+  const totalNetAllocated = billRows.reduce((s, b) => s + b.net, 0) + openingNet
 
-  const totalNetAllocated = totalGrossAllocated - totalWhtDeducted
   const totalAmount = Number(paymentAmount || 0)
   const difference = totalAmount - totalNetAllocated
 
@@ -230,18 +275,21 @@ export default function NewPaymentPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           party_id: supplierId,
-          amount: totalAmount, // net amount paid
+          amount: totalAmount, // net amount paid from bank
           payment_method: "Bank Transfer",
           bank_account_id: selectedBankId,
           expense_account_id: isDonation ? selectedExpenseAccountId : null,
           date: paymentDate,
           reference,
           notes,
-          allocations: Object.entries(allocations)
-            .filter(([key, allocAmt]) => key !== "opening" && allocAmt > 0)
-            .map(([billId, allocAmt]) => ({
-              bill_id: parseInt(billId),
-              amount: allocAmt, // gross allocation
+          // Send GROSS allocation per bill — the backend computes WHT itself
+          // from bill_withholding, proportional to gross/total. Our gross here
+          // is already back-solved so it reconciles with the net figure shown.
+          allocations: billRows
+            .filter(b => b.gross > 0)
+            .map(b => ({
+              bill_id: b.id,
+              amount: b.gross,
             })),
         }),
       })
@@ -255,7 +303,7 @@ export default function NewPaymentPage() {
       setFlash(`✅ Payment ${result.payment_no} saved!`)
       setSupplierId(null); setSelectedSupplier(null); setSupplierSearch("")
       setSelectedBankId(null); setSelectedExpenseAccountId(null); setIsDonation(false)
-      setBills([]); setAllocations({}); setPaymentAmount(""); setNotes(""); setReference("")
+      setBills([]); setNetAllocations({}); setPaymentAmount(""); setNotes(""); setReference("")
       setSupplierOpeningBalance(0)
       setLoading(false)
       setTimeout(() => loadSuppliers(), 500)
@@ -330,11 +378,14 @@ export default function NewPaymentPage() {
           }
         }
         .chk-box { width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary); }
-        .alloc-input { width: 80px; height: 28px; border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; text-align: right; background: var(--bg); color: var(--text); }
+        .alloc-input { width: 96px; height: 28px; border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; text-align: right; background: var(--bg); color: var(--text); }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
         th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
         td { padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
         .hint-text { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        .badge-full { font-size: 10px; font-weight: 700; color: #10B981; background: rgba(16,185,129,0.12); padding: 2px 6px; border-radius: 4px; }
+        .badge-partial { font-size: 10px; font-weight: 700; color: #F59E0B; background: rgba(245,158,11,0.12); padding: 2px 6px; border-radius: 4px; }
+        .derived-cell { font-size: 11px; color: var(--text-muted); }
       `}</style>
 
       <div className="pay-shell">
@@ -443,18 +494,22 @@ export default function NewPaymentPage() {
 
             {supplierId && !isDonation && (
               <div className="pay-card">
-                <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 12px 0" }}>Allocate to Bills & Opening</h3>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 4px 0" }}>Allocate to Bills & Opening</h3>
+                <div className="hint-text" style={{ marginBottom: 10 }}>
+                  Tick a bill to auto-fill the net amount that fully settles it, or type a net amount yourself for a partial payment — gross and WHT are calculated automatically.
+                </div>
                 <div style={{ overflowX: "auto" }}>
                   <table>
                     <thead>
                       <tr>
                         <th style={{ width: 30 }}></th>
-                        <th>Description</th>
-                        <th>Gross</th>
-                        <th>Paid</th>
-                        <th>Due</th>
-                        <th>WHT</th>
-                        <th style={{ textAlign: "right" }}>Allocate</th>
+                        <th>Bill</th>
+                        <th>Gross Due</th>
+                        <th>WHT Rate</th>
+                        <th style={{ textAlign: "right" }}>Net to Pay</th>
+                        <th style={{ textAlign: "right" }}>Gross / WHT Applied</th>
+                        <th style={{ textAlign: "right" }}>Balance After</th>
+                        <th></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -462,62 +517,77 @@ export default function NewPaymentPage() {
                         <tr style={{ background: "var(--bg-soft)" }}>
                           <td>
                             <input className="chk-box" type="checkbox"
-                              checked={(allocations["opening"] || 0) > 0}
+                              checked={openingNet > 0}
                               onChange={toggleOpeningAllocation}
                             />
                           </td>
-                          <td colSpan={6}>
+                          <td colSpan={3}>
                             <span style={{ fontWeight: 600 }}>Opening Balance</span>
                             <span style={{ marginLeft: 8, fontSize: 12, color: "var(--text-muted)" }}>
-                              (PKR {supplierOpeningBalance.toLocaleString()})
+                              (no WHT applies)
                             </span>
                           </td>
                           <td style={{ textAlign: "right", fontWeight: 600 }}>
                             PKR {supplierOpeningBalance.toLocaleString()}
                           </td>
+                          <td style={{ textAlign: "right" }} className="derived-cell">—</td>
+                          <td style={{ textAlign: "right" }} className="derived-cell">
+                            PKR {(supplierOpeningBalance - openingNet).toLocaleString()}
+                          </td>
+                          <td></td>
                         </tr>
                       )}
-                      {bills.map(bill => {
-                        const due = bill.total - (bill.paid || 0)
-                        const alloc = allocations[String(bill.id)] || 0
-                        const checked = alloc > 0
-                        const whtRate = bill.wht_rate || 0
-                        const whtAmt = bill.wht_amount || 0
-                        const netDue = due - whtAmt
-                        return (
-                          <tr key={bill.id}>
-                            <td><input className="chk-box" type="checkbox" checked={checked} onChange={() => toggleBill(bill.id, due)} /></td>
-                            <td>{bill.invoice_no}</td>
-                            <td>{bill.total.toLocaleString()}</td>
-                            <td>{(bill.paid || 0).toLocaleString()}</td>
-                            <td style={{ fontWeight: 600 }}>{due.toLocaleString()}</td>
-                            <td>{whtRate > 0 ? `${whtRate}% (${whtAmt.toLocaleString()})` : "—"}</td>
-                            <td style={{ textAlign: "right" }}>
-                              <input className="alloc-input" type="number" min="0" max={due} value={alloc} onChange={e => updateAllocation(bill.id, parseFloat(e.target.value) || 0, due)} />
-                            </td>
-                          </tr>
-                        )
-                      })}
+                      {billRows.map(bill => (
+                        <tr key={bill.id}>
+                          <td><input className="chk-box" type="checkbox" checked={bill.gross > 0} onChange={() => toggleBill(bill)} /></td>
+                          <td>{bill.invoice_no}</td>
+                          <td style={{ fontWeight: 600 }}>{bill.due.toLocaleString()}</td>
+                          <td>{bill.rate > 0 ? `${bill.rate}%` : "—"}</td>
+                          <td style={{ textAlign: "right" }}>
+                            <input
+                              className="alloc-input"
+                              type="number"
+                              min="0"
+                              value={bill.net}
+                              onChange={e => updateNetAllocation(bill, parseFloat(e.target.value) || 0)}
+                            />
+                          </td>
+                          <td style={{ textAlign: "right" }} className="derived-cell">
+                            {bill.gross.toLocaleString()} / {bill.wht.toLocaleString()}
+                          </td>
+                          <td style={{ textAlign: "right" }} className="derived-cell">
+                            {bill.remainingGross.toLocaleString()}
+                            {bill.rate > 0 ? ` (WHT ${bill.remainingWht.toLocaleString()})` : ""}
+                          </td>
+                          <td>
+                            {bill.gross > 0 && (
+                              bill.isFullySettled
+                                ? <span className="badge-full">Full</span>
+                                : <span className="badge-partial">Partial</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
                       <tr style={{ borderTop: "2px solid var(--border)", fontWeight: 700 }}>
-                        <td colSpan={6} style={{ textAlign: "right" }}>Allocated (Gross)</td>
-                        <td style={{ textAlign: "right" }}>PKR {totalGrossAllocated.toLocaleString()}</td>
+                        <td colSpan={5} style={{ textAlign: "right" }}>Allocated (Gross)</td>
+                        <td colSpan={3} style={{ textAlign: "right" }}>PKR {totalGrossAllocated.toLocaleString()}</td>
                       </tr>
                       {totalWhtDeducted > 0 && (
                         <tr style={{ color: "var(--text-muted)" }}>
-                          <td colSpan={6} style={{ textAlign: "right" }}>WHT Deducted</td>
-                          <td style={{ textAlign: "right" }}>PKR {totalWhtDeducted.toLocaleString()}</td>
+                          <td colSpan={5} style={{ textAlign: "right" }}>WHT → Withholding Tax Payable</td>
+                          <td colSpan={3} style={{ textAlign: "right" }}>PKR {totalWhtDeducted.toLocaleString()}</td>
                         </tr>
                       )}
                       <tr style={{ fontWeight: 600 }}>
-                        <td colSpan={6} style={{ textAlign: "right" }}>Net Payment</td>
-                        <td style={{ textAlign: "right", color: "#10B981" }}>PKR {totalNetAllocated.toLocaleString()}</td>
+                        <td colSpan={5} style={{ textAlign: "right" }}>Net Payment from Bank</td>
+                        <td colSpan={3} style={{ textAlign: "right", color: "#10B981" }}>PKR {totalNetAllocated.toLocaleString()}</td>
                       </tr>
                       {totalAmount > 0 && Math.abs(difference) > 0.5 && (
                         <tr style={{ fontSize: 12, color: "#EF4444" }}>
-                          <td colSpan={6} style={{ textAlign: "right", paddingTop: 4 }}>
+                          <td colSpan={5} style={{ textAlign: "right", paddingTop: 4 }}>
                             ⚠️ Payment amount {difference > 0 ? `exceeds net payable by` : `is short by`} PKR {Math.abs(difference).toLocaleString()}
                           </td>
-                          <td style={{ textAlign: "right", paddingTop: 4, fontWeight: 600 }}>
+                          <td colSpan={3} style={{ textAlign: "right", paddingTop: 4, fontWeight: 600 }}>
                             {difference > 0 ? `Overpaid` : `Underpaid`}
                           </td>
                         </tr>
@@ -543,15 +613,15 @@ export default function NewPaymentPage() {
               {!isDonation && (
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginTop: 4 }}>
-                    <span>Allocated (Gross)</span><span>PKR {totalGrossAllocated.toLocaleString()}</span>
+                    <span>Bills/Opening Settled (Gross)</span><span>PKR {totalGrossAllocated.toLocaleString()}</span>
                   </div>
                   {totalWhtDeducted > 0 && (
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--text-muted)" }}>
-                      <span>WHT Deducted</span><span>PKR {totalWhtDeducted.toLocaleString()}</span>
+                      <span>→ WHT to Tax Payable</span><span>PKR {totalWhtDeducted.toLocaleString()}</span>
                     </div>
                   )}
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 600 }}>
-                    <span>Net to Pay</span><span>PKR {totalNetAllocated.toLocaleString()}</span>
+                    <span>→ Net from Bank</span><span>PKR {totalNetAllocated.toLocaleString()}</span>
                   </div>
                   {totalAmount > 0 && Math.abs(difference) > 0.5 && (
                     <div style={{ fontSize: 12, color: "#EF4444", marginTop: 4 }}>
