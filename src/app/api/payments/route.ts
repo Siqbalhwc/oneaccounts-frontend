@@ -104,10 +104,12 @@ async function reversePayment(supabase: any, paymentId: number, paymentNo: strin
   // 3. Reverse supplier balance
   const { data: payment } = await supabase
     .from("payments")
-    .select("party_id, amount")
+    .select("party_id, amount, gross_amount")
     .eq("id", paymentId)
     .single()
   if (payment?.party_id) {
+    // Use gross_amount if available, otherwise fallback to amount
+    const gross = payment.gross_amount ?? payment.amount
     const { data: supp } = await supabase
       .from("suppliers")
       .select("balance")
@@ -116,7 +118,7 @@ async function reversePayment(supabase: any, paymentId: number, paymentNo: strin
       .single()
     if (supp) {
       await supabase.from("suppliers")
-        .update({ balance: (supp.balance || 0) + payment.amount })
+        .update({ balance: (supp.balance || 0) + gross })
         .eq("id", payment.party_id)
         .eq("company_id", companyId)
     }
@@ -187,6 +189,7 @@ export async function POST(request: NextRequest) {
       notes,
       created_by: user?.email || null,
       updated_by: user?.email || null,
+      gross_amount: 0,               // placeholder – will update after allocations
     }).select('*').single()
 
     if (!result.error) {
@@ -275,9 +278,7 @@ export async function POST(request: NextRequest) {
             const whtToDeduct = Math.round(wht.wht_amount * proportion)
             totalWhtDeducted += whtToDeduct
 
-            // We'll deduct WHT from bank credit later
             // Store the wht info for journal construction
-            // We'll push a virtual allocation for journal creation
             if (!payment._whtLines) payment._whtLines = []
             payment._whtLines.push({
               account_id: whtAccountId,
@@ -289,16 +290,17 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // ── Update supplier balance (reduce by the net amount actually paid) ──
+  // ✅ Update the payment record with the real gross amount (total AP reduction)
+  const grossAmount = totalGrossAllocated > 0 ? totalGrossAllocated : amount;
+  await supabase.from("payments").update({ gross_amount: grossAmount }).eq("id", payment.id);
+
+  // ── Update supplier balance (reduce by the gross AP reduction) ──
   if (targetPartyId) {
     const { data: supp } = await supabase.from('suppliers')
       .select('balance').eq('id', targetPartyId).eq('company_id', companyId).single()
     if (supp) {
-      // Reduce balance by the full gross allocated (AP reduction)
-      // Actually, the supplier balance should decrease by the gross allocated amount (the amount cleared from AP).
-      // The payment amount is the net cash outflow; the supplier balance tracks total outstanding, so it should decrease by the gross allocated.
       await supabase.from('suppliers')
-        .update({ balance: (supp.balance || 0) - totalGrossAllocated })
+        .update({ balance: (supp.balance || 0) - grossAmount })
         .eq('id', targetPartyId).eq('company_id', companyId)
     }
   }
@@ -334,10 +336,10 @@ export async function POST(request: NextRequest) {
     if (!apAcc) return NextResponse.json({ error: 'Accounts Payable (2000) not found' }, { status: 500 })
 
     // Debit AP for the total gross allocated
-    jeLines.push({ account_id: apAcc.id, debit: totalGrossAllocated, credit: 0 })
+    jeLines.push({ account_id: apAcc.id, debit: grossAmount, credit: 0 })
 
-    // Credit bank for net amount (totalGrossAllocated - totalWhtDeducted)
-    const bankCredit = totalGrossAllocated - totalWhtDeducted
+    // Credit bank for net amount (grossAmount - totalWhtDeducted)
+    const bankCredit = grossAmount - totalWhtDeducted
     jeLines.push({ account_id: bankGlAccountId, debit: 0, credit: bankCredit })
 
     // Credit WHT payable for each WHT portion
@@ -397,11 +399,8 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ success: true, payment_no: payNo, payment })
 }
 
-// ── PUT (Update) and DELETE remain the same as before, they already use reversePayment which works without WHT specifics. ──
-// (Existing PUT and DELETE code unchanged)
+// ── PUT (Update) ─────────────────────────────────────────────────────
 export async function PUT(request: NextRequest) {
-  // ... same as original code (I'll keep it for brevity, no change needed)
-  // Since PUT reverses and recreates, the new POST logic will be applied when re-inserting allocations.
   const cookieStore = await cookies()
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -549,12 +548,16 @@ export async function PUT(request: NextRequest) {
     }
   }
 
+  // Update gross_amount on the payment record
+  const grossAmount = totalGrossAllocated > 0 ? totalGrossAllocated : amount;
+  await supabase.from("payments").update({ gross_amount: grossAmount }).eq("id", id);
+
   if (targetPartyId) {
     const { data: supp } = await supabase.from('suppliers')
       .select('balance').eq('id', targetPartyId).eq('company_id', companyId).single()
     if (supp) {
       await supabase.from('suppliers')
-        .update({ balance: (supp.balance || 0) - totalGrossAllocated })
+        .update({ balance: (supp.balance || 0) - grossAmount })
         .eq('id', targetPartyId).eq('company_id', companyId)
     }
   }
@@ -585,8 +588,8 @@ export async function PUT(request: NextRequest) {
   } else {
     const apAcc = await getAccount(supabase, '2000', companyId)
     if (!apAcc) return NextResponse.json({ error: 'Accounts Payable (2000) not found' }, { status: 500 })
-    jeLines.push({ account_id: apAcc.id, debit: totalGrossAllocated, credit: 0 })
-    const bankCredit = totalGrossAllocated - totalWhtDeducted
+    jeLines.push({ account_id: apAcc.id, debit: grossAmount, credit: 0 })
+    const bankCredit = grossAmount - totalWhtDeducted
     jeLines.push({ account_id: bankGlAccountId, debit: 0, credit: bankCredit })
     if (updatedPayment._whtLines) {
       for (const whtLine of updatedPayment._whtLines) {
@@ -632,8 +635,8 @@ export async function PUT(request: NextRequest) {
   return NextResponse.json({ success: true, payment: updatedPayment })
 }
 
+// ═══════════════════ DELETE – Delete Payment ═══════════════════
 export async function DELETE(request: NextRequest) {
-  // unchanged
   const cookieStore = await cookies()
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
