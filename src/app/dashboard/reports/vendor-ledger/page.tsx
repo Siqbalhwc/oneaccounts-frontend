@@ -142,12 +142,13 @@ export default function VendorLedgerPage() {
       }
       periodLines.sort((a, b) => a.date.localeCompare(b.date))
 
-      // 5. Fallback opening
+      // 5. Fallback opening – CORRECTED FORMULA
       if (!openingLine) {
         const periodDebits = periodLines.reduce((s: number, l: any) => s + l.debit, 0)
         const periodCredits = periodLines.reduce((s: number, l: any) => s + l.credit, 0)
         const currentBalance = Number(supplier.balance || 0)
-        const openingBalance = currentBalance - periodDebits + periodCredits
+        // For vendor: credits (bills) increase AP, debits (payments) decrease AP
+        const openingBalance = currentBalance + periodDebits - periodCredits
         openingLine = {
           id: "opening-calc",
           entry_no: "",
@@ -250,7 +251,7 @@ export default function VendorLedgerPage() {
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
         
-        /* FIX: Updated grid columns to match Customer Ledger (130px for Entry #) */
+        /* Grid columns for ledger header and rows */
         .ledger-header {
           display: grid;
           grid-template-columns: 90px 130px 1fr 110px 110px 130px;
@@ -277,7 +278,6 @@ export default function VendorLedgerPage() {
         .ledger-row:last-child { border-bottom: none; }
         .opening-row { background: var(--bg-soft); font-weight: 600; }
         
-        /* FIX: No wrap text with ellipsis on all data cells */
         .ledger-row .cell-no-wrap {
           white-space: nowrap;
           overflow: hidden;
@@ -389,7 +389,6 @@ export default function VendorLedgerPage() {
             </div>
           ) : (
             <div className="ledger-card">
-              {/* FIX: Updated header with proper column widths and sort buttons */}
               <div className="ledger-header">
                 <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
                 <button className="sort-btn" onClick={() => handleSort("entry_no")}>Entry # {getSortIcon("entry_no")}</button>
