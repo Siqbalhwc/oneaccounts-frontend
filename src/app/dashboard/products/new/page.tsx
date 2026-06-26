@@ -224,7 +224,7 @@ export default function ProductFormPage() {
 
       <form onSubmit={handleSubmit}>
         <div className="header-grid">
-          {/* Left: Form fields */}
+          {/* Left: Form fields (no button) */}
           <div className="card">
             <div style={{ marginBottom: 16 }}>
               <label className="label">Product Code</label>
@@ -269,13 +269,9 @@ export default function ProductFormPage() {
                 )}
               </div>
             </div>
-
-            <button className="btn btn-submit" type="submit" disabled={loading} style={{ marginTop: 16 }}>
-              {loading ? "Saving..." : editId ? <><Save size={16} /> Update Product</> : <><Plus size={16} /> Create Product</>}
-            </button>
           </div>
 
-          {/* Right: Summary – will jump above form on mobile */}
+          {/* Right: Summary card and Save button card stacked */}
           <div className="summary-side" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="card">
               <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
@@ -287,6 +283,11 @@ export default function ProductFormPage() {
                 <span>Total Cost</span>
                 <span style={{ color: "#F59E0B" }}>PKR {totalCost.toLocaleString()}</span>
               </div>
+            </div>
+            <div className="card" style={{ padding: "16px" }}>
+              <button className="btn btn-submit" type="submit" disabled={loading}>
+                {loading ? "Saving..." : editId ? <><Save size={16} /> Update Product</> : <><Plus size={16} /> Create Product</>}
+              </button>
             </div>
           </div>
         </div>

@@ -183,7 +183,6 @@ export default function StockRegisterPage() {
   const totalStockValue = products.reduce((sum, p) => sum + (p.qty_on_hand * (p.cost_price || 0)), 0)
   const totalProducts = total
 
-  // ── Styles ──
   const thStyle: React.CSSProperties = {
     padding: "12px 16px",
     background: "var(--card-hover)",
@@ -314,42 +313,77 @@ export default function StockRegisterPage() {
         .table-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
         .stock-table { min-width: 1200px; }
 
-        /* ── Header actions row – filter left, button right ── */
-        .header-actions {
+        /* ── DESKTOP HEADER ── */
+        .header-row {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          width: 100%;
+          margin-bottom: 20px;
+          flex-wrap: wrap;
+          gap: 12px;
+        }
+        .header-row .title-area {
+          flex: 1;
+        }
+
+        /* search + category row */
+        .filter-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
           gap: 12px;
           margin-bottom: 16px;
         }
-        .header-actions .left-group {
+        .filter-row .search-group {
+          flex: 1;
+          max-width: 320px;
+          position: relative;
+        }
+        .filter-row .filter-group {
           display: flex;
           align-items: center;
           gap: 8px;
         }
 
+        /* ── MOBILE ── */
         @media (max-width: 640px) {
           .page-wrap { padding: 12px !important; }
           .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
-          .header-actions {
-            flex-wrap: wrap;
-            gap: 8px;
+          .header-row {
+            flex-direction: column;
+            align-items: stretch;
           }
-          .header-actions .left-group {
-            flex: 1;
-            justify-content: flex-start;
+          .header-row .title-area {
+            margin-bottom: 8px;
+          }
+          .filter-row {
+            flex-direction: column;
+            align-items: stretch;
+          }
+          .filter-row .search-group {
+            max-width: 100%;
+          }
+          .filter-row .filter-group {
+            width: 100%;
+            justify-content: flex-end;
           }
         }
       `}</style>
 
-      {/* Title */}
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📦 Stock Register</h1>
-        <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Manage inventory, view opening / inflow / outflow / closing</p>
+      {/* Header: title left, Add Product right */}
+      <div className="header-row">
+        <div className="title-area">
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📦 Stock Register</h1>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Manage inventory, view opening / inflow / outflow / closing</p>
+        </div>
+        {canEdit && (
+          <button className="btn" onClick={() => router.push("/dashboard/products/new")}>
+            <Plus size={16} /> Add Product
+          </button>
+        )}
       </div>
 
-      {/* Summary cards with PKR superscript fix */}
+      {/* Summary cards */}
       <div className="summary-grid">
         <div className="summary-item"><div className="summary-label">Total Products</div><div className="summary-value">{totalProducts}</div></div>
         <div className="summary-item">
@@ -366,9 +400,13 @@ export default function StockRegisterPage() {
         </div>
       )}
 
-      {/* Filter + Add Product row – filter left, button right */}
-      <div className="header-actions">
-        <div className="left-group">
+      {/* Search + Category filter row: search left, category right */}
+      <div className="filter-row">
+        <div className="search-group">
+          <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+          <input className="search-input" placeholder="Search by name or code..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} style={{ width: "100%" }} />
+        </div>
+        <div className="filter-group">
           <select className="filter-select" value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); setPage(1) }} style={{ minWidth: 160 }}>
             <option value="">All Categories</option>
             {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
@@ -379,17 +417,6 @@ export default function StockRegisterPage() {
             </button>
           )}
         </div>
-        {canEdit && (
-          <button className="btn" onClick={() => router.push("/dashboard/products/new")}>
-            <Plus size={16} /> Add Product
-          </button>
-        )}
-      </div>
-
-      {/* Search */}
-      <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
-        <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-        <input className="search-input" placeholder="Search by name or code..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} style={{ width: "100%" }} />
       </div>
 
       {/* Table */}
