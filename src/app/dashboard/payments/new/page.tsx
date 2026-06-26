@@ -193,7 +193,7 @@ export default function NewPaymentPage() {
   const openingAllocation = allocations["opening"] || 0
   const totalGrossAllocated = totalAllocatedToBills + openingAllocation
 
-  // Compute total WHT from bill allocations
+  // Compute total WHT from bill allocations (gross‑based, not payment‑based)
   const totalWhtDeducted = Object.entries(allocations)
     .filter(([key]) => key !== "opening")
     .reduce((sum, [billId, allocAmt]) => {
@@ -334,6 +334,7 @@ export default function NewPaymentPage() {
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
         th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
         td { padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        .hint-text { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
       `}</style>
 
       <div className="pay-shell">
@@ -423,7 +424,15 @@ export default function NewPaymentPage() {
               </div>
 
               <div className="pay-row" style={{ marginTop: 10 }}>
-                <div><label className="pay-label">Amount *</label><input className="pay-input" type="number" min="0" step="100" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value ? Number(e.target.value) : "")} placeholder="0" /></div>
+                <div>
+                  <label className="pay-label">Amount *</label>
+                  <input className="pay-input" type="number" min="0" step="100" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value ? Number(e.target.value) : "")} placeholder="0" />
+                  {!isDonation && totalNetAllocated > 0 && (
+                    <div className="hint-text">
+                      Net payable after WHT: <strong>PKR {totalNetAllocated.toLocaleString()}</strong>
+                    </div>
+                  )}
+                </div>
                 <div><label className="pay-label">Date</label><input className="pay-input" type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} /></div>
               </div>
               <div className="pay-row" style={{ marginTop: 10 }}>
@@ -529,7 +538,7 @@ export default function NewPaymentPage() {
             <div className="pay-card">
               <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
-                <span>Amount</span><span>PKR {totalAmount.toLocaleString()}</span>
+                <span>Payment Entered</span><span>PKR {totalAmount.toLocaleString()}</span>
               </div>
               {!isDonation && (
                 <>
@@ -542,7 +551,7 @@ export default function NewPaymentPage() {
                     </div>
                   )}
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 600 }}>
-                    <span>Net Payable</span><span>PKR {totalNetAllocated.toLocaleString()}</span>
+                    <span>Net to Pay</span><span>PKR {totalNetAllocated.toLocaleString()}</span>
                   </div>
                   {totalAmount > 0 && Math.abs(difference) > 0.5 && (
                     <div style={{ fontSize: 12, color: "#EF4444", marginTop: 4 }}>
