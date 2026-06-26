@@ -80,15 +80,15 @@ async function recordStockMoves(
   }
 }
 
-// ── Create the journal entry for a purchase bill (with optional tax and WHT) ──
+// ── Create the journal entry for a purchase bill (NO WHT at creation) ──
 async function createBillJournalEntry(
   supabase: any,
   bill: any,
   items: any[],
   companyId: string,
   businessType: string,
-  whtAmount: number = 0,
-  whtAccountId?: number | null
+  whtAmount: number = 0,         // ignored – kept for backward compatibility
+  whtAccountId?: number | null    // ignored
 ) {
   const debitLines: any[] = []
   let totalNetAmount = 0
@@ -178,39 +178,18 @@ async function createBillJournalEntry(
   }
 
   const payableAccount = await getPayableAccount(supabase, companyId)
-  const grossPayable = totalNetAmount + totalTaxAmount   // before WHT
+  const grossPayable = totalNetAmount + totalTaxAmount   // full gross
 
-  // Credit AP for (gross - WHT) and credit WHT if applicable
-  if (whtAmount > 0 && whtAccountId) {
-    debitLines.push({
-      account_id: whtAccountId,
-      debit: 0,
-      credit: whtAmount,
-      location_id: null,
-      activity_id: null,
-      project_id: null,
-      donor_id: null,
-    })
-    debitLines.push({
-      account_id: payableAccount.id,
-      debit: 0,
-      credit: grossPayable - whtAmount,
-      location_id: null,
-      activity_id: null,
-      project_id: null,
-      donor_id: null,
-    })
-  } else {
-    debitLines.push({
-      account_id: payableAccount.id,
-      debit: 0,
-      credit: grossPayable,
-      location_id: null,
-      activity_id: null,
-      project_id: null,
-      donor_id: null,
-    })
-  }
+  // Credit AP for the full gross amount – no WHT deduction at bill creation
+  debitLines.push({
+    account_id: payableAccount.id,
+    debit: 0,
+    credit: grossPayable,
+    location_id: null,
+    activity_id: null,
+    project_id: null,
+    donor_id: null,
+  })
 
   const { data: entry, error: entryErr } = await supabase.from('journal_entries').insert({
     company_id: companyId,
@@ -521,8 +500,8 @@ export async function POST(request: NextRequest) {
       enhancedItems,
       companyId,
       businessType,
-      actualWhtAmount,
-      whtAccountId
+      actualWhtAmount,    // passed but ignored inside the function
+      whtAccountId        // passed but ignored
     )
   } catch (e: any) {
     await supabase.from('invoice_items').delete().eq('invoice_id', bill.id)
@@ -801,8 +780,8 @@ export async function PUT(request: NextRequest) {
       enhancedItems,
       companyId,
       businessType,
-      actualWhtAmount,
-      whtAccountId
+      actualWhtAmount,    // ignored
+      whtAccountId        // ignored
     )
   } catch (e: any) {
     return NextResponse.json({ error: 'Journal entry failed after update: ' + e.message }, { status: 500 })

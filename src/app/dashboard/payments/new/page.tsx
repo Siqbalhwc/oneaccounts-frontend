@@ -96,17 +96,38 @@ export default function NewPaymentPage() {
       })
       return
     }
+    // Fetch unpaid/partial bills + their WHT data
     supabase.from("invoices")
-      .select("id, invoice_no, date, due_date, total, paid")
+      .select("id, invoice_no, date, due_date, total, paid, status")
       .eq("company_id", companyId).eq("party_id", supplierId)
       .eq("type", "purchase")
       .in("status", ["Unpaid","Partial"])
       .order("date")
-      .then(r => {
+      .then(async (r) => {
         const invs = r.data || []
-        setBills(invs)
+        // Fetch WHT records for all these bills
+        const billIds = invs.map(b => b.id)
+        const { data: whtData } = await supabase
+          .from("bill_withholding")
+          .select("bill_id, wht_tax_code_id, wht_rate, wht_amount")
+          .in("bill_id", billIds)
+          .eq("company_id", companyId)
+
+        const whtMap: Record<number, any> = {}
+        if (whtData) {
+          whtData.forEach((w: any) => { whtMap[w.bill_id] = w })
+        }
+
+        // Enrich bills with WHT info
+        const enriched = invs.map(inv => ({
+          ...inv,
+          wht_rate: whtMap[inv.id]?.wht_rate || 0,
+          wht_amount: whtMap[inv.id]?.wht_amount || 0,
+        }))
+
+        setBills(enriched)
         const initAlloc: Record<string, number> = { opening: 0 }
-        invs.forEach(inv => { initAlloc[String(inv.id)] = 0 })
+        enriched.forEach(inv => { initAlloc[String(inv.id)] = 0 })
         setAllocations(prev => ({ ...initAlloc, ...prev }))
       })
   }, [companyId, supplierId, isDonation])
@@ -172,9 +193,23 @@ export default function NewPaymentPage() {
     .reduce((s, [_, v]) => s + v, 0)
 
   const openingAllocation = allocations["opening"] || 0
-  const totalAllocated = totalAllocatedToBills + openingAllocation
+  const totalGrossAllocated = totalAllocatedToBills + openingAllocation
+
+  // Compute total WHT from bill allocations
+  const totalWhtDeducted = Object.entries(allocations)
+    .filter(([key]) => key !== "opening")
+    .reduce((sum, [billId, allocAmt]) => {
+      const bill = bills.find(b => b.id === Number(billId))
+      if (bill && bill.wht_amount > 0 && bill.total > 0) {
+        const proportion = allocAmt / bill.total
+        sum += Math.round(bill.wht_amount * proportion)
+      }
+      return sum
+    }, 0)
+
+  const totalNetAllocated = totalGrossAllocated - totalWhtDeducted
   const totalAmount = Number(paymentAmount || 0)
-  const unallocated = totalAmount - totalAllocated
+  const unallocated = totalAmount - totalNetAllocated
 
   const handleSubmit = async () => {
     if (!companyId) { setError("Company not loaded"); return }
@@ -197,7 +232,7 @@ export default function NewPaymentPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           party_id: supplierId,
-          amount: totalAmount,
+          amount: totalAmount, // net amount paid
           payment_method: "Bank Transfer",
           bank_account_id: selectedBankId,
           expense_account_id: isDonation ? selectedExpenseAccountId : null,
@@ -207,7 +242,8 @@ export default function NewPaymentPage() {
           allocations: Object.entries(allocations)
             .filter(([key, allocAmt]) => key !== "opening" && allocAmt > 0)
             .map(([billId, allocAmt]) => ({
-              bill_id: parseInt(billId), amount: allocAmt
+              bill_id: parseInt(billId),
+              amount: allocAmt, // gross allocation
             })),
         }),
       })
@@ -407,9 +443,10 @@ export default function NewPaymentPage() {
                       <tr>
                         <th style={{ width: 30 }}></th>
                         <th>Description</th>
-                        <th>Total</th>
+                        <th>Gross</th>
                         <th>Paid</th>
                         <th>Due</th>
+                        <th>WHT</th>
                         <th style={{ textAlign: "right" }}>Allocate</th>
                       </tr>
                     </thead>
@@ -422,7 +459,7 @@ export default function NewPaymentPage() {
                               onChange={toggleOpeningAllocation}
                             />
                           </td>
-                          <td colSpan={4}>
+                          <td colSpan={6}>
                             <span style={{ fontWeight: 600 }}>Opening Balance</span>
                             <span style={{ marginLeft: 8, fontSize: 12, color: "var(--text-muted)" }}>
                               (PKR {supplierOpeningBalance.toLocaleString()})
@@ -437,6 +474,9 @@ export default function NewPaymentPage() {
                         const due = bill.total - (bill.paid || 0)
                         const alloc = allocations[String(bill.id)] || 0
                         const checked = alloc > 0
+                        const whtRate = bill.wht_rate || 0
+                        const whtAmt = bill.wht_amount || 0
+                        const netDue = due - whtAmt
                         return (
                           <tr key={bill.id}>
                             <td><input className="chk-box" type="checkbox" checked={checked} onChange={() => toggleBill(bill.id, due)} /></td>
@@ -444,6 +484,7 @@ export default function NewPaymentPage() {
                             <td>{bill.total.toLocaleString()}</td>
                             <td>{(bill.paid || 0).toLocaleString()}</td>
                             <td style={{ fontWeight: 600 }}>{due.toLocaleString()}</td>
+                            <td>{whtRate > 0 ? `${whtRate}% (${whtAmt.toLocaleString()})` : "—"}</td>
                             <td style={{ textAlign: "right" }}>
                               <input className="alloc-input" type="number" min="0" max={due} value={alloc} onChange={e => updateAllocation(bill.id, parseFloat(e.target.value) || 0, due)} />
                             </td>
@@ -451,20 +492,23 @@ export default function NewPaymentPage() {
                         )
                       })}
                       <tr style={{ borderTop: "2px solid var(--border)", fontWeight: 700 }}>
-                        <td colSpan={5} style={{ textAlign: "right" }}>Allocated</td>
-                        <td style={{ textAlign: "right" }}>PKR {totalAllocated.toLocaleString()}</td>
+                        <td colSpan={6} style={{ textAlign: "right" }}>Allocated (Gross)</td>
+                        <td style={{ textAlign: "right" }}>PKR {totalGrossAllocated.toLocaleString()}</td>
                       </tr>
-                      {unallocated > 0 && (
-                        <tr style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                          <td colSpan={6} style={{ textAlign: "right", paddingTop: 4 }}>
-                            Unallocated: PKR {unallocated.toLocaleString()}
-                          </td>
+                      {totalWhtDeducted > 0 && (
+                        <tr style={{ color: "var(--text-muted)" }}>
+                          <td colSpan={6} style={{ textAlign: "right" }}>WHT Deducted</td>
+                          <td style={{ textAlign: "right" }}>PKR {totalWhtDeducted.toLocaleString()}</td>
                         </tr>
                       )}
-                      {totalAmount > 0 && unallocated === 0 && (
-                        <tr style={{ fontSize: 12, color: "#10B981" }}>
-                          <td colSpan={6} style={{ textAlign: "right", paddingTop: 4 }}>
-                            ✅ Fully allocated
+                      <tr style={{ fontWeight: 600 }}>
+                        <td colSpan={6} style={{ textAlign: "right" }}>Net Payment</td>
+                        <td style={{ textAlign: "right", color: "#10B981" }}>PKR {totalNetAllocated.toLocaleString()}</td>
+                      </tr>
+                      {totalAmount > 0 && Math.abs(totalAmount - totalNetAllocated) > 0.5 && (
+                        <tr style={{ fontSize: 12, color: "#EF4444" }}>
+                          <td colSpan={7} style={{ textAlign: "right", paddingTop: 4 }}>
+                            ⚠️ Payment amount doesn't match net payable
                           </td>
                         </tr>
                       )}
@@ -489,10 +533,15 @@ export default function NewPaymentPage() {
               {!isDonation && (
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginTop: 4 }}>
-                    <span>Allocated</span><span>PKR {totalAllocated.toLocaleString()}</span>
+                    <span>Allocated (Gross)</span><span>PKR {totalGrossAllocated.toLocaleString()}</span>
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: unallocated > 0 ? "#EF4444" : "var(--text-muted)" }}>
-                    <span>Unallocated</span><span>PKR {unallocated.toLocaleString()}</span>
+                  {totalWhtDeducted > 0 && (
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--text-muted)" }}>
+                      <span>WHT Deducted</span><span>PKR {totalWhtDeducted.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 600 }}>
+                    <span>Net Payable</span><span>PKR {totalNetAllocated.toLocaleString()}</span>
                   </div>
                 </>
               )}
