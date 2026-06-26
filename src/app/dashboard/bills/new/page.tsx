@@ -651,6 +651,13 @@ export default function NewBillPage() {
   const totalTaxAmount = items.reduce((s, i) => s + (i.tax_amount || 0), 0)
   const grossTotal = netTotal + totalTaxAmount
 
+  // ── NEW: Auto‑update WHT amount when gross total or rate changes ──
+  useEffect(() => {
+    if (taxEnabled && whtRate > 0) {
+      setWhtAmount(grossTotal * (whtRate / 100))
+    }
+  }, [grossTotal, whtRate, taxEnabled])
+
   // ── handleSubmit using RPC for new bills, API for updates ──
   const handleSubmit = async () => {
     if (!supplierId) { setError("Please select a supplier"); return }
@@ -897,7 +904,6 @@ export default function NewBillPage() {
   }
 
   // ── UNIFIED TABLE: Fixed columns, professional design ──
-  // Columns: Description | Qty | Price | Tax% | Location | Activity | GL Acc | Total | Delete
   const tableCols = () => {
     let cols = "280px 80px 120px "
     if (taxEnabled) cols += "120px "
@@ -907,7 +913,6 @@ export default function NewBillPage() {
     return cols
   }
 
-  // Fixed column widths for professional alignment
   const fixedCols = () => {
     let cols = "minmax(200px, 280px) 80px 120px "
     if (taxEnabled) cols += "120px "
@@ -959,24 +964,11 @@ export default function NewBillPage() {
           width: 100%;
           padding-bottom: 4px;
         }
-        .table-scroll-wrap::-webkit-scrollbar {
-          height: 10px;
-        }
-        .table-scroll-wrap::-webkit-scrollbar-track {
-          background: var(--bg);
-          border-radius: 8px;
-        }
-        .table-scroll-wrap::-webkit-scrollbar-thumb {
-          background: var(--border);
-          border-radius: 8px;
-        }
-        .table-scroll-wrap::-webkit-scrollbar-thumb:hover {
-          background: var(--text-muted);
-        }
-        .table-scroll-wrap {
-          scrollbar-color: var(--border) var(--bg);
-          scrollbar-width: thin;
-        }
+        .table-scroll-wrap::-webkit-scrollbar { height: 10px; }
+        .table-scroll-wrap::-webkit-scrollbar-track { background: var(--bg); border-radius: 8px; }
+        .table-scroll-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
+        .table-scroll-wrap::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+        .table-scroll-wrap { scrollbar-color: var(--border) var(--bg); scrollbar-width: thin; }
 
         .inv-item-header,
         .inv-item-row {
@@ -987,123 +979,47 @@ export default function NewBillPage() {
           padding: 6px 4px;
         }
         .inv-item-header {
-          font-size: 9px;
-          font-weight: 700;
-          text-transform: uppercase;
-          color: var(--text-muted);
-          border-bottom: 2px solid var(--border);
-          letter-spacing: 0.04em;
-          padding-bottom: 8px;
-          margin-bottom: 4px;
+          font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
+          border-bottom: 2px solid var(--border); letter-spacing: 0.04em; padding-bottom: 8px; margin-bottom: 4px;
         }
-        .inv-item-header span {
-          display: flex;
-          align-items: center;
-          padding: 0 8px;
-        }
-        .inv-item-header .header-right {
-          justify-content: flex-end;
-          text-align: right;
-        }
-        .inv-item-header .header-center {
-          justify-content: center;
-          text-align: center;
-        }
+        .inv-item-header span { display: flex; align-items: center; padding: 0 8px; }
+        .inv-item-header .header-right { justify-content: flex-end; text-align: right; }
+        .inv-item-header .header-center { justify-content: center; text-align: center; }
 
-        .inv-item-row {
-          border-bottom: 1px solid var(--border);
-          padding: 6px 4px;
-        }
-        .inv-item-row > * {
-          padding: 0 8px;
-          min-height: 34px;
-          display: flex;
-          align-items: center;
-        }
+        .inv-item-row { border-bottom: 1px solid var(--border); padding: 6px 4px; }
+        .inv-item-row > * { padding: 0 8px; min-height: 34px; display: flex; align-items: center; }
         .inv-item-row .inv-cell {
-          border: 1.5px solid var(--border);
-          border-radius: 8px;
-          padding: 0 8px;
-          font-size: 12px;
-          font-family: inherit;
-          background: var(--bg);
-          color: var(--text);
-          overflow: hidden;
-          white-space: nowrap;
-          text-overflow: ellipsis;
-          box-sizing: border-box;
-          height: 34px;
-          width: 100%;
+          border: 1.5px solid var(--border); border-radius: 8px; padding: 0 8px; font-size: 12px;
+          font-family: inherit; background: var(--bg); color: var(--text); overflow: hidden;
+          white-space: nowrap; text-overflow: ellipsis; box-sizing: border-box; height: 34px; width: 100%;
         }
         .inv-item-row input,
         .inv-item-row select {
-          height: 34px;
-          border: 1.5px solid var(--border);
-          border-radius: 8px;
-          padding: 0 8px;
-          font-size: 12px;
-          font-family: inherit;
-          background: var(--bg);
-          color: var(--text);
-          outline: none;
-          box-sizing: border-box;
-          width: 100%;
+          height: 34px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 8px;
+          font-size: 12px; font-family: inherit; background: var(--bg); color: var(--text);
+          outline: none; box-sizing: border-box; width: 100%;
         }
         .inv-item-row input:focus,
-        .inv-item-row select:focus {
-          border-color: var(--primary);
-        }
-        .inv-item-row .inv-cell-total {
-          justify-content: flex-end;
-          font-weight: 600;
-        }
-        .inv-item-row .inv-cell-tax {
-          justify-content: flex-end;
-          color: var(--text-muted);
-          font-size: 11px;
-        }
+        .inv-item-row select:focus { border-color: var(--primary); }
+        .inv-item-row .inv-cell-total { justify-content: flex-end; font-weight: 600; }
+        .inv-item-row .inv-cell-tax { justify-content: flex-end; color: var(--text-muted); font-size: 11px; }
 
         .inv-item-row .delete-btn {
-          background: none;
-          border: none;
-          cursor: pointer;
-          color: #EF4444;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 4px;
-          min-height: 34px;
+          background: none; border: none; cursor: pointer; color: #EF4444;
+          display: flex; align-items: center; justify-content: center; padding: 4px; min-height: 34px;
         }
-        .inv-item-row .delete-btn:hover {
-          color: #DC2626;
-        }
+        .inv-item-row .delete-btn:hover { color: #DC2626; }
 
         /* ── Tax Badge ── */
-        .tax-wrapper {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          width: 100%;
-        }
-        .tax-wrapper select {
-          flex: 1;
-          min-width: 60px;
-        }
+        .tax-wrapper { display: flex; align-items: center; gap: 6px; width: 100%; }
+        .tax-wrapper select { flex: 1; min-width: 60px; }
         .tax-badge {
-          font-size: 10px;
-          font-weight: 600;
-          padding: 2px 10px;
-          border-radius: 12px;
-          background: rgba(56, 189, 248, 0.15);
-          color: #38BDF8;
-          border: 1px solid rgba(56, 189, 248, 0.2);
-          white-space: nowrap;
-          flex-shrink: 0;
+          font-size: 10px; font-weight: 600; padding: 2px 10px; border-radius: 12px;
+          background: rgba(56, 189, 248, 0.15); color: #38BDF8; border: 1px solid rgba(56, 189, 248, 0.2);
+          white-space: nowrap; flex-shrink: 0;
         }
         .tax-badge.no-tax {
-          background: rgba(255, 255, 255, 0.04);
-          color: var(--text-muted);
-          border-color: var(--border);
+          background: rgba(255, 255, 255, 0.04); color: var(--text-muted); border-color: var(--border);
         }
 
         /* ── Budget/Project Info ── */
@@ -1115,45 +1031,19 @@ export default function NewBillPage() {
 
         /* ── Mobile Sticky Summary ── */
         .mobile-sticky-summary {
-          display: none;
-          position: sticky;
-          bottom: 0;
-          left: 0;
-          right: 0;
-          background: var(--card);
-          border-top: 1px solid var(--border);
-          padding: 12px 16px;
-          align-items: center;
-          justify-content: space-between;
-          z-index: 50;
-          margin-top: 16px;
+          display: none; position: sticky; bottom: 0; left: 0; right: 0;
+          background: var(--card); border-top: 1px solid var(--border); padding: 12px 16px;
+          align-items: center; justify-content: space-between; z-index: 50; margin-top: 16px;
         }
-        .mobile-sticky-summary .total-left {
-          flex: 1;
-          min-width: 0;
-        }
+        .mobile-sticky-summary .total-left { flex: 1; min-width: 0; }
         .mobile-sticky-summary .total-amount {
-          font-size: 18px;
-          font-weight: 800;
-          color: var(--text);
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          font-size: 18px; font-weight: 800; color: var(--text);
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .mobile-sticky-summary .total-label {
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-          color: var(--text-muted);
-        }
+        .mobile-sticky-summary .total-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); }
         .mobile-sticky-summary .post-btn {
-          flex-shrink: 0;
-          margin-left: 12px;
-          background: var(--primary);
-          color: var(--primary-text);
-          border-color: var(--primary);
-          padding: 12px 24px;
-          font-weight: 700;
+          flex-shrink: 0; margin-left: 12px; background: var(--primary); color: var(--primary-text);
+          border-color: var(--primary); padding: 12px 24px; font-weight: 700;
         }
 
         .desktop-summary { display: flex; flex-direction: column; gap: 12px; }
@@ -1176,14 +1066,10 @@ export default function NewBillPage() {
           .inv-input, .inv-select { height: 44px; font-size: 16px; }
           .inv-btn { padding: 10px 16px; font-size: 14px; }
           .cust-dropdown { max-height: 180px; }
-          .inv-item-header, .inv-item-row {
-            min-width: 750px;
-          }
+          .inv-item-header, .inv-item-row { min-width: 750px; }
         }
         @media (max-width: 640px) {
-          .inv-row {
-            grid-template-columns: 1fr;
-          }
+          .inv-row { grid-template-columns: 1fr; }
         }
       `}</style>
 
