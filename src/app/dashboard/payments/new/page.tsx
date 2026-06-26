@@ -105,7 +105,6 @@ export default function NewPaymentPage() {
       .order("date")
       .then(async (r) => {
         const invs = r.data || []
-        // Fetch WHT records for all these bills
         const billIds = invs.map(b => b.id)
         const { data: whtData } = await supabase
           .from("bill_withholding")
@@ -118,7 +117,6 @@ export default function NewPaymentPage() {
           whtData.forEach((w: any) => { whtMap[w.bill_id] = w })
         }
 
-        // Enrich bills with WHT info
         const enriched = invs.map(inv => ({
           ...inv,
           wht_rate: whtMap[inv.id]?.wht_rate || 0,
@@ -209,7 +207,7 @@ export default function NewPaymentPage() {
 
   const totalNetAllocated = totalGrossAllocated - totalWhtDeducted
   const totalAmount = Number(paymentAmount || 0)
-  const unallocated = totalAmount - totalNetAllocated
+  const difference = totalAmount - totalNetAllocated
 
   const handleSubmit = async () => {
     if (!companyId) { setError("Company not loaded"); return }
@@ -505,10 +503,13 @@ export default function NewPaymentPage() {
                         <td colSpan={6} style={{ textAlign: "right" }}>Net Payment</td>
                         <td style={{ textAlign: "right", color: "#10B981" }}>PKR {totalNetAllocated.toLocaleString()}</td>
                       </tr>
-                      {totalAmount > 0 && Math.abs(totalAmount - totalNetAllocated) > 0.5 && (
+                      {totalAmount > 0 && Math.abs(difference) > 0.5 && (
                         <tr style={{ fontSize: 12, color: "#EF4444" }}>
-                          <td colSpan={7} style={{ textAlign: "right", paddingTop: 4 }}>
-                            ⚠️ Payment amount doesn't match net payable
+                          <td colSpan={6} style={{ textAlign: "right", paddingTop: 4 }}>
+                            ⚠️ Payment amount {difference > 0 ? `exceeds net payable by` : `is short by`} PKR {Math.abs(difference).toLocaleString()}
+                          </td>
+                          <td style={{ textAlign: "right", paddingTop: 4, fontWeight: 600 }}>
+                            {difference > 0 ? `Overpaid` : `Underpaid`}
                           </td>
                         </tr>
                       )}
@@ -543,6 +544,11 @@ export default function NewPaymentPage() {
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 600 }}>
                     <span>Net Payable</span><span>PKR {totalNetAllocated.toLocaleString()}</span>
                   </div>
+                  {totalAmount > 0 && Math.abs(difference) > 0.5 && (
+                    <div style={{ fontSize: 12, color: "#EF4444", marginTop: 4 }}>
+                      ⚠️ {difference > 0 ? `Overpaid by PKR ${difference.toLocaleString()}` : `Underpaid by PKR ${Math.abs(difference).toLocaleString()}`}
+                    </div>
+                  )}
                 </>
               )}
             </div>
