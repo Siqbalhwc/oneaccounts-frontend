@@ -10,6 +10,7 @@ import {
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
+import EntityPicker from "@/components/entity-picker/EntityPicker"
 
 export default function NewBillPage() {
   const router = useRouter()
@@ -651,7 +652,7 @@ export default function NewBillPage() {
   const totalTaxAmount = items.reduce((s, i) => s + (i.tax_amount || 0), 0)
   const grossTotal = netTotal + totalTaxAmount
 
-  // ── NEW: Auto‑update WHT amount when gross total or rate changes ──
+  // Auto‑update WHT amount when gross total or rate changes
   useEffect(() => {
     if (taxEnabled && whtRate > 0) {
       setWhtAmount(grossTotal * (whtRate / 100))
@@ -904,6 +905,7 @@ export default function NewBillPage() {
   }
 
   // ── UNIFIED TABLE: Fixed columns, professional design ──
+  // Columns: Description | Qty | Price | Tax% | Location | Activity | GL Acc | Total | Delete
   const tableCols = () => {
     let cols = "280px 80px 120px "
     if (taxEnabled) cols += "120px "
@@ -913,6 +915,7 @@ export default function NewBillPage() {
     return cols
   }
 
+  // Fixed column widths for professional alignment
   const fixedCols = () => {
     let cols = "minmax(200px, 280px) 80px 120px "
     if (taxEnabled) cols += "120px "
@@ -1099,64 +1102,25 @@ export default function NewBillPage() {
           <div className="header-grid inv-customer-section">
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div className="inv-card">
-                {/* ── Supplier selection ── */}
-                <label className="inv-label">Supplier *</label>
-                <div className="cust-wrap" ref={supplierRef}>
-                  {selectedSupplier ? (
-                    <div className="cust-selected-badge" onClick={clearSupplier}>
-                      <span>🚚</span>
-                      <span className="cust-name">{selectedSupplier.code} — {selectedSupplier.name}</span>
-                      <span style={{ fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>Bal: PKR {(selectedSupplier.balance || 0).toLocaleString()}</span>
-                      <button
-                        style={{ marginLeft: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", flexShrink: 0 }}
-                        onClick={(e) => { e.stopPropagation(); clearSupplier() }}
-                      ><X size={14} /></button>
-                      <button
-                        style={{ marginLeft: 2, background: "none", border: "none", color: "var(--primary)", cursor: "pointer", flexShrink: 0 }}
-                        onClick={(e) => { e.stopPropagation(); refreshSuppliers() }}
-                        title="Refresh"
-                      ><RefreshCw size={13} /></button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="cust-input-row">
-                        <Search size={14} style={{ position: "absolute", left: 10, color: "var(--text-muted)" }} />
-                        <input
-                          className="inv-input"
-                          style={{ paddingLeft: 32, paddingRight: 32 }}
-                          placeholder="Search by name, code or phone..."
-                          value={supplierSearch}
-                          onChange={e => { setSupplierSearch(e.target.value); setShowSupplierList(true) }}
-                          onFocus={() => setShowSupplierList(true)}
-                          onClick={() => setShowSupplierList(true)}
-                          autoComplete="off"
-                        />
-                        {supplierSearch && (
-                          <button onClick={() => setSupplierSearch("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
-                            <X size={13} />
-                          </button>
-                        )}
-                      </div>
-                      {showSupplierList && (
-                        <div className="cust-dropdown">
-                          {filteredSuppliers.length === 0 ? (
-                            <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: 13 }}>No suppliers found</div>
-                          ) : (
-                            filteredSuppliers.map(s => (
-                              <div key={s.id} className="cust-option" onMouseDown={() => selectSupplier(s)}>
-                                <div>
-                                  <div className="cust-option-name">{s.name}</div>
-                                  <div className="cust-option-meta">{s.code}{s.phone ? ` · ${s.phone}` : ""}</div>
-                                </div>
-                                <div className="cust-option-bal">PKR {(s.balance || 0).toLocaleString()}</div>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
+                {/* ── Supplier selection – replaced by EntityPicker ── */}
+                <EntityPicker
+                  entityType="supplier"
+                  value={selectedSupplier}
+                  onChange={(record) => {
+                    if (record) {
+                      setSupplierId(Number(record.id))
+                      setSelectedSupplier(record)
+                      setSupplierSearch(record.name)
+                      setShowSupplierList(false)
+                      setPoId(null)
+                      setPoRemaining(0)
+                    } else {
+                      clearSupplier()
+                    }
+                  }}
+                  label="Supplier"
+                  required
+                />
 
                 {/* ── PO Linking ── */}
                 {showPO && selectedSupplier && openPOs.length > 0 && (
