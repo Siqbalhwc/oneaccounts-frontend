@@ -688,532 +688,307 @@ function NewInvoicePageContent() {
     return don?.name || ""
   }
 
+  const tableCols = taxEnabled
+    ? "60px 220px 320px 80px 120px 120px 140px 140px 120px 50px"
+    : "60px 220px 320px 80px 120px 140px 120px 50px"
+
   return (
-    <div style={{ padding: "22px 28px 60px", background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif", color: "var(--text)", maxWidth: 1280, WebkitFontSmoothing: "antialiased" }}>
+    <div className="invoice-page" style={{ padding: "12px 16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .layout-grid { display: grid; grid-template-columns: 1fr 300px; gap: 18px; align-items: start; }
-        .card {
-          background: var(--card); border: 1px solid var(--border);
-          border-radius: 10px; box-shadow: var(--shadow-sm); margin-bottom: 16px;
-        }
-        .card-pad { padding: 18px 20px; }
-        .card-head {
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 14px 20px; border-bottom: 1px solid var(--border);
-        }
-        .card-head h2 { font-size: 13px; font-weight: 700; margin: 0; }
-        .card-head .hint { font-size: 11.5px; color: var(--text-muted); }
-
-        .field { margin-bottom: 14px; }
-        .field:last-child { margin-bottom: 0; }
-        .field label {
-          display: block; font-size: 10.5px; font-weight: 700; color: var(--text-muted);
-          text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px;
-        }
-        .field label .req { color: #EF4444; margin-left: 2px; }
-        .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-
-        .input, .select {
-          width: 100%; height: 40px; border-radius: 8px; border: 1.5px solid var(--border);
-          background: var(--bg); color: var(--text); font-size: 13.5px; font-family: inherit;
-          padding: 0 12px; outline: none; transition: border-color .15s, box-shadow .15s;
-        }
-        .input::placeholder { color: var(--text-muted); }
-        .input:focus, .select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
+        .inv-shell { width: 100%; margin: 0; }
+        .inv-title { font-size: 18px; font-weight: 700; color: var(--text); }
+        .inv-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 16px 20px; box-shadow: var(--shadow-sm); margin-bottom: 12px; overflow: visible; }
+        .inv-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block; }
+        .inv-input, .inv-select { width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: 13px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box; }
         input[type="date"] { color-scheme: dark; }
+        .inv-input:focus, .inv-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+        .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .inv-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; transition: all 0.15s; white-space: nowrap; text-decoration: none; }
+        .inv-btn:hover { background: var(--card-hover); }
+        .inv-btn-success { background: #25D366; color: white; border-color: #25D366; }
+        .inv-btn-success:hover { background: #22C55E; }
 
-        .group-label {
-          font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em;
-          color: var(--text-muted); margin: 18px 0 10px; display: flex; align-items: center; gap: 8px;
-        }
-        .group-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-        .field-first-group { margin-top: 0; }
+        .cust-wrap { position: relative; }
+        .cust-input-row { position: relative; display: flex; align-items: center; }
+        .cust-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; max-height: 220px; overflow-y: auto; z-index: 9999; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
+        .cust-option { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .cust-option:last-child { border-bottom: none; }
+        .cust-option:hover { background: var(--card-hover); }
+        .cust-option-name { font-size: 13px; font-weight: 600; color: var(--text); }
+        .cust-option-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        .cust-option-bal { font-size: 12px; font-weight: 600; color: var(--primary); white-space: nowrap; }
+        .cust-selected-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 600; color: var(--text); width: 100%; cursor: pointer; position: relative; overflow: hidden; }
+        .cust-selected-badge .cust-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
-        .add-item-row { display: flex; gap: 10px; align-items: flex-end; }
-        .add-item-row .grow { flex: 1; max-width: 400px; }
+        .table-scroll-wrap { overflow-x: auto; width: 100%; padding-bottom: 4px; scrollbar-color: var(--border) var(--bg); scrollbar-width: thin; }
+        .table-scroll-wrap::-webkit-scrollbar { height: 10px; }
+        .table-scroll-wrap::-webkit-scrollbar-track { background: var(--bg); border-radius: 8px; }
+        .table-scroll-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
 
-        .btn {
-          display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 16px;
-          border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;
-          border: 1.5px solid var(--border); background: transparent; color: var(--text);
-          white-space: nowrap; font-family: inherit; transition: all .15s;
-        }
-        .btn:hover { background: var(--card-hover); }
-        .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
-        .btn-primary:hover { background: #3B74F0; }
-        .btn-block { width: 100%; justify-content: center; height: 44px; font-size: 13.5px; }
-        .btn-success { background: #1E8E5A; border-color: #1E8E5A; color: #fff; }
-        .btn-success:hover { background: #22A065; }
+        .inv-item-header, .inv-item-row { display: grid; grid-template-columns: ${tableCols}; gap: 6px; align-items: center; min-width: ${taxEnabled ? '1450px' : '1200px'}; padding: 6px 4px; }
+        .inv-item-header { font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); border-bottom: 2px solid var(--border); letter-spacing: 0.04em; padding-bottom: 8px; margin-bottom: 4px; }
+        .inv-item-header span { display: flex; align-items: center; padding: 0 8px; }
+        .inv-item-header .header-right { justify-content: flex-end; text-align: right; }
+        .inv-item-header .header-center { justify-content: center; text-align: center; }
 
-        .items-section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
-        .items-section-head h3 { font-size: 14px; font-weight: 700; margin: 0; }
-        .items-count { font-size: 11.5px; color: var(--text-muted); }
+        .inv-item-row { border-bottom: 1px solid var(--border); padding: 6px 4px; }
+        .inv-item-row > * { padding: 0 8px; min-height: 34px; display: flex; align-items: center; }
+        .inv-item-row .inv-cell { border: 1.5px solid var(--border); border-radius: 8px; padding: 0 8px; font-size: 12px; font-family: inherit; background: var(--bg); color: var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; box-sizing: border-box; height: 34px; width: 100%; }
+        .inv-item-row input, .inv-item-row select { height: 34px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 8px; font-size: 12px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box; width: 100%; }
+        .inv-item-row input:focus, .inv-item-row select:focus { border-color: var(--primary); }
+        .inv-item-row .inv-cell-total { justify-content: flex-end; font-weight: 600; }
+        .inv-item-row .inv-cell-tax { justify-content: flex-end; color: var(--text-muted); font-size: 11px; }
+        .inv-item-row .inv-cell-cost { justify-content: flex-end; color: var(--text-muted); font-size: 11px; }
+        .inv-item-row .delete-btn { background: none; border: none; cursor: pointer; color: #EF4444; display: flex; align-items: center; justify-content: center; padding: 4px; min-height: 34px; }
+        .inv-item-row .tax-wrapper { display: flex; align-items: center; gap: 6px; width: 100%; }
+        .inv-item-row .tax-wrapper select { flex: 1; min-width: 60px; }
+        .tax-badge { font-size: 10px; font-weight: 600; padding: 2px 10px; border-radius: 12px; background: rgba(56, 189, 248, 0.15); color: #38BDF8; border: 1px solid rgba(56, 189, 248, 0.2); white-space: nowrap; flex-shrink: 0; }
+        .tax-badge.no-tax { background: rgba(255, 255, 255, 0.04); color: var(--text-muted); border-color: var(--border); }
+        .stock-warning { color: #EF4444; font-size: 10px; font-weight: 600; white-space: nowrap; background: rgba(239, 68, 68, 0.1); padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(239, 68, 68, 0.2); flex-shrink: 0; }
 
-        .empty-items {
-          display: flex; flex-direction: column; align-items: center; justify-content: center;
-          padding: 46px 20px; text-align: center; color: var(--text-muted);
-        }
-        .empty-items .icon-wrap {
-          width: 48px; height: 48px; border-radius: 50%; background: rgba(37,99,235,0.08);
-          display: flex; align-items: center; justify-content: center; margin-bottom: 14px; color: var(--primary);
-        }
-        .empty-items .t1 { font-size: 13.5px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px; }
-        .empty-items .t2 { font-size: 12px; max-width: 280px; line-height: 1.5; }
+        .mobile-sticky-summary { display: none; position: sticky; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--border); padding: 12px 16px; align-items: center; justify-content: space-between; z-index: 50; margin-top: 16px; }
+        .mobile-sticky-summary .total-left { flex: 1; min-width: 0; }
+        .mobile-sticky-summary .total-amount { font-size: 18px; font-weight: 800; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mobile-sticky-summary .total-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); }
+        .mobile-sticky-summary .post-btn { flex-shrink: 0; margin-left: 12px; background: var(--primary); color: var(--primary-text); border-color: var(--primary); padding: 12px 24px; font-weight: 700; }
 
-        table.items-table { width: 100%; border-collapse: collapse; }
-        table.items-table thead th {
-          font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
-          color: var(--text-muted); text-align: left; padding: 0 10px 10px; border-bottom: 1.5px solid var(--border);
-        }
-        table.items-table thead th.num { text-align: right; }
-        table.items-table thead th.center { text-align: center; }
-        table.items-table tbody td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-        table.items-table tbody tr:last-child td { border-bottom: none; }
-        .cell-input { height: 34px; font-size: 12.5px; }
-        .cell-num { text-align: right; font-variant-numeric: tabular-nums; }
-        .prod-cell { display: flex; align-items: center; gap: 8px; }
-        .prod-thumb {
-          width: 26px; height: 26px; border-radius: 6px; background: var(--border);
-          flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-          color: var(--text-muted); overflow: hidden;
-        }
-        .prod-thumb img { width: 100%; height: 100%; object-fit: cover; }
-        .prod-name { font-size: 12.5px; font-weight: 600; }
-        .row-total { font-weight: 700; }
-        .tax-pill {
-          font-size: 10px; font-weight: 700; padding: 2px 9px; border-radius: 20px;
-          background: rgba(56,189,248,0.12); color: #38BDF8;
-          border: 1px solid rgba(56,189,248,0.25); white-space: nowrap;
-        }
-        .tax-pill.none { background: transparent; color: var(--text-muted); border-color: var(--border); }
-        .del-btn {
-          background: none; border: none; color: var(--text-muted); cursor: pointer;
-          padding: 6px; border-radius: 6px;
-        }
-        .del-btn:hover { color: #EF4444; background: rgba(239,68,68,0.08); }
-        .stock-flag {
-          font-size: 10px; color: #EF4444; background: rgba(239,68,68,0.08);
-          border: 1px solid rgba(239,68,68,0.25); padding: 1px 8px; border-radius: 20px;
-          display: inline-block; margin-top: 4px;
-        }
-
-        .summary-card { padding: 18px 20px; }
-        .summary-card h3 { font-size: 13px; font-weight: 700; margin: 0 0 14px; }
-        .sum-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; padding: 7px 0; }
-        .sum-row.muted { color: var(--text-muted); font-size: 12px; }
-        .sum-row.total {
-          font-size: 18px; font-weight: 800; border-top: 1px dashed var(--border);
-          margin-top: 6px; padding-top: 12px;
-        }
-        .sum-row .lbl { color: var(--text-muted); font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-        .sum-row.total .lbl { color: var(--text); font-size: 13px; text-transform: none; font-weight: 700; letter-spacing: 0; }
-
-        .actions-card { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
-
-        .warn-banner {
-          display: flex; align-items: flex-start; gap: 8px;
-          background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.3);
-          color: #FCA5A5; padding: 9px 12px; border-radius: 8px; font-size: 12px; margin-top: 10px;
-        }
-        .flash-banner {
-          display: flex; align-items: center; gap: 8px;
-          background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3);
-          color: #6EE7B7; padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;
-        }
-
-        .page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-        .back-btn {
-          width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--border);
-          background: var(--card); display: flex; align-items: center; justify-content: center;
-          color: var(--text-muted); cursor: pointer; flex-shrink: 0;
-        }
-        .back-btn:hover { background: var(--card-hover); color: var(--text); }
-        .page-header h1 { font-size: 18px; font-weight: 700; margin: 0; }
-        .page-header .sub { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
-        .header-spacer { flex: 1; }
-        .ghost-btn {
-          display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px;
-          border-radius: 8px; border: 1px solid var(--border); background: transparent;
-          color: var(--text-muted); font-size: 13px; font-weight: 600; cursor: pointer;
-        }
-        .ghost-btn:hover { background: var(--card-hover); color: var(--text); }
-
-        .price-history-card {
-          background: var(--card); border: 1px solid var(--border); border-radius: 8px;
-          padding: 10px 14px; margin-top: 12px; font-size: 12px;
-        }
+        .price-history { background: var(--card); border-radius: 8px; padding: 10px 14px; margin-top: 12px; font-size: 12px; border: 1px solid var(--border); }
         .price-history-item { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--border); }
-        .price-history-item:last-child { border-bottom: none; }
+        .project-info-row { font-size: 10px; color: var(--text-muted); margin-top: 2px; padding-left: 8px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+        .project-chip { display: inline-flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 10px; }
+        input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type="number"] { -moz-appearance: textfield; }
+        .desktop-summary { display: flex; flex-direction: column; gap: 12px; }
 
-        .project-info-row {
-          font-size: 10px; color: var(--text-muted); padding: 4px 0 6px 10px;
-          display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
-        }
-        .project-chip {
-          display: inline-flex; align-items: center; gap: 4px;
-          background: rgba(255,255,255,0.04); border: 1px solid var(--border);
-          border-radius: 4px; padding: 1px 6px; font-size: 10px;
-        }
+        .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; overflow: visible; }
+        .inv-customer-section { overflow: visible; }
+        .inv-content-wrapper { overflow: visible; }
 
-        @media (max-width: 1024px) {
-          .layout-grid { grid-template-columns: 1fr; }
-          .page-header { flex-wrap: wrap; }
-        }
-        @media (max-width: 640px) {
-          .row-2 { grid-template-columns: 1fr; }
-          .add-item-row { flex-wrap: wrap; }
-          .add-item-row .grow { max-width: 100%; flex: 100%; }
-        }
+        @media (min-width: 1025px) { .desktop-summary { display: flex; flex-direction: column; gap: 12px; } .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; } .mobile-sticky-summary { display: none !important; } }
+        @media (max-width: 1024px) { .header-grid { display: block; } .desktop-summary { display: none !important; } .mobile-sticky-summary { display: flex !important; } .inv-card { padding: 12px; } .inv-input, .inv-select { height: 44px; font-size: 16px; } .inv-btn { padding: 10px 16px; font-size: 14px; } .cust-dropdown { max-height: 180px; } }
+        @media (max-width: 640px) { .inv-row { grid-template-columns: 1fr; } }
       `}</style>
 
-      {/* ── Page Header ── */}
-      <div className="page-header">
-        <button className="back-btn" onClick={() => router.push("/dashboard/invoices")}>
-          <ArrowLeft size={16} />
-        </button>
-        <div>
-          <h1>{editId ? "Edit Sales Invoice" : "New Sales Invoice"}</h1>
-          <div className="sub">{editId ? "Modify invoice details and items" : "Add customer details and items, then post to the ledger"}</div>
-        </div>
-        <div className="header-spacer"></div>
-        <button className="ghost-btn" onClick={() => router.push("/dashboard/invoices")}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
-          View list
-        </button>
-      </div>
-
-      {/* ── Flash / Error Messages ── */}
-      {error && (
-        <div className="warn-banner" style={{ marginBottom: 16 }}>
-          <span>⚠</span> {error}
-        </div>
-      )}
-      {flash && (
-        <div className="flash-banner">
-          <CheckCircle size={16} /> {flash}
-          {savedInvoiceId && !editId && (
-            <button className="ghost-btn" style={{ marginLeft: 8, borderColor: "#6EE7B7", color: "#6EE7B7" }} onClick={() => router.push(`/dashboard/invoices/${savedInvoiceId}`)}>
-              <ExternalLink size={14} /> View Invoice
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* ── Layout Grid ── */}
-      <div className="layout-grid">
-        {/* LEFT COLUMN */}
-        <div>
-          {/* Customer + Dates Card */}
-          <div className="card card-pad">
-            <div className="field field-first-group">
-              <label>Customer <span className="req">*</span></label>
-              <EntityPicker
-                entityType="customer"
-                value={selectedCustomer}
-                onChange={(record) => {
-                  if (record) {
-                    setCustomerId(Number(record.id))
-                    setSelectedCustomer(record)
-                    setCustomerSearch(record.name)
-                    setShowCustomerList(false)
-                  } else {
-                    clearCustomer()
-                  }
-                }}
-                placeholder="Search customer by name, code or phone…"
-              />
-            </div>
-
-            <div className="group-label">Dates &amp; reference</div>
-            <div className="row-2">
-              <div className="field">
-                <label>Invoice date <span className="req">*</span></label>
-                <input className="input" type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
-              </div>
-              <div className="field">
-                <label>Due date</label>
-                <input className="input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
-              </div>
-            </div>
-            <div className="row-2">
-              <div className="field">
-                <label>Reference</label>
-                <input className="input" value={reference} onChange={e => setReference(e.target.value)} placeholder="Customer PO #" />
-              </div>
-              <div className="field">
-                <label>Notes</label>
-                <input className="input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" />
-              </div>
-            </div>
-
-            {/* Price History */}
-            {showHistory && lastSelectedProduct && (
-              <div className="price-history-card">
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                  {lastSelectedProduct.image_path && <img src={lastSelectedProduct.image_path} alt="" style={{ width: 28, height: 28, objectFit: "cover", borderRadius: 4 }} />}
-                  <span style={{ fontWeight: 600, fontSize: 12 }}>📋 Price history for {lastSelectedProduct.name}</span>
-                  <button style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }} onClick={() => setShowHistory(false)}><X size={14} /></button>
-                </div>
-                {priceHistory.length > 0 ? priceHistory.map((h: any, i: number) => (
-                  <div key={i} className="price-history-item">
-                    <span>{h.invoice_no} - {h.date}</span>
-                    <span style={{ fontWeight: 600 }}>PKR {h.unit_price.toLocaleString()}</span>
-                  </div>
-                )) : <div style={{ color: "var(--text-muted)", fontSize: 12 }}>No previous sales to this customer</div>}
-              </div>
-            )}
+      <div className="inv-shell">
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+          <button className="inv-btn" onClick={() => router.push("/dashboard/invoices")}><ArrowLeft size={16} /></button>
+          <div style={{ flex: 1 }}>
+            <div className="inv-title">{editId ? "✏️ Edit Sales Invoice" : "🧾 New Sales Invoice"}</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{editId ? "Modify invoice details and items" : "Create invoice with full accounting automation"}</div>
           </div>
+          <button className="inv-btn" onClick={() => router.push("/dashboard/invoices")}>View List</button>
+        </div>
 
-          {/* Add Item Card */}
-          {showProducts ? (
-            <div className="card card-pad">
-              <div className="field" style={{ marginBottom: 0 }}>
-                <label>Add item</label>
-                <div className="add-item-row">
-                  <div className="grow">
-                    <EntityPicker
-                      entityType="product"
-                      value={null}
-                      onChange={(record) => { if (record) addProductItem(record); }}
-                      placeholder="Search product by name or code…"
-                      allowCreate={false}
-                    />
-                  </div>
-                  <button className="btn" onClick={addManualItem}>
-                    <Plus size={14} /> Manual line
-                  </button>
+        {error && <div style={{ background: "var(--card)", border: "1px solid #EF4444", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
+        {flash && (
+          <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+            <CheckCircle size={16} /> {flash}
+            {savedInvoiceId && !editId && <button className="inv-btn" style={{ marginLeft: 8, borderColor: "#ECFDF5", color: "#ECFDF5" }} onClick={() => router.push(`/dashboard/invoices/${savedInvoiceId}`)}><ExternalLink size={14} /> View Invoice</button>}
+          </div>
+        )}
+
+        <div className="inv-content-wrapper">
+          <div className="header-grid inv-customer-section">
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div className="inv-card">
+                <EntityPicker
+                  entityType="customer"
+                  value={selectedCustomer}
+                  onChange={(record) => {
+                    if (record) {
+                      setCustomerId(Number(record.id))
+                      setSelectedCustomer(record)
+                      setCustomerSearch(record.name)
+                      setShowCustomerList(false)
+                    } else {
+                      clearCustomer()
+                    }
+                  }}
+                  label="Customer"
+                  required
+                />
+
+                <div className="inv-row" style={{ marginTop: 14 }}>
+                  <div><label className="inv-label">Invoice Date *</label><input className="inv-input" type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} /></div>
+                  <div><label className="inv-label">Due Date</label><input className="inv-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} /></div>
                 </div>
+                <div className="inv-row" style={{ marginTop: 10 }}>
+                  <div><label className="inv-label">Reference</label><input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="Customer PO #" /></div>
+                  <div><label className="inv-label">Notes</label><input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" /></div>
+                </div>
+
+                {showProducts ? (
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <div style={{ flex: 1, maxWidth: 320 }}>
+                        <EntityPicker
+                          entityType="product"
+                          value={null}
+                          onChange={(record) => { if (record) addProductItem(record); }}
+                          placeholder="Search product…"
+                          label="Product"
+                          allowCreate={false}
+                        />
+                      </div>
+                      <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 14 }}><label className="inv-label">Add Item</label><button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button></div>
+                )}
+
+                {showHistory && lastSelectedProduct && (
+                  <div className="price-history">
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                      {lastSelectedProduct.image_path && <img src={lastSelectedProduct.image_path} alt="" style={{ width: 28, height: 28, objectFit: "cover", borderRadius: 4 }} />}
+                      <span style={{ fontWeight: 600, fontSize: 12, color: "var(--text)" }}>📋 Price history for {lastSelectedProduct.name}</span>
+                      <button style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }} onClick={() => setShowHistory(false)}><X size={14} /></button>
+                    </div>
+                    {priceHistory.length > 0 ? priceHistory.map((h: any, i: number) => (
+                      <div key={i} className="price-history-item"><span>{h.invoice_no} - {h.date}</span><span style={{ fontWeight: 600 }}>PKR {h.unit_price.toLocaleString()}</span></div>
+                    )) : <div style={{ color: "var(--text-muted)", fontSize: 12 }}>No previous sales to this customer</div>}
+                  </div>
+                )}
               </div>
             </div>
-          ) : (
-            <div className="card card-pad">
-              <div className="field" style={{ marginBottom: 0 }}>
-                <label>Add item</label>
-                <button className="btn" onClick={addManualItem}>
-                  <Plus size={14} /> Manual line
+
+            <div className="desktop-summary">
+              <div className="inv-card">
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}><span>Total</span><span>PKR {(totalAmount + totalTaxAmount).toLocaleString()}</span></div>
+                {taxEnabled && totalTaxAmount > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}><span>Tax</span><span>PKR {totalTaxAmount.toLocaleString()}</span></div>}
+                {hasStockErrors && (
+                  <div style={{ marginTop: 8, padding: "6px 10px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, color: "#EF4444", fontSize: 11 }}>⚠️ Some items have insufficient stock</div>
+                )}
+              </div>
+              <div className="inv-card">
+                <button className="inv-btn" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={saving || hasStockErrors}>
+                  {saving ? "Posting..." : editId ? "💾 UPDATE Invoice" : "💾 POST Invoice"}
                 </button>
+                <button className="inv-btn" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleBeforeSavePdf}><Download size={14} /> PDF Preview</button>
+                {selectedCustomer && hasFeature("whatsapp_invoice") && <button className="inv-btn inv-btn-success" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleWhatsAppWithPDF}><Send size={14} /> WhatsApp (PDF)</button>}
               </div>
             </div>
-          )}
-
-          {/* Items Section */}
-          <div className="items-section-head">
-            <h3>Items</h3>
-            <span className="items-count">{items.length} {items.length === 1 ? 'item' : 'items'}</span>
           </div>
 
-          {items.length > 0 ? (
-            <div className="card">
-              <table className="items-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: 46 }}></th>
-                    <th>Description</th>
-                    <th className="center" style={{ width: 70 }}>Qty</th>
-                    <th className="num" style={{ width: 100 }}>Price</th>
-                    {taxEnabled && <th className="center" style={{ width: 110 }}>Tax</th>}
-                    <th className="num" style={{ width: 110 }}>Total</th>
-                    <th style={{ width: 40 }}></th>
-                  </tr>
-                </thead>
-                <tbody>
+          <div className="inv-items-section" style={{ marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
+            </div>
+            {items.length > 0 && (
+              <div className="inv-card" style={{ padding: "16px 12px" }}>
+                <div className="table-scroll-wrap">
+                  <div className="inv-item-header">
+                    <span className="header-center"></span>
+                    <span>Product</span>
+                    <span>Description</span>
+                    <span className="header-center">Qty</span>
+                    <span className="header-right">Price</span>
+                    {taxEnabled && <span className="header-center">Tax %</span>}
+                    <span className="header-right">Total</span>
+                    {taxEnabled && <span className="header-right">Tax Amt</span>}
+                    <span className="header-right">Cost</span>
+                    <span className="header-center"></span>
+                  </div>
+
                   {items.map((item, idx) => {
                     const stockError = stockErrors[idx]
-                    const taxBadge = taxEnabled && item.tax_code_id
-                    const taxCode = taxBadge ? taxCodes.find((t: any) => String(t.id) === item.tax_code_id) : null
+                    const taxBadge = taxEnabled && item.tax_code_id ? `${item.tax_rate}%` : null
 
                     return (
                       <Fragment key={idx}>
-                        <tr>
-                          {/* Image / Project selector */}
-                          <td>
-                            {item.product_id ? (
-                              <div className="prod-thumb">
-                                {item.product_image ? (
-                                  <img src={item.product_image} alt="" />
-                                ) : (
-                                  <ImageIcon size={13} />
-                                )}
-                              </div>
-                            ) : isNGO ? (
-                              <EntityPicker
-                                entityType="project"
-                                value={projects.find(p => p.id === item.project_id) || null}
-                                onChange={(record) => { updateItem(idx, "project_id", record ? Number(record.id) : null); }}
-                                placeholder="Project"
-                                compact
-                                allowCreate={false}
-                              />
-                            ) : null}
-                          </td>
+                        <div className="inv-item-row" style={stockError ? { background: "rgba(239,68,68,0.05)", borderRadius: "6px" } : {}}>
+                          <div style={{ display: "flex", justifyContent: "center" }}>
+                            {item.product_image ? <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} /> : <ImageIcon size={14} color="var(--text-muted)" />}
+                          </div>
 
-                          {/* Description */}
-                          <td>
-                            {item.product_id ? (
-                              <>
-                                <div className="prod-name">{item.product_name || "—"}</div>
-                                <input
-                                  className="input cell-input"
-                                  style={{ marginTop: 2, width: '100%' }}
-                                  value={item.description}
-                                  onChange={e => updateItem(idx, "description", e.target.value)}
-                                  placeholder="Description"
+                          {item.product_id ? (
+                            <div className="inv-cell" style={{ paddingLeft: 8 }}>{item.product_name || "—"}</div>
+                          ) : (
+                            <div>
+                              {isNGO ? (
+                                <EntityPicker
+                                  entityType="project"
+                                  value={projects.find(p => p.id === item.project_id) || null}
+                                  onChange={(record) => { updateItem(idx, "project_id", record ? Number(record.id) : null); }}
+                                  placeholder="— Select Project —"
+                                  compact
+                                  allowCreate={false}
                                 />
-                                {stockError && <span className="stock-flag">⚠ {stockError}</span>}
-                              </>
-                            ) : (
-                              <input
-                                className="input cell-input"
-                                style={{ width: '100%' }}
-                                value={item.description}
-                                onChange={e => updateItem(idx, "description", e.target.value)}
-                                placeholder="Description"
-                              />
-                            )}
-                          </td>
-
-                          {/* Qty */}
-                          <td>
-                            <input
-                              className="input cell-input"
-                              style={{ textAlign: "center", borderColor: stockError ? "#EF4444" : undefined }}
-                              type="number"
-                              value={item.qty}
-                              onChange={e => updateItem(idx, "qty", Number(e.target.value))}
-                            />
-                          </td>
-
-                          {/* Price */}
-                          <td>
-                            <input
-                              className="input cell-input cell-num"
-                              type="number"
-                              value={item.unit_price}
-                              onChange={e => updateItem(idx, "unit_price", Number(e.target.value))}
-                            />
-                          </td>
-
-                          {/* Tax */}
-                          {taxEnabled && (
-                            <td style={{ textAlign: "center" }}>
-                              <select
-                                className="input cell-input"
-                                style={{ width: '100%', fontSize: 11, textAlign: "center", padding: '0 4px' }}
-                                value={item.tax_code_id || ""}
-                                onChange={e => updateTax(idx, e.target.value || null)}
-                              >
-                                <option value="">No tax</option>
-                                {taxCodes.map((tc: any) => (
-                                  <option key={tc.id} value={String(tc.id)}>{tc.code}</option>
-                                ))}
-                              </select>
-                              {taxBadge && (
-                                <span className={taxBadge ? "tax-pill" : "tax-pill none"} style={{ marginTop: 3, display: 'inline-block' }}>
-                                  {taxCode?.rate || item.tax_rate}%
-                                </span>
+                              ) : (
+                                <div className="inv-cell" style={{ paddingLeft: 8 }}>—</div>
                               )}
-                            </td>
+                            </div>
                           )}
 
-                          {/* Total */}
-                          <td className="cell-num row-total">PKR {item.total.toLocaleString()}</td>
+                          <input className="inv-input" style={{ height: 32, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Description" />
+                          <input className="inv-input" style={{ height: 32, fontSize: 12, textAlign: "center", borderColor: stockError ? "#EF4444" : undefined }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                          <input className="inv-input" style={{ height: 32, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
 
-                          {/* Delete */}
-                          <td>
-                            <button className="del-btn" onClick={() => removeItem(idx)}>
-                              <Trash2 size={14} />
-                            </button>
-                          </td>
-                        </tr>
+                          {taxEnabled && (
+                            <div className="tax-wrapper">
+                              <select className="inv-select" style={{ height: 32, fontSize: 11, flex: 1, minWidth: 60 }} value={item.tax_code_id || ""} onChange={e => updateTax(idx, e.target.value || null)}>
+                                <option value="">No Tax</option>
+                                {taxCodes.map((tc: any) => <option key={tc.id} value={String(tc.id)}>{tc.code} ({tc.rate}%)</option>)}
+                              </select>
+                              {taxBadge ? <span className="tax-badge">{taxBadge}</span> : <span className="tax-badge no-tax">No Tax</span>}
+                            </div>
+                          )}
 
-                        {/* NGO Project Info Row */}
+                          <div className="inv-cell inv-cell-total">PKR {item.total.toLocaleString()}</div>
+
+                          {taxEnabled && (
+                            <div className="inv-cell inv-cell-tax">
+                              {item.tax_amount > 0 ? `PKR ${item.tax_amount.toLocaleString()}` : "—"}
+                            </div>
+                          )}
+
+                          <div className="inv-cell inv-cell-cost">
+                            {item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}
+                          </div>
+
+                          <button className="delete-btn" onClick={() => removeItem(idx)}><Trash2 size={14} /></button>
+                        </div>
+
+                        {stockError && (
+                          <div style={{ fontSize: 11, color: "#EF4444", padding: "2px 0 4px 8px", background: "rgba(239,68,68,0.05)", borderRadius: "0 0 6px 6px" }}>
+                            ⚠️ {stockError}
+                          </div>
+                        )}
+
                         {isNGO && !item.product_id && item.project_id && (
-                          <tr>
-                            <td colSpan={taxEnabled ? 7 : 6} style={{ padding: '4px 10px 6px' }}>
-                              <div className="project-info-row">
-                                <span className="project-chip">📁 {getProjectName(item.project_id)}</span>
-                                {item.donor_id && (
-                                  <span className="project-chip" style={{ color: "var(--primary)" }}>🤝 {getDonorName(item.donor_id)}</span>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
+                          <div className="project-info-row">
+                            <span className="project-chip">📁 {getProjectName(item.project_id)}{item.donor_id && <span style={{ color: "var(--primary)", marginLeft: 4 }}>· 🤝 {getDonorName(item.donor_id)}</span>}</span>
+                          </div>
                         )}
                       </Fragment>
                     )
                   })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="card">
-              <div className="empty-items">
-                <div className="icon-wrap">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-                  </svg>
                 </div>
-                <div className="t1">No items added yet</div>
-                <div className="t2">Search for a product above, or add a manual line to start building this invoice.</div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* RIGHT COLUMN */}
-        <div>
-          {/* Summary Card */}
-          <div className="card summary-card">
-            <h3>Summary</h3>
-            <div className="sum-row muted">
-              <span className="lbl">Subtotal</span>
-              <span>PKR {totalAmount.toLocaleString()}</span>
-            </div>
-            {taxEnabled && totalTaxAmount > 0 && (
-              <div className="sum-row muted">
-                <span className="lbl">Tax</span>
-                <span>PKR {totalTaxAmount.toLocaleString()}</span>
-              </div>
-            )}
-            <div className="sum-row total">
-              <span className="lbl">Total</span>
-              <span>PKR {(totalAmount + totalTaxAmount).toLocaleString()}</span>
-            </div>
-            {hasStockErrors && (
-              <div className="warn-banner">
-                <span>⚠</span> Some items have insufficient stock
               </div>
             )}
           </div>
 
-          {/* Actions Card */}
-          <div className="card actions-card">
-            <button
-              className="btn btn-primary btn-block"
-              onClick={handleSubmit}
-              disabled={saving || hasStockErrors}
-            >
-              {saving ? "Posting..." : editId ? "Update invoice" : "Post invoice"}
+          <div className="mobile-sticky-summary">
+            <div className="total-left">
+              <div className="total-label">Total</div>
+              <div className="total-amount">PKR {(totalAmount + totalTaxAmount).toLocaleString()}</div>
+              {taxEnabled && totalTaxAmount > 0 && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>incl. tax PKR {totalTaxAmount.toLocaleString()}</div>}
+              {hasStockErrors && <div style={{ fontSize: 10, color: "#EF4444" }}>⚠️ Stock issues</div>}
+            </div>
+            <button className="inv-btn post-btn" onClick={handleSubmit} disabled={saving || hasStockErrors}>
+              {saving ? "Posting..." : "POST"}
             </button>
-            <button className="btn btn-block" onClick={handleBeforeSavePdf}>
-              <Download size={14} /> PDF preview
-            </button>
-            {selectedCustomer && hasFeature("whatsapp_invoice") && (
-              <button className="btn btn-success btn-block" onClick={handleWhatsAppWithPDF}>
-                <Send size={14} /> Send on WhatsApp
-              </button>
-            )}
           </div>
         </div>
+
+        {editId && (
+          <div className="inv-card" style={{ marginTop: 16 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
+            <RecordHistory tableName="invoices" recordId={editId} />
+          </div>
+        )}
       </div>
-
-      {/* ── Edit History ── */}
-      {editId && (
-        <div className="card card-pad" style={{ marginTop: 16 }}>
-          <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
-          <RecordHistory tableName="invoices" recordId={editId} />
-        </div>
-      )}
     </div>
   )
 }
