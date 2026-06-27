@@ -1071,18 +1071,21 @@ export default function NewBillPage() {
                   </div>
                 </div>
 
-                {/* Product section – only the picker, no extra label */}
                 {showProducts ? (
                   <div style={{ marginTop: 14 }}>
-                    <EntityPicker
-                      entityType="product"
-                      value={null}
-                      onChange={(record) => { if (record) addProductItem(record); }}
-                      placeholder="Search product…"
-                      label="Product"
-                      allowCreate={false}
-                    />
-                    <button className="inv-btn" onClick={addManualItem} style={{ marginTop: 8 }}><Plus size={14} /> Manual</button>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <div style={{ flex: 1, maxWidth: 320 }}>
+                        <EntityPicker
+                          entityType="product"
+                          value={null}
+                          onChange={(record) => { if (record) addProductItem(record); }}
+                          placeholder="Search product…"
+                          label="Product"
+                          allowCreate={false}
+                        />
+                      </div>
+                      <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
+                    </div>
                   </div>
                 ) : (
                   <div style={{ marginTop: 14 }}>
