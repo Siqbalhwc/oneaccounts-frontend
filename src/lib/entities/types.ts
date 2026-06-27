@@ -8,6 +8,8 @@ export interface FieldConfig {
   defaultValue?: string | number;
   countryCodeField?: string;
   validation?: (value: string, formValues?: Record<string, any>) => string | null;
+  /** Supabase table name to fetch options for a dynamic select */
+  lookupTable?: string;
 }
 
 export interface EntityConfig {
@@ -23,6 +25,6 @@ export interface EntityConfig {
     create: string[];
     edit: string[];
   };
-  // Optional: function to extract extra display info from a record (e.g., balance)
+  /** Optional: function to extract extra display info from a record (e.g., balance) */
   searchResultExtra?: (record: any) => string | null;
 }
