@@ -486,13 +486,12 @@ export default function EntityPicker({
     },
     phoneRow: {
       display: "grid",
-      gridTemplateColumns: "100px 1fr",
+      gridTemplateColumns: "130px 1fr",
       gap: 8,
       alignItems: "flex-start",
     },
   };
 
-  // Helper to check if a field is part of a phone row
   const isPhoneRow = (fields: any[], idx: number) => {
     return fields[idx]?.name === 'country_code' && fields[idx+1]?.name === 'phone'
   }
@@ -592,16 +591,14 @@ export default function EntityPicker({
             {saveError && <div style={styles.errorBanner}>{saveError}</div>}
 
             {config.quickCreate.fields.map((field, idx) => {
-              // Skip phone field when it will be rendered as part of phone row
               if (field.name === 'phone' && idx > 0 && config.quickCreate.fields[idx-1]?.name === 'country_code') {
                 return null
               }
 
-              // Render country_code + phone in one row
               if (isPhoneRow(config.quickCreate.fields, idx)) {
                 const phoneField = config.quickCreate.fields[idx+1]
                 return (
-                  <div key="phone-row" style={styles.modalField}>
+                  <div key="phone-row" className="phone-row" style={styles.modalField}>
                     <label style={styles.modalFieldLabel}>
                       Phone
                       <span style={{ color: "#EF4444", marginLeft: 4 }}>*</span>
@@ -636,7 +633,6 @@ export default function EntityPicker({
                 )
               }
 
-              // Regular field
               return (
                 <div key={field.name} style={styles.modalField}>
                   <label style={styles.modalFieldLabel}>
@@ -688,6 +684,7 @@ export default function EntityPicker({
 
       <style>{`
         @media (max-width: 640px) {
+          .phone-row { grid-template-columns: 110px 1fr !important; }
           .entity-picker-modal-panel {
             max-width: 100% !important;
             border-radius: 12px 12px 0 0 !important;
