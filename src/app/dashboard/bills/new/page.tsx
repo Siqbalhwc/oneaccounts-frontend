@@ -63,26 +63,21 @@ export default function NewBillPage() {
   const [activities, setActivities] = useState<any[]>([])
   const [allAccounts, setAllAccounts] = useState<any[]>([])
 
-  // Pre‑loaded lookups
   const [allProjects, setAllProjects] = useState<any[]>([])
   const [allDonors, setAllDonors] = useState<any[]>([])
 
-  // budgetInfo
   const [budgetInfo, setBudgetInfo] = useState<Record<string, { budget: number; spent: number; available: number; hasBudget: boolean }>>({})
   const [budgetError, setBudgetError] = useState("")
 
   const [locationActivitiesMap, setLocationActivitiesMap] = useState<Record<number, number[]>>({})
 
-  // Combo cache
   const [comboCache, setComboCache] = useState<Record<string, { project_id: number; donor_id: number; projectName: string; donorName: string | null }[]>>({})
 
-  // WHT states
   const [whtTaxCodes, setWhtTaxCodes] = useState<any[]>([])
   const [selectedWhtTaxCodeId, setSelectedWhtTaxCodeId] = useState<string>("")
   const [whtRate, setWhtRate] = useState<number>(0)
   const [whtAmount, setWhtAmount] = useState<number>(0)
 
-  // Input tax codes
   const [inputTaxCodes, setInputTaxCodes] = useState<any[]>([])
 
   const fiscalYear = new Date().getFullYear()
@@ -167,7 +162,6 @@ export default function NewBillPage() {
     })
   }, [showProducts])
 
-  // Fetch WHT and input tax codes
   useEffect(() => {
     if (taxEnabled && companyId) {
       supabase.from("tax_codes")
@@ -207,7 +201,6 @@ export default function NewBillPage() {
       .then(r => r.data && setProducts(r.data))
   }
 
-  // PO logic
   useEffect(() => {
     if (!companyId || !supplierId || !showPO) {
       setOpenPOs([])
@@ -249,7 +242,6 @@ export default function NewBillPage() {
       })
   }, [companyId, supplierId, showPO])
 
-  // Load existing bill for editing
   useEffect(() => {
     if (!editId || !companyId) return
     supabase.from("invoices")
@@ -318,7 +310,6 @@ export default function NewBillPage() {
       })
   }, [editId, companyId, suppliers, taxEnabled])
 
-  // AUTO‑COMPUTE DUE DATE
   useEffect(() => {
     if (!selectedSupplier || !billDate) return
     const term = (selectedSupplier.payment_terms || "").toLowerCase()
@@ -561,7 +552,6 @@ export default function NewBillPage() {
     setBudgetError(overBudget ? "⚠️ Some lines exceed the available budget" : "")
   }
 
-  // ── Single tax update (batched) ──
   const updateTax = (idx: number, codeId: string | null) => {
     const updated = [...items]
     if (codeId) {
@@ -652,19 +642,16 @@ export default function NewBillPage() {
   const totalTaxAmount = items.reduce((s, i) => s + (i.tax_amount || 0), 0)
   const grossTotal = netTotal + totalTaxAmount
 
-  // Auto‑update WHT amount when gross total or rate changes
   useEffect(() => {
     if (taxEnabled && whtRate > 0) {
       setWhtAmount(grossTotal * (whtRate / 100))
     }
   }, [grossTotal, whtRate, taxEnabled])
 
-  // ── handleSubmit using RPC for new bills, API for updates ──
   const handleSubmit = async () => {
     if (!supplierId) { setError("Please select a supplier"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
 
-    // ── If editing, use the existing API route (PUT) ──
     if (editId) {
       for (const item of items) {
         if (!item.product_id) {
@@ -736,7 +723,6 @@ export default function NewBillPage() {
       }
     }
 
-    // ── NEW BILL: Use RPC for performance ──
     for (const item of items) {
       if (!item.product_id) {
         const showLoc = isNGO || locations.length > 0
@@ -904,7 +890,6 @@ export default function NewBillPage() {
     return comboCache[key] || []
   }
 
-  // ── UNIFIED TABLE: Fixed columns, professional design ──
   const tableCols = () => {
     let cols = "280px 80px 120px "
     if (taxEnabled) cols += "120px "
@@ -926,7 +911,6 @@ export default function NewBillPage() {
   return (
     <div style={{ padding: "12px 16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        /* ── Reset & Shell ── */
         .inv-shell { max-width: 100%; margin: 0 auto; }
         .inv-title { font-size: 18px; font-weight: 700; color: var(--text); }
         .inv-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 16px 20px; box-shadow: var(--shadow-sm); margin-bottom: 12px; overflow: visible; }
@@ -938,7 +922,6 @@ export default function NewBillPage() {
         .inv-btn:hover { background: var(--card-hover); }
         .inv-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        /* ── Customer/Supplier Dropdown ── */
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
         .cust-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; max-height: 220px; overflow-y: auto; z-index: 9999; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
@@ -951,131 +934,62 @@ export default function NewBillPage() {
         .cust-selected-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 600; color: var(--text); width: 100%; cursor: pointer; overflow: hidden; }
         .cust-selected-badge .cust-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
-        /* ── Header Grid ── */
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; overflow: visible; }
         .inv-customer-section { overflow: visible; }
         .inv-content-wrapper { overflow: visible; }
 
-        /* ── Budget Warnings ── */
         .budget-warning { background: var(--card); border: 1px solid #EF4444; color: #FCA5A5; padding: 8px 12px; border-radius: 6px; font-size: 12px; display: flex; align-items: center; gap: 6px; }
 
-        /* ── UNIFIED TABLE ── */
-        .table-scroll-wrap {
-          overflow-x: auto;
-          width: 100%;
-          padding-bottom: 4px;
-        }
+        .table-scroll-wrap { overflow-x: auto; width: 100%; padding-bottom: 4px; scrollbar-color: var(--border) var(--bg); scrollbar-width: thin; }
         .table-scroll-wrap::-webkit-scrollbar { height: 10px; }
         .table-scroll-wrap::-webkit-scrollbar-track { background: var(--bg); border-radius: 8px; }
         .table-scroll-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
-        .table-scroll-wrap::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
-        .table-scroll-wrap { scrollbar-color: var(--border) var(--bg); scrollbar-width: thin; }
 
-        .inv-item-header,
-        .inv-item-row {
-          display: grid;
-          grid-template-columns: ${fixedCols()};
-          gap: 6px;
-          align-items: center;
-          padding: 6px 4px;
-        }
-        .inv-item-header {
-          font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
-          border-bottom: 2px solid var(--border); letter-spacing: 0.04em; padding-bottom: 8px; margin-bottom: 4px;
-        }
+        .inv-item-header, .inv-item-row { display: grid; grid-template-columns: ${fixedCols()}; gap: 6px; align-items: center; padding: 6px 4px; }
+        .inv-item-header { font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); border-bottom: 2px solid var(--border); letter-spacing: 0.04em; padding-bottom: 8px; margin-bottom: 4px; }
         .inv-item-header span { display: flex; align-items: center; padding: 0 8px; }
         .inv-item-header .header-right { justify-content: flex-end; text-align: right; }
         .inv-item-header .header-center { justify-content: center; text-align: center; }
 
         .inv-item-row { border-bottom: 1px solid var(--border); padding: 6px 4px; }
         .inv-item-row > * { padding: 0 8px; min-height: 34px; display: flex; align-items: center; }
-        .inv-item-row .inv-cell {
-          border: 1.5px solid var(--border); border-radius: 8px; padding: 0 8px; font-size: 12px;
-          font-family: inherit; background: var(--bg); color: var(--text); overflow: hidden;
-          white-space: nowrap; text-overflow: ellipsis; box-sizing: border-box; height: 34px; width: 100%;
-        }
-        .inv-item-row input,
-        .inv-item-row select {
-          height: 34px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 8px;
-          font-size: 12px; font-family: inherit; background: var(--bg); color: var(--text);
-          outline: none; box-sizing: border-box; width: 100%;
-        }
-        .inv-item-row input:focus,
-        .inv-item-row select:focus { border-color: var(--primary); }
+        .inv-item-row .inv-cell { border: 1.5px solid var(--border); border-radius: 8px; padding: 0 8px; font-size: 12px; font-family: inherit; background: var(--bg); color: var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; box-sizing: border-box; height: 34px; width: 100%; }
+        .inv-item-row input, .inv-item-row select { height: 34px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 8px; font-size: 12px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box; width: 100%; }
+        .inv-item-row input:focus, .inv-item-row select:focus { border-color: var(--primary); }
         .inv-item-row .inv-cell-total { justify-content: flex-end; font-weight: 600; }
         .inv-item-row .inv-cell-tax { justify-content: flex-end; color: var(--text-muted); font-size: 11px; }
 
-        .inv-item-row .delete-btn {
-          background: none; border: none; cursor: pointer; color: #EF4444;
-          display: flex; align-items: center; justify-content: center; padding: 4px; min-height: 34px;
-        }
+        .inv-item-row .delete-btn { background: none; border: none; cursor: pointer; color: #EF4444; display: flex; align-items: center; justify-content: center; padding: 4px; min-height: 34px; }
         .inv-item-row .delete-btn:hover { color: #DC2626; }
 
-        /* ── Tax Badge ── */
         .tax-wrapper { display: flex; align-items: center; gap: 6px; width: 100%; }
         .tax-wrapper select { flex: 1; min-width: 60px; }
-        .tax-badge {
-          font-size: 10px; font-weight: 600; padding: 2px 10px; border-radius: 12px;
-          background: rgba(56, 189, 248, 0.15); color: #38BDF8; border: 1px solid rgba(56, 189, 248, 0.2);
-          white-space: nowrap; flex-shrink: 0;
-        }
-        .tax-badge.no-tax {
-          background: rgba(255, 255, 255, 0.04); color: var(--text-muted); border-color: var(--border);
-        }
+        .tax-badge { font-size: 10px; font-weight: 600; padding: 2px 10px; border-radius: 12px; background: rgba(56, 189, 248, 0.15); color: #38BDF8; border: 1px solid rgba(56, 189, 248, 0.2); white-space: nowrap; flex-shrink: 0; }
+        .tax-badge.no-tax { background: rgba(255, 255, 255, 0.04); color: var(--text-muted); border-color: var(--border); }
 
-        /* ── Budget/Project Info ── */
         .line-info-row { font-size: 10px; color: var(--text-muted); margin-left: 4px; display: flex; gap: 14px; padding: 3px 0 5px 0; flex-wrap: wrap; align-items: center; }
         .line-info-chip { display: inline-flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 10px; }
         .over-budget-chip { border-color: #EF4444 !important; color: #FCA5A5 !important; }
         .ok-budget-chip { border-color: #059669 !important; color: #6EE7B7 !important; }
         .project-select-small { height: 24px; font-size: 10px; padding: 0 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); margin-left: 6px; }
 
-        /* ── Mobile Sticky Summary ── */
-        .mobile-sticky-summary {
-          display: none; position: sticky; bottom: 0; left: 0; right: 0;
-          background: var(--card); border-top: 1px solid var(--border); padding: 12px 16px;
-          align-items: center; justify-content: space-between; z-index: 50; margin-top: 16px;
-        }
+        .mobile-sticky-summary { display: none; position: sticky; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--border); padding: 12px 16px; align-items: center; justify-content: space-between; z-index: 50; margin-top: 16px; }
         .mobile-sticky-summary .total-left { flex: 1; min-width: 0; }
-        .mobile-sticky-summary .total-amount {
-          font-size: 18px; font-weight: 800; color: var(--text);
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        }
+        .mobile-sticky-summary .total-amount { font-size: 18px; font-weight: 800; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .mobile-sticky-summary .total-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); }
-        .mobile-sticky-summary .post-btn {
-          flex-shrink: 0; margin-left: 12px; background: var(--primary); color: var(--primary-text);
-          border-color: var(--primary); padding: 12px 24px; font-weight: 700;
-        }
+        .mobile-sticky-summary .post-btn { flex-shrink: 0; margin-left: 12px; background: var(--primary); color: var(--primary-text); border-color: var(--primary); padding: 12px 24px; font-weight: 700; }
 
         .desktop-summary { display: flex; flex-direction: column; gap: 12px; }
 
-        input[type="number"]::-webkit-inner-spin-button,
-        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
 
-        /* ── Responsive ── */
-        @media (min-width: 1025px) {
-          .desktop-summary { display: flex; flex-direction: column; gap: 12px; }
-          .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
-          .mobile-sticky-summary { display: none !important; }
-        }
-        @media (max-width: 1024px) {
-          .header-grid { display: block; }
-          .desktop-summary { display: none !important; }
-          .mobile-sticky-summary { display: flex !important; }
-          .inv-card { padding: 12px; }
-          .inv-input, .inv-select { height: 44px; font-size: 16px; }
-          .inv-btn { padding: 10px 16px; font-size: 14px; }
-          .cust-dropdown { max-height: 180px; }
-          .inv-item-header, .inv-item-row { min-width: 750px; }
-        }
-        @media (max-width: 640px) {
-          .inv-row { grid-template-columns: 1fr; }
-        }
+        @media (min-width: 1025px) { .desktop-summary { display: flex; flex-direction: column; gap: 12px; } .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; } .mobile-sticky-summary { display: none !important; } }
+        @media (max-width: 1024px) { .header-grid { display: block; } .desktop-summary { display: none !important; } .mobile-sticky-summary { display: flex !important; } .inv-card { padding: 12px; } .inv-input, .inv-select { height: 44px; font-size: 16px; } .inv-btn { padding: 10px 16px; font-size: 14px; } .cust-dropdown { max-height: 180px; } .inv-item-header, .inv-item-row { min-width: 750px; } }
+        @media (max-width: 640px) { .inv-row { grid-template-columns: 1fr; } }
       `}</style>
 
       <div className="inv-shell">
-        {/* ── Header ── */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
           <button className="inv-btn" onClick={() => router.push("/dashboard/bills")}><ArrowLeft size={16} /></button>
           <div style={{ flex: 1 }}>
@@ -1100,7 +1014,6 @@ export default function NewBillPage() {
           <div className="header-grid inv-customer-section">
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div className="inv-card">
-                {/* ── Supplier selection – replaced by EntityPicker ── */}
                 <EntityPicker
                   entityType="supplier"
                   value={selectedSupplier}
@@ -1120,7 +1033,6 @@ export default function NewBillPage() {
                   required
                 />
 
-                {/* ── PO Linking ── */}
                 {showPO && selectedSupplier && openPOs.length > 0 && (
                   <div style={{ marginTop: 14 }}>
                     <label className="inv-label">Link to Purchase Order (optional)</label>
@@ -1138,7 +1050,6 @@ export default function NewBillPage() {
                   </div>
                 )}
 
-                {/* ── Date fields ── */}
                 <div className="inv-row" style={{ marginTop: 14 }}>
                   <div>
                     <label className="inv-label">Bill Date *</label>
@@ -1160,19 +1071,17 @@ export default function NewBillPage() {
                   </div>
                 </div>
 
-                {/* ── Add Item ── */}
                 {showProducts ? (
                   <div style={{ marginTop: 14 }}>
-                    <label className="inv-label">Add Item</label>
+                    <label className="inv-label">Add Product</label>
                     <div style={{ display: "flex", gap: 8 }}>
                       <div style={{ flex: 1 }}>
                         <EntityPicker
                           entityType="product"
                           value={null}
-                          onChange={(record) => {
-                            if (record) addProductItem(record);
-                          }}
+                          onChange={(record) => { if (record) addProductItem(record); }}
                           placeholder="Search product…"
+                          allowCreate={false}
                         />
                       </div>
                       <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
@@ -1186,7 +1095,6 @@ export default function NewBillPage() {
                 )}
               </div>
 
-              {/* ── WHT Section ── */}
               {taxEnabled && (
                 <div className="inv-card">
                   <label className="inv-label">Withholding Tax (WHT)</label>
@@ -1252,7 +1160,6 @@ export default function NewBillPage() {
               )}
             </div>
 
-            {/* ── Desktop Summary ── */}
             <div className="desktop-summary">
               <div className="inv-card">
                 <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px 0" }}>Summary</h3>
@@ -1306,7 +1213,6 @@ export default function NewBillPage() {
             </div>
           </div>
 
-          {/* ── Items Section ── */}
           <div style={{ marginTop: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
@@ -1344,7 +1250,6 @@ export default function NewBillPage() {
                     return (
                       <Fragment key={idx}>
                         <div className="inv-item-row" style={overBudget ? { background: "rgba(239,68,68,0.04)", borderRadius: 6 } : {}}>
-                          {/* Description */}
                           <input
                             className="inv-input"
                             style={{ height: 34, fontSize: 12 }}
@@ -1353,7 +1258,6 @@ export default function NewBillPage() {
                             placeholder="Description"
                           />
 
-                          {/* Qty */}
                           <input
                             className="inv-input"
                             style={{ height: 34, fontSize: 12, textAlign: "center" }}
@@ -1362,7 +1266,6 @@ export default function NewBillPage() {
                             onChange={e => updateItem(idx, "qty", Number(e.target.value))}
                           />
 
-                          {/* Price */}
                           <input
                             className="inv-input"
                             style={{ height: 34, fontSize: 12, textAlign: "right" }}
@@ -1371,7 +1274,6 @@ export default function NewBillPage() {
                             onChange={e => updateItem(idx, "unit_price", Number(e.target.value))}
                           />
 
-                          {/* Tax % with badge */}
                           {taxEnabled && (
                             <div className="tax-wrapper">
                               <select
@@ -1385,15 +1287,10 @@ export default function NewBillPage() {
                                   <option key={tc.id} value={tc.id}>{tc.code} ({tc.rate}%)</option>
                                 ))}
                               </select>
-                              {taxBadge ? (
-                                <span className="tax-badge">{taxBadge}</span>
-                              ) : (
-                                <span className="tax-badge no-tax">No Tax</span>
-                              )}
+                              {taxBadge ? <span className="tax-badge">{taxBadge}</span> : <span className="tax-badge no-tax">No Tax</span>}
                             </div>
                           )}
 
-                          {/* Location – compact EntityPicker */}
                           {(isNGO || locations.length > 0) && (
                             item.product_id ? (
                               <span style={{ fontSize: 11, color: "var(--text-muted)" }}>—</span>
@@ -1404,11 +1301,11 @@ export default function NewBillPage() {
                                 onChange={(record) => { updateItem(idx, "location_id", record ? record.id : ""); }}
                                 placeholder="—"
                                 compact
+                                allowCreate={false}
                               />
                             )
                           )}
 
-                          {/* Activity – compact EntityPicker */}
                           {(isNGO || activities.length > 0) && (
                             item.product_id ? (
                               <span style={{ fontSize: 11, color: "var(--text-muted)" }}>—</span>
@@ -1419,11 +1316,11 @@ export default function NewBillPage() {
                                 onChange={(record) => { updateItem(idx, "activity_id", record ? record.id : ""); }}
                                 placeholder="—"
                                 compact
+                                allowCreate={false}
                               />
                             )
                           )}
 
-                          {/* GL Account – compact EntityPicker */}
                           {item.product_id ? (
                             <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Inventory</span>
                           ) : (
@@ -1433,22 +1330,17 @@ export default function NewBillPage() {
                               onChange={(record) => { updateItem(idx, "account_id", record ? Number(record.id) : null); }}
                               placeholder="—"
                               compact
+                              allowCreate={false}
                             />
                           )}
 
-                          {/* Total */}
                           <div className="inv-cell inv-cell-total" style={{ color: overBudget ? "#FCA5A5" : undefined }}>
                             PKR {item.total.toLocaleString()}
                           </div>
 
-                          {/* Delete */}
-                          <button
-                            className="delete-btn"
-                            onClick={() => removeItem(idx)}
-                          ><Trash2 size={14} /></button>
+                          <button className="delete-btn" onClick={() => removeItem(idx)}><Trash2 size={14} /></button>
                         </div>
 
-                        {/* ── Budget / Project Info Row ── */}
                         {showInfoRow && (
                           <div className="line-info-row">
                             {combos.length === 0 && (
@@ -1511,7 +1403,6 @@ export default function NewBillPage() {
             )}
           </div>
 
-          {/* ── Mobile Sticky Summary ── */}
           <div className="mobile-sticky-summary">
             <div className="total-left">
               <div className="total-label">Total</div>

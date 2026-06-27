@@ -1,11 +1,6 @@
 "use client"
 
-import React, {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-} from "react"
+import React, { useState, useEffect, useRef, useCallback } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { getEntityConfig } from "@/lib/entities/registry"
 
@@ -25,8 +20,9 @@ interface EntityPickerProps {
   disabled?: boolean
   defaultValues?: Record<string, any>
   className?: string
-  /** Use compact styling for table cells (smaller input, no label) */
   compact?: boolean
+  /** Show the "+ Quick Create" button. Default true. */
+  allowCreate?: boolean
 }
 
 export default function EntityPicker({
@@ -40,6 +36,7 @@ export default function EntityPicker({
   defaultValues = {},
   className = "",
   compact = false,
+  allowCreate = true,
 }: EntityPickerProps) {
   const config = getEntityConfig(entityType)
   const supabase = createBrowserClient(
@@ -53,9 +50,9 @@ export default function EntityPicker({
 
   const [isOpen, setIsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
-  const [allRecords, setAllRecords] = useState<LookupRecord[]>([])
+  const [allRecords, setAllRecords] = useState<LookupRecord[] | null>(null)
   const [filteredResults, setFilteredResults] = useState<LookupRecord[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+  const [isSearching, setIsSearching] = useState(false)
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [formValues, setFormValues] = useState<Record<string, any>>({})
@@ -64,8 +61,6 @@ export default function EntityPicker({
   const [isSaving, setIsSaving] = useState(false)
 
   const [companyId, setCompanyId] = useState("")
-
-  // dynamic lookup options cache
   const [lookupOptions, setLookupOptions] = useState<Record<string, any[]>>({})
 
   useEffect(() => {
@@ -85,9 +80,11 @@ export default function EntityPicker({
     : entityType === "account" ? "accounts"
     : null
 
+  // ── Lazy load: only fetch when dropdown opens ──
   useEffect(() => {
-    if (!companyId || !tableName) return
-    setIsLoading(true)
+    if (!isOpen || !companyId || !tableName) return
+    if (allRecords !== null) return   // already loaded
+
     supabase
       .from(tableName)
       .select("*")
@@ -96,17 +93,31 @@ export default function EntityPicker({
       .order("name", { ascending: true })
       .then(({ data }) => {
         setAllRecords(data || [])
-        setIsLoading(false)
       })
-  }, [companyId, tableName])
+  }, [isOpen, companyId, tableName, allRecords])
+
+  // ── Filter locally ──
+  useEffect(() => {
+    if (!allRecords) { setFilteredResults([]); return }
+    if (!searchQuery.trim()) {
+      setFilteredResults(allRecords.slice(0, 8))
+      return
+    }
+    const q = searchQuery.toLowerCase()
+    const fields = config?.searchFields || ["name"]
+    const filtered = allRecords
+      .filter((r) => fields.some((f) => (r[f]?.toString() || "").toLowerCase().includes(q)))
+      .slice(0, 8)
+    setFilteredResults(filtered)
+  }, [searchQuery, allRecords, config])
 
   // Load dynamic lookup options when modal opens
   useEffect(() => {
     if (isModalOpen && config) {
-      config.quickCreate.fields.forEach(async (field) => {
-        if ((field as any).lookupTable && !lookupOptions[field.name]) {
+      config.quickCreate.fields.forEach(async (field: any) => {
+        if (field.lookupTable && !lookupOptions[field.name]) {
           const { data } = await supabase
-            .from((field as any).lookupTable)
+            .from(field.lookupTable)
             .select("id, name")
             .eq("company_id", companyId)
             .is("deleted_at", null)
@@ -118,21 +129,6 @@ export default function EntityPicker({
       })
     }
   }, [isModalOpen, config, companyId])
-
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredResults(allRecords.slice(0, 8))
-      return
-    }
-    const q = searchQuery.toLowerCase()
-    const fields = config?.searchFields || ["name"]
-    const filtered = allRecords
-      .filter((r) =>
-        fields.some((f) => (r[f]?.toString() || "").toLowerCase().includes(q))
-      )
-      .slice(0, 8)
-    setFilteredResults(filtered)
-  }, [searchQuery, allRecords, config])
 
   const openDropdown = useCallback(() => {
     if (!disabled) setIsOpen(true)
@@ -185,20 +181,20 @@ export default function EntityPicker({
   const handleFieldChange = (name: string, val: string) => {
     setFormValues((prev) => {
       const updated = { ...prev, [name]: val }
-      const field = config?.quickCreate.fields.find(f => f.name === name)
+      const field = config?.quickCreate.fields.find((f) => f.name === name)
       if (field?.validation) {
         const err = field.validation(val, updated)
-        setFieldErrors(prev => {
-          const next = { ...prev }
+        setFieldErrors((prevErrs) => {
+          const next = { ...prevErrs }
           if (err) next[name] = err
           else delete next[name]
           return next
         })
       } else if (field?.required && !val) {
-        setFieldErrors(prev => ({ ...prev, [name]: `${field.label} is required` }))
+        setFieldErrors((prevErrs) => ({ ...prevErrs, [name]: `${field.label} is required` }))
       } else {
-        setFieldErrors(prev => {
-          const next = { ...prev }
+        setFieldErrors((prevErrs) => {
+          const next = { ...prevErrs }
           delete next[name]
           return next
         })
@@ -234,41 +230,39 @@ export default function EntityPicker({
     try {
       const payload: any = { company_id: companyId }
       config.quickCreate.fields.forEach((f) => {
-        if (f.name === 'country_code') return
+        if (f.name === "country_code") return
         if (formValues[f.name] !== undefined) {
           payload[f.name] = formValues[f.name]
         }
       })
 
-      // Combine country_code + phone
       if (formValues.country_code && formValues.phone) {
-        payload.phone = (formValues.country_code || '') + (formValues.phone || '')
+        payload.phone = (formValues.country_code || "") + (formValues.phone || "")
       }
 
       let newRecord: any = null
 
-      // PRODUCT quick create (Supabase directly)
-      if (entityType === 'product') {
-        // ... same as before ...
-        let nextCode = 'PROD-001'
+      // PRODUCT
+      if (entityType === "product") {
+        let nextCode = "PROD-001"
         const { data: codes } = await supabase
-          .from('products')
-          .select('code')
-          .eq('company_id', companyId)
-          .ilike('code', 'PROD-%')
-          .order('code', { ascending: false })
+          .from("products")
+          .select("code")
+          .eq("company_id", companyId)
+          .ilike("code", "PROD-%")
+          .order("code", { ascending: false })
           .limit(1)
         if (codes && codes.length > 0) {
           const match = codes[0].code?.match(/PROD-(\d+)/)
           if (match) {
             const num = parseInt(match[1], 10) + 1
-            nextCode = `PROD-${String(num).padStart(3, '0')}`
+            nextCode = `PROD-${String(num).padStart(3, "0")}`
           }
         }
         const productPayload = {
           company_id: companyId,
           code: nextCode,
-          name: payload.name || '',
+          name: payload.name || "",
           sale_price: parseFloat(payload.sale_price || 0),
           cost_price: parseFloat(payload.cost_price || 0),
           opening_qty: 0,
@@ -276,25 +270,24 @@ export default function EntityPicker({
           image_path: null,
         }
         const { data: inserted, error: insertErr } = await supabase
-          .from('products')
+          .from("products")
           .insert(productPayload)
-          .select('*')
+          .select("*")
           .single()
         if (insertErr) throw new Error(insertErr.message)
         newRecord = inserted
       }
-      // Other direct Supabase inserts (location, activity, project, account)
-      else if (['location', 'activity', 'project', 'account'].includes(entityType)) {
-        // For GL account, ensure code is unique
-        if (entityType === 'account' && payload.code) {
+      // location, activity, project, account – direct insert
+      else if (["location", "activity", "project", "account"].includes(entityType)) {
+        if (entityType === "account" && payload.code) {
           const { data: existing } = await supabase
-            .from('accounts')
-            .select('id')
-            .eq('company_id', companyId)
-            .eq('code', payload.code)
+            .from("accounts")
+            .select("id")
+            .eq("company_id", companyId)
+            .eq("code", payload.code)
             .maybeSingle()
           if (existing) {
-            setSaveError('Code already exists. Please choose another.')
+            setSaveError("Code already exists. Please choose another.")
             setIsSaving(false)
             return
           }
@@ -302,32 +295,33 @@ export default function EntityPicker({
         const { data: inserted, error: insertErr } = await supabase
           .from(tableName!)
           .insert(payload)
-          .select('*')
+          .select("*")
           .single()
         if (insertErr) throw new Error(insertErr.message)
         newRecord = inserted
       }
-      // Customer / Supplier via API
+      // customer / supplier
       else {
         const res = await fetch(config.apiBase, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify(payload),
         })
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}))
-          throw new Error(errData.error || 'Failed to create record')
+          throw new Error(errData.error || "Failed to create record")
         }
         const data = await res.json()
         newRecord = data.customer || data.supplier || data
       }
 
-      setAllRecords((prev) => [newRecord, ...prev])
+      // Update all records cache and select
+      setAllRecords((prev) => (prev ? [newRecord, ...prev] : [newRecord]))
       onChange(newRecord)
       setIsModalOpen(false)
     } catch (err: any) {
-      setSaveError(err.message || 'Failed to create record. Please try again.')
+      setSaveError(err.message || "Failed to create record. Please try again.")
     } finally {
       setIsSaving(false)
     }
@@ -346,16 +340,15 @@ export default function EntityPicker({
 
   if (!config) return null
 
-  const canCreate = config.permissions.create.length > 0
-  const displayLabel = compact ? "" : (label || config.displayName)
+  const canCreate = allowCreate && config.permissions.create.length > 0
+  const displayLabel = compact ? "" : label || config.displayName
 
   const styles: Record<string, React.CSSProperties> = {
     wrapper: { position: "relative", fontFamily: "'Inter', sans-serif", width: "100%" },
     label: { fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)", marginBottom: 4, display: "block" },
     trigger: {
       display: "flex", alignItems: "center", justifyContent: "space-between",
-      width: "100%",
-      height: compact ? 32 : 38,
+      width: "100%", height: compact ? 32 : 38,
       border: "1.5px solid var(--border)", borderRadius: 8,
       padding: compact ? "0 6px" : "0 12px",
       fontSize: compact ? 11 : 13,
@@ -387,11 +380,10 @@ export default function EntityPicker({
     cancelBtn: { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", background: "transparent", color: "var(--text-muted)", border: "1.5px solid var(--border)", fontFamily: "inherit" },
     errorBanner: { background: "var(--card)", border: "1px solid #EF4444", color: "#FCA5A5", padding: "8px 12px", borderRadius: 8, fontSize: 13, marginBottom: 12 },
     phoneRow: { display: "grid", gridTemplateColumns: "130px 1fr", gap: 8, alignItems: "flex-start" },
-  };
-
-  const isPhoneRow = (fields: any[], idx: number) => {
-    return fields[idx]?.name === 'country_code' && fields[idx+1]?.name === 'phone'
   }
+
+  const isPhoneRow = (fields: any[], idx: number) =>
+    fields[idx]?.name === "country_code" && fields[idx + 1]?.name === "phone"
 
   return (
     <div style={styles.wrapper} className={className}>
@@ -405,7 +397,8 @@ export default function EntityPicker({
       <button ref={triggerRef} type="button" disabled={disabled} onClick={openDropdown} style={styles.trigger}>
         {value ? (
           <span style={styles.selectedChip}>
-            {value.code ? `${value.code} — ` : ""}{value.name}
+            {value.code ? `${value.code} — ` : ""}
+            {value.name}
           </span>
         ) : (
           <span style={styles.triggerPlaceholder}>
@@ -418,18 +411,42 @@ export default function EntityPicker({
       {isOpen && (
         <div ref={dropdownRef} style={styles.dropdown}>
           <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border)" }}>
-            <input ref={searchInputRef} type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder={`Search ${config.displayName.toLowerCase()}…`} style={styles.searchInput} />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={`Search ${config.displayName.toLowerCase()}…`}
+              style={styles.searchInput}
+            />
           </div>
           <div style={styles.resultsList}>
-            {filteredResults.length > 0 ? (
+            {allRecords === null ? (
+              <div style={styles.emptyState}>Loading…</div>
+            ) : filteredResults.length > 0 ? (
               filteredResults.map((r) => (
-                <div key={r.id} onClick={() => handleSelect(r)} style={{ ...styles.resultItem, background: value?.id === r.id ? "var(--card-hover)" : "transparent" }}
+                <div
+                  key={r.id}
+                  onClick={() => handleSelect(r)}
+                  style={{
+                    ...styles.resultItem,
+                    background: value?.id === r.id ? "var(--card-hover)" : "transparent",
+                  }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = "var(--card-hover)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = value?.id === r.id ? "var(--card-hover)" : "transparent")}>
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.background =
+                      value?.id === r.id ? "var(--card-hover)" : "transparent")
+                  }
+                >
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    <span style={{ fontWeight: 600 }}>{r.code ? `${r.code} — ` : ""}{r.name}</span>
+                    <span style={{ fontWeight: 600 }}>
+                      {r.code ? `${r.code} — ` : ""}
+                      {r.name}
+                    </span>
                     {config.searchResultExtra && config.searchResultExtra(r) && (
-                      <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: 8 }}>{config.searchResultExtra(r)}</span>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: 8 }}>
+                        {config.searchResultExtra(r)}
+                      </span>
                     )}
                   </span>
                 </div>
@@ -440,11 +457,13 @@ export default function EntityPicker({
               <div style={styles.emptyState}>Start typing to search…</div>
             )}
           </div>
-          <div style={styles.actionFooter}>
-            {canCreate && (
-              <button type="button" onClick={openModal} style={styles.actionBtn}>+ Quick Create {config.displayName}</button>
-            )}
-          </div>
+          {canCreate && (
+            <div style={styles.actionFooter}>
+              <button type="button" onClick={openModal} style={styles.actionBtn}>
+                + Quick Create {config.displayName}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -453,36 +472,63 @@ export default function EntityPicker({
           <div style={styles.modalPanel}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <h2 style={styles.modalTitle}>Create {config.displayName}</h2>
-              <button type="button" onClick={() => setIsModalOpen(false)} style={{ ...styles.cancelBtn, padding: "4px 8px", fontSize: 14 }}>✕</button>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                style={{ ...styles.cancelBtn, padding: "4px 8px", fontSize: 14 }}
+              >
+                ✕
+              </button>
             </div>
 
             {saveError && <div style={styles.errorBanner}>{saveError}</div>}
 
             {config.quickCreate.fields.map((field: any, idx: number) => {
-              if (field.name === 'phone' && idx > 0 && config.quickCreate.fields[idx-1]?.name === 'country_code') return null
+              if (field.name === "phone" && idx > 0 && config.quickCreate.fields[idx - 1]?.name === "country_code")
+                return null
 
               if (isPhoneRow(config.quickCreate.fields, idx)) {
-                const phoneField = config.quickCreate.fields[idx+1]
+                const phoneField = config.quickCreate.fields[idx + 1]
                 return (
                   <div key="phone-row" className="phone-row" style={styles.modalField}>
-                    <label style={styles.modalFieldLabel}>Phone<span style={{ color: "#EF4444", marginLeft: 4 }}>*</span></label>
+                    <label style={styles.modalFieldLabel}>
+                      Phone<span style={{ color: "#EF4444", marginLeft: 4 }}>*</span>
+                    </label>
                     <div style={styles.phoneRow}>
-                      <select value={formValues[field.name] || ""} onChange={(e) => handleFieldChange(field.name, e.target.value)} style={styles.modalFieldSelect}>
-                        {field.options?.map((opt: any) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                      <select
+                        value={formValues[field.name] || ""}
+                        onChange={(e) => handleFieldChange(field.name, e.target.value)}
+                        style={styles.modalFieldSelect}
+                      >
+                        {field.options?.map((opt: any) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
                       </select>
-                      <input type="text" value={formValues[phoneField.name] || ""} onChange={(e) => handleFieldChange(phoneField.name, e.target.value)} placeholder={phoneField.placeholder}
-                        style={{ ...styles.modalFieldInput, borderColor: fieldErrors[phoneField.name] ? "#EF4444" : "var(--border)" }} />
+                      <input
+                        type="text"
+                        value={formValues[phoneField.name] || ""}
+                        onChange={(e) => handleFieldChange(phoneField.name, e.target.value)}
+                        placeholder={phoneField.placeholder}
+                        style={{
+                          ...styles.modalFieldInput,
+                          borderColor: fieldErrors[phoneField.name] ? "#EF4444" : "var(--border)",
+                        }}
+                      />
                     </div>
-                    {fieldErrors[phoneField.name] && <div style={styles.modalFieldError}>{fieldErrors[phoneField.name]}</div>}
+                    {fieldErrors[phoneField.name] && (
+                      <div style={styles.modalFieldError}>{fieldErrors[phoneField.name]}</div>
+                    )}
                   </div>
                 )
               }
 
-              // Render regular field, with support for dynamic lookup selects
               return (
                 <div key={field.name} style={styles.modalField}>
                   <label style={styles.modalFieldLabel}>
-                    {field.label}{field.required && <span style={{ color: "#EF4444", marginLeft: 4 }}>*</span>}
+                    {field.label}
+                    {field.required && <span style={{ color: "#EF4444", marginLeft: 4 }}>*</span>}
                   </label>
 
                   {field.type === "select" && (field.options || field.lookupTable) ? (
@@ -504,7 +550,10 @@ export default function EntityPicker({
                       value={formValues[field.name] || ""}
                       onChange={(e) => handleFieldChange(field.name, e.target.value)}
                       placeholder={field.placeholder}
-                      style={{ ...styles.modalFieldInput, borderColor: fieldErrors[field.name] ? "#EF4444" : "var(--border)" }}
+                      style={{
+                        ...styles.modalFieldInput,
+                        borderColor: fieldErrors[field.name] ? "#EF4444" : "var(--border)",
+                      }}
                     />
                   )}
                   {fieldErrors[field.name] && (
@@ -515,7 +564,9 @@ export default function EntityPicker({
             })}
 
             <div style={styles.modalFooter}>
-              <button type="button" onClick={() => setIsModalOpen(false)} style={styles.cancelBtn}>Cancel</button>
+              <button type="button" onClick={() => setIsModalOpen(false)} style={styles.cancelBtn}>
+                Cancel
+              </button>
               <button type="button" onClick={handleSave} disabled={isSaving} style={styles.saveBtn}>
                 {isSaving ? "Saving…" : `Save ${config.displayName}`}
               </button>
