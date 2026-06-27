@@ -17,4 +17,11 @@ export const productMeta: EntityConfig = {
     create: ['admin', 'accountant'],
     edit:   ['admin', 'accountant'],
   },
+  // Display stock in search results
+  searchResultExtra: (record) => {
+    if (record.qty_on_hand !== undefined) {
+      return `Stock: ${record.qty_on_hand}`;
+    }
+    return null;
+  },
 };

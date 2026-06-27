@@ -75,13 +75,11 @@ function NewInvoicePageContent() {
 
   const [taxCodes, setTaxCodes] = useState<any[]>([])
 
-  // NEW: bank accounts to show on invoice
   const [bankAccounts, setBankAccounts] = useState<any[]>([])
 
   const isNGO = businessType === "ngo"
   const invoiceIdForLink = savedInvoiceId || (editId ? Number(editId) : null)
 
-  // ── Stock validation state ──
   const [stockErrors, setStockErrors] = useState<Record<number, string>>({})
 
   useEffect(() => {
@@ -132,7 +130,6 @@ function NewInvoicePageContent() {
           .then(r => r.data && setTaxCodes(r.data))
       }
 
-      // NEW: Fetch bank accounts that are marked to show on invoice
       supabase.from("bank_accounts")
         .select("bank_name, account_title, account_number, show_on_invoice")
         .eq("company_id", cid)
@@ -145,7 +142,6 @@ function NewInvoicePageContent() {
     })
   }, [showProducts, taxEnabled])
 
-  // ── Live stock validation ──
   useEffect(() => {
     const errors: Record<number, string> = {}
     items.forEach((item, idx) => {
@@ -692,7 +688,6 @@ function NewInvoicePageContent() {
     return don?.name || ""
   }
 
-  // ── UNIFIED TABLE ──
   const tableCols = taxEnabled
     ? "60px 220px 320px 80px 120px 120px 140px 140px 120px 50px"
     : "60px 220px 320px 80px 120px 140px 120px 50px"
@@ -700,7 +695,6 @@ function NewInvoicePageContent() {
   return (
     <div className="invoice-page" style={{ padding: "12px 16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        /* ── Reset & Shell ── */
         .inv-shell { width: 100%; margin: 0; }
         .inv-title { font-size: 18px; font-weight: 700; color: var(--text); }
         .inv-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 16px 20px; box-shadow: var(--shadow-sm); margin-bottom: 12px; overflow: visible; }
@@ -714,7 +708,6 @@ function NewInvoicePageContent() {
         .inv-btn-success { background: #25D366; color: white; border-color: #25D366; }
         .inv-btn-success:hover { background: #22C55E; }
 
-        /* ── Customer Dropdown ── */
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
         .cust-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; max-height: 220px; overflow-y: auto; z-index: 9999; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
@@ -725,101 +718,40 @@ function NewInvoicePageContent() {
         .cust-option-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
         .cust-option-bal { font-size: 12px; font-weight: 600; color: var(--primary); white-space: nowrap; }
         .cust-selected-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 600; color: var(--text); width: 100%; cursor: pointer; position: relative; overflow: hidden; }
-        .cust-selected-badge .cust-name {
-          flex: 1;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          min-width: 0;
-        }
+        .cust-selected-badge .cust-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
-        /* ── UNIFIED TABLE ── */
-        .table-scroll-wrap {
-          overflow-x: auto;
-          width: 100%;
-          padding-bottom: 4px;
-        }
+        .table-scroll-wrap { overflow-x: auto; width: 100%; padding-bottom: 4px; scrollbar-color: var(--border) var(--bg); scrollbar-width: thin; }
         .table-scroll-wrap::-webkit-scrollbar { height: 10px; }
         .table-scroll-wrap::-webkit-scrollbar-track { background: var(--bg); border-radius: 8px; }
         .table-scroll-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
-        .table-scroll-wrap::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
-        .table-scroll-wrap { scrollbar-color: var(--border) var(--bg); scrollbar-width: thin; }
 
-        .inv-item-header,
-        .inv-item-row {
-          display: grid;
-          grid-template-columns: ${tableCols};
-          gap: 6px;
-          align-items: center;
-          min-width: ${taxEnabled ? '1450px' : '1200px'};
-          padding: 6px 4px;
-        }
-
-        .inv-item-header {
-          font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
-          border-bottom: 2px solid var(--border); letter-spacing: 0.04em; padding-bottom: 8px; margin-bottom: 4px;
-        }
+        .inv-item-header, .inv-item-row { display: grid; grid-template-columns: ${tableCols}; gap: 6px; align-items: center; min-width: ${taxEnabled ? '1450px' : '1200px'}; padding: 6px 4px; }
+        .inv-item-header { font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); border-bottom: 2px solid var(--border); letter-spacing: 0.04em; padding-bottom: 8px; margin-bottom: 4px; }
         .inv-item-header span { display: flex; align-items: center; padding: 0 8px; }
         .inv-item-header .header-right { justify-content: flex-end; text-align: right; }
         .inv-item-header .header-center { justify-content: center; text-align: center; }
 
         .inv-item-row { border-bottom: 1px solid var(--border); padding: 6px 4px; }
         .inv-item-row > * { padding: 0 8px; min-height: 34px; display: flex; align-items: center; }
-        .inv-item-row .inv-cell {
-          border: 1.5px solid var(--border); border-radius: 8px; padding: 0 8px; font-size: 12px;
-          font-family: inherit; background: var(--bg); color: var(--text); overflow: hidden;
-          white-space: nowrap; text-overflow: ellipsis; box-sizing: border-box; height: 34px; width: 100%;
-        }
-        .inv-item-row input,
-        .inv-item-row select {
-          height: 34px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 8px;
-          font-size: 12px; font-family: inherit; background: var(--bg); color: var(--text);
-          outline: none; box-sizing: border-box; width: 100%;
-        }
-        .inv-item-row input:focus,
-        .inv-item-row select:focus { border-color: var(--primary); }
+        .inv-item-row .inv-cell { border: 1.5px solid var(--border); border-radius: 8px; padding: 0 8px; font-size: 12px; font-family: inherit; background: var(--bg); color: var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; box-sizing: border-box; height: 34px; width: 100%; }
+        .inv-item-row input, .inv-item-row select { height: 34px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 8px; font-size: 12px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box; width: 100%; }
+        .inv-item-row input:focus, .inv-item-row select:focus { border-color: var(--primary); }
         .inv-item-row .inv-cell-total { justify-content: flex-end; font-weight: 600; }
         .inv-item-row .inv-cell-tax { justify-content: flex-end; color: var(--text-muted); font-size: 11px; }
         .inv-item-row .inv-cell-cost { justify-content: flex-end; color: var(--text-muted); font-size: 11px; }
-        .inv-item-row .delete-btn {
-          background: none; border: none; cursor: pointer; color: #EF4444;
-          display: flex; align-items: center; justify-content: center; padding: 4px; min-height: 34px;
-        }
-        .inv-item-row .delete-btn:hover { color: #DC2626; }
+        .inv-item-row .delete-btn { background: none; border: none; cursor: pointer; color: #EF4444; display: flex; align-items: center; justify-content: center; padding: 4px; min-height: 34px; }
         .inv-item-row .tax-wrapper { display: flex; align-items: center; gap: 6px; width: 100%; }
         .inv-item-row .tax-wrapper select { flex: 1; min-width: 60px; }
-        .tax-badge {
-          font-size: 10px; font-weight: 600; padding: 2px 10px; border-radius: 12px;
-          background: rgba(56, 189, 248, 0.15); color: #38BDF8; border: 1px solid rgba(56, 189, 248, 0.2);
-          white-space: nowrap; flex-shrink: 0;
-        }
-        .tax-badge.no-tax {
-          background: rgba(255, 255, 255, 0.04); color: var(--text-muted); border-color: var(--border);
-        }
-        .stock-warning {
-          color: #EF4444; font-size: 10px; font-weight: 600; white-space: nowrap;
-          background: rgba(239, 68, 68, 0.1); padding: 2px 8px; border-radius: 12px;
-          border: 1px solid rgba(239, 68, 68, 0.2); flex-shrink: 0;
-        }
+        .tax-badge { font-size: 10px; font-weight: 600; padding: 2px 10px; border-radius: 12px; background: rgba(56, 189, 248, 0.15); color: #38BDF8; border: 1px solid rgba(56, 189, 248, 0.2); white-space: nowrap; flex-shrink: 0; }
+        .tax-badge.no-tax { background: rgba(255, 255, 255, 0.04); color: var(--text-muted); border-color: var(--border); }
+        .stock-warning { color: #EF4444; font-size: 10px; font-weight: 600; white-space: nowrap; background: rgba(239, 68, 68, 0.1); padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(239, 68, 68, 0.2); flex-shrink: 0; }
 
-        /* ── Mobile Sticky Summary ── */
-        .mobile-sticky-summary {
-          display: none; position: sticky; bottom: 0; left: 0; right: 0;
-          background: var(--card); border-top: 1px solid var(--border); padding: 12px 16px;
-          align-items: center; justify-content: space-between; z-index: 50; margin-top: 16px;
-        }
+        .mobile-sticky-summary { display: none; position: sticky; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--border); padding: 12px 16px; align-items: center; justify-content: space-between; z-index: 50; margin-top: 16px; }
         .mobile-sticky-summary .total-left { flex: 1; min-width: 0; }
-        .mobile-sticky-summary .total-amount {
-          font-size: 18px; font-weight: 800; color: var(--text);
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        }
+        .mobile-sticky-summary .total-amount { font-size: 18px; font-weight: 800; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .mobile-sticky-summary .total-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); }
-        .mobile-sticky-summary .post-btn {
-          flex-shrink: 0; margin-left: 12px; background: var(--primary); color: var(--primary-text);
-          border-color: var(--primary); padding: 12px 24px; font-weight: 700;
-        }
+        .mobile-sticky-summary .post-btn { flex-shrink: 0; margin-left: 12px; background: var(--primary); color: var(--primary-text); border-color: var(--primary); padding: 12px 24px; font-weight: 700; }
 
-        /* ── Other ── */
         .price-history { background: var(--card); border-radius: 8px; padding: 10px 14px; margin-top: 12px; font-size: 12px; border: 1px solid var(--border); }
         .price-history-item { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--border); }
         .project-info-row { font-size: 10px; color: var(--text-muted); margin-top: 2px; padding-left: 8px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
@@ -828,32 +760,16 @@ function NewInvoicePageContent() {
         input[type="number"] { -moz-appearance: textfield; }
         .desktop-summary { display: flex; flex-direction: column; gap: 12px; }
 
-        /* ── Responsive ── */
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; overflow: visible; }
         .inv-customer-section { overflow: visible; }
         .inv-content-wrapper { overflow: visible; }
 
-        @media (min-width: 1025px) {
-          .desktop-summary { display: flex; flex-direction: column; gap: 12px; }
-          .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
-          .mobile-sticky-summary { display: none !important; }
-        }
-        @media (max-width: 1024px) {
-          .header-grid { display: block; }
-          .desktop-summary { display: none !important; }
-          .mobile-sticky-summary { display: flex !important; }
-          .inv-card { padding: 12px; }
-          .inv-input, .inv-select { height: 44px; font-size: 16px; }
-          .inv-btn { padding: 10px 16px; font-size: 14px; }
-          .cust-dropdown { max-height: 180px; }
-        }
-        @media (max-width: 640px) {
-          .inv-row { grid-template-columns: 1fr; }
-        }
+        @media (min-width: 1025px) { .desktop-summary { display: flex; flex-direction: column; gap: 12px; } .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; } .mobile-sticky-summary { display: none !important; } }
+        @media (max-width: 1024px) { .header-grid { display: block; } .desktop-summary { display: none !important; } .mobile-sticky-summary { display: flex !important; } .inv-card { padding: 12px; } .inv-input, .inv-select { height: 44px; font-size: 16px; } .inv-btn { padding: 10px 16px; font-size: 14px; } .cust-dropdown { max-height: 180px; } }
+        @media (max-width: 640px) { .inv-row { grid-template-columns: 1fr; } }
       `}</style>
 
       <div className="inv-shell">
-        {/* ── Header ── */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
           <button className="inv-btn" onClick={() => router.push("/dashboard/invoices")}><ArrowLeft size={16} /></button>
           <div style={{ flex: 1 }}>
@@ -875,7 +791,6 @@ function NewInvoicePageContent() {
           <div className="header-grid inv-customer-section">
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div className="inv-card">
-                {/* ── Customer selection – replaced by EntityPicker ── */}
                 <EntityPicker
                   entityType="customer"
                   value={selectedCustomer}
@@ -893,7 +808,6 @@ function NewInvoicePageContent() {
                   required
                 />
 
-                {/* ── Date fields ── */}
                 <div className="inv-row" style={{ marginTop: 14 }}>
                   <div><label className="inv-label">Invoice Date *</label><input className="inv-input" type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} /></div>
                   <div><label className="inv-label">Due Date</label><input className="inv-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} /></div>
@@ -903,27 +817,19 @@ function NewInvoicePageContent() {
                   <div><label className="inv-label">Notes</label><input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" /></div>
                 </div>
 
-                {/* ── Product add ── */}
                 {showProducts ? (
                   <div style={{ marginTop: 14 }}>
                     <label className="inv-label">Add Product</label>
                     <div style={{ display: "flex", gap: 8 }}>
-                      <div style={{ position: "relative", flex: 1 }}>
-                        <Search size={14} style={{ position: "absolute", left: 12, top: 13, color: "var(--text-muted)" }} />
-                        <input className="inv-input" style={{ paddingLeft: 36 }} placeholder="Search product..." value={productSearch} onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }} onFocus={() => setShowProductList(true)} onBlur={() => setTimeout(() => setShowProductList(false), 200)} />
-                        {showProductList && (
-                          <div className="cust-dropdown" style={{ marginTop: 4 }}>
-                            {filteredProducts.map((p: any) => (
-                              <div key={p.id} className="cust-option" onMouseDown={() => addProductItem(p)}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                  {p.image_path && <img src={p.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />}
-                                  <div><div className="cust-option-name">{p.code} - {p.name}</div><div className="cust-option-meta">PKR {p.sale_price} | Stock: {p.qty_on_hand}</div></div>
-                                </div>
-                              </div>
-                            ))}
-                            {filteredProducts.length === 0 && <div style={{ padding: 12, color: "var(--text-muted)", fontSize: 12 }}>No products found</div>}
-                          </div>
-                        )}
+                      <div style={{ flex: 1 }}>
+                        <EntityPicker
+                          entityType="product"
+                          value={null}
+                          onChange={(record) => {
+                            if (record) addProductItem(record);
+                          }}
+                          placeholder="Search product…"
+                        />
                       </div>
                       <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
                     </div>
@@ -947,16 +853,13 @@ function NewInvoicePageContent() {
               </div>
             </div>
 
-            {/* ── Desktop Summary ── */}
             <div className="desktop-summary">
               <div className="inv-card">
                 <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}><span>Total</span><span>PKR {(totalAmount + totalTaxAmount).toLocaleString()}</span></div>
                 {taxEnabled && totalTaxAmount > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}><span>Tax</span><span>PKR {totalTaxAmount.toLocaleString()}</span></div>}
                 {hasStockErrors && (
-                  <div style={{ marginTop: 8, padding: "6px 10px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, color: "#EF4444", fontSize: 11 }}>
-                    ⚠️ Some items have insufficient stock
-                  </div>
+                  <div style={{ marginTop: 8, padding: "6px 10px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, color: "#EF4444", fontSize: 11 }}>⚠️ Some items have insufficient stock</div>
                 )}
               </div>
               <div className="inv-card">
@@ -969,7 +872,6 @@ function NewInvoicePageContent() {
             </div>
           </div>
 
-          {/* ── Items Section ── */}
           <div className="inv-items-section" style={{ marginBottom: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
@@ -1006,10 +908,14 @@ function NewInvoicePageContent() {
                           ) : (
                             <div>
                               {isNGO ? (
-                                <select className="inv-select" style={{ height: 32, fontSize: 12, width: "100%" }} value={item.project_id ?? ""} onChange={e => updateItem(idx, "project_id", e.target.value ? Number(e.target.value) : null)}>
-                                  <option value="">— Select Project —</option>
-                                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                </select>
+                                <EntityPicker
+                                  entityType="project"
+                                  value={projects.find(p => p.id === item.project_id) || null}
+                                  onChange={(record) => {
+                                    updateItem(idx, "project_id", record ? Number(record.id) : null);
+                                  }}
+                                  placeholder="— Select Project —"
+                                />
                               ) : (
                                 <div className="inv-cell" style={{ paddingLeft: 8 }}>—</div>
                               )}
@@ -1017,9 +923,7 @@ function NewInvoicePageContent() {
                           )}
 
                           <input className="inv-input" style={{ height: 32, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Description" />
-
                           <input className="inv-input" style={{ height: 32, fontSize: 12, textAlign: "center", borderColor: stockError ? "#EF4444" : undefined }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-
                           <input className="inv-input" style={{ height: 32, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
 
                           {taxEnabled && (
@@ -1028,11 +932,7 @@ function NewInvoicePageContent() {
                                 <option value="">No Tax</option>
                                 {taxCodes.map((tc: any) => <option key={tc.id} value={String(tc.id)}>{tc.code} ({tc.rate}%)</option>)}
                               </select>
-                              {taxBadge ? (
-                                <span className="tax-badge">{taxBadge}</span>
-                              ) : (
-                                <span className="tax-badge no-tax">No Tax</span>
-                              )}
+                              {taxBadge ? <span className="tax-badge">{taxBadge}</span> : <span className="tax-badge no-tax">No Tax</span>}
                             </div>
                           )}
 
