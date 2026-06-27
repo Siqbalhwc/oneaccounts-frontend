@@ -1,12 +1,12 @@
 import type { EntityConfig } from './types';
 
 const COUNTRY_CODES = [
-  { code: '+92', label: '🇵🇰 +92' },
-  { code: '+1',  label: '🇺🇸 +1' },
-  { code: '+44', label: '🇬🇧 +44' },
-  { code: '+971',label: '🇦🇪 +971' },
-  { code: '+966',label: '🇸🇦 +966' },
-  { code: '+91', label: '🇮🇳 +91' },
+  { value: '+92', label: '🇵🇰 +92' },
+  { value: '+1',  label: '🇺🇸 +1' },
+  { value: '+44', label: '🇬🇧 +44' },
+  { value: '+971',label: '🇦🇪 +971' },
+  { value: '+966',label: '🇸🇦 +966' },
+  { value: '+91', label: '🇮🇳 +91' },
 ];
 
 const PHONE_LENGTHS: Record<string, number> = {
