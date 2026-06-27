@@ -63,4 +63,11 @@ export const supplierMeta: EntityConfig = {
     create: ['admin', 'accountant'],
     edit:   ['admin', 'accountant'],
   },
+  // Display balance in search results
+  searchResultExtra: (record) => {
+    if (record.balance !== undefined) {
+      return `Bal: PKR ${(record.balance || 0).toLocaleString()}`;
+    }
+    return null;
+  },
 };

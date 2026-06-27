@@ -23,4 +23,6 @@ export interface EntityConfig {
     create: string[];
     edit: string[];
   };
+  // Optional: function to extract extra display info from a record (e.g., balance)
+  searchResultExtra?: (record: any) => string | null;
 }

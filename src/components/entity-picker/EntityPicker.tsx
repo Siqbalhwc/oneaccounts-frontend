@@ -550,8 +550,15 @@ export default function EntityPicker({
                   onMouseLeave={(e) => (e.currentTarget.style.background = value?.id === r.id ? "var(--card-hover)" : "transparent")}
                 >
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {r.code ? `${r.code} — ` : ""}{r.name}
-                  </span>
+  <span style={{ fontWeight: 600 }}>
+    {r.code ? `${r.code} — ` : ""}{r.name}
+  </span>
+  {config.searchResultExtra && config.searchResultExtra(r) && (
+    <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: 8 }}>
+      {config.searchResultExtra(r)}
+    </span>
+  )}
+</span>
                 </div>
               ))
             ) : searchQuery ? (
