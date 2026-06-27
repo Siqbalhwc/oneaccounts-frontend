@@ -881,7 +881,7 @@ function NewInvoicePageContent() {
                   value={selectedCustomer}
                   onChange={(record) => {
                     if (record) {
-                      setCustomerId(record.id)
+                      setCustomerId(Number(record.id))
                       setSelectedCustomer(record)
                       setCustomerSearch(record.name)
                       setShowCustomerList(false)
