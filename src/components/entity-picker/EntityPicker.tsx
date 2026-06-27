@@ -10,8 +10,6 @@ import { createBrowserClient } from "@supabase/ssr"
 import { getEntityConfig } from "@/lib/entities/registry"
 import { validatePKMobile } from "@/lib/validators"
 
-// ── Types ──────────────────────────────────────────────────────────────
-
 interface LookupRecord {
   id: number | string
   name: string
@@ -29,8 +27,6 @@ interface EntityPickerProps {
   defaultValues?: Record<string, any>
   className?: string
 }
-
-// ── Component ──────────────────────────────────────────────────────────
 
 export default function EntityPicker({
   entityType,
@@ -59,7 +55,6 @@ export default function EntityPicker({
   const [filteredResults, setFilteredResults] = useState<LookupRecord[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
-  // modal
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [formValues, setFormValues] = useState<Record<string, any>>({})
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
@@ -68,7 +63,6 @@ export default function EntityPicker({
 
   const [companyId, setCompanyId] = useState("")
 
-  // ── Fetch company ID ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
@@ -76,7 +70,6 @@ export default function EntityPicker({
     })
   }, [])
 
-  // ── Fetch all records ──
   const tableName =
     entityType === "customer" ? "customers"
     : entityType === "supplier" ? "suppliers"
@@ -98,7 +91,6 @@ export default function EntityPicker({
       })
   }, [companyId, tableName])
 
-  // ── Filter locally ──
   useEffect(() => {
     if (!searchQuery.trim()) {
       setFilteredResults(allRecords.slice(0, 8))
@@ -114,14 +106,12 @@ export default function EntityPicker({
     setFilteredResults(filtered)
   }, [searchQuery, allRecords, config])
 
-  // ── Open / close ──
   const openDropdown = useCallback(() => {
     if (!disabled) setIsOpen(true)
   }, [disabled])
 
   const closeDropdown = useCallback(() => setIsOpen(false), [])
 
-  // ── Click outside closes dropdown ──
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (
@@ -137,19 +127,16 @@ export default function EntityPicker({
     return () => document.removeEventListener("mousedown", handler)
   }, [closeDropdown])
 
-  // ── Focus search on open ──
   useEffect(() => {
     if (isOpen) setTimeout(() => searchInputRef.current?.focus(), 50)
   }, [isOpen])
 
-  // ── Select a record ──
   const handleSelect = (record: LookupRecord) => {
     onChange(record)
     closeDropdown()
     setSearchQuery("")
   }
 
-  // ── Open quick create modal ──
   const openModal = () => {
     const initial: Record<string, any> = { ...defaultValues }
     if (config) {
@@ -167,7 +154,6 @@ export default function EntityPicker({
     setIsModalOpen(true)
   }
 
-  // ── Form field change ──
   const handleFieldChange = (name: string, val: string) => {
     setFormValues((prev) => ({ ...prev, [name]: val }))
     setFieldErrors((prev) => {
@@ -177,7 +163,6 @@ export default function EntityPicker({
     })
   }
 
-  // ── Client‑side validation ──
   const validateForm = (): boolean => {
     if (!config) return false
     const errors: Record<string, string> = {}
@@ -187,8 +172,8 @@ export default function EntityPicker({
         errors[f.name] = `${f.label} is required`
         return
       }
-      if (f.type === "tel" && val) {
-        const err = validatePKMobile(val)
+      if (f.validation && val) {
+        const err = f.validation(val, formValues)
         if (err) errors[f.name] = err
       }
     })
@@ -196,7 +181,6 @@ export default function EntityPicker({
     return Object.keys(errors).length === 0
   }
 
-  // ── Save (Quick Create) ──
   const handleSave = async () => {
     if (!validateForm() || !config) return
 
@@ -206,10 +190,16 @@ export default function EntityPicker({
     try {
       const payload: any = { company_id: companyId }
       config.quickCreate.fields.forEach((f) => {
+        if (f.name === 'country_code') return // skip, will be combined
         if (formValues[f.name] !== undefined) {
           payload[f.name] = formValues[f.name]
         }
       })
+
+      // Combine country_code + phone into single phone field
+      if (formValues.country_code && formValues.phone) {
+        payload.phone = (formValues.country_code || '') + (formValues.phone || '')
+      }
 
       const res = await fetch(config.apiBase, {
         method: "POST",
@@ -238,7 +228,6 @@ export default function EntityPicker({
     }
   }
 
-  // ── Keyboard: Escape closes ──
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -255,7 +244,6 @@ export default function EntityPicker({
   const canCreate = config.permissions.create.length > 0
   const displayLabel = label || config.displayName
 
-  // ── Inline Styles (CSS variables, fully themed) ──
   const styles: Record<string, React.CSSProperties> = {
     wrapper: {
       position: "relative",
@@ -368,7 +356,6 @@ export default function EntityPicker({
       color: "var(--text-muted)",
       fontFamily: "inherit",
     },
-    // Modal
     modalBackdrop: {
       position: "fixed",
       inset: 0,
@@ -408,6 +395,19 @@ export default function EntityPicker({
       display: "block",
     },
     modalFieldInput: {
+      width: "100%",
+      height: 38,
+      border: "1.5px solid var(--border)",
+      borderRadius: 8,
+      padding: "0 12px",
+      fontSize: 13,
+      background: "var(--bg)",
+      color: "var(--text)",
+      outline: "none",
+      fontFamily: "inherit",
+      boxSizing: "border-box",
+    },
+    modalFieldSelect: {
       width: "100%",
       height: 38,
       border: "1.5px solid var(--border)",
@@ -468,17 +468,21 @@ export default function EntityPicker({
       fontSize: 13,
       marginBottom: 12,
     },
+    phoneRow: {
+      display: "grid",
+      gridTemplateColumns: "100px 1fr",
+      gap: 8,
+      alignItems: "center",
+    },
   };
 
   return (
     <div style={styles.wrapper} className={className}>
-      {/* Label */}
       <label style={styles.label}>
         {displayLabel}
         {required && <span style={{ color: "#EF4444", marginLeft: 4 }}>*</span>}
       </label>
 
-      {/* Trigger */}
       <button
         ref={triggerRef}
         type="button"
@@ -499,7 +503,6 @@ export default function EntityPicker({
         <span style={{ color: "var(--text-muted)" }}>▼</span>
       </button>
 
-      {/* Dropdown */}
       {isOpen && (
         <div ref={dropdownRef} style={styles.dropdown}>
           <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border)" }}>
@@ -532,13 +535,9 @@ export default function EntityPicker({
                 </div>
               ))
             ) : searchQuery ? (
-              <div style={styles.emptyState}>
-                No results for &quot;{searchQuery}&quot;
-              </div>
+              <div style={styles.emptyState}>No results for &quot;{searchQuery}&quot;</div>
             ) : (
-              <div style={styles.emptyState}>
-                Start typing to search…
-              </div>
+              <div style={styles.emptyState}>Start typing to search…</div>
             )}
           </div>
 
@@ -552,7 +551,6 @@ export default function EntityPicker({
         </div>
       )}
 
-      {/* Quick Create Modal */}
       {isModalOpen && (
         <div
           style={styles.modalBackdrop}
@@ -578,16 +576,30 @@ export default function EntityPicker({
                   {field.label}
                   {field.required && <span style={{ color: "#EF4444", marginLeft: 4 }}>*</span>}
                 </label>
-                <input
-                  type={field.type}
-                  value={formValues[field.name] || ""}
-                  onChange={(e) => handleFieldChange(field.name, e.target.value)}
-                  placeholder={field.placeholder}
-                  style={{
-                    ...styles.modalFieldInput,
-                    borderColor: fieldErrors[field.name] ? "#EF4444" : "var(--border)",
-                  }}
-                />
+                {field.type === "select" && field.options ? (
+                  <select
+                    value={formValues[field.name] || ""}
+                    onChange={(e) => handleFieldChange(field.name, e.target.value)}
+                    style={styles.modalFieldSelect}
+                  >
+                    {field.options.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type={field.type}
+                    value={formValues[field.name] || ""}
+                    onChange={(e) => handleFieldChange(field.name, e.target.value)}
+                    placeholder={field.placeholder}
+                    style={{
+                      ...styles.modalFieldInput,
+                      borderColor: fieldErrors[field.name] ? "#EF4444" : "var(--border)",
+                    }}
+                  />
+                )}
                 {fieldErrors[field.name] && (
                   <div style={styles.modalFieldError}>{fieldErrors[field.name]}</div>
                 )}
@@ -606,7 +618,6 @@ export default function EntityPicker({
         </div>
       )}
 
-      {/* Responsive: modal becomes bottom sheet on mobile */}
       <style>{`
         @media (max-width: 640px) {
           .entity-picker-modal-panel {
