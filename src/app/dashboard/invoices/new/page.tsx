@@ -11,6 +11,7 @@ import {
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
+import EntityPicker from "@/components/entity-picker/EntityPicker"
 
 function getCreditDays(term?: string | null): number {
   if (!term) return 30
@@ -143,9 +144,6 @@ function NewInvoicePageContent() {
       setLoading(false)
     })
   }, [showProducts, taxEnabled])
-
-  // ... rest of existing useEffects remain exactly the same ...
-  // (I'll keep the rest of the file identical, only adding bankAccounts to pdfData calls)
 
   // ── Live stock validation ──
   useEffect(() => {
@@ -741,24 +739,11 @@ function NewInvoicePageContent() {
           width: 100%;
           padding-bottom: 4px;
         }
-        .table-scroll-wrap::-webkit-scrollbar {
-          height: 10px;
-        }
-        .table-scroll-wrap::-webkit-scrollbar-track {
-          background: var(--bg);
-          border-radius: 8px;
-        }
-        .table-scroll-wrap::-webkit-scrollbar-thumb {
-          background: var(--border);
-          border-radius: 8px;
-        }
-        .table-scroll-wrap::-webkit-scrollbar-thumb:hover {
-          background: var(--text-muted);
-        }
-        .table-scroll-wrap {
-          scrollbar-color: var(--border) var(--bg);
-          scrollbar-width: thin;
-        }
+        .table-scroll-wrap::-webkit-scrollbar { height: 10px; }
+        .table-scroll-wrap::-webkit-scrollbar-track { background: var(--bg); border-radius: 8px; }
+        .table-scroll-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
+        .table-scroll-wrap::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+        .table-scroll-wrap { scrollbar-color: var(--border) var(--bg); scrollbar-width: thin; }
 
         .inv-item-header,
         .inv-item-row {
@@ -771,179 +756,67 @@ function NewInvoicePageContent() {
         }
 
         .inv-item-header {
-          font-size: 9px;
-          font-weight: 700;
-          text-transform: uppercase;
-          color: var(--text-muted);
-          border-bottom: 2px solid var(--border);
-          letter-spacing: 0.04em;
-          padding-bottom: 8px;
-          margin-bottom: 4px;
+          font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
+          border-bottom: 2px solid var(--border); letter-spacing: 0.04em; padding-bottom: 8px; margin-bottom: 4px;
         }
-        .inv-item-header span {
-          display: flex;
-          align-items: center;
-          padding: 0 8px;
-        }
-        .inv-item-header .header-right {
-          justify-content: flex-end;
-          text-align: right;
-        }
-        .inv-item-header .header-center {
-          justify-content: center;
-          text-align: center;
-        }
+        .inv-item-header span { display: flex; align-items: center; padding: 0 8px; }
+        .inv-item-header .header-right { justify-content: flex-end; text-align: right; }
+        .inv-item-header .header-center { justify-content: center; text-align: center; }
 
-        .inv-item-row {
-          border-bottom: 1px solid var(--border);
-          padding: 6px 4px;
-        }
-        .inv-item-row > * {
-          padding: 0 8px;
-          min-height: 34px;
-          display: flex;
-          align-items: center;
-        }
+        .inv-item-row { border-bottom: 1px solid var(--border); padding: 6px 4px; }
+        .inv-item-row > * { padding: 0 8px; min-height: 34px; display: flex; align-items: center; }
         .inv-item-row .inv-cell {
-          border: 1.5px solid var(--border);
-          border-radius: 8px;
-          padding: 0 8px;
-          font-size: 12px;
-          font-family: inherit;
-          background: var(--bg);
-          color: var(--text);
-          overflow: hidden;
-          white-space: nowrap;
-          text-overflow: ellipsis;
-          box-sizing: border-box;
-          height: 34px;
-          width: 100%;
+          border: 1.5px solid var(--border); border-radius: 8px; padding: 0 8px; font-size: 12px;
+          font-family: inherit; background: var(--bg); color: var(--text); overflow: hidden;
+          white-space: nowrap; text-overflow: ellipsis; box-sizing: border-box; height: 34px; width: 100%;
         }
         .inv-item-row input,
         .inv-item-row select {
-          height: 34px;
-          border: 1.5px solid var(--border);
-          border-radius: 8px;
-          padding: 0 8px;
-          font-size: 12px;
-          font-family: inherit;
-          background: var(--bg);
-          color: var(--text);
-          outline: none;
-          box-sizing: border-box;
-          width: 100%;
+          height: 34px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 8px;
+          font-size: 12px; font-family: inherit; background: var(--bg); color: var(--text);
+          outline: none; box-sizing: border-box; width: 100%;
         }
         .inv-item-row input:focus,
-        .inv-item-row select:focus {
-          border-color: var(--primary);
-        }
-        .inv-item-row .inv-cell-total {
-          justify-content: flex-end;
-          font-weight: 600;
-        }
-        .inv-item-row .inv-cell-tax {
-          justify-content: flex-end;
-          color: var(--text-muted);
-          font-size: 11px;
-        }
-        .inv-item-row .inv-cell-cost {
-          justify-content: flex-end;
-          color: var(--text-muted);
-          font-size: 11px;
-        }
+        .inv-item-row select:focus { border-color: var(--primary); }
+        .inv-item-row .inv-cell-total { justify-content: flex-end; font-weight: 600; }
+        .inv-item-row .inv-cell-tax { justify-content: flex-end; color: var(--text-muted); font-size: 11px; }
+        .inv-item-row .inv-cell-cost { justify-content: flex-end; color: var(--text-muted); font-size: 11px; }
         .inv-item-row .delete-btn {
-          background: none;
-          border: none;
-          cursor: pointer;
-          color: #EF4444;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 4px;
-          min-height: 34px;
+          background: none; border: none; cursor: pointer; color: #EF4444;
+          display: flex; align-items: center; justify-content: center; padding: 4px; min-height: 34px;
         }
-        .inv-item-row .delete-btn:hover {
-          color: #DC2626;
-        }
-        .inv-item-row .tax-wrapper {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          width: 100%;
-        }
-        .inv-item-row .tax-wrapper select {
-          flex: 1;
-          min-width: 60px;
-        }
+        .inv-item-row .delete-btn:hover { color: #DC2626; }
+        .inv-item-row .tax-wrapper { display: flex; align-items: center; gap: 6px; width: 100%; }
+        .inv-item-row .tax-wrapper select { flex: 1; min-width: 60px; }
         .tax-badge {
-          font-size: 10px;
-          font-weight: 600;
-          padding: 2px 10px;
-          border-radius: 12px;
-          background: rgba(56, 189, 248, 0.15);
-          color: #38BDF8;
-          border: 1px solid rgba(56, 189, 248, 0.2);
-          white-space: nowrap;
-          flex-shrink: 0;
+          font-size: 10px; font-weight: 600; padding: 2px 10px; border-radius: 12px;
+          background: rgba(56, 189, 248, 0.15); color: #38BDF8; border: 1px solid rgba(56, 189, 248, 0.2);
+          white-space: nowrap; flex-shrink: 0;
         }
         .tax-badge.no-tax {
-          background: rgba(255, 255, 255, 0.04);
-          color: var(--text-muted);
-          border-color: var(--border);
+          background: rgba(255, 255, 255, 0.04); color: var(--text-muted); border-color: var(--border);
         }
         .stock-warning {
-          color: #EF4444;
-          font-size: 10px;
-          font-weight: 600;
-          white-space: nowrap;
-          background: rgba(239, 68, 68, 0.1);
-          padding: 2px 8px;
-          border-radius: 12px;
-          border: 1px solid rgba(239, 68, 68, 0.2);
-          flex-shrink: 0;
+          color: #EF4444; font-size: 10px; font-weight: 600; white-space: nowrap;
+          background: rgba(239, 68, 68, 0.1); padding: 2px 8px; border-radius: 12px;
+          border: 1px solid rgba(239, 68, 68, 0.2); flex-shrink: 0;
         }
 
         /* ── Mobile Sticky Summary ── */
         .mobile-sticky-summary {
-          display: none;
-          position: sticky;
-          bottom: 0;
-          left: 0;
-          right: 0;
-          background: var(--card);
-          border-top: 1px solid var(--border);
-          padding: 12px 16px;
-          align-items: center;
-          justify-content: space-between;
-          z-index: 50;
-          margin-top: 16px;
+          display: none; position: sticky; bottom: 0; left: 0; right: 0;
+          background: var(--card); border-top: 1px solid var(--border); padding: 12px 16px;
+          align-items: center; justify-content: space-between; z-index: 50; margin-top: 16px;
         }
-        .mobile-sticky-summary .total-left {
-          flex: 1;
-          min-width: 0;
-        }
+        .mobile-sticky-summary .total-left { flex: 1; min-width: 0; }
         .mobile-sticky-summary .total-amount {
-          font-size: 18px;
-          font-weight: 800;
-          color: var(--text);
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          font-size: 18px; font-weight: 800; color: var(--text);
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .mobile-sticky-summary .total-label {
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-          color: var(--text-muted);
-        }
+        .mobile-sticky-summary .total-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); }
         .mobile-sticky-summary .post-btn {
-          flex-shrink: 0;
-          margin-left: 12px;
-          background: var(--primary);
-          color: var(--primary-text);
-          border-color: var(--primary);
-          padding: 12px 24px;
-          font-weight: 700;
+          flex-shrink: 0; margin-left: 12px; background: var(--primary); color: var(--primary-text);
+          border-color: var(--primary); padding: 12px 24px; font-weight: 700;
         }
 
         /* ── Other ── */
@@ -956,19 +829,9 @@ function NewInvoicePageContent() {
         .desktop-summary { display: flex; flex-direction: column; gap: 12px; }
 
         /* ── Responsive ── */
-        .header-grid {
-          display: grid;
-          grid-template-columns: 1fr 280px;
-          gap: 16px;
-          align-items: start;
-          overflow: visible;
-        }
-        .inv-customer-section {
-          overflow: visible;
-        }
-        .inv-content-wrapper {
-          overflow: visible;
-        }
+        .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; overflow: visible; }
+        .inv-customer-section { overflow: visible; }
+        .inv-content-wrapper { overflow: visible; }
 
         @media (min-width: 1025px) {
           .desktop-summary { display: flex; flex-direction: column; gap: 12px; }
@@ -985,9 +848,7 @@ function NewInvoicePageContent() {
           .cust-dropdown { max-height: 180px; }
         }
         @media (max-width: 640px) {
-          .inv-row {
-            grid-template-columns: 1fr;
-          }
+          .inv-row { grid-template-columns: 1fr; }
         }
       `}</style>
 
@@ -1014,37 +875,23 @@ function NewInvoicePageContent() {
           <div className="header-grid inv-customer-section">
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div className="inv-card">
-                {/* ── Customer selection ── */}
-                <label className="inv-label">Customer *</label>
-                <div className="cust-wrap" ref={customerRef}>
-                  {selectedCustomer ? (
-                    <div className="cust-selected-badge" onClick={clearCustomer}>
-                      <span>👤</span>
-                      <span className="cust-name">{selectedCustomer.code} — {selectedCustomer.name}</span>
-                      <span style={{ fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
-                      <button style={{ marginLeft: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", flexShrink: 0 }} onClick={(e) => { e.stopPropagation(); clearCustomer(); }}><X size={14} /></button>
-                      <button style={{ marginLeft: 2, background: "none", border: "none", color: "var(--primary)", cursor: "pointer", flexShrink: 0 }} onClick={(e) => { e.stopPropagation(); refreshCustomers(); }} title="Refresh"><RefreshCw size={13} /></button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="cust-input-row">
-                        <Search size={14} style={{ position: "absolute", left: 10, color: "var(--text-muted)" }} />
-                        <input className="inv-input" style={{ paddingLeft: 32, paddingRight: 32 }} placeholder="Search by name, code or phone..." value={customerSearch} onChange={e => { setCustomerSearch(e.target.value); setShowCustomerList(true) }} onFocus={() => setShowCustomerList(true)} onClick={() => setShowCustomerList(true)} autoComplete="off" />
-                        {customerSearch && <button onClick={() => setCustomerSearch("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}><X size={13} /></button>}
-                      </div>
-                      {showCustomerList && (
-                        <div className="cust-dropdown">
-                          {filteredCustomers.length === 0 ? <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: 13 }}>No customers found</div> : filteredCustomers.map(c => (
-                            <div key={c.id} className="cust-option" onMouseDown={() => selectCustomer(c)}>
-                              <div><div className="cust-option-name">{c.name}</div><div className="cust-option-meta">{c.code}{c.phone ? ` · ${c.phone}` : ""}</div></div>
-                              <div className="cust-option-bal">PKR {(c.balance || 0).toLocaleString()}</div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
+                {/* ── Customer selection – replaced by EntityPicker ── */}
+                <EntityPicker
+                  entityType="customer"
+                  value={selectedCustomer}
+                  onChange={(record) => {
+                    if (record) {
+                      setCustomerId(record.id)
+                      setSelectedCustomer(record)
+                      setCustomerSearch(record.name)
+                      setShowCustomerList(false)
+                    } else {
+                      clearCustomer()
+                    }
+                  }}
+                  label="Customer"
+                  required
+                />
 
                 {/* ── Date fields ── */}
                 <div className="inv-row" style={{ marginTop: 14 }}>
@@ -1130,7 +977,6 @@ function NewInvoicePageContent() {
             {items.length > 0 && (
               <div className="inv-card" style={{ padding: "16px 12px" }}>
                 <div className="table-scroll-wrap">
-                  {/* ── Header ── */}
                   <div className="inv-item-header">
                     <span className="header-center"></span>
                     <span>Product</span>
@@ -1144,7 +990,6 @@ function NewInvoicePageContent() {
                     <span className="header-center"></span>
                   </div>
 
-                  {/* ── Rows ── */}
                   {items.map((item, idx) => {
                     const stockError = stockErrors[idx]
                     const taxBadge = taxEnabled && item.tax_code_id ? `${item.tax_rate}%` : null
@@ -1152,12 +997,10 @@ function NewInvoicePageContent() {
                     return (
                       <Fragment key={idx}>
                         <div className="inv-item-row" style={stockError ? { background: "rgba(239,68,68,0.05)", borderRadius: "6px" } : {}}>
-                          {/* Image */}
                           <div style={{ display: "flex", justifyContent: "center" }}>
                             {item.product_image ? <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} /> : <ImageIcon size={14} color="var(--text-muted)" />}
                           </div>
 
-                          {/* Product */}
                           {item.product_id ? (
                             <div className="inv-cell" style={{ paddingLeft: 8 }}>{item.product_name || "—"}</div>
                           ) : (
@@ -1173,16 +1016,12 @@ function NewInvoicePageContent() {
                             </div>
                           )}
 
-                          {/* Description */}
                           <input className="inv-input" style={{ height: 32, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Description" />
 
-                          {/* Qty */}
                           <input className="inv-input" style={{ height: 32, fontSize: 12, textAlign: "center", borderColor: stockError ? "#EF4444" : undefined }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
 
-                          {/* Price */}
                           <input className="inv-input" style={{ height: 32, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
 
-                          {/* Tax % with badge */}
                           {taxEnabled && (
                             <div className="tax-wrapper">
                               <select className="inv-select" style={{ height: 32, fontSize: 11, flex: 1, minWidth: 60 }} value={item.tax_code_id || ""} onChange={e => updateTax(idx, e.target.value || null)}>
@@ -1197,33 +1036,27 @@ function NewInvoicePageContent() {
                             </div>
                           )}
 
-                          {/* Total */}
                           <div className="inv-cell inv-cell-total">PKR {item.total.toLocaleString()}</div>
 
-                          {/* Tax Amount */}
                           {taxEnabled && (
                             <div className="inv-cell inv-cell-tax">
                               {item.tax_amount > 0 ? `PKR ${item.tax_amount.toLocaleString()}` : "—"}
                             </div>
                           )}
 
-                          {/* Cost */}
                           <div className="inv-cell inv-cell-cost">
                             {item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}
                           </div>
 
-                          {/* Delete */}
                           <button className="delete-btn" onClick={() => removeItem(idx)}><Trash2 size={14} /></button>
                         </div>
 
-                        {/* ── Stock Warning ── */}
                         {stockError && (
                           <div style={{ fontSize: 11, color: "#EF4444", padding: "2px 0 4px 8px", background: "rgba(239,68,68,0.05)", borderRadius: "0 0 6px 6px" }}>
                             ⚠️ {stockError}
                           </div>
                         )}
 
-                        {/* ── NGO Project Info Row ── */}
                         {isNGO && !item.product_id && item.project_id && (
                           <div className="project-info-row">
                             <span className="project-chip">📁 {getProjectName(item.project_id)}{item.donor_id && <span style={{ color: "var(--primary)", marginLeft: 4 }}>· 🤝 {getDonorName(item.donor_id)}</span>}</span>
@@ -1237,7 +1070,6 @@ function NewInvoicePageContent() {
             )}
           </div>
 
-          {/* ── Mobile Sticky Summary ── */}
           <div className="mobile-sticky-summary">
             <div className="total-left">
               <div className="total-label">Total</div>
