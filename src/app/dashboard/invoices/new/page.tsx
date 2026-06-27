@@ -117,7 +117,7 @@ function NewInvoicePageContent() {
           }
         })
 
-      supabase.from("projects").select("id,name,donor_id").eq("company_id", cid).order("name")
+      supabase.from("projects").select("id,name,donor_id").eq("company_id", cid).not("donor_id", "is", null).order("name")
         .then(r => r.data && setProjects(r.data))
       supabase.from("donors").select("id,name").eq("company_id", cid).order("name")
         .then(r => r.data && setDonors(r.data))

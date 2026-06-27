@@ -25,6 +25,8 @@ interface EntityPickerProps {
   disabled?: boolean
   defaultValues?: Record<string, any>
   className?: string
+  /** Use compact styling for table cells (smaller input, no label) */
+  compact?: boolean
 }
 
 export default function EntityPicker({
@@ -37,6 +39,7 @@ export default function EntityPicker({
   disabled = false,
   defaultValues = {},
   className = "",
+  compact = false,
 }: EntityPickerProps) {
   const config = getEntityConfig(entityType)
   const supabase = createBrowserClient(
@@ -61,6 +64,9 @@ export default function EntityPicker({
   const [isSaving, setIsSaving] = useState(false)
 
   const [companyId, setCompanyId] = useState("")
+
+  // dynamic lookup options cache
+  const [lookupOptions, setLookupOptions] = useState<Record<string, any[]>>({})
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -93,6 +99,25 @@ export default function EntityPicker({
         setIsLoading(false)
       })
   }, [companyId, tableName])
+
+  // Load dynamic lookup options when modal opens
+  useEffect(() => {
+    if (isModalOpen && config) {
+      config.quickCreate.fields.forEach(async (field) => {
+        if ((field as any).lookupTable && !lookupOptions[field.name]) {
+          const { data } = await supabase
+            .from((field as any).lookupTable)
+            .select("id, name")
+            .eq("company_id", companyId)
+            .is("deleted_at", null)
+            .order("name")
+          if (data) {
+            setLookupOptions((prev) => ({ ...prev, [field.name]: data }))
+          }
+        }
+      })
+    }
+  }, [isModalOpen, config, companyId])
 
   useEffect(() => {
     if (!searchQuery.trim()) {
@@ -222,8 +247,9 @@ export default function EntityPicker({
 
       let newRecord: any = null
 
-      // ── PRODUCT quick create (Supabase directly) ──
+      // PRODUCT quick create (Supabase directly)
       if (entityType === 'product') {
+        // ... same as before ...
         let nextCode = 'PROD-001'
         const { data: codes } = await supabase
           .from('products')
@@ -232,7 +258,6 @@ export default function EntityPicker({
           .ilike('code', 'PROD-%')
           .order('code', { ascending: false })
           .limit(1)
-
         if (codes && codes.length > 0) {
           const match = codes[0].code?.match(/PROD-(\d+)/)
           if (match) {
@@ -240,7 +265,6 @@ export default function EntityPicker({
             nextCode = `PROD-${String(num).padStart(3, '0')}`
           }
         }
-
         const productPayload = {
           company_id: companyId,
           code: nextCode,
@@ -251,28 +275,39 @@ export default function EntityPicker({
           qty_on_hand: 0,
           image_path: null,
         }
-
         const { data: inserted, error: insertErr } = await supabase
           .from('products')
           .insert(productPayload)
           .select('*')
           .single()
-
         if (insertErr) throw new Error(insertErr.message)
         newRecord = inserted
       }
-      // ── LOCATION / ACTIVITY / PROJECT / ACCOUNT (Supabase directly) ──
+      // Other direct Supabase inserts (location, activity, project, account)
       else if (['location', 'activity', 'project', 'account'].includes(entityType)) {
+        // For GL account, ensure code is unique
+        if (entityType === 'account' && payload.code) {
+          const { data: existing } = await supabase
+            .from('accounts')
+            .select('id')
+            .eq('company_id', companyId)
+            .eq('code', payload.code)
+            .maybeSingle()
+          if (existing) {
+            setSaveError('Code already exists. Please choose another.')
+            setIsSaving(false)
+            return
+          }
+        }
         const { data: inserted, error: insertErr } = await supabase
           .from(tableName!)
           .insert(payload)
           .select('*')
           .single()
-
         if (insertErr) throw new Error(insertErr.message)
         newRecord = inserted
       }
-      // ── CUSTOMER / SUPPLIER (via API) ──
+      // Customer / Supplier via API
       else {
         const res = await fetch(config.apiBase, {
           method: 'POST',
@@ -280,12 +315,10 @@ export default function EntityPicker({
           credentials: 'include',
           body: JSON.stringify(payload),
         })
-
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}))
           throw new Error(errData.error || 'Failed to create record')
         }
-
         const data = await res.json()
         newRecord = data.customer || data.supplier || data
       }
@@ -314,14 +347,26 @@ export default function EntityPicker({
   if (!config) return null
 
   const canCreate = config.permissions.create.length > 0
-  const displayLabel = label || config.displayName
+  const displayLabel = compact ? "" : (label || config.displayName)
 
   const styles: Record<string, React.CSSProperties> = {
     wrapper: { position: "relative", fontFamily: "'Inter', sans-serif", width: "100%" },
     label: { fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)", marginBottom: 4, display: "block" },
-    trigger: { display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", height: 38, border: "1.5px solid var(--border)", borderRadius: 8, padding: "0 12px", fontSize: 13, background: "var(--bg)", color: "var(--text)", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, outline: "none", fontFamily: "inherit", boxSizing: "border-box", textAlign: "left" as const },
-    triggerPlaceholder: { color: "var(--text-muted)" },
-    selectedChip: { display: "flex", alignItems: "center", gap: 6, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" },
+    trigger: {
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      width: "100%",
+      height: compact ? 32 : 38,
+      border: "1.5px solid var(--border)", borderRadius: 8,
+      padding: compact ? "0 6px" : "0 12px",
+      fontSize: compact ? 11 : 13,
+      background: "var(--bg)", color: "var(--text)",
+      cursor: disabled ? "not-allowed" : "pointer",
+      opacity: disabled ? 0.5 : 1,
+      outline: "none", fontFamily: "inherit", boxSizing: "border-box",
+      textAlign: "left" as const,
+    },
+    triggerPlaceholder: { color: "var(--text-muted)", fontSize: compact ? 11 : 13 },
+    selectedChip: { display: "flex", alignItems: "center", gap: 6, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", fontSize: compact ? 11 : 13 },
     dropdown: { position: "absolute", zIndex: 100, top: "calc(100% + 4px)", left: 0, right: 0, background: "var(--card)", border: "1.5px solid var(--border)", borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.15)", overflow: "hidden" },
     searchInput: { width: "100%", height: 34, border: "1.5px solid var(--border)", borderRadius: 8, padding: "0 12px", fontSize: 13, background: "var(--bg)", color: "var(--text)", outline: "none", fontFamily: "inherit", boxSizing: "border-box" },
     resultsList: { maxHeight: 200, overflowY: "auto" as const },
@@ -350,10 +395,12 @@ export default function EntityPicker({
 
   return (
     <div style={styles.wrapper} className={className}>
-      <label style={styles.label}>
-        {displayLabel}
-        {required && <span style={{ color: "#EF4444", marginLeft: 4 }}>*</span>}
-      </label>
+      {!compact && (
+        <label style={styles.label}>
+          {displayLabel}
+          {required && <span style={{ color: "#EF4444", marginLeft: 4 }}>*</span>}
+        </label>
+      )}
 
       <button ref={triggerRef} type="button" disabled={disabled} onClick={openDropdown} style={styles.trigger}>
         {value ? (
@@ -365,7 +412,7 @@ export default function EntityPicker({
             {placeholder || `Search ${config.displayName.toLowerCase()}…`}
           </span>
         )}
-        <span style={{ color: "var(--text-muted)" }}>▼</span>
+        <span style={{ color: "var(--text-muted)", fontSize: compact ? 10 : 13 }}>▼</span>
       </button>
 
       {isOpen && (
@@ -411,7 +458,7 @@ export default function EntityPicker({
 
             {saveError && <div style={styles.errorBanner}>{saveError}</div>}
 
-            {config.quickCreate.fields.map((field, idx) => {
+            {config.quickCreate.fields.map((field: any, idx: number) => {
               if (field.name === 'phone' && idx > 0 && config.quickCreate.fields[idx-1]?.name === 'country_code') return null
 
               if (isPhoneRow(config.quickCreate.fields, idx)) {
@@ -421,7 +468,7 @@ export default function EntityPicker({
                     <label style={styles.modalFieldLabel}>Phone<span style={{ color: "#EF4444", marginLeft: 4 }}>*</span></label>
                     <div style={styles.phoneRow}>
                       <select value={formValues[field.name] || ""} onChange={(e) => handleFieldChange(field.name, e.target.value)} style={styles.modalFieldSelect}>
-                        {field.options?.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                        {field.options?.map((opt: any) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                       </select>
                       <input type="text" value={formValues[phoneField.name] || ""} onChange={(e) => handleFieldChange(phoneField.name, e.target.value)} placeholder={phoneField.placeholder}
                         style={{ ...styles.modalFieldInput, borderColor: fieldErrors[phoneField.name] ? "#EF4444" : "var(--border)" }} />
@@ -431,25 +478,47 @@ export default function EntityPicker({
                 )
               }
 
+              // Render regular field, with support for dynamic lookup selects
               return (
                 <div key={field.name} style={styles.modalField}>
-                  <label style={styles.modalFieldLabel}>{field.label}{field.required && <span style={{ color: "#EF4444", marginLeft: 4 }}>*</span>}</label>
-                  {field.type === "select" && field.options ? (
-                    <select value={formValues[field.name] || ""} onChange={(e) => handleFieldChange(field.name, e.target.value)} style={styles.modalFieldSelect}>
-                      {field.options.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                  <label style={styles.modalFieldLabel}>
+                    {field.label}{field.required && <span style={{ color: "#EF4444", marginLeft: 4 }}>*</span>}
+                  </label>
+
+                  {field.type === "select" && (field.options || field.lookupTable) ? (
+                    <select
+                      value={formValues[field.name] || ""}
+                      onChange={(e) => handleFieldChange(field.name, e.target.value)}
+                      style={styles.modalFieldSelect}
+                    >
+                      <option value="">Select {field.label.toLowerCase()}…</option>
+                      {(field.options || lookupOptions[field.name] || []).map((opt: any) => (
+                        <option key={opt.value || opt.id} value={opt.value || opt.id}>
+                          {opt.label || opt.name}
+                        </option>
+                      ))}
                     </select>
                   ) : (
-                    <input type={field.type} value={formValues[field.name] || ""} onChange={(e) => handleFieldChange(field.name, e.target.value)} placeholder={field.placeholder}
-                      style={{ ...styles.modalFieldInput, borderColor: fieldErrors[field.name] ? "#EF4444" : "var(--border)" }} />
+                    <input
+                      type={field.type}
+                      value={formValues[field.name] || ""}
+                      onChange={(e) => handleFieldChange(field.name, e.target.value)}
+                      placeholder={field.placeholder}
+                      style={{ ...styles.modalFieldInput, borderColor: fieldErrors[field.name] ? "#EF4444" : "var(--border)" }}
+                    />
                   )}
-                  {fieldErrors[field.name] && <div style={styles.modalFieldError}>{fieldErrors[field.name]}</div>}
+                  {fieldErrors[field.name] && (
+                    <div style={styles.modalFieldError}>{fieldErrors[field.name]}</div>
+                  )}
                 </div>
               )
             })}
 
             <div style={styles.modalFooter}>
               <button type="button" onClick={() => setIsModalOpen(false)} style={styles.cancelBtn}>Cancel</button>
-              <button type="button" onClick={handleSave} disabled={isSaving} style={styles.saveBtn}>{isSaving ? "Saving…" : `Save ${config.displayName}`}</button>
+              <button type="button" onClick={handleSave} disabled={isSaving} style={styles.saveBtn}>
+                {isSaving ? "Saving…" : `Save ${config.displayName}`}
+              </button>
             </div>
           </div>
         </div>
