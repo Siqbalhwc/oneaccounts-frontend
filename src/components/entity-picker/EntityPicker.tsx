@@ -5,11 +5,9 @@ import React, {
   useEffect,
   useRef,
   useCallback,
-  useMemo,
 } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { getEntityConfig } from "@/lib/entities/registry"
-import type { EntityConfig, FieldConfig } from "@/lib/entities/types"
 import { validatePKMobile } from "@/lib/validators"
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -32,7 +30,7 @@ interface EntityPickerProps {
   className?: string
 }
 
-// ── Entity Picker Component ────────────────────────────────────────────
+// ── Component ──────────────────────────────────────────────────────────
 
 export default function EntityPicker({
   entityType,
@@ -78,8 +76,9 @@ export default function EntityPicker({
     })
   }, [])
 
-  // ── Fetch all records for this entity ──
-  const tableName = entityType === "customer" ? "customers"
+  // ── Fetch all records ──
+  const tableName =
+    entityType === "customer" ? "customers"
     : entityType === "supplier" ? "suppliers"
     : entityType === "product" ? "products"
     : null
@@ -99,7 +98,7 @@ export default function EntityPicker({
       })
   }, [companyId, tableName])
 
-  // ── Filter locally based on searchQuery ──
+  // ── Filter locally ──
   useEffect(() => {
     if (!searchQuery.trim()) {
       setFilteredResults(allRecords.slice(0, 8))
@@ -107,13 +106,15 @@ export default function EntityPicker({
     }
     const q = searchQuery.toLowerCase()
     const fields = config?.searchFields || ["name"]
-    const filtered = allRecords.filter((r) =>
-      fields.some((f) => (r[f]?.toString() || "").toLowerCase().includes(q))
-    ).slice(0, 8)
+    const filtered = allRecords
+      .filter((r) =>
+        fields.some((f) => (r[f]?.toString() || "").toLowerCase().includes(q))
+      )
+      .slice(0, 8)
     setFilteredResults(filtered)
   }, [searchQuery, allRecords, config])
 
-  // ── Open / close logic ──
+  // ── Open / close ──
   const openDropdown = useCallback(() => {
     if (!disabled) setIsOpen(true)
   }, [disabled])
@@ -203,19 +204,12 @@ export default function EntityPicker({
     setSaveError(null)
 
     try {
-      // Build a minimal payload based on the entity
       const payload: any = { company_id: companyId }
       config.quickCreate.fields.forEach((f) => {
         if (formValues[f.name] !== undefined) {
           payload[f.name] = formValues[f.name]
         }
       })
-
-      // For customer/supplier: auto‑generate code if not provided
-      if (!payload.code && (entityType === "customer" || entityType === "supplier")) {
-        // Use existing code‑generation logic from the form (we can mimic it)
-        // For simplicity, we'll let the backend handle it (the existing API already does)
-      }
 
       const res = await fetch(config.apiBase, {
         method: "POST",
@@ -234,7 +228,6 @@ export default function EntityPicker({
       const data = await res.json()
       const newRecord = data.customer || data.supplier || data.product || data
 
-      // Add the new record to local list and select it
       setAllRecords((prev) => [newRecord, ...prev])
       onChange(newRecord)
       setIsModalOpen(false)
@@ -262,12 +255,227 @@ export default function EntityPicker({
   const canCreate = config.permissions.create.length > 0
   const displayLabel = label || config.displayName
 
+  // ── Inline Styles (CSS variables, fully themed) ──
+  const styles: Record<string, React.CSSProperties> = {
+    wrapper: {
+      position: "relative",
+      fontFamily: "'Inter', sans-serif",
+      width: "100%",
+    },
+    label: {
+      fontSize: 10,
+      fontWeight: 600,
+      textTransform: "uppercase",
+      letterSpacing: "0.06em",
+      color: "var(--text-muted)",
+      marginBottom: 4,
+      display: "block",
+    },
+    trigger: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      width: "100%",
+      height: 38,
+      border: "1.5px solid var(--border)",
+      borderRadius: 8,
+      padding: "0 12px",
+      fontSize: 13,
+      background: "var(--bg)",
+      color: "var(--text)",
+      cursor: disabled ? "not-allowed" : "pointer",
+      opacity: disabled ? 0.5 : 1,
+      outline: "none",
+      fontFamily: "inherit",
+      boxSizing: "border-box",
+      textAlign: "left" as const,
+    },
+    triggerPlaceholder: {
+      color: "var(--text-muted)",
+    },
+    selectedChip: {
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      overflow: "hidden",
+      whiteSpace: "nowrap",
+      textOverflow: "ellipsis",
+    },
+    dropdown: {
+      position: "absolute",
+      zIndex: 100,
+      top: "calc(100% + 4px)",
+      left: 0,
+      right: 0,
+      background: "var(--card)",
+      border: "1.5px solid var(--border)",
+      borderRadius: 10,
+      boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
+      overflow: "hidden",
+    },
+    searchInput: {
+      width: "100%",
+      height: 34,
+      border: "1.5px solid var(--border)",
+      borderRadius: 8,
+      padding: "0 12px",
+      fontSize: 13,
+      background: "var(--bg)",
+      color: "var(--text)",
+      outline: "none",
+      fontFamily: "inherit",
+      boxSizing: "border-box",
+    },
+    resultsList: {
+      maxHeight: 200,
+      overflowY: "auto" as const,
+    },
+    resultItem: {
+      padding: "8px 12px",
+      cursor: "pointer",
+      borderBottom: "1px solid var(--border)",
+      fontSize: 13,
+      color: "var(--text)",
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    emptyState: {
+      padding: "16px 12px",
+      textAlign: "center" as const,
+      color: "var(--text-muted)",
+      fontSize: 13,
+    },
+    actionFooter: {
+      display: "flex",
+      gap: 8,
+      padding: "8px 12px",
+      borderTop: "1px solid var(--border)",
+    },
+    actionBtn: {
+      flex: 1,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+      padding: "8px 14px",
+      borderRadius: 8,
+      fontSize: 13,
+      fontWeight: 600,
+      cursor: "pointer",
+      border: "1.5px solid var(--border)",
+      background: "transparent",
+      color: "var(--text-muted)",
+      fontFamily: "inherit",
+    },
+    // Modal
+    modalBackdrop: {
+      position: "fixed",
+      inset: 0,
+      zIndex: 1000,
+      background: "rgba(0,0,0,0.3)",
+      backdropFilter: "blur(2px)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    modalPanel: {
+      background: "var(--card)",
+      border: "1px solid var(--border)",
+      borderRadius: 12,
+      width: "90%",
+      maxWidth: 500,
+      maxHeight: "80vh",
+      overflowY: "auto" as const,
+      padding: 20,
+      boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+    },
+    modalTitle: {
+      fontSize: 15,
+      fontWeight: 700,
+      color: "var(--text)",
+      marginBottom: 12,
+    },
+    modalField: {
+      marginBottom: 12,
+    },
+    modalFieldLabel: {
+      fontSize: 10,
+      fontWeight: 600,
+      textTransform: "uppercase" as const,
+      color: "var(--text-muted)",
+      marginBottom: 4,
+      display: "block",
+    },
+    modalFieldInput: {
+      width: "100%",
+      height: 38,
+      border: "1.5px solid var(--border)",
+      borderRadius: 8,
+      padding: "0 12px",
+      fontSize: 13,
+      background: "var(--bg)",
+      color: "var(--text)",
+      outline: "none",
+      fontFamily: "inherit",
+      boxSizing: "border-box",
+    },
+    modalFieldError: {
+      color: "#EF4444",
+      fontSize: 12,
+      marginTop: 2,
+    },
+    modalFooter: {
+      display: "flex",
+      justifyContent: "flex-end",
+      gap: 8,
+      marginTop: 12,
+    },
+    saveBtn: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 6,
+      padding: "8px 14px",
+      borderRadius: 8,
+      fontSize: 13,
+      fontWeight: 600,
+      cursor: "pointer",
+      background: "var(--primary)",
+      color: "var(--primary-text)",
+      border: "none",
+      fontFamily: "inherit",
+    },
+    cancelBtn: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 6,
+      padding: "8px 14px",
+      borderRadius: 8,
+      fontSize: 13,
+      fontWeight: 600,
+      cursor: "pointer",
+      background: "transparent",
+      color: "var(--text-muted)",
+      border: "1.5px solid var(--border)",
+      fontFamily: "inherit",
+    },
+    errorBanner: {
+      background: "var(--card)",
+      border: "1px solid #EF4444",
+      color: "#FCA5A5",
+      padding: "8px 12px",
+      borderRadius: 8,
+      fontSize: 13,
+      marginBottom: 12,
+    },
+  };
+
   return (
-    <div className={`relative ${className}`} style={{ fontFamily: "inherit" }}>
+    <div style={styles.wrapper} className={className}>
       {/* Label */}
-      <label className="block text-xs font-semibold uppercase tracking-wide mb-1 text-gray-500">
+      <label style={styles.label}>
         {displayLabel}
-        {required && <span className="text-red-500 ml-0.5">*</span>}
+        {required && <span style={{ color: "#EF4444", marginLeft: 4 }}>*</span>}
       </label>
 
       {/* Trigger */}
@@ -276,69 +484,67 @@ export default function EntityPicker({
         type="button"
         disabled={disabled}
         onClick={openDropdown}
-        className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm text-left hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+        style={styles.trigger}
       >
         {value ? (
-          <span className="text-gray-800 font-medium truncate">
-            {value.code ? `${value.code} — ` : ""}{value.name}
+          <span style={styles.selectedChip}>
+            {value.code ? `${value.code} — ` : ""}
+            {value.name}
           </span>
         ) : (
-          <span className="text-gray-400">
+          <span style={styles.triggerPlaceholder}>
             {placeholder || `Search ${config.displayName.toLowerCase()}…`}
           </span>
         )}
-        <span className="text-gray-400">▼</span>
+        <span style={{ color: "var(--text-muted)" }}>▼</span>
       </button>
 
       {/* Dropdown */}
       {isOpen && (
-        <div
-          ref={dropdownRef}
-          className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden"
-        >
-          {/* Search */}
-          <div className="p-3 border-b border-gray-100">
+        <div ref={dropdownRef} style={styles.dropdown}>
+          <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border)" }}>
             <input
               ref={searchInputRef}
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={`Search ${config.displayName.toLowerCase()}…`}
-              className="w-full px-3 py-2 bg-gray-50 rounded-lg text-sm border border-transparent focus:border-blue-300 focus:bg-white outline-none"
+              style={styles.searchInput}
             />
           </div>
 
-          {/* Results */}
-          <div className="max-h-48 overflow-y-auto py-1">
+          <div style={styles.resultsList}>
             {filteredResults.length > 0 ? (
               filteredResults.map((r) => (
                 <div
                   key={r.id}
                   onClick={() => handleSelect(r)}
-                  className="px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer"
+                  style={{
+                    ...styles.resultItem,
+                    background: value?.id === r.id ? "var(--card-hover)" : "transparent",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--card-hover)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = value?.id === r.id ? "var(--card-hover)" : "transparent")}
                 >
-                  {r.code ? `${r.code} — ` : ""}{r.name}
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {r.code ? `${r.code} — ` : ""}{r.name}
+                  </span>
                 </div>
               ))
             ) : searchQuery ? (
-              <div className="px-4 py-6 text-center text-sm text-gray-400">
+              <div style={styles.emptyState}>
                 No results for &quot;{searchQuery}&quot;
               </div>
             ) : (
-              <div className="px-4 py-6 text-center text-sm text-gray-400">
+              <div style={styles.emptyState}>
                 Start typing to search…
               </div>
             )}
           </div>
 
-          {/* Actions */}
-          <div className="border-t border-gray-100 p-2 flex gap-2">
+          <div style={styles.actionFooter}>
             {canCreate && (
-              <button
-                type="button"
-                onClick={openModal}
-                className="flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-lg text-xs font-medium bg-blue-50 text-blue-600 hover:bg-blue-100"
-              >
+              <button type="button" onClick={openModal} style={styles.actionBtn}>
                 + Quick Create {config.displayName}
               </button>
             )}
@@ -349,70 +555,72 @@ export default function EntityPicker({
       {/* Quick Create Modal */}
       {isModalOpen && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-sm"
+          style={styles.modalBackdrop}
           onClick={(e) => e.target === e.currentTarget && setIsModalOpen(false)}
         >
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden max-sm:fixed max-sm:bottom-0 max-sm:left-0 max-sm:right-0 max-sm:rounded-b-none max-sm:max-w-none">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h2 className="text-sm font-semibold text-gray-800">
-                Create {config.displayName}
-              </h2>
+          <div style={styles.modalPanel}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <h2 style={styles.modalTitle}>Create {config.displayName}</h2>
               <button
+                type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                style={{ ...styles.cancelBtn, padding: "4px 8px", fontSize: 14 }}
               >
                 ✕
               </button>
             </div>
-            <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
-              {saveError && (
-                <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-2.5 text-xs text-red-600">
-                  {saveError}
-                </div>
-              )}
-              {config.quickCreate.fields.map((field) => (
-                <div key={field.name} className="space-y-1">
-                  <label className="block text-xs font-medium text-gray-500">
-                    {field.label}
-                    {field.required && <span className="text-red-400 ml-0.5">*</span>}
-                  </label>
-                  <input
-                    type={field.type}
-                    value={formValues[field.name] || ""}
-                    onChange={(e) => handleFieldChange(field.name, e.target.value)}
-                    placeholder={field.placeholder}
-                    className={`w-full px-3 py-2.5 rounded-lg border text-sm ${
-                      fieldErrors[field.name]
-                        ? "border-red-300 focus:border-red-400"
-                        : "border-gray-200 hover:border-gray-300 focus:border-blue-400"
-                    } bg-white text-gray-900 placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500/20`}
-                  />
-                  {fieldErrors[field.name] && (
-                    <p className="text-xs text-red-500">{fieldErrors[field.name]}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-            <div className="px-5 py-4 border-t border-gray-100 flex gap-3 justify-end">
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2.5 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-              >
+
+            {saveError && <div style={styles.errorBanner}>{saveError}</div>}
+
+            {config.quickCreate.fields.map((field) => (
+              <div key={field.name} style={styles.modalField}>
+                <label style={styles.modalFieldLabel}>
+                  {field.label}
+                  {field.required && <span style={{ color: "#EF4444", marginLeft: 4 }}>*</span>}
+                </label>
+                <input
+                  type={field.type}
+                  value={formValues[field.name] || ""}
+                  onChange={(e) => handleFieldChange(field.name, e.target.value)}
+                  placeholder={field.placeholder}
+                  style={{
+                    ...styles.modalFieldInput,
+                    borderColor: fieldErrors[field.name] ? "#EF4444" : "var(--border)",
+                  }}
+                />
+                {fieldErrors[field.name] && (
+                  <div style={styles.modalFieldError}>{fieldErrors[field.name]}</div>
+                )}
+              </div>
+            ))}
+
+            <div style={styles.modalFooter}>
+              <button type="button" onClick={() => setIsModalOpen(false)} style={styles.cancelBtn}>
                 Cancel
               </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={isSaving}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-              >
+              <button type="button" onClick={handleSave} disabled={isSaving} style={styles.saveBtn}>
                 {isSaving ? "Saving…" : `Save ${config.displayName}`}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Responsive: modal becomes bottom sheet on mobile */}
+      <style>{`
+        @media (max-width: 640px) {
+          .entity-picker-modal-panel {
+            max-width: 100% !important;
+            border-radius: 12px 12px 0 0 !important;
+            position: fixed !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            margin: 0 !important;
+            width: 100% !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }
