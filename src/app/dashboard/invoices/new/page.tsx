@@ -834,7 +834,7 @@ function NewInvoicePageContent() {
                     </div>
                   </div>
                 ) : (
-                  <div style={{ marginTop: 14 }}><label className="inv-label">Add Item</label><button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button></div>
+                  <div style={{ marginTop: 14 }}><label className="inv-label">Add Item</label><button className="inv-btn" onClick={addManualItem} style={{ marginLeft: 'auto' }}><Plus size={14} /> Manual</button></div>
                 )}
 
                 {showHistory && lastSelectedProduct && (
