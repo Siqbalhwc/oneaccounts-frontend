@@ -8,7 +8,6 @@ import React, {
 } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { getEntityConfig } from "@/lib/entities/registry"
-import { validatePKMobile } from "@/lib/validators"
 
 interface LookupRecord {
   id: number | string
@@ -155,11 +154,28 @@ export default function EntityPicker({
   }
 
   const handleFieldChange = (name: string, val: string) => {
-    setFormValues((prev) => ({ ...prev, [name]: val }))
-    setFieldErrors((prev) => {
-      const next = { ...prev }
-      delete next[name]
-      return next
+    setFormValues((prev) => {
+      const updated = { ...prev, [name]: val }
+      // Run validation immediately for this field
+      const field = config?.quickCreate.fields.find(f => f.name === name)
+      if (field?.validation) {
+        const err = field.validation(val, updated)
+        setFieldErrors(prev => {
+          const next = { ...prev }
+          if (err) next[name] = err
+          else delete next[name]
+          return next
+        })
+      } else if (field?.required && !val) {
+        setFieldErrors(prev => ({ ...prev, [name]: `${field.label} is required` }))
+      } else {
+        setFieldErrors(prev => {
+          const next = { ...prev }
+          delete next[name]
+          return next
+        })
+      }
+      return updated
     })
   }
 
@@ -190,13 +206,13 @@ export default function EntityPicker({
     try {
       const payload: any = { company_id: companyId }
       config.quickCreate.fields.forEach((f) => {
-        if (f.name === 'country_code') return // skip, will be combined
+        if (f.name === 'country_code') return // handled below
         if (formValues[f.name] !== undefined) {
           payload[f.name] = formValues[f.name]
         }
       })
 
-      // Combine country_code + phone into single phone field
+      // Combine country_code + phone
       if (formValues.country_code && formValues.phone) {
         payload.phone = (formValues.country_code || '') + (formValues.phone || '')
       }
@@ -472,9 +488,14 @@ export default function EntityPicker({
       display: "grid",
       gridTemplateColumns: "100px 1fr",
       gap: 8,
-      alignItems: "center",
+      alignItems: "flex-start",
     },
   };
+
+  // Helper to check if a field is part of a phone row
+  const isPhoneRow = (fields: any[], idx: number) => {
+    return fields[idx]?.name === 'country_code' && fields[idx+1]?.name === 'phone'
+  }
 
   return (
     <div style={styles.wrapper} className={className}>
@@ -570,41 +591,88 @@ export default function EntityPicker({
 
             {saveError && <div style={styles.errorBanner}>{saveError}</div>}
 
-            {config.quickCreate.fields.map((field) => (
-              <div key={field.name} style={styles.modalField}>
-                <label style={styles.modalFieldLabel}>
-                  {field.label}
-                  {field.required && <span style={{ color: "#EF4444", marginLeft: 4 }}>*</span>}
-                </label>
-                {field.type === "select" && field.options ? (
-                  <select
-                    value={formValues[field.name] || ""}
-                    onChange={(e) => handleFieldChange(field.name, e.target.value)}
-                    style={styles.modalFieldSelect}
-                  >
-                    {field.options.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type={field.type}
-                    value={formValues[field.name] || ""}
-                    onChange={(e) => handleFieldChange(field.name, e.target.value)}
-                    placeholder={field.placeholder}
-                    style={{
-                      ...styles.modalFieldInput,
-                      borderColor: fieldErrors[field.name] ? "#EF4444" : "var(--border)",
-                    }}
-                  />
-                )}
-                {fieldErrors[field.name] && (
-                  <div style={styles.modalFieldError}>{fieldErrors[field.name]}</div>
-                )}
-              </div>
-            ))}
+            {config.quickCreate.fields.map((field, idx) => {
+              // Skip phone field when it will be rendered as part of phone row
+              if (field.name === 'phone' && idx > 0 && config.quickCreate.fields[idx-1]?.name === 'country_code') {
+                return null
+              }
+
+              // Render country_code + phone in one row
+              if (isPhoneRow(config.quickCreate.fields, idx)) {
+                const phoneField = config.quickCreate.fields[idx+1]
+                return (
+                  <div key="phone-row" style={styles.modalField}>
+                    <label style={styles.modalFieldLabel}>
+                      Phone
+                      <span style={{ color: "#EF4444", marginLeft: 4 }}>*</span>
+                    </label>
+                    <div style={styles.phoneRow}>
+                      <select
+                        value={formValues[field.name] || ""}
+                        onChange={(e) => handleFieldChange(field.name, e.target.value)}
+                        style={styles.modalFieldSelect}
+                      >
+                        {field.options?.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        value={formValues[phoneField.name] || ""}
+                        onChange={(e) => handleFieldChange(phoneField.name, e.target.value)}
+                        placeholder={phoneField.placeholder}
+                        style={{
+                          ...styles.modalFieldInput,
+                          borderColor: fieldErrors[phoneField.name] ? "#EF4444" : "var(--border)",
+                        }}
+                      />
+                    </div>
+                    {fieldErrors[phoneField.name] && (
+                      <div style={styles.modalFieldError}>{fieldErrors[phoneField.name]}</div>
+                    )}
+                  </div>
+                )
+              }
+
+              // Regular field
+              return (
+                <div key={field.name} style={styles.modalField}>
+                  <label style={styles.modalFieldLabel}>
+                    {field.label}
+                    {field.required && <span style={{ color: "#EF4444", marginLeft: 4 }}>*</span>}
+                  </label>
+                  {field.type === "select" && field.options ? (
+                    <select
+                      value={formValues[field.name] || ""}
+                      onChange={(e) => handleFieldChange(field.name, e.target.value)}
+                      style={styles.modalFieldSelect}
+                    >
+                      {field.options.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={field.type}
+                      value={formValues[field.name] || ""}
+                      onChange={(e) => handleFieldChange(field.name, e.target.value)}
+                      placeholder={field.placeholder}
+                      style={{
+                        ...styles.modalFieldInput,
+                        borderColor: fieldErrors[field.name] ? "#EF4444" : "var(--border)",
+                      }}
+                    />
+                  )}
+                  {fieldErrors[field.name] && (
+                    <div style={styles.modalFieldError}>{fieldErrors[field.name]}</div>
+                  )}
+                </div>
+              )
+            })}
 
             <div style={styles.modalFooter}>
               <button type="button" onClick={() => setIsModalOpen(false)} style={styles.cancelBtn}>
