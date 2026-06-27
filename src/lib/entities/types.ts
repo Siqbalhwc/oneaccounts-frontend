@@ -6,7 +6,8 @@ export interface FieldConfig {
   placeholder?: string;
   options?: { label: string; value: string }[];
   defaultValue?: string | number;
-  countryCodeField?: string; // when type is 'tel', the field that stores the country code
+  countryCodeField?: string;
+  validation?: (value: string, formValues?: Record<string, any>) => string | null;
 }
 
 export interface EntityConfig {
