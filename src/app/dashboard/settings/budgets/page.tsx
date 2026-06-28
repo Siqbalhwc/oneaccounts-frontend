@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { useState, useEffect, Fragment } from "react"
+import { useState, useEffect, Fragment, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRole } from "@/contexts/RoleContext"
@@ -8,11 +8,6 @@ import * as XLSX from "xlsx"
 import { Upload, Download, Edit } from "lucide-react"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
-
-const MONTHS = [
-  "Jan","Feb","Mar","Apr","May","Jun",
-  "Jul","Aug","Sep","Oct","Nov","Dec"
-]
 
 export default function BudgetsPage() {
   const supabase = createBrowserClient(
@@ -46,7 +41,7 @@ export default function BudgetsPage() {
   const [viewMode, setViewMode] = useState<"gl" | "month">("gl")
   const [projectDuration, setProjectDuration] = useState<number>(12)
 
-  // ✅ Editable project start/end dates
+  // Editable project start/end dates
   const [projectStartDate, setProjectStartDate] = useState<string>("")
   const [projectEndDate, setProjectEndDate] = useState<string>("")
 
@@ -61,6 +56,9 @@ export default function BudgetsPage() {
   const [importingBudget, setImportingBudget] = useState(false)
 
   const [editMode, setEditMode] = useState(false)
+
+  // Budget approval status
+  const [budgetStatus, setBudgetStatus] = useState<string>("draft")
 
   // ── 1. Load master data (accounts, projects, donors, locations) ──
   useEffect(() => {
@@ -185,7 +183,33 @@ export default function BudgetsPage() {
     }
   }, [selectedProjectId, projects, businessType, initialDonor, companyId])
 
-  // ✅ NEW: when project changes, load its dates and calculate duration
+  // Fetch budget approval status for this project + fiscal year
+  useEffect(() => {
+    if (!companyId || !selectedProjectId) {
+      setBudgetStatus("draft")
+      return
+    }
+    // Try to fetch approval status – table may not exist yet, defaults to "draft"
+    supabase
+      .from("project_budget_status")
+      .select("status")
+      .eq("company_id", companyId)
+      .eq("project_id", selectedProjectId)
+      .eq("fiscal_year", fiscalYear)
+      .maybeSingle()
+      .then(({ data }) => {
+        setBudgetStatus(data?.status || "draft")
+      })
+      .catch(() => setBudgetStatus("draft"))
+  }, [companyId, selectedProjectId, fiscalYear])
+
+  // Reset month overrides when project/donor/year changes
+  useEffect(() => {
+    setMonthBudgetOverrides({})
+    setEditMode(false)
+  }, [selectedProjectId, selectedDonorId, fiscalYear])
+
+  // When project changes, load its dates and calculate duration
   useEffect(() => {
     if (!selectedProjectId) {
       setProjectStartDate("")
@@ -215,7 +239,7 @@ export default function BudgetsPage() {
     }
   }, [selectedProjectId, projects, fiscalYear])
 
-  // ✅ Save project dates when they change
+  // Save project dates when they change
   const saveProjectDates = async (field: "start_date" | "end_date", value: string) => {
     if (!selectedProjectId || !companyId) return
     if (field === "start_date") {
@@ -236,7 +260,7 @@ export default function BudgetsPage() {
     )
   }
 
-  // ── 5. Load budgets + actuals (NOW VIA SECURE API) ──
+  // ── 5. Load budgets + actuals (VIA SECURE API) – now also populates monthlyActuals ──
   useEffect(() => {
     if (!companyId) { setData({}); setLoading(false); return }
 
@@ -258,20 +282,31 @@ export default function BudgetsPage() {
       .then(res => res.json())
       .then(json => {
         if (json.data) {
-          // Convert flat rows back into the nested structure used by the UI
           const newData: Record<string, Record<string, Record<string, { budget: number; actual: number }>>> = {}
+          const newMonthlyActuals: Record<string, Record<string, Record<number, number>>> = {}
+
           json.data.forEach((row: any) => {
             const actId = String(row.activity_id)
             const locId = String(row.location_id)
             const accId = String(row.account_id)
+
             if (!newData[actId]) newData[actId] = {}
             if (!newData[actId][locId]) newData[actId][locId] = {}
             newData[actId][locId][accId] = {
               budget: row.budget || 0,
               actual: row.actual || 0,
             }
+
+            if (row.month_num) {
+              if (!newMonthlyActuals[actId]) newMonthlyActuals[actId] = {}
+              if (!newMonthlyActuals[actId][locId]) newMonthlyActuals[actId][locId] = {}
+              newMonthlyActuals[actId][locId][row.month_num] = row.month_actual || 0
+            }
           })
           setData(newData)
+          if (Object.keys(newMonthlyActuals).length > 0) {
+            setMonthlyActuals(newMonthlyActuals)
+          }
         }
         setLoading(false)
       })
@@ -280,41 +315,22 @@ export default function BudgetsPage() {
       })
   }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, filterLocationId, businessType, viewMode, projectDuration])
 
-  // ── 6. Monthly actuals (NOW VIA SECURE API – month view returns these directly) ──
-  useEffect(() => {
-    if (viewMode !== "month" || !companyId) return
-    if (businessType === "ngo" && !selectedDonorId && !selectedProjectId) return
+  // ── Dynamic month labels from project start date ──
+  const projectMonths = useMemo(() => {
+    const months: string[] = []
+    if (!projectStartDate) return months
 
-    // The month view data is already included in the matrix call above,
-    // but we still need to populate monthlyActuals for the UI.
-    // Since the API returns month_budget and month_actual per row,
-    // we'll build monthlyActuals from the same response.
-    const params = new URLSearchParams({
-      fiscalYear: String(fiscalYear),
-      view: "month",
-      duration: String(projectDuration),
-    })
-    if (selectedProjectId) params.set("projectId", selectedProjectId)
-    if (selectedDonorId) params.set("donorId", selectedDonorId)
-    if (filterLocationId) params.set("locationId", filterLocationId)
+    const start = new Date(projectStartDate)
+    if (isNaN(start.getTime())) return months
 
-    fetch(`/api/budgets/matrix?${params.toString()}`)
-      .then(res => res.json())
-      .then(json => {
-        if (json.data) {
-          const monthly: Record<string, Record<string, Record<number, number>>> = {}
-          json.data.forEach((row: any) => {
-            const actId = String(row.activity_id)
-            const locId = String(row.location_id)
-            const month = row.month_num
-            if (!monthly[actId]) monthly[actId] = {}
-            if (!monthly[actId][locId]) monthly[actId][locId] = {}
-            monthly[actId][locId][month] = row.month_actual || 0
-          })
-          setMonthlyActuals(monthly)
-        }
-      })
-  }, [viewMode, companyId, fiscalYear, selectedProjectId, selectedDonorId, filterLocationId, businessType, projectDuration])
+    for (let i = 0; i < projectDuration; i++) {
+      const date = new Date(start.getFullYear(), start.getMonth() + i, 1)
+      const monthName = date.toLocaleString("default", { month: "short" })
+      const year = date.getFullYear()
+      months.push(`${monthName} ${year}`)
+    }
+    return months
+  }, [projectStartDate, projectDuration])
 
   // ── Always show all eligible accounts ──
   const relevantAccounts = accounts
@@ -338,27 +354,31 @@ export default function BudgetsPage() {
     return total
   }
 
-  const getMonthBudget = (actId: string, locId: string, month: number) => {
-    const override = monthBudgetOverrides[actId]?.[locId]?.[month]
+  const getMonthBudget = (actId: string, locId: string, monthIdx: number) => {
+    const monthNum = monthIdx + 1 // 1-based month within project
+    const override = monthBudgetOverrides[actId]?.[locId]?.[monthNum]
     if (override !== null && override !== undefined) return override
     const annual = rowTotalBudget(actId, locId)
     const duration = projectDuration > 0 ? projectDuration : 12
     return Math.round(annual / duration)
   }
 
-  const setMonthBudget = (actId: string, locId: string, month: number, value: number) => {
+  const setMonthBudget = (actId: string, locId: string, monthIdx: number, value: number) => {
+    const monthNum = monthIdx + 1
     setMonthBudgetOverrides(prev => {
       const a = { ...prev }
       if (!a[actId]) a[actId] = {}
       if (!a[actId][locId]) a[actId][locId] = {}
-      a[actId][locId] = { ...a[actId][locId], [month]: value }
+      a[actId][locId] = { ...a[actId][locId], [monthNum]: value }
       return a
     })
   }
 
   const monthRowTotal = (actId: string, locId: string) => {
     let sum = 0
-    for (let m = 1; m <= projectDuration; m++) sum += getMonthBudget(actId, locId, m)
+    for (let i = 0; i < projectDuration; i++) {
+      sum += getMonthBudget(actId, locId, i)
+    }
     return sum
   }
 
@@ -386,7 +406,7 @@ export default function BudgetsPage() {
     })
   }
 
-  // ── Save budgets (NOW VIA SECURE API) ──
+  // ── Save budgets (VIA SECURE API) ──
   const handleSave = async () => {
     if (!companyId || !canEdit) return
     if (!selectedProjectId && !selectedDonorId) { setFlash("Please select a Project or Donor first."); return }
@@ -580,6 +600,10 @@ export default function BudgetsPage() {
   }
   const grandVariance = grandBudget - grandActual
 
+  // Determine edit permission based on approval status
+  const isApproved = budgetStatus === "approved"
+  const canEditBudget = isApproved ? (role === "admin") : canEdit
+
   if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
@@ -625,6 +649,7 @@ export default function BudgetsPage() {
         }
         .message-bar.success { border-color: #065F46; color: #6EE7B7; }
         .message-bar.error { border-color: #EF4444; color: #FCA5A5; }
+        .warning-row td { background: #FFF5F5; color: #EF4444; font-size: 11px; font-weight: 500; text-align: left; }
       `}</style>
 
       <div className="budget-shell">
@@ -651,27 +676,33 @@ export default function BudgetsPage() {
             <option value="">All Locations</option>
             {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
-          <select className="filter-select" value={viewMode} onChange={e => setViewMode(e.target.value as "gl" | "month")}>
+          {/* View mode selector – blocks switch if GL not saved */}
+          <select
+            className="filter-select"
+            value={viewMode}
+            onChange={e => {
+              const newMode = e.target.value as "gl" | "month"
+              if (newMode === "month" && editMode) {
+                setFlash("Please save the GL budget before switching to month view.")
+                return
+              }
+              setViewMode(newMode)
+            }}
+          >
             <option value="gl">View by: GL</option>
             <option value="month">View by: Month</option>
           </select>
+          {/* Show project duration as read-only */}
           {viewMode === "month" && (
-            <input
-              type="number"
-              min={1}
-              max={12}
-              value={projectDuration}
-              onChange={e => setProjectDuration(Number(e.target.value) || 12)}
-              className="filter-select"
-              style={{ width: 80 }}
-              placeholder="Months"
-            />
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+              {projectDuration} month{projectDuration !== 1 ? "s" : ""}
+            </span>
           )}
           <button className="btn-outline btn-sm" onClick={exportExcel}><Download size={14} /> Excel</button>
           <button className="btn-outline btn-sm" onClick={exportPDF}><Download size={14} /> PDF</button>
         </div>
 
-        {/* ✅ Editable project dates */}
+        {/* Editable project dates */}
         {selectedProjectId && (
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -699,11 +730,22 @@ export default function BudgetsPage() {
                 ({projectDuration} month{projectDuration !== 1 ? "s" : ""})
               </span>
             )}
+            {/* Approval status badge */}
+            {isApproved && (
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#10B981", marginLeft: 12 }}>
+                ✔ Approved
+              </span>
+            )}
+            {budgetStatus === "pending_approval" && (
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#F59E0B", marginLeft: 12 }}>
+                ⏳ Pending Approval
+              </span>
+            )}
           </div>
         )}
 
         {flash && (
-          <div className={`message-bar ${flash.startsWith("Error") ? "error" : "success"}`}>
+          <div className={`message-bar ${flash.startsWith("Error") || flash.startsWith("Please") ? "error" : "success"}`}>
             {flash}
           </div>
         )}
@@ -729,7 +771,7 @@ export default function BudgetsPage() {
           ) : (
             <>
               <div style={{ marginBottom: 12 }}>
-                {!editMode && (
+                {!editMode && canEditBudget && (
                   <button className="btn-outline" onClick={() => setEditMode(true)}>
                     <Edit size={14} /> Edit Budget
                   </button>
@@ -791,7 +833,7 @@ export default function BudgetsPage() {
                                         type="number" min="0" step="100"
                                         value={cell.budget || ""}
                                         onChange={e => updateCell(String(acc.id), act.id, lid, Number(e.target.value))}
-                                        disabled={!canEdit}
+                                        disabled={!canEditBudget || !editMode}
                                         placeholder="0"
                                       />
                                     </td>
@@ -877,7 +919,7 @@ export default function BudgetsPage() {
                 </tbody>
               </table>
               <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-                {canEdit && (
+                {canEditBudget && editMode && (
                   <>
                     <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save Budget"}</button>
                     <button className="btn-primary" onClick={() => document.getElementById('budget-file-input')?.click()}><Upload size={14} /> Import Budget</button>
@@ -896,18 +938,27 @@ export default function BudgetsPage() {
             </div>
           ) : (
             <>
+              {/* Edit Budget button in month view (matching GL view) */}
+              <div style={{ marginBottom: 12 }}>
+                {!editMode && canEditBudget && (
+                  <button className="btn-outline" onClick={() => setEditMode(true)}>
+                    <Edit size={14} /> Edit Budget
+                  </button>
+                )}
+              </div>
+
               <table className="table">
                 <thead>
                   <tr>
                     <th rowSpan={2} style={{ width: 120 }}>Activity / Location</th>
-                    {MONTHS.slice(0, projectDuration).map(m => (
-                      <th key={m} colSpan={3} style={{ fontSize: 10 }}>{m}</th>
+                    {projectMonths.map(monthLabel => (
+                      <th key={monthLabel} colSpan={3} style={{ fontSize: 10 }}>{monthLabel}</th>
                     ))}
                     <th colSpan={3} style={{ fontSize: 10 }}>TOTAL</th>
                   </tr>
                   <tr className="sub-header">
-                    {MONTHS.slice(0, projectDuration).map(m => (
-                      <Fragment key={m}>
+                    {projectMonths.map(monthLabel => (
+                      <Fragment key={monthLabel}>
                         <th>Budget</th><th>Actual</th><th>Var</th>
                       </Fragment>
                     ))}
@@ -920,42 +971,55 @@ export default function BudgetsPage() {
                     const locationsInAct = Object.keys(actData)
                     return (
                       <Fragment key={act.id}>
-                        <tr className="act-header"><td colSpan={1 + projectDuration * 3 + 3}>{act.name}</td></tr>
+                        <tr className="act-header"><td colSpan={1 + projectMonths.length * 3 + 3}>{act.name}</td></tr>
                         {locationsInAct.map(lid => {
                           const loc = locations.find(l => l.id == lid)
+                          const projectBudget = rowTotalBudget(act.id, lid)
+                          const monthSum = monthRowTotal(act.id, lid)
+                          const diff = projectBudget - monthSum
                           return (
-                            <tr key={lid}>
-                              <td style={{ fontWeight: 600, textAlign: "left", paddingLeft: 16, color: "var(--text)" }}>{loc?.name || lid}</td>
-                              {MONTHS.slice(0, projectDuration).map((_, idx) => {
-                                const monthNum = idx + 1
-                                const budget = getMonthBudget(act.id, lid, monthNum)
-                                const actual = monthlyActuals[act.id]?.[lid]?.[monthNum] || 0
-                                const variance = budget - actual
-                                return (
-                                  <Fragment key={monthNum}>
-                                    <td>
-                                      <input
-                                        className="input-budget"
-                                        type="number" min="0" step="100"
-                                        value={budget || ""}
-                                        onChange={e => setMonthBudget(act.id, lid, monthNum, Number(e.target.value))}
-                                        disabled={!canEdit}
-                                        placeholder="0"
-                                      />
-                                    </td>
-                                    <td style={{ fontSize: 10, color: "var(--text)" }}>{actual.toLocaleString()}</td>
-                                    <td style={{ fontSize: 10, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "var(--text-muted)" }}>
-                                      {variance === 0 ? "—" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
-                                    </td>
-                                  </Fragment>
-                                )
-                              })}
-                              <td style={{ fontWeight: 600, color: "var(--text)" }}>{monthRowTotal(act.id, lid).toLocaleString()}</td>
-                              <td style={{ fontWeight: 600, color: "var(--text)" }}>{rowTotalActual(act.id, lid).toLocaleString()}</td>
-                              <td style={{ fontWeight: 600, color: (monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid)) < 0 ? "#EF4444" : (monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid)) > 0 ? "#10B981" : "var(--text-muted)" }}>
-                                {(monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid)) === 0 ? "—" : (monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid) > 0 ? "+" : "") + (monthRowTotal(act.id, lid) - rowTotalActual(act.id, lid)).toLocaleString()}
-                              </td>
-                            </tr>
+                            <Fragment key={lid}>
+                              <tr>
+                                <td style={{ fontWeight: 600, textAlign: "left", paddingLeft: 16, color: "var(--text)" }}>{loc?.name || lid}</td>
+                                {projectMonths.map((_, idx) => {
+                                  const budget = getMonthBudget(act.id, lid, idx)
+                                  const actual = monthlyActuals[act.id]?.[lid]?.[idx + 1] || 0 // month number = idx+1
+                                  const variance = budget - actual
+                                  return (
+                                    <Fragment key={idx}>
+                                      <td>
+                                        <input
+                                          className="input-budget"
+                                          type="number" min="0" step="100"
+                                          value={budget || ""}
+                                          onChange={e => setMonthBudget(act.id, lid, idx, Number(e.target.value))}
+                                          disabled={!canEditBudget || !editMode}
+                                          placeholder="0"
+                                        />
+                                      </td>
+                                      <td style={{ fontSize: 10, color: "var(--text)" }}>{actual.toLocaleString()}</td>
+                                      <td style={{ fontSize: 10, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "var(--text-muted)" }}>
+                                        {variance === 0 ? "—" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
+                                      </td>
+                                    </Fragment>
+                                  )
+                                })}
+                                {/* TOTAL columns: month sum (Budget), actual, variance */}
+                                <td style={{ fontWeight: 600, color: "var(--text)" }}>{monthSum.toLocaleString()}</td>
+                                <td style={{ fontWeight: 600, color: "var(--text)" }}>{rowTotalActual(act.id, lid).toLocaleString()}</td>
+                                <td style={{ fontWeight: 600, color: (monthSum - rowTotalActual(act.id, lid)) < 0 ? "#EF4444" : (monthSum - rowTotalActual(act.id, lid)) > 0 ? "#10B981" : "var(--text-muted)" }}>
+                                  {(monthSum - rowTotalActual(act.id, lid)) === 0 ? "—" : (monthSum - rowTotalActual(act.id, lid) > 0 ? "+" : "") + (monthSum - rowTotalActual(act.id, lid)).toLocaleString()}
+                                </td>
+                              </tr>
+                              {/* Warning row when monthly sum ≠ project budget */}
+                              {diff !== 0 && (
+                                <tr className="warning-row">
+                                  <td colSpan={1 + projectMonths.length * 3 + 3} style={{ textAlign: "right", padding: "6px 12px" }}>
+                                    ⚠️ Total monthly allocations: <strong>{monthSum.toLocaleString()}</strong> → Project Budget: <strong>{projectBudget.toLocaleString()}</strong> → Remaining: <strong>{diff > 0 ? "+" : ""}{diff.toLocaleString()}</strong> (please assign this amount to another month)
+                                  </td>
+                                </tr>
+                              )}
+                            </Fragment>
                           )
                         })}
                       </Fragment>
@@ -964,7 +1028,7 @@ export default function BudgetsPage() {
                 </tbody>
               </table>
               <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-                {canEdit && (
+                {canEditBudget && editMode && (
                   <>
                     <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save Budget"}</button>
                     <button className="btn-primary" onClick={() => document.getElementById('budget-file-input')?.click()}><Upload size={14} /> Import Budget</button>
