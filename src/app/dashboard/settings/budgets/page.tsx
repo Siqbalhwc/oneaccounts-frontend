@@ -62,7 +62,7 @@ export default function BudgetsPage() {
 
   const [editMode, setEditMode] = useState(false)
 
-  // ── 1. Load master data ──
+  // ── 1. Load master data (accounts, projects, donors, locations) ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -236,7 +236,7 @@ export default function BudgetsPage() {
     )
   }
 
-  // ── 5. Load budgets + actuals ──
+  // ── 5. Load budgets + actuals (NOW VIA SECURE API) ──
   useEffect(() => {
     if (!companyId) { setData({}); setLoading(false); return }
 
@@ -245,80 +245,76 @@ export default function BudgetsPage() {
 
     setLoading(true)
 
-    let budgetQuery = supabase.from("budgets")
-      .select("account_id, activity_id, location_id, donor_id, budgeted_amount")
-      .eq("company_id", companyId).eq("fiscal_year", fiscalYear)
-      .is("month", null).is("deleted_at", null)
+    const params = new URLSearchParams({
+      fiscalYear: String(fiscalYear),
+      view: viewMode,
+      duration: String(projectDuration),
+    })
+    if (selectedProjectId) params.set("projectId", selectedProjectId)
+    if (selectedDonorId) params.set("donorId", selectedDonorId)
+    if (filterLocationId) params.set("locationId", filterLocationId)
 
-    if (selectedProjectId) budgetQuery = budgetQuery.eq("project_id", selectedProjectId)
-    if (businessType === "ngo" && selectedDonorId) budgetQuery = budgetQuery.eq("donor_id", selectedDonorId)
-    if (filterLocationId) budgetQuery = budgetQuery.eq("location_id", filterLocationId)
-
-    budgetQuery.then(({ data: budgetRows }) => {
-      const startDate = `${fiscalYear}-01-01`
-      const endDate = `${fiscalYear}-12-31`
-
-      let actualQuery = supabase.from("journal_lines")
-        .select("account_id, activity_id, location_id, debit, credit, journal_entries!inner(date)")
-        .eq("company_id", companyId)
-        .gte("journal_entries.date", startDate).lte("journal_entries.date", endDate)
-
-      if (selectedProjectId) actualQuery = actualQuery.eq("project_id", selectedProjectId)
-      if (businessType === "ngo" && selectedDonorId) actualQuery = actualQuery.eq("donor_id", selectedDonorId)
-      if (filterLocationId) actualQuery = actualQuery.eq("location_id", filterLocationId)
-
-      actualQuery.then(({ data: actualRows }) => {
-        const newData: Record<string, Record<string, Record<string, { budget: number; actual: number }>>> = {}
-        budgetRows?.forEach((b: any) => {
-          const { account_id, activity_id, location_id, budgeted_amount } = b
-          if (!activity_id || !location_id || !account_id) return
-          if (!newData[activity_id]) newData[activity_id] = {}
-          if (!newData[activity_id][location_id]) newData[activity_id][location_id] = {}
-          newData[activity_id][location_id][account_id] = { budget: budgeted_amount || 0, actual: 0 }
-        })
-        actualRows?.forEach((line: any) => {
-          const { account_id, activity_id, location_id, debit, credit } = line
-          if (!activity_id || !location_id || !account_id) return
-          if (!newData[activity_id]) newData[activity_id] = {}
-          if (!newData[activity_id][location_id]) newData[activity_id][location_id] = {}
-          if (!newData[activity_id][location_id][account_id]) newData[activity_id][location_id][account_id] = { budget: 0, actual: 0 }
-          newData[activity_id][location_id][account_id].actual += (debit || 0) - (credit || 0)
-        })
-        setData(newData)
+    fetch(`/api/budgets/matrix?${params.toString()}`)
+      .then(res => res.json())
+      .then(json => {
+        if (json.data) {
+          // Convert flat rows back into the nested structure used by the UI
+          const newData: Record<string, Record<string, Record<string, { budget: number; actual: number }>>> = {}
+          json.data.forEach((row: any) => {
+            const actId = String(row.activity_id)
+            const locId = String(row.location_id)
+            const accId = String(row.account_id)
+            if (!newData[actId]) newData[actId] = {}
+            if (!newData[actId][locId]) newData[actId][locId] = {}
+            newData[actId][locId][accId] = {
+              budget: row.budget || 0,
+              actual: row.actual || 0,
+            }
+          })
+          setData(newData)
+        }
         setLoading(false)
       })
-    })
-  }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, filterLocationId, businessType])
+      .catch(() => {
+        setLoading(false)
+      })
+  }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, filterLocationId, businessType, viewMode, projectDuration])
 
-  // ── 6. Monthly actuals ──
+  // ── 6. Monthly actuals (NOW VIA SECURE API – month view returns these directly) ──
   useEffect(() => {
     if (viewMode !== "month" || !companyId) return
     if (businessType === "ngo" && !selectedDonorId && !selectedProjectId) return
 
-    const startDate = `${fiscalYear}-01-01`
-    const endDate = `${fiscalYear}-12-31`
-    let query = supabase.from("journal_lines")
-      .select("activity_id, location_id, debit, credit, journal_entries!inner(date)")
-      .eq("company_id", companyId)
-      .gte("journal_entries.date", startDate).lte("journal_entries.date", endDate)
-
-    if (selectedProjectId) query = query.eq("project_id", selectedProjectId)
-    if (businessType === "ngo" && selectedDonorId) query = query.eq("donor_id", selectedDonorId)
-    if (filterLocationId) query = query.eq("location_id", filterLocationId)
-
-    query.then(({ data: lines }) => {
-      const agg: Record<string, Record<string, Record<number, number>>> = {}
-      ;(lines || []).forEach((l: any) => {
-        const act = String(l.activity_id)
-        const loc = String(l.location_id)
-        const month = new Date(l.journal_entries.date).getMonth() + 1
-        if (!agg[act]) agg[act] = {}
-        if (!agg[act][loc]) agg[act][loc] = {}
-        agg[act][loc][month] = (agg[act][loc][month] || 0) + (l.debit || 0) - (l.credit || 0)
-      })
-      setMonthlyActuals(agg)
+    // The month view data is already included in the matrix call above,
+    // but we still need to populate monthlyActuals for the UI.
+    // Since the API returns month_budget and month_actual per row,
+    // we'll build monthlyActuals from the same response.
+    const params = new URLSearchParams({
+      fiscalYear: String(fiscalYear),
+      view: "month",
+      duration: String(projectDuration),
     })
-  }, [viewMode, companyId, selectedProjectId, selectedDonorId, filterLocationId, fiscalYear, businessType])
+    if (selectedProjectId) params.set("projectId", selectedProjectId)
+    if (selectedDonorId) params.set("donorId", selectedDonorId)
+    if (filterLocationId) params.set("locationId", filterLocationId)
+
+    fetch(`/api/budgets/matrix?${params.toString()}`)
+      .then(res => res.json())
+      .then(json => {
+        if (json.data) {
+          const monthly: Record<string, Record<string, Record<number, number>>> = {}
+          json.data.forEach((row: any) => {
+            const actId = String(row.activity_id)
+            const locId = String(row.location_id)
+            const month = row.month_num
+            if (!monthly[actId]) monthly[actId] = {}
+            if (!monthly[actId][locId]) monthly[actId][locId] = {}
+            monthly[actId][locId][month] = row.month_actual || 0
+          })
+          setMonthlyActuals(monthly)
+        }
+      })
+  }, [viewMode, companyId, fiscalYear, selectedProjectId, selectedDonorId, filterLocationId, businessType, projectDuration])
 
   // ── Always show all eligible accounts ──
   const relevantAccounts = accounts
@@ -390,7 +386,7 @@ export default function BudgetsPage() {
     })
   }
 
-  // ── Save budgets ──
+  // ── Save budgets (NOW VIA SECURE API) ──
   const handleSave = async () => {
     if (!companyId || !canEdit) return
     if (!selectedProjectId && !selectedDonorId) { setFlash("Please select a Project or Donor first."); return }
@@ -407,51 +403,43 @@ export default function BudgetsPage() {
           if (uniqueKeys.has(key)) continue
           uniqueKeys.add(key)
           rowsToInsert.push({
-            company_id: companyId,
             account_id: parseInt(accountId),
-            project_id: selectedProjectId || null,
             activity_id: activityId,
-            donor_id: (businessType === "ngo") ? selectedDonorId : null,
             location_id: locationId,
-            fiscal_year: fiscalYear,
-            month: null,
             budgeted_amount: budget,
           })
         }
       }
     }
 
-    let deleteQuery = supabase.from("budgets").delete()
-      .eq("company_id", companyId).eq("fiscal_year", fiscalYear).is("month", null)
-    if (selectedProjectId) deleteQuery = deleteQuery.eq("project_id", selectedProjectId)
-    if (businessType === "ngo") deleteQuery = deleteQuery.eq("donor_id", selectedDonorId)
-    await deleteQuery
-
-    if (rowsToInsert.length > 0) {
-      const { error } = await supabase.from("budgets").insert(rowsToInsert)
-      if (error) { setFlash("Error: " + error.message); setSaving(false); return }
-    }
-
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      await supabase.from("data_change_logs").insert({
-        table_name: "budgets",
-        record_id: `${selectedProjectId || 'all'}_${fiscalYear}`,
-        action: "UPDATE",
-        old_data: null,
-        new_data: rowsToInsert,
-        changed_by: user?.email || user?.id || null,
-        changed_at: new Date().toISOString(),
+      const res = await fetch('/api/budgets/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fiscalYear,
+          projectId: selectedProjectId || null,
+          donorId: selectedDonorId || null,
+          rows: rowsToInsert,
+        }),
       })
-    } catch {}
-
-    setFlash("Budget saved!")
-    setSaving(false)
-    setEditMode(false)
-    setTimeout(() => setFlash(""), 4000)
+      const result = await res.json()
+      if (!result.success) {
+        setFlash("Error: " + (result.error || "Failed"))
+        setSaving(false)
+        return
+      }
+      setFlash("Budget saved!")
+      setSaving(false)
+      setEditMode(false)
+      setTimeout(() => setFlash(""), 4000)
+    } catch (err: any) {
+      setFlash("Error: " + err.message)
+      setSaving(false)
+    }
   }
 
-  // ── Export ──
+  // ── Export (unchanged) ──
   const exportExcel = () => {
     const rows: any[] = []
     for (const actId of Object.keys(data)) {
@@ -510,7 +498,7 @@ export default function BudgetsPage() {
     doc.save(`budget_vs_actual_${fiscalYear}.pdf`)
   }
 
-  // ── Import ──
+  // ── Import (unchanged) ──
   const handleBudgetImport = async () => {
     if (!budgetImportFile || !selectedProjectId || (businessType === "ngo" && !selectedDonorId)) {
       setFlash("Please select a project and donor (if NGO) before importing.")
