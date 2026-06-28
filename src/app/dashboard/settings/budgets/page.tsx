@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRole } from "@/contexts/RoleContext"
 import * as XLSX from "xlsx"
-import { Upload, Download, Edit } from "lucide-react"
+import { Upload, Download, Edit, Send, CheckCircle } from "lucide-react"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
@@ -274,7 +274,6 @@ export default function BudgetsPage() {
     if (selectedDonorId) baseParams.set("donorId", selectedDonorId)
     if (filterLocationId) baseParams.set("locationId", filterLocationId)
 
-    // Always fetch GL data (annual budget & actual totals)
     const glParams = new URLSearchParams(baseParams.toString())
     glParams.set("view", "gl")
 
@@ -391,7 +390,6 @@ export default function BudgetsPage() {
     const monthNum = monthIdx + 1
     const override = monthBudgetOverrides[actId]?.[locId]?.[monthNum]
     if (override !== null && override !== undefined) return override
-    // fallback (shouldn't be needed after auto‑correction)
     const annual = rowTotalBudget(actId, locId)
     const duration = projectDuration > 0 ? projectDuration : 12
     return Math.round(annual / duration)
@@ -440,7 +438,7 @@ export default function BudgetsPage() {
     })
   }
 
-  // ── Save budgets (VIA SECURE API) ──
+  // ── Save budgets ──
   const handleSave = async () => {
     if (!companyId || !canEdit) return
     if (!selectedProjectId && !selectedDonorId) { setFlash("Please select a Project or Donor first."); return }
@@ -490,6 +488,56 @@ export default function BudgetsPage() {
     } catch (err: any) {
       setFlash("Error: " + err.message)
       setSaving(false)
+    }
+  }
+
+  // ── Submit for Approval ──
+  const handleSubmitForApproval = async () => {
+    if (!selectedProjectId || !canEdit) return
+    try {
+      const res = await fetch('/api/budgets/submit-for-approval', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: selectedProjectId,
+          fiscalYear,
+        }),
+      })
+      const result = await res.json()
+      if (!result.success) {
+        setFlash("Error: " + (result.error || "Failed"))
+        return
+      }
+      setBudgetStatus('pending_approval')
+      setFlash("Budget sent for approval!")
+      setTimeout(() => setFlash(""), 4000)
+    } catch (err: any) {
+      setFlash("Error: " + err.message)
+    }
+  }
+
+  // ── Approve Budget ──
+  const handleApprove = async () => {
+    if (!selectedProjectId || role !== 'admin') return
+    try {
+      const res = await fetch('/api/budgets/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: selectedProjectId,
+          fiscalYear,
+        }),
+      })
+      const result = await res.json()
+      if (!result.success) {
+        setFlash("Error: " + (result.error || "Failed"))
+        return
+      }
+      setBudgetStatus('approved')
+      setFlash("Budget approved successfully!")
+      setTimeout(() => setFlash(""), 4000)
+    } catch (err: any) {
+      setFlash("Error: " + err.message)
     }
   }
 
@@ -634,7 +682,9 @@ export default function BudgetsPage() {
   }
   const grandVariance = grandBudget - grandActual
 
+  // ✅ Approval‑based edit logic
   const isApproved = budgetStatus === "approved"
+  const isPendingApproval = budgetStatus === "pending_approval"
   const canEditBudget = isApproved ? (role === "admin") : canEdit
 
   if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
@@ -766,9 +816,14 @@ export default function BudgetsPage() {
                 ✔ Approved
               </span>
             )}
-            {budgetStatus === "pending_approval" && (
+            {isPendingApproval && (
               <span style={{ fontSize: 12, fontWeight: 600, color: "#F59E0B", marginLeft: 12 }}>
                 ⏳ Pending Approval
+              </span>
+            )}
+            {!isApproved && !isPendingApproval && budgetStatus === "draft" && (
+              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginLeft: 12 }}>
+                Draft
               </span>
             )}
           </div>
@@ -777,6 +832,22 @@ export default function BudgetsPage() {
         {flash && (
           <div className={`message-bar ${flash.startsWith("Error") || flash.startsWith("Please") ? "error" : "success"}`}>
             {flash}
+          </div>
+        )}
+
+        {/* Approval action buttons – visible only in GL view and after saving */}
+        {viewMode === "gl" && selectedProjectId && canEditBudget && budgetStatus !== "approved" && (
+          <div style={{ marginBottom: 12, display: "flex", gap: 8 }}>
+            {budgetStatus === "draft" && (
+              <button className="btn-outline" onClick={handleSubmitForApproval}>
+                <Send size={14} /> Send for Approval
+              </button>
+            )}
+            {isPendingApproval && role === "admin" && (
+              <button className="btn-primary" onClick={handleApprove}>
+                <CheckCircle size={14} /> Approve Budget
+              </button>
+            )}
           </div>
         )}
 
