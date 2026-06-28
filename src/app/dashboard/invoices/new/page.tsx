@@ -734,7 +734,16 @@ function NewInvoicePageContent() {
         .table-scroll-wrap::-webkit-scrollbar-track { background: var(--bg); border-radius: 8px; }
         .table-scroll-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
 
-        .inv-item-header, .inv-item-row { display: grid; grid-template-columns: ${tableCols}; gap: 6px; align-items: center; min-width: ${taxEnabled ? '1450px' : '1200px'}; padding: 6px 4px; }
+        .inv-item-header, .inv-item-row { display: grid; grid-template-columns: ${tableCols}; gap: 6px; align-items: center; padding: 6px 4px; }
+
+        /* Cap visible item rows to roughly 5 before scrolling internally,
+           instead of letting the table (and the whole page) grow forever.
+           Header stays outside this wrapper so it never scrolls away. */
+        .items-body-scroll { max-height: 280px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+        .items-body-scroll::-webkit-scrollbar { width: 8px; }
+        .items-body-scroll::-webkit-scrollbar-track { background: transparent; }
+        .items-body-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
+        .items-body-scroll::-webkit-scrollbar-thumb:hover { background: var(--border-strong, var(--text-faint)); }
         .inv-item-header { font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); border-bottom: 2px solid var(--border); letter-spacing: 0.04em; padding-bottom: 8px; margin-bottom: 4px; }
         .inv-item-header span { display: flex; align-items: center; padding: 0 8px; }
         .inv-item-header .header-right { justify-content: flex-end; text-align: right; }
@@ -841,7 +850,7 @@ function NewInvoicePageContent() {
               <div className="inv-card">
                 {showProducts ? (
                   <div>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
                       <div style={{ flex: 1, maxWidth: 320 }}>
                         <EntityPicker
                           entityType="product"
@@ -852,7 +861,7 @@ function NewInvoicePageContent() {
                           allowCreate={false}
                         />
                       </div>
-                      <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
+                      <button className="inv-btn" style={{ height: 38 }} onClick={addManualItem}><Plus size={14} /> Manual</button>
                     </div>
                   </div>
                 ) : (
@@ -912,25 +921,27 @@ function NewInvoicePageContent() {
             {items.length > 0 && (
               <div className="inv-card" style={{ padding: "16px 12px" }}>
                 <div className="table-scroll-wrap">
-                  <div className="inv-item-header">
-                    <span className="header-center"></span>
-                    <span>Product</span>
-                    <span>Description</span>
-                    <span className="header-center">Qty</span>
-                    <span className="header-right">Price</span>
-                    {taxEnabled && <span className="header-center">Tax %</span>}
-                    <span className="header-right">Total</span>
-                    {taxEnabled && <span className="header-right">Tax Amt</span>}
-                    <span className="header-right">Cost</span>
-                    <span className="header-center"></span>
-                  </div>
+                  <div style={{ minWidth: taxEnabled ? '1450px' : '1200px' }}>
+                    <div className="inv-item-header">
+                      <span className="header-center"></span>
+                      <span>Product</span>
+                      <span>Description</span>
+                      <span className="header-center">Qty</span>
+                      <span className="header-right">Price</span>
+                      {taxEnabled && <span className="header-center">Tax %</span>}
+                      <span className="header-right">Total</span>
+                      {taxEnabled && <span className="header-right">Tax Amt</span>}
+                      <span className="header-right">Cost</span>
+                      <span className="header-center"></span>
+                    </div>
 
-                  {items.map((item, idx) => {
-                    const stockError = stockErrors[idx]
-                    const taxBadge = taxEnabled && item.tax_code_id ? `${item.tax_rate}%` : null
+                    <div className="items-body-scroll">
+                      {items.map((item, idx) => {
+                        const stockError = stockErrors[idx]
+                        const taxBadge = taxEnabled && item.tax_code_id ? `${item.tax_rate}%` : null
 
-                    return (
-                      <Fragment key={idx}>
+                        return (
+                          <Fragment key={idx}>
                         <div className="inv-item-row" style={stockError ? { background: "rgba(239,68,68,0.05)", borderRadius: "6px" } : {}}>
                           <div style={{ display: "flex", justifyContent: "center" }}>
                             <div className="prod-thumb-cell">
@@ -998,8 +1009,10 @@ function NewInvoicePageContent() {
                           </div>
                         )}
                       </Fragment>
-                    )
-                  })}
+                        )
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
