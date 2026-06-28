@@ -69,7 +69,7 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
   const totalBudget = budgetsRes.data?.reduce((s: number, b: any) => s + (b.budgeted_amount || 0), 0) || 0
   const totalSpent = totalSpentRpc.data?.[0]?.total || 0
 
-  // ── Donor balances (same as before) ──────────────────────────────────
+  // ── Donor balances ──────────────────────────────────
   const donorNameMap: Record<string, string> = {}
   donorsRes.data?.forEach((d: any) => { donorNameMap[String(d.id)] = d.name })
 
