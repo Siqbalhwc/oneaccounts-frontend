@@ -240,32 +240,32 @@ export default function EntityPicker({
     if (next) setCoords(next)
   }, [filteredResults, allRecords])
 
-  // Keep the dropdown glued to its trigger if the page/table scrolls or the
-  // window resizes while it's open (re-runs the same measurement pass).
-  // Closes the dropdown outright if the trigger scrolls fully out of view,
-  // rather than leaving it floating disconnected from anything visible.
+  // Closing on scroll, not re-tracking position through it.
+  // Earlier this dropdown tried to re-measure and follow the trigger during
+  // any scroll — but inside a horizontally-scrolling table, the trigger
+  // itself becomes partially clipped by its own scroll container as it
+  // scrolls toward the edge, so a "correctly positioned" dropdown still
+  // looks detached/broken because the field it's attached to is half-hidden
+  // behind something else. Simplest and most predictable fix, matching how
+  // Sheets/Airtable/Odoo-style table pickers behave: any scroll just closes
+  // the dropdown, the same way clicking outside does. The user can reopen it
+  // once they've finished scrolling to where they want to be.
+  // Window resize is different (rare, doesn't clip anything) so that still
+  // just re-measures position rather than closing.
   useEffect(() => {
-    if (!isOpen || coords === null) return
-    const remeasure = () => {
-      const triggerEl = triggerRef.current
-      if (triggerEl) {
-        const r = triggerEl.getBoundingClientRect()
-        const offscreen = r.bottom < 0 || r.top > window.innerHeight
-        if (offscreen) {
-          closeDropdown()
-          return
-        }
-      }
+    if (!isOpen) return
+    const handleScroll = () => closeDropdown()
+    const handleResize = () => {
       const next = computeDropdownPosition()
       if (next) setCoords(next)
     }
-    window.addEventListener("scroll", remeasure, true)
-    window.addEventListener("resize", remeasure)
+    window.addEventListener("scroll", handleScroll, true)
+    window.addEventListener("resize", handleResize)
     return () => {
-      window.removeEventListener("scroll", remeasure, true)
-      window.removeEventListener("resize", remeasure)
+      window.removeEventListener("scroll", handleScroll, true)
+      window.removeEventListener("resize", handleResize)
     }
-  }, [isOpen, coords, computeDropdownPosition, closeDropdown])
+  }, [isOpen, computeDropdownPosition, closeDropdown])
 
   const handleSelect = (record: LookupRecord) => {
     onChange(record)
