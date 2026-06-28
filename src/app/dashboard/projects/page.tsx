@@ -28,7 +28,6 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true)
   const [showInactive, setShowInactive] = useState(false)
 
-  // Individual column visibility
   const [visibleColumns, setVisibleColumns] = useState({
     budget: true,
     actual: true,
@@ -37,7 +36,6 @@ export default function ProjectsPage() {
   const [showColumnPicker, setShowColumnPicker] = useState(false)
   const columnPickerRef = useRef<HTMLDivElement>(null)
 
-  // Close column picker when clicking outside
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (columnPickerRef.current && !columnPickerRef.current.contains(e.target as Node)) {
@@ -64,21 +62,51 @@ export default function ProjectsPage() {
 
       const { data: { user } } = await supabase.auth.getUser()
       const companyId = (user?.app_metadata as any)?.company_id
+      if (!companyId) { setLoading(false); return }
+
+      // 1. Get all expense + fixed asset account IDs
+      const { data: expenseAccounts } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("type", "Expense")
+
+      const { data: assetAccounts } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("type", "Asset")
+        .gte("code", "1400")
+        .lte("code", "1499")
+
+      const relevantIds = [
+        ...(expenseAccounts || []).map(a => a.id),
+        ...(assetAccounts || []).map(a => a.id),
+      ]
+
+      if (relevantIds.length === 0) {
+        // No expense/fixed asset accounts – set actuals to 0
+        const enriched = data.map((p: any) => ({ ...p, actualSpent: 0 }))
+        const filtered = showInactive ? enriched : enriched.filter((p: any) => !p.deleted_at)
+        setProjects(filtered)
+        setLoading(false)
+        return
+      }
+
+      // 2. Fetch journal lines ONLY for those accounts
+      const { data: actualRows, error } = await supabase
+        .from("journal_lines")
+        .select("project_id, debit, credit")
+        .eq("company_id", companyId)
+        .in("account_id", relevantIds)
+        .not("project_id", "is", null)
 
       let actualsMap: Record<number, number> = {}
-      if (companyId) {
-        const { data: actualRows, error } = await supabase
-          .from("journal_lines")
-          .select("project_id, debit, credit")
-          .eq("company_id", companyId)
-          .not("project_id", "is", null)
-
-        if (!error && actualRows) {
-          for (const row of actualRows) {
-            const pid = row.project_id
-            const net = (row.debit || 0) - (row.credit || 0)
-            actualsMap[pid] = (actualsMap[pid] || 0) + net
-          }
+      if (!error && actualRows) {
+        for (const row of actualRows) {
+          const pid = row.project_id
+          const net = (row.debit || 0) - (row.credit || 0)
+          actualsMap[pid] = (actualsMap[pid] || 0) + net
         }
       }
 
@@ -168,8 +196,7 @@ export default function ProjectsPage() {
   const rowDark  = isLightStyle ? "#F8F9FC" : "#111827"
   const headerBg = isLightStyle ? "#07085B" : "#000000"
 
-  // Build dynamic grid columns based on visibleColumns
-  const baseCols = "minmax(200px, 2fr) minmax(100px, 1fr) 100px 90px"   // project, donor, status, approved
+  const baseCols = "minmax(200px, 2fr) minmax(100px, 1fr) 100px 90px"
   const budgetCol = " 1fr"
   const actualCol = " 1fr"
   const balanceCol = " 1fr"
@@ -180,9 +207,6 @@ export default function ProjectsPage() {
   if (visibleColumns.actual) gridCols += actualCol
   if (visibleColumns.balance) gridCols += balanceCol
   gridCols += pdfCol
-
-  // For mobile, we'll just use overflow-x:auto; the grid template will be defined inline in style.
-  // We'll compute inline styles for header and row templates.
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
