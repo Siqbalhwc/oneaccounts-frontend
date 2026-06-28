@@ -974,14 +974,6 @@ export default function NewBillPage() {
         .table-scroll-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
 
         .inv-item-header, .inv-item-row { display: grid; grid-template-columns: ${fixedCols()}; gap: 6px; align-items: center; padding: 6px 4px; }
-
-        /* Cap visible item rows to roughly 5 before scrolling internally.
-           Header stays outside this wrapper so it never scrolls away. */
-        .items-body-scroll { max-height: 280px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
-        .items-body-scroll::-webkit-scrollbar { width: 8px; }
-        .items-body-scroll::-webkit-scrollbar-track { background: transparent; }
-        .items-body-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
-        .items-body-scroll::-webkit-scrollbar-thumb:hover { background: var(--border-strong, var(--text-faint)); }
         .inv-item-header { font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); border-bottom: 2px solid var(--border); letter-spacing: 0.04em; padding-bottom: 8px; margin-bottom: 4px; }
         .inv-item-header span { display: flex; align-items: center; padding: 0 8px; }
         .inv-item-header .header-right { justify-content: flex-end; text-align: right; }
@@ -1294,7 +1286,6 @@ export default function NewBillPage() {
                     <span className="header-center"></span>
                   </div>
 
-                  <div className="items-body-scroll">
                   {items.map((item, idx) => {
                     const budgetData = getLineBudgetData(item)
                     const overBudget = isLineOverBudget(item, budgetData)
@@ -1461,7 +1452,6 @@ export default function NewBillPage() {
                       </Fragment>
                     )
                   })}
-                  </div>
                 </div>
               </div>
             )}

@@ -3,6 +3,7 @@
 /* ── DESIGN TOKENS ── */
 :root {
   /* Light theme - expert recommended contrast improvements */
+  color-scheme: light;
   --bg: #F7F9FC;
   --bg-soft: #F1F4F8;
   --card: #FFFFFF;
@@ -33,6 +34,7 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   --bg: #0B1120;
   --bg-soft: #0F172A;
   --card: #111827;
@@ -60,6 +62,7 @@
 /* ── OneAccounts Brand Theme ── */
 [data-theme="oneaccounts"] {
   /* OneAccounts theme - expert recommended contrast improvements */
+  color-scheme: light;
   --bg: #F7F9FC;
   --bg-soft: #F1F4F8;
   --card: #FFFFFF;

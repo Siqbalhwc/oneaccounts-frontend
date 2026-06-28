@@ -54,6 +54,13 @@ export default function EntityPicker({
   const [filteredResults, setFilteredResults] = useState<LookupRecord[]>([])
   const [isSearching, setIsSearching] = useState(false)
 
+  // Decided once when the dropdown opens: render below the trigger (default)
+  // or above it, if there isn't enough room below in the viewport. This also
+  // means we never rely on focus()'s native scroll-into-view behavior to make
+  // the dropdown visible — the dropdown places itself correctly instead of
+  // the page/row scrolling to chase it.
+  const [openDirection, setOpenDirection] = useState<"down" | "up">("down")
+
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [formValues, setFormValues] = useState<Record<string, any>>({})
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
@@ -130,8 +137,27 @@ export default function EntityPicker({
     }
   }, [isModalOpen, config, companyId])
 
+  // Estimated dropdown height: search box (~50px) + up to ~5 result rows
+  // (~38px each) + quick-create footer (~40px if present). Used only to
+  // decide open direction, not for exact layout.
+  const ESTIMATED_DROPDOWN_HEIGHT = 280
+
   const openDropdown = useCallback(() => {
-    if (!disabled) setIsOpen(true)
+    if (disabled) return
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - rect.bottom
+      const spaceAbove = rect.top
+      // Prefer below (the usual case). Only flip to "up" when there's
+      // clearly not enough room below but there is room above — e.g. a
+      // row near the bottom of a scrolled table.
+      if (spaceBelow < ESTIMATED_DROPDOWN_HEIGHT && spaceAbove > spaceBelow) {
+        setOpenDirection("up")
+      } else {
+        setOpenDirection("down")
+      }
+    }
+    setIsOpen(true)
   }, [disabled])
 
   const closeDropdown = useCallback(() => setIsOpen(false), [])
@@ -152,7 +178,7 @@ export default function EntityPicker({
   }, [closeDropdown])
 
   useEffect(() => {
-    if (isOpen) setTimeout(() => searchInputRef.current?.focus(), 50)
+    if (isOpen) setTimeout(() => searchInputRef.current?.focus({ preventScroll: true }), 50)
   }, [isOpen])
 
   const handleSelect = (record: LookupRecord) => {
@@ -360,7 +386,18 @@ export default function EntityPicker({
     },
     triggerPlaceholder: { color: "var(--text-muted)", fontSize: compact ? 11 : 13 },
     selectedChip: { display: "flex", alignItems: "center", gap: 6, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", fontSize: compact ? 11 : 13 },
-    dropdown: { position: "absolute", zIndex: 100, top: "calc(100% + 4px)", left: 0, minWidth: compact ? 220 : "100%", right: compact ? "auto" : 0, background: "var(--card)", border: "1.5px solid var(--border)", borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.15)", overflow: "hidden" },
+    dropdown: {
+      position: "absolute",
+      zIndex: 100,
+      ...(openDirection === "up"
+        ? { bottom: "calc(100% + 4px)" }
+        : { top: "calc(100% + 4px)" }),
+      left: 0,
+      minWidth: compact ? 220 : "100%",
+      right: compact ? "auto" : 0,
+      background: "var(--card)", border: "1.5px solid var(--border)", borderRadius: 10,
+      boxShadow: "0 8px 24px rgba(0,0,0,0.15)", overflow: "hidden",
+    },
     searchInput: { width: "100%", height: 34, border: "1.5px solid var(--border)", borderRadius: 8, padding: "0 12px", fontSize: 13, background: "var(--bg)", color: "var(--text)", outline: "none", fontFamily: "inherit", boxSizing: "border-box" },
     resultItem: { padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid var(--border)", fontSize: 13, color: "var(--text)", display: "flex", justifyContent: "space-between", alignItems: "center" },
     emptyState: { padding: "16px 12px", textAlign: "center" as const, color: "var(--text-muted)", fontSize: 13 },
