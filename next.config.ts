@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // No turbopack key – uses webpack by default
+  productionBrowserSourceMaps: false,   // ← security: hides readable code in production
 };
 
 export default nextConfig;
