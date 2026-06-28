@@ -284,7 +284,6 @@ export default function BudgetsPage() {
         const newData: Record<string, Record<string, Record<string, { budget: number; actual: number }>>> = {}
         if (glJson.data) {
           glJson.data.forEach((row: any) => {
-            // Skip rows without activity (e.g., revenue summary)
             if (!row.activity_id) return
             const actId = String(row.activity_id)
             const locId = String(row.location_id)
@@ -299,7 +298,6 @@ export default function BudgetsPage() {
         }
         setData(newData)
 
-        // If in month view, also fetch monthly actuals
         if (viewMode === "month") {
           const monthParams = new URLSearchParams(baseParams.toString())
           monthParams.set("view", "month")
@@ -329,6 +327,28 @@ export default function BudgetsPage() {
         setLoading(false)
       })
   }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, filterLocationId, businessType, viewMode, projectDuration])
+
+  // ── 6. Auto‑correct fractional rounding in monthly split ──
+  useEffect(() => {
+    if (viewMode !== "month") return
+    const newOverrides: Record<string, Record<string, Record<number, number | null>>> = {}
+    for (const actId of Object.keys(data)) {
+      for (const locId of Object.keys(data[actId])) {
+        const annual = rowTotalBudget(actId, locId)
+        if (annual === 0) continue
+        const duration = projectDuration > 0 ? projectDuration : 1
+        const base = Math.floor(annual / duration)
+        const remainder = annual - base * duration
+        for (let i = 0; i < duration; i++) {
+          const monthNum = i + 1
+          if (!newOverrides[actId]) newOverrides[actId] = {}
+          if (!newOverrides[actId][locId]) newOverrides[actId][locId] = {}
+          newOverrides[actId][locId][monthNum] = i === duration - 1 ? base + remainder : base
+        }
+      }
+    }
+    setMonthBudgetOverrides(newOverrides)
+  }, [data, viewMode, projectDuration])
 
   // ── Dynamic month labels from project start date ──
   const projectMonths = useMemo(() => {
@@ -371,6 +391,7 @@ export default function BudgetsPage() {
     const monthNum = monthIdx + 1
     const override = monthBudgetOverrides[actId]?.[locId]?.[monthNum]
     if (override !== null && override !== undefined) return override
+    // fallback (shouldn't be needed after auto‑correction)
     const annual = rowTotalBudget(actId, locId)
     const duration = projectDuration > 0 ? projectDuration : 12
     return Math.round(annual / duration)
