@@ -183,24 +183,29 @@ export default function BudgetsPage() {
     }
   }, [selectedProjectId, projects, businessType, initialDonor, companyId])
 
-  // Fetch budget approval status for this project + fiscal year
+    // Fetch budget approval status for this project + fiscal year
   useEffect(() => {
     if (!companyId || !selectedProjectId) {
       setBudgetStatus("draft")
       return
     }
-    // Try to fetch approval status – table may not exist yet, defaults to "draft"
-    supabase
-      .from("project_budget_status")
-      .select("status")
-      .eq("company_id", companyId)
-      .eq("project_id", selectedProjectId)
-      .eq("fiscal_year", fiscalYear)
-      .maybeSingle()
-      .then(({ data }) => {
+
+    async function fetchStatus() {
+      try {
+        const { data } = await supabase
+          .from("project_budget_status")
+          .select("status")
+          .eq("company_id", companyId)
+          .eq("project_id", selectedProjectId)
+          .eq("fiscal_year", fiscalYear)
+          .maybeSingle()
         setBudgetStatus(data?.status || "draft")
-      })
-      .catch(() => setBudgetStatus("draft"))
+      } catch {
+        setBudgetStatus("draft")
+      }
+    }
+
+    fetchStatus()
   }, [companyId, selectedProjectId, fiscalYear])
 
   // Reset month overrides when project/donor/year changes
