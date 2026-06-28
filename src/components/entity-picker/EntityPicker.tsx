@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useState, useEffect, useRef, useCallback } from "react"
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react"
+import { createPortal } from "react-dom"
 import { createBrowserClient } from "@supabase/ssr"
 import { getEntityConfig } from "@/lib/entities/registry"
 
@@ -47,6 +48,14 @@ export default function EntityPicker({
   const triggerRef = useRef<HTMLButtonElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+
+  // Dropdown is rendered via fixed positioning anchored to the trigger's
+  // measured screen coordinates, rather than CSS "absolute" relative to
+  // whatever scroll/overflow container happens to be the nearest positioned
+  // ancestor (an items-table row, a horizontally-scrolling wrapper, etc).
+  // This is what was causing the dropdown to appear detached from the field
+  // or to render underneath/inside other rows when used inside the items table.
+  const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null)
 
   const [isOpen, setIsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -154,6 +163,32 @@ export default function EntityPicker({
   useEffect(() => {
     if (isOpen) setTimeout(() => searchInputRef.current?.focus(), 50)
   }, [isOpen])
+
+  // Measure the trigger's screen position whenever the dropdown opens, and
+  // keep it in sync on scroll/resize (e.g. the horizontally-scrolling items
+  // table) so the dropdown always stays visually attached to its field.
+  const measureTrigger = useCallback(() => {
+    if (!triggerRef.current) return
+    const r = triggerRef.current.getBoundingClientRect()
+    const offscreen = r.bottom < 0 || r.top > window.innerHeight
+    if (offscreen) {
+      setIsOpen(false)
+      return
+    }
+    setDropdownRect({ top: r.bottom + 4, left: r.left, width: r.width })
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!isOpen) { setDropdownRect(null); return }
+    measureTrigger()
+    const onScrollOrResize = () => measureTrigger()
+    window.addEventListener("scroll", onScrollOrResize, true)
+    window.addEventListener("resize", onScrollOrResize)
+    return () => {
+      window.removeEventListener("scroll", onScrollOrResize, true)
+      window.removeEventListener("resize", onScrollOrResize)
+    }
+  }, [isOpen, measureTrigger])
 
   const handleSelect = (record: LookupRecord) => {
     onChange(record)
@@ -360,9 +395,17 @@ export default function EntityPicker({
     },
     triggerPlaceholder: { color: "var(--text-muted)", fontSize: compact ? 11 : 13 },
     selectedChip: { display: "flex", alignItems: "center", gap: 6, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", fontSize: compact ? 11 : 13 },
-    dropdown: { position: "absolute", zIndex: 100, top: "calc(100% + 4px)", left: 0, right: 0, background: "var(--card)", border: "1.5px solid var(--border)", borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.15)", overflow: "hidden" },
+    dropdown: {
+      position: "fixed",
+      zIndex: 1200,
+      top: dropdownRect ? dropdownRect.top : 0,
+      left: dropdownRect ? dropdownRect.left : 0,
+      width: dropdownRect ? Math.max(dropdownRect.width, compact ? 220 : 0) : "auto",
+      background: "var(--card)", border: "1.5px solid var(--border)", borderRadius: 10,
+      boxShadow: "0 8px 24px rgba(0,0,0,0.25)", overflow: "hidden",
+      visibility: dropdownRect ? "visible" : "hidden",
+    },
     searchInput: { width: "100%", height: 34, border: "1.5px solid var(--border)", borderRadius: 8, padding: "0 12px", fontSize: 13, background: "var(--bg)", color: "var(--text)", outline: "none", fontFamily: "inherit", boxSizing: "border-box" },
-    resultsList: { maxHeight: 200, overflowY: "auto" as const },
     resultItem: { padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid var(--border)", fontSize: 13, color: "var(--text)", display: "flex", justifyContent: "space-between", alignItems: "center" },
     emptyState: { padding: "16px 12px", textAlign: "center" as const, color: "var(--text-muted)", fontSize: 13 },
     actionFooter: { display: "flex", gap: 8, padding: "8px 12px", borderTop: "1px solid var(--border)" },
@@ -408,7 +451,7 @@ export default function EntityPicker({
         <span style={{ color: "var(--text-muted)", fontSize: compact ? 10 : 13 }}>▼</span>
       </button>
 
-      {isOpen && (
+      {isOpen && typeof document !== "undefined" && createPortal(
         <div ref={dropdownRef} style={styles.dropdown}>
           <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border)" }}>
             <input
@@ -420,7 +463,7 @@ export default function EntityPicker({
               style={styles.searchInput}
             />
           </div>
-          <div style={styles.resultsList}>
+          <div className="ep-results-list">
             {allRecords === null ? (
               <div style={styles.emptyState}>Loading…</div>
             ) : filteredResults.length > 0 ? (
@@ -464,7 +507,8 @@ export default function EntityPicker({
               </button>
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
 
       {isModalOpen && (
@@ -578,6 +622,29 @@ export default function EntityPicker({
       <style>{`
         @media (max-width: 640px) {
           .phone-row { grid-template-columns: 110px 1fr !important; }
+        }
+
+        /* Results list: capped to ~5 rows, theme-aware scrollbar instead of
+           the OS-default white scrollbar (inline styles can't reach
+           ::-webkit-scrollbar, so this has to live in real CSS). */
+        .ep-results-list {
+          max-height: 210px;
+          overflow-y: auto;
+          scrollbar-width: thin;
+          scrollbar-color: var(--border) transparent;
+        }
+        .ep-results-list::-webkit-scrollbar {
+          width: 8px;
+        }
+        .ep-results-list::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .ep-results-list::-webkit-scrollbar-thumb {
+          background: var(--border);
+          border-radius: 8px;
+        }
+        .ep-results-list::-webkit-scrollbar-thumb:hover {
+          background: var(--border-strong, var(--text-faint));
         }
       `}</style>
     </div>

@@ -916,11 +916,39 @@ export default function NewBillPage() {
         .inv-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 16px 20px; box-shadow: var(--shadow-sm); margin-bottom: 12px; overflow: visible; }
         .inv-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block; }
         .inv-input, .inv-select { width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: 13px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box; }
+        /* color-scheme for input[type=date] is set globally per data-theme
+           (see global stylesheet) — was previously missing entirely on this
+           page, which made the calendar icon invisible. Do not add it here;
+           it should inherit from the global rule like every other theme value. */
         .inv-input:focus, .inv-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
         .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .inv-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; transition: all 0.15s; white-space: nowrap; }
         .inv-btn:hover { background: var(--card-hover); }
         .inv-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .inv-btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); font-weight: 700; }
+        .inv-btn-primary:hover { filter: brightness(1.08); }
+        .inv-btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+
+        .group-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin: 16px 0 10px; display: flex; align-items: center; gap: 8px; }
+        .group-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+        .group-label:first-child { margin-top: 0; }
+
+        .po-banner { display: flex; align-items: center; justify-content: space-between; background: var(--bg); border: 1.5px solid var(--border-strong, var(--border)); border-radius: 9px; padding: 10px 14px; margin-top: 6px; flex-wrap: wrap; gap: 6px; }
+        .po-banner .po-no { font-weight: 700; }
+        .po-banner .po-remaining { font-size: 12.5px; color: var(--text-muted); }
+        .po-banner .po-remaining strong { color: var(--text); }
+
+        .wht-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+        .wht-grid { display: grid; grid-template-columns: 1.5fr 0.8fr 1.2fr; gap: 12px; }
+        .wht-result-row { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; }
+        .wht-result-row strong { font-size: 15px; }
+
+        .items-section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+        .items-count { font-size: 11.5px; color: var(--text-muted); font-weight: 600; }
+        .empty-items { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; text-align: center; color: var(--text-muted); }
+        .empty-items .icon-wrap { width: 44px; height: 44px; border-radius: 50%; background: rgba(37,99,235,0.08); display: flex; align-items: center; justify-content: center; margin-bottom: 12px; color: var(--primary); }
+        .empty-items .t1 { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+        .empty-items .t2 { font-size: 12px; max-width: 280px; line-height: 1.5; color: var(--text-muted); }
 
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
@@ -946,6 +974,14 @@ export default function NewBillPage() {
         .table-scroll-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
 
         .inv-item-header, .inv-item-row { display: grid; grid-template-columns: ${fixedCols()}; gap: 6px; align-items: center; padding: 6px 4px; }
+
+        /* Cap visible item rows to roughly 5 before scrolling internally.
+           Header stays outside this wrapper so it never scrolls away. */
+        .items-body-scroll { max-height: 280px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+        .items-body-scroll::-webkit-scrollbar { width: 8px; }
+        .items-body-scroll::-webkit-scrollbar-track { background: transparent; }
+        .items-body-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
+        .items-body-scroll::-webkit-scrollbar-thumb:hover { background: var(--border-strong, var(--text-faint)); }
         .inv-item-header { font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); border-bottom: 2px solid var(--border); letter-spacing: 0.04em; padding-bottom: 8px; margin-bottom: 4px; }
         .inv-item-header span { display: flex; align-items: center; padding: 0 8px; }
         .inv-item-header .header-right { justify-content: flex-end; text-align: right; }
@@ -1043,14 +1079,16 @@ export default function NewBillPage() {
                       ))}
                     </select>
                     {poId && poRemaining > 0 && (
-                      <div style={{ fontSize: 12, marginTop: 4, color: "var(--text-muted)" }}>
-                        PO balance remaining: PKR <strong>{poRemaining.toLocaleString()}</strong>
+                      <div className="po-banner">
+                        <span>Linked: <span className="po-no">{openPOs.find(p => p.id === poId)?.po_no}</span></span>
+                        <span className="po-remaining">Remaining balance: <strong>PKR {poRemaining.toLocaleString()}</strong></span>
                       </div>
                     )}
                   </div>
                 )}
 
-                <div className="inv-row" style={{ marginTop: 14 }}>
+                <div className="group-label">Dates &amp; reference</div>
+                <div className="inv-row">
                   <div>
                     <label className="inv-label">Bill Date *</label>
                     <input className="inv-input" type="date" value={billDate} onChange={e => setBillDate(e.target.value)} />
@@ -1070,25 +1108,27 @@ export default function NewBillPage() {
                     <input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" />
                   </div>
                 </div>
+              </div>
 
+              <div className="inv-card">
                 {showProducts ? (
-                  <div style={{ marginTop: 14 }}>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
                       <div style={{ flex: 1, maxWidth: 320 }}>
                         <EntityPicker
                           entityType="product"
                           value={null}
                           onChange={(record) => { if (record) addProductItem(record); }}
                           placeholder="Search product…"
-                          label="Product"
+                          label="Add Item"
                           allowCreate={false}
                         />
                       </div>
-                      <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
+                      <button className="inv-btn" style={{ height: 38 }} onClick={addManualItem}><Plus size={14} /> Manual</button>
                     </div>
                   </div>
                 ) : (
-                  <div style={{ marginTop: 14 }}>
+                  <div>
                     <label className="inv-label">Add Item</label>
                     <button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
                   </div>
@@ -1097,56 +1137,66 @@ export default function NewBillPage() {
 
               {taxEnabled && (
                 <div className="inv-card">
-                  <label className="inv-label">Withholding Tax (WHT)</label>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                    <select
-                      className="inv-select"
-                      style={{ maxWidth: 200 }}
-                      value={selectedWhtTaxCodeId}
-                      onChange={e => {
-                        const id = e.target.value
-                        setSelectedWhtTaxCodeId(id)
-                        if (id) {
-                          const tc = whtTaxCodes.find(t => t.id === id)
-                          if (tc) {
-                            setWhtRate(tc.rate)
-                            setWhtAmount(grossTotal * (tc.rate / 100))
+                  <div className="wht-card-head">
+                    <label className="inv-label" style={{ margin: 0 }}>Withholding Tax — Section 153 (WHT)</label>
+                  </div>
+                  <div className="wht-grid">
+                    <div>
+                      <label className="inv-label">Tax Code</label>
+                      <select
+                        className="inv-select"
+                        value={selectedWhtTaxCodeId}
+                        onChange={e => {
+                          const id = e.target.value
+                          setSelectedWhtTaxCodeId(id)
+                          if (id) {
+                            const tc = whtTaxCodes.find(t => t.id === id)
+                            if (tc) {
+                              setWhtRate(tc.rate)
+                              setWhtAmount(grossTotal * (tc.rate / 100))
+                            }
+                          } else {
+                            setWhtRate(0)
+                            setWhtAmount(0)
                           }
-                        } else {
-                          setWhtRate(0)
-                          setWhtAmount(0)
-                        }
-                      }}
-                    >
-                      <option value="">No WHT</option>
-                      {whtTaxCodes.map(tc => (
-                        <option key={tc.id} value={tc.id}>{tc.code} ({tc.rate}%)</option>
-                      ))}
-                    </select>
-                    <input
-                      className="inv-input"
-                      type="number"
-                      placeholder="Rate %"
-                      value={whtRate}
-                      onChange={e => {
-                        const r = Number(e.target.value)
-                        setWhtRate(r)
-                        setWhtAmount(grossTotal * (r / 100))
-                      }}
-                      style={{ width: 100 }}
-                    />
-                    <span style={{ fontSize: 13, color: "var(--text-muted)" }}>Amount:</span>
-                    <input
-                      className="inv-input"
-                      type="number"
-                      value={whtAmount}
-                      onChange={e => setWhtAmount(Number(e.target.value))}
-                      style={{ width: 140, textAlign: "right" }}
-                    />
+                        }}
+                      >
+                        <option value="">No WHT</option>
+                        {whtTaxCodes.map(tc => (
+                          <option key={tc.id} value={tc.id}>{tc.code} ({tc.rate}%)</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="inv-label">Rate %</label>
+                      <input
+                        className="inv-input"
+                        type="number"
+                        placeholder="Rate %"
+                        value={whtRate}
+                        onChange={e => {
+                          const r = Number(e.target.value)
+                          setWhtRate(r)
+                          setWhtAmount(grossTotal * (r / 100))
+                        }}
+                        style={{ textAlign: "right" }}
+                      />
+                    </div>
+                    <div>
+                      <label className="inv-label">Amount Deducted</label>
+                      <input
+                        className="inv-input"
+                        type="number"
+                        value={whtAmount}
+                        onChange={e => setWhtAmount(Number(e.target.value))}
+                        style={{ textAlign: "right", fontWeight: 600 }}
+                      />
+                    </div>
                   </div>
                   {whtAmount > 0 && (
-                    <div style={{ fontSize: 12, marginTop: 6, color: "var(--text-muted)" }}>
-                      Net payable after WHT: PKR {(grossTotal - whtAmount).toLocaleString()}
+                    <div className="wht-result-row">
+                      <span style={{ color: "var(--text-muted)" }}>Net payable after WHT</span>
+                      <strong>PKR {(grossTotal - whtAmount).toLocaleString()}</strong>
                     </div>
                   )}
                 </div>
@@ -1195,7 +1245,7 @@ export default function NewBillPage() {
               </div>
               <div className="inv-card">
                 <button
-                  className="inv-btn"
+                  className="inv-btn inv-btn-primary"
                   style={{ justifyContent: "center", padding: 10, width: "100%" }}
                   onClick={handleSubmit}
                   disabled={saving || budgetError !== ""}
@@ -1214,9 +1264,21 @@ export default function NewBillPage() {
           </div>
 
           <div style={{ marginTop: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <div className="items-section-head">
               <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
+              {items.length > 0 && <span className="items-count">{items.length} item{items.length > 1 ? "s" : ""}</span>}
             </div>
+            {items.length === 0 && (
+              <div className="inv-card">
+                <div className="empty-items">
+                  <div className="icon-wrap">
+                    <Plus size={20} />
+                  </div>
+                  <div className="t1">No items added yet</div>
+                  <div className="t2">Search for a product above, or add a manual line to start building this bill.</div>
+                </div>
+              </div>
+            )}
             {items.length > 0 && (
               <div className="inv-card" style={{ padding: "16px 12px" }}>
                 <div className="table-scroll-wrap">
@@ -1232,6 +1294,7 @@ export default function NewBillPage() {
                     <span className="header-center"></span>
                   </div>
 
+                  <div className="items-body-scroll">
                   {items.map((item, idx) => {
                     const budgetData = getLineBudgetData(item)
                     const overBudget = isLineOverBudget(item, budgetData)
@@ -1398,6 +1461,7 @@ export default function NewBillPage() {
                       </Fragment>
                     )
                   })}
+                  </div>
                 </div>
               </div>
             )}
