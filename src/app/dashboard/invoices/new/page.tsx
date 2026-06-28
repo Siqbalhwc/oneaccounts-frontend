@@ -700,13 +700,22 @@ function NewInvoicePageContent() {
         .inv-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 16px 20px; box-shadow: var(--shadow-sm); margin-bottom: 12px; overflow: visible; }
         .inv-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block; }
         .inv-input, .inv-select { width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: 13px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box; }
-        input[type="date"] { color-scheme: dark; }
+        /* color-scheme for input[type=date] is now set globally per data-theme
+           (see global stylesheet) so the calendar icon matches whichever of the
+           3 themes (light / dark / oneaccounts) is active. Do not hardcode it here. */
         .inv-input:focus, .inv-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
         .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .inv-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; transition: all 0.15s; white-space: nowrap; text-decoration: none; }
         .inv-btn:hover { background: var(--card-hover); }
         .inv-btn-success { background: #25D366; color: white; border-color: #25D366; }
         .inv-btn-success:hover { background: #22C55E; }
+        .inv-btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); font-weight: 700; }
+        .inv-btn-primary:hover { background: var(--primary-hover, var(--primary)); filter: brightness(1.08); }
+        .inv-btn-primary:disabled, .inv-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+        .group-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin: 16px 0 10px; display: flex; align-items: center; gap: 8px; }
+        .group-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+        .group-label:first-child { margin-top: 0; }
 
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
@@ -745,6 +754,16 @@ function NewInvoicePageContent() {
         .tax-badge { font-size: 10px; font-weight: 600; padding: 2px 10px; border-radius: 12px; background: rgba(56, 189, 248, 0.15); color: #38BDF8; border: 1px solid rgba(56, 189, 248, 0.2); white-space: nowrap; flex-shrink: 0; }
         .tax-badge.no-tax { background: rgba(255, 255, 255, 0.04); color: var(--text-muted); border-color: var(--border); }
         .stock-warning { color: #EF4444; font-size: 10px; font-weight: 600; white-space: nowrap; background: rgba(239, 68, 68, 0.1); padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(239, 68, 68, 0.2); flex-shrink: 0; }
+
+        .items-section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+        .items-count { font-size: 11.5px; color: var(--text-muted); font-weight: 600; }
+        .empty-items { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; text-align: center; color: var(--text-muted); }
+        .empty-items .icon-wrap { width: 44px; height: 44px; border-radius: 50%; background: rgba(37,99,235,0.08); display: flex; align-items: center; justify-content: center; margin-bottom: 12px; color: var(--primary); }
+        .empty-items .t1 { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+        .empty-items .t2 { font-size: 12px; max-width: 280px; line-height: 1.5; color: var(--text-muted); }
+
+        .prod-thumb-cell { width: 26px; height: 26px; border-radius: 6px; background: var(--border); display: flex; align-items: center; justify-content: center; color: var(--text-muted); flex-shrink: 0; overflow: hidden; }
+        .prod-thumb-cell img { width: 100%; height: 100%; object-fit: cover; }
 
         .mobile-sticky-summary { display: none; position: sticky; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--border); padding: 12px 16px; align-items: center; justify-content: space-between; z-index: 50; margin-top: 16px; }
         .mobile-sticky-summary .total-left { flex: 1; min-width: 0; }
@@ -808,7 +827,8 @@ function NewInvoicePageContent() {
                   required
                 />
 
-                <div className="inv-row" style={{ marginTop: 14 }}>
+                <div className="group-label">Dates &amp; reference</div>
+                <div className="inv-row">
                   <div><label className="inv-label">Invoice Date *</label><input className="inv-input" type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} /></div>
                   <div><label className="inv-label">Due Date</label><input className="inv-input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} /></div>
                 </div>
@@ -816,9 +836,11 @@ function NewInvoicePageContent() {
                   <div><label className="inv-label">Reference</label><input className="inv-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="Customer PO #" /></div>
                   <div><label className="inv-label">Notes</label><input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes" /></div>
                 </div>
+              </div>
 
+              <div className="inv-card">
                 {showProducts ? (
-                  <div style={{ marginTop: 14 }}>
+                  <div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <div style={{ flex: 1, maxWidth: 320 }}>
                         <EntityPicker
@@ -826,7 +848,7 @@ function NewInvoicePageContent() {
                           value={null}
                           onChange={(record) => { if (record) addProductItem(record); }}
                           placeholder="Search product…"
-                          label="Product"
+                          label="Add Item"
                           allowCreate={false}
                         />
                       </div>
@@ -834,7 +856,7 @@ function NewInvoicePageContent() {
                     </div>
                   </div>
                 ) : (
-                  <div style={{ marginTop: 14 }}><label className="inv-label">Add Item</label><button className="inv-btn" onClick={addManualItem} style={{ marginLeft: 'auto' }}><Plus size={14} /> Manual</button></div>
+                  <div><label className="inv-label">Add Item</label><button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button></div>
                 )}
 
                 {showHistory && lastSelectedProduct && (
@@ -862,7 +884,7 @@ function NewInvoicePageContent() {
                 )}
               </div>
               <div className="inv-card">
-                <button className="inv-btn" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={saving || hasStockErrors}>
+                <button className="inv-btn inv-btn-primary" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={saving || hasStockErrors}>
                   {saving ? "Posting..." : editId ? "💾 UPDATE Invoice" : "💾 POST Invoice"}
                 </button>
                 <button className="inv-btn" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleBeforeSavePdf}><Download size={14} /> PDF Preview</button>
@@ -872,9 +894,21 @@ function NewInvoicePageContent() {
           </div>
 
           <div className="inv-items-section" style={{ marginBottom: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <div className="items-section-head">
               <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Items</span>
+              {items.length > 0 && <span className="items-count">{items.length} item{items.length > 1 ? "s" : ""}</span>}
             </div>
+            {items.length === 0 && (
+              <div className="inv-card">
+                <div className="empty-items">
+                  <div className="icon-wrap">
+                    <ImageIcon size={20} />
+                  </div>
+                  <div className="t1">No items added yet</div>
+                  <div className="t2">Search for a product above, or add a manual line to start building this invoice.</div>
+                </div>
+              </div>
+            )}
             {items.length > 0 && (
               <div className="inv-card" style={{ padding: "16px 12px" }}>
                 <div className="table-scroll-wrap">
@@ -899,7 +933,9 @@ function NewInvoicePageContent() {
                       <Fragment key={idx}>
                         <div className="inv-item-row" style={stockError ? { background: "rgba(239,68,68,0.05)", borderRadius: "6px" } : {}}>
                           <div style={{ display: "flex", justifyContent: "center" }}>
-                            {item.product_image ? <img src={item.product_image} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} /> : <ImageIcon size={14} color="var(--text-muted)" />}
+                            <div className="prod-thumb-cell">
+                              {item.product_image ? <img src={item.product_image} alt="" /> : <ImageIcon size={13} />}
+                            </div>
                           </div>
 
                           {item.product_id ? (
