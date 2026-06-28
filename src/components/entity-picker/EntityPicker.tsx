@@ -46,7 +46,7 @@ export default function EntityPicker({
   )
 
   const triggerRef = useRef<HTMLButtonElement>(null)
-  const dropdownRef = useRef<HTMLDivElement>(null)
+  const dropdownRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   const [isOpen, setIsOpen] = useState(false)
@@ -66,7 +66,7 @@ export default function EntityPicker({
   // Re-measured on scroll/resize so it stays glued to the trigger.
   const [coords, setCoords] = useState<{ top: number; left: number; width: number } | null>(null)
   const [measuring, setMeasuring] = useState(false)
-  const portalDropdownRef = useRef<HTMLDivElement>(null)
+  const portalDropdownRef = useRef<HTMLDivElement | null>(null)
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [formValues, setFormValues] = useState<Record<string, any>>({})
@@ -230,11 +230,15 @@ export default function EntityPicker({
   // (e.g. typing narrows 8 matches down to 1), the dropdown's height changes
   // too — recompute its position so it stays correctly flipped/clamped
   // instead of keeping its original below/above decision forever.
+  // (canCreate is intentionally not a dependency here: it's derived from the
+  // allowCreate prop and the static entity config, neither of which change
+  // while the dropdown is open, and referencing it here would require using
+  // it before its declaration further down the component.)
   useLayoutEffect(() => {
     if (!isOpen || measuring || coords === null) return
     const next = computeDropdownPosition()
     if (next) setCoords(next)
-  }, [filteredResults, allRecords, canCreate])
+  }, [filteredResults, allRecords])
 
   // Keep the dropdown glued to its trigger if the page/table scrolls or the
   // window resizes while it's open (re-runs the same measurement pass).
