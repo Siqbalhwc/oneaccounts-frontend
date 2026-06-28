@@ -850,8 +850,8 @@ function NewInvoicePageContent() {
               <div className="inv-card">
                 {showProducts ? (
                   <div>
-                    <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-                      <div style={{ flex: 1, maxWidth: 320 }}>
+                    <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+                      <div style={{ flex: 1 }}>
                         <EntityPicker
                           entityType="product"
                           value={null}
@@ -861,7 +861,7 @@ function NewInvoicePageContent() {
                           allowCreate={false}
                         />
                       </div>
-                      <button className="inv-btn" style={{ height: 38 }} onClick={addManualItem}><Plus size={14} /> Manual</button>
+                      <button className="inv-btn" style={{ height: 38, flexShrink: 0 }} onClick={addManualItem}><Plus size={14} /> Manual</button>
                     </div>
                   </div>
                 ) : (
