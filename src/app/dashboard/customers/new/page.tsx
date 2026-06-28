@@ -51,6 +51,8 @@ export default function NewCustomerPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
+  const [phoneError, setPhoneError] = useState("")   // ✅ inline phone error
+
   const [totalCustomers, setTotalCustomers] = useState(0)
   const [totalReceivables, setTotalReceivables] = useState(0)
 
@@ -117,15 +119,25 @@ export default function NewCustomerPage() {
     init()
   }, [editId])
 
+  // Clear phone error when user retypes
+  const handlePhoneChange = (value: string) => {
+    setPhoneNumber(value)
+    setPhoneError("")
+  }
+
   const handleSubmit = async () => {
+    setPhoneError("")
     if (!companyId) { setError("Company not loaded"); return }
     if (!customerName.trim()) { setError("Customer name is required"); return }
 
+    // Phone validation (with inline error)
     if (phoneNumber.trim()) {
       const digitsOnly = phoneNumber.trim().replace(/\D/g, "")
       const expectedLength = PHONE_LENGTHS[countryCode]
       if (expectedLength && digitsOnly.length !== expectedLength) {
-        setError(`Phone number must be ${expectedLength} digits for ${countryCode}. Current: ${digitsOnly.length} digits.`)
+        const msg = `Must be ${expectedLength} digits for ${countryCode}. Currently ${digitsOnly.length} digits.`
+        setPhoneError(msg)
+        setError(msg)   // also top banner
         return
       }
     }
@@ -136,7 +148,6 @@ export default function NewCustomerPage() {
     const fullPhone = countryCode + (phoneNumber.trim().replace(/\D/g, ""))
     const balance = parseFloat(openingBalance || "0")
 
-    // ---- EDIT MODE: use our PUT API ----
     if (editId) {
       try {
         const response = await fetch("/api/customers", {
@@ -170,7 +181,6 @@ export default function NewCustomerPage() {
       return
     }
 
-    // ---- NEW CUSTOMER MODE: direct insert + opening-entry API ----
     const { data: { user } } = await supabase.auth.getUser()
     const userEmail = user?.email || "system"
 
@@ -256,6 +266,7 @@ export default function NewCustomerPage() {
         .phone-row { display: grid; grid-template-columns: 130px 1fr; gap: 8px; }
 
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
+        .phone-error { color: #EF4444; font-size: 12px; margin-top: 4px; }
 
         /* Mobile: summary above form */
         @media (max-width: 900px) {
@@ -286,7 +297,6 @@ export default function NewCustomerPage() {
 
       <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
         <div className="header-grid">
-          {/* Left: Form fields (no button) */}
           <div className="card">
             <div style={{ marginBottom: 16 }}>
               <label className="label">Customer Code</label>
@@ -304,8 +314,16 @@ export default function NewCustomerPage() {
                 <select className="select" value={countryCode} onChange={e => setCountryCode(e.target.value)}>
                   {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
                 </select>
-                <input className="input" type="tel" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} placeholder="300 1234567" />
+                <input
+                  className="input"
+                  type="tel"
+                  value={phoneNumber}
+                  onChange={e => handlePhoneChange(e.target.value)}
+                  placeholder="300 1234567"
+                  style={{ borderColor: phoneError ? "#EF4444" : undefined }}
+                />
               </div>
+              {phoneError && <div className="phone-error">{phoneError}</div>}
             </div>
 
             <div style={{ marginBottom: 16 }}>
@@ -332,7 +350,6 @@ export default function NewCustomerPage() {
             </div>
           </div>
 
-          {/* Right: Summary card and Save button card stacked */}
           <div className="summary-side" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="card">
               <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
