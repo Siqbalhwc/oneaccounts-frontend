@@ -1371,6 +1371,7 @@ export default function NewBillPage() {
                                 placeholder="—"
                                 compact
                                 allowCreate={false}
+                                allowedIds={item.location_id ? getFilteredActivities(item.location_id).map((a: any) => a.id) : undefined}
                               />
                             )
                           )}

@@ -24,6 +24,8 @@ interface EntityPickerProps {
   compact?: boolean
   /** Show the "+ Quick Create" button. Default true. */
   allowCreate?: boolean
+  /** Optional: restrict the dropdown to a list of record IDs */
+  allowedIds?: (number | string)[]
 }
 
 export default function EntityPicker({
@@ -38,6 +40,7 @@ export default function EntityPicker({
   className = "",
   compact = false,
   allowCreate = true,
+  allowedIds,
 }: EntityPickerProps) {
   const config = getEntityConfig(entityType)
   const supabase = createBrowserClient(
@@ -53,17 +56,8 @@ export default function EntityPicker({
   const [searchQuery, setSearchQuery] = useState("")
   const [allRecords, setAllRecords] = useState<LookupRecord[] | null>(null)
   const [filteredResults, setFilteredResults] = useState<LookupRecord[]>([])
-  const [isSearching, setIsSearching] = useState(false)
 
-  // The dropdown is measured in two passes and rendered through a portal to
-  // document.body, so it is never clipped or shifted by an ancestor's
-  // overflow/scroll (a table row, a horizontally-scrolling wrapper, etc):
-  //   1. Open with coords=null -> dropdown renders off-screen (visibility:
-  //      hidden) at its natural size so we can measure its REAL height
-  //      (never an estimate).
-  //   2. Once measured, compute final top/left (flipping above the trigger
-  //      if there isn't room below) and reveal it.
-  // Re-measured on scroll/resize so it stays glued to the trigger.
+  // dropdown positioning (unchanged)
   const [coords, setCoords] = useState<{ top: number; left: number; width: number } | null>(null)
   const [measuring, setMeasuring] = useState(false)
   const portalDropdownRef = useRef<HTMLDivElement | null>(null)
@@ -94,16 +88,20 @@ export default function EntityPicker({
     : entityType === "account" ? "accounts"
     : null
 
-  // ── Lazy load: only fetch when dropdown opens ──
   const [loadError, setLoadError] = useState<string | null>(null)
 
+  // Reset cache when allowedIds changes so that the picker refetches
+  useEffect(() => {
+    setAllRecords(null)
+  }, [allowedIds])
+
+  // ── Lazy load ──
   useEffect(() => {
     if (!isOpen || !companyId || !tableName) return
-    if (allRecords !== null) return   // already loaded
+    if (allRecords !== null) return
 
     setLoadError(null)
 
-    // ✅ ONLY CHANGE: skip deleted_at filter for tables that don't have it
     let query = supabase
       .from(tableName)
       .select("*")
@@ -122,9 +120,14 @@ export default function EntityPicker({
         setAllRecords([])
         return
       }
-      setAllRecords(data || [])
+      let records = data || []
+      // ✅ restrict to allowed IDs if the list is provided
+      if (allowedIds && allowedIds.length > 0) {
+        records = records.filter((r: any) => allowedIds.includes(r.id))
+      }
+      setAllRecords(records)
     })
-  }, [isOpen, companyId, tableName, allRecords, entityType, config])
+  }, [isOpen, companyId, tableName, allRecords, entityType, config, allowedIds])
 
   // ── Filter locally ──
   useEffect(() => {
@@ -141,7 +144,7 @@ export default function EntityPicker({
     setFilteredResults(filtered)
   }, [searchQuery, allRecords, config])
 
-  // Load dynamic lookup options when modal opens
+  // Load dynamic lookup options when modal opens (unchanged)
   useEffect(() => {
     if (isModalOpen && config) {
       config.quickCreate.fields.forEach(async (field: any) => {
@@ -162,9 +165,6 @@ export default function EntityPicker({
 
   const openDropdown = useCallback(() => {
     if (disabled) return
-    // If the previous load attempt failed, clear the cached empty result so
-    // reopening the dropdown retries the fetch instead of showing the same
-    // stale error (or stale "no results") forever until a full page reload.
     if (loadError) {
       setAllRecords(null)
       setLoadError(null)
@@ -199,8 +199,6 @@ export default function EntityPicker({
     if (isOpen) setTimeout(() => searchInputRef.current?.focus({ preventScroll: true }), 50)
   }, [isOpen])
 
-  // Shared positioning math, used both for the initial measurement pass and
-  // for re-measuring on scroll/resize while the dropdown stays open.
   const computeDropdownPosition = useCallback(() => {
     const triggerEl = triggerRef.current
     const dropdownEl = portalDropdownRef.current
@@ -219,28 +217,18 @@ export default function EntityPicker({
 
     let top: number
     if (spaceBelow >= dropdownHeight + margin || spaceBelow >= spaceAbove) {
-      // Fits below, or below is simply the larger side — open down.
       top = triggerRect.bottom + 4
     } else {
-      // Not enough room below — open up, anchored to the trigger's top.
       top = triggerRect.top - dropdownHeight - 4
     }
-    // Clamp vertically so it can never render off the top or bottom edge.
     top = Math.max(margin, Math.min(top, viewportHeight - dropdownHeight - margin))
 
-    // Clamp horizontally too — matters for compact pickers (Location,
-    // Activity, GL Account) in the last column of a wide table, where the
-    // trigger itself can sit close to the right edge of the viewport.
     let left = triggerRect.left
     left = Math.max(margin, Math.min(left, viewportWidth - dropdownWidth - margin))
 
     return { top, left, width: triggerRect.width }
   }, [])
 
-  // Pass 2 of positioning: once the dropdown has mounted off-screen (while
-  // `measuring` is true) we can read its REAL rendered height — not an
-  // estimate — and use that to decide whether it fits below the trigger or
-  // needs to flip above it. Then reveal it at the final position.
   useLayoutEffect(() => {
     if (!isOpen || !measuring) return
     const next = computeDropdownPosition()
@@ -249,32 +237,12 @@ export default function EntityPicker({
     setMeasuring(false)
   }, [isOpen, measuring, computeDropdownPosition])
 
-  // If the visible result count changes while the dropdown is already open
-  // (e.g. typing narrows 8 matches down to 1), the dropdown's height changes
-  // too — recompute its position so it stays correctly flipped/clamped
-  // instead of keeping its original below/above decision forever.
-  // (canCreate is intentionally not a dependency here: it's derived from the
-  // allowCreate prop and the static entity config, neither of which change
-  // while the dropdown is open, and referencing it here would require using
-  // it before its declaration further down the component.)
   useLayoutEffect(() => {
     if (!isOpen || measuring || coords === null) return
     const next = computeDropdownPosition()
     if (next) setCoords(next)
   }, [filteredResults, allRecords])
 
-  // Closing on scroll, not re-tracking position through it.
-  // Earlier this dropdown tried to re-measure and follow the trigger during
-  // any scroll — but inside a horizontally-scrolling table, the trigger
-  // itself becomes partially clipped by its own scroll container as it
-  // scrolls toward the edge, so a "correctly positioned" dropdown still
-  // looks detached/broken because the field it's attached to is half-hidden
-  // behind something else. Simplest and most predictable fix, matching how
-  // Sheets/Airtable/Odoo-style table pickers behave: any scroll just closes
-  // the dropdown, the same way clicking outside does. The user can reopen it
-  // once they've finished scrolling to where they want to be.
-  // Window resize is different (rare, doesn't clip anything) so that still
-  // just re-measures position rather than closing.
   useEffect(() => {
     if (!isOpen) return
     const handleScroll = () => closeDropdown()
