@@ -52,6 +52,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [selectedDonorId, setSelectedDonorId] = useState<string>("")
   const [userDisplayName, setUserDisplayName] = useState("")
+  const [expenseAccountIds, setExpenseAccountIds] = useState<number[]>([])
 
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
@@ -75,6 +76,14 @@ export default function ManagementDashboard({ role }: { role: string }) {
       .then(({ data }) => data && setProjects(data))
     supabase.from("donors").select("id, name").eq("company_id", companyId).order("name")
       .then(({ data }) => data && setDonors(data))
+    // Fetch expense + fixed asset account IDs for actuals filtering
+    supabase.from("accounts")
+      .select("id")
+      .eq("company_id", companyId)
+      .or("type.eq.Expense,and(type.eq.Asset,code.gte.1400,code.lte.1499)")
+      .then(({ data }) => {
+        if (data) setExpenseAccountIds(data.map((a: any) => a.id))
+      })
   }, [companyId])
 
   const { data: dashData, isLoading, isError } = useDashboardData(companyId, fiscalYear)
@@ -112,6 +121,12 @@ export default function ManagementDashboard({ role }: { role: string }) {
     })
   }, [allJournalLines, selectedProjectId, selectedDonorId, isFiltered])
 
+  // Only expense / fixed-asset journal lines for actual spending
+  const actualsJL = useMemo(() => {
+    if (expenseAccountIds.length === 0) return filteredJournalLines
+    return filteredJournalLines.filter((jl: any) => expenseAccountIds.includes(jl.account_id))
+  }, [filteredJournalLines, expenseAccountIds])
+
   // Original aggregate values (unfiltered)
   const totalBudgetOrig = dashData?.totalBudget || 0
   const totalSpentOrig = dashData?.totalSpent || 0
@@ -123,11 +138,11 @@ export default function ManagementDashboard({ role }: { role: string }) {
     : totalBudgetOrig
 
   const totalSpent = isFiltered
-    ? filteredJournalLines.reduce((s: number, jl: any) => s + (jl.debit || 0) - (jl.credit || 0), 0)
+    ? actualsJL.reduce((s: number, jl: any) => s + (jl.debit || 0) - (jl.credit || 0), 0)
     : totalSpentOrig
 
   const monthlySpending = isFiltered
-    ? filteredJournalLines
+    ? actualsJL
         .filter((jl: any) => jl.journal_entries?.date >= startOfMonthISO && jl.journal_entries?.date <= todayISO)
         .reduce((s: number, jl: any) => s + (jl.debit || 0) - (jl.credit || 0), 0)
     : monthlySpendingOrig
@@ -148,7 +163,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
   })
 
   const actualByDonor: Record<string, number> = {}
-  filteredJournalLines.forEach((jl: any) => {
+  actualsJL.forEach((jl: any) => {
     if (jl.donor_id) {
       const key = String(jl.donor_id)
       actualByDonor[key] = (actualByDonor[key] || 0) + (jl.debit || 0) - (jl.credit || 0)
@@ -215,7 +230,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
   })
 
   const actualByProject: Record<string, number> = {}
-  filteredJournalLines.forEach((jl: any) => {
+  actualsJL.forEach((jl: any) => {
     if (jl.project_id) {
       const key = String(jl.project_id)
       actualByProject[key] = (actualByProject[key] || 0) + (jl.debit || 0) - (jl.credit || 0)
@@ -255,7 +270,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
     }
   })
 
-  filteredJournalLines.forEach((jl: any) => {
+  actualsJL.forEach((jl: any) => {
     if (jl.activity_id) {
       actualByAct[jl.activity_id] = (actualByAct[jl.activity_id] || 0) + (jl.debit || 0) - (jl.credit || 0)
     }
