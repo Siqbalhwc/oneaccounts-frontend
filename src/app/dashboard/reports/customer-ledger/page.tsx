@@ -266,11 +266,11 @@ export default function CustomerLedgerPage() {
         .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
-        
-        /* ── Wider Entry # column, narrower Description, no wrap anywhere ── */
+
+        /* ── Entry # column widened to 170px, all cells aligned with headers ── */
         .ledger-header {
           display: grid;
-          grid-template-columns: 90px 160px 1fr 140px 140px 160px;   /* ENTRY # now 160px */
+          grid-template-columns: 90px 170px 1fr 140px 140px 160px;
           padding: 12px 16px;
           background: var(--card-hover);
           font-size: 12px;
@@ -281,35 +281,43 @@ export default function CustomerLedgerPage() {
           border-bottom: 1px solid var(--border);
           white-space: nowrap;
           user-select: none;
+          box-sizing: border-box;
         }
         .ledger-row {
           display: grid;
-          grid-template-columns: 90px 160px 1fr 140px 140px 160px;
+          grid-template-columns: 90px 170px 1fr 140px 140px 160px;
           padding: 12px 16px;
           border-bottom: 1px solid var(--border);
           font-size: 13px;
           align-items: center;
           transition: background 0.15s;
-          white-space: nowrap; /* 🛡️ never wrap any cell */
+          white-space: nowrap;
+          box-sizing: border-box;
         }
         .ledger-row:hover { background: var(--card-hover); }
         .ledger-row:last-child { border-bottom: none; }
         .opening-row { background: var(--bg-soft); font-weight: 600; }
-        
-        /* All cells: ellipsis if too long */
+
+        /* Every cell inside rows gets ellipsis + the same padding as the header buttons */
         .ledger-row span {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          display: block; /* ensures span fills grid cell */
+          box-sizing: border-box;
         }
-        
+
+        /* Header sort buttons – match padding of row cells */
         .sort-btn {
           background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
-          display: inline-flex; align-items: center; gap: 4px; padding: 0;
+          display: flex; align-items: center; gap: 4px; padding: 0;
           font-weight: 700; text-transform: uppercase; font-size: 12px;
           letter-spacing: 0.04em;
+          height: 100%;
+          box-sizing: border-box;
         }
         .sort-btn:hover { color: var(--primary); }
+
         .date-input {
           height: 34px; border: 1.5px solid var(--border); border-radius: 8px;
           padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text);
@@ -325,14 +333,11 @@ export default function CustomerLedgerPage() {
           outline: none; font-family: inherit; min-width: 200px;
         }
         .customer-select:focus { border-color: var(--primary); }
-        
+
         /* ── Mobile: keep responsiveness but adjust Entry # width ── */
         @media (max-width: 640px) {
           .ledger-header, .ledger-row {
-            grid-template-columns: 70px 110px 1fr 100px 100px 120px;
-          }
-          .ledger-row span {
-            /* On small screens, we still use ellipsis, but the Description column may be very narrow */
+            grid-template-columns: 70px 120px 1fr 100px 100px 120px;
           }
         }
       `}</style>
@@ -418,10 +423,10 @@ export default function CustomerLedgerPage() {
               <div className="ledger-header">
                 <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
                 <button className="sort-btn" onClick={() => handleSort("entry_no")}>Entry # {getSortIcon("entry_no")}</button>
-                <button className="sort-btn" onClick={() => handleSort("description")} style={{ textAlign: "left", justifyContent: "flex-start" }}>Description {getSortIcon("description")}</button>
-                <button className="sort-btn" onClick={() => handleSort("debit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
-                <button className="sort-btn" onClick={() => handleSort("credit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
-                <button className="sort-btn" onClick={() => handleSort("running_balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("running_balance")}</button>
+                <button className="sort-btn" onClick={() => handleSort("description")} style={{ justifyContent: "flex-start" }}>Description {getSortIcon("description")}</button>
+                <button className="sort-btn" onClick={() => handleSort("debit")} style={{ justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
+                <button className="sort-btn" onClick={() => handleSort("credit")} style={{ justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
+                <button className="sort-btn" onClick={() => handleSort("running_balance")} style={{ justifyContent: "flex-end" }}>Balance {getSortIcon("running_balance")}</button>
               </div>
               {sortedLines.map((line, idx) => (
                 <div key={line.id || idx} className={`ledger-row ${line.isOpening ? "opening-row" : ""}`}>
