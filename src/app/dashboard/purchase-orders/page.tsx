@@ -35,33 +35,35 @@ export default function PurchaseOrdersPage() {
   )
   const router = useRouter()
   const { role } = useRole()
-  const { hasFeature } = usePlan()
+  const { hasFeature, loading: planLoading } = usePlan()
   const canView = role === "admin" || role === "accountant"
   const canEdit = role === "admin" || role === "accountant"
-
-  // Hide entire page if feature is disabled
-  if (!hasFeature("purchase_orders")) {
-    return (
-      <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>
-        <h2>Purchase Orders feature is not enabled.</h2>
-        <p>Enable it in the Feature Manager.</p>
-      </div>
-    )
-  }
 
   const [orders, setOrders] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
+  const [companyId, setCompanyId] = useState("")
 
   const [supplierMap, setSupplierMap] = useState<Record<number, string>>({})
 
+  // 1. Get company ID
   useEffect(() => {
-    if (!role || !canView) return
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id
+      if (cid) setCompanyId(cid)
+    })
+  }, [])
+
+  // 2. Load suppliers (scoped to company)
+  useEffect(() => {
+    if (!role || !canView || !companyId) return
     supabase
       .from("suppliers")
       .select("id, name")
+      .eq("company_id", companyId)
+      .is("deleted_at", null)
       .then(({ data }) => {
         if (data) {
           const map: Record<number, string> = {}
@@ -69,14 +71,16 @@ export default function PurchaseOrdersPage() {
           setSupplierMap(map)
         }
       })
-  }, [role, canView])
+  }, [role, canView, companyId])
 
+  // 3. Load purchase orders (scoped to company)
   useEffect(() => {
-    if (!role || !canView) return
+    if (!role || !canView || !companyId) return
     setLoading(true)
     supabase
       .from("purchase_orders")
       .select("*, items:purchase_order_items(total)")
+      .eq("company_id", companyId)
       .order(sortField === "supplier" ? "supplier_id" : sortField, { ascending: sortDir === "asc" })
       .then(({ data }) => {
         if (data) {
@@ -88,7 +92,7 @@ export default function PurchaseOrdersPage() {
         }
         setLoading(false)
       })
-  }, [role, canView, sortField, sortDir])
+  }, [role, canView, companyId, sortField, sortDir])
 
   const filtered = search.trim()
     ? orders.filter(po => {
@@ -134,7 +138,6 @@ export default function PurchaseOrdersPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  // Shared th/td styles (identical to invoice page)
   const thStyle: React.CSSProperties = {
     padding: "12px 16px",
     background: "var(--card-hover)",
@@ -170,6 +173,27 @@ export default function PurchaseOrdersPage() {
       </button>
     </th>
   )
+
+  // --- Render logic ---
+
+  // While plan is still loading, show a simple spinner (prevents flicker)
+  if (planLoading) {
+    return (
+      <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>
+        Loading features…
+      </div>
+    )
+  }
+
+  // Feature disabled – now only shown when we are sure the plan has been loaded
+  if (!hasFeature("purchase_orders")) {
+    return (
+      <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>
+        <h2>Purchase Orders feature is not enabled.</h2>
+        <p>Enable it in the Feature Manager.</p>
+      </div>
+    )
+  }
 
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
@@ -268,12 +292,12 @@ export default function PurchaseOrdersPage() {
         <div className="table-scroll">
           <table className="po-table">
             <colgroup>
-              <col style={{ width: 130 }} /> {/* PO # */}
-              <col style={{ width: 100 }} /> {/* Date */}
-              <col />                         {/* Supplier – takes remaining space */}
-              <col style={{ width: 120 }} /> {/* Total */}
-              <col style={{ width: 85  }} /> {/* Status */}
-              <col style={{ width: 80  }} /> {/* Actions */}
+              <col style={{ width: 130 }} />
+              <col style={{ width: 100 }} />
+              <col />
+              <col style={{ width: 120 }} />
+              <col style={{ width: 85 }} />
+              <col style={{ width: 80 }} />
             </colgroup>
             <thead>
               <tr>
