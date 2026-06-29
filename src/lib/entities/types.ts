@@ -14,6 +14,7 @@ export interface FieldConfig {
 
 export interface EntityConfig {
   entity: string;
+  softDelete?: boolean;
   displayName: string;
   apiBase: string;
   searchFields: string[];
