@@ -267,10 +267,10 @@ export default function CustomerLedgerPage() {
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
         
-        /* ── Updated grid with wider numeric columns ── */
+        /* ── Wider Entry # column, narrower Description, no wrap anywhere ── */
         .ledger-header {
           display: grid;
-          grid-template-columns: 90px 130px 1fr 140px 140px 160px;
+          grid-template-columns: 90px 160px 1fr 140px 140px 160px;   /* ENTRY # now 160px */
           padding: 12px 16px;
           background: var(--card-hover);
           font-size: 12px;
@@ -284,24 +284,20 @@ export default function CustomerLedgerPage() {
         }
         .ledger-row {
           display: grid;
-          grid-template-columns: 90px 130px 1fr 140px 140px 160px;
+          grid-template-columns: 90px 160px 1fr 140px 140px 160px;
           padding: 12px 16px;
           border-bottom: 1px solid var(--border);
           font-size: 13px;
           align-items: center;
           transition: background 0.15s;
+          white-space: nowrap; /* 🛡️ never wrap any cell */
         }
         .ledger-row:hover { background: var(--card-hover); }
         .ledger-row:last-child { border-bottom: none; }
         .opening-row { background: var(--bg-soft); font-weight: 600; }
         
-        /* ── No wrap, no ellipsis on amounts ── */
-        .ledger-row .cell-no-wrap {
-          white-space: nowrap;
-          overflow: visible;
-          text-overflow: clip;
-        }
-        .ledger-row .cell-description {
+        /* All cells: ellipsis if too long */
+        .ledger-row span {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -329,13 +325,14 @@ export default function CustomerLedgerPage() {
           outline: none; font-family: inherit; min-width: 200px;
         }
         .customer-select:focus { border-color: var(--primary); }
+        
+        /* ── Mobile: keep responsiveness but adjust Entry # width ── */
         @media (max-width: 640px) {
           .ledger-header, .ledger-row {
-            grid-template-columns: 70px 90px 1fr 100px 100px 120px;
+            grid-template-columns: 70px 110px 1fr 100px 100px 120px;
           }
-          .ledger-row .cell-no-wrap {
-            overflow: hidden;
-            text-overflow: ellipsis;
+          .ledger-row span {
+            /* On small screens, we still use ellipsis, but the Description column may be very narrow */
           }
         }
       `}</style>
@@ -428,20 +425,20 @@ export default function CustomerLedgerPage() {
               </div>
               {sortedLines.map((line, idx) => (
                 <div key={line.id || idx} className={`ledger-row ${line.isOpening ? "opening-row" : ""}`}>
-                  <span className="cell-no-wrap" style={{ fontSize: 12 }}>{line.date}</span>
-                  <span className="cell-no-wrap" style={{ color: "var(--primary)", fontSize: 12 }} title={line.entry_no || ""}>
+                  <span style={{ fontSize: 12 }}>{line.date}</span>
+                  <span style={{ color: "var(--primary)", fontSize: 12 }} title={line.entry_no || ""}>
                     {line.entry_no || "—"}
                   </span>
-                  <span className="cell-description" title={line.description} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span title={line.description}>
                     {line.description}
                   </span>
-                  <span className="cell-no-wrap" style={{ textAlign: "right", color: line.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit > 0 ? 600 : 400 }}>
+                  <span style={{ textAlign: "right", color: line.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit > 0 ? 600 : 400 }}>
                     {line.debit > 0 ? `PKR ${line.debit.toLocaleString()}` : "—"}
                   </span>
-                  <span className="cell-no-wrap" style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.credit > 0 ? 600 : 400 }}>
+                  <span style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.credit > 0 ? 600 : 400 }}>
                     {line.credit > 0 ? `PKR ${line.credit.toLocaleString()}` : "—"}
                   </span>
-                  <span className="cell-no-wrap" style={{ textAlign: "right", fontWeight: 600, color: line.running_balance >= 0 ? "#10B981" : "#EF4444" }}>
+                  <span style={{ textAlign: "right", fontWeight: 600, color: line.running_balance >= 0 ? "#10B981" : "#EF4444" }}>
                     PKR {line.running_balance.toLocaleString()}
                   </span>
                 </div>
