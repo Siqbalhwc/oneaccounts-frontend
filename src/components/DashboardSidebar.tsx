@@ -240,9 +240,11 @@ export default function DashboardSidebar({
     return !visitedFeatures[item.feature]
   }
 
-  // Visibility rules
+  // ✅ UPDATED: hide feature items while plan is still loading
   const isVisible = (item: NavItem) => {
     if (item.adminOnly && role !== 'admin') return false
+    // During loading, hide any feature‑gated item to prevent flicker
+    if (loading && item.feature) return false
     if (item.feature && !hasFeature(item.feature)) return false
     if (['Admin Panel', 'Feature Manager', 'Audit Logs', 'New Company'].includes(item.label) && role !== 'super_admin') {
       return false
