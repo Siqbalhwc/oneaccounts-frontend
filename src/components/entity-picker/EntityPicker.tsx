@@ -21,6 +21,7 @@ interface EntityPickerProps {
   defaultValues?: Record<string, any>
   className?: string
   compact?: boolean
+  /** Show the "+ Quick Create" button. Default true. */
   allowCreate?: boolean
 }
 
@@ -53,6 +54,8 @@ export default function EntityPicker({
   const [filteredResults, setFilteredResults] = useState<LookupRecord[]>([])
   const [isSearching, setIsSearching] = useState(false)
 
+  // Decided once when the dropdown opens: render below the trigger (default)
+  // or above it, if there isn't enough room below in the viewport.
   const [openDirection, setOpenDirection] = useState<"down" | "up">("down")
 
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -81,7 +84,7 @@ export default function EntityPicker({
     : entityType === "account" ? "accounts"
     : null
 
-  // Lazy load: only fetch when dropdown opens
+  // ── Lazy load: only fetch when dropdown opens ──
   useEffect(() => {
     if (!isOpen || !companyId || !tableName) return
     if (allRecords !== null) return   // already loaded
@@ -91,6 +94,7 @@ export default function EntityPicker({
       .select("*")
       .eq("company_id", companyId)
 
+    // ✅ ONLY CHANGE: skip deleted_at for tables that don't have it
     if (config?.softDelete !== false) {
       query = query.is("deleted_at", null)
     }
@@ -102,7 +106,7 @@ export default function EntityPicker({
     })
   }, [isOpen, companyId, tableName, allRecords, config])
 
-  // Filter locally
+  // ── Filter locally ──
   useEffect(() => {
     if (!allRecords) { setFilteredResults([]); return }
     if (!searchQuery.trim()) {
@@ -136,6 +140,7 @@ export default function EntityPicker({
     }
   }, [isModalOpen, config, companyId])
 
+  // Estimated dropdown height for direction decision
   const ESTIMATED_DROPDOWN_HEIGHT = 280
 
   const openDropdown = useCallback(() => {
