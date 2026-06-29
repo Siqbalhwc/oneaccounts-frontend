@@ -12,6 +12,7 @@ export default function NewAdjustmentPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
+  const [companyId, setCompanyId] = useState<string>("")
   const [products, setProducts] = useState<any[]>([])
   const [stockMap, setStockMap] = useState<Record<number, number>>({})
   const [productId, setProductId] = useState<number | null>(null)
@@ -22,30 +23,41 @@ export default function NewAdjustmentPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  // True available stock = opening_qty + purchases - sales + adjustments
   const [trueStock, setTrueStock] = useState<number | null>(null)
 
-  // Fetch all products and pre-compute closing stock for all in one batch
+  // 1. Get company ID and fetch products + stock data (scoped)
   useEffect(() => {
-    const fetchProductsAndStock = async () => {
+    const init = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      const cid = (user?.app_metadata as any)?.company_id
+      if (!cid) {
+        setError("Company not found – please log in again.")
+        return
+      }
+      setCompanyId(cid)
+
+      // Fetch products for THIS company only
       const { data: prods } = await supabase
         .from("products")
         .select("id, code, name, opening_qty, cost_price")
+        .eq("company_id", cid)
         .order("code")
       if (!prods) return
       setProducts(prods)
 
-      // Fetch all invoice items and stock moves in parallel
+      // Fetch invoice items (only for this company's invoices) and stock moves
       const [{ data: items }, { data: moves }] = await Promise.all([
         supabase
           .from("invoice_items")
-          .select("qty, product_id, invoices!inner(type)"),
+          .select("qty, product_id, invoices!inner(type, company_id)")
+          .eq("invoices.company_id", cid),
         supabase
           .from("stock_moves")
-          .select("qty, product_id"),
+          .select("qty, product_id")
+          .eq("company_id", cid),
       ])
 
-      // Build closing stock map starting from opening_qty
+      // Build closing stock map
       const map: Record<number, number> = {}
       prods.forEach((p: any) => {
         map[p.id] = p.opening_qty || 0
@@ -67,10 +79,10 @@ export default function NewAdjustmentPage() {
 
       setStockMap(map)
     }
-    fetchProductsAndStock()
+    init()
   }, [])
 
-  // Set trueStock from pre-computed stockMap when product is selected
+  // 2. Update trueStock whenever selected product changes
   useEffect(() => {
     if (!productId) {
       setTrueStock(null)
@@ -113,6 +125,7 @@ export default function NewAdjustmentPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        company_id: companyId,
         product_id: productId,
         qty: adjustmentQty,
         reason: reason.trim(),
@@ -234,7 +247,6 @@ export default function NewAdjustmentPage() {
               />
             </div>
 
-            {/* Summary section shows true stock = opening + purchases - sales + adjustments */}
             {selectedProduct && trueStock !== null && (
               <div className="summary-grid" style={{ marginBottom: 16 }}>
                 <div className="summary-item">
