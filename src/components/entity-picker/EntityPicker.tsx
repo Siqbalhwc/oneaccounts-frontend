@@ -102,27 +102,29 @@ export default function EntityPicker({
     if (allRecords !== null) return   // already loaded
 
     setLoadError(null)
-    supabase
+
+    // ✅ ONLY CHANGE: skip deleted_at filter for tables that don't have it
+    let query = supabase
       .from(tableName)
       .select("*")
       .eq("company_id", companyId)
-      .is("deleted_at", null)
-      .order("name", { ascending: true })
-      .then(({ data, error }) => {
-        if (error) {
-          // Previously this was silently swallowed and the picker just
-          // showed "Start typing to search…" forever, indistinguishable
-          // from "this table is genuinely empty" — which is exactly what
-          // made the missing-GL-accounts case invisible. Now the real
-          // database error surfaces in the dropdown instead.
-          console.error(`EntityPicker (${entityType}) failed to load from "${tableName}":`, error)
-          setLoadError(error.message || "Failed to load records")
-          setAllRecords([])
-          return
-        }
-        setAllRecords(data || [])
-      })
-  }, [isOpen, companyId, tableName, allRecords, entityType])
+
+    if (config?.softDelete !== false) {
+      query = query.is("deleted_at", null)
+    }
+
+    query = query.order("name", { ascending: true })
+
+    query.then(({ data, error }) => {
+      if (error) {
+        console.error(`EntityPicker (${entityType}) failed to load from "${tableName}":`, error)
+        setLoadError(error.message || "Failed to load records")
+        setAllRecords([])
+        return
+      }
+      setAllRecords(data || [])
+    })
+  }, [isOpen, companyId, tableName, allRecords, entityType, config])
 
   // ── Filter locally ──
   useEffect(() => {
@@ -733,9 +735,6 @@ export default function EntityPicker({
           .phone-row { grid-template-columns: 110px 1fr !important; }
         }
 
-        /* Results list: capped to ~5 rows, theme-aware scrollbar instead of
-           the OS-default white scrollbar (inline styles can't reach
-           ::-webkit-scrollbar, so this has to live in real CSS). */
         .ep-results-list {
           max-height: 210px;
           overflow-y: auto;
