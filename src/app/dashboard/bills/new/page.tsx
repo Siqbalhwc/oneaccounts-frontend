@@ -70,6 +70,8 @@ export default function NewBillPage() {
   const [budgetError, setBudgetError] = useState("")
 
   const [locationActivitiesMap, setLocationActivitiesMap] = useState<Record<number, number[]>>({})
+  // NEW: map of locationId_activityId -> account IDs (for NGO)
+  const [locationActivityAccountsMap, setLocationActivityAccountsMap] = useState<Record<string, number[]>>({})
 
   const [comboCache, setComboCache] = useState<Record<string, { project_id: number; donor_id: number; projectName: string; donorName: string | null }[]>>({})
 
@@ -134,28 +136,41 @@ export default function NewBillPage() {
         .eq("company_id", cid).order("name")
         .then(r => r.data && setAllDonors(r.data))
 
+      // Fetch budget rows to build both maps
       supabase.from("budgets")
-        .select("location_id, activity_id")
+        .select("location_id, activity_id, account_id")
         .eq("company_id", cid)
         .eq("fiscal_year", fiscalYear)
         .is("month", null)
         .then(({ data: budgetRows }) => {
-          const map: Record<number, Set<number>> = {}
+          const actMap: Record<number, Set<number>> = {}
+          const accMap: Record<string, Set<number>> = {}
           if (budgetRows) {
             budgetRows.forEach((b: any) => {
               const locId = b.location_id
               const actId = b.activity_id
+              const accId = b.account_id
               if (locId && actId) {
-                if (!map[locId]) map[locId] = new Set()
-                map[locId].add(actId)
+                if (!actMap[locId]) actMap[locId] = new Set()
+                actMap[locId].add(actId)
+
+                const key = `${locId}_${actId}`
+                if (!accMap[key]) accMap[key] = new Set()
+                accMap[key].add(accId)
               }
             })
           }
-          const finalMap: Record<number, number[]> = {}
-          for (const locId of Object.keys(map)) {
-            finalMap[Number(locId)] = Array.from(map[Number(locId)])
+          const finalActMap: Record<number, number[]> = {}
+          for (const locId of Object.keys(actMap)) {
+            finalActMap[Number(locId)] = Array.from(actMap[Number(locId)])
           }
-          setLocationActivitiesMap(finalMap)
+          setLocationActivitiesMap(finalActMap)
+
+          const finalAccMap: Record<string, number[]> = {}
+          for (const key of Object.keys(accMap)) {
+            finalAccMap[key] = Array.from(accMap[key])
+          }
+          setLocationActivityAccountsMap(finalAccMap)
         })
 
       setLoading(false)
@@ -353,7 +368,7 @@ export default function NewBillPage() {
     setRefreshingSuppliers(true)
     supabase.from("suppliers")
       .select("id,code,name,phone,balance,payment_terms,default_project_id,default_location_id,default_activity_id")
-      .eq("company_id", companyId)
+      .eq("companyId", companyId)
       .order("name")
       .then(r => {
         if (r.data) setSuppliers(r.data)
@@ -863,6 +878,13 @@ export default function NewBillPage() {
     return activities.filter(a => allowed.includes(a.id))
   }
 
+  // NEW: get filtered account IDs for a given location+activity (NGO only)
+  const getFilteredAccountIds = (locationId: string, activityId: string): number[] | undefined => {
+    if (!isNGO || !locationId || !activityId) return undefined
+    const key = `${Number(locationId)}_${Number(activityId)}`
+    return locationActivityAccountsMap[key]
+  }
+
   const getLineBudgetData = (item: any) => {
     if (!item.activity_id || !item.account_id) return null
     const locId = item.location_id ? Number(item.location_id) : null
@@ -1290,6 +1312,7 @@ export default function NewBillPage() {
                     const budgetData = getLineBudgetData(item)
                     const overBudget = isLineOverBudget(item, budgetData)
                     const filteredActs = getFilteredActivities(item.location_id)
+                    const filteredAccIds = getFilteredAccountIds(item.location_id, item.activity_id)
                     const combos = getCombosForLine(item)
                     const selectedProject = item.project_id
                       ? allProjects.find(p => p.id === item.project_id)
@@ -1386,6 +1409,7 @@ export default function NewBillPage() {
                               placeholder="—"
                               compact
                               allowCreate={false}
+                              allowedIds={filteredAccIds}
                             />
                           )}
 
