@@ -284,68 +284,6 @@ export default function BudgetsPage() {
       .catch(() => setLoading(false))
   }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, filterLocationId, businessType, viewMode, projectDuration])
 
-  // ── 6. Fetch real actuals (overrides API when API returns zeros) ──
-  useEffect(() => {
-    if (!companyId || !selectedProjectId) return
-    if (viewMode !== "gl" && viewMode !== "month") return
-
-    const fetchRealActuals = async () => {
-      // Get expense + fixed asset account IDs
-      const { data: expAcc } = await supabase
-        .from("accounts").select("id").eq("company_id", companyId).eq("type", "Expense")
-      const { data: assetAcc } = await supabase
-        .from("accounts").select("id").eq("company_id", companyId).eq("type", "Asset")
-        .gte("code", "1400").lte("code", "1499")
-      const relevantIds = [...(expAcc || []).map(a => a.id), ...(assetAcc || []).map(a => a.id)]
-      if (relevantIds.length === 0) return
-
-      let query = supabase
-        .from("journal_lines")
-        .select("account_id, activity_id, location_id, debit, credit, date")
-        .eq("company_id", companyId)
-        .eq("project_id", selectedProjectId)
-        .in("account_id", relevantIds)
-
-      if (filterLocationId) query = query.eq("location_id", filterLocationId)
-
-      const { data: rows, error } = await query
-      if (error || !rows) return
-
-      // Aggregate actuals
-      const actualsMap: Record<string, Record<string, Record<string, number>>> = {}
-      for (const row of rows) {
-        const accId = String(row.account_id)
-        const actId = String(row.activity_id || "")
-        const locId = String(row.location_id || "")
-        const net = (row.debit || 0) - (row.credit || 0)
-        if (!actualsMap[actId]) actualsMap[actId] = {}
-        if (!actualsMap[actId][locId]) actualsMap[actId][locId] = {}
-        actualsMap[actId][locId][accId] = (actualsMap[actId][locId][accId] || 0) + net
-      }
-
-      // Merge into data
-      setData(prev => {
-        const updated = { ...prev }
-        for (const actId of Object.keys(actualsMap)) {
-          if (!updated[actId]) updated[actId] = {}
-          for (const locId of Object.keys(actualsMap[actId])) {
-            if (!updated[actId][locId]) updated[actId][locId] = {}
-            for (const accId of Object.keys(actualsMap[actId][locId])) {
-              const existing = updated[actId][locId][accId] || { budget: 0, actual: 0 }
-              updated[actId][locId][accId] = {
-                ...existing,
-                actual: actualsMap[actId][locId][accId],
-              }
-            }
-          }
-        }
-        return updated
-      })
-    }
-
-    fetchRealActuals()
-  }, [companyId, selectedProjectId, filterLocationId, viewMode])
-
   // ── Auto‑correct rounding ──
   useEffect(() => {
     if (viewMode !== "month") return
@@ -510,14 +448,6 @@ export default function BudgetsPage() {
       setTimeout(() => setFlash(""), 4000)
     } catch (err: any) { setFlash("Error: " + err.message) }
   }
-
-  // Export/Import (unchanged, omitted for brevity – keep existing)
-  // ... (the rest of export/import functions remain identical)
-  // I'll include them for completeness in the final file.
-
-  // Because the file is huge, I'll provide the export/import functions as before.
-  // But for brevity, I'll just note: keep the existing exportExcel, exportPDF, handleBudgetImport unchanged.
-  // In the final file they will be present.
 
   const exportExcel = () => {
     const rows: any[] = []
