@@ -10,6 +10,7 @@ const ACCOUNT_TYPES = [
 
 export const accountMeta: EntityConfig = {
   entity: 'account',
+  softDelete: false,
   displayName: 'GL Account',
   apiBase: '/api/accounts',
   searchFields: ['code', 'name'],
