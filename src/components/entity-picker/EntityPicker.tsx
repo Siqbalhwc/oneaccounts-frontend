@@ -26,6 +26,10 @@ interface EntityPickerProps {
   allowCreate?: boolean
   /** Optional: restrict the dropdown to a list of record IDs */
   allowedIds?: (number | string)[]
+  /** Force a full reload of the record list every time the dropdown opens */
+  clearCacheOnOpen?: boolean
+  /** Called when the record list is refreshed, useful to sync parent state */
+  onRecordsRefreshed?: (records: LookupRecord[]) => void
 }
 
 export default function EntityPicker({
@@ -41,6 +45,8 @@ export default function EntityPicker({
   compact = false,
   allowCreate = true,
   allowedIds,
+  clearCacheOnOpen,
+  onRecordsRefreshed,
 }: EntityPickerProps) {
   const config = getEntityConfig(entityType)
   const supabase = createBrowserClient(
@@ -98,7 +104,8 @@ export default function EntityPicker({
   // ── Lazy load ──
   useEffect(() => {
     if (!isOpen || !companyId || !tableName) return
-    if (allRecords !== null) return
+    // ✅ if clearCacheOnOpen is true, ignore the cached records and refetch
+    if (allRecords !== null && !clearCacheOnOpen) return
 
     setLoadError(null)
 
@@ -121,13 +128,14 @@ export default function EntityPicker({
         return
       }
       let records = data || []
-      // ✅ restrict to allowed IDs if the list is provided
       if (allowedIds && allowedIds.length > 0) {
         records = records.filter((r: any) => allowedIds.includes(r.id))
       }
       setAllRecords(records)
+      // ✅ notify parent so it can update its own state (e.g., for stock validation)
+      if (onRecordsRefreshed) onRecordsRefreshed(records)
     })
-  }, [isOpen, companyId, tableName, allRecords, entityType, config, allowedIds])
+  }, [isOpen, companyId, tableName, allRecords, entityType, config, allowedIds, clearCacheOnOpen, onRecordsRefreshed])
 
   // ── Filter locally ──
   useEffect(() => {
@@ -169,10 +177,14 @@ export default function EntityPicker({
       setAllRecords(null)
       setLoadError(null)
     }
+    // ✅ clear cache if clearCacheOnOpen is set (forces refetch on open)
+    if (clearCacheOnOpen) {
+      setAllRecords(null)
+    }
     setCoords(null)
     setMeasuring(true)
     setIsOpen(true)
-  }, [disabled, loadError])
+  }, [disabled, loadError, clearCacheOnOpen])
 
   const closeDropdown = useCallback(() => {
     setIsOpen(false)

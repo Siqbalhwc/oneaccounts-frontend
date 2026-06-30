@@ -230,6 +230,11 @@ function NewInvoicePageContent() {
       })
   }
 
+  // ✅ Callback to update parent's product list when EntityPicker refetches
+  const handleProductsRefreshed = (records: any[]) => {
+    setProducts(records)
+  }
+
   const filteredCustomers = customers.filter(c =>
     c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
     c.code.toLowerCase().includes(customerSearch.toLowerCase()) ||
@@ -850,6 +855,8 @@ function NewInvoicePageContent() {
                           placeholder="Search product…"
                           label="Add Item"
                           allowCreate={false}
+                          clearCacheOnOpen
+                          onRecordsRefreshed={handleProductsRefreshed}
                         />
                       </div>
                       <button className="inv-btn" style={{ height: 38, flexShrink: 0 }} onClick={addManualItem}><Plus size={14} /> Manual</button>
