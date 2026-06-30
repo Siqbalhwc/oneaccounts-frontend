@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     // 2. Get product details (scoped to user's company)
     const { data: product } = await supabase
       .from("products")
-      .select("id, code, cost_price, qty_on_hand, total_inflow, total_outflow")
+      .select("id, code, cost_price, qty_on_hand")
       .eq("id", product_id)
       .eq("company_id", companyId)
       .single()
@@ -54,24 +54,22 @@ export async function POST(request: NextRequest) {
     const costPrice = product.cost_price || 0
     const oldQty = product.qty_on_hand || 0
     const newQty = oldQty + qtyNum
-    const totalInflow = (product.total_inflow || 0) + (qtyNum > 0 ? qtyNum : 0)
-    const totalOutflow = (product.total_outflow || 0) + (qtyNum < 0 ? Math.abs(qtyNum) : 0)
 
     if (newQty < 0) {
       return NextResponse.json({ success: false, error: "Insufficient stock" }, { status: 400 })
     }
 
-    // 3. Insert stock movement with type and reference
+    // 3. Insert stock movement with type = 'adjustment' (so it appears in the list)
     const { data: moveData, error: moveError } = await supabase
       .from("stock_moves")
       .insert({
         company_id: companyId,
         product_id: product_id,
-        move_type: qtyNum > 0 ? 'stock_in' : 'stock_out',
+        move_type: 'adjustment',   // ✅ always "adjustment", not stock_in/stock_out
         qty: qtyNum,
         date,
-        ref: reason,          // show the reason as reference
         reason,
+        source_type: 'adjustment',
       })
       .select()
       .single()
@@ -80,14 +78,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: moveError?.message || "Failed to record movement" }, { status: 500 })
     }
 
-    // 4. Update product quantity and summary fields (scoped)
+    // 4. Update product quantity (scoped)
     const { error: updateError } = await supabase
       .from("products")
-      .update({
-        qty_on_hand: newQty,
-        total_inflow: totalInflow,
-        total_outflow: totalOutflow,
-      })
+      .update({ qty_on_hand: newQty })
       .eq("id", product_id)
       .eq("company_id", companyId)
 
@@ -95,9 +89,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: updateError.message }, { status: 500 })
     }
 
-    // 5. Ensure Inventory account (1200) exists
+    // 5. Journal entry (unchanged)
     const inventoryAccount = await getOrCreateAccount(supabase, companyId, "1200", "Inventory", "Asset")
-    // 6. Ensure Owner Equity account (3000) exists
     const equityAccount = await getOrCreateAccount(supabase, companyId, "3000", "Owner Equity", "Equity")
 
     if (!inventoryAccount || !equityAccount) {
@@ -105,11 +98,8 @@ export async function POST(request: NextRequest) {
     }
 
     const amount = Math.abs(qtyNum) * costPrice
-
-    // 7. Generate a safe journal entry number
     const entryNo = `JE-ADJ-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
 
-    // 8. Create journal entry
     const { data: journalEntry, error: journalError } = await supabase
       .from("journal_entries")
       .insert({
@@ -126,7 +116,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: journalError?.message || "Failed to create journal entry" }, { status: 500 })
     }
 
-    // 9. Journal lines
     const lines = qtyNum > 0
       ? [
           { company_id: companyId, entry_id: journalEntry.id, account_id: inventoryAccount.id, debit: amount, credit: 0, source_type: "inventory_adjustment", source_id: moveData.id },
@@ -143,16 +132,6 @@ export async function POST(request: NextRequest) {
 
     if (linesError) {
       return NextResponse.json({ success: false, error: linesError.message }, { status: 500 })
-    }
-
-    // 10. Update account balances (optional)
-    const inventoryDelta = qtyNum > 0 ? amount : -amount
-    const equityDelta = qtyNum > 0 ? -amount : amount
-    try {
-      await supabase.rpc("increment_account_balance", { acc_id: inventoryAccount.id, delta: inventoryDelta })
-      await supabase.rpc("increment_account_balance", { acc_id: equityAccount.id, delta: equityDelta })
-    } catch {
-      // RPC may not exist – ignore
     }
 
     return NextResponse.json({ success: true, new_qty_on_hand: newQty, adjustment_id: moveData.id })
