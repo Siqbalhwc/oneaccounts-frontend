@@ -761,6 +761,7 @@ export default function NewBillPage() {
 
     setSaving(true); setError("")
 
+    // ✅ Added project_id and donor_id to the payload
     const payloadItems = items.map(i => ({
       product_id: i.product_id || null,
       description: i.description,
@@ -769,6 +770,8 @@ export default function NewBillPage() {
       account_id: i.account_id || null,
       location_id: i.location_id || null,
       activity_id: i.activity_id || null,
+      project_id: i.project_id || null,          // ← added
+      donor_id: i.donor_id || null,              // ← added
       tax_code_id: taxEnabled ? (i.tax_code_id || null) : null,
       tax_rate: taxEnabled ? (i.tax_rate || 0) : 0,
       tax_amount: taxEnabled ? (i.tax_amount || 0) : 0,
