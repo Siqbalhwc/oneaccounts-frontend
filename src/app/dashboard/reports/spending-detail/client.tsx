@@ -89,11 +89,11 @@ export default function SpendingDetailClient() {
       const locationIds = [...new Set(lines.map((l: any) => l.location_id))]
 
       const [accRes, projRes, donRes, actRes, locRes] = await Promise.all([
-        supabase.from("accounts").select("id,code,name").in("id", accountIds),
-        supabase.from("projects").select("id,name").in("id", projectIds),
-        supabase.from("donors").select("id,name").in("id", donorIds),
-        supabase.from("activities").select("id,name").in("id", activityIds),
-        supabase.from("locations").select("id,name").in("id", locationIds),
+        supabase.from("accounts").select("id,code,name").in("id", accountIds).eq("company_id", companyId),
+        supabase.from("projects").select("id,name").in("id", projectIds).eq("company_id", companyId),
+        supabase.from("donors").select("id,name").in("id", donorIds).eq("company_id", companyId),
+        supabase.from("activities").select("id,name").in("id", activityIds).eq("company_id", companyId),
+        supabase.from("locations").select("id,name").in("id", locationIds).eq("company_id", companyId),
       ])
 
       const mapFrom = (arr: any[]) => {
