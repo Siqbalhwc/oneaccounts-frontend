@@ -82,6 +82,17 @@ function NewInvoicePageContent() {
 
   const [stockErrors, setStockErrors] = useState<Record<number, string>>({})
 
+  // ✅ NEW: function to load products (can be called manually)
+  const loadProducts = () => {
+    if (!companyId) return
+    supabase.from("products")
+      .select("id,code,name,sale_price,cost_price,qty_on_hand,image_path,default_tax_code_id")
+      .eq("company_id", companyId)
+      .is("deleted_at", null)
+      .order("name")
+      .then(r => r.data && setProducts(r.data))
+  }
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -97,12 +108,7 @@ function NewInvoicePageContent() {
         .then(r => { if (r.data) setCustomers(r.data) })
 
       if (showProducts) {
-        supabase.from("products")
-          .select("id,code,name,sale_price,cost_price,qty_on_hand,image_path,default_tax_code_id")
-          .eq("company_id", cid)
-          .is("deleted_at", null)
-          .order("name")
-          .then(r => r.data && setProducts(r.data))
+        loadProducts()   // initial load via helper
       }
 
       supabase.from("company_settings")
@@ -141,6 +147,18 @@ function NewInvoicePageContent() {
       setLoading(false)
     })
   }, [showProducts, taxEnabled])
+
+  // ✅ NEW: manual refresh handler (calls loadProducts)
+  const refreshProducts = () => {
+    if (!companyId) return
+    setRefreshingProducts(true)
+    loadProducts()
+    // small delay to show the spinner briefly
+    setTimeout(() => setRefreshingProducts(false), 800)
+  }
+
+  // ✅ NEW: state for refreshing products spinner (optional)
+  const [refreshingProducts, setRefreshingProducts] = useState(false)
 
   useEffect(() => {
     const errors: Record<number, string> = {}
@@ -700,9 +718,6 @@ function NewInvoicePageContent() {
         .inv-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 16px 20px; box-shadow: var(--shadow-sm); margin-bottom: 12px; overflow: visible; }
         .inv-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block; }
         .inv-input, .inv-select { width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: 13px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box; }
-        /* color-scheme for input[type=date] is now set globally per data-theme
-           (see global stylesheet) so the calendar icon matches whichever of the
-           3 themes (light / dark / oneaccounts) is active. Do not hardcode it here. */
         .inv-input:focus, .inv-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
         .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .inv-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; transition: all 0.15s; white-space: nowrap; text-decoration: none; }
@@ -783,6 +798,23 @@ function NewInvoicePageContent() {
         .inv-customer-section { overflow: visible; }
         .inv-content-wrapper { overflow: visible; }
 
+        /* ✅ small refresh button styling */
+        .refresh-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 38px;
+          height: 38px;
+          border: 1.5px solid var(--border);
+          border-radius: 8px;
+          background: transparent;
+          color: var(--text-muted);
+          cursor: pointer;
+          transition: all 0.15s;
+          flex-shrink: 0;
+        }
+        .refresh-btn:hover { background: var(--card-hover); color: var(--text); }
+
         @media (min-width: 1025px) { .desktop-summary { display: flex; flex-direction: column; gap: 12px; } .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; } .mobile-sticky-summary { display: none !important; } }
         @media (max-width: 1024px) { .header-grid { display: block; } .desktop-summary { display: none !important; } .mobile-sticky-summary { display: flex !important; } .inv-card { padding: 12px; } .inv-input, .inv-select { height: 44px; font-size: 16px; } .inv-btn { padding: 10px 16px; font-size: 14px; } .cust-dropdown { max-height: 180px; } }
         @media (max-width: 640px) { .inv-row { grid-template-columns: 1fr; } }
@@ -852,8 +884,19 @@ function NewInvoicePageContent() {
                           allowCreate={false}
                         />
                       </div>
+                      {/* ✅ Refresh products button */}
+                      <button
+                        className="refresh-btn"
+                        onClick={refreshProducts}
+                        disabled={refreshingProducts}
+                        title="Refresh product list"
+                      >
+                        <RefreshCw size={16} style={refreshingProducts ? { animation: "spin 0.8s linear infinite" } : undefined} />
+                      </button>
                       <button className="inv-btn" style={{ height: 38, flexShrink: 0 }} onClick={addManualItem}><Plus size={14} /> Manual</button>
                     </div>
+                    {/* ✅ spinning animation */}
+                    <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
                   </div>
                 ) : (
                   <div><label className="inv-label">Add Item</label><button className="inv-btn" onClick={addManualItem}><Plus size={14} /> Manual</button></div>
