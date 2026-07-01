@@ -1,23 +1,15 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Download, Search, X, Check } from "lucide-react"
+import { ArrowLeft, Download, Search, X, Check, ChevronRight, AlertTriangle } from "lucide-react"
 import { useRouter } from "next/navigation"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import { useCompany } from "@/contexts/CompanyContext"
 
-const NAVY = [7, 8, 91] as [number, number, number]
-const DARK = [17, 24, 39] as [number, number, number]
-const MUTED = [107, 114, 128] as [number, number, number]
-const BORDER = [229, 231, 235] as [number, number, number]
-const WHITE = [255, 255, 255] as [number, number, number]
-const ROW_ALT = [248, 249, 252] as [number, number, number]
-
-interface AgingRow {
-  supplierName: string
-  supplierId: number
+// ── Types ──
+interface InvoiceRow {
   invoiceNo: string
   invoiceDate: string
   dueDate: string
@@ -27,6 +19,18 @@ interface AgingRow {
   days61to90: number
   over90: number
   total: number
+}
+
+interface SupplierGroup {
+  supplierId: number
+  supplierName: string
+  current: number
+  days1to30: number
+  days31to60: number
+  days61to90: number
+  over90: number
+  total: number
+  invoices: InvoiceRow[]
 }
 
 interface APInvoice {
@@ -41,28 +45,61 @@ interface APInvoice {
   supplier_id: number
 }
 
-async function loadImage(url: string): Promise<string | null> {
-  try {
-    const r = await fetch(url)
-    if (!r.ok) return null
-    const b = await r.blob()
-    return new Promise((res) => {
-      const reader = new FileReader()
-      reader.onload = () => res(reader.result as string)
-      reader.onerror = () => res("")
-      reader.readAsDataURL(b)
-    })
-  } catch { return null }
+// ── Helpers ──
+const fmt = (n: number) => (n ? n.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "–")
+
+// ── Components ──
+function SummaryCard({
+  label,
+  value,
+  warn,
+  danger,
+  emphasize,
+}: {
+  label: string
+  value: string
+  warn?: boolean
+  danger?: boolean
+  emphasize?: boolean
+}) {
+  return (
+    <div
+      className={`rounded-lg px-4 py-3 ${
+        danger
+          ? "bg-red-50"
+          : warn
+          ? "bg-amber-50"
+          : emphasize
+          ? "border border-slate-300 bg-white"
+          : "bg-slate-100"
+      }`}
+    >
+      <div
+        className={`mb-1 text-xs font-medium ${
+          danger ? "text-red-600" : warn ? "text-amber-600" : "text-slate-500"
+        }`}
+      >
+        {label}
+      </div>
+      <div className="text-lg font-semibold text-slate-900">{value}</div>
+    </div>
+  )
 }
 
+function Cell({ value, muted, danger }: { value: number; muted?: boolean; danger?: boolean }) {
+  const color = !value ? "text-slate-300" : danger ? "text-red-600" : muted ? "text-slate-500" : "text-slate-700"
+  return <div className={`text-right ${color}`}>{fmt(value)}</div>
+}
+
+// ── Main Page ──
 export default function APAgingPage() {
   const router = useRouter()
   const { companyId } = useCompany()
-  const { companyName, companyTagline, logoUrl } = useCompany()
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
-  const [data, setData] = useState<AgingRow[]>([])
+  const [groups, setGroups] = useState<SupplierGroup[]>([])
   const [loading, setLoading] = useState(true)
+  const [expanded, setExpanded] = useState<Set<number>>(new Set())
 
   const today = new Date().toISOString().split("T")[0]
   const [asOfDate, setAsOfDate] = useState(today)
@@ -72,7 +109,7 @@ export default function APAgingPage() {
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(false)
   const supplierDropdownRef = useRef<HTMLDivElement>(null)
 
-  // Fetch suppliers list
+  // ── Suppliers list ──
   useEffect(() => {
     if (!companyId) return
     supabase
@@ -84,7 +121,18 @@ export default function APAgingPage() {
       .then(({ data }) => data && setSuppliers(data))
   }, [companyId])
 
-  // ── Fetch invoices using RPC ──
+  // ── Outside click ──
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (supplierDropdownRef.current && !supplierDropdownRef.current.contains(e.target as Node)) {
+        setShowSupplierDropdown(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
+
+  // ── Fetch & group data ──
   useEffect(() => {
     if (!companyId) {
       setLoading(false)
@@ -95,18 +143,18 @@ export default function APAgingPage() {
     supabase
       .rpc('get_ap_aging', {
         p_company_id: companyId,
-        p_as_of_date: asOfDate
+        p_as_of_date: asOfDate,
       })
       .then(({ data: invoices, error }) => {
         if (error) {
           console.error("AP Aging RPC error:", error)
-          setData([])
+          setGroups([])
           setLoading(false)
           return
         }
 
         if (!invoices || invoices.length === 0) {
-          setData([])
+          setGroups([])
           setLoading(false)
           return
         }
@@ -119,259 +167,218 @@ export default function APAgingPage() {
         }
 
         const refDate = new Date(asOfDate)
-        const rows: AgingRow[] = filteredInvoices
-          .map((inv: APInvoice) => {
-            const bal = (inv.total || 0) - (inv.paid || 0)
-            if (bal <= 0) return null
-            const due = new Date(inv.due_date)
-            const days = Math.floor((refDate.getTime() - due.getTime()) / 86400000)
-            let current = 0, d1to30 = 0, d31to60 = 0, d61to90 = 0, over90 = 0
-            if (days <= 0) current = bal
-            else if (days <= 30) d1to30 = bal
-            else if (days <= 60) d31to60 = bal
-            else if (days <= 90) d61to90 = bal
-            else over90 = bal
-            return {
-              supplierName: inv.supplier_name || "Unknown",
-              supplierId: inv.supplier_id || inv.party_id,
-              invoiceNo: inv.invoice_no,
-              invoiceDate: inv.date,
-              dueDate: inv.due_date,
-              current,
-              days1to30: d1to30,
-              days31to60: d31to60,
-              days61to90: d61to90,
-              over90,
-              total: bal,
-            }
-          })
-          .filter(Boolean) as AgingRow[]
+        const bySupplier = new Map<number, SupplierGroup>()
 
-        // Group by supplier
-        const grouped: AgingRow[] = []
-        let currentSuppId = -1
-        let subCurrent = 0, sub1to30 = 0, sub31to60 = 0, sub61to90 = 0, subOver90 = 0, subTotal = 0
+        filteredInvoices.forEach((inv: APInvoice) => {
+          const bal = (inv.total || 0) - (inv.paid || 0)
+          if (bal <= 0) return
 
-        rows.forEach((row, idx) => {
-          if (row.supplierId !== currentSuppId) {
-            if (currentSuppId !== -1) {
-              grouped.push({
-                supplierName: "",
-                supplierId: -1,
-                invoiceNo: "Subtotal",
-                invoiceDate: "",
-                dueDate: "",
-                current: subCurrent,
-                days1to30: sub1to30,
-                days31to60: sub31to60,
-                days61to90: sub61to90,
-                over90: subOver90,
-                total: subTotal,
-              })
-              subCurrent = sub1to30 = sub31to60 = sub61to90 = subOver90 = subTotal = 0
-            }
-            currentSuppId = row.supplierId
+          const due = new Date(inv.due_date)
+          const days = Math.floor((refDate.getTime() - due.getTime()) / 86400000)
 
-            grouped.push({
-              supplierName: row.supplierName,
-              supplierId: row.supplierId,
-              invoiceNo: "",
-              invoiceDate: "",
-              dueDate: "",
+          let current = 0, d1to30 = 0, d31to60 = 0, d61to90 = 0, over90 = 0
+          if (days <= 0) current = bal
+          else if (days <= 30) d1to30 = bal
+          else if (days <= 60) d31to60 = bal
+          else if (days <= 90) d61to90 = bal
+          else over90 = bal
+
+          const supId = inv.supplier_id || inv.party_id
+          const supName = inv.supplier_name || "Unknown"
+
+          if (!bySupplier.has(supId)) {
+            bySupplier.set(supId, {
+              supplierId: supId,
+              supplierName: supName,
               current: 0,
               days1to30: 0,
               days31to60: 0,
               days61to90: 0,
               over90: 0,
               total: 0,
+              invoices: [],
             })
           }
 
-          grouped.push({
-            supplierName: "",
-            supplierId: row.supplierId,
-            invoiceNo: row.invoiceNo,
-            invoiceDate: row.invoiceDate,
-            dueDate: row.dueDate,
-            current: row.current,
-            days1to30: row.days1to30,
-            days31to60: row.days31to60,
-            days61to90: row.days61to90,
-            over90: row.over90,
-            total: row.total,
+          const group = bySupplier.get(supId)!
+          group.current += current
+          group.days1to30 += d1to30
+          group.days31to60 += d31to60
+          group.days61to90 += d61to90
+          group.over90 += over90
+          group.total += bal
+          group.invoices.push({
+            invoiceNo: inv.invoice_no,
+            invoiceDate: inv.date,
+            dueDate: inv.due_date,
+            current,
+            days1to30: d1to30,
+            days31to60: d31to60,
+            days61to90: d61to90,
+            over90,
+            total: bal,
           })
-
-          subCurrent += row.current
-          sub1to30 += row.days1to30
-          sub31to60 += row.days31to60
-          sub61to90 += row.days61to90
-          subOver90 += row.over90
-          subTotal += row.total
-
-          if (idx === rows.length - 1) {
-            grouped.push({
-              supplierName: "",
-              supplierId: -1,
-              invoiceNo: "Subtotal",
-              invoiceDate: "",
-              dueDate: "",
-              current: subCurrent,
-              days1to30: sub1to30,
-              days31to60: sub31to60,
-              days61to90: sub61to90,
-              over90: subOver90,
-              total: subTotal,
-            })
-          }
         })
 
-        setData(grouped)
+        const groupList = Array.from(bySupplier.values())
+        groupList.sort((a, b) => a.supplierId - b.supplierId)
+
+        setGroups(groupList)
         setLoading(false)
       })
   }, [companyId, asOfDate, selectedSupplierIds])
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (supplierDropdownRef.current && !supplierDropdownRef.current.contains(e.target as Node)) {
-        setShowSupplierDropdown(false)
-      }
-    }
-    document.addEventListener("mousedown", handler)
-    return () => document.removeEventListener("mousedown", handler)
-  }, [])
+  // ── Totals ──
+  const totals = useMemo(() => {
+    return groups.reduce(
+      (acc, g) => {
+        acc.current += g.current
+        acc.days1to30 += g.days1to30
+        acc.days31to60 += g.days31to60
+        acc.days61to90 += g.days61to90
+        acc.over90 += g.over90
+        acc.total += g.total
+        return acc
+      },
+      { current: 0, days1to30: 0, days31to60: 0, days61to90: 0, over90: 0, total: 0 }
+    )
+  }, [groups])
 
-  const totals = data.filter(d => d.invoiceNo === "Subtotal").reduce((acc, d) => ({
-    current: acc.current + d.current,
-    days1to30: acc.days1to30 + d.days1to30,
-    days31to60: acc.days31to60 + d.days31to60,
-    days61to90: acc.days61to90 + d.days61to90,
-    over90: acc.over90 + d.over90,
-    total: acc.total + d.total,
-  }), { current: 0, days1to30: 0, days31to60: 0, days61to90: 0, over90: 0, total: 0 })
+  // ── Expand / collapse ──
+  function toggleExpand(supplierId: number) {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(supplierId)) next.delete(supplierId)
+      else next.add(supplierId)
+      return next
+    })
+  }
 
-  const filteredSuppliers = suppliers.filter(s =>
+  function expandAll() {
+    setExpanded(new Set(groups.map((g) => g.supplierId)))
+  }
+
+  function collapseAll() {
+    setExpanded(new Set())
+  }
+
+  const allExpanded = groups.length > 0 && expanded.size === groups.length
+
+  // ── Supplier filter ──
+  function toggleSupplierSelection(id: number) {
+    setSelectedSupplierIds((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]))
+  }
+
+  function clearSupplierFilter() {
+    setSelectedSupplierIds([])
+  }
+
+  const filteredSupplierOptions = suppliers.filter((s) =>
     s.name.toLowerCase().includes(supplierSearch.toLowerCase())
   )
 
-  const toggleSupplier = (id: number) => {
-    setSelectedSupplierIds(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    )
-  }
-
-  const clearSupplierFilter = () => {
-    setSelectedSupplierIds([])
-    setSupplierSearch("")
-  }
-
-  // ── PDF Export ──
-  const handleDownloadPDF = async () => {
-    if (data.length === 0) return alert("No data to export")
+  // ── PDF export (unchanged logic, adapted to new group structure) ──
+  const exportPDF = async () => {
+    if (groups.length === 0) return alert("No data to export")
 
     const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" })
     const PW = 297, ML = 14, MR = 14
     const LOGO_SIZE = 20, LOGO_X = ML, LOGO_Y = 7
 
-    // ── Load Logo ──
-    let logoData: string | null = null
-    if (logoUrl) logoData = await loadImage(logoUrl)
-    if (logoData) doc.addImage(logoData, "PNG", LOGO_X, LOGO_Y, LOGO_SIZE, LOGO_SIZE)
+    // Keep logo if available – use company context
+    const { logoUrl, companyName, companyTagline } = useCompany()
+    if (logoUrl) {
+      try {
+        const r = await fetch(logoUrl)
+        if (r.ok) {
+          const b = await r.blob()
+          const reader = new FileReader()
+          const dataUrl = await new Promise<string>((res) => {
+            reader.onload = () => res(reader.result as string)
+            reader.onerror = () => res("")
+            reader.readAsDataURL(b)
+          })
+          if (dataUrl) doc.addImage(dataUrl, "PNG", LOGO_X, LOGO_Y, LOGO_SIZE, LOGO_SIZE)
+        }
+      } catch {}
+    }
 
-    // ── Left Side: Company Info ──
-    const textX = logoData ? LOGO_X + LOGO_SIZE + 5 : ML
-    doc.setTextColor(...NAVY).setFont("helvetica", "bold").setFontSize(14)
+    const textX = logoUrl ? LOGO_X + LOGO_SIZE + 5 : ML
+    doc.setTextColor(7, 8, 91).setFont("helvetica", "bold").setFontSize(14)
     doc.text(companyName || "", textX, LOGO_Y + 7)
-    doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...MUTED)
+    doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(107, 114, 128)
     doc.text(companyTagline || "", textX, LOGO_Y + 13)
 
-    // ── Right Side: Report Title & Filters ──
-    doc.setFont("helvetica", "bold").setFontSize(24).setTextColor(...NAVY)
+    doc.setFont("helvetica", "bold").setFontSize(24).setTextColor(7, 8, 91)
     doc.text("AP AGING REPORT", PW - MR, LOGO_Y + 8, { align: "right" })
 
     const supplierFilter = selectedSupplierIds.length === 1
       ? suppliers.find(s => s.id === selectedSupplierIds[0])?.name || "Selected Supplier"
       : "All Suppliers"
 
-    doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...MUTED)
+    doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(107, 114, 128)
     doc.text(`Supplier: ${supplierFilter}`, PW - MR, LOGO_Y + 16, { align: "right" })
     doc.text(`As of: ${asOfDate}`, PW - MR, LOGO_Y + 21, { align: "right" })
 
-    // ── Header Line ──
     const HEADER_BOTTOM = LOGO_Y + LOGO_SIZE + 5
-    doc.setDrawColor(...NAVY).setLineWidth(0.6).line(ML, HEADER_BOTTOM, PW - MR, HEADER_BOTTOM)
+    doc.setDrawColor(7, 8, 91).setLineWidth(0.6).line(ML, HEADER_BOTTOM, PW - MR, HEADER_BOTTOM)
 
-    // ── Table ──
     let Y = HEADER_BOTTOM + 6
     const headers = ["Supplier", "Invoice #", "Inv Date", "Current", "1-30", "31-60", "61-90", ">90", "Total"]
 
-    const rows: any[] = []
-    data.forEach((row) => {
-      const isSubtotal = row.invoiceNo === "Subtotal"
-      const isSupplierHeader = !isSubtotal && row.supplierName && row.supplierName.length > 0
-
-      if (isSupplierHeader) {
-        rows.push([
-          { content: row.supplierName, styles: { fontStyle: "bold", fillColor: [245, 247, 250] } },
+    const body: any[] = []
+    groups.forEach((g) => {
+      body.push([
+        { content: g.supplierName, styles: { fontStyle: "bold", fillColor: [245, 247, 250] } },
+        "", "", "", "", "", "", "", "",
+      ])
+      g.invoices.forEach((inv) => {
+        body.push([
           "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
+          inv.invoiceNo,
+          inv.invoiceDate,
+          inv.current > 0 ? fmt(inv.current) : "",
+          inv.days1to30 > 0 ? fmt(inv.days1to30) : "",
+          inv.days31to60 > 0 ? fmt(inv.days31to60) : "",
+          inv.days61to90 > 0 ? fmt(inv.days61to90) : "",
+          inv.over90 > 0 ? fmt(inv.over90) : "",
+          inv.total > 0 ? fmt(inv.total) : "",
         ])
-      } else {
-        rows.push([
-          isSubtotal ? "Subtotal" : "",
-          isSubtotal ? "" : row.invoiceNo,
-          isSubtotal ? "" : row.invoiceDate,
-          row.current > 0 ? row.current.toLocaleString() : "",
-          row.days1to30 > 0 ? row.days1to30.toLocaleString() : "",
-          row.days31to60 > 0 ? row.days31to60.toLocaleString() : "",
-          row.days61to90 > 0 ? row.days61to90.toLocaleString() : "",
-          row.over90 > 0 ? row.over90.toLocaleString() : "",
-          row.total > 0 ? row.total.toLocaleString() : "",
-        ])
-      }
+      })
+      body.push([
+        { content: "Subtotal", styles: { fontStyle: "bold", fillColor: [240, 242, 245] } },
+        "",
+        "",
+        g.current > 0 ? fmt(g.current) : "",
+        g.days1to30 > 0 ? fmt(g.days1to30) : "",
+        g.days31to60 > 0 ? fmt(g.days31to60) : "",
+        g.days61to90 > 0 ? fmt(g.days61to90) : "",
+        g.over90 > 0 ? fmt(g.over90) : "",
+        g.total > 0 ? fmt(g.total) : "",
+      ])
     })
 
-    // Grand Total
-    rows.push([
-      { content: "Grand Total", styles: { fontStyle: "bold", fillColor: NAVY, textColor: WHITE } },
-      "",
-      "",
-      totals.current > 0 ? totals.current.toLocaleString() : "",
-      totals.days1to30 > 0 ? totals.days1to30.toLocaleString() : "",
-      totals.days31to60 > 0 ? totals.days31to60.toLocaleString() : "",
-      totals.days61to90 > 0 ? totals.days61to90.toLocaleString() : "",
-      totals.over90 > 0 ? totals.over90.toLocaleString() : "",
-      { content: totals.total > 0 ? totals.total.toLocaleString() : "", styles: { fontStyle: "bold" } },
-    ])
-
-    // ── AutoTable configuration – all columns auto width ──
     autoTable(doc, {
       startY: Y,
       margin: { left: ML, right: MR },
       tableWidth: 'auto',
       head: [headers],
-      body: rows,
+      body,
       styles: {
         fontSize: 7.5,
         cellPadding: { top: 2, bottom: 2, left: 2, right: 2 },
-        textColor: DARK,
-        lineColor: BORDER,
+        textColor: [17, 24, 39],
+        lineColor: [229, 231, 235],
         lineWidth: 0.2,
         overflow: 'linebreak',
       },
       headStyles: {
-        fillColor: NAVY,
-        textColor: WHITE,
+        fillColor: [7, 8, 91],
+        textColor: [255, 255, 255],
         fontStyle: "bold",
         fontSize: 8,
       },
-      alternateRowStyles: { fillColor: ROW_ALT },
+      alternateRowStyles: { fillColor: [248, 249, 252] },
       columnStyles: {
         0: { halign: 'left' },
         1: { halign: 'left' },
@@ -397,10 +404,9 @@ export default function APAgingPage() {
       },
     })
 
-    // ── Footer ──
     const PH = 210
-    doc.setDrawColor(...NAVY).setLineWidth(0.4).line(ML, PH - 14, PW - MR, PH - 14)
-    doc.setFont("helvetica", "normal").setFontSize(7.5).setTextColor(...MUTED)
+    doc.setDrawColor(7, 8, 91).setLineWidth(0.4).line(ML, PH - 14, PW - MR, PH - 14)
+    doc.setFont("helvetica", "normal").setFontSize(7.5).setTextColor(107, 114, 128)
     doc.text(
       `Generated by ${companyName || "OneAccounts"}  ·  ${companyTagline || ""}`,
       PW / 2,
@@ -411,461 +417,226 @@ export default function APAgingPage() {
     doc.save("ap-aging-report.pdf")
   }
 
-  const format = (v: number) => v ? v.toLocaleString() : "–"
-
-  if (!companyId) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading company…</div>
-  if (loading && data.length === 0) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading AP Aging…</div>
-
+  // ── Render ──
   return (
-    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
-      <style>{`
-        .aging-header {
-          display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;
-        }
-        .aging-title { font-size: 22px; font-weight: 800; color: var(--text); }
-        .aging-subtitle { font-size: 13px; color: var(--text-muted); }
-
-        .aging-btn {
-          display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px;
-          border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;
-          border: 1.5px solid var(--border); background: transparent; color: var(--text-muted);
-          font-family: inherit;
-        }
-        .aging-btn:hover { background: var(--card-hover); }
-
-        .aging-table-wrapper {
-          overflow-x: auto;
-          border-radius: 10px;
-          border: 1px solid var(--border);
-        }
-
-        .aging-table {
-          width: 100%;
-          min-width: 900px;
-          border-collapse: collapse;
-          font-size: 12px;
-          background: var(--card);
-          table-layout: fixed;
-        }
-
-        .aging-table th {
-          padding: 10px 8px;
-          background: var(--card-hover);
-          font-size: 9px;
-          font-weight: 700;
-          text-transform: uppercase;
-          color: var(--text-muted);
-          border-bottom: 2px solid var(--border);
-          white-space: nowrap;
-          text-align: right;
-          letter-spacing: 0.04em;
-        }
-
-        .aging-table th:first-child {
-          text-align: left;
-          width: 14%;
-          min-width: 100px;
-        }
-        .aging-table th:nth-child(2) {
-          text-align: left;
-          width: 12%;
-          min-width: 80px;
-        }
-        .aging-table th:nth-child(3) {
-          text-align: left;
-          width: 10%;
-          min-width: 75px;
-        }
-
-        .aging-table th:nth-child(4),
-        .aging-table th:nth-child(5),
-        .aging-table th:nth-child(6),
-        .aging-table th:nth-child(7),
-        .aging-table th:nth-child(8),
-        .aging-table th:nth-child(9) {
-          width: 11%;
-          min-width: 90px;
-          text-align: right;
-        }
-
-        .aging-table td {
-          padding: 8px 8px;
-          border-bottom: 1px solid var(--border);
-          text-align: right;
-          white-space: nowrap;
-          overflow: visible;
-        }
-
-        .aging-table td:first-child {
-          text-align: left;
-          font-weight: 600;
-          color: var(--text);
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .aging-table td:nth-child(2),
-        .aging-table td:nth-child(3) {
-          text-align: left;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .aging-table tr.supplier-header td {
-          font-weight: 700;
-          font-size: 14px;
-          color: var(--primary);
-          padding-top: 16px;
-          padding-bottom: 4px;
-          border-bottom: 1.5px solid var(--border);
-          background: var(--bg);
-          text-align: left !important;
-        }
-        .aging-table tr.supplier-header td:first-child {
-          font-size: 14px;
-        }
-        .aging-table tr.supplier-header td:not(:first-child) {
-          color: var(--text-muted);
-          font-weight: 400;
-          font-size: 11px;
-          text-align: right !important;
-        }
-
-        .aging-table tr.invoice-row td {
-          font-weight: 400;
-          font-size: 11.5px;
-          color: var(--text);
-        }
-        .aging-table tr.invoice-row td:first-child {
-          padding-left: 24px;
-          font-weight: 400;
-          color: var(--text-muted);
-          font-size: 11px;
-        }
-
-        .aging-table tr.subtotal-row td {
-          font-weight: 700 !important;
-          font-size: 12px;
-          background: var(--bg-soft);
-          border-top: 1.5px solid var(--border);
-          border-bottom: 2px solid var(--border);
-          padding-top: 6px;
-          padding-bottom: 6px;
-          text-align: right !important;
-        }
-        .aging-table tr.subtotal-row td:first-child {
-          font-weight: 700 !important;
-          color: var(--text);
-          padding-left: 8px;
-          text-align: left !important;
-          font-size: 12px;
-        }
-
-        .aging-table tr.grand-total td {
-          font-weight: 800;
-          background: var(--primary);
-          color: var(--primary-text);
-          border-top: 2px solid var(--border);
-          padding: 10px 8px;
-          font-size: 13px;
-          text-align: right !important;
-        }
-        .aging-table tr.grand-total td:first-child {
-          text-align: left !important;
-        }
-        .aging-table tr.grand-total td:not(:first-child) {
-          text-align: right !important;
-        }
-
-        .aging-summary {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-          gap: 10px;
-          margin-bottom: 20px;
-        }
-
-        .aging-summary-card {
-          background: var(--card);
-          border: 1px solid var(--border);
-          border-radius: 10px;
-          padding: 12px 14px;
-          text-align: center;
-        }
-
-        .aging-summary-label {
-          font-size: 9px;
-          font-weight: 700;
-          text-transform: uppercase;
-          color: var(--text-muted);
-          margin-bottom: 2px;
-        }
-
-        .aging-summary-value {
-          font-size: 18px;
-          font-weight: 800;
-        }
-
-        .aging-summary-value .currency-prefix {
-          font-size: 11px;
-          font-weight: 600;
-          color: var(--text-muted);
-          margin-right: 2px;
-        }
-
-        .filter-row {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          margin-bottom: 16px;
-          flex-wrap: wrap;
-        }
-
-        .date-input {
-          height: 38px;
-          border: 1.5px solid var(--border);
-          border-radius: 8px;
-          padding: 0 12px;
-          font-size: 13px;
-          background: var(--card);
-          color: var(--text);
-          font-family: inherit;
-        }
-
-        .multi-select {
-          position: relative;
-          flex: 1;
-          min-width: 200px;
-          max-width: 400px;
-        }
-
-        .multi-select-trigger {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          height: 38px;
-          border: 1.5px solid var(--border);
-          border-radius: 8px;
-          padding: 0 12px;
-          font-size: 13px;
-          background: var(--card);
-          color: var(--text);
-          cursor: pointer;
-        }
-
-        .multi-select-dropdown {
-          position: absolute;
-          top: 100%;
-          left: 0;
-          right: 0;
-          background: var(--card);
-          border: 1px solid var(--border);
-          border-radius: 8px;
-          max-height: 220px;
-          overflow-y: auto;
-          z-index: 100;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-
-        .multi-select-option {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 8px 12px;
-          cursor: pointer;
-          font-size: 13px;
-          color: var(--text);
-        }
-
-        .multi-select-option:hover {
-          background: var(--card-hover);
-        }
-
-        .multi-select-search {
-          position: sticky;
-          top: 0;
-          background: var(--card);
-          padding: 8px 12px;
-          border-bottom: 1px solid var(--border);
-        }
-
-        @media (max-width: 768px) {
-          .aging-table {
-            font-size: 10px;
-            min-width: 700px;
-          }
-          .aging-table th,
-          .aging-table td {
-            padding: 5px 4px;
-          }
-          .aging-table th:first-child {
-            min-width: 70px;
-          }
-          .aging-table th:nth-child(2) {
-            min-width: 50px;
-          }
-          .aging-table th:nth-child(3) {
-            min-width: 50px;
-          }
-          .aging-table th:nth-child(4),
-          .aging-table th:nth-child(5),
-          .aging-table th:nth-child(6),
-          .aging-table th:nth-child(7),
-          .aging-table th:nth-child(8),
-          .aging-table th:nth-child(9) {
-            min-width: 60px;
-          }
-          .aging-summary {
-            grid-template-columns: repeat(2, 1fr);
-          }
-          .aging-table tr.invoice-row td:first-child {
-            padding-left: 12px;
-            font-size: 9px;
-          }
-        }
-
-        .currency-note {
-          font-size: 10px;
-          color: var(--text-muted);
-          text-align: right;
-          padding: 4px 8px 0 0;
-          font-weight: 500;
-        }
-      `}</style>
-
-      <div className="aging-header">
-        <button className="aging-btn" onClick={() => router.push("/dashboard/reports")}><ArrowLeft size={16} /></button>
-        <div style={{ flex: 1 }}>
-          <h1 className="aging-title">📅 AP Aging Report</h1>
-          <p className="aging-subtitle">Accounts Payable aging analysis as of {asOfDate}</p>
-        </div>
-        <button className="aging-btn" onClick={handleDownloadPDF}><Download size={14} /> PDF</button>
-      </div>
-
-      <div className="filter-row">
-        <label style={{ fontSize: 13, color: "var(--text-muted)", marginRight: -4 }}>As of:</label>
-        <input type="date" className="date-input" value={asOfDate} onChange={e => setAsOfDate(e.target.value)} />
-
-        <div className="multi-select" ref={supplierDropdownRef}>
-          <div className="multi-select-trigger" onClick={() => setShowSupplierDropdown(!showSupplierDropdown)}>
-            <span>
-              {selectedSupplierIds.length === 0
-                ? "All Suppliers"
-                : `${selectedSupplierIds.length} selected`}
-            </span>
-            <X size={14} color="var(--text-muted)" onClick={(e) => { e.stopPropagation(); clearSupplierFilter(); }} />
+    <div className="min-h-screen bg-slate-50 px-6 py-6">
+      <div className="mx-auto max-w-7xl">
+        {/* Header */}
+        <div className="mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.back()}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <div>
+              <h1 className="text-lg font-semibold text-slate-900">AP Aging Report</h1>
+              <p className="text-sm text-slate-500">Accounts Payable aging analysis as of {asOfDate}</p>
+            </div>
           </div>
-          {showSupplierDropdown && (
-            <div className="multi-select-dropdown">
-              <div className="multi-select-search">
-                <Search size={14} color="var(--text-muted)" style={{ position: "absolute", left: 12, top: 10 }} />
-                <input
-                  style={{ width: "100%", height: 30, border: "1px solid var(--border)", borderRadius: 6, paddingLeft: 32, fontSize: 13, background: "var(--bg)", color: "var(--text)" }}
-                  placeholder="Search suppliers…"
-                  value={supplierSearch}
-                  onChange={e => setSupplierSearch(e.target.value)}
-                  onClick={e => e.stopPropagation()}
+          <button
+            onClick={exportPDF}
+            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+          >
+            <Download className="h-4 w-4" />
+            PDF
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="mb-6 flex flex-wrap items-center gap-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">As of</label>
+            <input
+              type="date"
+              value={asOfDate}
+              onChange={(e) => setAsOfDate(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+            />
+          </div>
+
+          <div className="relative" ref={supplierDropdownRef}>
+            <label className="mb-1 block text-xs font-medium text-slate-500">Supplier</label>
+            <button
+              onClick={() => setShowSupplierDropdown((v) => !v)}
+              className="flex min-w-[220px] items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+            >
+              <span className="truncate">
+                {selectedSupplierIds.length === 0
+                  ? "All suppliers"
+                  : selectedSupplierIds.length === 1
+                  ? suppliers.find((s) => s.id === selectedSupplierIds[0])?.name
+                  : `${selectedSupplierIds.length} suppliers selected`}
+              </span>
+              {selectedSupplierIds.length > 0 ? (
+                <X
+                  className="h-4 w-4 text-slate-400 hover:text-slate-600"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    clearSupplierFilter()
+                  }}
                 />
-              </div>
-              {filteredSuppliers.map(s => (
-                <div key={s.id} className="multi-select-option" onClick={() => toggleSupplier(s.id)}>
-                  <div style={{ width: 16, height: 16, border: "1px solid var(--border)", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {selectedSupplierIds.includes(s.id) && <Check size={12} />}
-                  </div>
-                  <span>{s.name}</span>
-                </div>
-              ))}
-              {filteredSuppliers.length === 0 && (
-                <div className="multi-select-option" style={{ color: "var(--text-muted)" }}>No suppliers found</div>
+              ) : (
+                <ChevronRight className="h-4 w-4 rotate-90 text-slate-400" />
               )}
+            </button>
+
+            {showSupplierDropdown && (
+              <div className="absolute z-10 mt-1 w-72 rounded-lg border border-slate-200 bg-white shadow-lg">
+                <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-2">
+                  <Search className="h-4 w-4 text-slate-400" />
+                  <input
+                    autoFocus
+                    value={supplierSearch}
+                    onChange={(e) => setSupplierSearch(e.target.value)}
+                    placeholder="Search suppliers"
+                    className="w-full text-sm outline-none"
+                  />
+                </div>
+                <div className="max-h-64 overflow-y-auto py-1">
+                  <button
+                    onClick={clearSupplierFilter}
+                    className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
+                  >
+                    <span className={selectedSupplierIds.length === 0 ? "font-medium text-slate-900" : "text-slate-600"}>
+                      All suppliers
+                    </span>
+                    {selectedSupplierIds.length === 0 && <Check className="h-4 w-4 text-blue-600" />}
+                  </button>
+                  {filteredSupplierOptions.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => toggleSupplierSelection(s.id)}
+                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
+                    >
+                      <span className={selectedSupplierIds.includes(s.id) ? "font-medium text-slate-900" : "text-slate-600"}>
+                        {s.name}
+                      </span>
+                      {selectedSupplierIds.includes(s.id) && <Check className="h-4 w-4 text-blue-600" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Summary cards */}
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <SummaryCard label="Current" value={fmt(totals.current)} />
+          <SummaryCard label="1-30 days" value={fmt(totals.days1to30)} />
+          <SummaryCard label="31-60 days" value={fmt(totals.days31to60)} />
+          <SummaryCard label="61-90 days" value={fmt(totals.days61to90)} warn />
+          <SummaryCard label=">90 days" value={fmt(totals.over90)} danger />
+          <SummaryCard label="Grand Total" value={fmt(totals.total)} emphasize />
+        </div>
+
+        {/* Table */}
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <div className="grid grid-cols-[2fr_repeat(6,1fr)] items-center border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-500">
+            <div className="flex items-center gap-2">
+              <span>Supplier</span>
+              <button
+                onClick={allExpanded ? collapseAll : expandAll}
+                disabled={groups.length === 0}
+                className="ml-1 rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+              >
+                {allExpanded ? "Collapse all" : "Expand all"}
+              </button>
+            </div>
+            <div className="text-right">Current</div>
+            <div className="text-right">1-30</div>
+            <div className="text-right">31-60</div>
+            <div className="text-right">61-90</div>
+            <div className="text-right">&gt;90</div>
+            <div className="text-right">Total due</div>
+          </div>
+
+          {loading && <div className="px-4 py-8 text-center text-sm text-slate-400">Loading…</div>}
+
+          {!loading && groups.length === 0 && (
+            <div className="px-4 py-8 text-center text-sm text-slate-400">No outstanding payables found.</div>
+          )}
+
+          {!loading &&
+            groups.map((g) => {
+              const isOpen = expanded.has(g.supplierId)
+              const isRisky = g.over90 > 0 || g.days61to90 > 0
+              return (
+                <div key={g.supplierId} className="border-b border-slate-100 last:border-b-0">
+                  <button
+                    onClick={() => toggleExpand(g.supplierId)}
+                    className="grid w-full grid-cols-[2fr_repeat(6,1fr)] items-center px-4 py-3 text-left text-sm hover:bg-slate-50"
+                  >
+                    <div className="flex items-center gap-2 font-medium text-slate-900">
+                      <ChevronRight
+                        className={`h-4 w-4 text-slate-400 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                      />
+                      {g.supplierName}
+                      {isRisky && (
+                        <span className="flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600">
+                          <AlertTriangle className="h-3 w-3" />
+                          At risk
+                        </span>
+                      )}
+                      <span className="text-xs font-normal text-slate-400">
+                        ({g.invoices.length} {g.invoices.length === 1 ? "invoice" : "invoices"})
+                      </span>
+                    </div>
+                    <Cell value={isOpen ? 0 : g.current} />
+                    <Cell value={isOpen ? 0 : g.days1to30} />
+                    <Cell value={isOpen ? 0 : g.days31to60} />
+                    <Cell value={isOpen ? 0 : g.days61to90} danger />
+                    <Cell value={isOpen ? 0 : g.over90} danger />
+                    <div className="text-right font-semibold text-slate-900">{isOpen ? "–" : fmt(g.total)}</div>
+                  </button>
+
+                  {isOpen && (
+                    <div className="bg-slate-50/60">
+                      {g.invoices.map((inv) => (
+                        <div
+                          key={inv.invoiceNo}
+                          className="grid grid-cols-[2fr_repeat(6,1fr)] items-center px-4 py-2 pl-10 text-sm text-slate-600"
+                        >
+                          <div>
+                            {inv.invoiceNo} <span className="text-slate-400">· {inv.invoiceDate}</span>
+                          </div>
+                          <Cell value={inv.current} muted />
+                          <Cell value={inv.days1to30} muted />
+                          <Cell value={inv.days31to60} muted />
+                          <Cell value={inv.days61to90} muted danger />
+                          <Cell value={inv.over90} muted danger />
+                          <div className="text-right">{fmt(inv.total)}</div>
+                        </div>
+                      ))}
+                      <div className="grid grid-cols-[2fr_repeat(6,1fr)] items-center border-t border-slate-200 px-4 py-2 pl-10 text-sm font-semibold text-slate-900">
+                        <div>Total {g.supplierName}</div>
+                        <Cell value={g.current} />
+                        <Cell value={g.days1to30} />
+                        <Cell value={g.days31to60} />
+                        <Cell value={g.days61to90} danger />
+                        <Cell value={g.over90} danger />
+                        <div className="text-right">{fmt(g.total)}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+
+          {!loading && groups.length > 0 && (
+            <div className="grid grid-cols-[2fr_repeat(6,1fr)] border-t border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
+              <div>Grand total</div>
+              <div className="text-right">{fmt(totals.current)}</div>
+              <div className="text-right">{fmt(totals.days1to30)}</div>
+              <div className="text-right">{fmt(totals.days31to60)}</div>
+              <div className="text-right">{fmt(totals.days61to90)}</div>
+              <div className="text-right">{fmt(totals.over90)}</div>
+              <div className="text-right">{fmt(totals.total)}</div>
             </div>
           )}
         </div>
-      </div>
-
-      <div className="aging-summary">
-        {[
-          { label: "Current", value: totals.current, color: "#10B981" },
-          { label: "1-30 days", value: totals.days1to30, color: "#F59E0B" },
-          { label: "31-60 days", value: totals.days31to60, color: "#F97316" },
-          { label: "61-90 days", value: totals.days61to90, color: "#EF4444" },
-          { label: ">90 days", value: totals.over90, color: "#B91C1C" },
-          { label: "Grand Total", value: totals.total, color: "#1E3A8A" },
-        ].map(s => (
-          <div key={s.label} className="aging-summary-card">
-            <div className="aging-summary-label">{s.label}</div>
-            <div className="aging-summary-value" style={{ color: s.color }}>
-              <span className="currency-prefix">PKR</span> {format(s.value)}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="currency-note">Amounts in PKR</div>
-
-      <div className="aging-table-wrapper">
-        <table className="aging-table">
-          <thead>
-            <tr>
-              <th>Supplier</th>
-              <th>Invoice #</th>
-              <th>Inv Date</th>
-              <th>Current</th>
-              <th>1-30</th>
-              <th>31-60</th>
-              <th>61-90</th>
-              <th>&gt;90</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.length === 0 ? (
-              <tr><td colSpan={9} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>No outstanding payables</td></tr>
-            ) : (
-              data.map((row, i) => {
-                const isSubtotal = row.invoiceNo === "Subtotal"
-                const isSupplierHeader = !isSubtotal && row.supplierName && row.supplierName.length > 0
-
-                return (
-                  <tr
-                    key={i}
-                    className={
-                      isSubtotal ? "subtotal-row" :
-                      isSupplierHeader ? "supplier-header" :
-                      "invoice-row"
-                    }
-                  >
-                    <td title={row.supplierName || (isSubtotal ? "Subtotal" : "")}>
-                      {isSupplierHeader ? row.supplierName : (isSubtotal ? "Subtotal" : "")}
-                    </td>
-                    <td title={isSubtotal ? "" : row.invoiceNo}>
-                      {isSubtotal ? "" : row.invoiceNo}
-                    </td>
-                    <td title={isSubtotal ? "" : row.invoiceDate}>
-                      {isSubtotal ? "" : row.invoiceDate}
-                    </td>
-                    <td title={format(row.current)}>{format(row.current)}</td>
-                    <td title={format(row.days1to30)}>{format(row.days1to30)}</td>
-                    <td title={format(row.days31to60)}>{format(row.days31to60)}</td>
-                    <td title={format(row.days61to90)}>{format(row.days61to90)}</td>
-                    <td title={format(row.over90)}>{format(row.over90)}</td>
-                    <td title={format(row.total)}>{format(row.total)}</td>
-                  </tr>
-                )
-              })
-            )}
-          </tbody>
-          <tfoot>
-            <tr className="grand-total">
-              <td colSpan={3}>Grand Total</td>
-              <td title={format(totals.current)}>{format(totals.current)}</td>
-              <td title={format(totals.days1to30)}>{format(totals.days1to30)}</td>
-              <td title={format(totals.days31to60)}>{format(totals.days31to60)}</td>
-              <td title={format(totals.days61to90)}>{format(totals.days61to90)}</td>
-              <td title={format(totals.over90)}>{format(totals.over90)}</td>
-              <td title={format(totals.total)}>{format(totals.total)}</td>
-            </tr>
-          </tfoot>
-        </table>
       </div>
     </div>
   )
