@@ -287,7 +287,7 @@ export default function APAgingPage() {
     s.name.toLowerCase().includes(supplierSearch.toLowerCase())
   )
 
-  // PDF export (unchanged)
+  // PDF export (reformatted for build)
   const exportPDF = async () => {
     if (groups.length === 0) return alert("No data to export")
     const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" })
@@ -327,7 +327,53 @@ export default function APAgingPage() {
       })
       body.push([{content:"Subtotal",styles:{fontStyle:"bold",fillColor:[240,242,245]}},"","",g.current>0?fmt(g.current):"",g.days1to30>0?fmt(g.days1to30):"",g.days31to60>0?fmt(g.days31to60):"",g.days61to90>0?fmt(g.days61to90):"",g.over90>0?fmt(g.over90):"",g.total>0?fmt(g.total):""])
     })
-    autoTable(doc,{startY:Y,margin:{left:ML,right:MR},tableWidth:'auto',head:[headers],body,styles:{fontSize:7.5,cellPadding:{top:2,bottom:2,left:2,right:2},textColor:[17,24,39],lineColor:[229,231,235],lineWidth:0.2,overflow:'linebreak'},headStyles:{fillColor:[7,8,91],textColor:[255,255,255],fontStyle:"bold",fontSize:8},alternateRowStyles:{fillColor:[248,249,252]},columnStyles:{0:{halign:'left'},1:{halign:'left'},2:{halign:'left'},3:{halign:'right'},4:{halign:'right'},5:{halign:'right'},6:{halign:'right'},7:{halign:'right'},8:{halign:'right'}},didParseCell:(hookData)=>{if(hookData.section==='head'&&hookData.column.index>=3){hookData.cell.styles.halign='center'}if(hookData.section==='body'){const row=hookData.row.raw;if(row&&Array.isArray(row)&&row[0]==="Subtotal"){hookData.cell.styles.fillColor=[240,242,245];hookData.cell.styles.fontStyle="bold"}}})
+
+    autoTable(doc, {
+      startY: Y,
+      margin: { left: ML, right: MR },
+      tableWidth: 'auto',
+      head: [headers],
+      body,
+      styles: {
+        fontSize: 7.5,
+        cellPadding: { top: 2, bottom: 2, left: 2, right: 2 },
+        textColor: [17, 24, 39],
+        lineColor: [229, 231, 235],
+        lineWidth: 0.2,
+        overflow: 'linebreak',
+      },
+      headStyles: {
+        fillColor: [7, 8, 91],
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        fontSize: 8,
+      },
+      alternateRowStyles: { fillColor: [248, 249, 252] },
+      columnStyles: {
+        0: { halign: 'left' },
+        1: { halign: 'left' },
+        2: { halign: 'left' },
+        3: { halign: 'right' },
+        4: { halign: 'right' },
+        5: { halign: 'right' },
+        6: { halign: 'right' },
+        7: { halign: 'right' },
+        8: { halign: 'right' },
+      },
+      didParseCell: (hookData: any) => {
+        if (hookData.section === 'head' && hookData.column.index >= 3) {
+          hookData.cell.styles.halign = 'center'
+        }
+        if (hookData.section === 'body') {
+          const row = hookData.row.raw
+          if (row && Array.isArray(row) && row[0] === "Subtotal") {
+            hookData.cell.styles.fillColor = [240, 242, 245]
+            hookData.cell.styles.fontStyle = "bold"
+          }
+        }
+      },
+    })
+
     const PH = 210
     doc.setDrawColor(7,8,91).setLineWidth(0.4).line(ML,PH-14,PW-MR,PH-14)
     doc.setFont("helvetica","normal").setFontSize(7.5).setTextColor(107,114,128)
