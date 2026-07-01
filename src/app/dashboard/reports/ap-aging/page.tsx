@@ -287,7 +287,7 @@ export default function APAgingPage() {
     s.name.toLowerCase().includes(supplierSearch.toLowerCase())
   )
 
-  // PDF export (reformatted for build)
+  // PDF export
   const exportPDF = async () => {
     if (groups.length === 0) return alert("No data to export")
     const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" })
@@ -468,7 +468,11 @@ export default function APAgingPage() {
         <input type="date" className="ap-input" value={asOfDate} onChange={e => setAsOfDate(e.target.value)} />
 
         <div style={{ position: "relative" }} ref={supplierDropdownRef}>
-          <button className="ap-btn" onClick={() => setShowSupplierDropdown(!showSupplierDropdown)}>
+          <button
+            className="ap-btn"
+            onClick={() => setShowSupplierDropdown(!showSupplierDropdown)}
+            style={{ minWidth: 280 }}
+          >
             <span>{selectedSupplierIds.length === 0 ? "All Suppliers" : `${selectedSupplierIds.length} selected`}</span>
             <X size={14} color="var(--text-muted)" onClick={(e) => { e.stopPropagation(); clearSupplierFilter(); }} />
           </button>
@@ -479,14 +483,26 @@ export default function APAgingPage() {
               maxHeight: 220, overflowY: "auto", boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
             }}>
               <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8 }}>
-                <Search size={14} color="var(--text-muted)" />
+                <Search size={14} color="var(--text-muted)" style={{ flexShrink: 0 }} />
                 <input
-                  style={{ flex: 1, height: 30, border: "1px solid var(--border)", borderRadius: 6, padding: "0 8px", fontSize: 13, background: "var(--bg)", color: "var(--text)" }}
+                  style={{ flex: 1, height: 32, border: "1px solid var(--border)", borderRadius: 6, padding: "0 8px", fontSize: 13, background: "var(--bg)", color: "var(--text)" }}
                   placeholder="Search suppliers…"
                   value={supplierSearch}
                   onChange={e => setSupplierSearch(e.target.value)}
                   autoFocus
                 />
+                {supplierSearch && (
+                  <button
+                    onClick={() => setSupplierSearch("")}
+                    style={{
+                      background: "none", border: "none", cursor: "pointer",
+                      color: "var(--text-muted)", display: "flex", alignItems: "center",
+                      justifyContent: "center", flexShrink: 0, padding: 2,
+                    }}
+                  >
+                    <X size={16} />
+                  </button>
+                )}
               </div>
               <button
                 onClick={clearSupplierFilter}

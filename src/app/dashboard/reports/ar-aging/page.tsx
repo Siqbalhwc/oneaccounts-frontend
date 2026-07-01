@@ -426,7 +426,7 @@ export default function ARAgingPage() {
           <button
   className="ar-btn"
   onClick={() => setShowCustomerDropdown(!showCustomerDropdown)}
-  style={{ minWidth: 380 }}
+  style={{ minWidth: 280 }}
 >
             <span>{selectedCustomerIds.length === 0 ? "All Customers" : `${selectedCustomerIds.length} selected`}</span>
             <X size={14} color="var(--text-muted)" onClick={(e) => { e.stopPropagation(); clearCustomerFilter(); }} />
