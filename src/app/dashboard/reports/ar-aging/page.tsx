@@ -32,6 +32,18 @@ interface CustomerGroup {
   invoices: InvoiceRow[]
 }
 
+interface ARInvoice {
+  invoice_id: number
+  invoice_no: string
+  date: string
+  due_date: string
+  total: number
+  paid: number
+  party_id: number
+  customer_name: string
+  customer_id: number
+}
+
 const fmt = (n: number) => (n ? n.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "–")
 
 // ── Components ──
@@ -124,7 +136,7 @@ export default function ARAgingPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
-  // Fetch customers list
+  // Fetch customers list (unchanged)
   useEffect(() => {
     if (!companyId) return
     supabase
@@ -136,7 +148,7 @@ export default function ARAgingPage() {
       .then(({ data }) => data && setCustomers(data))
   }, [companyId])
 
-  // Fetch & group data
+  // ── Fetch & group data using get_ar_aging (mirror of AP) ──
   useEffect(() => {
     if (!companyId) {
       setLoading(false)
@@ -144,93 +156,92 @@ export default function ARAgingPage() {
     }
     setLoading(true)
 
-    let query = supabase
-      .from("invoices")
-      .select("id, invoice_no, date, due_date, total, paid, party_id, customers!inner(name)")
-      .eq("company_id", companyId)
-      .eq("type", "sale")
-      .neq("status", "Paid")
-      .order("due_date")
-
-    if (selectedCustomerIds.length > 0) {
-      query = query.in("party_id", selectedCustomerIds)
-    }
-
-    query.then(({ data: invoices, error }) => {
-      if (error) {
-        console.error("AR Aging query error:", error)
-        setGroups([])
-        setLoading(false)
-        return
-      }
-
-      if (!invoices || invoices.length === 0) {
-        setGroups([])
-        setLoading(false)
-        return
-      }
-
-      const refDate = new Date(asOfDate)
-      const byCustomer = new Map<number, CustomerGroup>()
-
-      invoices.forEach((inv: any) => {
-        const bal = (inv.total || 0) - (inv.paid || 0)
-        if (bal <= 0) return
-
-        const due = new Date(inv.due_date)
-        const days = Math.floor((refDate.getTime() - due.getTime()) / 86400000)
-
-        let current = 0, d1to30 = 0, d31to60 = 0, d61to90 = 0, over90 = 0
-        if (days <= 0) current = bal
-        else if (days <= 30) d1to30 = bal
-        else if (days <= 60) d31to60 = bal
-        else if (days <= 90) d61to90 = bal
-        else over90 = bal
-
-        const custId = inv.party_id
-        const custName = inv.customers?.name || "Unknown"
-
-        if (!byCustomer.has(custId)) {
-          byCustomer.set(custId, {
-            customerId: custId,
-            customerName: custName,
-            current: 0,
-            days1to30: 0,
-            days31to60: 0,
-            days61to90: 0,
-            over90: 0,
-            total: 0,
-            invoices: [],
-          })
+    supabase
+      .rpc("get_ar_aging", {
+        p_company_id: companyId,
+        p_as_of_date: asOfDate,
+      })
+      .then(({ data: invoices, error }) => {
+        if (error) {
+          console.error("AR Aging RPC error:", error)
+          setGroups([])
+          setLoading(false)
+          return
         }
 
-        const group = byCustomer.get(custId)!
-        group.current += current
-        group.days1to30 += d1to30
-        group.days31to60 += d31to60
-        group.days61to90 += d61to90
-        group.over90 += over90
-        group.total += bal
-        group.invoices.push({
-          invoiceNo: inv.invoice_no,
-          invoiceDate: inv.date,
-          dueDate: inv.due_date,
-          current,
-          days1to30: d1to30,
-          days31to60: d31to60,
-          days61to90: d61to90,
-          over90,
-          total: bal,
+        if (!invoices || invoices.length === 0) {
+          setGroups([])
+          setLoading(false)
+          return
+        }
+
+        let filteredInvoices: ARInvoice[] = invoices
+        if (selectedCustomerIds.length > 0) {
+          filteredInvoices = invoices.filter((inv: ARInvoice) =>
+            selectedCustomerIds.includes(inv.customer_id)
+          )
+        }
+
+        const refDate = new Date(asOfDate)
+        const byCustomer = new Map<number, CustomerGroup>()
+
+        filteredInvoices.forEach((inv: ARInvoice) => {
+          const bal = (inv.total || 0) - (inv.paid || 0)
+          if (bal <= 0) return
+
+          const due = new Date(inv.due_date)
+          const days = Math.floor((refDate.getTime() - due.getTime()) / 86400000)
+
+          let current = 0, d1to30 = 0, d31to60 = 0, d61to90 = 0, over90 = 0
+          if (days <= 0) current = bal
+          else if (days <= 30) d1to30 = bal
+          else if (days <= 60) d31to60 = bal
+          else if (days <= 90) d61to90 = bal
+          else over90 = bal
+
+          const custId = inv.customer_id
+          const custName = inv.customer_name || "Unknown"
+
+          if (!byCustomer.has(custId)) {
+            byCustomer.set(custId, {
+              customerId: custId,
+              customerName: custName,
+              current: 0,
+              days1to30: 0,
+              days31to60: 0,
+              days61to90: 0,
+              over90: 0,
+              total: 0,
+              invoices: [],
+            })
+          }
+
+          const group = byCustomer.get(custId)!
+          group.current += current
+          group.days1to30 += d1to30
+          group.days31to60 += d31to60
+          group.days61to90 += d61to90
+          group.over90 += over90
+          group.total += bal
+          group.invoices.push({
+            invoiceNo: inv.invoice_no,
+            invoiceDate: inv.date,
+            dueDate: inv.due_date,
+            current,
+            days1to30: d1to30,
+            days31to60: d31to60,
+            days61to90: d61to90,
+            over90,
+            total: bal,
+          })
         })
+
+        const groupList = Array.from(byCustomer.values())
+        groupList.sort((a, b) => a.customerId - b.customerId)
+
+        setGroups(groupList)
+        setLoading(false)
       })
-
-      // Sort by customerId ascending (as original)
-      const groupList = Array.from(byCustomer.values())
-      groupList.sort((a, b) => a.customerId - b.customerId)
-
-      setGroups(groupList)
-      setLoading(false)
-    })
   }, [companyId, asOfDate, selectedCustomerIds])
 
   // Totals
@@ -271,7 +282,7 @@ export default function ARAgingPage() {
     c.name.toLowerCase().includes(customerSearch.toLowerCase())
   )
 
-  // PDF export (unchanged formatting, adapted to new group structure)
+  // PDF export (unchanged)
   const exportPDF = () => {
     const doc = new jsPDF()
     doc.setFontSize(14)
@@ -325,7 +336,7 @@ export default function ARAgingPage() {
     doc.save(`ar-aging-${asOfDate}.pdf`)
   }
 
-  // ── Render (CSS‑variables only, no Tailwind) ──
+  // ── Render (CSS variables only) ──
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
