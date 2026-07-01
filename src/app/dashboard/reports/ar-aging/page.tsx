@@ -34,6 +34,68 @@ interface CustomerGroup {
 
 const fmt = (n: number) => (n ? n.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "–")
 
+// ── Components ──
+function SummaryCard({
+  label,
+  value,
+  warn,
+  danger,
+  emphasize,
+}: {
+  label: string
+  value: string
+  warn?: boolean
+  danger?: boolean
+  emphasize?: boolean
+}) {
+  return (
+    <div
+      style={{
+        borderRadius: 10,
+        padding: "12px 16px",
+        background: danger
+          ? "#FEF2F2"
+          : warn
+          ? "#FFFBEB"
+          : emphasize
+          ? "var(--card)"
+          : "var(--card-hover)",
+        border: emphasize ? "1px solid var(--border)" : "1px solid transparent",
+        boxShadow: "var(--shadow-sm)",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          fontWeight: 700,
+          textTransform: "uppercase",
+          color: danger ? "#B91C1C" : warn ? "#92400E" : "var(--text-muted)",
+          marginBottom: 2,
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{value}</div>
+    </div>
+  )
+}
+
+function Cell({ value, muted, danger }: { value: number; muted?: boolean; danger?: boolean }) {
+  const color = !value
+    ? "var(--text-muted)"
+    : danger
+    ? "#B91C1C"
+    : muted
+    ? "var(--text-soft)"
+    : "var(--text)"
+  return (
+    <div style={{ textAlign: "right", color, fontWeight: danger ? 600 : undefined }}>
+      {fmt(value)}
+    </div>
+  )
+}
+
+// ── Main Page ──
 export default function ARAgingPage() {
   const router = useRouter()
   const { companyId } = useCompany()
@@ -51,6 +113,7 @@ export default function ARAgingPage() {
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
   const customerDropdownRef = useRef<HTMLDivElement>(null)
 
+  // Close dropdown on outside click
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (customerDropdownRef.current && !customerDropdownRef.current.contains(e.target as Node)) {
@@ -61,6 +124,7 @@ export default function ARAgingPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
+  // Fetch customers list
   useEffect(() => {
     if (!companyId) return
     supabase
@@ -72,6 +136,7 @@ export default function ARAgingPage() {
       .then(({ data }) => data && setCustomers(data))
   }, [companyId])
 
+  // Fetch & group data
   useEffect(() => {
     if (!companyId) {
       setLoading(false)
@@ -159,7 +224,7 @@ export default function ARAgingPage() {
         })
       })
 
-      // Report order follows customer number (customerId) ascending, not aging risk.
+      // Sort by customerId ascending (as original)
       const groupList = Array.from(byCustomer.values())
       groupList.sort((a, b) => a.customerId - b.customerId)
 
@@ -168,6 +233,7 @@ export default function ARAgingPage() {
     })
   }, [companyId, asOfDate, selectedCustomerIds])
 
+  // Totals
   const totals = useMemo(() => {
     return groups.reduce(
       (acc, g) => {
@@ -183,6 +249,7 @@ export default function ARAgingPage() {
     )
   }, [groups])
 
+  // Expand / collapse
   function toggleExpand(customerId: number) {
     setExpanded((prev) => {
       const next = new Set(prev)
@@ -191,30 +258,21 @@ export default function ARAgingPage() {
       return next
     })
   }
-
-  function expandAll() {
-    setExpanded(new Set(groups.map((g) => g.customerId)))
-  }
-
-  function collapseAll() {
-    setExpanded(new Set())
-  }
-
+  function expandAll() { setExpanded(new Set(groups.map((g) => g.customerId))) }
+  function collapseAll() { setExpanded(new Set()) }
   const allExpanded = groups.length > 0 && expanded.size === groups.length
 
+  // Customer filter
   function toggleCustomerSelection(id: number) {
     setSelectedCustomerIds((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]))
   }
-
-  function clearCustomerFilter() {
-    setSelectedCustomerIds([])
-  }
-
+  function clearCustomerFilter() { setSelectedCustomerIds([]) }
   const filteredCustomerOptions = customers.filter((c) =>
     c.name.toLowerCase().includes(customerSearch.toLowerCase())
   )
 
-  function exportPDF() {
+  // PDF export (unchanged formatting, adapted to new group structure)
+  const exportPDF = () => {
     const doc = new jsPDF()
     doc.setFontSize(14)
     doc.text("AR Aging Report", 14, 16)
@@ -267,264 +325,257 @@ export default function ARAgingPage() {
     doc.save(`ar-aging-${asOfDate}.pdf`)
   }
 
+  // ── Render (CSS‑variables only, no Tailwind) ──
   return (
-    <div className="min-h-screen bg-slate-50 px-6 py-6">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => router.back()}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
-            <div>
-              <h1 className="text-lg font-semibold text-slate-900">AR Aging Report</h1>
-              <p className="text-sm text-slate-500">Accounts receivable aging analysis as of {asOfDate}</p>
-            </div>
-          </div>
-          <button
-            onClick={exportPDF}
-            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-          >
-            <Download className="h-4 w-4" />
-            PDF
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+      <style>{`
+        .ar-btn {
+          display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px;
+          border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;
+          border: 1.5px solid var(--border); background: transparent; color: var(--text-muted);
+          font-family: inherit; transition: background 0.15s;
+        }
+        .ar-btn:hover { background: var(--card-hover); }
+        .ar-input, .ar-select {
+          height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px;
+          font-size: 13px; background: var(--card); color: var(--text); font-family: inherit; outline: none;
+        }
+        .ar-card {
+          background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+          box-shadow: var(--shadow-sm);
+        }
+        .ar-header-row {
+          display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr;
+          align-items: center; padding: 10px 16px; background: var(--card-hover);
+          border-bottom: 2px solid var(--border); font-size: 10px; font-weight: 700;
+          text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em;
+        }
+        .ar-group-row {
+          display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr;
+          align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border);
+          cursor: pointer; transition: background 0.15s; font-size: 13px; color: var(--text);
+        }
+        .ar-group-row:hover { background: var(--card-hover); }
+        .ar-invoice-row {
+          display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr;
+          align-items: center; padding: 8px 16px 8px 40px; border-bottom: 1px solid var(--border);
+          font-size: 12px; color: var(--text-soft); background: var(--bg-soft);
+        }
+        .ar-subtotal-row {
+          display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr;
+          align-items: center; padding: 10px 16px; border-top: 2px solid var(--border);
+          font-weight: 700; font-size: 13px; background: var(--card-hover);
+        }
+        .ar-grand-row {
+          display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr;
+          align-items: center; padding: 12px 16px; background: var(--primary);
+          color: var(--primary-text); font-weight: 800; border-top: 2px solid var(--border);
+          font-size: 14px;
+        }
+        .summary-grid {
+          display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+          gap: 10px; margin-bottom: 20px;
+        }
+        .summary-card {
+          background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+          padding: 12px 14px; text-align: center; box-shadow: var(--shadow-sm);
+        }
+        .summary-label {
+          font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);
+          margin-bottom: 2px;
+        }
+        .summary-value { font-size: 18px; font-weight: 800; color: var(--text); }
+
+        @media (max-width: 768px) {
+          .ar-header-row, .ar-group-row, .ar-invoice-row, .ar-subtotal-row, .ar-grand-row {
+            grid-template-columns: 1.5fr 1fr 1fr 1fr 1fr 1fr 1fr;
+            font-size: 10px;
+          }
+          .ar-invoice-row { padding-left: 24px; }
+          .summary-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+      `}</style>
+
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <button className="ar-btn" onClick={() => router.back()}><ArrowLeft size={16} /></button>
+        <div style={{ flex: 1 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📅 AR Aging Report</h1>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Accounts Receivable aging analysis as of {asOfDate}</p>
+        </div>
+        <button className="ar-btn" onClick={exportPDF}><Download size={14} /> PDF</button>
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+        <label style={{ fontSize: 13, color: "var(--text-muted)" }}>As of:</label>
+        <input type="date" className="ar-input" value={asOfDate} onChange={e => setAsOfDate(e.target.value)} />
+
+        <div style={{ position: "relative" }} ref={customerDropdownRef}>
+          <button className="ar-btn" onClick={() => setShowCustomerDropdown(!showCustomerDropdown)}>
+            <span>{selectedCustomerIds.length === 0 ? "All Customers" : `${selectedCustomerIds.length} selected`}</span>
+            <X size={14} color="var(--text-muted)" onClick={(e) => { e.stopPropagation(); clearCustomerFilter(); }} />
           </button>
-        </div>
-
-        <div className="mb-6 flex flex-wrap items-center gap-3">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">As of</label>
-            <input
-              type="date"
-              value={asOfDate}
-              onChange={(e) => setAsOfDate(e.target.value)}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
-            />
-          </div>
-
-          <div className="relative" ref={customerDropdownRef}>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Customer</label>
-            <button
-              onClick={() => setShowCustomerDropdown((v) => !v)}
-              className="flex min-w-[220px] items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
-            >
-              <span className="truncate">
-                {selectedCustomerIds.length === 0
-                  ? "All customers"
-                  : selectedCustomerIds.length === 1
-                  ? customers.find((c) => c.id === selectedCustomerIds[0])?.name
-                  : `${selectedCustomerIds.length} customers selected`}
-              </span>
-              {selectedCustomerIds.length > 0 ? (
-                <X
-                  className="h-4 w-4 text-slate-400 hover:text-slate-600"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    clearCustomerFilter()
-                  }}
+          {showCustomerDropdown && (
+            <div style={{
+              position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100,
+              background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8,
+              maxHeight: 220, overflowY: "auto", boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            }}>
+              <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8 }}>
+                <Search size={14} color="var(--text-muted)" />
+                <input
+                  style={{ flex: 1, height: 30, border: "1px solid var(--border)", borderRadius: 6, padding: "0 8px", fontSize: 13, background: "var(--bg)", color: "var(--text)" }}
+                  placeholder="Search customers…"
+                  value={customerSearch}
+                  onChange={e => setCustomerSearch(e.target.value)}
+                  autoFocus
                 />
-              ) : (
-                <ChevronRight className="h-4 w-4 rotate-90 text-slate-400" />
-              )}
-            </button>
-
-            {showCustomerDropdown && (
-              <div className="absolute z-10 mt-1 w-72 rounded-lg border border-slate-200 bg-white shadow-lg">
-                <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-2">
-                  <Search className="h-4 w-4 text-slate-400" />
-                  <input
-                    autoFocus
-                    value={customerSearch}
-                    onChange={(e) => setCustomerSearch(e.target.value)}
-                    placeholder="Search customers"
-                    className="w-full text-sm outline-none"
-                  />
-                </div>
-                <div className="max-h-64 overflow-y-auto py-1">
-                  <button
-                    onClick={clearCustomerFilter}
-                    className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
-                  >
-                    <span className={selectedCustomerIds.length === 0 ? "font-medium text-slate-900" : "text-slate-600"}>
-                      All customers
-                    </span>
-                    {selectedCustomerIds.length === 0 && <Check className="h-4 w-4 text-blue-600" />}
-                  </button>
-                  {filteredCustomerOptions.map((c) => (
-                    <button
-                      key={c.id}
-                      onClick={() => toggleCustomerSelection(c.id)}
-                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
-                    >
-                      <span className={selectedCustomerIds.includes(c.id) ? "font-medium text-slate-900" : "text-slate-600"}>
-                        {c.name}
-                      </span>
-                      {selectedCustomerIds.includes(c.id) && <Check className="h-4 w-4 text-blue-600" />}
-                    </button>
-                  ))}
-                </div>
               </div>
-            )}
-          </div>
-        </div>
-
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <SummaryCard label="Current" value={fmt(totals.current)} />
-          <SummaryCard label="1-30 days" value={fmt(totals.days1to30)} />
-          <SummaryCard label="31-60 days" value={fmt(totals.days31to60)} />
-          <SummaryCard label="61-90 days" value={fmt(totals.days61to90)} warn />
-          <SummaryCard label="90+ days" value={fmt(totals.over90)} danger />
-          <SummaryCard label="Grand total" value={fmt(totals.total)} emphasize />
-        </div>
-
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="grid grid-cols-[2fr_repeat(6,1fr)] items-center border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-500">
-            <div className="flex items-center gap-2">
-              <span>Customer</span>
               <button
-                onClick={allExpanded ? collapseAll : expandAll}
-                disabled={groups.length === 0}
-                className="ml-1 rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+                onClick={clearCustomerFilter}
+                style={{ display: "flex", width: "100%", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", cursor: "pointer", border: "none", background: "transparent", color: selectedCustomerIds.length === 0 ? "var(--text)" : "var(--text-muted)", fontSize: 13 }}
               >
-                {allExpanded ? "Collapse all" : "Expand all"}
+                <span style={{ fontWeight: selectedCustomerIds.length === 0 ? 600 : 400 }}>All customers</span>
+                {selectedCustomerIds.length === 0 && <Check size={14} color="var(--primary)" />}
               </button>
-            </div>
-            <div className="text-right">Current</div>
-            <div className="text-right">1-30</div>
-            <div className="text-right">31-60</div>
-            <div className="text-right">61-90</div>
-            <div className="text-right">90+</div>
-            <div className="text-right">Total due</div>
-          </div>
-
-          {loading && <div className="px-4 py-8 text-center text-sm text-slate-400">Loading…</div>}
-
-          {!loading && groups.length === 0 && (
-            <div className="px-4 py-8 text-center text-sm text-slate-400">No outstanding invoices found.</div>
-          )}
-
-          {!loading &&
-            groups.map((g) => {
-              const isOpen = expanded.has(g.customerId)
-              const isRisky = g.over90 > 0 || g.days61to90 > 0
-              return (
-                <div key={g.customerId} className="border-b border-slate-100 last:border-b-0">
-                  <button
-                    onClick={() => toggleExpand(g.customerId)}
-                    className="grid w-full grid-cols-[2fr_repeat(6,1fr)] items-center px-4 py-3 text-left text-sm hover:bg-slate-50"
-                  >
-                    <div className="flex items-center gap-2 font-medium text-slate-900">
-                      <ChevronRight
-                        className={`h-4 w-4 text-slate-400 transition-transform ${isOpen ? "rotate-90" : ""}`}
-                      />
-                      {g.customerName}
-                      {isRisky && (
-                        <span className="flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600">
-                          <AlertTriangle className="h-3 w-3" />
-                          At risk
-                        </span>
-                      )}
-                      <span className="text-xs font-normal text-slate-400">
-                        ({g.invoices.length} {g.invoices.length === 1 ? "invoice" : "invoices"})
-                      </span>
-                    </div>
-                    <Cell value={isOpen ? 0 : g.current} />
-                    <Cell value={isOpen ? 0 : g.days1to30} />
-                    <Cell value={isOpen ? 0 : g.days31to60} />
-                    <Cell value={isOpen ? 0 : g.days61to90} danger />
-                    <Cell value={isOpen ? 0 : g.over90} danger />
-                    <div className="text-right font-semibold text-slate-900">{isOpen ? "–" : fmt(g.total)}</div>
-                  </button>
-
-                  {isOpen && (
-                    <div className="bg-slate-50/60">
-                      {g.invoices.map((inv) => (
-                        <div
-                          key={inv.invoiceNo}
-                          className="grid grid-cols-[2fr_repeat(6,1fr)] items-center px-4 py-2 pl-10 text-sm text-slate-600"
-                        >
-                          <div>
-                            {inv.invoiceNo} <span className="text-slate-400">· {inv.invoiceDate}</span>
-                          </div>
-                          <Cell value={inv.current} muted />
-                          <Cell value={inv.days1to30} muted />
-                          <Cell value={inv.days31to60} muted />
-                          <Cell value={inv.days61to90} muted danger />
-                          <Cell value={inv.over90} muted danger />
-                          <div className="text-right">{fmt(inv.total)}</div>
-                        </div>
-                      ))}
-                      <div className="grid grid-cols-[2fr_repeat(6,1fr)] items-center border-t border-slate-200 px-4 py-2 pl-10 text-sm font-semibold text-slate-900">
-                        <div>Total {g.customerName}</div>
-                        <Cell value={g.current} />
-                        <Cell value={g.days1to30} />
-                        <Cell value={g.days31to60} />
-                        <Cell value={g.days61to90} danger />
-                        <Cell value={g.over90} danger />
-                        <div className="text-right">{fmt(g.total)}</div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-
-          {!loading && groups.length > 0 && (
-            <div className="grid grid-cols-[2fr_repeat(6,1fr)] border-t border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
-              <div>Grand total</div>
-              <div className="text-right">{fmt(totals.current)}</div>
-              <div className="text-right">{fmt(totals.days1to30)}</div>
-              <div className="text-right">{fmt(totals.days31to60)}</div>
-              <div className="text-right">{fmt(totals.days61to90)}</div>
-              <div className="text-right">{fmt(totals.over90)}</div>
-              <div className="text-right">{fmt(totals.total)}</div>
+              {filteredCustomerOptions.map(c => (
+                <button
+                  key={c.id}
+                  onClick={() => toggleCustomerSelection(c.id)}
+                  style={{ display: "flex", width: "100%", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", cursor: "pointer", border: "none", background: "transparent", color: "var(--text)", fontSize: 13 }}
+                >
+                  <span>{c.name}</span>
+                  {selectedCustomerIds.includes(c.id) && <Check size={14} color="var(--primary)" />}
+                </button>
+              ))}
             </div>
           )}
         </div>
       </div>
-    </div>
-  )
-}
 
-function SummaryCard({
-  label,
-  value,
-  warn,
-  danger,
-  emphasize,
-}: {
-  label: string
-  value: string
-  warn?: boolean
-  danger?: boolean
-  emphasize?: boolean
-}) {
-  return (
-    <div
-      className={`rounded-lg px-4 py-3 ${
-        danger
-          ? "bg-red-50"
-          : warn
-          ? "bg-amber-50"
-          : emphasize
-          ? "border border-slate-300 bg-white"
-          : "bg-slate-100"
-      }`}
-    >
-      <div
-        className={`mb-1 text-xs font-medium ${
-          danger ? "text-red-600" : warn ? "text-amber-600" : "text-slate-500"
-        }`}
-      >
-        {label}
+      {/* Summary cards */}
+      <div className="summary-grid">
+        <div className="summary-card">
+          <div className="summary-label">Current</div>
+          <div className="summary-value" style={{ color: "#10B981" }}>{fmt(totals.current)}</div>
+        </div>
+        <div className="summary-card">
+          <div className="summary-label">1-30 days</div>
+          <div className="summary-value" style={{ color: "#F59E0B" }}>{fmt(totals.days1to30)}</div>
+        </div>
+        <div className="summary-card">
+          <div className="summary-label">31-60 days</div>
+          <div className="summary-value" style={{ color: "#F97316" }}>{fmt(totals.days31to60)}</div>
+        </div>
+        <div className="summary-card">
+          <div className="summary-label">61-90 days</div>
+          <div className="summary-value" style={{ color: "#EF4444" }}>{fmt(totals.days61to90)}</div>
+        </div>
+        <div className="summary-card">
+          <div className="summary-label">&gt;90 days</div>
+          <div className="summary-value" style={{ color: "#B91C1C" }}>{fmt(totals.over90)}</div>
+        </div>
+        <div className="summary-card" style={{ border: "2px solid var(--border-strong)", background: "var(--card)" }}>
+          <div className="summary-label">Grand Total</div>
+          <div className="summary-value" style={{ color: "#1E3A8A" }}>{fmt(totals.total)}</div>
+        </div>
       </div>
-      <div className="text-lg font-semibold text-slate-900">{value}</div>
+
+      {/* Table */}
+      <div className="ar-card">
+        <div className="ar-header-row">
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span>Customer</span>
+            <button
+              onClick={allExpanded ? collapseAll : expandAll}
+              disabled={groups.length === 0}
+              style={{
+                padding: "2px 8px", borderRadius: 4, border: "1px solid var(--border)",
+                background: "var(--card)", color: "var(--text-muted)", cursor: "pointer",
+                fontSize: 11, fontWeight: 600,
+              }}
+            >
+              {allExpanded ? "Collapse all" : "Expand all"}
+            </button>
+          </div>
+          <div style={{ textAlign: "right" }}>Current</div>
+          <div style={{ textAlign: "right" }}>1-30</div>
+          <div style={{ textAlign: "right" }}>31-60</div>
+          <div style={{ textAlign: "right" }}>61-90</div>
+          <div style={{ textAlign: "right" }}>90+</div>
+          <div style={{ textAlign: "right" }}>Total due</div>
+        </div>
+
+        {loading && <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>}
+        {!loading && groups.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>No outstanding invoices found.</div>}
+
+        {!loading && groups.map(g => {
+          const isOpen = expanded.has(g.customerId)
+          const isRisky = g.over90 > 0 || g.days61to90 > 0
+          return (
+            <div key={g.customerId}>
+              <div className="ar-group-row" onClick={() => toggleExpand(g.customerId)}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, color: "var(--primary)" }}>
+                  <ChevronRight size={16} style={{ transform: isOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                  {g.customerName}
+                  {isRisky && (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "1px 8px", borderRadius: 20, background: "#FEF2F2", color: "#B91C1C", fontSize: 11, fontWeight: 600 }}>
+                      <AlertTriangle size={12} /> At risk
+                    </span>
+                  )}
+                  <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 400 }}>
+                    ({g.invoices.length} {g.invoices.length === 1 ? "invoice" : "invoices"})
+                  </span>
+                </div>
+                <Cell value={isOpen ? 0 : g.current} />
+                <Cell value={isOpen ? 0 : g.days1to30} />
+                <Cell value={isOpen ? 0 : g.days31to60} />
+                <Cell value={isOpen ? 0 : g.days61to90} danger />
+                <Cell value={isOpen ? 0 : g.over90} danger />
+                <div style={{ textAlign: "right", fontWeight: 700, color: "var(--text)" }}>{isOpen ? "–" : fmt(g.total)}</div>
+              </div>
+
+              {isOpen && (
+                <div>
+                  {g.invoices.map(inv => (
+                    <div key={inv.invoiceNo} className="ar-invoice-row">
+                      <div>{inv.invoiceNo} <span style={{ color: "var(--text-muted)", fontSize: 11 }}>· {inv.invoiceDate}</span></div>
+                      <Cell value={inv.current} muted />
+                      <Cell value={inv.days1to30} muted />
+                      <Cell value={inv.days31to60} muted />
+                      <Cell value={inv.days61to90} muted danger />
+                      <Cell value={inv.over90} muted danger />
+                      <div style={{ textAlign: "right" }}>{fmt(inv.total)}</div>
+                    </div>
+                  ))}
+                  <div className="ar-subtotal-row">
+                    <div>Total {g.customerName}</div>
+                    <Cell value={g.current} />
+                    <Cell value={g.days1to30} />
+                    <Cell value={g.days31to60} />
+                    <Cell value={g.days61to90} danger />
+                    <Cell value={g.over90} danger />
+                    <div style={{ textAlign: "right" }}>{fmt(g.total)}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+
+        {!loading && groups.length > 0 && (
+          <div className="ar-grand-row">
+            <div>Grand Total</div>
+            <div style={{ textAlign: "right" }}>{fmt(totals.current)}</div>
+            <div style={{ textAlign: "right" }}>{fmt(totals.days1to30)}</div>
+            <div style={{ textAlign: "right" }}>{fmt(totals.days31to60)}</div>
+            <div style={{ textAlign: "right" }}>{fmt(totals.days61to90)}</div>
+            <div style={{ textAlign: "right" }}>{fmt(totals.over90)}</div>
+            <div style={{ textAlign: "right" }}>{fmt(totals.total)}</div>
+          </div>
+        )}
+      </div>
     </div>
   )
-}
-
-function Cell({ value, muted, danger }: { value: number; muted?: boolean; danger?: boolean }) {
-  const color = !value ? "text-slate-300" : danger ? "text-red-600" : muted ? "text-slate-500" : "text-slate-700"
-  return <div className={`text-right ${color}`}>{fmt(value)}</div>
 }
