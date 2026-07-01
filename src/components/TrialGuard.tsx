@@ -20,14 +20,14 @@ export default function TrialGuard({ children }: { children: React.ReactNode }) 
         // 1. Get the current user
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) {
-          setAllowed(true)   // not even logged in – let the auth guard handle it
+          setAllowed(true)   // not logged in – let the auth guard handle it
           return
         }
 
-        // 2. Get the user's company_id from app_metadata (or user_roles)
-        const companyId = (user.app_metadata as any)?.company_id
-        if (!companyId) {
-          // No company linked – probably a platform admin, allow
+        // 2. Get the user's company_id via the secure helper function
+        const { data: companyId, error: rpcErr } = await supabase.rpc('current_company_id')
+        if (rpcErr || !companyId) {
+          // No company linked – platform admin or similar, allow
           setAllowed(true)
           return
         }
