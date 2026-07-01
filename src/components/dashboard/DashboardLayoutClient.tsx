@@ -10,6 +10,7 @@ import BottomNav from "@/components/BottomNav"
 import { CompanyProvider } from "@/contexts/CompanyContext"
 import QueryProvider from "@/components/QueryProvider"
 import { SessionMonitor } from "@/components/SessionMonitor"
+import TrialGuard from "@/components/TrialGuard"
 
 export default function DashboardLayoutClient({ tenant, email, initial, children }: { tenant: any; email: string; initial: string; children: React.ReactNode }) {
   const isMobile = useMediaQuery("(max-width: 768px)")
@@ -25,9 +26,11 @@ export default function DashboardLayoutClient({ tenant, email, initial, children
       }}>
         <QueryProvider>
           <SessionMonitor>
-            <div style={{ position: "relative", minHeight: "100vh", background: "var(--bg)", paddingBottom: "60px" }}>
-              {children}
-            </div>
+            <TrialGuard>
+              <div style={{ position: "relative", minHeight: "100vh", background: "var(--bg)", paddingBottom: "60px" }}>
+                {children}
+              </div>
+            </TrialGuard>
             <MobileBottomNav onMenuClick={() => setDrawerOpen(true)} />
             <MobileDrawer isOpen={drawerOpen} onClose={() => setDrawerOpen(false)} />
           </SessionMonitor>
@@ -56,7 +59,9 @@ export default function DashboardLayoutClient({ tenant, email, initial, children
         }}>
           <QueryProvider>
             <SessionMonitor>
-              <div className="dl-main-content">{children}</div>
+              <TrialGuard>
+                <div className="dl-main-content">{children}</div>
+              </TrialGuard>
             </SessionMonitor>
           </QueryProvider>
         </CompanyProvider>
