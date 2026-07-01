@@ -1,14 +1,21 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 
 export default function TrialGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter()
+  const pathname = usePathname()
   const [allowed, setAllowed] = useState<boolean | null>(null)
 
   useEffect(() => {
+    // Always allow the upgrade page to load without any trial check
+    if (pathname === "/dashboard/upgrade") {
+      setAllowed(true)
+      return
+    }
+
     async function checkTrial() {
       try {
         const supabase = createBrowserClient(
@@ -23,7 +30,7 @@ export default function TrialGuard({ children }: { children: React.ReactNode }) 
           return
         }
 
-        // Fetch trial status using the anon key (RLS may block, but the function already gave the ID)
+        // Fetch trial status
         const { data: settings } = await supabase
           .from("company_settings")
           .select("trial_ends_at, plan_id")
@@ -48,7 +55,7 @@ export default function TrialGuard({ children }: { children: React.ReactNode }) 
       }
     }
     checkTrial()
-  }, [])
+  }, [pathname])
 
   // While checking, show nothing — no flicker
   if (allowed === null) return null
