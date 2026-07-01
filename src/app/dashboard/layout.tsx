@@ -1,5 +1,7 @@
 // app/dashboard/layout.tsx
 import { getUserCompany } from '@/lib/get-user-company'
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
 import DashboardLayoutClient from '@/components/dashboard/DashboardLayoutClient'
 
 const styles = `
@@ -207,6 +209,28 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </body>
       </html>
     )
+  }
+
+  // ✅ Server‑side trial check – runs before any HTML is sent
+  try {
+    const supabase = await createClient()
+    const { data: settings } = await supabase
+      .from("company_settings")
+      .select("trial_ends_at, plan_id")
+      .eq("company_id", tenant.companyId)
+      .maybeSingle()
+
+    if (settings) {
+      const trialEnd = settings.trial_ends_at ? new Date(settings.trial_ends_at) : null
+      const hasPlan = settings.plan_id !== null
+
+      // Block only if trial has expired and no paid plan
+      if (!hasPlan && trialEnd && trialEnd < new Date()) {
+        redirect('/dashboard/upgrade')
+      }
+    }
+  } catch {
+    // If the check fails for any reason, allow access – never lock out due to a DB error
   }
 
   const email = tenant.email
