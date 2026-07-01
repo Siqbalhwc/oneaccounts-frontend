@@ -423,7 +423,11 @@ export default function ARAgingPage() {
         <input type="date" className="ar-input" value={asOfDate} onChange={e => setAsOfDate(e.target.value)} />
 
         <div style={{ position: "relative" }} ref={customerDropdownRef}>
-          <button className="ar-btn" onClick={() => setShowCustomerDropdown(!showCustomerDropdown)}>
+          <button
+  className="ar-btn"
+  onClick={() => setShowCustomerDropdown(!showCustomerDropdown)}
+  style={{ minWidth: 380 }}
+>
             <span>{selectedCustomerIds.length === 0 ? "All Customers" : `${selectedCustomerIds.length} selected`}</span>
             <X size={14} color="var(--text-muted)" onClick={(e) => { e.stopPropagation(); clearCustomerFilter(); }} />
           </button>
