@@ -255,20 +255,68 @@ export default function EntityPicker({
     if (next) setCoords(next)
   }, [filteredResults, allRecords])
 
+  // Walks up the DOM from the trigger, intersecting its rect against every
+  // scrollable/clipping ancestor (e.g. the horizontally-scrolling items
+  // table) as well as the window itself. Returns false as soon as the
+  // trigger is clipped out of view by ANY ancestor — not just the window —
+  // so a field that scrolls behind the edge of its own table container is
+  // treated as hidden even though it's still technically within window
+  // bounds (e.g. still to the right of the sidebar).
+  const isTriggerVisible = useCallback((el: HTMLElement): boolean => {
+    let top = -Infinity, bottom = Infinity, left = -Infinity, right = Infinity
+    const rect = el.getBoundingClientRect()
+    top = rect.top; bottom = rect.bottom; left = rect.left; right = rect.right
+
+    let node: HTMLElement | null = el.parentElement
+    while (node && node !== document.body && node !== document.documentElement) {
+      const style = window.getComputedStyle(node)
+      const clipsX = style.overflowX === "hidden" || style.overflowX === "auto" || style.overflowX === "scroll"
+      const clipsY = style.overflowY === "hidden" || style.overflowY === "auto" || style.overflowY === "scroll"
+      if (clipsX || clipsY) {
+        const cRect = node.getBoundingClientRect()
+        if (clipsX) { left = Math.max(left, cRect.left); right = Math.min(right, cRect.right) }
+        if (clipsY) { top = Math.max(top, cRect.top); bottom = Math.min(bottom, cRect.bottom) }
+        if (right <= left || bottom <= top) return false
+      }
+      node = node.parentElement
+    }
+
+    if (right <= 0 || left >= window.innerWidth) return false
+    if (bottom <= 0 || top >= window.innerHeight) return false
+    return true
+  }, [])
+
+  // ── Keep the dropdown anchored to its trigger on scroll (page scroll,
+  //    horizontal table scroll, or scrolling inside the results list),
+  //    instead of closing it. Only close once the trigger is actually
+  //    clipped out of view — by the window OR by a scrollable ancestor
+  //    like the items table — so we never leave an orphaned dropdown
+  //    floating with nothing visible to anchor to. ──
   useEffect(() => {
     if (!isOpen) return
-    const handleScroll = () => closeDropdown()
+
+    const handleScroll = () => {
+      const triggerEl = triggerRef.current
+      if (triggerEl && !isTriggerVisible(triggerEl)) {
+        closeDropdown()
+        return
+      }
+      const next = computeDropdownPosition()
+      if (next) setCoords(next)
+    }
+
     const handleResize = () => {
       const next = computeDropdownPosition()
       if (next) setCoords(next)
     }
+
     window.addEventListener("scroll", handleScroll, true)
     window.addEventListener("resize", handleResize)
     return () => {
       window.removeEventListener("scroll", handleScroll, true)
       window.removeEventListener("resize", handleResize)
     }
-  }, [isOpen, computeDropdownPosition, closeDropdown])
+  }, [isOpen, computeDropdownPosition, closeDropdown, isTriggerVisible])
 
   const handleSelect = (record: LookupRecord) => {
     onChange(record)
