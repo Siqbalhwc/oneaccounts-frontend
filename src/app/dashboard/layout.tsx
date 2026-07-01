@@ -232,8 +232,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
       const hasPlan = settings.plan_id !== null
 
       if (!hasPlan && trialEnd && trialEnd < new Date()) {
-        // Read the pathname set by our middleware
-        const heads = headers()
+        // Read the pathname set by our middleware (must await headers())
+        const heads = await headers()
         const pathname = heads.get('x-pathname') || ''
         if (pathname !== '/dashboard/upgrade') {
           redirect('/dashboard/upgrade')
