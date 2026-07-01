@@ -145,6 +145,9 @@ export default function UpgradePage() {
   const [isTrial, setIsTrial] = useState(false)
   const [isLifetime, setIsLifetime] = useState(false)
 
+  // ✅ NEW: actual trial end date from company_settings
+  const [trialEndDate, setTrialEndDate] = useState<Date | null>(null)
+
   // Additional users state
   const [additionalUsers, setAdditionalUsers] = useState(0)
 
@@ -154,13 +157,26 @@ export default function UpgradePage() {
       try {
         const { data: company } = await supabase
           .from("companies")
-          .select("business_type, is_trial, trial_ends_at, plans(code, name, monthly_price_per_user, half_yearly_price_per_user, yearly_price_per_user, trial_days)")
+          .select("business_type, is_trial, plans(code, name, monthly_price_per_user, half_yearly_price_per_user, yearly_price_per_user, trial_days)")
           .eq("id", companyId)
           .single()
         if (company) {
           setPlan(Array.isArray(company.plans) ? company.plans[0] : company.plans)
           setBusinessType(company.business_type || "")
           setIsTrial(company.is_trial || false)
+        }
+
+        // ✅ Fetch the real trial expiry from company_settings
+        const { data: settings } = await supabase
+          .from("company_settings")
+          .select("trial_ends_at")
+          .eq("company_id", companyId)
+          .maybeSingle()
+
+        if (settings?.trial_ends_at) {
+          setTrialEndDate(new Date(settings.trial_ends_at))
+        } else {
+          setTrialEndDate(null)
         }
 
         const { data: sub } = await supabase
@@ -173,12 +189,6 @@ export default function UpgradePage() {
           .maybeSingle()
         setSubscription(sub)
         setIsLifetime(sub && sub.end_date >= "9999-01-01")
-
-        // If a paid subscription exists, default billing period to match existing
-        if (sub && sub.plan_type) {
-          // We don't have the actual billing period stored; assume based on price?
-          // Default to yearly for lifetime, else keep as selected
-        }
 
         const { data: cfRows } = await supabase
           .from("company_features")
@@ -243,9 +253,18 @@ export default function UpgradePage() {
     setTimeout(() => setHighlightCard(false), 600)
   }
 
-  const trialDaysLeft = subscription?.end_date
-    ? Math.ceil((new Date(subscription.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-    : plan?.trial_days ?? 10
+  // ✅ Correct trial days calculation using real trial_ends_at
+  const trialDaysLeft = (() => {
+    if (subscription?.end_date) {
+      return Math.ceil((new Date(subscription.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    }
+    if (trialEndDate) {
+      return Math.ceil((trialEndDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    }
+    // fallback to plan's trial_days (should rarely happen)
+    return plan?.trial_days ?? 10
+  })()
+
   const isExpired = isTrial && !subscription && trialDaysLeft <= 0
   const isUrgent = isTrial && !subscription && trialDaysLeft > 0 && trialDaysLeft <= 5
   const userCount = subscription?.max_users || 1
@@ -389,7 +408,9 @@ export default function UpgradePage() {
             <>
               <span className="oa-dot">·</span>
               <span style={{ color: isUrgent ? "#DC2626" : "#059669", fontWeight: 700 }}>
-                Trial ends in {trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""}
+                {trialDaysLeft > 0
+                  ? `Trial ends in ${trialDaysLeft} day${trialDaysLeft !== 1 ? "s" : ""}`
+                  : "Trial expired"}
               </span>
             </>
           )}
@@ -465,7 +486,7 @@ export default function UpgradePage() {
                 {isLifetime ? " Lifetime" : ` Active until ${new Date(subscription.end_date).toLocaleDateString()}`}
               </sup>
             ) : isTrial ? (
-              <sup className="plan-super"> Trial — {trialDaysLeft} days left</sup>
+              <sup className="plan-super"> Trial — {trialDaysLeft > 0 ? `${trialDaysLeft} days left` : "Expired"}</sup>
             ) : (
               <sup className="plan-super"> No active subscription</sup>
             )}
@@ -478,9 +499,9 @@ export default function UpgradePage() {
           )}
 
           {!subscription && isTrial && (
-            <span className={`badge ${trialDaysLeft <= 5 ? "badge-red" : "badge-green"}`} style={{ alignSelf: "flex-start", marginBottom: 6 }}>
+            <span className={`badge ${trialDaysLeft <= 0 ? "badge-red" : trialDaysLeft <= 5 ? "badge-red" : "badge-green"}`} style={{ alignSelf: "flex-start", marginBottom: 6 }}>
               <Clock size={11} />
-              {trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} remaining
+              {trialDaysLeft > 0 ? `${trialDaysLeft} day${trialDaysLeft !== 1 ? "s" : ""} remaining` : "Expired"}
             </span>
           )}
 
@@ -537,7 +558,7 @@ export default function UpgradePage() {
             {subscription
               ? "You are on a paid plan. All core features are unlocked."
               : isTrial
-                ? `Includes all features for the full ${plan?.trial_days || 10}-day trial period.`
+                ? `Includes all features for the full ${trialDaysLeft > 0 ? trialDaysLeft : "0"}-day trial period.`
                 : "No active plan. Subscribe to unlock all features."}
           </p>
         </div>
