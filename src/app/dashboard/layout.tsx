@@ -1,6 +1,8 @@
 // app/dashboard/layout.tsx
 import { getUserCompany } from '@/lib/get-user-company'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import DashboardLayoutClient from '@/components/dashboard/DashboardLayoutClient'
 
@@ -211,10 +213,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
     )
   }
 
-  // ✅ Server‑side trial check – runs before any HTML is sent
+  // ✅ Server‑side trial check — uses the service‑role key to bypass RLS
   try {
-    const supabase = await createClient()
-    const { data: settings } = await supabase
+    const serviceSupabase = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false } }
+    )
+
+    const { data: settings } = await serviceSupabase
       .from("company_settings")
       .select("trial_ends_at, plan_id")
       .eq("company_id", tenant.companyId)
@@ -224,13 +231,17 @@ export default async function DashboardLayout({ children }: { children: React.Re
       const trialEnd = settings.trial_ends_at ? new Date(settings.trial_ends_at) : null
       const hasPlan = settings.plan_id !== null
 
-      // Block only if trial has expired and no paid plan
       if (!hasPlan && trialEnd && trialEnd < new Date()) {
-        redirect('/dashboard/upgrade')
+        // Read the pathname set by our middleware
+        const heads = headers()
+        const pathname = heads.get('x-pathname') || ''
+        if (pathname !== '/dashboard/upgrade') {
+          redirect('/dashboard/upgrade')
+        }
       }
     }
   } catch {
-    // If the check fails for any reason, allow access – never lock out due to a DB error
+    // If the check fails, allow access — never lock users out due to a DB error
   }
 
   const email = tenant.email
