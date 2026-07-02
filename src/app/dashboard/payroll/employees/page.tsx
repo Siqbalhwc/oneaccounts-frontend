@@ -37,66 +37,33 @@ export default function EmployeesPage() {
   const canView = role === "admin" || role === "accountant"
   const canEdit = role === "admin" || role === "accountant"
 
+  // ── ALL HOOKS DECLARED UP FRONT (fixes React error #310) ──
   const [payrollEnabled, setPayrollEnabled] = useState(false)
   const [checkingFeature, setCheckingFeature] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-    const check = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user || cancelled) return
-        const cid = (user?.app_metadata as any)?.company_id
-        if (!cid) { setCheckingFeature(false); return }
-
-        // Safe two‑step check
-        const { data: feat } = await supabase
-          .from("features")
-          .select("id")
-          .eq("code", "payroll")
-          .maybeSingle()
-
-        if (feat && !cancelled) {
-          const { data: cf } = await supabase
-            .from("company_features")
-            .select("enabled")
-            .eq("company_id", cid)
-            .eq("feature_id", feat.id)
-            .maybeSingle()
-
-          if (!cancelled) {
-            setPayrollEnabled(cf?.enabled === true)
-          }
-        }
-      } catch (_) {
-        // if anything fails, payroll stays hidden – no crash
-      } finally {
-        if (!cancelled) setCheckingFeature(false)
-      }
-    }
-    check()
-    return () => { cancelled = true }
-  }, [])
-
-  if (checkingFeature) {
-    return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
-  }
-
-  if (!payrollEnabled) {
-    return (
-      <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>
-        <h2>Payroll feature is not enabled.</h2>
-        <p>Enable it in the Feature Manager.</p>
-      </div>
-    )
-  }
-
   const [employees, setEmployees] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [sortField, setSortField] = useState<SortField>("full_name")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
   const [companyId, setCompanyId] = useState("")
+
+  // Direct DB check for payroll feature (bypasses PlanContext timing)
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id
+      if (!cid) { setCheckingFeature(false); return }
+      supabase.from("features").select("id").eq("code", "payroll").maybeSingle().then(({ data: feat }) => {
+        if (feat) {
+          supabase.from("company_features").select("enabled").eq("company_id", cid).eq("feature_id", feat.id).maybeSingle().then(({ data: cf }) => {
+            setPayrollEnabled(cf?.enabled === true)
+            setCheckingFeature(false)
+          })
+        } else {
+          setCheckingFeature(false)
+        }
+      })
+    })
+  }, [])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -193,6 +160,20 @@ export default function EmployeesPage() {
       </button>
     </th>
   )
+
+  // ── ALL CONDITIONAL RETURNS NOW HAPPEN AFTER EVERY HOOK CALL ──
+  if (checkingFeature) {
+    return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
+  }
+
+  if (!payrollEnabled) {
+    return (
+      <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>
+        <h2>Payroll feature is not enabled.</h2>
+        <p>Enable it in the Feature Manager.</p>
+      </div>
+    )
+  }
 
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
