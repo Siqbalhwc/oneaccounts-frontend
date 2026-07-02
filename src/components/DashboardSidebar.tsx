@@ -35,7 +35,7 @@ const baseNavSections: NavSection[] = [
     { label: 'Products',       icon: '📦', href: '/dashboard/products'              },
     { label: 'Inventory Adj.', icon: '⚖️', href: '/dashboard/inventory/adjustments' },
   ]},
-  // ✅ NEW: Payroll section
+  // ✅ NEW: Payroll section (visibility controlled by direct DB check)
   { section: 'PAYROLL', feature: 'payroll', items: [
     { label: 'Employees',         icon: '👥', href: '/dashboard/payroll/employees' },
     { label: 'Salary Structures', icon: '📊', href: '/dashboard/payroll/salary-structures' },
@@ -103,13 +103,14 @@ export default function DashboardSidebar({
   const [dummy, setDummy] = useState(0)
   useEffect(() => {
     if (!loading && features.length > 0) {
-      // This triggers a re‑render when loading becomes false
       setDummy(prev => prev + 1)
     }
   }, [loading, features])
 
-  // Fetch business type
+  // Fetch business type and payroll toggle
   const [businessType, setBusinessType] = useState<string>("")
+  const [payrollEnabled, setPayrollEnabled] = useState(false)
+
   useEffect(() => {
     const getCompany = async () => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -122,6 +123,17 @@ export default function DashboardSidebar({
         .eq("id", cid)
         .single()
       if (data) setBusinessType(data.business_type || "")
+
+      // ✅ Direct check for payroll feature (bypasses PlanContext flicker)
+      const { data: payrollFeature } = await supabase
+        .from("company_features")
+        .select("enabled")
+        .eq("company_id", cid)
+        .eq("features(code)", "payroll")
+        .maybeSingle()
+      if (payrollFeature?.enabled) {
+        setPayrollEnabled(true)
+      }
     }
     getCompany()
   }, [])
@@ -191,7 +203,6 @@ export default function DashboardSidebar({
   // ✅ Use original function for core sections, then manually check for the dynamic one
   const [openSection, setOpenSection] = useState<string>(() => {
     const base = getSectionForPath(pathname)
-    // If path matches one of the NGO pages, override to the new section
     if (businessType === 'ngo') {
       const ngoPaths = [
         '/dashboard/projects',
@@ -249,7 +260,6 @@ export default function DashboardSidebar({
   // ✅ UPDATED: hide feature items while plan is still loading
   const isVisible = (item: NavItem) => {
     if (item.adminOnly && role !== 'admin') return false
-    // During loading, hide any feature‑gated item to prevent flicker
     if (loading && item.feature) return false
     if (item.feature && !hasFeature(item.feature)) return false
     if (['Admin Panel', 'Feature Manager', 'Audit Logs', 'New Company'].includes(item.label) && role !== 'super_admin') {
@@ -279,7 +289,7 @@ export default function DashboardSidebar({
     <motion.aside
       className="dl-sidebar"
       id="dl-sidebar"
-      key={`sidebar-${dummy}`} // ← Force remount when dummy changes
+      key={`sidebar-${dummy}`}
       style={{
         width: collapsed ? 68 : 240,
         minWidth: collapsed ? 68 : 240,
@@ -298,7 +308,7 @@ export default function DashboardSidebar({
       animate={{ width: collapsed ? 68 : 240 }}
       transition={{ duration: 0.35, ease: [0.25, 0.8, 0.25, 1] }}
     >
-      {/* Blurred background – separate layer, does NOT affect content */}
+      {/* Blurred background */}
       <div
         style={{
           position: "absolute",
@@ -311,7 +321,7 @@ export default function DashboardSidebar({
         }}
       />
 
-      {/* ── Header ── */}
+      {/* Header */}
       <div style={{
         display: "flex", alignItems: "center",
         justifyContent: collapsed ? "center" : "space-between",
@@ -340,18 +350,19 @@ export default function DashboardSidebar({
         </motion.button>
       </div>
 
-      {/* ── Navigation ── */}
+      {/* Navigation */}
       <nav className="dl-sidebar-nav" style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "8px 8px" }}>
         {navSections.map(sec => {
-          if (sec.feature && !hasFeature(sec.feature)) return null
+          // ✅ Payroll section guarded by direct DB flag, not context
+          if (sec.section === 'PAYROLL' && !payrollEnabled) return null
+          if (sec.feature && sec.section !== 'PAYROLL' && !hasFeature(sec.feature)) return null
+
           const isOpen = openSection === sec.section
 
-          // Hide groups that contain no visible items
           const visibleGroups = sec.groups
             ? sec.groups.filter(group => group.items.some(item => isVisible(item)))
             : []
 
-          // Only render if there is at least one visible item
           const visibleItems = sec.items?.filter(item => isVisible(item)) ?? []
 
           if (!sec.groups && visibleItems.length === 0) return null
@@ -372,14 +383,12 @@ export default function DashboardSidebar({
               <AnimatePresence initial={false}>
                 {(collapsed || isOpen) && (
                   <motion.div key="content" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3, ease: "easeInOut" }} style={{ overflow: "hidden" }}>
-                    {/* Visible groups */}
                     {visibleGroups.map(group => (
                       <div key={group.groupLabel}>
                         {!collapsed && <div style={{ padding: "6px 14px 2px", color: mutedTextColor, fontSize: 8, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{group.groupLabel}</div>}
                         {group.items.map(item => isVisible(item) && <NavLink key={item.href} {...{ item, collapsed, isNew: isNew(item), markVisited, isActive: matchesItem(item, pathname), textColor, mutedTextColor, router }} />)}
                       </div>
                     ))}
-                    {/* Visible direct items */}
                     {visibleItems.map(item => isVisible(item) && <NavLink key={item.href} {...{ item, collapsed, isNew: isNew(item), markVisited, isActive: matchesItem(item, pathname), textColor, mutedTextColor, router }} />)}
                   </motion.div>
                 )}
@@ -389,7 +398,7 @@ export default function DashboardSidebar({
         })}
       </nav>
 
-      {/* ── User footer ── */}
+      {/* User footer */}
       <div style={{
         borderTop: `1px solid ${borderColor}`, display: "flex", alignItems: "center", gap: 10,
         padding: collapsed ? "12px 0" : "14px 16px",
