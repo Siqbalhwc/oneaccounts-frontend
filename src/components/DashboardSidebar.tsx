@@ -35,6 +35,12 @@ const baseNavSections: NavSection[] = [
     { label: 'Products',       icon: '📦', href: '/dashboard/products'              },
     { label: 'Inventory Adj.', icon: '⚖️', href: '/dashboard/inventory/adjustments' },
   ]},
+  // ✅ NEW: Payroll section
+  { section: 'PAYROLL', feature: 'payroll', items: [
+    { label: 'Employees',         icon: '👥', href: '/dashboard/payroll/employees' },
+    { label: 'Salary Structures', icon: '📊', href: '/dashboard/payroll/salary-structures' },
+    { label: 'Payroll Runs',      icon: '📅', href: '/dashboard/payroll/runs' },
+  ]},
   { section: 'ACCOUNTING', groups: [
     { groupLabel: 'General', items: [
       { label: 'Chart of Accounts', icon: '📋', href: '/dashboard/accounts' },
