@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { Plus, Search } from "lucide-react"
+import { Plus, Search, Pencil } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 
@@ -82,6 +82,13 @@ export default function SalaryStructuresPage() {
           transform: translateY(-1px);
           box-shadow: 0 6px 20px rgba(7,19,82,0.45);
         }
+        .btn-icon {
+          background: transparent; border: 1.5px solid var(--border);
+          color: var(--text-muted); padding: 5px; border-radius: 6px;
+          cursor: pointer; display: inline-flex; align-items: center;
+          justify-content: center; flex-shrink: 0; line-height: 1;
+        }
+        .btn-icon:hover { background: var(--card-hover); }
         .search-input {
           width: 100%; height: 38px; border: 1.5px solid var(--border);
           border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px;
@@ -121,18 +128,26 @@ export default function SalaryStructuresPage() {
             <tr>
               <th>ID</th>
               <th>Name</th>
+              {canEdit && <th style={{ textAlign: "center", width: 80 }}>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={2} style={{ textAlign: "center", padding: 20 }}>Loading…</td></tr>
+              <tr><td colSpan={canEdit ? 3 : 2} style={{ textAlign: "center", padding: 20 }}>Loading…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={2} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>No salary structures found.</td></tr>
+              <tr><td colSpan={canEdit ? 3 : 2} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>No salary structures found.</td></tr>
             ) : (
               filtered.map(s => (
                 <tr key={s.id}>
                   <td>{s.id}</td>
                   <td style={{ fontWeight: 600, color: "var(--primary)" }}>{s.name}</td>
+                  {canEdit && (
+                    <td style={{ textAlign: "center" }}>
+                      <button className="btn-icon" onClick={() => router.push(`/dashboard/payroll/salary-structures/${s.id}`)} title="Edit structure">
+                        <Pencil size={13} />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))
             )}
