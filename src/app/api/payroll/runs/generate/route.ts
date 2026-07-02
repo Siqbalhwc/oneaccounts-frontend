@@ -91,10 +91,9 @@ export async function POST(request: NextRequest) {
 
     // Fallback: use employee's current salary_structure_id if no revision yet
     if (!revision) {
-      // We'll create a synthetic revision with basic_salary = 0 for now – user must add revisions.
-      // But we still need a structure to compute components.
-      // For Phase 1, we'll assume the employee has a salary_structure_id and we'll fetch the components from it, but basic_salary will be 0 if no revision.
+      // Create a synthetic revision with basic_salary = 0 for now – user must add revisions.
       revision = {
+        id: 0,                          // ✅ placeholder – not used later
         salary_structure_id: emp.salary_structure_id,
         basic_salary: 0,
       }
@@ -162,7 +161,7 @@ export async function POST(request: NextRequest) {
       project_id: dims?.project_id || null,
       activity_id: dims?.activity_id || null,
       location_id: dims?.location_id || null,
-      donor_id: null,   // not stored in dimensions table yet, but we can extend later
+      donor_id: null,
       department_id: dims?.department_id || null,
     }
 
