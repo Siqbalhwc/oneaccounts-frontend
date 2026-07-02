@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { Bell } from "lucide-react"
+import { Bell, RefreshCw, TrendingUp, TrendingDown } from "lucide-react"
 import { useTheme } from "@/contexts/ThemeContext"
 import { useCompany } from "@/contexts/CompanyContext"
 
@@ -84,22 +84,104 @@ function getPeriodDates(key: PeriodKey): { start: string | null; end: string | n
   }
 }
 
-// ── Bell notification with dropdown ────────────────────────
-function BellNotification({
-  count,
-  label,
-  items,
-  onViewAll,
+// ── Previous-period dates, for trend deltas on KPI cards ────
+// Returns the immediately-preceding period of the same length as `key`,
+// so "This Month" compares to last month, "This Quarter" to the prior
+// quarter, etc. Returns nulls for "all" since there's no prior window.
+function getPreviousPeriodDates(key: PeriodKey): { start: string | null; end: string | null } {
+  const now   = new Date()
+  const y     = now.getFullYear()
+  const m     = now.getMonth()
+  const pad   = (n: number) => String(n).padStart(2, "0")
+  const ymd   = (d: Date)   => d.toISOString().split("T")[0]
+  const qStart = (q: number, yr: number) => new Date(yr, q * 3, 1)
+  const qEnd   = (q: number, yr: number) => new Date(yr, q * 3 + 3, 0)
+  const cq     = Math.floor(m / 3)
+
+  switch (key) {
+    case "this_month": {
+      const lm = m === 0 ? 11 : m - 1
+      const ly = m === 0 ? y - 1 : y
+      return { start: `${ly}-${pad(lm + 1)}-01`, end: ymd(new Date(ly, lm + 1, 0)) }
+    }
+    case "last_month": {
+      const lm2 = m - 2
+      const d   = new Date(y, lm2, 1)
+      return { start: ymd(new Date(d.getFullYear(), d.getMonth(), 1)), end: ymd(new Date(d.getFullYear(), d.getMonth() + 1, 0)) }
+    }
+    case "this_quarter": {
+      const lq  = cq === 0 ? 3 : cq - 1
+      const lqy = cq === 0 ? y - 1 : y
+      return { start: ymd(qStart(lq, lqy)), end: ymd(qEnd(lq, lqy)) }
+    }
+    case "last_quarter": {
+      const lq   = cq === 0 ? 3 : cq - 1
+      const lqy  = cq === 0 ? y - 1 : y
+      const lq2  = lq === 0 ? 3 : lq - 1
+      const lqy2 = lq === 0 ? lqy - 1 : lqy
+      return { start: ymd(qStart(lq2, lqy2)), end: ymd(qEnd(lq2, lqy2)) }
+    }
+    case "this_year":
+      return { start: `${y - 1}-01-01`, end: `${y - 1}-12-31` }
+    case "last_year":
+      return { start: `${y - 2}-01-01`, end: `${y - 2}-12-31` }
+    case "last_12_months": {
+      const end   = new Date(now); end.setFullYear(end.getFullYear() - 1)
+      const start = new Date(end); start.setFullYear(start.getFullYear() - 1); start.setDate(start.getDate() + 1)
+      return { start: ymd(start), end: ymd(end) }
+    }
+    case "all":
+    default:
+      return { start: null, end: null }
+  }
+}
+
+// ── Trend delta helper (for KPI cards) ───────────────────────
+function computeDelta(current: number, previous: number | null): { pct: number; up: boolean } | null {
+  if (previous === null || previous === undefined) return null
+  if (previous === 0) {
+    if (current === 0) return null
+    return { pct: 100, up: current > 0 }
+  }
+  const pct = ((current - previous) / Math.abs(previous)) * 100
+  return { pct, up: pct >= 0 }
+}
+
+function TrendBadge({ delta, goodWhenUp = true }: { delta: { pct: number; up: boolean } | null; goodWhenUp?: boolean }) {
+  if (!delta) return null
+  const isGood = goodWhenUp ? delta.up : !delta.up
+  const color  = isGood ? "#10B981" : "#EF4444"
+  const Icon   = delta.up ? TrendingUp : TrendingDown
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 3, marginTop: 4, fontSize: "0.72rem", fontWeight: 700, color }}>
+      <Icon size={12} strokeWidth={2.5} />
+      {Math.abs(delta.pct).toFixed(1)}% <span style={{ fontWeight: 500, color: "var(--text-muted)" }}>vs last period</span>
+    </div>
+  )
+}
+
+// ── Consolidated notification center (invoices + bills) ─────
+function NotificationCenter({
+  invoiceCount,
+  billCount,
+  invoiceItems,
+  billItems,
+  onViewInvoices,
+  onViewBills,
   isDark,
 }: {
-  count: number
-  label: string
-  items: { title: string; subtitle: string; amount?: string }[]
-  onViewAll: () => void
+  invoiceCount: number
+  billCount: number
+  invoiceItems: { title: string; subtitle: string; amount?: string }[]
+  billItems: { title: string; subtitle: string; amount?: string }[]
+  onViewInvoices: () => void
+  onViewBills: () => void
   isDark: boolean
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const totalCount = invoiceCount + billCount
+  const hasItems = totalCount > 0
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -109,12 +191,10 @@ function BellNotification({
     return () => document.removeEventListener("mousedown", handler)
   }, [])
 
-  const hasItems = count > 0
-
   return (
-    <div ref={ref} style={{ position: "relative", textAlign: "center", userSelect: "none" }}>
+    <div ref={ref} style={{ position: "relative", userSelect: "none" }}>
       <div
-        onClick={() => (hasItems ? setOpen(o => !o) : onViewAll())}
+        onClick={() => setOpen(o => !o)}
         style={{
           cursor: "pointer",
           display: "inline-flex",
@@ -139,6 +219,7 @@ function BellNotification({
             ? isDark ? "rgba(239,68,68,0.15)" : "rgba(239,68,68,0.08)"
             : isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"
         }}
+        title="Notifications"
       >
         <Bell size={17} color={hasItems ? "#EF4444" : "var(--text-muted)"} style={hasItems ? { animation: "bellShake 0.6s ease" } : undefined} />
         {hasItems && (
@@ -150,35 +231,64 @@ function BellNotification({
             display: "flex", alignItems: "center", justifyContent: "center",
             padding: "0 3px", border: "1.5px solid var(--bg)",
           }}>
-            {count > 9 ? "9+" : count}
+            {totalCount > 9 ? "9+" : totalCount}
           </span>
         )}
       </div>
-      <div style={{ fontSize: 9, marginTop: 3, fontWeight: hasItems ? 700 : 400, color: hasItems ? "#EF4444" : "var(--text-muted)" }}>{label}</div>
-      {open && hasItems && (
-        <div style={{ position: "absolute", top: "calc(100% + 10px)", right: 0, width: 290, background: isDark ? "#1E293B" : "#FFFFFF", border: `1px solid ${isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)"}`, borderRadius: 12, boxShadow: isDark ? "0 16px 48px rgba(0,0,0,0.7)" : "0 16px 48px rgba(0,0,0,0.15)", zIndex: 999, overflow: "hidden" }}>
-          <div style={{ padding: "9px 14px 8px", borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)"}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#EF4444", textTransform: "uppercase", letterSpacing: "0.05em" }}>{count} Overdue {label}</span>
-            <button onClick={(e) => { e.stopPropagation(); setOpen(false); onViewAll() }} style={{ fontSize: "0.7rem", color: "#93C5FD", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>View All →</button>
+
+      {open && (
+        <div style={{ position: "absolute", top: "calc(100% + 10px)", right: 0, width: 320, background: isDark ? "#1E293B" : "#FFFFFF", border: `1px solid ${isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)"}`, borderRadius: 12, boxShadow: isDark ? "0 16px 48px rgba(0,0,0,0.7)" : "0 16px 48px rgba(0,0,0,0.15)", zIndex: 999, overflow: "hidden" }}>
+          <div style={{ padding: "10px 14px", borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)"}` }}>
+            <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text)" }}>Notifications</span>
+            {!hasItems && <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 4 }}>You're all caught up 🎉</div>}
           </div>
-          <div style={{ maxHeight: 230, overflowY: "auto" }}>
-            {items.slice(0, 8).map((item, i) => (
-              <div key={i} style={{ padding: "8px 14px", borderBottom: i < Math.min(items.length, 8) - 1 ? `1px solid ${isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.05)"}` : "none", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                <div>
-                  <div style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text)" }}>{item.title}</div>
-                  <div style={{ fontSize: "0.68rem", color: "#EF4444", marginTop: 2 }}>{item.subtitle}</div>
-                </div>
-                {item.amount && <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>{item.amount}</div>}
+
+          {invoiceCount > 0 && (
+            <div>
+              <div style={{ padding: "8px 14px 4px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "#EF4444", textTransform: "uppercase", letterSpacing: "0.05em" }}>{invoiceCount} Overdue Invoices</span>
+                <button onClick={(e) => { e.stopPropagation(); setOpen(false); onViewInvoices() }} style={{ fontSize: "0.68rem", color: "#93C5FD", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>View All →</button>
               </div>
-            ))}
-          </div>
+              <div style={{ maxHeight: 150, overflowY: "auto" }}>
+                {invoiceItems.slice(0, 5).map((item, i) => (
+                  <div key={i} style={{ padding: "7px 14px", borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.05)"}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: "0.76rem", fontWeight: 600, color: "var(--text)" }}>{item.title}</div>
+                      <div style={{ fontSize: "0.66rem", color: "#EF4444", marginTop: 1 }}>{item.subtitle}</div>
+                    </div>
+                    {item.amount && <div style={{ fontSize: "0.76rem", fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>{item.amount}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {billCount > 0 && (
+            <div>
+              <div style={{ padding: "8px 14px 4px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "#EF4444", textTransform: "uppercase", letterSpacing: "0.05em" }}>{billCount} Overdue Bills</span>
+                <button onClick={(e) => { e.stopPropagation(); setOpen(false); onViewBills() }} style={{ fontSize: "0.68rem", color: "#93C5FD", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>View All →</button>
+              </div>
+              <div style={{ maxHeight: 150, overflowY: "auto" }}>
+                {billItems.slice(0, 5).map((item, i) => (
+                  <div key={i} style={{ padding: "7px 14px", borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.05)"}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: "0.76rem", fontWeight: 600, color: "var(--text)" }}>{item.title}</div>
+                      <div style={{ fontSize: "0.66rem", color: "#EF4444", marginTop: 1 }}>{item.subtitle}</div>
+                    </div>
+                    {item.amount && <div style={{ fontSize: "0.76rem", fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>{item.amount}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
   )
 }
 
-// ── Odoo-style animated loading screen ─────────────────────
+// ── Odoo-style animated loading screen (first load only) ────
 const LOADING_STEPS = [
   { icon: "🏗️", text: "Setting up your workspace…" },
   { icon: "📊", text: "Configuring chart of accounts…" },
@@ -483,6 +593,159 @@ function NewCompanyEmptyState({
 interface MonthlyProfit  { month: string; profit: number }
 interface TopCustomer    { name: string; revenue: number; outstanding: number }
 interface OverdueItem    { id: string; invoice_no: string; total: number; due_date: string; customer_name?: string }
+interface PrevMetrics    { revenueTotal: number; expenseTotal: number; grossProfit: number }
+
+// ── KPI card skeleton (used only inline during refresh, not first load) ──
+function KpiSkeleton({ isDark }: { isDark: boolean }) {
+  return (
+    <div className="card" style={{ cursor: "default" }}>
+      <div className="skeleton-line" style={{ width: "60%", height: 10, marginBottom: 10 }} />
+      <div className="skeleton-line" style={{ width: "80%", height: 22 }} />
+    </div>
+  )
+}
+
+// ── Monthly profit chart (dependency-free, handles 1-point gracefully) ──
+function ProfitTrendChart({
+  data,
+  formatPKR,
+  isDark,
+}: {
+  data: MonthlyProfit[]
+  formatPKR: (v: number) => string
+  isDark: boolean
+}) {
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null)
+
+  if (data.length === 0) {
+    return (
+      <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+        No profit data for selected period
+      </div>
+    )
+  }
+
+  // Single month: a sparse bar chart looks broken, so show a focused
+  // callout card instead — this is a correct empty-of-comparison state,
+  // not a bug, but it needs to *read* that way to the user.
+  if (data.length === 1) {
+    const only = data[0]
+    const isPositive = only.profit >= 0
+    return (
+      <div style={{
+        display: "flex", alignItems: "center", gap: 20,
+        padding: "20px 24px",
+        borderRadius: 12,
+        background: isPositive
+          ? isDark ? "rgba(16,185,129,0.08)" : "rgba(16,185,129,0.05)"
+          : isDark ? "rgba(239,68,68,0.08)" : "rgba(239,68,68,0.05)",
+        border: `1px solid ${isPositive ? "rgba(16,185,129,0.2)" : "rgba(239,68,68,0.2)"}`,
+      }}>
+        <div style={{
+          width: 56, height: 56, borderRadius: 14, flexShrink: 0,
+          background: isPositive ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          {isPositive ? <TrendingUp size={26} color="#10B981" /> : <TrendingDown size={26} color="#EF4444" />}
+        </div>
+        <div>
+          <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            {only.month}
+          </div>
+          <div style={{ fontSize: "1.6rem", fontWeight: 800, color: isPositive ? "#10B981" : "#EF4444", marginTop: 2 }}>
+            {formatPKR(only.profit)}
+          </div>
+          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 4 }}>
+            Only one month of activity in this period — switch to "Last 12 Months" or "This Year" to see a trend.
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const maxProfit  = Math.max(...data.map(m => Math.abs(m.profit)), 1)
+  const chartH     = 160
+  const gap        = 12
+  const barW       = 100 / data.length
+
+  // Build an SVG polyline overlay tracing the profit trend across bars,
+  // anchored to the same 0..chartH coordinate space as the bars below.
+  const points = data.map((m, i) => {
+    const x = (i + 0.5) * barW
+    const norm = (m.profit + maxProfit) / (2 * maxProfit) // -max..max -> 0..1
+    const y = chartH - norm * chartH
+    return `${x},${y}`
+  }).join(" ")
+
+  return (
+    <>
+      <div className="chart-container">
+        <div style={{ position: "relative", minWidth: 600 }}>
+          {/* gridlines */}
+          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", justifyContent: "space-between", pointerEvents: "none", height: chartH }}>
+            {[0, 1, 2, 3].map(i => (
+              <div key={i} style={{ borderTop: `1px dashed ${isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}` }} />
+            ))}
+          </div>
+
+          {/* trend line overlay */}
+          <svg
+            viewBox={`0 0 100 ${chartH}`}
+            preserveAspectRatio="none"
+            style={{ position: "absolute", inset: 0, width: "100%", height: chartH, overflow: "visible", pointerEvents: "none" }}
+          >
+            <polyline
+              points={points}
+              fill="none"
+              stroke={isDark ? "rgba(167,139,250,0.9)" : "rgba(99,102,241,0.85)"}
+              strokeWidth={0.6}
+              vectorEffect="non-scaling-stroke"
+            />
+          </svg>
+
+          <div className="bar-chart" style={{ height: chartH, gap, position: "relative" }}>
+            {data.map((m, i) => (
+              <div
+                key={i}
+                className="bar-column"
+                onMouseEnter={() => setHoverIdx(i)}
+                onMouseLeave={() => setHoverIdx(null)}
+                style={{ position: "relative" }}
+              >
+                {hoverIdx === i && (
+                  <div style={{
+                    position: "absolute", bottom: "100%", marginBottom: 6,
+                    background: isDark ? "#1E293B" : "#0F172A", color: "#fff",
+                    fontSize: "0.7rem", fontWeight: 700, padding: "4px 8px",
+                    borderRadius: 6, whiteSpace: "nowrap", zIndex: 10,
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
+                  }}>
+                    {m.month}: {formatPKR(m.profit)}
+                  </div>
+                )}
+                <div
+                  className={`bar${m.profit < 0 ? " negative" : ""}`}
+                  style={{
+                    height: `${(Math.abs(m.profit) / maxProfit) * (chartH - 20) + 4}px`,
+                    opacity: hoverIdx === null || hoverIdx === i ? 1 : 0.55,
+                    transition: "opacity 0.15s, height 0.4s ease",
+                  }}
+                />
+                <div className="bar-value">{formatPKR(m.profit)}</div>
+                <div className="bar-label">{m.month}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="trend-summary">
+        <span>📈 Best: <strong>{data.reduce((a, b) => a.profit > b.profit ? a : b).month}</strong> ({formatPKR(Math.max(...data.map(m => m.profit)))})</span>
+        <span>📉 Worst: <strong>{data.reduce((a, b) => a.profit < b.profit ? a : b).month}</strong> ({formatPKR(Math.min(...data.map(m => m.profit)))})</span>
+        <span>📊 Avg: <strong>{formatPKR(data.reduce((s, m) => s + m.profit, 0) / data.length)}</strong></span>
+      </div>
+    </>
+  )
+}
 
 // ── Main component ──────────────────────────────────────────
 export default function TradingServiceDashboard({ role }: { role: string }) {
@@ -498,9 +761,12 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
 
   const [userDisplayName, setUserDisplayName]   = useState("")
   const [businessType,    setBusinessType]       = useState("")
-  const [loading,         setLoading]            = useState(true)
+  const [loading,         setLoading]            = useState(true)   // first-ever load only
+  const [refreshing,      setRefreshing]         = useState(false)  // subsequent period/refresh fetches
   const [selectedPeriod,  setSelectedPeriod]     = useState<PeriodKey>("all")
   const [isNewCompany,    setIsNewCompany]        = useState(false)
+  const [lastUpdated,     setLastUpdated]         = useState<Date | null>(null)
+  const hasLoadedOnce = useRef(false)
 
   // KPIs
   const [revenueTotal,        setRevenueTotal]        = useState(0)
@@ -512,6 +778,9 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
   const [overdueBillsCount,   setOverdueBillsCount]   = useState(0)
   const [monthlyProfit,       setMonthlyProfit]        = useState<MonthlyProfit[]>([])
   const [topCustomers,        setTopCustomers]         = useState<TopCustomer[]>([])
+
+  // Previous-period comparison, for KPI trend badges (revenue/expense/profit only)
+  const [prevMetrics, setPrevMetrics] = useState<PrevMetrics | null>(null)
 
   // Overdue detail lists
   const [overdueInvoicesList, setOverdueInvoicesList] = useState<OverdueItem[]>([])
@@ -539,72 +808,120 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
     }).catch(() => {})
   }, [companyId])
 
-  // ── Dashboard metrics ──────────────────────────────────────
-  useEffect(() => {
+  // ── Dashboard metrics (extracted so the refresh button can call it too) ──
+  const fetchDashboard = useCallback(async () => {
     if (!companyId) return
-    setLoading(true)
     const { start, end } = getPeriodDates(selectedPeriod)
+
+    // First-ever load shows the full animated loader; every subsequent
+    // fetch (period switch, manual refresh) just dims the existing
+    // content instead of remounting the whole page.
+    if (!hasLoadedOnce.current) setLoading(true)
+    else setRefreshing(true)
 
     let finished = false
     const safetyTimer = setTimeout(() => {
       if (!finished) {
         finished = true
         setLoading(false)
+        setRefreshing(false)
       }
     }, 8000)
 
-    const fetchDashboard = async () => {
-      try {
-        const { data, error } = await supabase.rpc("get_dashboard_metrics", {
-          p_company_id: companyId,
-          ...(start ? { p_date_from: start } : {}),
-          ...(end   ? { p_date_to:   end   } : {}),
-        })
+    try {
+      const { data, error } = await supabase.rpc("get_dashboard_metrics", {
+        p_company_id: companyId,
+        ...(start ? { p_date_from: start } : {}),
+        ...(end   ? { p_date_to:   end   } : {}),
+      })
 
-        if (!finished) {
-          if (error) {
-            console.error("Dashboard RPC error:", error)
-          } else if (data) {
-            const revenue = data.revenueTotal || 0
-            const expense = data.expenseTotal || 0
-            const cash    = data.cashBalance  || 0
-            const recv    = data.totalReceivables || 0
-            const pay     = data.totalPayables    || 0
+      if (!finished) {
+        if (error) {
+          console.error("Dashboard RPC error:", error)
+        } else if (data) {
+          const revenue = data.revenueTotal || 0
+          const expense = data.expenseTotal || 0
+          const cash    = data.cashBalance  || 0
+          const recv    = data.totalReceivables || 0
+          const pay     = data.totalPayables    || 0
 
-            // Detect new company: all KPIs zero AND no monthly data
-            const hasAnyData = revenue > 0 || expense > 0 || cash > 0 || recv > 0 || pay > 0 ||
-              (Array.isArray(data.monthlyProfit) && data.monthlyProfit.length > 0)
-            setIsNewCompany(!hasAnyData)
+          // Detect new company: all KPIs zero AND no monthly data
+          const hasAnyData = revenue > 0 || expense > 0 || cash > 0 || recv > 0 || pay > 0 ||
+            (Array.isArray(data.monthlyProfit) && data.monthlyProfit.length > 0)
+          setIsNewCompany(!hasAnyData)
 
-            setRevenueTotal(revenue)
-            setExpenseTotal(expense)
-            setCashBalance(cash)
-            setTotalReceivables(recv)
-            setTotalPayables(pay)
-            setOverdueInvoicesCount(data.overdueInvoicesCount || 0)
-            setOverdueBillsCount(data.overdueBillsCount || 0)
-            setMonthlyProfit(data.monthlyProfit || [])
-            setTopCustomers(data.topCustomers || [])
+          // Diagnostic flag: cash showing 0 while receivables/payables have
+          // real balances usually means get_dashboard_metrics isn't summing
+          // bank/cash GL accounts correctly for this company — worth a look
+          // in the RPC rather than in this component.
+          if (cash === 0 && (recv > 0 || pay > 0)) {
+            console.warn(
+              "[Dashboard] Cash & Bank returned 0 while Receivables/Payables are non-zero. " +
+              "This likely means get_dashboard_metrics isn't summing bank/cash GL accounts " +
+              "correctly for company", companyId
+            )
           }
+
+          setRevenueTotal(revenue)
+          setExpenseTotal(expense)
+          setCashBalance(cash)
+          setTotalReceivables(recv)
+          setTotalPayables(pay)
+          setOverdueInvoicesCount(data.overdueInvoicesCount || 0)
+          setOverdueBillsCount(data.overdueBillsCount || 0)
+          setMonthlyProfit(data.monthlyProfit || [])
+          setTopCustomers(data.topCustomers || [])
+          setLastUpdated(new Date())
         }
-      } catch (err) {
-        console.error("Dashboard fetch error:", err)
-      } finally {
-        if (!finished) {
-          finished = true
-          clearTimeout(safetyTimer)
-          setLoading(false)
-        }
+      }
+    } catch (err) {
+      console.error("Dashboard fetch error:", err)
+    } finally {
+      if (!finished) {
+        finished = true
+        clearTimeout(safetyTimer)
+        setLoading(false)
+        setRefreshing(false)
+        hasLoadedOnce.current = true
       }
     }
 
-    fetchDashboard()
+    // Previous-period comparison for the Revenue / Expense / Gross Profit
+    // trend badges. Skipped for "All Time" since there's no prior window.
+    // Fetched separately (not Promise.all'd with the main call above) so a
+    // failure here never blocks the primary KPIs from rendering.
+    const { start: prevStart, end: prevEnd } = getPreviousPeriodDates(selectedPeriod)
+    if (prevStart && prevEnd) {
+      try {
+        const { data: prevData, error: prevError } = await supabase.rpc("get_dashboard_metrics", {
+          p_company_id: companyId,
+          p_date_from: prevStart,
+          p_date_to: prevEnd,
+        })
+        if (!prevError && prevData) {
+          const pRevenue = prevData.revenueTotal || 0
+          const pExpense = prevData.expenseTotal || 0
+          setPrevMetrics({ revenueTotal: pRevenue, expenseTotal: pExpense, grossProfit: pRevenue - pExpense })
+        } else {
+          setPrevMetrics(null)
+        }
+      } catch (err) {
+        console.error("Previous-period fetch error:", err)
+        setPrevMetrics(null)
+      }
+    } else {
+      setPrevMetrics(null)
+    }
 
     return () => {
       clearTimeout(safetyTimer)
       finished = true
     }
   }, [companyId, selectedPeriod])
+
+  useEffect(() => {
+    fetchDashboard()
+  }, [fetchDashboard])
 
   // ── Overdue lists (fixed two‑step fetch) ──────────────────
   useEffect(() => {
@@ -669,6 +986,17 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
     return `${sign}PKR ${abs.toLocaleString()}`
   }
 
+  const formatRelativeTime = (d: Date | null): string => {
+    if (!d) return ""
+    const secs = Math.floor((Date.now() - d.getTime()) / 1000)
+    if (secs < 10) return "just now"
+    if (secs < 60) return `${secs}s ago`
+    const mins = Math.floor(secs / 60)
+    if (mins < 60) return `${mins} min ago`
+    const hrs = Math.floor(mins / 60)
+    return `${hrs}h ago`
+  }
+
   const grossProfit  = revenueTotal - expenseTotal
   const animRevenue  = useAnimatedNumber(revenueTotal, 600)
   const animExpense  = useAnimatedNumber(expenseTotal, 600)
@@ -677,8 +1005,11 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
   const animRecv     = useAnimatedNumber(totalReceivables, 600)
   const animPay      = useAnimatedNumber(totalPayables,    600)
 
-  const maxProfit    = Math.max(...monthlyProfit.map(m => Math.abs(m.profit)), 1)
   const periodLabel  = PERIOD_OPTIONS.find(p => p.key === selectedPeriod)?.label || ""
+
+  const revenueDelta = prevMetrics ? computeDelta(revenueTotal, prevMetrics.revenueTotal) : null
+  const expenseDelta = prevMetrics ? computeDelta(expenseTotal, prevMetrics.expenseTotal) : null
+  const profitDelta  = prevMetrics ? computeDelta(grossProfit,  prevMetrics.grossProfit)  : null
 
   const invoiceBellItems = overdueInvoicesList.map(inv => ({
     title:    inv.invoice_no || `INV-${inv.id}`,
@@ -701,7 +1032,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
     )
   }
 
-  // If the dashboard data is still loading, show the animated loader
+  // First-ever load: full animated loader (unchanged behavior)
   if (loading) return <OdooLoader isDark={isDark} />
 
   // If it's a brand‑new company, show the onboarding checklist
@@ -719,13 +1050,26 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           60%     { transform: rotate(6deg); }
           75%     { transform: rotate(-4deg); }
         }
+        @keyframes shimmer {
+          0%   { background-position: -200px 0; }
+          100% { background-position: calc(200px + 100%) 0; }
+        }
 
         .tsd * { box-sizing: border-box; }
+
+        .tsd .skeleton-line {
+          border-radius: 6px;
+          background: ${isDark
+            ? "linear-gradient(90deg, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.13) 37%, rgba(255,255,255,0.06) 63%)"
+            : "linear-gradient(90deg, rgba(0,0,0,0.06) 25%, rgba(0,0,0,0.11) 37%, rgba(0,0,0,0.06) 63%)"};
+          background-size: 400px 100%;
+          animation: shimmer 1.4s ease-in-out infinite;
+        }
 
         .tsd .card {
           background: var(--card); border: 1px solid var(--border); border-radius: 14px;
           padding: 20px; box-shadow: var(--shadow-sm);
-          transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+          transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, opacity 0.2s ease;
           cursor: pointer; display: flex; flex-direction: column;
           min-height: 0; /* prevents flex children's grid content (quick-actions) from being clipped on mobile */
         }
@@ -733,6 +1077,12 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           transform: translateY(-2px);
           box-shadow: 0 8px 24px rgba(0,0,0,0.12);
           border-color: var(--primary);
+        }
+        .tsd.is-refreshing .kpi-row .card,
+        .tsd.is-refreshing .two-col .card,
+        .tsd.is-refreshing .full-width .card {
+          opacity: 0.55;
+          pointer-events: none;
         }
 
         .tsd .hero {
@@ -765,8 +1115,23 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         }
         .tsd .period-select:focus { outline: none; border-color: #A78BFA; }
 
+        .tsd .refresh-btn {
+          display: inline-flex; align-items: center; justify-content: center;
+          width: 30px; height: 30px; border-radius: 8px;
+          background: ${isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)"};
+          border: 1px solid var(--border); cursor: pointer;
+          color: var(--text-muted); transition: all 0.15s;
+        }
+        .tsd .refresh-btn:hover { color: var(--text); border-color: #A78BFA; }
+        .tsd .refresh-btn.spinning svg { animation: spin 0.7s linear infinite; }
+
+        .tsd .last-updated {
+          font-size: 0.68rem; color: var(--text-muted);
+          display: flex; align-items: center; gap: 6px;
+        }
+
         .tsd .bells-group {
-          display: flex; align-items: flex-start; gap: 10px;
+          display: flex; align-items: center; gap: 10px;
           padding-left: 1rem;
           border-left: 1px solid var(--border);
         }
@@ -811,13 +1176,13 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         .tsd td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
 
         .tsd .chart-container { padding: 8px 0 12px; overflow-x: auto; }
-        .tsd .bar-chart        { display: flex; align-items: flex-end; gap: 12px; height: 200px; padding: 0 8px; min-width: 600px; }
+        .tsd .bar-chart        { display: flex; align-items: flex-end; gap: 12px; min-width: 600px; }
         .tsd .bar-column       { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; }
         .tsd .bar              { width: 100%; background: linear-gradient(180deg, #6366f1, #818cf8); border-radius: 6px 6px 0 0; min-height: 4px; }
         .tsd .bar.negative     { background: linear-gradient(180deg, #ef4444, #f87171); }
         .tsd .bar-value        { font-size: 10px; font-weight: 700; color: var(--text); white-space: nowrap; }
         .tsd .bar-label        { font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
-        .tsd .trend-summary    { display: flex; justify-content: space-between; margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 0.75rem; font-weight: 600; }
+        .tsd .trend-summary    { display: flex; justify-content: space-between; margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 0.75rem; font-weight: 600; flex-wrap: wrap; gap: 8px; }
 
         .customer-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
 
@@ -864,7 +1229,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         }
       `}</style>
 
-      <div className="tsd">
+      <div className={`tsd${refreshing ? " is-refreshing" : ""}`}>
 
         {/* ── Hero ── */}
         <div className="hero">
@@ -874,6 +1239,18 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           </div>
 
           <div className="hero-right">
+            <div className="last-updated">
+              Updated {formatRelativeTime(lastUpdated)}
+              <button
+                className={`refresh-btn${refreshing ? " spinning" : ""}`}
+                onClick={fetchDashboard}
+                title="Refresh dashboard"
+                disabled={refreshing}
+              >
+                <RefreshCw size={13} />
+              </button>
+            </div>
+
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", whiteSpace: "nowrap" }}>Period:</span>
               <select
@@ -888,18 +1265,13 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
             </div>
 
             <div className="bells-group">
-              <BellNotification
-                count={overdueInvoicesCount}
-                label="Invoices"
-                items={invoiceBellItems}
-                onViewAll={() => router.push("/dashboard/invoices?status=Unpaid&overdue=true")}
-                isDark={isDark}
-              />
-              <BellNotification
-                count={overdueBillsCount}
-                label="Bills"
-                items={billBellItems}
-                onViewAll={() => router.push("/dashboard/bills?status=Unpaid&overdue=true")}
+              <NotificationCenter
+                invoiceCount={overdueInvoicesCount}
+                billCount={overdueBillsCount}
+                invoiceItems={invoiceBellItems}
+                billItems={billBellItems}
+                onViewInvoices={() => router.push("/dashboard/invoices?status=Unpaid&overdue=true")}
+                onViewBills={() => router.push("/dashboard/bills?status=Unpaid&overdue=true")}
                 isDark={isDark}
               />
             </div>
@@ -909,9 +1281,9 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         {/* ── KPI Cards ── */}
         <div className="kpi-row">
           {[
-            { label: "💰 Total Revenue",   value: formatPKR(animRevenue), color: "#10B981", link: "/dashboard/reports/profit-loss" },
-            { label: "📤 Total Expenses",  value: formatPKR(animExpense), color: "#EF4444", link: "/dashboard/reports/profit-loss" },
-            { label: "📈 Gross Profit",    value: formatPKR(animProfit),  color: grossProfit >= 0 ? "#10B981" : "#EF4444", link: "/dashboard/reports/profit-loss" },
+            { label: "💰 Total Revenue",   value: formatPKR(animRevenue), color: "#10B981", link: "/dashboard/reports/profit-loss", delta: revenueDelta, goodWhenUp: true },
+            { label: "📤 Total Expenses",  value: formatPKR(animExpense), color: "#EF4444", link: "/dashboard/reports/profit-loss", delta: expenseDelta, goodWhenUp: false },
+            { label: "📈 Gross Profit",    value: formatPKR(animProfit),  color: grossProfit >= 0 ? "#10B981" : "#EF4444", link: "/dashboard/reports/profit-loss", delta: profitDelta, goodWhenUp: true },
             { label: "🏦 Cash & Bank",     value: formatPKR(animCash),   color: "#A78BFA", link: "/dashboard/banking/bank-accounts" },
             { label: "🧾 Receivables",     value: formatPKR(animRecv),   color: "#F97316", link: "/dashboard/customers" },
             { label: "📋 Payables",        value: formatPKR(animPay),    color: "#EF4444", link: "/dashboard/suppliers" },
@@ -936,6 +1308,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
               {kpi.sub && (
                 <div style={{ fontSize: "0.72rem", marginTop: 4, color: kpi.color, fontWeight: 600 }}>{kpi.sub}</div>
               )}
+              {kpi.delta !== undefined && <TrendBadge delta={kpi.delta} goodWhenUp={kpi.goodWhenUp} />}
             </div>
           ))}
         </div>
@@ -1000,33 +1373,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
               <span style={{ fontWeight: 700, fontSize: "1rem" }}>📊 Monthly Profit Trend</span>
               <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{periodLabel}</span>
             </div>
-            {monthlyProfit.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-muted)", fontSize: "0.85rem" }}>
-                No profit data for selected period
-              </div>
-            ) : (
-              <>
-                <div className="chart-container">
-                  <div className="bar-chart">
-                    {monthlyProfit.map((m, i) => (
-                      <div key={i} className="bar-column">
-                        <div
-                          className={`bar${m.profit < 0 ? " negative" : ""}`}
-                          style={{ height: `${(Math.abs(m.profit) / maxProfit) * 140 + 4}px` }}
-                        />
-                        <div className="bar-value">{formatPKR(m.profit)}</div>
-                        <div className="bar-label">{m.month}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="trend-summary">
-                  <span>📈 Best: <strong>{monthlyProfit.reduce((a, b) => a.profit > b.profit ? a : b).month}</strong> ({formatPKR(Math.max(...monthlyProfit.map(m => m.profit)))})</span>
-                  <span>📉 Worst: <strong>{monthlyProfit.reduce((a, b) => a.profit < b.profit ? a : b).month}</strong> ({formatPKR(Math.min(...monthlyProfit.map(m => m.profit)))})</span>
-                  <span>📊 Avg: <strong>{formatPKR(monthlyProfit.reduce((s, m) => s + m.profit, 0) / monthlyProfit.length)}</strong></span>
-                </div>
-              </>
-            )}
+            <ProfitTrendChart data={monthlyProfit} formatPKR={formatPKR} isDark={isDark} />
           </div>
         </div>
 
