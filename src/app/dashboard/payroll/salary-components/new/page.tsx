@@ -31,7 +31,7 @@ export default function NewSalaryComponentPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState("")
 
-  // Simple account picker state
+  // Account picker state
   const [accounts, setAccounts] = useState<any[]>([])
   const [accountSearch, setAccountSearch] = useState("")
   const [showAccountPicker, setShowAccountPicker] = useState(false)
@@ -42,7 +42,7 @@ export default function NewSalaryComponentPage() {
       if (cid) {
         setCompanyId(cid)
         supabase
-          .from("chart_of_accounts")
+          .from("accounts")
           .select("id, code, name")
           .eq("company_id", cid)
           .order("code")

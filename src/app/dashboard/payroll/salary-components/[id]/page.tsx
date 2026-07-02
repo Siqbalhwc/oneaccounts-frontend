@@ -43,7 +43,7 @@ export default function EditSalaryComponentPage() {
       const cid = (user?.app_metadata as any)?.company_id
       if (cid) {
         setCompanyId(cid)
-        supabase.from("chart_of_accounts").select("id, code, name").eq("company_id", cid).order("code").then(({ data }) => setAccounts(data || []))
+        supabase.from("accounts").select("id, code, name").eq("company_id", cid).order("code").then(({ data }) => setAccounts(data || []))
         supabase.from("salary_components").select("*").eq("id", componentId).eq("company_id", cid).single().then(({ data }) => {
           if (data) {
             setName(data.name)
