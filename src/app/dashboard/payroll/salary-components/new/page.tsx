@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Plus, CheckCircle } from "lucide-react"
@@ -35,6 +35,7 @@ export default function NewSalaryComponentPage() {
   const [accounts, setAccounts] = useState<any[]>([])
   const [accountSearch, setAccountSearch] = useState("")
   const [showAccountPicker, setShowAccountPicker] = useState(false)
+  const pickerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -50,6 +51,19 @@ export default function NewSalaryComponentPage() {
       }
     })
   }, [])
+
+  // Close picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setShowAccountPicker(false)
+      }
+    }
+    if (showAccountPicker) {
+      document.addEventListener("mousedown", handleClickOutside)
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [showAccountPicker])
 
   const handleSubmit = async () => {
     if (!companyId) { setError("Company not loaded"); return }
@@ -129,9 +143,16 @@ export default function NewSalaryComponentPage() {
         .btn-submit { width: 100%; justify-content: center; background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
         .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; }
         .inline-group { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .picker-wrapper {
+          position: relative;
+        }
+        .picker-input {
+          cursor: pointer;
+        }
         .picker-dropdown {
           position: absolute; top: 100%; left: 0; right: 0; background: var(--card); border: 1px solid var(--border);
-          border-radius: 0 0 8px 8px; max-height: 200px; overflow-y: auto; z-index: 10;
+          border-radius: 0 0 8px 8px; max-height: 220px; overflow-y: auto; z-index: 20;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         }
         .picker-item {
           padding: 8px 12px; cursor: pointer; font-size: 13px;
@@ -172,21 +193,43 @@ export default function NewSalaryComponentPage() {
             </div>
           </div>
 
-          <div style={{ marginBottom: 16, position: "relative" }}>
+          <div style={{ marginBottom: 16 }} className="picker-wrapper" ref={pickerRef}>
             <label className="label">GL Account *</label>
-            <input className="input" readOnly value={
-              glAccountId ? accounts.find(a => a.id === glAccountId)?.name || `ID ${glAccountId}` : ""
-            } placeholder="Search and select an account…" onFocus={() => setShowAccountPicker(true)} onBlur={() => setTimeout(() => setShowAccountPicker(false), 200)} />
+            <input
+              className="input picker-input"
+              readOnly
+              value={glAccountId ? accounts.find(a => a.id === glAccountId)?.name || `ID ${glAccountId}` : ""}
+              placeholder="Search and select an account…"
+              onClick={() => setShowAccountPicker(prev => !prev)}
+            />
             {showAccountPicker && (
               <div className="picker-dropdown">
                 <div style={{ padding: 8 }}>
-                  <input className="input" style={{ height: 32 }} autoFocus placeholder="Search accounts..." value={accountSearch} onChange={e => setAccountSearch(e.target.value)} />
+                  <input
+                    className="input"
+                    style={{ height: 32 }}
+                    placeholder="Search accounts..."
+                    value={accountSearch}
+                    onChange={e => setAccountSearch(e.target.value)}
+                    autoFocus
+                  />
                 </div>
-                {accounts.filter(a => !accountSearch || a.name?.toLowerCase().includes(accountSearch.toLowerCase()) || a.code?.includes(accountSearch)).slice(0, 20).map(a => (
-                  <div key={a.id} className="picker-item" onMouseDown={() => { setGlAccountId(a.id); setShowAccountPicker(false); }}>
-                    <div style={{ fontWeight: 600 }}>{a.code} – {a.name}</div>
-                  </div>
-                ))}
+                {accounts
+                  .filter(a => !accountSearch || a.name?.toLowerCase().includes(accountSearch.toLowerCase()) || a.code?.includes(accountSearch))
+                  .slice(0, 20)
+                  .map(a => (
+                    <div
+                      key={a.id}
+                      className="picker-item"
+                      onMouseDown={() => {
+                        setGlAccountId(a.id)
+                        setShowAccountPicker(false)
+                        setAccountSearch("")
+                      }}
+                    >
+                      <div style={{ fontWeight: 600 }}>{a.code} – {a.name}</div>
+                    </div>
+                  ))}
               </div>
             )}
           </div>
