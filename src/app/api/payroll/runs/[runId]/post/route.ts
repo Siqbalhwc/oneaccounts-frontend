@@ -4,8 +4,9 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { runId: string } }
+  { params }: { params: Promise<{ runId: string }> }
 ) {
+  const { runId: runIdStr } = await params
   const cookieStore = await cookies()
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -46,7 +47,7 @@ export async function POST(
     return NextResponse.json({ error: 'Payroll feature is not enabled' }, { status: 403 })
   }
 
-  const runId = parseInt(params.runId, 10)
+  const runId = parseInt(runIdStr, 10)
   if (isNaN(runId)) return NextResponse.json({ error: 'Invalid run ID' }, { status: 400 })
 
   // 4. Verify the run belongs to this company and is ready to post
