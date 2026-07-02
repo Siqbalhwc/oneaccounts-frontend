@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, CheckCircle } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
-import { usePlan } from "@/contexts/PlanContext"
 
 export default function NewPayrollRunPage() {
   const supabase = createBrowserClient(
@@ -14,11 +13,34 @@ export default function NewPayrollRunPage() {
   )
   const router = useRouter()
   const { role } = useRole()
-  const { hasFeature } = usePlan()
   const canView = role === "admin" || role === "accountant"
   const canEdit = role === "admin" || role === "accountant"
 
-  if (!hasFeature("payroll")) {
+  const [payrollEnabled, setPayrollEnabled] = useState(false)
+  const [checkingFeature, setCheckingFeature] = useState(true)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id
+      if (!cid) { setCheckingFeature(false); return }
+      supabase.from("features").select("id").eq("code", "payroll").maybeSingle().then(({ data: feat }) => {
+        if (feat) {
+          supabase.from("company_features").select("enabled").eq("company_id", cid).eq("feature_id", feat.id).maybeSingle().then(({ data: cf }) => {
+            setPayrollEnabled(cf?.enabled === true)
+            setCheckingFeature(false)
+          })
+        } else {
+          setCheckingFeature(false)
+        }
+      })
+    })
+  }, [])
+
+  if (checkingFeature) {
+    return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
+  }
+
+  if (!payrollEnabled) {
     return (
       <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>
         <h2>Payroll feature is not enabled.</h2>
@@ -27,6 +49,7 @@ export default function NewPayrollRunPage() {
     )
   }
 
+  // rest of the component unchanged
   const [companyId, setCompanyId] = useState("")
   const [month, setMonth] = useState(() => {
     const now = new Date()
@@ -63,7 +86,6 @@ export default function NewPayrollRunPage() {
 
       if (!res.ok) {
         if (res.status === 409 && data.run_id) {
-          // Run already exists – redirect to that run
           setFlash("A run already exists for this month. Redirecting...")
           setTimeout(() => router.push(`/dashboard/payroll/runs/${data.run_id}`), 1500)
           return

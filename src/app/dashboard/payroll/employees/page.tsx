@@ -5,7 +5,6 @@ import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
 import { Plus, Pencil, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
-import { usePlan } from "@/contexts/PlanContext"
 
 type SortField = "employee_code" | "full_name" | "joining_date" | "employment_type" | "status"
 type SortDir = "asc" | "desc"
@@ -35,12 +34,35 @@ export default function EmployeesPage() {
   )
   const router = useRouter()
   const { role } = useRole()
-  const { hasFeature } = usePlan()
   const canView = role === "admin" || role === "accountant"
   const canEdit = role === "admin" || role === "accountant"
 
-  // Hide entire page if feature is disabled
-  if (!hasFeature("payroll")) {
+  const [payrollEnabled, setPayrollEnabled] = useState(false)
+  const [checkingFeature, setCheckingFeature] = useState(true)
+
+  // Direct DB check for payroll feature (bypasses PlanContext timing)
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id
+      if (!cid) { setCheckingFeature(false); return }
+      supabase.from("features").select("id").eq("code", "payroll").maybeSingle().then(({ data: feat }) => {
+        if (feat) {
+          supabase.from("company_features").select("enabled").eq("company_id", cid).eq("feature_id", feat.id).maybeSingle().then(({ data: cf }) => {
+            setPayrollEnabled(cf?.enabled === true)
+            setCheckingFeature(false)
+          })
+        } else {
+          setCheckingFeature(false)
+        }
+      })
+    })
+  }, [])
+
+  if (checkingFeature) {
+    return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
+  }
+
+  if (!payrollEnabled) {
     return (
       <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>
         <h2>Payroll feature is not enabled.</h2>
@@ -49,6 +71,7 @@ export default function EmployeesPage() {
     )
   }
 
+  // rest of the component remains exactly as before
   const [employees, setEmployees] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
@@ -251,12 +274,12 @@ export default function EmployeesPage() {
         <div className="table-scroll">
           <table className="emp-table">
             <colgroup>
-              <col style={{ width: 120 }} /> {/* Employee Code */}
-              <col />                         {/* Full Name */}
-              <col style={{ width: 100 }} />   {/* Joining Date */}
-              <col style={{ width: 120 }} />   {/* Employment Type */}
-              <col style={{ width: 100 }} />   {/* Status */}
-              <col style={{ width: 80 }} />    {/* Actions */}
+              <col style={{ width: 120 }} />
+              <col />
+              <col style={{ width: 100 }} />
+              <col style={{ width: 120 }} />
+              <col style={{ width: 100 }} />
+              <col style={{ width: 80 }} />
             </colgroup>
             <thead>
               <tr>
