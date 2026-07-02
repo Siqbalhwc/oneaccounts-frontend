@@ -71,9 +71,6 @@ export default function NewEmployeePage() {
     setLoading(true)
     setError("")
 
-    const { data: { user } } = await supabase.auth.getUser()
-    const userEmail = user?.email || "system"
-
     const payload = {
       company_id: companyId,
       employee_code: employeeCode,
@@ -88,8 +85,7 @@ export default function NewEmployeePage() {
       bank_account_no: bankAccountNo.trim() || null,
       tax_status: taxStatus.trim() || null,
       status: status,
-      created_by: userEmail,
-      updated_by: userEmail,
+      // ❌ removed created_by, updated_by – they don't exist in the employees table
     }
 
     const { data, error: insertErr } = await supabase
@@ -125,7 +121,6 @@ export default function NewEmployeePage() {
     setTimeout(() => router.push("/dashboard/payroll/employees"), 1500)
   }
 
-  // PlanContext guard – no extra queries
   if (planLoading) {
     return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
   }
