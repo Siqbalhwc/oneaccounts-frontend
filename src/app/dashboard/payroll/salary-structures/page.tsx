@@ -20,20 +20,40 @@ export default function SalaryStructuresPage() {
   const [checkingFeature, setCheckingFeature] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      const cid = (user?.app_metadata as any)?.company_id
-      if (!cid) { setCheckingFeature(false); return }
-      supabase.from("features").select("id").eq("code", "payroll").maybeSingle().then(({ data: feat }) => {
-        if (feat) {
-          supabase.from("company_features").select("enabled").eq("company_id", cid).eq("feature_id", feat.id).maybeSingle().then(({ data: cf }) => {
+    let cancelled = false
+    const check = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || cancelled) return
+        const cid = (user?.app_metadata as any)?.company_id
+        if (!cid) { setCheckingFeature(false); return }
+
+        const { data: feat } = await supabase
+          .from("features")
+          .select("id")
+          .eq("code", "payroll")
+          .maybeSingle()
+
+        if (feat && !cancelled) {
+          const { data: cf } = await supabase
+            .from("company_features")
+            .select("enabled")
+            .eq("company_id", cid)
+            .eq("feature_id", feat.id)
+            .maybeSingle()
+
+          if (!cancelled) {
             setPayrollEnabled(cf?.enabled === true)
-            setCheckingFeature(false)
-          })
-        } else {
-          setCheckingFeature(false)
+          }
         }
-      })
-    })
+      } catch (_) {
+        // ignore errors
+      } finally {
+        if (!cancelled) setCheckingFeature(false)
+      }
+    }
+    check()
+    return () => { cancelled = true }
   }, [])
 
   if (checkingFeature) {
