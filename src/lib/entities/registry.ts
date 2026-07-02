@@ -5,6 +5,7 @@ import { locationMeta } from './location.meta';
 import { activityMeta } from './activity.meta';
 import { projectMeta  } from './project.meta';
 import { accountMeta  } from './account.meta';
+import { salaryStructureMeta } from './salary_structure.meta';
 import type { EntityConfig } from './types';
 
 const registry: Record<string, EntityConfig> = {
@@ -15,6 +16,7 @@ const registry: Record<string, EntityConfig> = {
   activity: activityMeta,
   project:  projectMeta,
   account:  accountMeta,
+salary_structure: salaryStructureMeta,
 };
 
 export function getEntityConfig(entity: string): EntityConfig | undefined {
