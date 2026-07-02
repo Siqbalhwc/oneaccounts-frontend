@@ -19,18 +19,9 @@ export default function NewEmployeePage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
   const { role } = useRole()
-  const { hasFeature } = usePlan()
+  const { hasFeature, loading: planLoading } = usePlan()
   const canView = role === "admin" || role === "accountant"
   const canEdit = role === "admin" || role === "accountant"
-
-  if (!hasFeature("payroll")) {
-    return (
-      <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>
-        <h2>Payroll feature is not enabled.</h2>
-        <p>Enable it in the Feature Manager.</p>
-      </div>
-    )
-  }
 
   const [companyId, setCompanyId] = useState("")
   const [employeeCode, setEmployeeCode] = useState("")
@@ -56,7 +47,6 @@ export default function NewEmployeePage() {
       const cid = (user?.app_metadata as any)?.company_id
       if (cid) {
         setCompanyId(cid)
-        // Auto‑generate employee code
         supabase
           .from("employees")
           .select("employee_code")
@@ -133,6 +123,20 @@ export default function NewEmployeePage() {
     setSelectedSalaryStructure(null)
     setLoading(false)
     setTimeout(() => router.push("/dashboard/payroll/employees"), 1500)
+  }
+
+  // PlanContext guard – no extra queries
+  if (planLoading) {
+    return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
+  }
+
+  if (!hasFeature("payroll")) {
+    return (
+      <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>
+        <h2>Payroll feature is not enabled.</h2>
+        <p>Enable it in the Feature Manager.</p>
+      </div>
+    )
   }
 
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
