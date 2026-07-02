@@ -15,6 +15,7 @@ const FEATURE_CODES = [
   "purchase_orders",
   "asset_management",
   "tax_management",
+  "payroll",                                    // ✅ ADDED – makes hasFeature("payroll") work
 ]
 
 interface PlanContextType {
