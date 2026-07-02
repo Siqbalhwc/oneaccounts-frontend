@@ -693,9 +693,13 @@ function NewInvoicePageContent() {
     return don?.name || ""
   }
 
+  // Responsive column tracks: fixed px for narrow, fixed-width columns (thumbnail, qty, tax select, delete),
+  // minmax(floor, fr) for columns that should grow to fill extra width on large screens
+  // (Product, Description, Price, Total, Tax Amt, Cost) while still guaranteeing a
+  // usable minimum so the horizontal-scroll wrapper kicks in correctly on small screens.
   const tableCols = taxEnabled
-    ? "60px 220px 320px 80px 120px 120px 140px 140px 120px 50px"
-    : "60px 220px 320px 80px 120px 140px 120px 50px"
+    ? "60px minmax(180px,1.2fr) minmax(240px,2fr) 80px minmax(110px,0.8fr) 110px minmax(120px,0.9fr) minmax(120px,0.9fr) minmax(110px,0.8fr) 50px"
+    : "60px minmax(180px,1.2fr) minmax(240px,2fr) 80px minmax(110px,1fr) minmax(120px,1fr) minmax(110px,1fr) 50px"
 
   return (
     <div className="invoice-page" style={{ padding: "12px 16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -919,7 +923,7 @@ function NewInvoicePageContent() {
             {items.length > 0 && (
               <div className="inv-card" style={{ padding: "16px 12px" }}>
                 <div className="table-scroll-wrap">
-                  <div style={{ minWidth: taxEnabled ? '1450px' : '1200px' }}>
+                  <div style={{ minWidth: taxEnabled ? '1180px' : '950px' }}>
                     <div className="inv-item-header">
                       <span className="header-center"></span>
                       <span>Product</span>
