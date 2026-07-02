@@ -15,7 +15,7 @@ interface NavItem { label: string; icon: string; href: string; feature?: string;
 interface NavGroup { groupLabel: string; items: NavItem[] }
 interface NavSection { section: string; feature?: string; items?: NavItem[]; groups?: NavGroup[] }
 
-// ── Base navigation (no projects section) ──
+// ── Base navigation ──
 const baseNavSections: NavSection[] = [
   { section: 'MAIN', items: [{ label: 'Dashboard', icon: '📊', href: '/dashboard' }] },
   { section: 'CRM', items: [
@@ -35,7 +35,6 @@ const baseNavSections: NavSection[] = [
     { label: 'Products',       icon: '📦', href: '/dashboard/products'              },
     { label: 'Inventory Adj.', icon: '⚖️', href: '/dashboard/inventory/adjustments' },
   ]},
-  // ✅ NEW: Payroll section (visibility controlled by direct DB check)
   { section: 'PAYROLL', feature: 'payroll', items: [
     { label: 'Employees',         icon: '👥', href: '/dashboard/payroll/employees' },
     { label: 'Salary Structures', icon: '📊', href: '/dashboard/payroll/salary-structures' },
@@ -63,11 +62,9 @@ const baseNavSections: NavSection[] = [
   ]},
 ]
 
-// ── Helper: exact match for /dashboard, startsWith for all other routes ──
 const matchesItem = (item: NavItem, path: string): boolean =>
   item.href === "/dashboard" ? path === item.href : path.startsWith(item.href)
 
-// ✅ Original function – only checks base sections
 function getSectionForPath(path: string): string {
   for (const sec of baseNavSections) {
     if (sec.items?.some(item => matchesItem(item, path))) return sec.section
@@ -99,7 +96,6 @@ export default function DashboardSidebar({
     return false
   })
 
-  // ── Force a re‑render when PlanContext finishes loading ──
   const [dummy, setDummy] = useState(0)
   useEffect(() => {
     if (!loading && features.length > 0) {
@@ -107,7 +103,6 @@ export default function DashboardSidebar({
     }
   }, [loading, features])
 
-  // Fetch business type and payroll toggle
   const [businessType, setBusinessType] = useState<string>("")
   const [payrollEnabled, setPayrollEnabled] = useState(false)
 
@@ -124,21 +119,30 @@ export default function DashboardSidebar({
         .single()
       if (data) setBusinessType(data.business_type || "")
 
-      // ✅ Direct check for payroll feature (bypasses PlanContext flicker)
-      const { data: payrollFeature } = await supabase
-        .from("company_features")
-        .select("enabled")
-        .eq("company_id", cid)
-        .eq("features(code)", "payroll")
+      // ✅ Reliable payroll check – step 1: get feature UUID
+      const { data: featureRow } = await supabase
+        .from("features")
+        .select("id")
+        .eq("code", "payroll")
         .maybeSingle()
-      if (payrollFeature?.enabled) {
-        setPayrollEnabled(true)
+
+      if (featureRow) {
+        // ✅ Step 2: check company_features for that feature
+        const { data: cfRow } = await supabase
+          .from("company_features")
+          .select("enabled")
+          .eq("company_id", cid)
+          .eq("feature_id", featureRow.id)
+          .maybeSingle()
+
+        if (cfRow?.enabled) {
+          setPayrollEnabled(true)
+        }
       }
     }
     getCompany()
   }, [])
 
-  // Platform admin check
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
   useEffect(() => {
     const check = async () => {
@@ -154,7 +158,6 @@ export default function DashboardSidebar({
     check()
   }, [])
 
-  // Super admin check – hardcoded for siqbalhwc@gmail.com
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   useEffect(() => {
     const checkSuper = async () => {
@@ -168,10 +171,8 @@ export default function DashboardSidebar({
     checkSuper()
   }, [])
 
-  // Build final nav sections
   const navSections = [...baseNavSections]
 
-  // ── Insert "Project & Budgets" section right after INVENTORY ──
   if (businessType === 'ngo') {
     const invIndex = navSections.findIndex(s => s.section === 'INVENTORY')
     const insertAt = invIndex >= 0 ? invIndex + 1 : navSections.length - 1
@@ -185,7 +186,6 @@ export default function DashboardSidebar({
     })
   }
 
-  // Add Platform Admin & Super Admin links under SYSTEM
   const systemSection = navSections.find(s => s.section === 'SYSTEM')!
   if (isPlatformAdmin) {
     if (!systemSection.items!.some(item => item.href === '/dashboard/admin')) {
@@ -200,7 +200,6 @@ export default function DashboardSidebar({
 
   const GAP = 6
 
-  // ✅ Use original function for core sections, then manually check for the dynamic one
   const [openSection, setOpenSection] = useState<string>(() => {
     const base = getSectionForPath(pathname)
     if (businessType === 'ngo') {
@@ -225,7 +224,6 @@ export default function DashboardSidebar({
     }
   }, [collapsed])
 
-  // Update open section when path changes
   useEffect(() => {
     const base = getSectionForPath(pathname)
     if (businessType === 'ngo') {
@@ -257,7 +255,6 @@ export default function DashboardSidebar({
     return !visitedFeatures[item.feature]
   }
 
-  // ✅ UPDATED: hide feature items while plan is still loading
   const isVisible = (item: NavItem) => {
     if (item.adminOnly && role !== 'admin') return false
     if (loading && item.feature) return false
@@ -308,7 +305,6 @@ export default function DashboardSidebar({
       animate={{ width: collapsed ? 68 : 240 }}
       transition={{ duration: 0.35, ease: [0.25, 0.8, 0.25, 1] }}
     >
-      {/* Blurred background */}
       <div
         style={{
           position: "absolute",
@@ -321,7 +317,6 @@ export default function DashboardSidebar({
         }}
       />
 
-      {/* Header */}
       <div style={{
         display: "flex", alignItems: "center",
         justifyContent: collapsed ? "center" : "space-between",
@@ -350,10 +345,9 @@ export default function DashboardSidebar({
         </motion.button>
       </div>
 
-      {/* Navigation */}
       <nav className="dl-sidebar-nav" style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "8px 8px" }}>
         {navSections.map(sec => {
-          // ✅ Payroll section guarded by direct DB flag, not context
+          // ✅ Payroll section guarded by direct DB flag
           if (sec.section === 'PAYROLL' && !payrollEnabled) return null
           if (sec.feature && sec.section !== 'PAYROLL' && !hasFeature(sec.feature)) return null
 
@@ -398,7 +392,6 @@ export default function DashboardSidebar({
         })}
       </nav>
 
-      {/* User footer */}
       <div style={{
         borderTop: `1px solid ${borderColor}`, display: "flex", alignItems: "center", gap: 10,
         padding: collapsed ? "12px 0" : "14px 16px",
