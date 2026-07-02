@@ -107,53 +107,58 @@ export default function DashboardSidebar({
   const [payrollEnabled, setPayrollEnabled] = useState(false)
 
   useEffect(() => {
+    let cancelled = false
     const getCompany = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const cid = (user?.app_metadata as any)?.company_id
-      if (!cid) return
-      const { data } = await supabase
-        .from("companies")
-        .select("business_type")
-        .eq("id", cid)
-        .single()
-      if (data) setBusinessType(data.business_type || "")
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || cancelled) return
+        const cid = (user?.app_metadata as any)?.company_id
+        if (!cid) return
 
-      // ✅ Reliable payroll check – step 1: get feature UUID
-      const { data: featureRow } = await supabase
-        .from("features")
-        .select("id")
-        .eq("code", "payroll")
-        .maybeSingle()
+        const { data } = await supabase
+          .from("companies")
+          .select("business_type")
+          .eq("id", cid)
+          .single()
+        if (!cancelled && data) setBusinessType(data.business_type || "")
 
-      if (featureRow) {
-        // ✅ Step 2: check company_features for that feature
-        const { data: cfRow } = await supabase
-          .from("company_features")
-          .select("enabled")
-          .eq("company_id", cid)
-          .eq("feature_id", featureRow.id)
-          .maybeSingle()
+        // ✅ SAFE payroll check – wrapped in try/catch, correct join
+        try {
+          const { data: cfRow } = await supabase
+            .from("company_features")
+            .select("enabled, features!inner(code)")
+            .eq("features.code", "payroll")
+            .eq("company_id", cid)
+            .maybeSingle()
 
-        if (cfRow?.enabled) {
-          setPayrollEnabled(true)
+          if (!cancelled && cfRow?.enabled) {
+            setPayrollEnabled(true)
+          }
+        } catch (_) {
+          // if this query fails, payroll simply stays hidden – no crash
+          if (!cancelled) setPayrollEnabled(false)
         }
+      } catch (_) {
+        // outer try/catch – ignore any error in company fetch
       }
     }
     getCompany()
+    return () => { cancelled = true }
   }, [])
 
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
   useEffect(() => {
     const check = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user?.email) return
-      const { data } = await supabase
-        .from("platform_admins")
-        .select("id")
-        .eq("email", user.email)
-        .maybeSingle()
-      setIsPlatformAdmin(!!data)
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user?.email) return
+        const { data } = await supabase
+          .from("platform_admins")
+          .select("id")
+          .eq("email", user.email)
+          .maybeSingle()
+        setIsPlatformAdmin(!!data)
+      } catch (_) {}
     }
     check()
   }, [])
@@ -161,12 +166,14 @@ export default function DashboardSidebar({
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   useEffect(() => {
     const checkSuper = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user?.email === 'siqbalhwc@gmail.com') {
-        setIsSuperAdmin(true)
-      } else {
-        setIsSuperAdmin(false)
-      }
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user?.email === 'siqbalhwc@gmail.com') {
+          setIsSuperAdmin(true)
+        } else {
+          setIsSuperAdmin(false)
+        }
+      } catch (_) {}
     }
     checkSuper()
   }, [])
@@ -347,7 +354,7 @@ export default function DashboardSidebar({
 
       <nav className="dl-sidebar-nav" style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "8px 8px" }}>
         {navSections.map(sec => {
-          // ✅ Payroll section guarded by direct DB flag
+          // ✅ Payroll section guarded by direct DB flag (safe – will never crash)
           if (sec.section === 'PAYROLL' && !payrollEnabled) return null
           if (sec.feature && sec.section !== 'PAYROLL' && !hasFeature(sec.feature)) return null
 
