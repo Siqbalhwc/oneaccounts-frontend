@@ -28,9 +28,14 @@ export default function PayrollRunDetailPage() {
   const params = useParams()
   const runId = parseInt(params.id as string, 10)
   const { role } = useRole()
-  const { hasFeature } = usePlan()
+  const { hasFeature, loading: planLoading } = usePlan()   // ✅ loading guard added
   const canView = role === "admin" || role === "accountant"
   const canEdit = role === "admin" || role === "accountant"
+
+  // ✅ PlanContext loading check – no flicker
+  if (planLoading) {
+    return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
+  }
 
   if (!hasFeature("payroll")) {
     return (
@@ -60,7 +65,6 @@ export default function PayrollRunDetailPage() {
     if (!companyId || !runId) return
     setLoading(true)
 
-    // Fetch the run
     supabase
       .from("payroll_runs")
       .select("*")
@@ -75,7 +79,6 @@ export default function PayrollRunDetailPage() {
         }
         setRun(runData)
 
-        // Fetch run lines with employee names
         supabase
           .from("payroll_run_lines")
           .select("*, employees!inner(full_name)")

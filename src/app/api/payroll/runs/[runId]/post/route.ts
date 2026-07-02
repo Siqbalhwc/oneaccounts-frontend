@@ -8,9 +8,11 @@ export async function POST(
 ) {
   const { runId: runIdStr } = await params
   const cookieStore = await cookies()
-  const supabase = createServerClient(
+
+  // ✅ Use service‑role key for server‑side operations that need to bypass RLS
+  const supabaseAdmin = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,   // NEVER exposed to client
     {
       cookies: {
         getAll() { return cookieStore.getAll() },
@@ -24,11 +26,11 @@ export async function POST(
   )
 
   // 1. Authenticate
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { user } } = await supabaseAdmin.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // 2. Get company ID (using the existing helper)
-  const { data: roleData } = await supabase
+  // 2. Get company ID
+  const { data: roleData } = await supabaseAdmin
     .from('user_roles')
     .select('company_id')
     .eq('user_id', user.id)
@@ -36,35 +38,48 @@ export async function POST(
   if (!roleData?.company_id) return NextResponse.json({ error: 'No company found' }, { status: 400 })
   const companyId = roleData.company_id
 
-  // 3. Check feature toggle (payroll must be enabled for this company)
-  const { data: featureRow } = await supabase
+  // 3. ✅ Correct, safe feature check – no broken join
+  const { data: payrollFeature } = await supabaseAdmin
+    .from('features')
+    .select('id')
+    .eq('code', 'payroll')
+    .maybeSingle()
+
+  if (!payrollFeature) {
+    return NextResponse.json({ error: 'Payroll feature not configured' }, { status: 403 })
+  }
+
+  const { data: cfRow } = await supabaseAdmin
     .from('company_features')
     .select('enabled')
     .eq('company_id', companyId)
-    .eq('features(code)', 'payroll')
+    .eq('feature_id', payrollFeature.id)
     .maybeSingle()
-  if (!featureRow || !featureRow.enabled) {
+
+  if (!cfRow?.enabled) {
     return NextResponse.json({ error: 'Payroll feature is not enabled' }, { status: 403 })
   }
 
   const runId = parseInt(runIdStr, 10)
   if (isNaN(runId)) return NextResponse.json({ error: 'Invalid run ID' }, { status: 400 })
 
-  // 4. Verify the run belongs to this company and is ready to post
-  const { data: run } = await supabase
+  // 4. Verify the run belongs to this company and is not already posted
+  const { data: run } = await supabaseAdmin
     .from('payroll_runs')
     .select('id, status')
     .eq('id', runId)
     .eq('company_id', companyId)
-    .not('status', 'in', '("posted","locked","reversed")')
     .maybeSingle()
 
   if (!run) {
-    return NextResponse.json({ error: 'Run not found or already posted/locked/reversed' }, { status: 404 })
+    return NextResponse.json({ error: 'Run not found' }, { status: 404 })
+  }
+  if (['posted','locked','reversed'].includes(run.status)) {
+    return NextResponse.json({ error: 'Run already posted/locked/reversed' }, { status: 409 })
   }
 
-  // 5. Call the Postgres function that does the actual posting
-  const { data, error: rpcError } = await supabase.rpc('create_payroll_transaction', {
+  // 5. Call the Postgres function (service‑role bypasses RLS)
+  const { data, error: rpcError } = await supabaseAdmin.rpc('create_payroll_transaction', {
     p_run_id: runId,
   })
 
