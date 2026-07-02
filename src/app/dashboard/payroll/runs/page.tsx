@@ -5,6 +5,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
 import { Plus, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
+import { usePlan } from "@/contexts/PlanContext"
 
 type SortField = "month" | "status" | "generated_at"
 type SortDir = "asc" | "desc"
@@ -34,35 +35,16 @@ export default function PayrollRunsPage() {
   )
   const router = useRouter()
   const { role } = useRole()
+  const { hasFeature, loading: planLoading } = usePlan()
   const canView = role === "admin" || role === "accountant"
   const canEdit = role === "admin" || role === "accountant"
 
-  // ── ALL HOOKS DECLARED UP FRONT (fixes React error #310) ──
-  const [payrollEnabled, setPayrollEnabled] = useState(false)
-  const [checkingFeature, setCheckingFeature] = useState(true)
   const [runs, setRuns] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [sortField, setSortField] = useState<SortField>("generated_at")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
   const [companyId, setCompanyId] = useState("")
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      const cid = (user?.app_metadata as any)?.company_id
-      if (!cid) { setCheckingFeature(false); return }
-      supabase.from("features").select("id").eq("code", "payroll").maybeSingle().then(({ data: feat }) => {
-        if (feat) {
-          supabase.from("company_features").select("enabled").eq("company_id", cid).eq("feature_id", feat.id).maybeSingle().then(({ data: cf }) => {
-            setPayrollEnabled(cf?.enabled === true)
-            setCheckingFeature(false)
-          })
-        } else {
-          setCheckingFeature(false)
-        }
-      })
-    })
-  }, [])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -146,12 +128,11 @@ export default function PayrollRunsPage() {
     </th>
   )
 
-  // ── ALL CONDITIONAL RETURNS NOW HAPPEN AFTER EVERY HOOK CALL ──
-  if (checkingFeature) {
+  if (planLoading) {
     return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
   }
 
-  if (!payrollEnabled) {
+  if (!hasFeature("payroll")) {
     return (
       <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>
         <h2>Payroll feature is not enabled.</h2>
