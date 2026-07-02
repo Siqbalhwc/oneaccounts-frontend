@@ -152,7 +152,6 @@ export default function NewSalaryRevisionPage() {
           </div>
 
           <div style={{ marginBottom: 16 }}>
-            <label className="label">Salary Structure *</label>
             <EntityPicker
               entityType="salary_structure"
               value={selectedSalaryStructure}
@@ -161,7 +160,7 @@ export default function NewSalaryRevisionPage() {
                 setSelectedSalaryStructure(record)
               }}
               placeholder="Select salary structure…"
-              label=""
+              label="Salary Structure *"
               allowCreate={false}
             />
           </div>
