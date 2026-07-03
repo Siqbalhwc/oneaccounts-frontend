@@ -92,6 +92,7 @@ export default function EntityPicker({
     : entityType === "activity" ? "activities"
     : entityType === "project" ? "projects"
     : entityType === "account" ? "accounts"
+    : entityType === "salary_structure" ? "salary_structures"   // ✅ added
     : null
 
   const [loadError, setLoadError] = useState<string | null>(null)

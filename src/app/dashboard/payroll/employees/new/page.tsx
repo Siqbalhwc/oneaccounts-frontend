@@ -12,6 +12,9 @@ const EMPLOYMENT_TYPES = ["permanent", "contract", "daily_wage", "consultant"]
 const PAYMENT_METHODS = ["bank", "cash"]
 const EMPLOYEE_STATUSES = ["draft", "active", "on_leave", "resigned", "terminated", "retired"]
 
+const CNIC_REGEX = /^\d{5}-\d{7}-\d$/
+const MOBILE_REGEX = /^03\d{2}-\d{7}$/
+
 export default function NewEmployeePage() {
   const router = useRouter()
   const supabase = createBrowserClient(
@@ -68,6 +71,19 @@ export default function NewEmployeePage() {
   const handleSubmit = async () => {
     if (!companyId) { setError("Company not loaded"); return }
     if (!fullName.trim()) { setError("Employee name is required"); return }
+
+    // ✅ CNIC validation (if filled)
+    if (cnic.trim() && !CNIC_REGEX.test(cnic.trim())) {
+      setError("CNIC format must be 00000-0000000-0")
+      return
+    }
+
+    // ✅ Mobile validation (if filled)
+    if (mobile.trim() && !MOBILE_REGEX.test(mobile.trim())) {
+      setError("Mobile format must be 03XX-XXXXXXX")
+      return
+    }
+
     setLoading(true)
     setError("")
 
@@ -85,7 +101,6 @@ export default function NewEmployeePage() {
       bank_account_no: bankAccountNo.trim() || null,
       tax_status: taxStatus.trim() || null,
       status: status,
-      // ❌ removed created_by, updated_by – they don't exist in the employees table
     }
 
     const { data, error: insertErr } = await supabase
@@ -234,8 +249,8 @@ export default function NewEmployeePage() {
               </div>
             </div>
 
+            {/* ✅ Salary Structure — only the EntityPicker, no extra label */}
             <div style={{ marginBottom: 16 }}>
-              <label className="label">Salary Structure</label>
               <EntityPicker
                 entityType="salary_structure"
                 value={selectedSalaryStructure}
@@ -244,7 +259,7 @@ export default function NewEmployeePage() {
                   setSelectedSalaryStructure(record)
                 }}
                 placeholder="Select salary structure…"
-                label=""
+                label="Salary Structure"
                 allowCreate={false}
               />
             </div>

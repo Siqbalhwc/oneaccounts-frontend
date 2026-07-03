@@ -19,6 +19,7 @@ const FEATURE_CODES = [
   "purchase_orders",
   "asset_management",
   "payroll",
+  "material_management",
 ]
 
 const FEATURE_INFO: Record<string, { label: string; desc: string; icon: string }> = {
@@ -33,6 +34,7 @@ const FEATURE_INFO: Record<string, { label: string; desc: string; icon: string }
   purchase_orders:      { label: "Purchase Orders",           desc: "Create and manage purchase orders with approval workflow",                     icon: "📋" },
   asset_management:     { label: "Fixed Asset Management",    desc: "Track fixed assets, depreciation, transfers, and asset sales",                icon: "📦" },
   payroll:              { label: "Payroll",                   desc: "Process employee salaries, generate payslips, and post payroll journal entries", icon: "💵" },
+  material_management:  { label: "Material Management",       desc: "Track raw material, WIP, and finished goods flow through gate passes, production runs, and stock ledger", icon: "🏭" },
 }
 
 export default function FeatureManagerPage() {
