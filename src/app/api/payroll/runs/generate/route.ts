@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,   // ✅ service‑role key for server‑side writes
     {
       cookies: {
         getAll() { return cookieStore.getAll() },
@@ -31,14 +31,25 @@ export async function POST(request: NextRequest) {
   if (!roleData?.company_id) return NextResponse.json({ error: 'No company found' }, { status: 400 })
   const companyId = roleData.company_id
 
-  // 2. Feature check
-  const { data: featureRow } = await supabase
+  // 2. ✅ Safe feature check – no broken join
+  const { data: payrollFeature } = await supabase
+    .from('features')
+    .select('id')
+    .eq('code', 'payroll')
+    .maybeSingle()
+
+  if (!payrollFeature) {
+    return NextResponse.json({ error: 'Payroll feature not configured' }, { status: 403 })
+  }
+
+  const { data: cfRow } = await supabase
     .from('company_features')
     .select('enabled')
     .eq('company_id', companyId)
-    .eq('features(code)', 'payroll')
+    .eq('feature_id', payrollFeature.id)
     .maybeSingle()
-  if (!featureRow || !featureRow.enabled) {
+
+  if (!cfRow?.enabled) {
     return NextResponse.json({ error: 'Payroll feature not enabled' }, { status: 403 })
   }
 
