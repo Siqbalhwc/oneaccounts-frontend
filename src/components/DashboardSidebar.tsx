@@ -43,6 +43,7 @@ const baseNavSections: NavSection[] = [
   ]},
   { section: 'MATERIALS', feature: 'material_management', items: [
     { label: 'Overview', icon: '🏭', href: '/dashboard/materials' },
+    { label: 'Products', icon: '📦', href: '/dashboard/materials/products' },
   ]},
   { section: 'ACCOUNTING', groups: [
     { groupLabel: 'General', items: [
