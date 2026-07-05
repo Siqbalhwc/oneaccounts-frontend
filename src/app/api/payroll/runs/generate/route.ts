@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,   // ✅ service‑role key for server‑side writes
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
       cookies: {
         getAll() { return cookieStore.getAll() },
@@ -31,34 +31,31 @@ export async function POST(request: NextRequest) {
   if (!roleData?.company_id) return NextResponse.json({ error: 'No company found' }, { status: 400 })
   const companyId = roleData.company_id
 
-  // 2. ✅ Safe feature check – no broken join
+  // 2. Safe feature check
   const { data: payrollFeature } = await supabase
     .from('features')
     .select('id')
     .eq('code', 'payroll')
     .maybeSingle()
-
   if (!payrollFeature) {
     return NextResponse.json({ error: 'Payroll feature not configured' }, { status: 403 })
   }
-
   const { data: cfRow } = await supabase
     .from('company_features')
     .select('enabled')
     .eq('company_id', companyId)
     .eq('feature_id', payrollFeature.id)
     .maybeSingle()
-
   if (!cfRow?.enabled) {
     return NextResponse.json({ error: 'Payroll feature not enabled' }, { status: 403 })
   }
 
   const body = await request.json()
-  const { month, department_id } = body   // month = '2026-07-01', department_id optional
+  const { month, department_id } = body   // month = '2026-07-01'
 
   if (!month) return NextResponse.json({ error: 'Month is required' }, { status: 400 })
 
-  // 3. Check if a run already exists for this company + month + department (unique constraint)
+  // 3. Check for existing run
   const { data: existingRun } = await supabase
     .from('payroll_runs')
     .select('id')
@@ -70,41 +67,42 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'A payroll run already exists for this month and department', run_id: existingRun.id }, { status: 409 })
   }
 
-  // 4. Fetch active employees for the company
+  // 4. Fetch active employees
   let employeeQuery = supabase
     .from('employees')
     .select('id, full_name, salary_structure_id')
     .eq('company_id', companyId)
     .eq('status', 'active')
-
   if (department_id) {
     employeeQuery = employeeQuery.eq('department_id', department_id)
   }
-
   const { data: employees, error: empErr } = await employeeQuery
   if (empErr || !employees || employees.length === 0) {
     return NextResponse.json({ error: 'No active employees found' }, { status: 404 })
   }
 
-  // 5. Resolve current salary for each employee using effective-dated revisions
+  // Compute days in the payroll month
+  const [y, m] = month.split('-').map(Number)
+  const daysInMonth = new Date(y, m, 0).getDate()
+  const startDate = month
+  const endDate = `${y}-${String(m).padStart(2, '0')}-${daysInMonth}`
+
   const runLines: any[] = []
 
   for (const emp of employees) {
-    // Get the most recent revision effective <= month
+    // Get salary revision
     let { data: revision } = await supabase
       .from('employee_salary_revisions')
       .select('id, salary_structure_id, basic_salary')
       .eq('employee_id', emp.id)
-      .lte('effective_date', month)   // effective on or before the payroll month
+      .lte('effective_date', month)
       .order('effective_date', { ascending: false })
       .limit(1)
       .maybeSingle()
 
-    // Fallback: use employee's current salary_structure_id if no revision yet
     if (!revision) {
-      // Create a synthetic revision with basic_salary = 0 for now – user must add revisions.
       revision = {
-        id: 0,                          // ✅ placeholder – not used later
+        id: 0,
         salary_structure_id: emp.salary_structure_id,
         basic_salary: 0,
       }
@@ -112,7 +110,7 @@ export async function POST(request: NextRequest) {
 
     if (!revision.salary_structure_id) continue
 
-    // Fetch the structure components
+    // Fetch structure components
     const { data: components } = await supabase
       .from('salary_structure_components')
       .select('calculation_type, value, salary_component_id, salary_components!inner(id, name, type, gl_account_id)')
@@ -148,16 +146,74 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // ───── Attendance Integration ─────
+    let absentDays = 0
+    let halfDays = 0
+    let overtimeTotal = 0
+
+    const { data: attRecords } = await supabase
+      .from('attendance_records')
+      .select('raw_status, overtime_amount')
+      .eq('company_id', companyId)
+      .eq('employee_id', emp.id)
+      .eq('verified_status', 'approved')
+      .gte('date', startDate)
+      .lte('date', endDate)
+
+    if (attRecords) {
+      for (const rec of attRecords) {
+        if (rec.raw_status === 'absent') absentDays++
+        else if (rec.raw_status === 'half_day') halfDays++
+        overtimeTotal += Number(rec.overtime_amount || 0)
+      }
+    }
+
+    const dailyRate = revision.basic_salary > 0 ? revision.basic_salary / daysInMonth : 0
+    const absenceDeduction = Math.round(dailyRate * (absentDays + halfDays * 0.5) * 100) / 100
+
+    // Add absence deduction as a component
+    if (absenceDeduction > 0) {
+      lineComponents.push({
+        salary_component_id: null,
+        component_name: 'Attendance Deduction',
+        amount: absenceDeduction,
+        type: 'deduction',
+        gl_account_id: null,
+      })
+      deductions += absenceDeduction
+    }
+
+    // Add overtime as earning component
+    if (overtimeTotal > 0) {
+      lineComponents.push({
+        salary_component_id: null,
+        component_name: 'Overtime',
+        amount: overtimeTotal,
+        type: 'earning',
+        gl_account_id: null,
+      })
+      gross += overtimeTotal
+    }
+
     const net = gross - deductions
 
-    // Dimensions snapshot (from employee_default_dimensions if present)
+    // Attendance summary for run line
+    const attendanceSummary = {
+      working_days: daysInMonth,
+      present: daysInMonth - absentDays - halfDays,
+      absent: absentDays,
+      half_days: halfDays,
+      overtime_hours: overtimeTotal > 0 ? overtimeTotal : 0,
+      deduction: absenceDeduction,
+    }
+
+    // Dimensions snapshot
     const { data: dims } = await supabase
       .from('employee_default_dimensions')
       .select('department_id, location_id, project_id, activity_id, cost_center_id')
       .eq('employee_id', emp.id)
       .maybeSingle()
 
-    // Salary structure snapshot (store the component list)
     const structureSnapshot = {
       id: revision.salary_structure_id,
       components: lineComponents.map(c => ({
@@ -179,6 +235,7 @@ export async function POST(request: NextRequest) {
     runLines.push({
       employee_id: emp.id,
       salary_structure_snapshot: structureSnapshot,
+      attendance_summary: attendanceSummary,
       gross_amount: gross,
       total_deductions: deductions,
       net_amount: net,
@@ -191,7 +248,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No employees with valid salary structures found' }, { status: 400 })
   }
 
-  // 6. Insert the payroll run and its lines in one transaction
+  // 6. Insert run and lines
   const { data: run, error: runErr } = await supabase
     .from('payroll_runs')
     .insert({
@@ -214,6 +271,7 @@ export async function POST(request: NextRequest) {
         payroll_run_id: run.id,
         employee_id: line.employee_id,
         salary_structure_snapshot: line.salary_structure_snapshot,
+        attendance_summary: line.attendance_summary,
         gross_amount: line.gross_amount,
         total_deductions: line.total_deductions,
         net_amount: line.net_amount,
@@ -223,12 +281,10 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (lineErr || !runLine) {
-      // Rollback? For simplicity, we'll just return error
       await supabase.from('payroll_runs').delete().eq('id', run.id)
       return NextResponse.json({ error: lineErr?.message || 'Failed to create run line' }, { status: 500 })
     }
 
-    // Insert line components
     const compRows = line.components.map((c: any) => ({
       payroll_run_line_id: runLine.id,
       salary_component_id: c.salary_component_id,
