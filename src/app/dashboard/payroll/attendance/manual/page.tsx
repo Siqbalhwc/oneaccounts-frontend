@@ -23,7 +23,7 @@ export default function ManualAttendancePage() {
   const [companyId, setCompanyId] = useState("")
   const [date, setDate] = useState(new Date().toISOString().split("T")[0])
   const [employees, setEmployees] = useState<any[]>([])
-  const [attendanceRows, setAttendanceRows] = useState<Record<number, any>>({}) // keyed by employee id
+  const [attendanceRows, setAttendanceRows] = useState<Record<number, any>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
@@ -118,6 +118,25 @@ export default function ManualAttendancePage() {
       setError(upsertErr.message)
       setSaving(false)
       return
+    }
+
+    // ✅ Refresh the displayed records from the database
+    const { data } = await supabase
+      .from("attendance_records")
+      .select("employee_id, raw_status, check_in, check_out")
+      .eq("company_id", companyId)
+      .eq("date", date)
+    if (data) {
+      const refreshed: Record<number, any> = { ...attendanceRows }
+      data.forEach((row: any) => {
+        refreshed[row.employee_id] = {
+          employee_id: row.employee_id,
+          raw_status: row.raw_status,
+          check_in: row.check_in || "",
+          check_out: row.check_out || "",
+        }
+      })
+      setAttendanceRows(refreshed)
     }
 
     setFlash(`✅ Attendance saved for ${date}`)
