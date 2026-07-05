@@ -41,6 +41,8 @@ const baseNavSections: NavSection[] = [
     { label: 'Attendance Verification', icon: '✅', href: '/dashboard/payroll/attendance/verify' },
     { label: 'Leave Types',          icon: '🏖️', href: '/dashboard/payroll/leave-types' },    
     { label: 'Leave Applications',  icon: '📝', href: '/dashboard/payroll/leave-applications' },
+    { label: 'Employee Loans',      icon: '💵', href: '/dashboard/payroll/loans' },
+    { label: 'Salary Advances',     icon: '💸', href: '/dashboard/payroll/advances' },
     { label: 'Salary Components',  icon: '💰', href: '/dashboard/payroll/salary-components' },
     { label: 'Salary Structures', icon: '📊', href: '/dashboard/payroll/salary-structures' },
     { label: 'Payroll Runs',      icon: '📅', href: '/dashboard/payroll/runs' },
