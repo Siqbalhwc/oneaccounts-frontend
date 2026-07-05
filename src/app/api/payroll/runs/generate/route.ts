@@ -136,6 +136,8 @@ export async function POST(request: NextRequest) {
         amount,
         type: (comp.salary_components as any)?.type,
         gl_account_id: (comp.salary_components as any)?.gl_account_id,
+        source_type: null,
+        source_id: null,
       })
 
       if ((comp.salary_components as any)?.type === 'earning') {
@@ -177,6 +179,8 @@ export async function POST(request: NextRequest) {
         amount: absenceDeduction,
         type: 'deduction',
         gl_account_id: null,
+        source_type: null,
+        source_id: null,
       })
       deductions += absenceDeduction
     }
@@ -188,11 +192,13 @@ export async function POST(request: NextRequest) {
         amount: overtimeTotal,
         type: 'earning',
         gl_account_id: null,
+        source_type: null,
+        source_id: null,
       })
       gross += overtimeTotal
     }
 
-    // ───── Employee Loans Integration ─────
+    // ───── Employee Loans Integration (with source tracking) ─────
     const { data: activeLoans } = await supabase
       .from('employee_loans')
       .select('id, monthly_installment')
@@ -210,13 +216,15 @@ export async function POST(request: NextRequest) {
             amount: installment,
             type: 'deduction',
             gl_account_id: null,
+            source_type: 'loan',
+            source_id: loan.id,
           })
           deductions += installment
         }
       }
     }
 
-    // ───── Salary Advances Integration ─────
+    // ───── Salary Advances Integration (with source tracking) ─────
     const { data: activeAdvances } = await supabase
       .from('salary_advances')
       .select('id, monthly_recovery')
@@ -234,6 +242,8 @@ export async function POST(request: NextRequest) {
             amount: recovery,
             type: 'deduction',
             gl_account_id: null,
+            source_type: 'advance',
+            source_id: adv.id,
           })
           deductions += recovery
         }
@@ -335,6 +345,8 @@ export async function POST(request: NextRequest) {
       salary_component_id: c.salary_component_id,
       component_name: c.component_name,
       amount: c.amount,
+      source_type: c.source_type || null,
+      source_id: c.source_id || null,
     }))
 
     const { error: compErr } = await supabase
