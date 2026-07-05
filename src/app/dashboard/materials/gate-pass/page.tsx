@@ -319,12 +319,14 @@ export default function InwardGatePassPage() {
 
         .po-link-box { background: var(--bg); border: 1px dashed var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; }
 
-        .line-item-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+        .line-item-row { display: grid; grid-template-columns: 2fr 60px 1fr 1fr 1fr auto; gap: 8px; align-items: center; margin-bottom: 8px; }
         .line-item-header { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; }
+        .line-item-unit { font-size: 12px; color: var(--text-muted); text-align: center; text-transform: uppercase; font-weight: 600; }
 
         @media (max-width: 600px) {
           .form-row { grid-template-columns: 1fr; }
           .line-item-row { grid-template-columns: 1fr; }
+          .line-item-unit { text-align: left; }
         }
       `}</style>
 
@@ -460,8 +462,8 @@ export default function InwardGatePassPage() {
             <input className="input-field" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Optional" />
 
             <div style={{ marginTop: 8, marginBottom: 8 }}>
-              <div className="line-item-header" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr auto", gap: 8 }}>
-                <span>Product</span><span>Expected</span><span>Received *</span><span>Batch #</span><span></span>
+              <div className="line-item-header" style={{ display: "grid", gridTemplateColumns: "2fr 60px 1fr 1fr 1fr auto", gap: 8 }}>
+                <span>Product</span><span>Unit</span><span>Expected</span><span>Received *</span><span>Batch #</span><span></span>
               </div>
               {lineItems.map((li, idx) => (
                 <div key={idx} className="line-item-row">
@@ -473,6 +475,7 @@ export default function InwardGatePassPage() {
                       {matProducts.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                   )}
+                  <div className="line-item-unit">{productMap[parseInt(li.product_id)]?.unit || "—"}</div>
                   <input className="input-field" style={{ marginBottom: 0 }} type="number" value={li.expected_qty} disabled={!!selectedPoId} onChange={e => updateLineItem(idx, "expected_qty", e.target.value)} placeholder="Qty" />
                   <input className="input-field" style={{ marginBottom: 0 }} type="number" value={li.received_qty} onChange={e => updateLineItem(idx, "received_qty", e.target.value)} placeholder="Qty" />
                   <input className="input-field" style={{ marginBottom: 0 }} value={li.batch_number} onChange={e => updateLineItem(idx, "batch_number", e.target.value)} placeholder="Optional" />
