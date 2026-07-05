@@ -61,7 +61,7 @@ export default function TaxDeductionPage() {
       return
     }
 
-    // Fetch taxable components: join component -> salary_component -> run line -> employee
+    // Fetch taxable components
     const { data: lines, error: lineErr } = await supabase
       .from("payroll_run_line_components")
       .select("amount, payroll_run_lines!inner(employee_id, payroll_run_id, employees!inner(full_name, employee_code)), salary_components!inner(name, is_taxable)")
@@ -77,13 +77,17 @@ export default function TaxDeductionPage() {
     // Group by employee
     const grouped: Record<number, { name: string; code: string; total: number }> = {}
     for (const row of lines || []) {
-      // The join returns an array because it's a one-to-many relationship
+      // Handle payroll_run_lines as array or single object
       const runLine = Array.isArray(row.payroll_run_lines) ? row.payroll_run_lines[0] : row.payroll_run_lines
       if (!runLine) continue
       const empId = runLine.employee_id
       if (!empId) continue
-      const employeeName = runLine.employees?.full_name || "Unknown"
-      const employeeCode = runLine.employees?.employee_code || "N/A"
+
+      // Handle employees as array or single object
+      const emp = Array.isArray(runLine.employees) ? runLine.employees[0] : runLine.employees
+      const employeeName = emp?.full_name || "Unknown"
+      const employeeCode = emp?.employee_code || "N/A"
+
       if (!grouped[empId]) {
         grouped[empId] = { name: employeeName, code: employeeCode, total: 0 }
       }
