@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { month, department_id } = body   // month = '2026-07-01'
+  const { month, department_id } = body
 
   if (!month) return NextResponse.json({ error: 'Month is required' }, { status: 400 })
 
@@ -81,7 +81,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No active employees found' }, { status: 404 })
   }
 
-  // Compute days in the payroll month
   const [y, m] = month.split('-').map(Number)
   const daysInMonth = new Date(y, m, 0).getDate()
   const startDate = month
@@ -90,7 +89,7 @@ export async function POST(request: NextRequest) {
   const runLines: any[] = []
 
   for (const emp of employees) {
-    // Get salary revision
+    // Salary revision
     let { data: revision } = await supabase
       .from('employee_salary_revisions')
       .select('id, salary_structure_id, basic_salary')
@@ -110,7 +109,7 @@ export async function POST(request: NextRequest) {
 
     if (!revision.salary_structure_id) continue
 
-    // Fetch structure components
+    // Structure components
     const { data: components } = await supabase
       .from('salary_structure_components')
       .select('calculation_type, value, salary_component_id, salary_components!inner(id, name, type, gl_account_id)')
@@ -171,7 +170,6 @@ export async function POST(request: NextRequest) {
     const dailyRate = revision.basic_salary > 0 ? revision.basic_salary / daysInMonth : 0
     const absenceDeduction = Math.round(dailyRate * (absentDays + halfDays * 0.5) * 100) / 100
 
-    // Add absence deduction as a component
     if (absenceDeduction > 0) {
       lineComponents.push({
         salary_component_id: null,
@@ -183,7 +181,6 @@ export async function POST(request: NextRequest) {
       deductions += absenceDeduction
     }
 
-    // Add overtime as earning component
     if (overtimeTotal > 0) {
       lineComponents.push({
         salary_component_id: null,
@@ -195,9 +192,57 @@ export async function POST(request: NextRequest) {
       gross += overtimeTotal
     }
 
+    // ───── Employee Loans Integration ─────
+    const { data: activeLoans } = await supabase
+      .from('employee_loans')
+      .select('id, monthly_installment')
+      .eq('employee_id', emp.id)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+
+    if (activeLoans) {
+      for (const loan of activeLoans) {
+        const installment = Number(loan.monthly_installment || 0)
+        if (installment > 0) {
+          lineComponents.push({
+            salary_component_id: null,
+            component_name: 'Loan Deduction',
+            amount: installment,
+            type: 'deduction',
+            gl_account_id: null,
+          })
+          deductions += installment
+        }
+      }
+    }
+
+    // ───── Salary Advances Integration ─────
+    const { data: activeAdvances } = await supabase
+      .from('salary_advances')
+      .select('id, monthly_recovery')
+      .eq('employee_id', emp.id)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+
+    if (activeAdvances) {
+      for (const adv of activeAdvances) {
+        const recovery = Number(adv.monthly_recovery || 0)
+        if (recovery > 0) {
+          lineComponents.push({
+            salary_component_id: null,
+            component_name: 'Salary Advance Recovery',
+            amount: recovery,
+            type: 'deduction',
+            gl_account_id: null,
+          })
+          deductions += recovery
+        }
+      }
+    }
+
     const net = gross - deductions
 
-    // Attendance summary for run line
+    // Attendance summary
     const attendanceSummary = {
       working_days: daysInMonth,
       present: daysInMonth - absentDays - halfDays,
