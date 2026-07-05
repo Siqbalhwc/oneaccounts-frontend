@@ -47,6 +47,7 @@ const baseNavSections: NavSection[] = [
     { label: 'Salary Structures', icon: '📊', href: '/dashboard/payroll/salary-structures' },
     { label: 'Payroll Runs',      icon: '📅', href: '/dashboard/payroll/runs' },
     { label: 'Approval Workflow',     icon: '⚙️', href: '/dashboard/payroll/settings/approval-workflow' },
+    { label: 'Reports',               icon: '📊', href: '/dashboard/payroll/reports' },
   ]},
   { section: 'MATERIALS', feature: 'material_management', items: [
     { label: 'Overview', icon: '🏭', href: '/dashboard/materials' },
