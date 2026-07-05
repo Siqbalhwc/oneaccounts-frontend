@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, CheckCircle, AlertTriangle } from "lucide-react"
+import { ArrowLeft, CheckCircle, Send, ThumbsUp } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 
@@ -28,11 +28,10 @@ export default function PayrollRunDetailPage() {
   const params = useParams()
   const runId = parseInt(params.id as string, 10)
   const { role } = useRole()
-  const { hasFeature, loading: planLoading } = usePlan()   // ✅ loading guard added
+  const { hasFeature, loading: planLoading } = usePlan()
   const canView = role === "admin" || role === "accountant"
   const canEdit = role === "admin" || role === "accountant"
 
-  // ✅ PlanContext loading check – no flicker
   if (planLoading) {
     return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
   }
@@ -47,17 +46,29 @@ export default function PayrollRunDetailPage() {
   }
 
   const [companyId, setCompanyId] = useState("")
+  const [approvalLevels, setApprovalLevels] = useState<string>("1")
   const [run, setRun] = useState<any>(null)
   const [lines, setLines] = useState<RunLine[]>([])
   const [loading, setLoading] = useState(true)
-  const [posting, setPosting] = useState(false)
+  const [actionLoading, setActionLoading] = useState("")   // 'submit', 'approve', 'post'
   const [flash, setFlash] = useState("")
   const [error, setError] = useState("")
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
-      if (cid) setCompanyId(cid)
+      if (cid) {
+        setCompanyId(cid)
+        // Fetch approval settings
+        supabase
+          .from("payroll_approval_settings")
+          .select("approval_levels")
+          .eq("company_id", cid)
+          .maybeSingle()
+          .then(({ data }) => {
+            if (data) setApprovalLevels(data.approval_levels)
+          })
+      }
     })
   }, [])
 
@@ -108,26 +119,55 @@ export default function PayrollRunDetailPage() {
     )
   }, [lines])
 
+  // Workflow actions
+  const handleSubmit = async () => {
+    setActionLoading("submit")
+    try {
+      const res = await fetch(`/api/payroll/runs/${runId}/submit`, { method: "POST" })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || "Submit failed"); setActionLoading(""); return }
+      setRun((prev: any) => ({ ...prev, status: "submitted", submitted_at: new Date().toISOString() }))
+      setFlash("✅ Run submitted for approval")
+    } catch (err: any) { setError(err.message) }
+    setActionLoading("")
+  }
+
+  const handleApprove = async () => {
+    setActionLoading("approve")
+    try {
+      const res = await fetch(`/api/payroll/runs/${runId}/approve`, { method: "POST" })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || "Approve failed"); setActionLoading(""); return }
+      setRun((prev: any) => ({ ...prev, status: "approved", approved_at: new Date().toISOString() }))
+      setFlash("✅ Run approved")
+    } catch (err: any) { setError(err.message) }
+    setActionLoading("")
+  }
+
   const handlePost = async () => {
     if (!confirm("Post this payroll run? This will create a journal entry and lock the run permanently.")) return
-    setPosting(true)
-    setError("")
+    setActionLoading("post")
     try {
       const res = await fetch(`/api/payroll/runs/${runId}/post`, { method: "POST" })
       const data = await res.json()
-      if (!res.ok || !data.success) {
-        setError(data.error || "Posting failed")
-        setPosting(false)
-        return
-      }
-      setFlash("✅ Payroll posted successfully – journal entry created and run locked.")
+      if (!res.ok) { setError(data.error || "Posting failed"); setActionLoading(""); return }
+      setFlash("✅ Payroll posted successfully")
       setRun((prev: any) => ({ ...prev, status: "posted", posted_at: new Date().toISOString(), locked_at: new Date().toISOString() }))
-      setPosting(false)
-    } catch (err: any) {
-      setError(err.message || "Network error")
-      setPosting(false)
-    }
+    } catch (err: any) { setError(err.message) }
+    setActionLoading("")
   }
+
+  // Determine which buttons to show based on approval levels and current status
+  const canSubmit = canEdit && run && (run.status === "draft") && (approvalLevels === "3")
+  const canApprove = canEdit && run && (run.status === "draft" || run.status === "submitted") && (approvalLevels === "2" || approvalLevels === "3")
+  const canPost = canEdit && run && (
+    // Level 1: draft -> post (no approval required)
+    (approvalLevels === "1" && run.status === "draft") ||
+    // Level 2: approved -> post
+    (approvalLevels === "2" && run.status === "approved") ||
+    // Level 3: approved -> post
+    (approvalLevels === "3" && run.status === "approved")
+  )
 
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
@@ -146,9 +186,10 @@ export default function PayrollRunDetailPage() {
         }
         .btn:hover { background: var(--card-hover); }
         .btn-back { padding: 6px 12px; }
-        .btn-post { background: #059669; color: white; border-color: #059669; }
-        .btn-post:hover { background: #047857; }
-        .btn-post:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-submit { background: #2563EB; color: white; border-color: #2563EB; }
+        .btn-approve { background: #059669; color: white; border-color: #059669; }
+        .btn-post { background: #7C3AED; color: white; border-color: #7C3AED; }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
         .summary-grid {
           display: grid;
@@ -194,11 +235,25 @@ export default function PayrollRunDetailPage() {
             Status: <strong>{run?.status || "…"}</strong>
           </p>
         </div>
-        {run && run.status !== "posted" && run.status !== "locked" && canEdit && (
-          <button className="btn btn-post" onClick={handlePost} disabled={posting}>
-            <CheckCircle size={16} /> {posting ? "Posting..." : "Post Payroll"}
-          </button>
-        )}
+
+        {/* Dynamic workflow buttons */}
+        <div style={{ display: "flex", gap: 8 }}>
+          {canSubmit && (
+            <button className="btn btn-submit" onClick={handleSubmit} disabled={actionLoading !== ""}>
+              <Send size={16} /> {actionLoading === "submit" ? "Submitting..." : "Submit"}
+            </button>
+          )}
+          {canApprove && (
+            <button className="btn btn-approve" onClick={handleApprove} disabled={actionLoading !== ""}>
+              <ThumbsUp size={16} /> {actionLoading === "approve" ? "Approving..." : "Approve"}
+            </button>
+          )}
+          {canPost && (
+            <button className="btn btn-post" onClick={handlePost} disabled={actionLoading !== ""}>
+              <CheckCircle size={16} /> {actionLoading === "post" ? "Posting..." : "Post Payroll"}
+            </button>
+          )}
+        </div>
       </div>
 
       {error && <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, border: "1px solid #FECACA" }}>{error}</div>}
