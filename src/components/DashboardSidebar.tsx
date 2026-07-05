@@ -38,8 +38,9 @@ const baseNavSections: NavSection[] = [
     { section: 'PAYROLL', feature: 'payroll', items: [
     { label: 'Employees',         icon: '👥', href: '/dashboard/payroll/employees' },
     { label: 'Attendance',          icon: '📋', href: '/dashboard/payroll/attendance' },
+    { label: 'Attendance Verification', icon: '✅', href: '/dashboard/payroll/attendance/verify' },
+    { label: 'Leave Types',          icon: '🏖️', href: '/dashboard/payroll/leave-types' },    
     { label: 'Leave Applications',  icon: '📝', href: '/dashboard/payroll/leave-applications' },
-    { label: 'Leave Types',          icon: '🏖️', href: '/dashboard/payroll/leave-types' },
     { label: 'Salary Components',  icon: '💰', href: '/dashboard/payroll/salary-components' },
     { label: 'Salary Structures', icon: '📊', href: '/dashboard/payroll/salary-structures' },
     { label: 'Payroll Runs',      icon: '📅', href: '/dashboard/payroll/runs' },
