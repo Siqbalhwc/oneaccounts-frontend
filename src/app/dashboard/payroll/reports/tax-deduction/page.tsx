@@ -77,10 +77,13 @@ export default function TaxDeductionPage() {
     // Group by employee
     const grouped: Record<number, { name: string; code: string; total: number }> = {}
     for (const row of lines || []) {
-      const empId = row.payroll_run_lines?.employee_id
+      // The join returns an array because it's a one-to-many relationship
+      const runLine = Array.isArray(row.payroll_run_lines) ? row.payroll_run_lines[0] : row.payroll_run_lines
+      if (!runLine) continue
+      const empId = runLine.employee_id
       if (!empId) continue
-      const employeeName = row.payroll_run_lines?.employees?.full_name || "Unknown"
-      const employeeCode = row.payroll_run_lines?.employees?.employee_code || "N/A"
+      const employeeName = runLine.employees?.full_name || "Unknown"
+      const employeeCode = runLine.employees?.employee_code || "N/A"
       if (!grouped[empId]) {
         grouped[empId] = { name: employeeName, code: employeeCode, total: 0 }
       }
