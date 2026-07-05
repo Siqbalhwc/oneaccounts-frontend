@@ -77,7 +77,9 @@ export default function SalarySummaryPage() {
     const groups: Record<string, { dept: string; gross: number; deductions: number; net: number; count: number }> = {}
     for (const line of lines) {
       const emp = Array.isArray(line.employees) ? line.employees[0] : line.employees
-      const deptName = emp?.departments?.name || "Unassigned"
+      // departments could also be an array
+      const dept = Array.isArray(emp?.departments) ? emp.departments[0] : emp?.departments
+      const deptName = dept?.name || "Unassigned"
       if (!groups[deptName]) {
         groups[deptName] = { dept: deptName, gross: 0, deductions: 0, net: 0, count: 0 }
       }
