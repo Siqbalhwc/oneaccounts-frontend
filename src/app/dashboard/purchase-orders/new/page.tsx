@@ -30,6 +30,8 @@ export default function NewPurchaseOrderPage() {
   const [selectedSupplier, setSelectedSupplier] = useState<any>(null)
   const supplierRef = useRef<HTMLDivElement>(null)
 
+  const [products, setProducts] = useState<any[]>([])
+
   const [poDate, setPoDate] = useState(new Date().toISOString().split("T")[0])
   const [expectedDelivery, setExpectedDelivery] = useState("")
   const [notes, setNotes] = useState("")
@@ -53,6 +55,7 @@ export default function NewPurchaseOrderPage() {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
       loadSuppliers(cid)
+      loadProducts(cid)
       setLoading(false)
     })
   }, [hasFeature])
@@ -91,8 +94,20 @@ export default function NewPurchaseOrderPage() {
     supabase.from("suppliers")
       .select("id,code,name,phone,balance")
       .eq("company_id", targetId)
+      .is("deleted_at", null)
       .order("name")
       .then(r => { if (r.data) setSuppliers(r.data) })
+  }
+
+  const loadProducts = (cid?: string) => {
+    const targetId = cid || companyId
+    if (!targetId) return
+    supabase.from("products")
+      .select("id, code, name, unit, cost_price")
+      .eq("company_id", targetId)
+      .is("deleted_at", null)
+      .order("name")
+      .then(r => { if (r.data) setProducts(r.data) })
   }
 
   const refreshSuppliers = () => {
@@ -130,6 +145,26 @@ export default function NewPurchaseOrderPage() {
     updated[idx] = { ...updated[idx], [field]: value }
     if (field === "qty" || field === "unit_price") {
       updated[idx].total = updated[idx].qty * updated[idx].unit_price
+    }
+    setItems(updated)
+  }
+
+  const selectItemProduct = (idx: number, productId: string) => {
+    const updated = [...items]
+    if (!productId) {
+      updated[idx] = { ...updated[idx], product_id: null }
+      setItems(updated)
+      return
+    }
+    const product = products.find(p => p.id === parseInt(productId))
+    if (!product) return
+    const qty = updated[idx].qty || 1
+    updated[idx] = {
+      ...updated[idx],
+      product_id: product.id,
+      description: product.name,
+      unit_price: product.cost_price || 0,
+      total: qty * (product.cost_price || 0),
     }
     setItems(updated)
   }
@@ -257,15 +292,17 @@ export default function NewPurchaseOrderPage() {
         .inv-btn:hover { background: var(--card-hover); }
         .inv-btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
 
+        .inv-item-block {
+          padding: 8px 0; border-bottom: 1px solid var(--border);
+        }
         .inv-item-row {
           display: grid;
-          grid-template-columns: 2fr 70px 100px 100px 30px;
-          gap: 6px; align-items: center; padding: 6px 0;
-          border-bottom: 1px solid var(--border);
+          grid-template-columns: 1.4fr 1.4fr 70px 100px 100px 30px;
+          gap: 6px; align-items: center;
         }
         .inv-item-header {
           display: grid;
-          grid-template-columns: 2fr 70px 100px 100px 30px;
+          grid-template-columns: 1.4fr 1.4fr 70px 100px 100px 30px;
           gap: 6px; font-size: 9px; font-weight: 700;
           text-transform: uppercase; color: var(--text-muted); padding-bottom: 6px;
         }
@@ -297,6 +334,9 @@ export default function NewPurchaseOrderPage() {
 
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
         @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
+        @media (max-width: 700px) {
+          .inv-item-row, .inv-item-header { grid-template-columns: 1fr; }
+        }
 
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
@@ -354,7 +394,7 @@ export default function NewPurchaseOrderPage() {
                     {showSupplierList && (
                       <div className="cust-dropdown">
                         {filteredSuppliers.length === 0 ? (
-                          <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: 13 }}>No suppliers found</div>
+                          <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: 13 }}>No active suppliers found</div>
                         ) : (
                           filteredSuppliers.map(s => (
                             <div key={s.id} className="cust-option" onMouseDown={() => selectSupplier(s)}>
@@ -410,6 +450,7 @@ export default function NewPurchaseOrderPage() {
               {items.length > 0 && (
                 <div className="inv-card" style={{ overflowX: "auto", padding: "16px 12px" }}>
                   <div className="inv-item-header">
+                    <span>Product</span>
                     <span>Description</span>
                     <span>Qty</span>
                     <span>Price</span>
@@ -417,12 +458,23 @@ export default function NewPurchaseOrderPage() {
                     <span></span>
                   </div>
                   {items.map((item, idx) => (
-                    <div key={idx} className="inv-item-row">
-                      <input className="inv-input" style={{ height: 34, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Item description" />
-                      <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                      <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                      <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13 }}>PKR {(item.total || 0).toLocaleString()}</span>
-                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
+                    <div key={idx} className="inv-item-block">
+                      <div className="inv-item-row">
+                        <select
+                          className="inv-select"
+                          style={{ height: 34, fontSize: 12 }}
+                          value={item.product_id || ""}
+                          onChange={e => selectItemProduct(idx, e.target.value)}
+                        >
+                          <option value="">— Custom line item —</option>
+                          {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                        <input className="inv-input" style={{ height: 34, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Item description" />
+                        <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                        <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                        <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13 }}>PKR {(item.total || 0).toLocaleString()}</span>
+                        <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
+                      </div>
                     </div>
                   ))}
                 </div>
