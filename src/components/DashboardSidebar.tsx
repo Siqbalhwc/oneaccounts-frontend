@@ -38,7 +38,6 @@ const baseNavSections: NavSection[] = [
     { section: 'PAYROLL', feature: 'payroll', items: [
     { label: 'Employees',         icon: '👥', href: '/dashboard/payroll/employees' },
     { label: 'Attendance',      icon: '🕒', href: '/dashboard/payroll/attendance/manual' },
-    { label: 'Attendance Calendar', icon: '📅', href: '/dashboard/payroll/attendance/calendar' },
     { label: 'Salary Components',  icon: '💰', href: '/dashboard/payroll/salary-components' },
     { label: 'Salary Structures', icon: '📊', href: '/dashboard/payroll/salary-structures' },
     { label: 'Payroll Runs',      icon: '📅', href: '/dashboard/payroll/runs' },
