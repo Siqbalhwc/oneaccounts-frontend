@@ -30,7 +30,6 @@ export default function PayrollRunDetailPage() {
   const { role } = useRole()
   const { hasFeature, loading: planLoading } = usePlan()
   const canView = role === "admin" || role === "accountant"
-  const canEdit = role === "admin" || role === "accountant"
 
   if (planLoading) {
     return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
@@ -47,10 +46,13 @@ export default function PayrollRunDetailPage() {
 
   const [companyId, setCompanyId] = useState("")
   const [approvalLevels, setApprovalLevels] = useState<string>("1")
+  const [submitRoles, setSubmitRoles] = useState<string[]>([])
+  const [approveRoles, setApproveRoles] = useState<string[]>([])
+  const [postRoles, setPostRoles] = useState<string[]>([])
   const [run, setRun] = useState<any>(null)
   const [lines, setLines] = useState<RunLine[]>([])
   const [loading, setLoading] = useState(true)
-  const [actionLoading, setActionLoading] = useState("")   // 'submit', 'approve', 'post'
+  const [actionLoading, setActionLoading] = useState("")
   const [flash, setFlash] = useState("")
   const [error, setError] = useState("")
 
@@ -59,14 +61,18 @@ export default function PayrollRunDetailPage() {
       const cid = (user?.app_metadata as any)?.company_id
       if (cid) {
         setCompanyId(cid)
-        // Fetch approval settings
         supabase
           .from("payroll_approval_settings")
-          .select("approval_levels")
+          .select("*")
           .eq("company_id", cid)
           .maybeSingle()
           .then(({ data }) => {
-            if (data) setApprovalLevels(data.approval_levels)
+            if (data) {
+              setApprovalLevels(data.approval_levels)
+              setSubmitRoles(data.submit_roles || [])
+              setApproveRoles(data.approve_roles || [])
+              setPostRoles(data.post_roles || [])
+            }
           })
       }
     })
@@ -119,7 +125,6 @@ export default function PayrollRunDetailPage() {
     )
   }, [lines])
 
-  // Workflow actions
   const handleSubmit = async () => {
     setActionLoading("submit")
     try {
@@ -157,16 +162,14 @@ export default function PayrollRunDetailPage() {
     setActionLoading("")
   }
 
-  // Determine which buttons to show based on approval levels and current status
-  const canSubmit = canEdit && run && (run.status === "draft") && (approvalLevels === "3")
-  const canApprove = canEdit && run && (run.status === "draft" || run.status === "submitted") && (approvalLevels === "2" || approvalLevels === "3")
-  const canPost = canEdit && run && (
-    // Level 1: draft -> post (no approval required)
-    (approvalLevels === "1" && run.status === "draft") ||
-    // Level 2: approved -> post
-    (approvalLevels === "2" && run.status === "approved") ||
-    // Level 3: approved -> post
-    (approvalLevels === "3" && run.status === "approved")
+  // Role‑based button visibility
+  const canSubmit = run && run.status === "draft" && approvalLevels === "3" && submitRoles.includes(role ?? "")
+  const canApprove = run && (run.status === "draft" || run.status === "submitted") &&
+    (approvalLevels === "2" || approvalLevels === "3") && approveRoles.includes(role ?? "")
+  const canPost = run && (
+    (approvalLevels === "1" && run.status === "draft" && postRoles.includes(role ?? "")) ||
+    (approvalLevels === "2" && run.status === "approved" && postRoles.includes(role ?? "")) ||
+    (approvalLevels === "3" && run.status === "approved" && postRoles.includes(role ?? ""))
   )
 
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
@@ -236,7 +239,6 @@ export default function PayrollRunDetailPage() {
           </p>
         </div>
 
-        {/* Dynamic workflow buttons */}
         <div style={{ display: "flex", gap: 8 }}>
           {canSubmit && (
             <button className="btn btn-submit" onClick={handleSubmit} disabled={actionLoading !== ""}>
