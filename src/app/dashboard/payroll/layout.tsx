@@ -1,24 +1,38 @@
 "use client"
 
-import { ReactNode } from "react"
-import { PlanProvider, usePlan } from "@/contexts/PlanContext"
+import { ReactNode, useState, useEffect } from "react"
+import { usePlan } from "@/contexts/PlanContext"
 import { useRole } from "@/contexts/RoleContext"
 import { Loader2 } from "lucide-react"
 
-function PayrollContent({ children }: { children: ReactNode }) {
+export default function PayrollLayout({ children }: { children: ReactNode }) {
   const { hasFeature, loading: planLoading } = usePlan()
   const { role } = useRole()
 
-  // Only show loading spinner while the plan context is still resolving
-  if (planLoading) {
+  // Track whether we've ever finished the initial load
+  const [initialized, setInitialized] = useState(false)
+
+  useEffect(() => {
+    if (!planLoading && role && hasFeature("payroll")) {
+      setInitialized(true)
+    }
+  }, [planLoading, role, hasFeature])
+
+  // Show a spinner ONLY on the very first load
+  if (!initialized) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", minHeight: "60vh" }}>
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: "60vh",
+      }}>
         <Loader2 size={32} style={{ animation: "spin 1s linear infinite", color: "var(--text-muted)" }} />
       </div>
     )
   }
 
-  // If payroll feature is not enabled, show a consistent message
+  // If payroll feature is disabled, show the message
   if (!hasFeature("payroll")) {
     return (
       <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>
@@ -28,20 +42,6 @@ function PayrollContent({ children }: { children: ReactNode }) {
     )
   }
 
-  // If no role yet (shouldn't happen, but guard anyway)
-  if (!role) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", minHeight: "60vh" }}>
-        <Loader2 size={32} style={{ animation: "spin 1s linear infinite", color: "var(--text-muted)" }} />
-      </div>
-    )
-  }
-
-  // All checks passed – render the actual page content
+  // All good – render the page
   return <>{children}</>
-}
-
-export default function PayrollLayout({ children }: { children: ReactNode }) {
-  // The PlanProvider is already wrapping the whole app, so we just use the consumer
-  return <PayrollContent>{children}</PayrollContent>
 }
