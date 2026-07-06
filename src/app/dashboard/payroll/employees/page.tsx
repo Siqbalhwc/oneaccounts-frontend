@@ -20,24 +20,24 @@ export default function EmployeesPage() {
 
   const [companyId, setCompanyId] = useState("")
   const [employees, setEmployees] = useState<any[]>([])
+  const [departments, setDepartments] = useState<any[]>([])
+  const [designations, setDesignations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [typeFilter, setTypeFilter] = useState("all")
   const [departmentFilter, setDepartmentFilter] = useState("all")
-  const [departments, setDepartments] = useState<any[]>([])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
       if (cid) {
         setCompanyId(cid)
-        supabase
-          .from("departments")
-          .select("id, name")
-          .eq("company_id", cid)
-          .order("name")
+        // Fetch departments and designations once for local merging
+        supabase.from("departments").select("id, name").eq("company_id", cid).order("name")
           .then(({ data }) => setDepartments(data || []))
+        supabase.from("designations").select("id, name").eq("company_id", cid).order("name")
+          .then(({ data }) => setDesignations(data || []))
       }
     })
   }, [])
@@ -48,39 +48,29 @@ export default function EmployeesPage() {
 
     let query = supabase
       .from("employees")
-      .select(`
-        id,
-        employee_code,
-        full_name,
-        joining_date,
-        employment_type,
-        status,
-        salary_structure_id,
-        bank_account_no,
-        department_id,
-        designation_id,
-        departments ( name ),
-        designations ( name ),
-        salary_structures ( name )
-      `)
+      .select("id, employee_code, full_name, joining_date, employment_type, status, salary_structure_id, bank_account_no, department_id, designation_id, salary_structures(name)")
       .eq("company_id", companyId)
       .order("full_name")
 
-    if (statusFilter !== "all") {
-      query = query.eq("status", statusFilter)
-    }
-    if (typeFilter !== "all") {
-      query = query.eq("employment_type", typeFilter)
-    }
-    if (departmentFilter !== "all") {
-      query = query.eq("department_id", parseInt(departmentFilter))
-    }
+    if (statusFilter !== "all") query = query.eq("status", statusFilter)
+    if (typeFilter !== "all") query = query.eq("employment_type", typeFilter)
+    if (departmentFilter !== "all") query = query.eq("department_id", parseInt(departmentFilter))
 
     query.then(({ data }) => {
-      setEmployees(data || [])
+      if (data) {
+        // Merge department/designation names locally
+        const enriched = data.map((emp: any) => ({
+          ...emp,
+          department_name: departments.find(d => d.id === emp.department_id)?.name || null,
+          designation_name: designations.find(d => d.id === emp.designation_id)?.name || null,
+        }))
+        setEmployees(enriched)
+      } else {
+        setEmployees([])
+      }
       setLoading(false)
     })
-  }, [role, canView, companyId, statusFilter, typeFilter, departmentFilter])
+  }, [role, canView, companyId, statusFilter, typeFilter, departmentFilter, departments, designations])
 
   // Stats
   const typeCounts = EMPLOYMENT_TYPES.reduce((acc, type) => {
@@ -96,7 +86,6 @@ export default function EmployeesPage() {
       )
     : employees
 
-  // Mask bank account for display
   const maskAccount = (accountNo: string | null) => {
     if (!accountNo) return "—"
     if (accountNo.length <= 4) return accountNo
@@ -129,53 +118,20 @@ export default function EmployeesPage() {
     <div style={{ padding: "24px 32px", background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .filter-chip {
-          padding: 6px 14px;
-          border-radius: 20px;
-          font-size: 12px;
-          font-weight: 500;
-          cursor: pointer;
-          border: 1px solid var(--border);
-          background: var(--bg);
-          color: var(--text);
-          transition: all 0.2s;
+          padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 500;
+          cursor: pointer; border: 1px solid var(--border); background: var(--bg);
+          color: var(--text); transition: all 0.2s;
         }
         .filter-chip:hover { background: var(--card-hover); }
-        .filter-chip.active {
-          background: var(--primary);
-          color: var(--primary-text);
-          border-color: var(--primary);
-        }
-        .status-badge {
-          display: inline-block;
-          padding: 3px 10px;
-          border-radius: 12px;
-          font-size: 11px;
-          font-weight: 600;
-          text-transform: capitalize;
-        }
-        .btn {
-          padding: 8px 16px;
-          border-radius: 8px;
-          font-size: 13px;
-          font-weight: 600;
-          cursor: pointer;
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          border: none;
-          transition: all 0.2s;
-        }
+        .filter-chip.active { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+        .status-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: capitalize; }
+        .btn { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; border: none; transition: all 0.2s; }
         .btn-primary { background: var(--primary); color: var(--primary-text); }
         .btn-primary:hover { filter: brightness(0.95); }
-        .btn-outline {
-          background: transparent;
-          border: 1px solid var(--border);
-          color: var(--text-muted);
-        }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-muted); }
         .btn-outline:hover { background: var(--card-hover); }
       `}</style>
 
-      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -193,7 +149,6 @@ export default function EmployeesPage() {
         )}
       </div>
 
-      {/* Quick stats */}
       <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
         <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 20px", minWidth: 120 }}>
           <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 4 }}>Total Employees</div>
@@ -211,58 +166,34 @@ export default function EmployeesPage() {
         ))}
       </div>
 
-      {/* Search and filters */}
       <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
         <div style={{ position: "relative", flex: 1, maxWidth: 300 }}>
           <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
           <input
-            type="text"
-            placeholder="Search by name or code..."
-            value={search}
+            type="text" placeholder="Search by name or code..." value={search}
             onChange={e => setSearch(e.target.value)}
-            style={{
-              width: "100%", height: 38, border: "1px solid var(--border)", borderRadius: 8,
-              padding: "0 12px 0 36px", fontSize: 13, background: "var(--card)", color: "var(--text)",
-              outline: "none", boxSizing: "border-box",
-            }}
+            style={{ width: "100%", height: 38, border: "1px solid var(--border)", borderRadius: 8, padding: "0 12px 0 36px", fontSize: 13, background: "var(--card)", color: "var(--text)", outline: "none", boxSizing: "border-box" }}
           />
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {["all", "active", "on_leave", "draft"].map(s => (
-            <div
-              key={s}
-              className={`filter-chip ${statusFilter === s ? "active" : ""}`}
-              onClick={() => setStatusFilter(s)}
-            >
+            <div key={s} className={`filter-chip ${statusFilter === s ? "active" : ""}`} onClick={() => setStatusFilter(s)}>
               {s === "all" ? "All Status" : s.replace("_", " ")}
             </div>
           ))}
         </div>
-        <select
-          value={typeFilter}
-          onChange={e => setTypeFilter(e.target.value)}
-          style={{
-            height: 38, border: "1px solid var(--border)", borderRadius: 8, padding: "0 12px",
-            fontSize: 12, background: "var(--card)", color: "var(--text)", outline: "none",
-          }}
-        >
+        <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
+          style={{ height: 38, border: "1px solid var(--border)", borderRadius: 8, padding: "0 12px", fontSize: 12, background: "var(--card)", color: "var(--text)", outline: "none" }}>
           <option value="all">All Types</option>
           {EMPLOYMENT_TYPES.map(t => <option key={t} value={t}>{t.replace("_", " ")}</option>)}
         </select>
-        <select
-          value={departmentFilter}
-          onChange={e => setDepartmentFilter(e.target.value)}
-          style={{
-            height: 38, border: "1px solid var(--border)", borderRadius: 8, padding: "0 12px",
-            fontSize: 12, background: "var(--card)", color: "var(--text)", outline: "none",
-          }}
-        >
+        <select value={departmentFilter} onChange={e => setDepartmentFilter(e.target.value)}
+          style={{ height: 38, border: "1px solid var(--border)", borderRadius: 8, padding: "0 12px", fontSize: 12, background: "var(--card)", color: "var(--text)", outline: "none" }}>
           <option value="all">All Departments</option>
           {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
         </select>
       </div>
 
-      {/* Table */}
       <div style={{ background: "var(--card)", borderRadius: 12, border: "1px solid var(--border)", overflowX: "auto", boxShadow: "var(--shadow-sm)" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 800 }}>
           <colgroup>
@@ -285,17 +216,9 @@ export default function EmployeesPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr>
-                <td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>
-                  Loading employees…
-                </td>
-              </tr>
+              <tr><td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>Loading employees…</td></tr>
             ) : filteredEmployees.length === 0 ? (
-              <tr>
-                <td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>
-                  No employees found.
-                </td>
-              </tr>
+              <tr><td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>No employees found.</td></tr>
             ) : (
               filteredEmployees.map(emp => (
                 <tr key={emp.id} style={{ transition: "background 0.15s" }}
@@ -306,40 +229,28 @@ export default function EmployeesPage() {
                   <td style={tdStyle}>
                     <div style={{ fontWeight: 600, marginBottom: 2 }}>{emp.full_name}</div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                      {emp.designations?.name && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{emp.designations.name}</span>}
-                      <span
-                        className="status-badge"
+                      {emp.designation_name && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{emp.designation_name}</span>}
+                      <span className="status-badge"
                         style={{
-                          background: emp.status === "active" ? "#065F46" :
-                                       emp.status === "on_leave" ? "#7F1D1D" :
-                                       emp.status === "draft" ? "#374151" : "#1E293B",
+                          background: emp.status === "active" ? "#065F46" : emp.status === "on_leave" ? "#7F1D1D" : emp.status === "draft" ? "#374151" : "#1E293B",
                           color: "#E2E8F0",
-                        }}
-                      >
+                        }}>
                         {emp.status}
                       </span>
-                      <span style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "capitalize" }}>
-                        {emp.employment_type?.replace("_", " ")}
-                      </span>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "capitalize" }}>{emp.employment_type?.replace("_", " ")}</span>
                     </div>
                   </td>
-                  <td style={tdStyle}>{emp.departments?.name || "—"}</td>
+                  <td style={tdStyle}>{emp.department_name || "—"}</td>
                   <td style={tdStyle}>{emp.salary_structures?.name || "—"}</td>
                   <td style={tdStyle}>{maskAccount(emp.bank_account_no)}</td>
                   <td style={{ ...tdStyle, textAlign: "center" }}>
                     <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
-                      <button
-                        style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 6, padding: 5, cursor: "pointer", color: "var(--text-muted)" }}
-                        onClick={() => router.push(`/dashboard/payroll/employees/${emp.id}`)}
-                        title="View Profile"
-                      >
+                      <button style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 6, padding: 5, cursor: "pointer", color: "var(--text-muted)" }}
+                        onClick={() => router.push(`/dashboard/payroll/employees/${emp.id}`)} title="View Profile">
                         <Eye size={14} />
                       </button>
-                      <button
-                        style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 6, padding: 5, cursor: "pointer", color: "var(--text-muted)" }}
-                        onClick={() => {}}
-                        title="More actions"
-                      >
+                      <button style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 6, padding: 5, cursor: "pointer", color: "var(--text-muted)" }}
+                        onClick={() => {}} title="More actions">
                         <MoreHorizontal size={14} />
                       </button>
                     </div>
