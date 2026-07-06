@@ -162,6 +162,29 @@ export default function PayrollRunDetailPage() {
     setActionLoading("")
   }
 
+  // Reverse handler
+  const handleReverse = () => {
+    const reason = prompt("Enter reversal reason:")
+    if (!reason) return
+    setActionLoading("reverse")
+    fetch(`/api/payroll/runs/${runId}/reverse`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          setFlash("✅ Payroll reversed successfully")
+          setRun((prev: any) => ({ ...prev, status: "reversed", reversal_reason: reason }))
+        } else {
+          setError(data.error || "Reversal failed")
+        }
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setActionLoading(""))
+  }
+
   // Role‑based button visibility
   const canSubmit = run && run.status === "draft" && approvalLevels === "3" && submitRoles.includes(role ?? "")
   const canApprove = run && (run.status === "draft" || run.status === "submitted") &&
@@ -171,6 +194,7 @@ export default function PayrollRunDetailPage() {
     (approvalLevels === "2" && run.status === "approved" && postRoles.includes(role ?? "")) ||
     (approvalLevels === "3" && run.status === "approved" && postRoles.includes(role ?? ""))
   )
+  const canReverse = run && (run.status === "posted" || run.status === "locked") && postRoles.includes(role ?? "")
 
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
@@ -192,6 +216,7 @@ export default function PayrollRunDetailPage() {
         .btn-submit { background: #2563EB; color: white; border-color: #2563EB; }
         .btn-approve { background: #059669; color: white; border-color: #059669; }
         .btn-post { background: #7C3AED; color: white; border-color: #7C3AED; }
+        .btn-reverse { background: #DC2626; color: white; border-color: #DC2626; }
         .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
         .summary-grid {
@@ -253,6 +278,11 @@ export default function PayrollRunDetailPage() {
           {canPost && (
             <button className="btn btn-post" onClick={handlePost} disabled={actionLoading !== ""}>
               <CheckCircle size={16} /> {actionLoading === "post" ? "Posting..." : "Post Payroll"}
+            </button>
+          )}
+          {canReverse && (
+            <button className="btn btn-reverse" onClick={handleReverse} disabled={actionLoading !== ""}>
+              ↩️ {actionLoading === "reverse" ? "Reversing..." : "Reverse Payroll"}
             </button>
           )}
         </div>
