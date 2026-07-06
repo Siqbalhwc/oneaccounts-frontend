@@ -67,20 +67,22 @@ export default function UnifiedAttendancePage() {
       const cid = (user?.app_metadata as any)?.company_id
       if (cid) {
         setCompanyId(cid)
+        // Fetch employees WITHOUT joining departments
         supabase
           .from("employees")
-          .select("id, employee_code, full_name, department_id, departments(name)")
+          .select("id, employee_code, full_name, department_id")
           .eq("company_id", cid)
           .eq("status", "active")
           .order("full_name")
           .then(({ data }) => setEmployees(data || []))
+        // Fetch departments separately for the filter dropdown
         supabase
           .from("departments")
           .select("id, name")
           .eq("company_id", cid)
           .order("name")
           .then(({ data }) => setDepartments(data || []))
-        // Check freeze
+        // Check freeze status
         supabase
           .from("attendance_freeze")
           .select("id")
