@@ -1,3 +1,5 @@
+"use client"
+
 import { ReactNode } from "react"
 import { PlanProvider, usePlan } from "@/contexts/PlanContext"
 import { useRole } from "@/contexts/RoleContext"
