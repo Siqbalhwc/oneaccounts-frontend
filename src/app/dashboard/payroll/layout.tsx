@@ -1,6 +1,6 @@
 "use client"
 
-import { ReactNode, useState, useEffect } from "react"
+import { ReactNode, useEffect, useRef } from "react"
 import { usePlan } from "@/contexts/PlanContext"
 import { useRole } from "@/contexts/RoleContext"
 import { Loader2 } from "lucide-react"
@@ -9,17 +9,17 @@ export default function PayrollLayout({ children }: { children: ReactNode }) {
   const { hasFeature, loading: planLoading } = usePlan()
   const { role } = useRole()
 
-  // Track whether we've ever finished the initial load
-  const [initialized, setInitialized] = useState(false)
+  // Once we've finished loading at least once, never show the spinner again
+  const hasLoadedOnce = useRef(false)
 
   useEffect(() => {
-    if (!planLoading && role && hasFeature("payroll")) {
-      setInitialized(true)
+    if (!planLoading && role) {
+      hasLoadedOnce.current = true
     }
-  }, [planLoading, role, hasFeature])
+  }, [planLoading, role])
 
-  // Show a spinner ONLY on the very first load
-  if (!initialized) {
+  // Show a spinner only on the very first load
+  if (!hasLoadedOnce.current) {
     return (
       <div style={{
         display: "flex",
@@ -32,7 +32,7 @@ export default function PayrollLayout({ children }: { children: ReactNode }) {
     )
   }
 
-  // If payroll feature is disabled, show the message
+  // If payroll feature is not enabled, show the message
   if (!hasFeature("payroll")) {
     return (
       <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>
@@ -42,6 +42,6 @@ export default function PayrollLayout({ children }: { children: ReactNode }) {
     )
   }
 
-  // All good – render the page
+  // All good – render the page content without ever flashing the spinner again
   return <>{children}</>
 }
