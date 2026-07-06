@@ -6,7 +6,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import {
   ArrowLeft, Search, Check, X, Clock, AlertCircle,
   Users, Filter, CheckCircle, ChevronDown, ChevronUp,
-  Eye, Download, Percent
+  Eye, Download, Percent, ChevronRight
 } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 
