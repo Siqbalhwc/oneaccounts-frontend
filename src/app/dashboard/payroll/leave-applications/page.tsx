@@ -77,9 +77,46 @@ export default function LeaveApplicationsPage() {
       const cid = (user?.app_metadata as any)?.company_id
       if (cid) {
         setCompanyId(cid)
-        supabase.from("employees").select("id, employee_code, full_name, department_id, departments(name)").eq("company_id", cid).eq("status", "active").order("full_name").then(({ data }) => setEmployees(data || []))
-        supabase.from("leave_types").select("id, name").eq("company_id", cid).eq("is_active", true).order("name").then(({ data }) => setLeaveTypes(data || []))
-        supabase.from("departments").select("id, name").eq("company_id", cid).order("name").then(({ data }) => setDepartments(data || []))
+
+        // 1. Fetch departments
+        supabase
+          .from("departments")
+          .select("id, name")
+          .eq("company_id", cid)
+          .order("name")
+          .then(({ data: depts }) => {
+            const deptList = depts || []
+            setDepartments(deptList)
+
+            // 2. Fetch employees without join, then enrich locally
+            return supabase
+              .from("employees")
+              .select("id, employee_code, full_name, department_id")
+              .eq("company_id", cid)
+              .eq("status", "active")
+              .order("full_name")
+          })
+          .then(({ data: emps }) => {
+            if (emps) {
+              const deptList = departments // departments state may still be updating, but we'll use the freshly set one
+              const enriched = emps.map((emp: any) => ({
+                ...emp,
+                departments: deptList.find(d => d.id === emp.department_id) || null,
+              }))
+              setEmployees(enriched)
+            } else {
+              setEmployees([])
+            }
+          })
+
+        // 3. Fetch leave types (independent)
+        supabase
+          .from("leave_types")
+          .select("id, name")
+          .eq("company_id", cid)
+          .eq("is_active", true)
+          .order("name")
+          .then(({ data }) => setLeaveTypes(data || []))
       }
     })
   }, [])
@@ -123,15 +160,12 @@ export default function LeaveApplicationsPage() {
   // Fetch leave balances (simplified: for each employee and leave type, count approved days)
   useEffect(() => {
     if (!companyId || employees.length === 0 || leaveTypes.length === 0) return
-    // Fetch all approved leave applications for the company
     supabase
       .from("leave_applications")
       .select("employee_id, leave_type_id, from_date, to_date")
       .eq("status", "approved")
       .then(({ data }) => {
         const balances: Record<string, { used: number; total: number }> = {}
-        // Initialize all leave types with default total (e.g., 20 days for annual, etc.)
-        // We'll use a simple total of 20 days for every leave type for demonstration; later you can add a `default_days` column to leave_types.
         const totalDaysMap: Record<number, number> = {}
         leaveTypes.forEach(lt => { totalDaysMap[lt.id] = 20 }) // placeholder
         if (data) {
