@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
@@ -72,7 +72,7 @@ export default function BankAccountsPage() {
   const [saving, setSaving] = useState(false)
   const [deleteId, setDeleteId] = useState<number | null>(null)
 
-  // -- 1. Get company ID ----------------------------------------------------
+  // ── 1. Get company ID ────────────────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
@@ -81,7 +81,7 @@ export default function BankAccountsPage() {
     })
   }, [])
 
-  // -- 2. Fetch data --------------------------------------------------------
+  // ── 2. Fetch data ────────────────────────────────────────────────────────
   const fetchData = async () => {
     if (!companyId) return
     setLoading(true)
@@ -119,7 +119,7 @@ export default function BankAccountsPage() {
 
   useEffect(() => { if (companyId) fetchData() }, [companyId])
 
-  // -- Access guards --------------------------------------------------------
+  // ── Access guards ────────────────────────────────────────────────────────
   if (!companyId) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
   if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
   if (!canView) {
@@ -131,7 +131,7 @@ export default function BankAccountsPage() {
     )
   }
 
-  // -- Filter by search -----------------------------------------------------
+  // ── Filter by search ─────────────────────────────────────────────────────
   const filtered = search.trim()
     ? bankAccounts.filter(b =>
         (b.bank_name || "").toLowerCase().includes(search.toLowerCase()) ||
@@ -141,7 +141,7 @@ export default function BankAccountsPage() {
       )
     : bankAccounts
 
-  // -- Sort handler ---------------------------------------------------------
+  // ── Sort handler ─────────────────────────────────────────────────────────
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDir(prev => prev === "asc" ? "desc" : "asc")
@@ -156,7 +156,7 @@ export default function BankAccountsPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  // -- Client-side sorting --------------------------------------------------
+  // ── Client‑side sorting ──────────────────────────────────────────────────
   const sortedFiltered = [...filtered].sort((a, b) => {
     let valA: any, valB: any
     switch (sortField) {
@@ -190,7 +190,7 @@ export default function BankAccountsPage() {
 
   const totalBalance = sortedFiltered.reduce((sum, b) => sum + (b.balance || 0), 0)
 
-  // -- Modal helpers --------------------------------------------------------
+  // ── Modal helpers ────────────────────────────────────────────────────────
   const openEdit = (b: BankAccount) => {
     if (!canEdit) return
     setEditing(b)
@@ -371,7 +371,7 @@ export default function BankAccountsPage() {
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>?? Bank Accounts</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>🏦 Bank Accounts</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
             {canEdit ? "Manage your bank and cash accounts" : "View bank accounts"}
           </p>
@@ -409,7 +409,7 @@ export default function BankAccountsPage() {
           <table className="bank-table">
             <colgroup>
               <col style={{ width: 180 }} /> {/* Account */}
-              <col />                         {/* Bank Name � takes remaining space */}
+              <col />                         {/* Bank Name – takes remaining space */}
               <col style={{ width: 120 }} /> {/* Account # */}
               <col style={{ width: 100 }} /> {/* Branch */}
               <col style={{ width: 120 }} /> {/* Balance */}
@@ -443,8 +443,8 @@ export default function BankAccountsPage() {
                     <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {b.bank_name}
                     </td>
-                    <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{b.account_number || "�"}</td>
-                    <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{b.branch || "�"}</td>
+                    <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{b.account_number || "—"}</td>
+                    <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{b.branch || "—"}</td>
                     <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>
                       PKR {(b.balance || 0).toLocaleString()}
                     </td>
