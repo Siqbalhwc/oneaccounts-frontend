@@ -54,6 +54,7 @@ const baseNavSections: NavSection[] = [
     { label: 'Products', icon: '📦', href: '/dashboard/materials/products' },
     { label: 'Inward Gate Pass', icon: '🚛', href: '/dashboard/materials/gate-pass' },
     { label: 'Material Store', icon: '🏬', href: '/dashboard/materials/material-store' },
+    { label: 'WIP', icon: '⚙️', href: '/dashboard/materials/wip' },
   ]},
   { section: 'ACCOUNTING', groups: [
     { groupLabel: 'General', items: [
