@@ -302,10 +302,13 @@ export default function MaterialsProductsPage() {
               {UOM_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
             </select>
 
-            {form.unit === "bags" && (
+            {form.unit !== "kg" && (
               <>
-                <label className="field-label">Bag-to-KG Conversion Factor</label>
-                <input className="input-field" type="number" value={form.conversion_kg} onChange={e => setForm({ ...form, conversion_kg: e.target.value })} placeholder="e.g. 25 (1 bag = 25 kg)" />
+                <label className="field-label">Conversion to KG *</label>
+                <input className="input-field" type="number" value={form.conversion_kg} onChange={e => setForm({ ...form, conversion_kg: e.target.value })} placeholder={`e.g. 25 (1 ${form.unit} = 25 kg)`} />
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: -10, marginBottom: 14 }}>
+                  Required for production math — how many KG does one {form.unit} of this product equal?
+                </div>
               </>
             )}
 
