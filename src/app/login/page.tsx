@@ -1167,7 +1167,7 @@ export default function LoginPage() {
                     <a href="mailto:siqbalhwc@gmail.com">
                       <Mail size={13} strokeWidth={1.8} /> siqbalhwc@gmail.com
                     </a>
-                    <a href="https://www.oneaccountsbysiqbal.com" target="_blank">
+                    <a href="https://app.oneaccountsbysiqbal.com" target="_blank">
                       <Globe size={13} strokeWidth={1.8} /> oneaccountsbysiqbal.com
                     </a>
                   </div>

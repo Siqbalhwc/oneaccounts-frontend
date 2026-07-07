@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect, Fragment, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
@@ -57,7 +57,7 @@ export default function BudgetsPage() {
   const [editMode, setEditMode] = useState(false)
   const [budgetStatus, setBudgetStatus] = useState<string>("draft")
 
-  // ── 1. Load master data ──
+  // -- 1. Load master data --
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
@@ -101,7 +101,7 @@ export default function BudgetsPage() {
     })
   }, [])
 
-  // ── 2. Activity detection ──
+  // -- 2. Activity detection --
   useEffect(() => {
     if (!initialActivity || !companyId) return
     supabase.from("activities").select("project_id").eq("id", initialActivity).single()
@@ -110,7 +110,7 @@ export default function BudgetsPage() {
       })
   }, [initialActivity, companyId])
 
-  // ── 3. Activities of selected project ──
+  // -- 3. Activities of selected project --
   useEffect(() => {
     if (!companyId || !selectedProjectId) {
       if (!selectedDonorId) setAllActivities([])
@@ -147,7 +147,7 @@ export default function BudgetsPage() {
     fetchActivities()
   }, [companyId, selectedProjectId])
 
-  // ── 4. Donor auto‑select ──
+  // -- 4. Donor auto-select --
   useEffect(() => {
     if (!selectedProjectId || businessType !== "ngo") return
     if (initialDonor) return
@@ -166,7 +166,7 @@ export default function BudgetsPage() {
     }
   }, [selectedProjectId, projects, businessType, initialDonor, companyId])
 
-  // ── Approval status fetch ──
+  // -- Approval status fetch --
   useEffect(() => {
     if (!companyId || !selectedProjectId) { setBudgetStatus("draft"); return }
     async function fetchStatus() {
@@ -184,13 +184,13 @@ export default function BudgetsPage() {
     fetchStatus()
   }, [companyId, selectedProjectId, fiscalYear])
 
-  // ── Reset overrides ──
+  // -- Reset overrides --
   useEffect(() => {
     setMonthBudgetOverrides({})
     setEditMode(false)
   }, [selectedProjectId, selectedDonorId, fiscalYear])
 
-  // ── Project dates & duration ──
+  // -- Project dates & duration --
   useEffect(() => {
     if (!selectedProjectId) { setProjectStartDate(""); setProjectEndDate(""); return }
     const project = projects.find(p => p.id == selectedProjectId)
@@ -224,7 +224,7 @@ export default function BudgetsPage() {
     setProjects(prev => prev.map(p => (p.id == selectedProjectId ? { ...p, [field]: value || null } : p)))
   }
 
-  // ── 5. Load budgets + actuals (GL & month) ──
+  // -- 5. Load budgets + actuals (GL & month) --
   useEffect(() => {
     if (!companyId) { setData({}); setLoading(false); return }
     const canLoad = businessType !== "ngo" || selectedDonorId || selectedProjectId
@@ -284,7 +284,7 @@ export default function BudgetsPage() {
       .catch(() => setLoading(false))
   }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, filterLocationId, businessType, viewMode, projectDuration])
 
-  // ── Auto‑correct rounding ──
+  // -- Auto-correct rounding --
   useEffect(() => {
     if (viewMode !== "month") return
     const newOverrides: Record<string, Record<string, Record<number, number | null>>> = {}
@@ -306,7 +306,7 @@ export default function BudgetsPage() {
     setMonthBudgetOverrides(newOverrides)
   }, [data, viewMode, projectDuration])
 
-  // ── Dynamic month labels ──
+  // -- Dynamic month labels --
   const projectMonths = useMemo(() => {
     const months: string[] = []
     if (!projectStartDate) return months
@@ -632,7 +632,7 @@ export default function BudgetsPage() {
       `}</style>
 
       <div className="budget-shell">
-        {/* ─────── Row 1: Heading + Approve button (right) ─────── */}
+        {/* ------- Row 1: Heading + Approve button (right) ------- */}
         <div className="heading-row">
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>Budget vs Actuals</h1>
@@ -659,7 +659,7 @@ export default function BudgetsPage() {
           )}
         </div>
 
-        {/* ─────── Row 2: Filters (Year, Project, Activities, Locations, GL/Month, Excel, PDF right‑aligned) ─────── */}
+        {/* ------- Row 2: Filters (Year, Project, Activities, Locations, GL/Month, Excel, PDF right-aligned) ------- */}
         <div className="filter-bar" style={{ justifyContent: "space-between" }}>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <select className="filter-select" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
@@ -704,7 +704,7 @@ export default function BudgetsPage() {
           </div>
         </div>
 
-        {/* ─────── Row 3: Project dates + Edit button (right‑aligned) ─────── */}
+        {/* ------- Row 3: Project dates + Edit button (right-aligned) ------- */}
         {selectedProjectId && (
           <div className="dates-row" style={{ justifyContent: "space-between" }}>
             <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -721,13 +721,13 @@ export default function BudgetsPage() {
                   ({projectDuration} month{projectDuration !== 1 ? "s" : ""})
                 </span>
               )}
-              {isApproved && <span style={{ fontSize: 12, fontWeight: 600, color: "#10B981" }}>✔ Approved</span>}
-              {isPendingApproval && <span style={{ fontSize: 12, fontWeight: 600, color: "#F59E0B" }}>⏳ Pending Approval</span>}
+              {isApproved && <span style={{ fontSize: 12, fontWeight: 600, color: "#10B981" }}>? Approved</span>}
+              {isPendingApproval && <span style={{ fontSize: 12, fontWeight: 600, color: "#F59E0B" }}>? Pending Approval</span>}
               {!isApproved && !isPendingApproval && budgetStatus === "draft" && (
                 <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}>Draft</span>
               )}
             </div>
-            {/* Edit Budget button – only when not editing and user can edit */}
+            {/* Edit Budget button � only when not editing and user can edit */}
             {!editMode && canEditBudget && (
               <button className="btn-outline" onClick={() => setEditMode(true)}>
                 <Edit size={14} /> Edit Budget
@@ -742,7 +742,7 @@ export default function BudgetsPage() {
           </div>
         )}
 
-        {/* ─────── Table content unchanged ─────── */}
+        {/* ------- Table content unchanged ------- */}
         {(!selectedProjectId && !selectedDonorId) ? (
           <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>
             {businessType === "ngo" ? "Please select Project and/or Donor to display the budget matrix." : "Please select a Project to display the budget matrix."}
@@ -802,13 +802,13 @@ export default function BudgetsPage() {
                                   <Fragment key={acc.id}>
                                     <td><input className="input-budget" type="number" min="0" step="100" value={cell.budget || ""} onChange={e => updateCell(String(acc.id), act.id, lid, Number(e.target.value))} disabled={!canEditBudget || !editMode} placeholder="0" /></td>
                                     <td style={{ fontSize: 10, color: "var(--text)" }}>{cell.actual.toLocaleString()}</td>
-                                    <td style={{ fontSize: 10, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "var(--text-muted)" }}>{variance === 0 ? "—" : (variance > 0 ? "+" : "") + variance.toLocaleString()}</td>
+                                    <td style={{ fontSize: 10, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "var(--text-muted)" }}>{variance === 0 ? "�" : (variance > 0 ? "+" : "") + variance.toLocaleString()}</td>
                                   </Fragment>
                                 )
                               })}
                               <td style={{ fontWeight: 600 }}>{rowBudget.toLocaleString()}</td>
                               <td style={{ fontWeight: 600 }}>{rowActual.toLocaleString()}</td>
-                              <td style={{ fontWeight: 600, color: (rowBudget - rowActual) < 0 ? "#EF4444" : (rowBudget - rowActual) > 0 ? "#10B981" : "var(--text-muted)" }}>{(rowBudget - rowActual) === 0 ? "—" : (rowBudget - rowActual > 0 ? "+" : "") + (rowBudget - rowActual).toLocaleString()}</td>
+                              <td style={{ fontWeight: 600, color: (rowBudget - rowActual) < 0 ? "#EF4444" : (rowBudget - rowActual) > 0 ? "#10B981" : "var(--text-muted)" }}>{(rowBudget - rowActual) === 0 ? "�" : (rowBudget - rowActual > 0 ? "+" : "") + (rowBudget - rowActual).toLocaleString()}</td>
                             </tr>
                           )
                         })}
@@ -833,12 +833,12 @@ export default function BudgetsPage() {
                             return (
                               <Fragment key={acc.id}>
                                 <td>{sb.toLocaleString()}</td><td>{sa.toLocaleString()}</td>
-                                <td style={{ color: sv < 0 ? "#EF4444" : sv > 0 ? "#10B981" : "var(--text-muted)" }}>{sv === 0 ? "—" : (sv > 0 ? "+" : "") + sv.toLocaleString()}</td>
+                                <td style={{ color: sv < 0 ? "#EF4444" : sv > 0 ? "#10B981" : "var(--text-muted)" }}>{sv === 0 ? "�" : (sv > 0 ? "+" : "") + sv.toLocaleString()}</td>
                               </Fragment>
                             )
                           })}
                           <td>{actTotalBudget.toLocaleString()}</td><td>{actTotalActual.toLocaleString()}</td>
-                          <td style={{ color: (actTotalBudget - actTotalActual) < 0 ? "#EF4444" : (actTotalBudget - actTotalActual) > 0 ? "#10B981" : "var(--text-muted)" }}>{(actTotalBudget - actTotalActual) === 0 ? "—" : (actTotalBudget - actTotalActual > 0 ? "+" : "") + (actTotalBudget - actTotalActual).toLocaleString()}</td>
+                          <td style={{ color: (actTotalBudget - actTotalActual) < 0 ? "#EF4444" : (actTotalBudget - actTotalActual) > 0 ? "#10B981" : "var(--text-muted)" }}>{(actTotalBudget - actTotalActual) === 0 ? "�" : (actTotalBudget - actTotalActual > 0 ? "+" : "") + (actTotalBudget - actTotalActual).toLocaleString()}</td>
                         </tr>
                       </Fragment>
                     )
@@ -855,12 +855,12 @@ export default function BudgetsPage() {
                       return (
                         <Fragment key={acc.id}>
                           <td>{gb.toLocaleString()}</td><td>{ga.toLocaleString()}</td>
-                          <td style={{ color: gv < 0 ? "#EF4444" : gv > 0 ? "#10B981" : "var(--text-muted)" }}>{gv === 0 ? "—" : (gv > 0 ? "+" : "") + gv.toLocaleString()}</td>
+                          <td style={{ color: gv < 0 ? "#EF4444" : gv > 0 ? "#10B981" : "var(--text-muted)" }}>{gv === 0 ? "�" : (gv > 0 ? "+" : "") + gv.toLocaleString()}</td>
                         </Fragment>
                       )
                     })}
                     <td>{grandBudget.toLocaleString()}</td><td>{grandActual.toLocaleString()}</td>
-                    <td style={{ color: grandVariance < 0 ? "#EF4444" : grandVariance > 0 ? "#10B981" : "var(--text-muted)" }}>{grandVariance === 0 ? "—" : (grandVariance > 0 ? "+" : "") + grandVariance.toLocaleString()}</td>
+                    <td style={{ color: grandVariance < 0 ? "#EF4444" : grandVariance > 0 ? "#10B981" : "var(--text-muted)" }}>{grandVariance === 0 ? "�" : (grandVariance > 0 ? "+" : "") + grandVariance.toLocaleString()}</td>
                   </tr>
                 </tbody>
               </table>

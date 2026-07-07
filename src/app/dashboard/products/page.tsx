@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
@@ -313,7 +313,7 @@ export default function StockRegisterPage() {
         .table-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
         .stock-table { min-width: 1200px; }
 
-        /* ── DESKTOP HEADER ── */
+        /* -- DESKTOP HEADER -- */
         .header-row {
           display: flex;
           justify-content: space-between;
@@ -345,7 +345,7 @@ export default function StockRegisterPage() {
           gap: 8px;
         }
 
-        /* ── MOBILE ── */
+        /* -- MOBILE -- */
         @media (max-width: 640px) {
           .page-wrap { padding: 12px !important; }
           .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
@@ -373,7 +373,7 @@ export default function StockRegisterPage() {
       {/* Header: title left, Add Product right */}
       <div className="header-row">
         <div className="title-area">
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📦 Stock Register</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>?? Stock Register</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Manage inventory, view opening / inflow / outflow / closing</p>
         </div>
         {canEdit && (
@@ -476,7 +476,7 @@ export default function StockRegisterPage() {
                       <td style={{ ...tdStyle, textAlign: "center" }}>
                         {prod.image_path ? (
                           <img src={prod.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
-                        ) : "—"}
+                        ) : "�"}
                       </td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>
                         <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>

@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
@@ -9,12 +9,12 @@ import { Plus, Search, Edit, Trash2, X, Eye, ArrowUpDown, ArrowUp, ArrowDown, Fi
 import RecordHistory from "@/components/RecordHistory"
 
 const COUNTRY_CODES = [
-  { code: "+92", label: "🇵🇰 +92" },
-  { code: "+1",  label: "🇺🇸 +1" },
-  { code: "+44", label: "🇬🇧 +44" },
-  { code: "+971",label: "🇦🇪 +971" },
-  { code: "+966",label: "🇸🇦 +966" },
-  { code: "+91", label: "🇮🇳 +91" },
+  { code: "+92", label: "???? +92" },
+  { code: "+1",  label: "???? +1" },
+  { code: "+44", label: "???? +44" },
+  { code: "+971",label: "???? +971" },
+  { code: "+966",label: "???? +966" },
+  { code: "+91", label: "???? +91" },
 ]
 
 const PAYMENT_TERMS = [
@@ -318,13 +318,13 @@ export default function SuppliersPage() {
       const res = await fetch("/api/import", { method: "POST", body: formData })
       const result = await res.json()
       if (result.success) {
-        setImportMessage(`✅ Imported ${result.count} suppliers successfully`)
+        setImportMessage(`? Imported ${result.count} suppliers successfully`)
         fetchSuppliers()
       } else {
-        setImportMessage(`❌ Error: ${result.error}`)
+        setImportMessage(`? Error: ${result.error}`)
       }
     } catch (err: any) {
-      setImportMessage(`❌ Network error: ${err.message}`)
+      setImportMessage(`? Network error: ${err.message}`)
     } finally {
       setImporting(false)
       if (fileInputRef.current) fileInputRef.current.value = ""
@@ -465,7 +465,7 @@ export default function SuppliersPage() {
         .input:focus, .select:focus { border-color: var(--primary); outline: none; }
         label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; display: block; }
 
-        /* ── DESKTOP: original header layout ── */
+        /* -- DESKTOP: original header layout -- */
         .header-row {
           display: flex;
           justify-content: space-between;
@@ -490,7 +490,7 @@ export default function SuppliersPage() {
           position: relative;
         }
 
-        /* ── MOBILE ONLY ── */
+        /* -- MOBILE ONLY -- */
         @media (max-width: 640px) {
           .page-wrap { padding: 12px !important; }
           .summary-grid { grid-template-columns: 1fr 1fr; }
@@ -513,10 +513,10 @@ export default function SuppliersPage() {
         }
       `}</style>
 
-      {/* ── HEADER ROW: title left, all buttons right ── */}
+      {/* -- HEADER ROW: title left, all buttons right -- */}
       <div className="header-row">
         <div className="title-area">
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>🚚 Suppliers</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>?? Suppliers</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Manage your supplier accounts</p>
         </div>
         <div className="actions">
@@ -543,18 +543,18 @@ export default function SuppliersPage() {
       </div>
 
       {importMessage && (
-        <div className="message" style={{ background: importMessage.startsWith("✅") ? "#065F46" : "#7C2D12", color: "white" }}>
+        <div className="message" style={{ background: importMessage.startsWith("?") ? "#065F46" : "#7C2D12", color: "white" }}>
           {importMessage}
         </div>
       )}
 
-      {/* ── Summary cards ── */}
+      {/* -- Summary cards -- */}
       <div className="summary-grid">
         <div className="summary-item"><div className="summary-label">Total Suppliers</div><div className="summary-value">{total}</div></div>
         <div className="summary-item"><div className="summary-label">Total Payables</div><div className="summary-value" style={{ color: totalPayables >= 0 ? "#10B981" : "#EF4444" }}>PKR {totalPayables.toLocaleString()}</div></div>
       </div>
 
-      {/* ── Search (below summary) ── */}
+      {/* -- Search (below summary) -- */}
       <div className="search-section">
         <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
         <input className="search-input" placeholder="Search by code, name, or phone..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
@@ -566,13 +566,13 @@ export default function SuppliersPage() {
         </div>
       )}
 
-      {/* ── Table ── */}
+      {/* -- Table -- */}
       <div className="card">
         <div className="table-scroll">
           <table className="sup-table">
             <colgroup>
               <col style={{ width: 110 }} /> {/* Code */}
-              <col />                         {/* Name – takes remaining space */}
+              <col />                         {/* Name � takes remaining space */}
               <col style={{ width: 120 }} /> {/* Phone */}
               <col style={{ width: 130 }} /> {/* Balance */}
               <col style={{ width: 140 }} /> {/* Actions */}
@@ -604,7 +604,7 @@ export default function SuppliersPage() {
                     <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {s.name}
                     </td>
-                    <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{s.phone || "—"}</td>
+                    <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{s.phone || "�"}</td>
                     <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: s.balance >= 0 ? "#10B981" : "#EF4444", whiteSpace: "nowrap" }}>
                       PKR {s.balance?.toLocaleString()}
                     </td>
@@ -679,14 +679,14 @@ export default function SuppliersPage() {
                 <div>
                   <label>Default Project</label>
                   <select className="select" value={form.default_project_id ?? ""} onChange={e => setForm({...form, default_project_id: e.target.value ? Number(e.target.value) : null})}>
-                    <option value="">— None —</option>
+                    <option value="">� None �</option>
                     {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label>Default Location</label>
                   <select className="select" value={form.default_location_id ?? ""} onChange={e => setForm({...form, default_location_id: e.target.value ? Number(e.target.value) : null})}>
-                    <option value="">— None —</option>
+                    <option value="">� None �</option>
                     {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                   </select>
                 </div>
@@ -694,14 +694,14 @@ export default function SuppliersPage() {
               <div>
                 <label>Default Activity</label>
                 <select className="select" value={form.default_activity_id ?? ""} onChange={e => setForm({...form, default_activity_id: e.target.value ? Number(e.target.value) : null})}>
-                  <option value="">— None —</option>
+                  <option value="">� None �</option>
                   {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
               </div>
 
               {editingSupplier && (
                 <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 4 }}>
-                  <h4 style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>📝 Change History</h4>
+                  <h4 style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>?? Change History</h4>
                   <RecordHistory tableName="suppliers" recordId={String(editingSupplier.id)} />
                 </div>
               )}

@@ -84,10 +84,6 @@ function getPeriodDates(key: PeriodKey): { start: string | null; end: string | n
   }
 }
 
-// ── Previous-period dates, for trend deltas on KPI cards ────
-// Returns the immediately-preceding period of the same length as `key`,
-// so "This Month" compares to last month, "This Quarter" to the prior
-// quarter, etc. Returns nulls for "all" since there's no prior window.
 function getPreviousPeriodDates(key: PeriodKey): { start: string | null; end: string | null } {
   const now   = new Date()
   const y     = now.getFullYear()
@@ -625,9 +621,6 @@ function ProfitTrendChart({
     )
   }
 
-  // Single month: a sparse bar chart looks broken, so show a focused
-  // callout card instead — this is a correct empty-of-comparison state,
-  // not a bug, but it needs to *read* that way to the user.
   if (data.length === 1) {
     const only = data[0]
     const isPositive = only.profit >= 0
@@ -668,8 +661,6 @@ function ProfitTrendChart({
   const gap        = 12
   const barW       = 100 / data.length
 
-  // Build an SVG polyline overlay tracing the profit trend across bars,
-  // anchored to the same 0..chartH coordinate space as the bars below.
   const points = data.map((m, i) => {
     const x = (i + 0.5) * barW
     const norm = (m.profit + maxProfit) / (2 * maxProfit) // -max..max -> 0..1
@@ -681,14 +672,12 @@ function ProfitTrendChart({
     <>
       <div className="chart-container">
         <div style={{ position: "relative", minWidth: 600 }}>
-          {/* gridlines */}
           <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", justifyContent: "space-between", pointerEvents: "none", height: chartH }}>
             {[0, 1, 2, 3].map(i => (
               <div key={i} style={{ borderTop: `1px dashed ${isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}` }} />
             ))}
           </div>
 
-          {/* trend line overlay */}
           <svg
             viewBox={`0 0 100 ${chartH}`}
             preserveAspectRatio="none"
@@ -813,9 +802,6 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
     if (!companyId) return
     const { start, end } = getPeriodDates(selectedPeriod)
 
-    // First-ever load shows the full animated loader; every subsequent
-    // fetch (period switch, manual refresh) just dims the existing
-    // content instead of remounting the whole page.
     if (!hasLoadedOnce.current) setLoading(true)
     else setRefreshing(true)
 
@@ -839,38 +825,28 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         if (error) {
           console.error("Dashboard RPC error:", error)
         } else if (data) {
-          const revenue = data.revenueTotal || 0
-          const expense = data.expenseTotal || 0
-          const cash    = data.cashBalance  || 0
-          const recv    = data.totalReceivables || 0
-          const pay     = data.totalPayables    || 0
+          // ✅ Handle both array and object return types
+          const metricsData = Array.isArray(data) ? data[0] : data
 
-          // Detect new company: all KPIs zero AND no monthly data
+          const revenue = metricsData.revenueTotal || 0
+          const expense = metricsData.expenseTotal || 0
+          const cash    = metricsData.cashBalance  || 0
+          const recv    = metricsData.totalReceivables || 0
+          const pay     = metricsData.totalPayables    || 0
+
           const hasAnyData = revenue > 0 || expense > 0 || cash > 0 || recv > 0 || pay > 0 ||
-            (Array.isArray(data.monthlyProfit) && data.monthlyProfit.length > 0)
+            (Array.isArray(metricsData.monthlyProfit) && metricsData.monthlyProfit.length > 0)
           setIsNewCompany(!hasAnyData)
-
-          // Diagnostic flag: cash showing 0 while receivables/payables have
-          // real balances usually means get_dashboard_metrics isn't summing
-          // bank/cash GL accounts correctly for this company — worth a look
-          // in the RPC rather than in this component.
-          if (cash === 0 && (recv > 0 || pay > 0)) {
-            console.warn(
-              "[Dashboard] Cash & Bank returned 0 while Receivables/Payables are non-zero. " +
-              "This likely means get_dashboard_metrics isn't summing bank/cash GL accounts " +
-              "correctly for company", companyId
-            )
-          }
 
           setRevenueTotal(revenue)
           setExpenseTotal(expense)
           setCashBalance(cash)
           setTotalReceivables(recv)
           setTotalPayables(pay)
-          setOverdueInvoicesCount(data.overdueInvoicesCount || 0)
-          setOverdueBillsCount(data.overdueBillsCount || 0)
-          setMonthlyProfit(data.monthlyProfit || [])
-          setTopCustomers(data.topCustomers || [])
+          setOverdueInvoicesCount(metricsData.overdueInvoicesCount || 0)
+          setOverdueBillsCount(metricsData.overdueBillsCount || 0)
+          setMonthlyProfit(metricsData.monthlyProfit || [])
+          setTopCustomers(metricsData.topCustomers || [])
           setLastUpdated(new Date())
         }
       }
@@ -886,10 +862,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
       }
     }
 
-    // Previous-period comparison for the Revenue / Expense / Gross Profit
-    // trend badges. Skipped for "All Time" since there's no prior window.
-    // Fetched separately (not Promise.all'd with the main call above) so a
-    // failure here never blocks the primary KPIs from rendering.
+    // Previous-period comparison
     const { start: prevStart, end: prevEnd } = getPreviousPeriodDates(selectedPeriod)
     if (prevStart && prevEnd) {
       try {
@@ -899,8 +872,9 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           p_date_to: prevEnd,
         })
         if (!prevError && prevData) {
-          const pRevenue = prevData.revenueTotal || 0
-          const pExpense = prevData.expenseTotal || 0
+          const pData = Array.isArray(prevData) ? prevData[0] : prevData
+          const pRevenue = pData.revenueTotal || 0
+          const pExpense = pData.expenseTotal || 0
           setPrevMetrics({ revenueTotal: pRevenue, expenseTotal: pExpense, grossProfit: pRevenue - pExpense })
         } else {
           setPrevMetrics(null)
@@ -1032,10 +1006,8 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
     )
   }
 
-  // First-ever load: full animated loader (unchanged behavior)
   if (loading) return <OdooLoader isDark={isDark} />
 
-  // If it's a brand‑new company, show the onboarding checklist
   if (isNewCompany) return <NewCompanyEmptyState router={router} isDark={isDark} userDisplayName={userDisplayName} />
 
   return (
@@ -1071,7 +1043,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           padding: 20px; box-shadow: var(--shadow-sm);
           transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, opacity 0.2s ease;
           cursor: pointer; display: flex; flex-direction: column;
-          min-height: 0; /* prevents flex children's grid content (quick-actions) from being clipped on mobile */
+          min-height: 0;
         }
         .tsd .card:hover {
           transform: translateY(-2px);
@@ -1180,11 +1152,11 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         .tsd .bar-column       { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; }
         .tsd .bar              { width: 100%; background: linear-gradient(180deg, #6366f1, #818cf8); border-radius: 6px 6px 0 0; min-height: 4px; }
         .tsd .bar.negative     { background: linear-gradient(180deg, #ef4444, #f87171); }
-        .tsd .bar-value        { font-size: 10px; font-weight: 700; color: var(--text); white-space: nowrap; }
-        .tsd .bar-label        { font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+        .tsd .bar-value        { font-size: 10px; font-weight: 700; color: var(--text); whiteSpace: nowrap; }
+        .tsd .bar-label        { font-size: 10px; color: var(--text-muted); font-weight: 600; textTransform: uppercase; }
         .tsd .trend-summary    { display: flex; justify-content: space-between; margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 0.75rem; font-weight: 600; flex-wrap: wrap; gap: 8px; }
 
-        .customer-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+        .customer-name { whiteSpace: nowrap; overflow: hidden; textOverflow: ellipsis; max-width: 180px; }
 
         @media (max-width: 1024px) {
           .tsd .kpi-row { grid-template-columns: repeat(2, 1fr); }
@@ -1192,7 +1164,6 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           .customer-name { max-width: 140px; }
         }
 
-        /* ── MOBILE FIX: Show all 6 action buttons ── */
         @media (max-width: 768px) {
           .tsd .hero-right { width: 100%; justify-content: space-between; }
           .tsd .bells-group { border-left: none; padding-left: 0; }

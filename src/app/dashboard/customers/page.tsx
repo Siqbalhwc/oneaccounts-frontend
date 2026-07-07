@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
@@ -53,7 +53,7 @@ export default function CustomersPage() {
   const [importing, setImporting] = useState(false)
   const [importMessage, setImportMessage] = useState("")
 
-  // ── Fetch company ID from JWT ──
+  // -- Fetch company ID from JWT --
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
@@ -61,7 +61,7 @@ export default function CustomersPage() {
     })
   }, [])
 
-  // ── Fetch customers – waits for companyId ──
+  // -- Fetch customers � waits for companyId --
   useEffect(() => {
     if (!role) return
     if (!canView) { setLoading(false); return }
@@ -80,7 +80,7 @@ export default function CustomersPage() {
       })
   }, [role, canView, companyId, sortField, sortDir])
 
-  // ── Filter by search ──
+  // -- Filter by search --
   const filtered = customers.filter((c) => {
     if (!search.trim()) return true
     const q = search.toLowerCase()
@@ -90,7 +90,7 @@ export default function CustomersPage() {
            c.email?.toLowerCase().includes(q)
   })
 
-  // ── Sorting (already pre‑sorted by DB, but we re-sort client‑side for consistency) ──
+  // -- Sorting (already pre-sorted by DB, but we re-sort client-side for consistency) --
   const sortedFiltered = [...filtered].sort((a, b) => {
     let valA: any, valB: any
     if (sortField === "balance") {
@@ -123,7 +123,7 @@ export default function CustomersPage() {
     setCustomers(prev => prev.filter(c => c.id !== id))
   }
 
-  // WhatsApp for customer – send a friendly message with balance info
+  // WhatsApp for customer � send a friendly message with balance info
   const sendWhatsApp = (cust: any) => {
     if (!cust.phone) { alert("No phone number for this customer."); return }
     const message = [
@@ -132,7 +132,7 @@ export default function CustomersPage() {
       `Your current balance with us is PKR ${(cust.balance || 0).toLocaleString()}.`,
       `Thank you for your business!`,
       ``,
-      `— OneAccounts`
+      `� OneAccounts`
     ].join("\n")
     const link = getWhatsAppLink(cust.phone, message)
     if (link) window.open(link, "_blank")
@@ -186,7 +186,7 @@ export default function CustomersPage() {
       const res = await fetch("/api/import", { method: "POST", body: formData })
       const result = await res.json()
       if (result.success) {
-        setImportMessage(`✅ Imported ${result.count} customers successfully`)
+        setImportMessage(`? Imported ${result.count} customers successfully`)
         const { data } = await supabase
           .from("customers")
           .select("*")
@@ -195,10 +195,10 @@ export default function CustomersPage() {
           .order("name")
         setCustomers(data || [])
       } else {
-        setImportMessage(`❌ Error: ${result.error}`)
+        setImportMessage(`? Error: ${result.error}`)
       }
     } catch (err: any) {
-      setImportMessage(`❌ Network error: ${err.message}`)
+      setImportMessage(`? Network error: ${err.message}`)
     } finally {
       setImporting(false)
       if (fileInputRef.current) fileInputRef.current.value = ""
@@ -242,7 +242,7 @@ export default function CustomersPage() {
     </th>
   )
 
-  if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
+  if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading�</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
   return (
@@ -318,7 +318,7 @@ export default function CustomersPage() {
 
           .message { padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
 
-          /* ── DESKTOP: original header layout (buttons in one row, search below) ── */
+          /* -- DESKTOP: original header layout (buttons in one row, search below) -- */
           .header-row {
             display: flex;
             justify-content: space-between;
@@ -343,7 +343,7 @@ export default function CustomersPage() {
             position: relative;
           }
 
-          /* ── MOBILE ONLY ── */
+          /* -- MOBILE ONLY -- */
           @media (max-width: 640px) {
             .page-wrap { padding: 12px !important; }
             .summary-grid { grid-template-columns: 1fr 1fr; }
@@ -366,10 +366,10 @@ export default function CustomersPage() {
           }
         `}</style>
 
-        {/* ── HEADER ROW: title left, all buttons right ── */}
+        {/* -- HEADER ROW: title left, all buttons right -- */}
         <div className="header-row">
           <div className="title-area">
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>👥 Customers</h1>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>?? Customers</h1>
             <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Manage your customer accounts</p>
           </div>
           <div className="actions">
@@ -396,31 +396,31 @@ export default function CustomersPage() {
         </div>
 
         {importMessage && (
-          <div className="message" style={{ background: importMessage.startsWith("✅") ? "#065F46" : "#7C2D12", color: "white" }}>
+          <div className="message" style={{ background: importMessage.startsWith("?") ? "#065F46" : "#7C2D12", color: "white" }}>
             {importMessage}
           </div>
         )}
 
-        {/* ── Summary cards ── */}
+        {/* -- Summary cards -- */}
         <div className="summary-grid">
           <div className="summary-item"><div className="summary-label">Total Customers</div><div className="summary-value">{totalCustomers}</div></div>
           <div className="summary-item"><div className="summary-label">Total Receivables</div><div className="summary-value" style={{ color: totalReceivables >= 0 ? "#10B981" : "#EF4444" }}>PKR {totalReceivables.toLocaleString()}</div></div>
           <div className="summary-item summary-card-active"><div className="summary-label">Active</div><div className="summary-value" style={{ color: "#10B981" }}>{activeCustomers}</div></div>
         </div>
 
-        {/* ── Search (below summary) ── */}
+        {/* -- Search (below summary) -- */}
         <div className="search-section">
           <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
           <input className="input" placeholder="Search by code, name, phone, email..." value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
 
-        {/* ── Table ── */}
+        {/* -- Table -- */}
         <div className="card">
           <div className="table-scroll">
             <table className="cust-table">
               <colgroup>
                 <col style={{ width: 110 }} /> {/* Code */}
-                <col />                          {/* Name – takes remaining space */}
+                <col />                          {/* Name � takes remaining space */}
                 <col style={{ width: 120 }} />  {/* Phone */}
                 <col style={{ width: 130 }} />  {/* Balance */}
                 <col style={{ width: 140 }} />  {/* Actions */}
@@ -454,7 +454,7 @@ export default function CustomersPage() {
                         <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {cust.name}
                         </td>
-                        <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{cust.phone || "—"}</td>
+                        <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{cust.phone || "�"}</td>
                         <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: balance >= 0 ? "#10B981" : "#EF4444", whiteSpace: "nowrap" }}>
                           PKR {balance.toLocaleString()}
                         </td>
