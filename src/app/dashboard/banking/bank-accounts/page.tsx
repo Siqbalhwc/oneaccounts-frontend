@@ -409,7 +409,7 @@ export default function BankAccountsPage() {
           <table className="bank-table">
             <colgroup>
               <col style={{ width: 180 }} /> {/* Account */}
-              <col />                         {/* Bank Name – takes remaining space */}
+              <col />                         {/* Bank Name ï¿½ takes remaining space */}
               <col style={{ width: 120 }} /> {/* Account # */}
               <col style={{ width: 100 }} /> {/* Branch */}
               <col style={{ width: 120 }} /> {/* Balance */}
@@ -443,8 +443,8 @@ export default function BankAccountsPage() {
                     <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {b.bank_name}
                     </td>
-                    <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{b.account_number || "—"}</td>
-                    <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{b.branch || "—"}</td>
+                    <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{b.account_number || "ï¿½"}</td>
+                    <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{b.branch || "ï¿½"}</td>
                     <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>
                       PKR {(b.balance || 0).toLocaleString()}
                     </td>

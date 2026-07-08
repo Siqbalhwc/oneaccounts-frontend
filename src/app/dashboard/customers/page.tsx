@@ -61,7 +61,7 @@ export default function CustomersPage() {
     })
   }, [])
 
-  // -- Fetch customers – waits for companyId --
+  // -- Fetch customers ï¿½ waits for companyId --
   useEffect(() => {
     if (!role) return
     if (!canView) { setLoading(false); return }
@@ -123,7 +123,7 @@ export default function CustomersPage() {
     setCustomers(prev => prev.filter(c => c.id !== id))
   }
 
-  // WhatsApp for customer – send a friendly message with balance info
+  // WhatsApp for customer ï¿½ send a friendly message with balance info
   const sendWhatsApp = (cust: any) => {
     if (!cust.phone) { alert("No phone number for this customer."); return }
     const message = [
@@ -132,7 +132,7 @@ export default function CustomersPage() {
       `Your current balance with us is PKR ${(cust.balance || 0).toLocaleString()}.`,
       `Thank you for your business!`,
       ``,
-      `— OneAccounts`
+      `ï¿½ OneAccounts`
     ].join("\n")
     const link = getWhatsAppLink(cust.phone, message)
     if (link) window.open(link, "_blank")
@@ -242,7 +242,7 @@ export default function CustomersPage() {
     </th>
   )
 
-  if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
+  if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loadingï¿½</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
   return (
@@ -420,7 +420,7 @@ export default function CustomersPage() {
             <table className="cust-table">
               <colgroup>
                 <col style={{ width: 110 }} /> {/* Code */}
-                <col />                          {/* Name – takes remaining space */}
+                <col />                          {/* Name ï¿½ takes remaining space */}
                 <col style={{ width: 120 }} />  {/* Phone */}
                 <col style={{ width: 130 }} />  {/* Balance */}
                 <col style={{ width: 140 }} />  {/* Actions */}
@@ -454,7 +454,7 @@ export default function CustomersPage() {
                         <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {cust.name}
                         </td>
-                        <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{cust.phone || "—"}</td>
+                        <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{cust.phone || "ï¿½"}</td>
                         <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: balance >= 0 ? "#10B981" : "#EF4444", whiteSpace: "nowrap" }}>
                           PKR {balance.toLocaleString()}
                         </td>
