@@ -315,7 +315,7 @@ export default function ProjectsPage() {
 
       <div className="pr-header">
         <div>
-          <div className="pr-title">?? Projects & Activities</div>
+          <div className="pr-title">📁 Projects & Activities</div>
           <div className="pr-subtitle">Manage projects, locations, activities, and donors for budgeting and tracking</div>
         </div>
       </div>
