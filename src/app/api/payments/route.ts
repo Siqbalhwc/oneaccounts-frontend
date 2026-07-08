@@ -164,242 +164,137 @@ export async function POST(request: NextRequest) {
   }
 
   const isExpense = !!expense_account_id
-  const paymentType = isExpense ? 'expense' : 'supplier_payment'
-  const partyType = isExpense ? 'expense' : 'supplier'
-  const targetPartyId = isExpense ? null : party_id
 
-  // ── Generate unique payment number ────────────
-  let payNo = ''
-  let payment: any = null
-
-  for (let attempt = 0; attempt < 3; attempt++) {
-    payNo = await generatePaymentNo(supabase, companyId)
-    const result = await supabase.from("payments").insert({
-      company_id: companyId,
-      payment_no: payNo,
-      payment_type: paymentType,
-      party_type: partyType,
-      party_id: targetPartyId,
-      payment_date: date || new Date().toISOString().split('T')[0],
-      amount,
-      payment_method,
-      bank_account_id: bank_account_id || null,
-      expense_account_id: expense_account_id || null,
-      reference,
-      notes,
-      created_by: user?.email || null,
-      updated_by: user?.email || null,
-      gross_amount: 0,               // placeholder – will update after allocations
-    }).select('*').single()
-
-    if (!result.error) {
-      payment = result.data
-      break
-    }
-    if (result.error.message?.includes('duplicate key') && attempt < 2) continue
-    return NextResponse.json({ error: result.error?.message || 'Insert failed' }, { status: 500 })
-  }
-
-  if (!payment) return NextResponse.json({ error: 'Failed to create payment after multiple attempts.' }, { status: 500 })
-
-  // ── Allocations + WHT handling ─────────────────
-  let totalGrossAllocated = 0
-  let totalWhtDeducted = 0
-
-  if (!isExpense && allocations && Array.isArray(allocations) && allocations.length > 0) {
-    // Fetch all WHT records for the allocated bills in one go
-    const billIds = allocations.map((a: any) => a.bill_id)
-    const { data: whtRecords } = await supabase
-      .from("bill_withholding")
-      .select("bill_id, wht_tax_code_id, wht_rate, wht_amount")
-      .in("bill_id", billIds)
-      .eq("company_id", companyId)
-    const whtMap: Record<number, any> = {}
-    if (whtRecords) whtRecords.forEach((w: any) => { whtMap[w.bill_id] = w })
-
-    for (const alloc of allocations) {
-      const billId = alloc.bill_id
-      const grossAlloc = parseFloat(alloc.amount) || 0
-      if (grossAlloc <= 0) continue
-
-      const { data: bill } = await supabase
-        .from('invoices')
-        .select('paid, total, status')
-        .eq('id', billId)
-        .eq('company_id', companyId)
-        .eq('type', 'purchase')
-        .single()
-
-      if (!bill) continue
-
-      const newPaid = (bill.paid || 0) + grossAlloc
-      const newStatus = newPaid >= bill.total ? 'Paid' : 'Partial'
-      await supabase.from('invoices')
-        .update({ paid: newPaid, status: newStatus })
-        .eq('id', billId)
-        .eq('company_id', companyId)
-
-      await supabase.from('payment_allocations').insert({
-        payment_id: payment.id,
-        bill_id: billId,
-        amount: grossAlloc,
-        company_id: companyId,
-      })
-
-      totalGrossAllocated += grossAlloc
-    }
-
-    // Now compute proportional WHT for each allocated bill
-    for (const alloc of allocations) {
-      const billId = alloc.bill_id
-      const grossAlloc = parseFloat(alloc.amount) || 0
-      if (grossAlloc <= 0) continue
-
-      const wht = whtMap[billId]
-      if (wht && wht.wht_amount > 0 && wht.wht_tax_code_id) {
-        // Fetch the WHT payable account from tax_codes
-        const { data: taxCode } = await supabase
-          .from("tax_codes")
-          .select("tax_account_id")
-          .eq("id", wht.wht_tax_code_id)
-          .eq("company_id", companyId)
-          .single()
-
-        const whtAccountId = taxCode?.tax_account_id
-        if (whtAccountId) {
-          // Get the bill's total to calculate proportion
-          const { data: bill } = await supabase
-            .from("invoices")
-            .select("total")
-            .eq("id", billId)
-            .single()
-          if (bill) {
-            const proportion = grossAlloc / bill.total
-            const whtToDeduct = Math.round(wht.wht_amount * proportion)
-            totalWhtDeducted += whtToDeduct
-
-            // Store the wht info for journal construction
-            if (!payment._whtLines) payment._whtLines = []
-            payment._whtLines.push({
-              account_id: whtAccountId,
-              amount: whtToDeduct,
-            })
-          }
-        }
-      }
-    }
-  }
-
-  // ✅ Update the payment record with the real gross amount (total AP reduction)
-  const grossAmount = totalGrossAllocated > 0 ? totalGrossAllocated : amount;
-  await supabase.from("payments").update({ gross_amount: grossAmount }).eq("id", payment.id);
-
-  // ── Update supplier balance (reduce by the gross AP reduction) ──
-  if (targetPartyId) {
-    const { data: supp } = await supabase.from('suppliers')
-      .select('balance').eq('id', targetPartyId).eq('company_id', companyId).single()
-    if (supp) {
-      await supabase.from('suppliers')
-        .update({ balance: (supp.balance || 0) - grossAmount })
-        .eq('id', targetPartyId).eq('company_id', companyId)
-    }
-  }
-
-  // ── Determine bank GL account ────────────────
-  let bankGlAccountId: number | null = null
-  if (bank_account_id) {
-    const { data: bank } = await supabase.from('bank_accounts')
-      .select('account_id')
-      .eq('id', bank_account_id)
-      .eq('company_id', companyId)
-      .single()
-    if (bank) bankGlAccountId = bank.account_id
-  }
-  if (!bankGlAccountId) {
-    const cashFallback = await getAccount(supabase, '1000', companyId)
-    if (cashFallback) bankGlAccountId = cashFallback.id
-  }
-  if (!bankGlAccountId) {
-    return NextResponse.json({ error: 'No bank GL account found.' }, { status: 500 })
-  }
-
-  // ── Journal Entry ─────────────────────────────
-  const jeLines: any[] = []
-  let description = `Payment - ${payNo}`
-
+  // ── Expense Payment – keep existing logic completely unchanged ──
   if (isExpense) {
+    const paymentType = 'expense'
+    const partyType = 'expense'
+    const targetPartyId = null
+
+    let payNo = ''
+    let payment: any = null
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      payNo = await generatePaymentNo(supabase, companyId)
+      const result = await supabase.from("payments").insert({
+        company_id: companyId,
+        payment_no: payNo,
+        payment_type: paymentType,
+        party_type: partyType,
+        party_id: targetPartyId,
+        payment_date: date || new Date().toISOString().split('T')[0],
+        amount,
+        payment_method,
+        bank_account_id: bank_account_id || null,
+        expense_account_id: expense_account_id || null,
+        reference,
+        notes,
+        created_by: user?.email || null,
+        updated_by: user?.email || null,
+        gross_amount: 0,
+      }).select('*').single()
+
+      if (!result.error) {
+        payment = result.data
+        break
+      }
+      if (result.error.message?.includes('duplicate key') && attempt < 2) continue
+      return NextResponse.json({ error: result.error?.message || 'Insert failed' }, { status: 500 })
+    }
+
+    if (!payment) return NextResponse.json({ error: 'Failed to create payment after multiple attempts.' }, { status: 500 })
+
+    // Expense journal entry
+    let bankGlAccountId: number | null = null
+    if (bank_account_id) {
+      const { data: bank } = await supabase.from('bank_accounts')
+        .select('account_id')
+        .eq('id', bank_account_id)
+        .eq('company_id', companyId)
+        .single()
+      if (bank) bankGlAccountId = bank.account_id
+    }
+    if (!bankGlAccountId) {
+      const cashFallback = await getAccount(supabase, '1000', companyId)
+      if (cashFallback) bankGlAccountId = cashFallback.id
+    }
+    if (!bankGlAccountId) {
+      return NextResponse.json({ error: 'No bank GL account found.' }, { status: 500 })
+    }
+
+    const jeLines: any[] = []
     jeLines.push({ account_id: expense_account_id, debit: amount, credit: 0 })
     jeLines.push({ account_id: bankGlAccountId, debit: 0, credit: amount })
-    description = `Expense Payment - ${payNo}`
-  } else {
-    const apAcc = await getAccount(supabase, '2000', companyId)
-    if (!apAcc) return NextResponse.json({ error: 'Accounts Payable (2000) not found' }, { status: 500 })
 
-    // Debit AP for the total gross allocated
-    jeLines.push({ account_id: apAcc.id, debit: grossAmount, credit: 0 })
+    const description = `Expense Payment - ${payNo}`
+    const { data: entry, error: entryErr } = await supabase.from('journal_entries').insert({
+      company_id: companyId,
+      entry_no: `JE-PAY-${payNo}`,
+      date: date || new Date().toISOString().split('T')[0],
+      description,
+    }).select('id').single()
 
-    // Credit bank for net amount (grossAmount - totalWhtDeducted)
-    const bankCredit = grossAmount - totalWhtDeducted
-    jeLines.push({ account_id: bankGlAccountId, debit: 0, credit: bankCredit })
+    if (entryErr || !entry) {
+      return NextResponse.json({ error: entryErr?.message || 'JE insert failed' }, { status: 500 })
+    }
 
-    // Credit WHT payable for each WHT portion
-    if (payment._whtLines) {
-      for (const whtLine of payment._whtLines) {
-        jeLines.push({
-          account_id: whtLine.account_id,
-          debit: 0,
-          credit: whtLine.amount,
-        })
+    const lineRows = jeLines.map(l => ({
+      ...l,
+      entry_id: entry.id,
+      company_id: companyId,
+      source_type: 'payment',
+      source_id: payment.id,
+    }))
+    await supabase.from('journal_lines').insert(lineRows)
+
+    for (const l of jeLines) {
+      const { data: acc } = await supabase.from('accounts')
+        .select('balance').eq('id', l.account_id).eq('company_id', companyId).single()
+      if (acc) {
+        const newBal = acc.balance + (l.debit || 0) - (l.credit || 0)
+        await supabase.from('accounts').update({ balance: newBal }).eq('id', l.account_id).eq('company_id', companyId)
       }
     }
+
+    await supabase.from("data_change_logs").insert({
+      table_name: "payments",
+      record_id: String(payment.id),
+      action: "INSERT",
+      old_data: null,
+      new_data: payment,
+      changed_by: user?.email || user?.id || null,
+      changed_at: new Date().toISOString(),
+    })
+
+    return NextResponse.json({ success: true, payment_no: payNo, payment })
   }
 
-  // Insert journal entry and lines
-  const { data: entry, error: entryErr } = await supabase.from('journal_entries').insert({
-    company_id: companyId,
-    entry_no: `JE-PAY-${payNo}`,
-    date: date || new Date().toISOString().split('T')[0],
-    description,
-  }).select('id').single()
-
-  if (entryErr || !entry) {
-    return NextResponse.json({ error: entryErr?.message || 'JE insert failed' }, { status: 500 })
+  // ── Supplier Payment – call the new database function ──
+  if (!allocations || !Array.isArray(allocations) || allocations.length === 0) {
+    return NextResponse.json({ error: 'Allocations are required for supplier payment' }, { status: 400 })
   }
 
-  const lineRows = jeLines.map(l => ({
-    ...l,
-    entry_id: entry.id,
-    company_id: companyId,
-    source_type: 'payment',
-    source_id: payment.id,
-  }))
-  await supabase.from('journal_lines').insert(lineRows)
-
-  // Update account balances
-  for (const l of jeLines) {
-    const { data: acc } = await supabase.from('accounts')
-      .select('balance').eq('id', l.account_id).eq('company_id', companyId).single()
-    if (acc) {
-      const newBal = acc.balance + (l.debit || 0) - (l.credit || 0)
-      await supabase.from('accounts').update({ balance: newBal }).eq('id', l.account_id).eq('company_id', companyId)
-    }
-  }
-
-  // Audit log
-  await supabase.from("data_change_logs").insert({
-    table_name: "payments",
-    record_id: String(payment.id),
-    action: "INSERT",
-    old_data: null,
-    new_data: payment,
-    changed_by: user?.email || user?.id || null,
-    changed_at: new Date().toISOString(),
+  const { data, error: rpcError } = await supabase.rpc('create_vendor_payment', {
+    p_company_id: companyId,
+    p_party_id: party_id,
+    p_payment_date: date || new Date().toISOString().split('T')[0],
+    p_amount: amount,
+    p_payment_method: payment_method,
+    p_bank_account_id: bank_account_id,
+    p_allocations: allocations,
+    p_reference: reference || null,
+    p_notes: notes || null,
+    p_user_email: user?.email || 'system'
   })
 
-  return NextResponse.json({ success: true, payment_no: payNo, payment })
+  if (rpcError) {
+    return NextResponse.json({ error: rpcError.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true, ...data })
 }
 
-// ── PUT (Update) ─────────────────────────────────────────────────────
+// ── PUT (Update) – unchanged ─────────────────────────────────────────────────────
 export async function PUT(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -473,7 +368,6 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: updateErr?.message || 'Update failed' }, { status: 500 })
   }
 
-  // Re-insert allocations with WHT handling (same as POST)
   let totalGrossAllocated = 0
   let totalWhtDeducted = 0
 
@@ -548,7 +442,6 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  // Update gross_amount on the payment record
   const grossAmount = totalGrossAllocated > 0 ? totalGrossAllocated : amount;
   await supabase.from("payments").update({ gross_amount: grossAmount }).eq("id", id);
 
