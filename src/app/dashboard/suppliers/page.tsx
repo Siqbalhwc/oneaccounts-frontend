@@ -572,7 +572,7 @@ export default function SuppliersPage() {
           <table className="sup-table">
             <colgroup>
               <col style={{ width: 110 }} /> {/* Code */}
-              <col />                         {/* Name – takes remaining space */}
+              <col />                         {/* Name - takes remaining space */}
               <col style={{ width: 120 }} /> {/* Phone */}
               <col style={{ width: 130 }} /> {/* Balance */}
               <col style={{ width: 140 }} /> {/* Actions */}
@@ -604,7 +604,7 @@ export default function SuppliersPage() {
                     <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {s.name}
                     </td>
-                    <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{s.phone || "—"}</td>
+                    <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{s.phone || "-"}</td>
                     <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: s.balance >= 0 ? "#10B981" : "#EF4444", whiteSpace: "nowrap" }}>
                       PKR {s.balance?.toLocaleString()}
                     </td>
@@ -679,14 +679,14 @@ export default function SuppliersPage() {
                 <div>
                   <label>Default Project</label>
                   <select className="select" value={form.default_project_id ?? ""} onChange={e => setForm({...form, default_project_id: e.target.value ? Number(e.target.value) : null})}>
-                    <option value="">— None —</option>
+                    <option value="">- None -</option>
                     {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label>Default Location</label>
                   <select className="select" value={form.default_location_id ?? ""} onChange={e => setForm({...form, default_location_id: e.target.value ? Number(e.target.value) : null})}>
-                    <option value="">— None —</option>
+                    <option value="">- None -</option>
                     {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                   </select>
                 </div>
@@ -694,7 +694,7 @@ export default function SuppliersPage() {
               <div>
                 <label>Default Activity</label>
                 <select className="select" value={form.default_activity_id ?? ""} onChange={e => setForm({...form, default_activity_id: e.target.value ? Number(e.target.value) : null})}>
-                  <option value="">— None —</option>
+                  <option value="">- None -</option>
                   {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
               </div>

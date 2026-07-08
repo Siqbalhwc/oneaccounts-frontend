@@ -149,7 +149,7 @@ export default function BudgetVsActualReportPage() {
     XLSX.writeFile(wb, "budget_vs_actual_report.xlsx")
   }
 
-  if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
+  if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" }}>Loading...</div>
   if (!canView) return <div style={{ padding: 24 }}><h2>Access Denied</h2></div>
 
   return (
@@ -218,7 +218,7 @@ export default function BudgetVsActualReportPage() {
                         <td style={{ border: "1px solid #eee", padding: 4, textAlign: "right" }}>{budget.toLocaleString()}</td>
                         <td style={{ border: "1px solid #eee", padding: 4, textAlign: "right" }}>{actual.toLocaleString()}</td>
                         <td style={{ border: "1px solid #eee", padding: 4, textAlign: "right", color: variance < 0 ? "#EF4444" : "#10B981" }}>
-                          {variance === 0 ? "—" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
+                          {variance === 0 ? "-" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
                         </td>
                       </tr>
                     )

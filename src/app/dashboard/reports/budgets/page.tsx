@@ -99,7 +99,7 @@ export default function BudgetReportPage() {
     XLSX.writeFile(wb, "budget_report.xlsx")
   }
 
-if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
+if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" }}>Loading...</div>
   if (!canView) return <div style={{ padding: 24 }}><h2>Access Denied</h2></div>
 
   return (

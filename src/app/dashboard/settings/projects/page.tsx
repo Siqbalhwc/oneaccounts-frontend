@@ -108,7 +108,7 @@ export default function ProjectsPage() {
     } else if (activeTab === "donors") {
       const { data } = await supabase.from("donors").select("*").eq("company_id", companyId).order("name")
       setItems(data || [])
-    } else { // activities – now uses single project_id directly
+    } else { // activities - now uses single project_id directly
       let query = supabase
         .from("activities")
         .select("id, name, is_active, project_id, projects!inner(name)")
@@ -132,7 +132,7 @@ export default function ProjectsPage() {
         name: a.name,
         is_active: a.is_active,
         project_id: a.project_id,
-        project_name: a.projects?.name || "—",
+        project_name: a.projects?.name || "-",
       }))
 
       setItems(enriched)
@@ -143,7 +143,7 @@ export default function ProjectsPage() {
   useEffect(() => { fetchData() }, [companyId, activeTab, activityProjectFilter])
 
   if (!companyId) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
-  if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
+  if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
   const filtered = search.trim()
@@ -386,9 +386,9 @@ export default function ProjectsPage() {
             }}>
               <span style={{ fontWeight: 600 }}>{item.name}{item.description ? <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: 8 }}>({item.description})</span> : ""}</span>
               {activeTab === "activities" && <span>{item.project_name}</span>}
-              {activeTab === "projects" && <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{(item as any).description || "—"}</span>}
-              {activeTab === "projects" && <span style={{ color: "var(--primary)" }}>{item.donor_name || "—"}</span>}
-              {activeTab === "donors" && <span style={{ fontFamily: "monospace", fontSize: 12 }}>{(item as any).code || "—"}</span>}
+              {activeTab === "projects" && <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{(item as any).description || "-"}</span>}
+              {activeTab === "projects" && <span style={{ color: "var(--primary)" }}>{item.donor_name || "-"}</span>}
+              {activeTab === "donors" && <span style={{ fontFamily: "monospace", fontSize: 12 }}>{(item as any).code || "-"}</span>}
               <span>{item.is_active ? "?" : "?"}</span>
               <button className="pr-icon-btn" onClick={() => openEdit(item)}><Edit size={14} /></button>
               <button className="pr-icon-btn danger" onClick={() => setDeleteId(item.id)}><Trash2 size={14} /></button>
@@ -419,7 +419,7 @@ export default function ProjectsPage() {
                   <div>
                     <label className="pr-field-label">Donor</label>
                     <select className="pr-field-input" value={formDonorId ?? ""} onChange={e => setFormDonorId(e.target.value ? Number(e.target.value) : null)}>
-                      <option value="">— Select Donor —</option>
+                      <option value="">- Select Donor -</option>
                       {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
                   </div>
@@ -428,7 +428,7 @@ export default function ProjectsPage() {
               {activeTab === "donors" && (
                 <div>
                   <label className="pr-field-label">Code (optional)</label>
-                  <input className="pr-field-input" value={formCode} onChange={e => setFormCode(e.target.value)} placeholder="e.g., UNICEF, GIZ — leave blank for auto code" />
+                  <input className="pr-field-input" value={formCode} onChange={e => setFormCode(e.target.value)} placeholder="e.g., UNICEF, GIZ - leave blank for auto code" />
                 </div>
               )}
               {activeTab === "activities" && (
@@ -439,7 +439,7 @@ export default function ProjectsPage() {
                     value={formProjectId ?? ""}
                     onChange={e => setFormProjectId(e.target.value ? Number(e.target.value) : null)}
                   >
-                    <option value="">— Select Project —</option>
+                    <option value="">- Select Project -</option>
                     {projects.map(p => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}

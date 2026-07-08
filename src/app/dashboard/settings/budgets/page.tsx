@@ -727,7 +727,7 @@ export default function BudgetsPage() {
                 <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}>Draft</span>
               )}
             </div>
-            {/* Edit Budget button – only when not editing and user can edit */}
+            {/* Edit Budget button - only when not editing and user can edit */}
             {!editMode && canEditBudget && (
               <button className="btn-outline" onClick={() => setEditMode(true)}>
                 <Edit size={14} /> Edit Budget
@@ -802,13 +802,13 @@ export default function BudgetsPage() {
                                   <Fragment key={acc.id}>
                                     <td><input className="input-budget" type="number" min="0" step="100" value={cell.budget || ""} onChange={e => updateCell(String(acc.id), act.id, lid, Number(e.target.value))} disabled={!canEditBudget || !editMode} placeholder="0" /></td>
                                     <td style={{ fontSize: 10, color: "var(--text)" }}>{cell.actual.toLocaleString()}</td>
-                                    <td style={{ fontSize: 10, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "var(--text-muted)" }}>{variance === 0 ? "—" : (variance > 0 ? "+" : "") + variance.toLocaleString()}</td>
+                                    <td style={{ fontSize: 10, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "var(--text-muted)" }}>{variance === 0 ? "-" : (variance > 0 ? "+" : "") + variance.toLocaleString()}</td>
                                   </Fragment>
                                 )
                               })}
                               <td style={{ fontWeight: 600 }}>{rowBudget.toLocaleString()}</td>
                               <td style={{ fontWeight: 600 }}>{rowActual.toLocaleString()}</td>
-                              <td style={{ fontWeight: 600, color: (rowBudget - rowActual) < 0 ? "#EF4444" : (rowBudget - rowActual) > 0 ? "#10B981" : "var(--text-muted)" }}>{(rowBudget - rowActual) === 0 ? "—" : (rowBudget - rowActual > 0 ? "+" : "") + (rowBudget - rowActual).toLocaleString()}</td>
+                              <td style={{ fontWeight: 600, color: (rowBudget - rowActual) < 0 ? "#EF4444" : (rowBudget - rowActual) > 0 ? "#10B981" : "var(--text-muted)" }}>{(rowBudget - rowActual) === 0 ? "-" : (rowBudget - rowActual > 0 ? "+" : "") + (rowBudget - rowActual).toLocaleString()}</td>
                             </tr>
                           )
                         })}
@@ -833,12 +833,12 @@ export default function BudgetsPage() {
                             return (
                               <Fragment key={acc.id}>
                                 <td>{sb.toLocaleString()}</td><td>{sa.toLocaleString()}</td>
-                                <td style={{ color: sv < 0 ? "#EF4444" : sv > 0 ? "#10B981" : "var(--text-muted)" }}>{sv === 0 ? "—" : (sv > 0 ? "+" : "") + sv.toLocaleString()}</td>
+                                <td style={{ color: sv < 0 ? "#EF4444" : sv > 0 ? "#10B981" : "var(--text-muted)" }}>{sv === 0 ? "-" : (sv > 0 ? "+" : "") + sv.toLocaleString()}</td>
                               </Fragment>
                             )
                           })}
                           <td>{actTotalBudget.toLocaleString()}</td><td>{actTotalActual.toLocaleString()}</td>
-                          <td style={{ color: (actTotalBudget - actTotalActual) < 0 ? "#EF4444" : (actTotalBudget - actTotalActual) > 0 ? "#10B981" : "var(--text-muted)" }}>{(actTotalBudget - actTotalActual) === 0 ? "—" : (actTotalBudget - actTotalActual > 0 ? "+" : "") + (actTotalBudget - actTotalActual).toLocaleString()}</td>
+                          <td style={{ color: (actTotalBudget - actTotalActual) < 0 ? "#EF4444" : (actTotalBudget - actTotalActual) > 0 ? "#10B981" : "var(--text-muted)" }}>{(actTotalBudget - actTotalActual) === 0 ? "-" : (actTotalBudget - actTotalActual > 0 ? "+" : "") + (actTotalBudget - actTotalActual).toLocaleString()}</td>
                         </tr>
                       </Fragment>
                     )
@@ -855,12 +855,12 @@ export default function BudgetsPage() {
                       return (
                         <Fragment key={acc.id}>
                           <td>{gb.toLocaleString()}</td><td>{ga.toLocaleString()}</td>
-                          <td style={{ color: gv < 0 ? "#EF4444" : gv > 0 ? "#10B981" : "var(--text-muted)" }}>{gv === 0 ? "—" : (gv > 0 ? "+" : "") + gv.toLocaleString()}</td>
+                          <td style={{ color: gv < 0 ? "#EF4444" : gv > 0 ? "#10B981" : "var(--text-muted)" }}>{gv === 0 ? "-" : (gv > 0 ? "+" : "") + gv.toLocaleString()}</td>
                         </Fragment>
                       )
                     })}
                     <td>{grandBudget.toLocaleString()}</td><td>{grandActual.toLocaleString()}</td>
-                    <td style={{ color: grandVariance < 0 ? "#EF4444" : grandVariance > 0 ? "#10B981" : "var(--text-muted)" }}>{grandVariance === 0 ? "—" : (grandVariance > 0 ? "+" : "") + grandVariance.toLocaleString()}</td>
+                    <td style={{ color: grandVariance < 0 ? "#EF4444" : grandVariance > 0 ? "#10B981" : "var(--text-muted)" }}>{grandVariance === 0 ? "-" : (grandVariance > 0 ? "+" : "") + grandVariance.toLocaleString()}</td>
                   </tr>
                 </tbody>
               </table>
