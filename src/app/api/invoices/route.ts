@@ -385,8 +385,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const arAccount = await getAccount(supabase, '1100', companyId)
-    const revenueAccount = await getAccount(supabase, '4000', companyId)
+    // ✅ All account lookups now use supabaseAdmin to bypass RLS
+    const arAccount = await getAccount(supabaseAdmin, '1100', companyId)
+    const revenueAccount = await getAccount(supabaseAdmin, '4000', companyId)
     if (!arAccount || !revenueAccount) throw new Error('AR or Revenue account not found')
 
     const jeLines: any[] = []
@@ -417,8 +418,8 @@ export async function POST(request: NextRequest) {
     }
 
     // COGS for product lines
-    const cogsAccount = await getAccount(supabase, '5000', companyId)
-    const inventoryAccount = await getAccount(supabase, '1200', companyId)
+    const cogsAccount = await getAccount(supabaseAdmin, '5000', companyId)
+    const inventoryAccount = await getAccount(supabaseAdmin, '1200', companyId)
     if (cogsAccount && inventoryAccount) {
       for (const item of enhancedItems) {
         if (!item.product_id) continue
@@ -506,7 +507,7 @@ export async function POST(request: NextRequest) {
         netProfit -= cost
       }
       if (netProfit > 0) {
-        const retainedEarnings = await getAccount(supabase, '3000', companyId)
+        const retainedEarnings = await getAccount(supabaseAdmin, '3000', companyId)
         if (retainedEarnings) {
           jeLines.push({ account_id: retainedEarnings.id, debit: netProfit, credit: 0 })
 
@@ -586,8 +587,8 @@ export async function PUT(request: NextRequest) {
   }
 
   // Check essential accounts before reversing
-  const arAccount = await getAccount(supabase, '1100', companyId)
-  const revenueAccount = await getAccount(supabase, '4000', companyId)
+  const arAccount = await getAccount(supabaseAdmin, '1100', companyId)
+  const revenueAccount = await getAccount(supabaseAdmin, '4000', companyId)
   if (!arAccount || !revenueAccount) {
     return NextResponse.json({
       error: `Cannot edit invoice: ${!arAccount ? 'Accounts Receivable (1100)' : 'Revenue (4000)'} account not found for this company.`
@@ -779,8 +780,8 @@ export async function PUT(request: NextRequest) {
     }
 
     // COGS
-    const cogsAccount = await getAccount(supabase, '5000', companyId)
-    const inventoryAccount = await getAccount(supabase, '1200', companyId)
+    const cogsAccount = await getAccount(supabaseAdmin, '5000', companyId)
+    const inventoryAccount = await getAccount(supabaseAdmin, '1200', companyId)
     if (cogsAccount && inventoryAccount) {
       for (const item of enhancedItems) {
         if (!item.product_id) continue
@@ -859,7 +860,7 @@ export async function PUT(request: NextRequest) {
         netProfit -= cost
       }
       if (netProfit > 0) {
-        const retainedEarnings = await getAccount(supabase, '3000', companyId)
+        const retainedEarnings = await getAccount(supabaseAdmin, '3000', companyId)
         if (retainedEarnings) {
           jeLines.push({ account_id: retainedEarnings.id, debit: netProfit, credit: 0 })
 
