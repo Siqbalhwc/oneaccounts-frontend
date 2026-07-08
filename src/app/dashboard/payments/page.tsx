@@ -181,7 +181,7 @@ export default function PaymentsPage() {
     </th>
   )
 
-  if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading�</div>
+  if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
   return (
@@ -254,7 +254,7 @@ export default function PaymentsPage() {
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>?? Payments</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>💳 Payments</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>{canEdit ? "Record supplier payments" : "View payments"}</p>
         </div>
         {canEdit && (
@@ -280,7 +280,7 @@ export default function PaymentsPage() {
             <colgroup>
               <col style={{ width: 130 }} /> {/* Payment # */}
               <col style={{ width: 100 }} /> {/* Date */}
-              <col />                         {/* Supplier � takes remaining space */}
+              <col />                         {/* Supplier  takes remaining space */}
               <col style={{ width: 120 }} /> {/* Amount */}
               <col style={{ width: 110 }} /> {/* Method */}
               <col style={{ width: 80  }} /> {/* Actions */}
@@ -307,7 +307,7 @@ export default function PaymentsPage() {
               ) : (
                 sortedFiltered.map((pay) => {
                   const supp = supplierMap[pay.party_id]
-                  const suppName = supp?.name || "�"
+                  const suppName = supp?.name || "-"
                   return (
                     <tr key={pay.id}>
                       <td style={tdStyle}>
@@ -320,7 +320,7 @@ export default function PaymentsPage() {
                       <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>
                         PKR {pay.amount?.toLocaleString()}
                       </td>
-                      <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{pay.payment_method || "�"}</td>
+                      <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{pay.payment_method || "-"}</td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>
                         <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
                           <button className="btn-icon" onClick={() => router.push(`/dashboard/payments/${pay.id}`)} title="View payment">
@@ -346,3 +346,4 @@ export default function PaymentsPage() {
     </div>
   )
 }
+f
