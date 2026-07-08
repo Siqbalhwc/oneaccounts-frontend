@@ -43,16 +43,16 @@ async function reversePayment(supabase: any, paymentId: number, paymentNo: strin
       const { data: bill } = await supabase
         .from("invoices")
         .select("paid, total")
-        .eq("id", alloc.bill_id)
+        .eq("id", alloc.invoice_id)
         .eq("company_id", companyId)
         .eq("type", "purchase")
         .single()
       if (bill) {
-        const newPaid = (bill.paid || 0) - alloc.amount
+        const newPaid = (bill.paid || 0) - alloc.allocated_amount
         const newStatus = newPaid >= (bill.total || 0) ? 'Paid' : newPaid > 0 ? 'Partial' : 'Unpaid'
         await supabase.from("invoices")
           .update({ paid: newPaid, status: newStatus })
-          .eq("id", alloc.bill_id)
+          .eq("id", alloc.invoice_id)
           .eq("company_id", companyId)
       }
     }
@@ -108,7 +108,6 @@ async function reversePayment(supabase: any, paymentId: number, paymentNo: strin
     .eq("id", paymentId)
     .single()
   if (payment?.party_id) {
-    // Use gross_amount if available, otherwise fallback to amount
     const gross = payment.gross_amount ?? payment.amount
     const { data: supp } = await supabase
       .from("suppliers")
@@ -274,6 +273,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Allocations are required for supplier payment' }, { status: 400 })
   }
 
+  // Map frontend field names to database column names
+  const mappedAllocations = allocations.map((a: any) => ({
+    invoice_id: a.bill_id,
+    allocated_amount: a.amount,
+  }))
+
   const { data, error: rpcError } = await supabase.rpc('create_vendor_payment', {
     p_company_id: companyId,
     p_party_id: party_id,
@@ -281,7 +286,7 @@ export async function POST(request: NextRequest) {
     p_amount: amount,
     p_payment_method: payment_method,
     p_bank_account_id: bank_account_id,
-    p_allocations: allocations,
+    p_allocations: mappedAllocations,
     p_reference: reference || null,
     p_notes: notes || null,
     p_user_email: user?.email || 'system'
@@ -405,8 +410,8 @@ export async function PUT(request: NextRequest) {
 
       await supabase.from('payment_allocations').insert({
         payment_id: Number(id),
-        bill_id: billId,
-        amount: grossAlloc,
+        invoice_id: billId,
+        allocated_amount: grossAlloc,
         company_id: companyId,
       })
       totalGrossAllocated += grossAlloc
