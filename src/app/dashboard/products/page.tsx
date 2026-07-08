@@ -373,7 +373,7 @@ export default function StockRegisterPage() {
       {/* Header: title left, Add Product right */}
       <div className="header-row">
         <div className="title-area">
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>?? Stock Register</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📦 Stock Register</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Manage inventory, view opening / inflow / outflow / closing</p>
         </div>
         {canEdit && (
@@ -476,7 +476,7 @@ export default function StockRegisterPage() {
                       <td style={{ ...tdStyle, textAlign: "center" }}>
                         {prod.image_path ? (
                           <img src={prod.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
-                        ) : "�"}
+                        ) : "-"}
                       </td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>
                         <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
