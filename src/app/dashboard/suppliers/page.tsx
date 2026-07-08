@@ -9,12 +9,12 @@ import { Plus, Search, Edit, Trash2, X, Eye, ArrowUpDown, ArrowUp, ArrowDown, Fi
 import RecordHistory from "@/components/RecordHistory"
 
 const COUNTRY_CODES = [
-  { code: "+92", label: "???? +92" },
-  { code: "+1",  label: "???? +1" },
-  { code: "+44", label: "???? +44" },
-  { code: "+971",label: "???? +971" },
-  { code: "+966",label: "???? +966" },
-  { code: "+91", label: "???? +91" },
+  { code: "+92",  label: "🇵🇰 +92" },
+  { code: "+1",   label: "🇺🇸 +1" },
+  { code: "+44",  label: "🇬🇧 +44" },
+  { code: "+971", label: "🇦🇪 +971" },
+  { code: "+966", label: "🇸🇦 +966" },
+  { code: "+91",  label: "🇮🇳 +91" },
 ]
 
 const PAYMENT_TERMS = [
@@ -516,7 +516,7 @@ export default function SuppliersPage() {
       {/* -- HEADER ROW: title left, all buttons right -- */}
       <div className="header-row">
         <div className="title-area">
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>?? Suppliers</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>🚚 Suppliers</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Manage your supplier accounts</p>
         </div>
         <div className="actions">
