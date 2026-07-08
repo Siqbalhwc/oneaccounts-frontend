@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { usePlan } from "@/contexts/PlanContext"
-import { Plus, X, Search } from "lucide-react"
+import { Plus, X, Search, Pencil } from "lucide-react"
 
 const CATEGORIES = [
   { code: "RAW", label: "Raw Material" },
@@ -24,6 +24,7 @@ interface Product {
   mm_is_rc: boolean | null
   mm_is_sellable: boolean | null
   reorder_level: number | null
+  mm_parent_product_id: number | null
   deleted_at: string | null
 }
 
@@ -43,6 +44,7 @@ export default function MaterialsProductsPage() {
 
   const [showModal, setShowModal] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState({
     name: "",
     category: "RAW",
@@ -50,6 +52,7 @@ export default function MaterialsProductsPage() {
     is_rc: false,
     reorder_level: "",
     conversion_kg: "",
+    parent_product_id: "",
   })
 
   useEffect(() => {
@@ -59,21 +62,19 @@ export default function MaterialsProductsPage() {
       if (!cid) { setLoading(false); return }
       setCompanyId(cid)
       await loadProducts(cid)
+      setLoading(false)
     }
     init()
   }, [])
 
   const loadProducts = async (cid: string) => {
-    setLoading(true)
-    // Only material-management products: those with an mm_category set
     const { data, error } = await supabase
       .from("products")
-      .select("id, code, name, mm_category, unit, mm_conversion_kg, mm_is_rc, mm_is_sellable, reorder_level, deleted_at")
+      .select("id, code, name, mm_category, unit, mm_conversion_kg, mm_is_rc, mm_is_sellable, reorder_level, mm_parent_product_id, deleted_at")
       .eq("company_id", cid)
       .not("mm_category", "is", null)
       .order("code", { ascending: true })
     if (!error && data) setProducts(data as Product[])
-    setLoading(false)
   }
 
   const showMessage = (msg: string) => {
@@ -93,40 +94,76 @@ export default function MaterialsProductsPage() {
   }
 
   const openAddModal = () => {
-    setForm({ name: "", category: "RAW", unit: "kg", is_rc: false, reorder_level: "", conversion_kg: "" })
+    setEditingId(null)
+    setForm({ name: "", category: "RAW", unit: "kg", is_rc: false, reorder_level: "", conversion_kg: "", parent_product_id: "" })
+    setShowModal(true)
+  }
+
+  const openEditModal = (p: Product) => {
+    setEditingId(p.id)
+    setForm({
+      name: p.name,
+      category: p.mm_category || "RAW",
+      unit: p.unit || "kg",
+      is_rc: !!p.mm_is_rc,
+      reorder_level: p.reorder_level != null ? String(p.reorder_level) : "",
+      conversion_kg: p.mm_conversion_kg != null ? String(p.mm_conversion_kg) : "",
+      parent_product_id: p.mm_parent_product_id != null ? String(p.mm_parent_product_id) : "",
+    })
     setShowModal(true)
   }
 
   const handleSave = async () => {
     if (!companyId) return
     if (!form.name.trim()) { showMessage("❌ Product name is required"); return }
+    if (form.unit !== "kg" && !form.conversion_kg) { showMessage("❌ Conversion to KG is required for non-kg units"); return }
 
     setSaving(true)
-    const code = generateNextCode(form.category)
-    // Raw materials/chemicals/consumables should not appear on Sales Invoice pickers;
-    // Finished Goods should.
     const isSellable = form.category === "FG"
 
-    const { error } = await supabase.from("products").insert({
-      company_id: companyId,
-      code,
-      name: form.name.trim(),
-      mm_category: form.category,
-      unit: form.unit,
-      mm_is_rc: form.is_rc,
-      mm_is_sellable: isSellable,
-      reorder_level: form.reorder_level ? parseFloat(form.reorder_level) : null,
-      mm_conversion_kg: form.conversion_kg ? parseFloat(form.conversion_kg) : null,
-      opening_qty: 0,
-      qty_on_hand: 0,
-    })
+    if (editingId) {
+      const { error } = await supabase.from("products").update({
+        name: form.name.trim(),
+        mm_category: form.category,
+        unit: form.unit,
+        mm_is_rc: form.is_rc,
+        mm_is_sellable: isSellable,
+        reorder_level: form.reorder_level ? parseFloat(form.reorder_level) : null,
+        mm_conversion_kg: form.conversion_kg ? parseFloat(form.conversion_kg) : null,
+        mm_parent_product_id: form.parent_product_id ? parseInt(form.parent_product_id) : null,
+      }).eq("id", editingId).eq("company_id", companyId)
 
-    if (error) {
-      showMessage("❌ " + error.message)
+      if (error) {
+        showMessage("❌ " + error.message)
+      } else {
+        showMessage(`✅ Product updated`)
+        setShowModal(false)
+        await loadProducts(companyId)
+      }
     } else {
-      showMessage(`✅ Product ${code} added`)
-      setShowModal(false)
-      await loadProducts(companyId)
+      const code = generateNextCode(form.category)
+      const { error } = await supabase.from("products").insert({
+        company_id: companyId,
+        code,
+        name: form.name.trim(),
+        mm_category: form.category,
+        unit: form.unit,
+        mm_is_rc: form.is_rc,
+        mm_is_sellable: isSellable,
+        reorder_level: form.reorder_level ? parseFloat(form.reorder_level) : null,
+        mm_conversion_kg: form.conversion_kg ? parseFloat(form.conversion_kg) : null,
+        mm_parent_product_id: form.parent_product_id ? parseInt(form.parent_product_id) : null,
+        opening_qty: 0,
+        qty_on_hand: 0,
+      })
+
+      if (error) {
+        showMessage("❌ " + error.message)
+      } else {
+        showMessage(`✅ Product ${code} added`)
+        setShowModal(false)
+        await loadProducts(companyId)
+      }
     }
     setSaving(false)
   }
@@ -145,11 +182,23 @@ export default function MaterialsProductsPage() {
     }
   }
 
+  const parentName = (id: number | null) => {
+    if (!id) return null
+    return products.find(p => p.id === id)?.name || `#${id}`
+  }
+
   const filtered = products.filter(p => {
     if (!showInactive && p.deleted_at) return false
     const q = search.toLowerCase()
     return p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q)
   })
+
+  // Candidates for "parent" dropdown: same category, not itself, not already a child
+  const parentCandidates = products.filter(p =>
+    p.mm_category === form.category &&
+    p.id !== editingId &&
+    !p.mm_parent_product_id
+  )
 
   if (planLoading) {
     return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
@@ -175,16 +224,18 @@ export default function MaterialsProductsPage() {
         .mp-btn:hover { background: var(--card-hover); }
         .mp-btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
         .mp-btn-primary:hover { background: var(--primary-hover); }
+        .mp-btn-icon { padding: 6px; }
 
         .mp-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
         .mp-search { display: flex; align-items: center; gap: 6px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; flex: 1; min-width: 200px; max-width: 320px; }
         .mp-search input { border: none; background: transparent; outline: none; color: var(--text); font-size: 13px; width: 100%; }
 
         .mp-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
-        .mp-table { width: 100%; border-collapse: collapse; min-width: 750px; }
+        .mp-table { width: 100%; border-collapse: collapse; min-width: 820px; }
         .mp-table th { text-align: left; padding: 10px 12px; font-size: 11px; font-weight: 700; color: var(--text-muted); border-bottom: 2px solid var(--border); text-transform: uppercase; }
         .mp-table td { padding: 10px 12px; font-size: 13px; border-bottom: 1px solid var(--border); }
         .mp-table tr:hover { background: var(--card-hover); }
+        .mp-child-name { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 
         .mp-badge { padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; }
         .mp-badge-active { background: #065F46; color: #A7F3D0; }
@@ -248,7 +299,12 @@ export default function MaterialsProductsPage() {
               filtered.map(p => (
                 <tr key={p.id}>
                   <td style={{ fontWeight: 600 }}>{p.code}</td>
-                  <td>{p.name}</td>
+                  <td>
+                    {p.name}
+                    {p.mm_parent_product_id && (
+                      <div className="mp-child-name">↳ variant of {parentName(p.mm_parent_product_id)}</div>
+                    )}
+                  </td>
                   <td>{CATEGORIES.find(c => c.code === p.mm_category)?.label || p.mm_category}</td>
                   <td>{p.unit}</td>
                   <td>{p.reorder_level ?? "—"}</td>
@@ -265,9 +321,12 @@ export default function MaterialsProductsPage() {
                     </span>
                   </td>
                   <td>
-                    <button className="mp-btn" onClick={() => toggleActive(p)}>
-                      {!p.deleted_at ? "Deactivate" : "Activate"}
-                    </button>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button className="mp-btn mp-btn-icon" onClick={() => openEditModal(p)} title="Edit"><Pencil size={12} /></button>
+                      <button className="mp-btn" onClick={() => toggleActive(p)}>
+                        {!p.deleted_at ? "Deactivate" : "Activate"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -280,7 +339,7 @@ export default function MaterialsProductsPage() {
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2 style={{ fontSize: 16, margin: 0 }}>Add Product</h2>
+              <h2 style={{ fontSize: 16, margin: 0 }}>{editingId ? "Edit Product" : "Add Product"}</h2>
               <button className="mp-btn" onClick={() => setShowModal(false)}><X size={16} /></button>
             </div>
 
@@ -288,14 +347,28 @@ export default function MaterialsProductsPage() {
             <input className="input-field" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Polypropylene Granules" />
 
             <label className="field-label">Category</label>
-            <select className="input-field" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
+            <select className="input-field" value={form.category} disabled={!!editingId} onChange={e => setForm({ ...form, category: e.target.value, parent_product_id: "" })}>
               {CATEGORIES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
             </select>
+            {editingId && (
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: -10, marginBottom: 14 }}>
+                Category can't be changed after creation (it's baked into the product code).
+              </div>
+            )}
             {form.category === "FG" && (
               <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: -10, marginBottom: 14 }}>
                 Finished Goods will be selectable on Sales Invoices.
               </div>
             )}
+
+            <label className="field-label">Parent Product (optional)</label>
+            <select className="input-field" value={form.parent_product_id} onChange={e => setForm({ ...form, parent_product_id: e.target.value })}>
+              <option value="">— None, this is a standalone/base product —</option>
+              {parentCandidates.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: -10, marginBottom: 14 }}>
+              Use this for size/packaging variants of the same base material (e.g. "Caustic Soda – 25kg Bag" and "Caustic Soda – 50kg Bag" both under a "Caustic Soda" parent).
+            </div>
 
             <label className="field-label">Unit of Measure</label>
             <select className="input-field" value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })}>
@@ -321,7 +394,7 @@ export default function MaterialsProductsPage() {
             </label>
 
             <button className="mp-btn mp-btn-primary" onClick={handleSave} disabled={saving} style={{ width: "100%", padding: "10px", justifyContent: "center" }}>
-              {saving ? "Saving…" : "Save Product"}
+              {saving ? "Saving…" : editingId ? "Update Product" : "Save Product"}
             </button>
           </div>
         </div>
