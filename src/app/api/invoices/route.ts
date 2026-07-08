@@ -258,7 +258,8 @@ export async function POST(request: NextRequest) {
   const enhancedItems = await Promise.all(items.map(async (item: any) => {
     let cost_price = 0
     if (item.product_id) {
-      const { data: product } = await supabase
+      // ✅ FIX: use service-role client to bypass RLS and always get cost_price
+      const { data: product } = await supabaseAdmin
         .from('products')
         .select('cost_price')
         .eq('id', item.product_id)
@@ -637,7 +638,8 @@ export async function PUT(request: NextRequest) {
   const enhancedItems = await Promise.all((items || []).map(async (item: any) => {
     let cost_price = 0
     if (item.product_id) {
-      const { data: product } = await supabase
+      // ✅ FIX: use service-role client to bypass RLS and always get cost_price
+      const { data: product } = await supabaseAdmin
         .from('products')
         .select('cost_price')
         .eq('id', item.product_id)
