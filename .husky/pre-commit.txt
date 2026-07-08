@@ -1,0 +1,16 @@
+#!/bin/sh
+
+# Detect non‑UTF‑8 characters in staged files
+bad=$(git diff --cached --name-only -z | xargs -0 -I{} sh -c 'if file -b --mime-encoding "{}" | grep -qv "utf-8\|us-ascii\|binary"; then echo "{}"; fi')
+
+if [ -n "$bad" ]; then
+  echo ""
+  echo "❌ COMMIT REJECTED – These files contain non‑UTF‑8 characters:"
+  echo "$bad"
+  echo ""
+  echo "👉 Open the files in Notepad, press Ctrl+H (Replace), search for any unusual"
+  echo "   characters (like Â, â€, ðŸ, etc.) and delete them, or re‑type the text"
+  echo "   manually instead of pasting from external sources."
+  echo ""
+  exit 1
+fi
