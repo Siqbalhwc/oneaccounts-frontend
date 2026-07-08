@@ -476,7 +476,7 @@ export default function StockRegisterPage() {
                       <td style={{ ...tdStyle, textAlign: "center" }}>
                         {prod.image_path ? (
                           <img src={prod.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
-                        ) : "-"}
+                        ) : "—"}
                       </td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>
                         <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
