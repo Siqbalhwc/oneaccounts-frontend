@@ -4,7 +4,7 @@ import { cookies } from "next/headers"
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const cookieStore = cookies()
   const supabase = createServerClient(
@@ -17,7 +17,8 @@ export async function POST(
     }
   )
 
-  const id = Number(params.id)
+  const { id } = await params
+  const structureId = Number(id)
   const { name } = await request.json()
 
   if (!name) {
@@ -28,7 +29,7 @@ export async function POST(
   const { data: structure, error: structErr } = await supabase
     .from("salary_structures")
     .select("*")
-    .eq("id", id)
+    .eq("id", structureId)
     .single()
 
   if (structErr || !structure) {
@@ -38,7 +39,7 @@ export async function POST(
   const { data: components, error: compErr } = await supabase
     .from("salary_structure_components")
     .select("*")
-    .eq("salary_structure_id", id)
+    .eq("salary_structure_id", structureId)
 
   if (compErr) {
     return NextResponse.json({ error: "Failed to fetch components" }, { status: 500 })
@@ -74,7 +75,6 @@ export async function POST(
       .insert(newComponents)
 
     if (compInsertErr) {
-      // Rollback? We'll just report error but leave the structure (can be cleaned manually)
       return NextResponse.json({ error: "Structure duplicated but component copy failed: " + compInsertErr.message }, { status: 500 })
     }
   }
