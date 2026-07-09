@@ -25,7 +25,6 @@ export default function SignupPage() {
   const [isCreating, setIsCreating] = useState(false)
   const [signupSuccess, setSignupSuccess] = useState(false)
 
-  // ── Phone validation using your normalizePhone helper ──
   const validatePakistanPhone = (raw: string): boolean => {
     const normalized = normalizePhone(raw)
     return /^3\d{9}$/.test(normalized)
@@ -42,7 +41,6 @@ export default function SignupPage() {
     setLoading(true)
     setErrorMsg("")
 
-    // ── Validate phone ──
     if (!phone) {
       setErrorMsg("Phone number is required.")
       setLoading(false)
@@ -62,12 +60,11 @@ export default function SignupPage() {
       return
     }
 
-    // ── 1. Create auth user with email confirmation ──
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: window.location.origin + "/auth/callback", // ✅ Explicit redirect
+        emailRedirectTo: window.location.origin + "/auth/callback",
         data: {
           company_name: companyName,
           business_type: businessType,
@@ -92,10 +89,6 @@ export default function SignupPage() {
       return
     }
 
-    // ── 2. Create company record, linked via the new user's ID ──
-    // NOTE: At this point there is NO session yet (email confirmation is
-    // required), so we explicitly pass userId + email. The API route
-    // verifies both server-side before creating anything.
     try {
       const res = await fetch("/api/trial/signup", {
         method: "POST",
@@ -131,7 +124,7 @@ export default function SignupPage() {
     setLoading(false)
   }
 
-  // ── Show success screen after signup ──
+  // ── Success screen ──
   if (signupSuccess) {
     return (
       <div style={{
@@ -139,33 +132,33 @@ export default function SignupPage() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "#EFF4FB",
-        fontFamily: "Arial",
+        background: "var(--bg)",
+        fontFamily: "'Inter', sans-serif",
       }}>
         <div style={{
-          background: "white",
+          background: "var(--card)",
           padding: 40,
           borderRadius: 12,
-          border: "1px solid #E2E8F0",
+          border: "1px solid var(--border)",
           maxWidth: 420,
           width: "100%",
           textAlign: "center",
         }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>📧</div>
-          <h2 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", marginBottom: 8 }}>
+          <h2 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", marginBottom: 8 }}>
             Check Your Email
           </h2>
-          <p style={{ fontSize: 14, color: "#64748B", lineHeight: 1.6, marginBottom: 8 }}>
+          <p style={{ fontSize: 14, color: "var(--text-muted)", lineHeight: 1.6, marginBottom: 8 }}>
             We sent a confirmation link to <strong>{email}</strong>.
           </p>
-          <p style={{ fontSize: 13, color: "#94A3B8", lineHeight: 1.6, marginBottom: 24 }}>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.6, marginBottom: 24 }}>
             Please click the link in your email to verify your address and activate your free trial.
           </p>
           <button
             onClick={() => router.push("/login")}
             style={{
-              background: "#1D4ED8",
-              color: "white",
+              background: "var(--primary)",
+              color: "var(--primary-text)",
               border: "none",
               borderRadius: 8,
               padding: "10px 32px",
@@ -177,7 +170,7 @@ export default function SignupPage() {
           >
             Go to Login
           </button>
-          <p style={{ fontSize: 12, color: "#94A3B8", marginTop: 16 }}>
+          <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 16 }}>
             Didn't receive the email? Check your spam folder.
           </p>
         </div>
@@ -185,7 +178,7 @@ export default function SignupPage() {
     )
   }
 
-  // ── Full‑screen loading overlay ──
+  // ── Loading overlay ──
   if (isCreating) {
     return (
       <div style={{
@@ -194,19 +187,19 @@ export default function SignupPage() {
         zIndex: 9999, fontFamily: "'Inter', sans-serif",
       }}>
         <div style={{
-          background: "white", borderRadius: 16, padding: "32px 40px",
+          background: "var(--card)", borderRadius: 16, padding: "32px 40px",
           textAlign: "center", boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
           maxWidth: 360, width: "90%",
         }}>
           <div style={{
             width: 48, height: 48, borderRadius: "50%",
-            border: "4px solid #E2E8F0", borderTopColor: "#1D4ED8",
+            border: "4px solid var(--border)", borderTopColor: "var(--primary)",
             animation: "spin 0.8s linear infinite", margin: "0 auto 16px",
           }} />
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: "#1E293B", margin: "0 0 8px" }}>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text)", margin: "0 0 8px" }}>
             Creating your company…
           </h2>
-          <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
             Setting up accounts, budget templates, and more.
           </p>
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -222,24 +215,24 @@ export default function SignupPage() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "#EFF4FB",
-        fontFamily: "Arial",
+        background: "var(--bg)",
+        fontFamily: "'Inter', sans-serif",
       }}
     >
       <div
         style={{
-          background: "white",
+          background: "var(--card)",
           padding: 32,
           borderRadius: 12,
-          border: "1px solid #E2E8F0",
+          border: "1px solid var(--border)",
           width: "100%",
           maxWidth: 400,
         }}
       >
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", marginBottom: 4 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", marginBottom: 4 }}>
           🚀 Start your free trial
         </h1>
-        <p style={{ fontSize: 13, color: "#64748B", marginBottom: 24 }}>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 24 }}>
           10‑day Professional plan. No credit card required.
         </p>
 
@@ -274,7 +267,7 @@ export default function SignupPage() {
             {errorMsg}
             {errorMsg.includes("already exists") && (
               <div style={{ marginTop: 6 }}>
-                <a href="/login" style={{ color: "#1D4ED8", fontWeight: 600 }}>
+                <a href="/login" style={{ color: "var(--primary)", fontWeight: 600 }}>
                   Go to Login →
                 </a>
               </div>
@@ -283,7 +276,7 @@ export default function SignupPage() {
         )}
 
         <form onSubmit={handleSignup}>
-          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4, color: "var(--text)" }}>
             Company Name
           </label>
           <input
@@ -295,15 +288,18 @@ export default function SignupPage() {
             style={{
               width: "100%",
               padding: "8px 12px",
-              border: "1px solid #E2E8F0",
+              border: "1px solid var(--border)",
               borderRadius: 6,
               fontSize: 13,
               marginBottom: 12,
               boxSizing: "border-box",
+              background: "var(--bg)",
+              color: "var(--text)",
+              fontFamily: "inherit",
             }}
           />
 
-          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4, color: "var(--text)" }}>
             Business Type
           </label>
           <select
@@ -312,12 +308,21 @@ export default function SignupPage() {
             style={{
               width: "100%",
               padding: "8px 12px",
-              border: "1px solid #E2E8F0",
+              border: "1px solid var(--border)",
               borderRadius: 6,
               fontSize: 13,
               marginBottom: 12,
               boxSizing: "border-box",
-              background: "white",
+              background: "var(--bg)",
+              color: "var(--text)",
+              fontFamily: "inherit",
+              appearance: "none",
+              WebkitAppearance: "none",
+              MozAppearance: "none",
+              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+              backgroundRepeat: "no-repeat",
+              backgroundPosition: "right 12px center",
+              paddingRight: 32,
             }}
           >
             <option value="ngo">NGO</option>
@@ -325,8 +330,8 @@ export default function SignupPage() {
             <option value="trading">Trading Business</option>
           </select>
 
-          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>
-            Phone Number <span style={{ fontSize: 11, fontWeight: 400, color: "#94A3B8" }}>(Pakistan, for WhatsApp follow-up)</span>
+          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4, color: "var(--text)" }}>
+            Phone Number <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-muted)" }}>(Pakistan, for WhatsApp follow-up)</span>
           </label>
           <input
             type="tel"
@@ -337,15 +342,18 @@ export default function SignupPage() {
             style={{
               width: "100%",
               padding: "8px 12px",
-              border: "1px solid #E2E8F0",
+              border: "1px solid var(--border)",
               borderRadius: 6,
               fontSize: 13,
               marginBottom: 12,
               boxSizing: "border-box",
+              background: "var(--bg)",
+              color: "var(--text)",
+              fontFamily: "inherit",
             }}
           />
 
-          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4, color: "var(--text)" }}>
             Email
           </label>
           <input
@@ -357,15 +365,18 @@ export default function SignupPage() {
             style={{
               width: "100%",
               padding: "8px 12px",
-              border: "1px solid #E2E8F0",
+              border: "1px solid var(--border)",
               borderRadius: 6,
               fontSize: 13,
               marginBottom: 12,
               boxSizing: "border-box",
+              background: "var(--bg)",
+              color: "var(--text)",
+              fontFamily: "inherit",
             }}
           />
 
-          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4, color: "var(--text)" }}>
             Password
           </label>
           <div style={{ position: "relative", marginBottom: 18 }}>
@@ -379,10 +390,13 @@ export default function SignupPage() {
               style={{
                 width: "100%",
                 padding: "8px 40px 8px 12px",
-                border: "1px solid #E2E8F0",
+                border: "1px solid var(--border)",
                 borderRadius: 6,
                 fontSize: 13,
                 boxSizing: "border-box",
+                background: "var(--bg)",
+                color: "var(--text)",
+                fontFamily: "inherit",
               }}
             />
             <button
@@ -396,7 +410,7 @@ export default function SignupPage() {
                 background: "none",
                 border: "none",
                 cursor: "pointer",
-                color: "#94A3B8",
+                color: "var(--text-muted)",
                 padding: 4,
                 display: "flex",
                 alignItems: "center",
@@ -413,22 +427,23 @@ export default function SignupPage() {
             style={{
               width: "100%",
               padding: 10,
-              background: hasExistingSession ? "#94A3B8" : "#1D4ED8",
-              color: "white",
+              background: hasExistingSession ? "var(--text-muted)" : "var(--primary)",
+              color: "var(--primary-text)",
               border: "none",
               borderRadius: 8,
               fontWeight: 600,
               fontSize: 14,
               cursor: hasExistingSession ? "not-allowed" : "pointer",
+              fontFamily: "inherit",
             }}
           >
             {loading ? "Creating..." : hasExistingSession ? "Sign out first or use incognito" : "Start Free 10‑Day Trial"}
           </button>
         </form>
 
-        <p style={{ textAlign: "center", marginTop: 16, fontSize: 13, color: "#64748B" }}>
+        <p style={{ textAlign: "center", marginTop: 16, fontSize: 13, color: "var(--text-muted)" }}>
           Already have an account?{" "}
-          <a href="/login" style={{ color: "#1D4ED8", fontWeight: 600 }}>
+          <a href="/login" style={{ color: "var(--primary)", fontWeight: 600 }}>
             Log in
           </a>
         </p>
