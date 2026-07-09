@@ -30,7 +30,7 @@ async function generatePaymentNo(supabase: any, companyId: string): Promise<stri
   return `${prefix}${String(nextNum).padStart(4, "0")}`
 }
 
-// ✅ Helper to reverse a single payment (unchanged, kept for PUT/DELETE)
+// ✅ Helper to reverse an expense payment (used only for expense updates/deletions)
 async function reversePayment(supabase: any, paymentId: number, paymentNo: string, companyId: string) {
   // 1. Reverse bill allocations
   const { data: allocations } = await supabase
@@ -101,7 +101,7 @@ async function reversePayment(supabase: any, paymentId: number, paymentNo: strin
     }
   }
 
-  // 3. Reverse supplier balance
+  // 3. Reverse supplier balance (only if it's a supplier payment, but we call this only for expenses now)
   const { data: payment } = await supabase
     .from("payments")
     .select("party_id, amount, gross_amount")
@@ -273,7 +273,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Allocations are required for supplier payment' }, { status: 400 })
   }
 
-  // Map frontend field names to database column names
   const mappedAllocations = allocations.map((a: any) => ({
     invoice_id: a.bill_id,
     allocated_amount: a.amount,
@@ -299,7 +298,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ success: true, ...data })
 }
 
-// ── PUT (Update) – unchanged ─────────────────────────────────────────────────────
+// ── PUT (Update) – supplier payment uses update_vendor_payment, expense unchanged ──
 export async function PUT(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -329,6 +328,12 @@ export async function PUT(request: NextRequest) {
   const companyId = roleData.company_id
 
   const body = await request.json()
+  const {
+    party_id, amount, payment_method, bank_account_id,
+    expense_account_id, date, reference, notes, allocations
+  } = body
+
+  const isExpense = !!expense_account_id
 
   const { data: oldPayment } = await supabase
     .from("payments")
@@ -338,202 +343,125 @@ export async function PUT(request: NextRequest) {
     .single()
   if (!oldPayment) return NextResponse.json({ error: "Payment not found" }, { status: 404 })
 
-  await reversePayment(supabase, Number(id), oldPayment.payment_no, companyId)
-
-  const {
-    party_id, amount, payment_method, bank_account_id,
-    expense_account_id, date, reference, notes, allocations
-  } = body
-
-  const isExpense = !!expense_account_id
-  const paymentType = isExpense ? 'expense' : 'supplier_payment'
-  const partyType = isExpense ? 'expense' : 'supplier'
-  const targetPartyId = isExpense ? null : party_id
-
-  const { data: updatedPayment, error: updateErr } = await supabase
-    .from("payments")
-    .update({
-      party_id: targetPartyId,
-      payment_date: date || oldPayment.payment_date,
-      amount,
-      payment_method,
-      bank_account_id: bank_account_id || null,
-      expense_account_id: expense_account_id || null,
-      reference,
-      notes,
-      payment_type: paymentType,
-      party_type: partyType,
-      updated_by: user?.email || null,
-    })
-    .eq("id", id)
-    .select("*")
-    .single()
-
-  if (updateErr || !updatedPayment) {
-    return NextResponse.json({ error: updateErr?.message || 'Update failed' }, { status: 500 })
-  }
-
-  let totalGrossAllocated = 0
-  let totalWhtDeducted = 0
-
-  if (!isExpense && allocations && Array.isArray(allocations) && allocations.length > 0) {
-    const billIds = allocations.map((a: any) => a.bill_id)
-    const { data: whtRecords } = await supabase
-      .from("bill_withholding")
-      .select("bill_id, wht_tax_code_id, wht_rate, wht_amount")
-      .in("bill_id", billIds)
-      .eq("company_id", companyId)
-    const whtMap: Record<number, any> = {}
-    if (whtRecords) whtRecords.forEach((w: any) => { whtMap[w.bill_id] = w })
-
-    for (const alloc of allocations) {
-      const billId = alloc.bill_id
-      const grossAlloc = parseFloat(alloc.amount) || 0
-      if (grossAlloc <= 0) continue
-
-      const { data: bill } = await supabase
-        .from('invoices')
-        .select('paid, total, status')
-        .eq('id', billId)
-        .eq('company_id', companyId)
-        .eq('type', 'purchase')
-        .single()
-
-      if (bill) {
-        const newPaid = (bill.paid || 0) + grossAlloc
-        const newStatus = newPaid >= bill.total ? 'Paid' : 'Partial'
-        await supabase.from('invoices')
-          .update({ paid: newPaid, status: newStatus })
-          .eq('id', billId)
-          .eq('company_id', companyId)
-      }
-
-      await supabase.from('payment_allocations').insert({
-        payment_id: Number(id),
-        invoice_id: billId,
-        allocated_amount: grossAlloc,
-        company_id: companyId,
-      })
-      totalGrossAllocated += grossAlloc
-    }
-
-    for (const alloc of allocations) {
-      const billId = alloc.bill_id
-      const grossAlloc = parseFloat(alloc.amount) || 0
-      if (grossAlloc <= 0) continue
-      const wht = whtMap[billId]
-      if (wht && wht.wht_amount > 0 && wht.wht_tax_code_id) {
-        const { data: taxCode } = await supabase
-          .from("tax_codes")
-          .select("tax_account_id")
-          .eq("id", wht.wht_tax_code_id)
-          .eq("company_id", companyId)
-          .single()
-        const whtAccountId = taxCode?.tax_account_id
-        if (whtAccountId) {
-          const { data: bill } = await supabase.from("invoices").select("total").eq("id", billId).single()
-          if (bill) {
-            const proportion = grossAlloc / bill.total
-            const whtToDeduct = Math.round(wht.wht_amount * proportion)
-            totalWhtDeducted += whtToDeduct
-            if (!updatedPayment._whtLines) updatedPayment._whtLines = []
-            updatedPayment._whtLines.push({
-              account_id: whtAccountId,
-              amount: whtToDeduct,
-            })
-          }
-        }
-      }
-    }
-  }
-
-  const grossAmount = totalGrossAllocated > 0 ? totalGrossAllocated : amount;
-  await supabase.from("payments").update({ gross_amount: grossAmount }).eq("id", id);
-
-  if (targetPartyId) {
-    const { data: supp } = await supabase.from('suppliers')
-      .select('balance').eq('id', targetPartyId).eq('company_id', companyId).single()
-    if (supp) {
-      await supabase.from('suppliers')
-        .update({ balance: (supp.balance || 0) - grossAmount })
-        .eq('id', targetPartyId).eq('company_id', companyId)
-    }
-  }
-
-  let bankGlAccountId: number | null = null
-  if (bank_account_id) {
-    const { data: bank } = await supabase.from('bank_accounts')
-      .select('account_id')
-      .eq('id', bank_account_id)
-      .eq('company_id', companyId)
-      .single()
-    if (bank) bankGlAccountId = bank.account_id
-  }
-  if (!bankGlAccountId) {
-    const cashFallback = await getAccount(supabase, '1000', companyId)
-    if (cashFallback) bankGlAccountId = cashFallback.id
-  }
-  if (!bankGlAccountId) {
-    return NextResponse.json({ error: 'No bank GL account found.' }, { status: 500 })
-  }
-
-  const jeLines: any[] = []
-  let description = `Payment - ${oldPayment.payment_no}`
+  // ── Expense Payment update – keep original logic ──
   if (isExpense) {
+    await reversePayment(supabase, Number(id), oldPayment.payment_no, companyId)
+
+    const paymentType = 'expense'
+    const partyType = 'expense'
+    const targetPartyId = null
+
+    const { data: updatedPayment, error: updateErr } = await supabase
+      .from("payments")
+      .update({
+        party_id: targetPartyId,
+        payment_date: date || oldPayment.payment_date,
+        amount,
+        payment_method,
+        bank_account_id: bank_account_id || null,
+        expense_account_id: expense_account_id || null,
+        reference,
+        notes,
+        payment_type: paymentType,
+        party_type: partyType,
+        updated_by: user?.email || null,
+      })
+      .eq("id", id)
+      .select("*")
+      .single()
+
+    if (updateErr || !updatedPayment) {
+      return NextResponse.json({ error: updateErr?.message || 'Update failed' }, { status: 500 })
+    }
+
+    // Expense journal entry (identical to create)
+    let bankGlAccountId: number | null = null
+    if (bank_account_id) {
+      const { data: bank } = await supabase.from('bank_accounts')
+        .select('account_id')
+        .eq('id', bank_account_id)
+        .eq('company_id', companyId)
+        .single()
+      if (bank) bankGlAccountId = bank.account_id
+    }
+    if (!bankGlAccountId) {
+      const cashFallback = await getAccount(supabase, '1000', companyId)
+      if (cashFallback) bankGlAccountId = cashFallback.id
+    }
+    if (!bankGlAccountId) {
+      return NextResponse.json({ error: 'No bank GL account found.' }, { status: 500 })
+    }
+
+    const jeLines: any[] = []
     jeLines.push({ account_id: expense_account_id, debit: amount, credit: 0 })
     jeLines.push({ account_id: bankGlAccountId, debit: 0, credit: amount })
-    description = `Expense Payment - ${oldPayment.payment_no}`
-  } else {
-    const apAcc = await getAccount(supabase, '2000', companyId)
-    if (!apAcc) return NextResponse.json({ error: 'Accounts Payable (2000) not found' }, { status: 500 })
-    jeLines.push({ account_id: apAcc.id, debit: grossAmount, credit: 0 })
-    const bankCredit = grossAmount - totalWhtDeducted
-    jeLines.push({ account_id: bankGlAccountId, debit: 0, credit: bankCredit })
-    if (updatedPayment._whtLines) {
-      for (const whtLine of updatedPayment._whtLines) {
-        jeLines.push({
-          account_id: whtLine.account_id,
-          debit: 0,
-          credit: whtLine.amount,
-        })
+
+    const description = `Expense Payment - ${oldPayment.payment_no}`
+    const { data: entry, error: entryErr } = await supabase.from('journal_entries').insert({
+      company_id: companyId,
+      entry_no: `JE-PAY-${Date.now()}-${id}`,
+      date: date || oldPayment.payment_date,
+      description,
+    }).select('id').single()
+
+    if (entryErr || !entry) {
+      return NextResponse.json({ error: entryErr?.message || 'JE insert failed' }, { status: 500 })
+    }
+
+    const lineRows = jeLines.map(l => ({
+      ...l,
+      entry_id: entry.id,
+      company_id: companyId,
+      source_type: 'payment',
+      source_id: Number(id),
+    }))
+    await supabase.from('journal_lines').insert(lineRows)
+
+    for (const l of jeLines) {
+      const { data: acc } = await supabase.from('accounts')
+        .select('balance').eq('id', l.account_id).eq('company_id', companyId).single()
+      if (acc) {
+        const newBal = acc.balance + (l.debit || 0) - (l.credit || 0)
+        await supabase.from('accounts').update({ balance: newBal }).eq('id', l.account_id).eq('company_id', companyId)
       }
     }
+
+    await logDataChange('payments', id, 'UPDATE', oldPayment, updatedPayment)
+    return NextResponse.json({ success: true, payment: updatedPayment })
   }
 
-  const { data: entry, error: entryErr } = await supabase.from('journal_entries').insert({
-    company_id: companyId,
-    entry_no: `JE-PAY-${Date.now()}-${id}`,
-    date: date || oldPayment.payment_date,
-    description,
-  }).select('id').single()
-
-  if (entryErr || !entry) {
-    return NextResponse.json({ error: entryErr?.message || 'JE insert failed' }, { status: 500 })
+  // ── Supplier Payment update – call the new function ──
+  if (!allocations || !Array.isArray(allocations) || allocations.length === 0) {
+    return NextResponse.json({ error: 'Allocations are required' }, { status: 400 })
   }
 
-  const lineRows = jeLines.map(l => ({
-    ...l,
-    entry_id: entry.id,
-    company_id: companyId,
-    source_type: 'payment',
-    source_id: Number(id),
+  const mappedAllocations = allocations.map((a: any) => ({
+    invoice_id: a.bill_id,
+    allocated_amount: a.amount,
   }))
-  await supabase.from('journal_lines').insert(lineRows)
 
-  for (const l of jeLines) {
-    const { data: acc } = await supabase.from('accounts')
-      .select('balance').eq('id', l.account_id).eq('company_id', companyId).single()
-    if (acc) {
-      const newBal = acc.balance + (l.debit || 0) - (l.credit || 0)
-      await supabase.from('accounts').update({ balance: newBal }).eq('id', l.account_id).eq('company_id', companyId)
-    }
+  const { data, error: rpcError } = await supabase.rpc('update_vendor_payment', {
+    p_payment_id: parseInt(id),
+    p_company_id: companyId,
+    p_party_id: party_id,
+    p_payment_date: date || oldPayment.payment_date,
+    p_amount: amount,
+    p_payment_method: payment_method,
+    p_bank_account_id: bank_account_id,
+    p_allocations: mappedAllocations,
+    p_reference: reference || null,
+    p_notes: notes || null,
+    p_user_email: user?.email || 'system'
+  })
+
+  if (rpcError) {
+    return NextResponse.json({ error: rpcError.message }, { status: 500 })
   }
 
-  await logDataChange('payments', id, 'UPDATE', oldPayment, updatedPayment)
-  return NextResponse.json({ success: true, payment: updatedPayment })
+  return NextResponse.json({ success: true, ...data })
 }
 
-// ═══════════════════ DELETE – Delete Payment ═══════════════════
+// ── DELETE – supplier payment calls reverse_vendor_payment, expense unchanged ──
 export async function DELETE(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -570,8 +498,30 @@ export async function DELETE(request: NextRequest) {
     .single()
   if (!payment) return NextResponse.json({ error: "Payment not found" }, { status: 404 })
 
-  await reversePayment(supabase, Number(id), payment.payment_no, companyId)
+  // If it's an expense payment, keep the original deletion logic
+  if (payment.payment_type === 'expense') {
+    await reversePayment(supabase, Number(id), payment.payment_no, companyId)
 
+    await supabase.from("payments")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("company_id", companyId)
+
+    await logDataChange('payments', id, 'DELETE', payment, null)
+    return NextResponse.json({ success: true })
+  }
+
+  // Supplier payment – call reversal function
+  const { error: rpcError } = await supabase.rpc('reverse_vendor_payment', {
+    p_payment_id: parseInt(id),
+    p_company_id: companyId
+  })
+
+  if (rpcError) {
+    return NextResponse.json({ error: rpcError.message }, { status: 500 })
+  }
+
+  // Soft-delete the payment record
   await supabase.from("payments")
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id)
