@@ -227,7 +227,7 @@ export default function UpgradePage() {
 
   const totalPrice = (period: BillingPeriod): number => {
     const base = getBasePrice(period)
-    const topups = selectedTopups.length * getTopupPrice(period)
+    const topups = selectedTopups.length * getTopupPrice(period) * (1 + additionalUsers)
     const users = additionalUsers * additionalUserPrice(period)
     return base + topups + users
   }
@@ -255,15 +255,15 @@ export default function UpgradePage() {
 
   // ✅ Correct trial days calculation using real trial_ends_at
   const trialDaysLeft = (() => {
-    if (subscription?.end_date) {
-      return Math.ceil((new Date(subscription.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-    }
-    if (trialEndDate) {
-      return Math.ceil((trialEndDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-    }
-    // fallback to plan's trial_days (should rarely happen)
-    return plan?.trial_days ?? 10
-  })()
+  if (subscription?.end_date) {
+    return Math.ceil((new Date(subscription.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+  }
+  if (trialEndDate) {
+    return Math.ceil((trialEndDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+  }
+  // If no reliable trial end date, assume expired
+  return 0
+})()
 
   const isExpired = isTrial && !subscription && trialDaysLeft <= 0
   const isUrgent = isTrial && !subscription && trialDaysLeft > 0 && trialDaysLeft <= 5
