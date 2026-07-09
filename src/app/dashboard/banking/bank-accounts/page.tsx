@@ -371,7 +371,7 @@ export default function BankAccountsPage() {
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>?? Bank Accounts</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>🏦 Bank Accounts</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
             {canEdit ? "Manage your bank and cash accounts" : "View bank accounts"}
           </p>
@@ -409,7 +409,7 @@ export default function BankAccountsPage() {
           <table className="bank-table">
             <colgroup>
               <col style={{ width: 180 }} /> {/* Account */}
-              <col />                         {/* Bank Name � takes remaining space */}
+              <col />                         {/* Bank Name  takes remaining space */}
               <col style={{ width: 120 }} /> {/* Account # */}
               <col style={{ width: 100 }} /> {/* Branch */}
               <col style={{ width: 120 }} /> {/* Balance */}
@@ -443,8 +443,8 @@ export default function BankAccountsPage() {
                     <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {b.bank_name}
                     </td>
-                    <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{b.account_number || "�"}</td>
-                    <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{b.branch || "�"}</td>
+                    <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{b.account_number || "-"}</td>
+                    <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{b.branch || "-"}</td>
                     <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>
                       PKR {(b.balance || 0).toLocaleString()}
                     </td>
