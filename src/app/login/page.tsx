@@ -883,8 +883,8 @@ export default function LoginPage() {
               {/* Hero */}
               <div className="oa-hero">
                 <div className="oa-headline">
-                  Control Your Finances.<br />
-                  <span className="oa-headline-grad">Grow Your Organization.</span>
+                  Simple by Design.<br />
+                  <span className="oa-headline-grad">Professional by Nature.</span>
                 </div>
               </div>
 
@@ -1158,7 +1158,7 @@ export default function LoginPage() {
                     Need help? We're here for you.
                   </div>
                   <div className="oa-card-contact">
-                    <a href="https://wa.me/923117798157" target="_blank" className="wa">
+                    <a href="https://wa.me/+923716853677" target="_blank" className="wa">
                       <MessageCircle size={13} strokeWidth={1.8} /> WhatsApp
                     </a>
                     <a href="tel:03117798157">
