@@ -1161,8 +1161,8 @@ export default function LoginPage() {
                     <a href="https://wa.me/+923716853677" target="_blank" className="wa">
                       <MessageCircle size={13} strokeWidth={1.8} /> WhatsApp
                     </a>
-                    <a href="tel:03117798157">
-                      <Phone size={13} strokeWidth={1.8} /> 0311-7798157
+                    <a href="tel:+92 371 6853677">
+                      <Phone size={13} strokeWidth={1.8} /> +923716853677
                     </a>
                     <a href="mailto:siqbalhwc@gmail.com">
                       <Mail size={13} strokeWidth={1.8} /> siqbalhwc@gmail.com
