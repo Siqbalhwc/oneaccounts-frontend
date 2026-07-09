@@ -5,14 +5,15 @@ import { PlanProvider } from "@/contexts/PlanContext"
 import "./globals.css"
 import "./theme-utils.css"
 
-const FAVICON_URI = "PASTE_YOUR_BASE64_STRING_HERE"
-
 export const metadata: Metadata = {
   title: "OneAccounts",
   description: "Accounting Software for Trading, Service & NGO",
-  icons: {
-    icon: FAVICON_URI,
-  },
+  icons: [
+    { rel: "icon", url: "/favicon-16.png", sizes: "16x16", type: "image/png" },
+    { rel: "icon", url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+    { rel: "apple-touch-icon", url: "/favicon-180.png", sizes: "180x180", type: "image/png" },
+    { rel: "icon", url: "/favicon-512.png", sizes: "512x512", type: "image/png" },
+  ],
 }
 
 export default function RootLayout({
