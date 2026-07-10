@@ -30,27 +30,28 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Missing or invalid fields. days must be 7, 15, or 30.' }, { status: 400 })
   }
 
-  // Get current trial_ends_at
-  const { data: company } = await supabaseAdmin
-    .from('companies')
+  // Get current trial_ends_at from the correct table (company_settings)
+  const { data: settings } = await supabaseAdmin
+    .from('company_settings')
     .select('trial_ends_at')
-    .eq('id', companyId)
-    .single()
+    .eq('company_id', companyId)
+    .maybeSingle()
 
-  if (!company) {
-    return NextResponse.json({ error: 'Company not found' }, { status: 404 })
-  }
+  const baseDate = settings?.trial_ends_at
+    ? new Date(settings.trial_ends_at)
+    : new Date()
 
-  // Calculate new trial end date
-  const baseDate = company.trial_ends_at ? new Date(company.trial_ends_at) : new Date()
   baseDate.setDate(baseDate.getDate() + days)
   const newEndDate = baseDate.toISOString()
 
-  // Update
+  // Upsert into company_settings so the upgrade page picks it up
   const { error } = await supabaseAdmin
-    .from('companies')
-    .update({ trial_ends_at: newEndDate })
-    .eq('id', companyId)
+    .from('company_settings')
+    .upsert({
+      company_id: companyId,
+      trial_ends_at: newEndDate,
+    })
+    .eq('company_id', companyId)
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
