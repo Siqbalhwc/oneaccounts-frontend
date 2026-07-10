@@ -8,7 +8,6 @@ import { useRole } from "@/contexts/RoleContext"
 
 const EMPLOYMENT_TYPES = ["permanent", "contract", "daily_wage", "consultant"]
 
-// ── Status badge (consistent with payroll runs) ──────────
 const statusColors: Record<string, string> = {
   active: "#22c55e",
   on_leave: "#f59e0b",
@@ -50,6 +49,7 @@ export default function EmployeesPage() {
   const [employees, setEmployees] = useState<any[]>([])
   const [departments, setDepartments] = useState<any[]>([])
   const [designations, setDesignations] = useState<any[]>([])
+  const [salaryStructures, setSalaryStructures] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -61,10 +61,13 @@ export default function EmployeesPage() {
       const cid = (user?.app_metadata as any)?.company_id
       if (cid) {
         setCompanyId(cid)
+        // Fetch lookup tables once
         supabase.from("departments").select("id, name").eq("company_id", cid).order("name")
           .then(({ data }) => setDepartments(data || []))
         supabase.from("designations").select("id, name").eq("company_id", cid).order("name")
           .then(({ data }) => setDesignations(data || []))
+        supabase.from("salary_structures").select("id, name").eq("company_id", cid).order("name")
+          .then(({ data }) => setSalaryStructures(data || []))
       }
     })
   }, [])
@@ -75,7 +78,7 @@ export default function EmployeesPage() {
 
     let query = supabase
       .from("employees")
-      .select("id, employee_code, full_name, joining_date, employment_type, status, salary_structure_id, bank_account_no, department_id, designation_id, salary_structures(name)")
+      .select("id, employee_code, full_name, joining_date, employment_type, status, salary_structure_id, bank_account_no, department_id, designation_id")
       .eq("company_id", companyId)
       .order("full_name")
 
@@ -85,10 +88,12 @@ export default function EmployeesPage() {
 
     query.then(({ data }) => {
       if (data) {
+        // Merge local lookup data (departments, designations, salary structures)
         const enriched = data.map((emp: any) => ({
           ...emp,
           department_name: departments.find(d => d.id === emp.department_id)?.name || null,
           designation_name: designations.find(d => d.id === emp.designation_id)?.name || null,
+          salary_structure_name: salaryStructures.find(s => s.id === emp.salary_structure_id)?.name || null,
         }))
         setEmployees(enriched)
       } else {
@@ -96,7 +101,7 @@ export default function EmployeesPage() {
       }
       setLoading(false)
     })
-  }, [role, canView, companyId, statusFilter, typeFilter, departmentFilter, departments, designations])
+  }, [role, canView, companyId, statusFilter, typeFilter, departmentFilter, departments, designations, salaryStructures])
 
   const typeCounts = EMPLOYMENT_TYPES.reduce((acc, type) => {
     acc[type] = employees.filter(e => e.employment_type === type).length
@@ -245,18 +250,11 @@ export default function EmployeesPage() {
           </thead>
           <tbody>
             {loading ? (
-              // Skeleton loading rows
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>
                   {Array.from({ length: 6 }).map((_, j) => (
                     <td key={j} style={{ padding: "12px 16px" }}>
-                      <div style={{
-                        width: `${60 + j * 10}%`,
-                        height: 12,
-                        background: "var(--bg-soft)",
-                        borderRadius: 4,
-                        animation: "shimmer 1.5s ease-in-out infinite"
-                      }} />
+                      <div style={{ width: `${60 + j * 10}%`, height: 12, background: "var(--bg-soft)", borderRadius: 4, animation: "shimmer 1.5s ease-in-out infinite" }} />
                     </td>
                   ))}
                 </tr>
@@ -296,7 +294,7 @@ export default function EmployeesPage() {
                     </div>
                   </td>
                   <td style={tdStyle}>{emp.department_name || "—"}</td>
-                  <td style={tdStyle}>{emp.salary_structures?.name || "—"}</td>
+                  <td style={tdStyle}>{emp.salary_structure_name || "—"}</td>
                   <td style={tdStyle}>{maskAccount(emp.bank_account_no)}</td>
                   <td style={{ ...tdStyle, textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
