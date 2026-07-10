@@ -6,9 +6,8 @@ import { ToggleLeft, ToggleRight, Zap, ZapOff, Shield, CheckCircle } from "lucid
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 
-// Balance Sheet removed – it is always available by default
 const FEATURE_CODES = [
-  "asset_management",   // ← moved to the very top so it can't be missed
+  "asset_management",
   "inventory",
   "investors",
   "invoice_automation",
@@ -54,9 +53,6 @@ export default function FeatureManagerPage() {
   const [message, setMessage] = useState("")
   const [savingAll, setSavingAll] = useState(false)
 
-  // Debug: count rendered cards
-  const [renderedCards, setRenderedCards] = useState(0)
-
   useEffect(() => {
     if (!canView) { setLoading(false); return }
 
@@ -82,9 +78,9 @@ export default function FeatureManagerPage() {
         if (featureRows) {
           featureRows.forEach((f: any) => { map[f.code] = f.id })
         }
-        // Fallback: ensure asset_management always has an ID
+        // Ensure asset_management always has an ID
         if (!map['asset_management']) {
-          map['asset_management'] = '93a42327-12a6-465c-ba74-bd9a71df0ebb' // known ID
+          map['asset_management'] = '93a42327-12a6-465c-ba74-bd9a71df0ebb'
         }
         setFeatureIdMap(map)
 
@@ -372,13 +368,6 @@ export default function FeatureManagerPage() {
         }
       `}</style>
 
-      {/* Debug bar – visible to help diagnose missing cards */}
-      <div style={{ background: "var(--card-hover)", border: "1px solid var(--border)", borderRadius: 8, padding: "6px 12px", marginBottom: 16, fontSize: 12, color: "var(--text-muted)", display: "flex", gap: 16 }}>
-        <span>Array length: <strong>{FEATURE_CODES.length}</strong></span>
-        <span>Rendered cards: <strong>{renderedCards}</strong></span>
-        <span>Feature IDs loaded: <strong>{Object.keys(featureIdMap).length}</strong></span>
-      </div>
-
       {/* Header */}
       <div className="page-header">
         <div>
@@ -453,8 +442,6 @@ export default function FeatureManagerPage() {
           {FEATURE_CODES.map(code => {
             const info = FEATURE_INFO[code] || { label: code, desc: "", icon: "🔧" }
             const isEnabled = featureStates[code] || false
-            // Increment counter after render
-            setRenderedCards(prev => prev + 1)
             return (
               <div key={code} className={`feature-card ${isEnabled ? "enabled" : "disabled"}`}>
                 <div className="feature-icon" style={{ background: isEnabled ? "#065F46" : "var(--card-hover)" }}>
