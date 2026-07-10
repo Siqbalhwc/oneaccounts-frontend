@@ -8,12 +8,14 @@ import {
 } from "lucide-react"
 
 const FEATURE_CODES = [
+  "asset_management",           // ← added
   "invoice_automation","profit_allocation","inventory","investors",
   "balance_sheet","whatsapp_invoice","payment_reminders",
   "csv_import_export","email_reports","purchase_orders","tax_management",
   "payroll","material_management",
 ]
 const FEATURE_LABELS: Record<string, string> = {
+  asset_management: "Fixed Asset Management",   // ← added
   invoice_automation:"Invoice Automation", profit_allocation:"Profit Allocation",
   inventory:"Inventory", investors:"Investors", balance_sheet:"Balance Sheet",
   whatsapp_invoice:"WhatsApp Invoice", payment_reminders:"Payment Reminders",
