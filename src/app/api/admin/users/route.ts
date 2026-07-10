@@ -161,17 +161,14 @@ export async function POST(request: Request) {
   }
   // --- End limit check ---
 
+  // 1. Try to invite as a new user
   const { data: inviteData, error: inviteError } = await supabaseAdmin
     .auth.admin.inviteUserByEmail(email, {
       redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/login`,
     })
 
-  if (inviteError) {
-    console.error('Invite error:', inviteError)
-    return NextResponse.json({ error: inviteError.message }, { status: 500 })
-  }
-
-  if (inviteData.user) {
+  // If invite succeeded, store the role and we're done
+  if (!inviteError && inviteData.user) {
     await supabaseAdmin
       .from('user_roles')
       .upsert({
@@ -180,12 +177,90 @@ export async function POST(request: Request) {
         role,
         is_active: true,
       })
+
+    return NextResponse.json({
+      success: true,
+      message: `Invitation sent to ${email}. They will appear after signing up.`,
+    })
   }
 
-  return NextResponse.json({
-    success: true,
-    message: `Invitation sent to ${email}. They will appear after signing up.`
-  })
+  // 2. If the user already exists in Auth, just add them to this company
+  if (inviteError && (
+    inviteError.message?.toLowerCase().includes('already') ||
+    inviteError.status === 422 // Supabase often returns 422 for duplicate
+  )) {
+    // Look up the existing user by email using the admin API
+    const { data: existingUser, error: lookupError } = await supabaseAdmin
+      .auth.admin.listUsers({ page: 1, perPage: 1 }) // limited, but we'll use a more precise method later
+    // Actually `listUsers` doesn't filter by email directly; we'll use a Postgres function
+    // Fallback: use raw query on auth.users (allowed with service key)
+    const { data: userByEmail, error: emailErr } = await supabaseAdmin
+      .from('auth.users')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle()
+
+    if (emailErr || !userByEmail) {
+      // If direct query fails (rare), we try a custom RPC
+      const { data: uid, error: rpcErr } = await supabaseAdmin
+        .rpc('get_user_id_by_email', { p_email: email })
+      if (rpcErr || !uid) {
+        return NextResponse.json({ error: 'User exists but could not be retrieved. Please try again or contact support.' }, { status: 500 })
+      }
+      const userId = uid
+      // Continue with userId
+      // Add to company
+      await supabaseAdmin
+        .from('user_roles')
+        .upsert({
+          user_id: userId,
+          company_id: companyId,
+          role,
+          is_active: true,
+        })
+      return NextResponse.json({
+        success: true,
+        message: `User ${email} already exists. They have been added to your company with role "${role}".`,
+      })
+    }
+
+    const userId = userByEmail.id
+
+    // Check if the user already has a role in this company (could have been deleted before)
+    const { data: existingRole } = await supabaseAdmin
+      .from('user_roles')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('company_id', companyId)
+      .maybeSingle()
+
+    if (existingRole) {
+      // Already active – just update the role if different
+      await supabaseAdmin
+        .from('user_roles')
+        .update({ role, is_active: true })
+        .eq('id', existingRole.id)
+    } else {
+      // Insert new role assignment
+      await supabaseAdmin
+        .from('user_roles')
+        .insert({
+          user_id: userId,
+          company_id: companyId,
+          role,
+          is_active: true,
+        })
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `User ${email} already exists. They have been added to your company with role "${role}".`,
+    })
+  }
+
+  // 3. Any other error
+  console.error('Invite error:', inviteError)
+  return NextResponse.json({ error: inviteError.message }, { status: 500 })
 }
 
 // ── DELETE (remove user from this company) ──
