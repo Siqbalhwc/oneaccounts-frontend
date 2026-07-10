@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, UserPlus, Plus, X, CheckCircle } from "lucide-react"
+import { ArrowLeft, UserPlus, Plus, X } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import EntityPicker from "@/components/entity-picker/EntityPicker"
 
@@ -351,9 +351,11 @@ export default function NewEmployeePage() {
         .btn-primary:hover { filter: brightness(0.95); }
         .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-muted); }
         .btn-outline:hover { background: var(--card-hover); }
-        .btn-icon {
-          width: 38px;
-          height: 38px;
+        /* Inline create button – exactly matches select height */
+        .btn-create {
+          width: 42px;
+          height: 42px;
+          padding: 0;
           border-radius: 8px;
           border: 1px solid var(--border);
           background: var(--bg);
@@ -363,8 +365,9 @@ export default function NewEmployeePage() {
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
+          transition: all 0.15s;
         }
-        .btn-icon:hover { background: var(--card-hover); }
+        .btn-create:hover { background: var(--card-hover); border-color: var(--primary); color: var(--primary); }
         .inline-group {
           display: grid;
           grid-template-columns: 1fr 1fr;
@@ -480,25 +483,25 @@ export default function NewEmployeePage() {
             <div className="inline-group">
               <div>
                 <label className="label">Department</label>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
                   <select className="select" value={departmentId ?? ""} onChange={e => setDepartmentId(e.target.value ? Number(e.target.value) : null)} style={{ flex: 1 }}>
                     <option value="">Select department…</option>
                     {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
-                  <button className="btn-icon" onClick={() => setShowCreateDept(true)} title="Create Department">
-                    <Plus size={16} />
+                  <button className="btn-create" onClick={() => setShowCreateDept(true)} title="Create Department">
+                    <Plus size={18} />
                   </button>
                 </div>
               </div>
               <div>
                 <label className="label">Designation</label>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
                   <select className="select" value={designationId ?? ""} onChange={e => setDesignationId(e.target.value ? Number(e.target.value) : null)} style={{ flex: 1 }}>
                     <option value="">Select designation…</option>
                     {designations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
-                  <button className="btn-icon" onClick={() => setShowCreateDesig(true)} title="Create Designation">
-                    <Plus size={16} />
+                  <button className="btn-create" onClick={() => setShowCreateDesig(true)} title="Create Designation">
+                    <Plus size={18} />
                   </button>
                 </div>
               </div>
