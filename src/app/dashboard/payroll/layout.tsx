@@ -1,25 +1,17 @@
 "use client"
 
-import { ReactNode, useEffect, useRef } from "react"
+import { ReactNode } from "react"
 import { usePlan } from "@/contexts/PlanContext"
 import { useRole } from "@/contexts/RoleContext"
-import { Loader2 } from "lucide-react"
 
 export default function PayrollLayout({ children }: { children: ReactNode }) {
   const { hasFeature, loading: planLoading } = usePlan()
   const { role } = useRole()
 
-  // Once we've finished loading at least once, never show the spinner again
-  const hasLoadedOnce = useRef(false)
-
-  useEffect(() => {
-    if (!planLoading && role) {
-      hasLoadedOnce.current = true
-    }
-  }, [planLoading, role])
-
-  // Show a spinner only on the very first load
-  if (!hasLoadedOnce.current) {
+  // Show a minimal inline loader only while plan is still loading.
+  // The global dashboard splash already handles the initial role/plan wait,
+  // so this only appears on subsequent rapid navigations.
+  if (planLoading) {
     return (
       <div style={{
         display: "flex",
@@ -27,7 +19,14 @@ export default function PayrollLayout({ children }: { children: ReactNode }) {
         justifyContent: "center",
         minHeight: "60vh",
       }}>
-        <Loader2 size={32} style={{ animation: "spin 1s linear infinite", color: "var(--text-muted)" }} />
+        <div style={{
+          width: 24, height: 24,
+          border: "3px solid var(--border)",
+          borderTopColor: "var(--primary)",
+          borderRadius: "50%",
+          animation: "spin 0.8s linear infinite",
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     )
   }
@@ -42,6 +41,6 @@ export default function PayrollLayout({ children }: { children: ReactNode }) {
     )
   }
 
-  // All good – render the page content without ever flashing the spinner again
+  // All good – render the page content
   return <>{children}</>
 }
