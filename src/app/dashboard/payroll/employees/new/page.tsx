@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, UserPlus } from "lucide-react"
+import { ArrowLeft, UserPlus, Plus, X, CheckCircle } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import EntityPicker from "@/components/entity-picker/EntityPicker"
 
@@ -12,6 +12,90 @@ const PAYMENT_METHODS = ["bank", "cash"]
 
 const CNIC_REGEX = /^\d{5}-\d{7}-\d$/
 const MOBILE_REGEX = /^03\d{2}-\d{7}$/
+
+// ── Tiny inline creation modal ──────────────────────────
+function InlineCreateModal({
+  title,
+  placeholder,
+  onSave,
+  onClose,
+}: {
+  title: string
+  placeholder: string
+  onSave: (name: string) => Promise<void>
+  onClose: () => void
+}) {
+  const [name, setName] = useState("")
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    setSaving(true)
+    await onSave(trimmed)
+    setSaving(false)
+    onClose()
+  }
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: "rgba(0,0,0,0.4)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 9999,
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: "var(--card)",
+          borderRadius: 12,
+          padding: 20,
+          width: 320,
+          maxWidth: "90vw",
+          boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <span style={{ fontWeight: 700, fontSize: 14 }}>{title}</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }}>
+            <X size={16} />
+          </button>
+        </div>
+        <input
+          className="inv-input"
+          placeholder={placeholder}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleSave()}
+          autoFocus
+          style={{ width: "100%", height: 38, marginBottom: 12 }}
+        />
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button className="btn btn-outline" onClick={onClose} style={{ padding: "6px 14px" }}>
+            Cancel
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={handleSave}
+            disabled={saving || !name.trim()}
+            style={{ padding: "6px 14px" }}
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function NewEmployeePage() {
   const router = useRouter()
@@ -45,16 +129,22 @@ export default function NewEmployeePage() {
   const [departments, setDepartments] = useState<any[]>([])
   const [designations, setDesignations] = useState<any[]>([])
 
+  // Inline creation modals
+  const [showCreateDept, setShowCreateDept] = useState(false)
+  const [showCreateDesig, setShowCreateDesig] = useState(false)
+
   const showToast = (message: string, type: "success" | "error") => {
     setToast({ message, type })
     setTimeout(() => setToast(null), 4000)
   }
 
+  // Load company data and lists
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
       if (cid) {
         setCompanyId(cid)
+        // Generate employee code
         supabase
           .from("employees")
           .select("employee_code")
@@ -69,11 +159,59 @@ export default function NewEmployeePage() {
             }
             setEmployeeCode(`EMP-${String(nextNum).padStart(4, "0")}`)
           })
-        supabase.from("departments").select("id, name").eq("company_id", cid).order("name").then(({ data }) => setDepartments(data || []))
-        supabase.from("designations").select("id, name").eq("company_id", cid).order("name").then(({ data }) => setDesignations(data || []))
+        fetchDepartments(cid)
+        fetchDesignations(cid)
       }
     })
   }, [])
+
+  const fetchDepartments = (cid: string) => {
+    supabase.from("departments")
+      .select("id, name")
+      .eq("company_id", cid)
+      .order("name")
+      .then(({ data }) => setDepartments(data || []))
+  }
+
+  const fetchDesignations = (cid: string) => {
+    supabase.from("designations")
+      .select("id, name")
+      .eq("company_id", cid)
+      .order("name")
+      .then(({ data }) => setDesignations(data || []))
+  }
+
+  const createDepartment = async (name: string) => {
+    if (!companyId) return
+    const { data, error } = await supabase
+      .from("departments")
+      .insert({ name, company_id: companyId })
+      .select("id, name")
+      .single()
+    if (error) {
+      showToast(error.message, "error")
+    } else if (data) {
+      fetchDepartments(companyId)
+      setDepartmentId(data.id)
+      showToast("Department created", "success")
+    }
+  }
+
+  const createDesignation = async (name: string) => {
+    if (!companyId) return
+    const { data, error } = await supabase
+      .from("designations")
+      .insert({ name, company_id: companyId })
+      .select("id, name")
+      .single()
+    if (error) {
+      showToast(error.message, "error")
+    } else if (data) {
+      fetchDesignations(companyId)
+      setDesignationId(data.id)
+      showToast("Designation created", "success")
+    }
+  }
 
   const handleSubmit = async () => {
     if (!companyId) { showToast("Company not loaded", "error"); return }
@@ -195,25 +333,38 @@ export default function NewEmployeePage() {
         }
         .input:disabled { opacity: 0.7; cursor: not-allowed; }
         .btn {
-          padding: 10px 18px;
+          padding: 8px 14px;
           border-radius: 8px;
-          font-size: 14px;
+          font-size: 13px;
           font-weight: 600;
           cursor: pointer;
           display: inline-flex;
           align-items: center;
-          gap: 8px;
+          gap: 6px;
           border: none;
           transition: all 0.2s;
-        }
-        .btn-primary { background: var(--primary); color: var(--primary-text); }
-        .btn-primary:hover { filter: brightness(0.95); }
-        .btn-outline {
           background: transparent;
-          border: 1px solid var(--border);
           color: var(--text-muted);
+          border: 1px solid var(--border);
         }
+        .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+        .btn-primary:hover { filter: brightness(0.95); }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-muted); }
         .btn-outline:hover { background: var(--card-hover); }
+        .btn-icon {
+          width: 38px;
+          height: 38px;
+          border-radius: 8px;
+          border: 1px solid var(--border);
+          background: var(--bg);
+          color: var(--text-muted);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+        .btn-icon:hover { background: var(--card-hover); }
         .inline-group {
           display: grid;
           grid-template-columns: 1fr 1fr;
@@ -232,12 +383,8 @@ export default function NewEmployeePage() {
           border-bottom: 1px solid var(--border);
           font-size: 13px;
         }
-        .summary-panel .summary-label {
-          color: var(--text-muted);
-        }
-        .summary-panel .summary-value {
-          font-weight: 600;
-        }
+        .summary-panel .summary-label { color: var(--text-muted); }
+        .summary-panel .summary-value { font-weight: 600; }
         .toast {
           position: fixed;
           bottom: 24px;
@@ -246,7 +393,7 @@ export default function NewEmployeePage() {
           border-radius: 8px;
           color: white;
           font-weight: 500;
-          z-index: 2000;
+          z-index: 9998;
           animation: slideIn 0.3s ease;
         }
         .toast-success { background: #16a34a; }
@@ -260,7 +407,7 @@ export default function NewEmployeePage() {
         }
       `}</style>
 
-      {/* Toast notification */}
+      {/* Toast */}
       {toast && <div className={`toast ${toast.type === "success" ? "toast-success" : "toast-error"}`}>{toast.message}</div>}
 
       {/* Breadcrumb */}
@@ -333,17 +480,27 @@ export default function NewEmployeePage() {
             <div className="inline-group">
               <div>
                 <label className="label">Department</label>
-                <select className="select" value={departmentId ?? ""} onChange={e => setDepartmentId(e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">Select department…</option>
-                  {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <select className="select" value={departmentId ?? ""} onChange={e => setDepartmentId(e.target.value ? Number(e.target.value) : null)} style={{ flex: 1 }}>
+                    <option value="">Select department…</option>
+                    {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                  <button className="btn-icon" onClick={() => setShowCreateDept(true)} title="Create Department">
+                    <Plus size={16} />
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="label">Designation</label>
-                <select className="select" value={designationId ?? ""} onChange={e => setDesignationId(e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">Select designation…</option>
-                  {designations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <select className="select" value={designationId ?? ""} onChange={e => setDesignationId(e.target.value ? Number(e.target.value) : null)} style={{ flex: 1 }}>
+                    <option value="">Select designation…</option>
+                    {designations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                  <button className="btn-icon" onClick={() => setShowCreateDesig(true)} title="Create Designation">
+                    <Plus size={16} />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -427,6 +584,24 @@ export default function NewEmployeePage() {
           </div>
         </div>
       </div>
+
+      {/* Inline creation modals */}
+      {showCreateDept && (
+        <InlineCreateModal
+          title="Create Department"
+          placeholder="Department name"
+          onSave={createDepartment}
+          onClose={() => setShowCreateDept(false)}
+        />
+      )}
+      {showCreateDesig && (
+        <InlineCreateModal
+          title="Create Designation"
+          placeholder="Designation name"
+          onSave={createDesignation}
+          onClose={() => setShowCreateDesig(false)}
+        />
+      )}
     </div>
   )
 }
