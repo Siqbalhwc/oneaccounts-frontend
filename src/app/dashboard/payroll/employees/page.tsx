@@ -3,10 +3,38 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { Search, Plus, Eye, MoreHorizontal } from "lucide-react"
+import { Search, Plus, Eye } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 
 const EMPLOYMENT_TYPES = ["permanent", "contract", "daily_wage", "consultant"]
+
+// ── Status badge (consistent with payroll runs) ──────────
+const statusColors: Record<string, string> = {
+  active: "#22c55e",
+  on_leave: "#f59e0b",
+  draft: "#94a3b8",
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const color = statusColors[status] || "#6b7280"
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        padding: "2px 10px",
+        borderRadius: "100px",
+        fontSize: "11px",
+        fontWeight: 700,
+        textTransform: "capitalize",
+        background: `${color}22`,
+        color: color,
+        border: `1px solid ${color}44`,
+      }}
+    >
+      {status.replace("_", " ")}
+    </span>
+  )
+}
 
 export default function EmployeesPage() {
   const supabase = createBrowserClient(
@@ -33,7 +61,6 @@ export default function EmployeesPage() {
       const cid = (user?.app_metadata as any)?.company_id
       if (cid) {
         setCompanyId(cid)
-        // Fetch departments and designations once for local merging
         supabase.from("departments").select("id, name").eq("company_id", cid).order("name")
           .then(({ data }) => setDepartments(data || []))
         supabase.from("designations").select("id, name").eq("company_id", cid).order("name")
@@ -58,7 +85,6 @@ export default function EmployeesPage() {
 
     query.then(({ data }) => {
       if (data) {
-        // Merge department/designation names locally
         const enriched = data.map((emp: any) => ({
           ...emp,
           department_name: departments.find(d => d.id === emp.department_id)?.name || null,
@@ -72,7 +98,6 @@ export default function EmployeesPage() {
     })
   }, [role, canView, companyId, statusFilter, typeFilter, departmentFilter, departments, designations])
 
-  // Stats
   const typeCounts = EMPLOYMENT_TYPES.reduce((acc, type) => {
     acc[type] = employees.filter(e => e.employment_type === type).length
     return acc
@@ -124,12 +149,16 @@ export default function EmployeesPage() {
         }
         .filter-chip:hover { background: var(--card-hover); }
         .filter-chip.active { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
-        .status-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: capitalize; }
         .btn { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; border: none; transition: all 0.2s; }
         .btn-primary { background: var(--primary); color: var(--primary-text); }
         .btn-primary:hover { filter: brightness(0.95); }
         .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-muted); }
         .btn-outline:hover { background: var(--card-hover); }
+        @keyframes shimmer {
+          0% { opacity: 0.4; }
+          50% { opacity: 0.8; }
+          100% { opacity: 0.4; }
+        }
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
@@ -216,12 +245,44 @@ export default function EmployeesPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>Loading employees…</td></tr>
+              // Skeleton loading rows
+              Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i}>
+                  {Array.from({ length: 6 }).map((_, j) => (
+                    <td key={j} style={{ padding: "12px 16px" }}>
+                      <div style={{
+                        width: `${60 + j * 10}%`,
+                        height: 12,
+                        background: "var(--bg-soft)",
+                        borderRadius: 4,
+                        animation: "shimmer 1.5s ease-in-out infinite"
+                      }} />
+                    </td>
+                  ))}
+                </tr>
+              ))
             ) : filteredEmployees.length === 0 ? (
-              <tr><td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>No employees found.</td></tr>
+              <tr>
+                <td colSpan={6} style={{ padding: 40, textAlign: "center" }}>
+                  <div>
+                    <p style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>👥 No Employees Yet</p>
+                    <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
+                      Add your first employee to start managing payroll.
+                    </p>
+                    {canEdit && (
+                      <button className="btn btn-primary" onClick={() => router.push("/dashboard/payroll/employees/new")}>
+                        <Plus size={16} /> Create Employee
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
             ) : (
               filteredEmployees.map(emp => (
-                <tr key={emp.id} style={{ transition: "background 0.15s" }}
+                <tr
+                  key={emp.id}
+                  onClick={() => router.push(`/dashboard/payroll/employees/${emp.id}`)}
+                  style={{ cursor: "pointer", transition: "background 0.15s" }}
                   onMouseEnter={e => (e.currentTarget.style.background = "var(--card-hover)")}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                 >
@@ -230,28 +291,21 @@ export default function EmployeesPage() {
                     <div style={{ fontWeight: 600, marginBottom: 2 }}>{emp.full_name}</div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                       {emp.designation_name && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{emp.designation_name}</span>}
-                      <span className="status-badge"
-                        style={{
-                          background: emp.status === "active" ? "#065F46" : emp.status === "on_leave" ? "#7F1D1D" : emp.status === "draft" ? "#374151" : "#1E293B",
-                          color: "#E2E8F0",
-                        }}>
-                        {emp.status}
-                      </span>
+                      <StatusBadge status={emp.status} />
                       <span style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "capitalize" }}>{emp.employment_type?.replace("_", " ")}</span>
                     </div>
                   </td>
                   <td style={tdStyle}>{emp.department_name || "—"}</td>
                   <td style={tdStyle}>{emp.salary_structures?.name || "—"}</td>
                   <td style={tdStyle}>{maskAccount(emp.bank_account_no)}</td>
-                  <td style={{ ...tdStyle, textAlign: "center" }}>
+                  <td style={{ ...tdStyle, textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
-                      <button style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 6, padding: 5, cursor: "pointer", color: "var(--text-muted)" }}
-                        onClick={() => router.push(`/dashboard/payroll/employees/${emp.id}`)} title="View Profile">
+                      <button
+                        style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 6, padding: 5, cursor: "pointer", color: "var(--text-muted)" }}
+                        onClick={() => router.push(`/dashboard/payroll/employees/${emp.id}`)}
+                        title="View Profile"
+                      >
                         <Eye size={14} />
-                      </button>
-                      <button style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 6, padding: 5, cursor: "pointer", color: "var(--text-muted)" }}
-                        onClick={() => {}} title="More actions">
-                        <MoreHorizontal size={14} />
                       </button>
                     </div>
                   </td>

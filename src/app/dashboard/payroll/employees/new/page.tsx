@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, UserPlus, CheckCircle } from "lucide-react"
+import { ArrowLeft, UserPlus } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import EntityPicker from "@/components/entity-picker/EntityPicker"
 
@@ -38,21 +38,23 @@ export default function NewEmployeePage() {
   const [selectedSalaryStructure, setSelectedSalaryStructure] = useState<any>(null)
 
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
-  const [flash, setFlash] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null)
 
-  // Optional department / designation (future)
   const [departmentId, setDepartmentId] = useState<number | null>(null)
   const [designationId, setDesignationId] = useState<number | null>(null)
   const [departments, setDepartments] = useState<any[]>([])
   const [designations, setDesignations] = useState<any[]>([])
+
+  const showToast = (message: string, type: "success" | "error") => {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 4000)
+  }
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
       if (cid) {
         setCompanyId(cid)
-        // Generate employee code
         supabase
           .from("employees")
           .select("employee_code")
@@ -74,20 +76,19 @@ export default function NewEmployeePage() {
   }, [])
 
   const handleSubmit = async () => {
-    if (!companyId) { setError("Company not loaded"); return }
-    if (!fullName.trim()) { setError("Full name is required"); return }
+    if (!companyId) { showToast("Company not loaded", "error"); return }
+    if (!fullName.trim()) { showToast("Full name is required", "error"); return }
 
     if (cnic.trim() && !CNIC_REGEX.test(cnic.trim())) {
-      setError("CNIC format must be 00000-0000000-0")
+      showToast("CNIC format must be 00000-0000000-0", "error")
       return
     }
     if (mobile.trim() && !MOBILE_REGEX.test(mobile.trim())) {
-      setError("Mobile format must be 03XX-XXXXXXX")
+      showToast("Mobile format must be 03XX-XXXXXXX", "error")
       return
     }
 
     setLoading(true)
-    setError("")
 
     const payload = {
       company_id: companyId,
@@ -98,7 +99,7 @@ export default function NewEmployeePage() {
       mobile: mobile.trim() || null,
       joining_date: joiningDate,
       employment_type: employmentType,
-      status: "active",          // new employees are always active
+      status: "active",
       payment_method: paymentMethod,
       bank_account_no: bankAccountNo.trim() || null,
       tax_status: taxStatus.trim() || null,
@@ -115,15 +116,15 @@ export default function NewEmployeePage() {
 
     if (insertErr) {
       if (insertErr.message?.includes("duplicate key")) {
-        setError("This employee code already exists. Please refresh.")
+        showToast("This employee code already exists. Please refresh.", "error")
       } else {
-        setError(insertErr.message)
+        showToast(insertErr.message, "error")
       }
       setLoading(false)
       return
     }
 
-    setFlash(`Employee ${data.employee_code} created successfully`)
+    showToast(`Employee ${data.employee_code} created successfully`, "success")
     setLoading(false)
     setTimeout(() => router.push("/dashboard/payroll/employees"), 1500)
   }
@@ -237,10 +238,39 @@ export default function NewEmployeePage() {
         .summary-panel .summary-value {
           font-weight: 600;
         }
+        .toast {
+          position: fixed;
+          bottom: 24px;
+          right: 24px;
+          padding: 12px 20px;
+          border-radius: 8px;
+          color: white;
+          font-weight: 500;
+          z-index: 2000;
+          animation: slideIn 0.3s ease;
+        }
+        .toast-success { background: #16a34a; }
+        .toast-error { background: #dc2626; }
+        @keyframes slideIn {
+          from { transform: translateY(20px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
         @media (max-width: 1000px) {
           .layout { grid-template-columns: 1fr; }
         }
       `}</style>
+
+      {/* Toast notification */}
+      {toast && <div className={`toast ${toast.type === "success" ? "toast-success" : "toast-error"}`}>{toast.message}</div>}
+
+      {/* Breadcrumb */}
+      <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>
+        <button className="btn btn-outline" style={{ padding: 0, background: "none", border: "none", textDecoration: "underline", cursor: "pointer", color: "var(--text-muted)" }} onClick={() => router.push("/dashboard/payroll/employees")}>
+          Employees
+        </button>
+        <span style={{ margin: "0 8px" }}>/</span>
+        <span style={{ color: "var(--text)" }}>New Employee</span>
+      </div>
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
@@ -252,9 +282,6 @@ export default function NewEmployeePage() {
           <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>New Employee</h1>
         </div>
       </div>
-
-      {error && <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "12px 18px", borderRadius: 8, marginBottom: 16, fontSize: 14, border: "1px solid #FECACA" }}>{error}</div>}
-      {flash && <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "12px 18px", borderRadius: 8, marginBottom: 16, fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
 
       <div className="layout">
         {/* Left form sections */}
