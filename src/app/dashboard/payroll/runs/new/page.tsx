@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, CheckCircle, AlertTriangle, Info, Loader2 } from "lucide-react"
+import { ArrowLeft, CheckCircle, AlertTriangle, Loader2 } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 
 const DEPT_PLACEHOLDER = "All Departments"
@@ -16,15 +16,16 @@ export default function NewPayrollRunPage() {
   const router = useRouter()
   const { role } = useRole()
   const canView = role === "admin" || role === "accountant"
-  const canEdit = role === "admin" || role === "accountant"
 
   const [companyId, setCompanyId] = useState("")
 
-  // Form state
-  const [month, setMonth] = useState(() => {
+  // ── Form state ───────────────────────────────────────────
+  // Use <input type="month"> which returns "YYYY-MM" (no day).
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
     const now = new Date()
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
   })
+
   const [departmentId, setDepartmentId] = useState<string>("")
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState("")
@@ -35,7 +36,7 @@ export default function NewPayrollRunPage() {
 
   // Preview data
   const [preview, setPreview] = useState<{
-    totalEmployees: number
+    totalActiveEmployees: number
     missingStructure: number
     inactiveEmployees: number
     activeLoans: number
@@ -44,24 +45,28 @@ export default function NewPayrollRunPage() {
   } | null>(null)
   const [loadingPreview, setLoadingPreview] = useState(false)
 
-  // Fetch company ID and departments
+  // ── Fetch company ID and departments (graceful) ──────────
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
       if (!cid) return
       setCompanyId(cid)
 
-      // Fetch departments for dropdown
-      const { data: deptData } = await supabase
-        .from("departments")
-        .select("id, name")
-        .eq("company_id", cid)
-        .order("name")
-      setDepartments(deptData || [])
+      // Try to fetch departments – ignore if table doesn't exist (404)
+      try {
+        const { data: deptData } = await supabase
+          .from("departments")
+          .select("id, name")
+          .eq("company_id", cid)
+          .order("name")
+        setDepartments(deptData || [])
+      } catch {
+        setDepartments([])
+      }
     })
   }, [])
 
-  // Fetch preview whenever month or department changes
+  // ── Preview effect – correct schema usage ────────────────
   useEffect(() => {
     if (!companyId) return
     setLoadingPreview(true)
@@ -69,30 +74,58 @@ export default function NewPayrollRunPage() {
 
     async function loadPreview() {
       try {
-        // Base employee query – active employees for this company
+        // 1. Fetch all employees (active + inactive) for the company
         let employeeQuery = supabase
           .from("employees")
-          .select("id, is_active, salary_structure_id", { count: "exact" })
+          .select("id, is_active")
           .eq("company_id", companyId)
 
-        // If a specific department is selected, filter employees by department
-        // (Assuming employees have a department_id column – if not, skip this filter)
         if (departmentId) {
           employeeQuery = employeeQuery.eq("department_id", departmentId)
         }
 
-        const { data: employees, error: empErr, count } = await employeeQuery
+        const { data: employees, error: empErr } = await employeeQuery
         if (empErr) {
-          setError("Failed to load employee data.")
+          // If the query fails, show error and stop
+          setError("Failed to load employee data: " + empErr.message)
           setLoadingPreview(false)
           return
         }
 
-        const totalEmployees = employees?.length || 0
-        const inactiveEmployees = employees?.filter(e => !e.is_active).length || 0
-        const missingStructure = employees?.filter(e => e.is_active && !e.salary_structure_id).length || 0
+        const allEmployees = employees || []
+        const totalActiveEmployees = allEmployees.filter(e => e.is_active).length
+        const inactiveEmployees = allEmployees.length - totalActiveEmployees
 
-        // Active loans count (unpaid loans that would be deducted)
+        // 2. Determine employees without a salary structure
+        //    We use employee_salary_revisions: get the latest revision for each active employee.
+        let missingStructureCount = 0
+        if (totalActiveEmployees > 0) {
+          // Fetch all revisions for the company
+          const { data: revisions } = await supabase
+            .from("employee_salary_revisions")
+            .select("employee_id, effective_date")
+            .eq("company_id", companyId)
+            .order("effective_date", { ascending: false })
+
+          if (revisions) {
+            // Build a map of employee_id -> latest revision date
+            const latestRevMap: Record<number, string> = {}
+            revisions.forEach(rev => {
+              if (!latestRevMap[rev.employee_id] || rev.effective_date > latestRevMap[rev.employee_id]) {
+                latestRevMap[rev.employee_id] = rev.effective_date
+              }
+            })
+            // Active employees not in the map have no revision -> missing structure
+            missingStructureCount = allEmployees
+              .filter(e => e.is_active && !latestRevMap[e.id])
+              .length
+          } else {
+            // If revisions table is empty, all active employees lack a structure
+            missingStructureCount = totalActiveEmployees
+          }
+        }
+
+        // 3. Active loans count
         let { count: loansCount } = await supabase
           .from("employee_loans")
           .select("*", { count: "exact", head: true })
@@ -100,7 +133,7 @@ export default function NewPayrollRunPage() {
           .eq("status", "active")
         loansCount = loansCount || 0
 
-        // Active advances count
+        // 4. Active advances count
         let { count: advancesCount } = await supabase
           .from("salary_advances")
           .select("*", { count: "exact", head: true })
@@ -108,14 +141,18 @@ export default function NewPayrollRunPage() {
           .eq("status", "active")
         advancesCount = advancesCount || 0
 
-        // Build warnings
+        // Warnings
         const warnings: string[] = []
-        if (missingStructure > 0) warnings.push(`${missingStructure} active employee(s) have no salary structure assigned.`)
-        if (inactiveEmployees > 0) warnings.push(`${inactiveEmployees} inactive employee(s) will be excluded.`)
+        if (missingStructureCount > 0) {
+          warnings.push(`${missingStructureCount} active employee(s) have no salary structure assigned.`)
+        }
+        if (inactiveEmployees > 0) {
+          warnings.push(`${inactiveEmployees} inactive employee(s) will be excluded.`)
+        }
 
         setPreview({
-          totalEmployees,
-          missingStructure,
+          totalActiveEmployees,
+          missingStructure: missingStructureCount,
           inactiveEmployees,
           activeLoans: loansCount,
           activeAdvances: advancesCount,
@@ -129,10 +166,11 @@ export default function NewPayrollRunPage() {
     }
 
     loadPreview()
-  }, [companyId, month, departmentId])
+  }, [companyId, selectedMonth, departmentId])
 
+  // ── Generate run ─────────────────────────────────────────
   const handleGenerate = async () => {
-    if (!companyId || !month) {
+    if (!companyId || !selectedMonth) {
       setError("Month is required")
       return
     }
@@ -140,12 +178,15 @@ export default function NewPayrollRunPage() {
     setError("")
     setFlash("")
 
+    // Convert "YYYY-MM" to a full date (first day of the month)
+    const monthDate = `${selectedMonth}-01`
+
     try {
       const res = await fetch("/api/payroll/runs/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          month,
+          month: monthDate,
           department_id: departmentId || null,
         }),
       })
@@ -176,9 +217,11 @@ export default function NewPayrollRunPage() {
     }
   }
 
-  // Access control – PayrollLayout already handles feature/plan loading
+  // ── Access control (layout handles feature gate) ─────────
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
+
+  const todayStr = new Date().toLocaleDateString("en-PK", { year: "numeric", month: "short", day: "numeric" })
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -209,7 +252,7 @@ export default function NewPayrollRunPage() {
         .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
         .preview-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
           gap: 10px;
           margin-bottom: 16px;
         }
@@ -246,7 +289,7 @@ export default function NewPayrollRunPage() {
         <button className="btn" onClick={() => router.push("/dashboard/payroll/runs")}><ArrowLeft size={16} /></button>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>📅 New Payroll Run</h1>
-          <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Select month and review before generating payroll</p>
+          <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Select payroll month and review details</p>
         </div>
       </div>
 
@@ -255,21 +298,32 @@ export default function NewPayrollRunPage() {
 
       {/* 1. Payroll Period */}
       <div className="card">
-        <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>1️⃣ Payroll Period</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>1️⃣ Payroll Period</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "end" }}>
           <div>
-            <label className="label">Month *</label>
-            <input className="input" type="date" value={month} onChange={e => setMonth(e.target.value)} />
+            <label className="label">Payroll Month *</label>
+            <input
+              className="input"
+              type="month"
+              value={selectedMonth}
+              onChange={e => setSelectedMonth(e.target.value)}
+            />
           </div>
           <div>
-            <label className="label">Department</label>
-            <select className="select" value={departmentId} onChange={e => setDepartmentId(e.target.value)}>
-              <option value="">{DEPT_PLACEHOLDER}</option>
-              {departments.map(d => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </select>
+            <label className="label">Run Date</label>
+            <div style={{ height: 38, display: "flex", alignItems: "center", fontSize: 13, color: "var(--text)", paddingLeft: 4 }}>
+              {todayStr}
+            </div>
           </div>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <label className="label">Department</label>
+          <select className="select" value={departmentId} onChange={e => setDepartmentId(e.target.value)}>
+            <option value="">{DEPT_PLACEHOLDER}</option>
+            {departments.map(d => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -289,8 +343,8 @@ export default function NewPayrollRunPage() {
           <>
             <div className="preview-grid">
               <div className="preview-item">
-                <div className="preview-value">{preview.totalEmployees}</div>
-                <div className="preview-label">Employees</div>
+                <div className="preview-value">{preview.totalActiveEmployees}</div>
+                <div className="preview-label">Active Employees</div>
               </div>
               <div className="preview-item">
                 <div className="preview-value" style={{ color: preview.missingStructure > 0 ? "#EF4444" : "#10B981" }}>
@@ -310,7 +364,7 @@ export default function NewPayrollRunPage() {
               </div>
               <div className="preview-item">
                 <div className="preview-value">{preview.activeAdvances}</div>
-                <div className="preview-label">Advances</div>
+                <div className="preview-label">Active Advances</div>
               </div>
             </div>
 
@@ -323,7 +377,7 @@ export default function NewPayrollRunPage() {
             )}
           </>
         ) : (
-          <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Could not load preview. Check console for errors.</p>
+          <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Could not load preview. See console for details.</p>
         )}
       </div>
 
@@ -332,7 +386,7 @@ export default function NewPayrollRunPage() {
         <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>3️⃣ Generate Payroll</h2>
         <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>
           {preview
-            ? `This will create a payroll run for ${preview.totalEmployees} employee(s) with the selected parameters.`
+            ? `This will create a payroll run for ${preview.totalActiveEmployees} active employee(s).`
             : "Please wait for the preview to finish."}
         </p>
         <button
