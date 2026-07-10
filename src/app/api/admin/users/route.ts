@@ -187,44 +187,32 @@ export async function POST(request: Request) {
   // 2. If the user already exists in Auth, just add them to this company
   if (inviteError && (
     inviteError.message?.toLowerCase().includes('already') ||
-    inviteError.status === 422 // Supabase often returns 422 for duplicate
+    inviteError.status === 422
   )) {
-    // Look up the existing user by email using the admin API
-    const { data: existingUser, error: lookupError } = await supabaseAdmin
-      .auth.admin.listUsers({ page: 1, perPage: 1 }) // limited, but we'll use a more precise method later
-    // Actually `listUsers` doesn't filter by email directly; we'll use a Postgres function
-    // Fallback: use raw query on auth.users (allowed with service key)
+    // Try to get the user id via a direct query on auth.users (allowed with service role)
     const { data: userByEmail, error: emailErr } = await supabaseAdmin
       .from('auth.users')
       .select('id')
       .eq('email', email)
       .maybeSingle()
 
+    let userId: string | null = null
+
     if (emailErr || !userByEmail) {
-      // If direct query fails (rare), we try a custom RPC
+      // Fallback to RPC
       const { data: uid, error: rpcErr } = await supabaseAdmin
         .rpc('get_user_id_by_email', { p_email: email })
       if (rpcErr || !uid) {
         return NextResponse.json({ error: 'User exists but could not be retrieved. Please try again or contact support.' }, { status: 500 })
       }
-      const userId = uid
-      // Continue with userId
-      // Add to company
-      await supabaseAdmin
-        .from('user_roles')
-        .upsert({
-          user_id: userId,
-          company_id: companyId,
-          role,
-          is_active: true,
-        })
-      return NextResponse.json({
-        success: true,
-        message: `User ${email} already exists. They have been added to your company with role "${role}".`,
-      })
+      userId = uid
+    } else {
+      userId = userByEmail.id
     }
 
-    const userId = userByEmail.id
+    if (!userId) {
+      return NextResponse.json({ error: 'User exists but could not be retrieved.' }, { status: 500 })
+    }
 
     // Check if the user already has a role in this company (could have been deleted before)
     const { data: existingRole } = await supabaseAdmin
@@ -260,7 +248,7 @@ export async function POST(request: Request) {
 
   // 3. Any other error
   console.error('Invite error:', inviteError)
-  return NextResponse.json({ error: inviteError.message }, { status: 500 })
+  return NextResponse.json({ error: inviteError?.message || 'Unknown error' }, { status: 500 })
 }
 
 // ── DELETE (remove user from this company) ──
