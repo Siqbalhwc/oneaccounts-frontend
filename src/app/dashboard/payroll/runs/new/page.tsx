@@ -20,7 +20,6 @@ export default function NewPayrollRunPage() {
   const [companyId, setCompanyId] = useState("")
 
   // ── Form state ───────────────────────────────────────────
-  // Use <input type="month"> which returns "YYYY-MM" (no day).
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
@@ -34,11 +33,10 @@ export default function NewPayrollRunPage() {
   // Department list
   const [departments, setDepartments] = useState<{ id: number; name: string }[]>([])
 
-  // Preview data
+  // Preview data – simplified (no is_active)
   const [preview, setPreview] = useState<{
-    totalActiveEmployees: number
+    totalEmployees: number
     missingStructure: number
-    inactiveEmployees: number
     activeLoans: number
     activeAdvances: number
     warnings: string[]
@@ -52,7 +50,6 @@ export default function NewPayrollRunPage() {
       if (!cid) return
       setCompanyId(cid)
 
-      // Try to fetch departments – ignore if table doesn't exist (404)
       try {
         const { data: deptData } = await supabase
           .from("departments")
@@ -66,7 +63,7 @@ export default function NewPayrollRunPage() {
     })
   }, [])
 
-  // ── Preview effect – correct schema usage ────────────────
+  // ── Preview effect (no is_active) ────────────────────────
   useEffect(() => {
     if (!companyId) return
     setLoadingPreview(true)
@@ -74,10 +71,10 @@ export default function NewPayrollRunPage() {
 
     async function loadPreview() {
       try {
-        // 1. Fetch all employees (active + inactive) for the company
+        // 1. Count all employees (no is_active filter)
         let employeeQuery = supabase
           .from("employees")
-          .select("id, is_active")
+          .select("id")
           .eq("company_id", companyId)
 
         if (departmentId) {
@@ -86,21 +83,17 @@ export default function NewPayrollRunPage() {
 
         const { data: employees, error: empErr } = await employeeQuery
         if (empErr) {
-          // If the query fails, show error and stop
           setError("Failed to load employee data: " + empErr.message)
           setLoadingPreview(false)
           return
         }
 
         const allEmployees = employees || []
-        const totalActiveEmployees = allEmployees.filter(e => e.is_active).length
-        const inactiveEmployees = allEmployees.length - totalActiveEmployees
+        const totalEmployees = allEmployees.length
 
-        // 2. Determine employees without a salary structure
-        //    We use employee_salary_revisions: get the latest revision for each active employee.
+        // 2. Missing salary structure – using employee_salary_revisions
         let missingStructureCount = 0
-        if (totalActiveEmployees > 0) {
-          // Fetch all revisions for the company
+        if (totalEmployees > 0) {
           const { data: revisions } = await supabase
             .from("employee_salary_revisions")
             .select("employee_id, effective_date")
@@ -108,24 +101,20 @@ export default function NewPayrollRunPage() {
             .order("effective_date", { ascending: false })
 
           if (revisions) {
-            // Build a map of employee_id -> latest revision date
             const latestRevMap: Record<number, string> = {}
             revisions.forEach(rev => {
               if (!latestRevMap[rev.employee_id] || rev.effective_date > latestRevMap[rev.employee_id]) {
                 latestRevMap[rev.employee_id] = rev.effective_date
               }
             })
-            // Active employees not in the map have no revision -> missing structure
-            missingStructureCount = allEmployees
-              .filter(e => e.is_active && !latestRevMap[e.id])
-              .length
+            missingStructureCount = allEmployees.filter(e => !latestRevMap[e.id]).length
           } else {
-            // If revisions table is empty, all active employees lack a structure
-            missingStructureCount = totalActiveEmployees
+            // If revisions table empty, all employees lack a structure
+            missingStructureCount = totalEmployees
           }
         }
 
-        // 3. Active loans count
+        // 3. Active loans
         let { count: loansCount } = await supabase
           .from("employee_loans")
           .select("*", { count: "exact", head: true })
@@ -133,7 +122,7 @@ export default function NewPayrollRunPage() {
           .eq("status", "active")
         loansCount = loansCount || 0
 
-        // 4. Active advances count
+        // 4. Active advances
         let { count: advancesCount } = await supabase
           .from("salary_advances")
           .select("*", { count: "exact", head: true })
@@ -141,19 +130,14 @@ export default function NewPayrollRunPage() {
           .eq("status", "active")
         advancesCount = advancesCount || 0
 
-        // Warnings
         const warnings: string[] = []
         if (missingStructureCount > 0) {
-          warnings.push(`${missingStructureCount} active employee(s) have no salary structure assigned.`)
-        }
-        if (inactiveEmployees > 0) {
-          warnings.push(`${inactiveEmployees} inactive employee(s) will be excluded.`)
+          warnings.push(`${missingStructureCount} employee(s) have no salary structure assigned.`)
         }
 
         setPreview({
-          totalActiveEmployees,
+          totalEmployees,
           missingStructure: missingStructureCount,
-          inactiveEmployees,
           activeLoans: loansCount,
           activeAdvances: advancesCount,
           warnings,
@@ -178,7 +162,6 @@ export default function NewPayrollRunPage() {
     setError("")
     setFlash("")
 
-    // Convert "YYYY-MM" to a full date (first day of the month)
     const monthDate = `${selectedMonth}-01`
 
     try {
@@ -217,7 +200,7 @@ export default function NewPayrollRunPage() {
     }
   }
 
-  // ── Access control (layout handles feature gate) ─────────
+  // ── Access control ───────────────────────────────────────
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
@@ -335,7 +318,7 @@ export default function NewPayrollRunPage() {
 
         {loadingPreview ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 10 }}>
-            {[...Array(5)].map((_, i) => (
+            {[...Array(4)].map((_, i) => (
               <div key={i} style={{ background: "var(--bg-soft)", borderRadius: 10, padding: 12, height: 60 }} />
             ))}
           </div>
@@ -343,20 +326,14 @@ export default function NewPayrollRunPage() {
           <>
             <div className="preview-grid">
               <div className="preview-item">
-                <div className="preview-value">{preview.totalActiveEmployees}</div>
-                <div className="preview-label">Active Employees</div>
+                <div className="preview-value">{preview.totalEmployees}</div>
+                <div className="preview-label">Employees</div>
               </div>
               <div className="preview-item">
                 <div className="preview-value" style={{ color: preview.missingStructure > 0 ? "#EF4444" : "#10B981" }}>
                   {preview.missingStructure}
                 </div>
                 <div className="preview-label">Missing Structure</div>
-              </div>
-              <div className="preview-item">
-                <div className="preview-value" style={{ color: preview.inactiveEmployees > 0 ? "#F59E0B" : "#10B981" }}>
-                  {preview.inactiveEmployees}
-                </div>
-                <div className="preview-label">Inactive</div>
               </div>
               <div className="preview-item">
                 <div className="preview-value">{preview.activeLoans}</div>
@@ -377,7 +354,7 @@ export default function NewPayrollRunPage() {
             )}
           </>
         ) : (
-          <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Could not load preview. See console for details.</p>
+          <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Could not load preview.</p>
         )}
       </div>
 
@@ -386,7 +363,7 @@ export default function NewPayrollRunPage() {
         <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>3️⃣ Generate Payroll</h2>
         <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>
           {preview
-            ? `This will create a payroll run for ${preview.totalActiveEmployees} active employee(s).`
+            ? `This will create a payroll run for ${preview.totalEmployees} employee(s).`
             : "Please wait for the preview to finish."}
         </p>
         <button
