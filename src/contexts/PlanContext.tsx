@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react"
+import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 
 const FEATURE_CODES = [
@@ -16,37 +16,54 @@ const FEATURE_CODES = [
   "asset_management",
   "tax_management",
   "payroll",
-  "material_management",                        // ✅ ADDED – makes hasFeature("material_management") work
+  "material_management",
 ]
 
 interface PlanContextType {
   hasFeature: (code: string) => boolean
   features: string[]
-  loading: boolean
+  loading: boolean          // true ONLY during the very first load (splash-worthy)
+  refreshing: boolean       // true during background refetches (not splash-worthy)
   refreshFeatures: () => void
   setFeatureState: (code: string, enabled: boolean) => void
 }
 
 const PlanContext = createContext<PlanContextType>({
-  hasFeature: () => true,
+  // 🔒 Deny-by-default until we actually know what this company is entitled to.
+  hasFeature: () => false,
   features: [],
   loading: true,
+  refreshing: false,
   refreshFeatures: () => {},
   setFeatureState: () => {},
 })
 
 export function PlanProvider({ children }: { children: ReactNode }) {
   const [features, setFeatures] = useState<string[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(true)       // gates splash — only true pre-first-load
+  const [refreshing, setRefreshing] = useState(false) // background refetch, does NOT gate UI
   const [businessType, setBusinessType] = useState<string>("")
-  const supabase = createClient()
 
-  const loadFeatures = useCallback(async () => {
+  const supabase = createClient()
+  const hasLoadedOnceRef = useRef(false)
+  const loadedForUserIdRef = useRef<string | null>(null)
+
+  const loadFeatures = useCallback(async (isBackground: boolean) => {
     try {
-      setLoading(true)
+      if (isBackground) {
+        setRefreshing(true)
+      } else {
+        setLoading(true)
+      }
+
       const { data: { user } } = await supabase.auth.getUser()
       const cid = (user?.app_metadata as any)?.company_id
-      if (!cid) { setLoading(false); return }
+
+      if (!cid) {
+        setFeatures([])
+        loadedForUserIdRef.current = null
+        return
+      }
 
       const { data: companyData } = await supabase
         .from("companies")
@@ -65,7 +82,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
 
       if (!featureRows || featureRows.length === 0) {
         setFeatures([])
-        setLoading(false)
+        loadedForUserIdRef.current = user?.id ?? null
         return
       }
 
@@ -90,38 +107,74 @@ export function PlanProvider({ children }: { children: ReactNode }) {
       }
 
       setFeatures(active)
+      loadedForUserIdRef.current = user?.id ?? null
     } catch (err) {
       console.error("Failed to load features:", err)
+      // 🔒 On error, fail closed — do not leave stale/unknown feature state granting access.
+      if (!isBackground) setFeatures([])
     } finally {
-      setLoading(false)
+      hasLoadedOnceRef.current = true
+      if (isBackground) {
+        setRefreshing(false)
+      } else {
+        setLoading(false)
+      }
     }
   }, [supabase])
 
+  // Initial load — this one legitimately blocks the UI with the splash screen.
   useEffect(() => {
-    loadFeatures()
-  }, [loadFeatures])
+    loadFeatures(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
+  // React to real auth changes only. Never treat a plain token refresh
+  // (which fires on every tab focus) as a reason to reload or to show
+  // the splash screen again — that was the cause of the constant
+  // "Loading your workspace..." flicker and the state loss on tab switch.
   useEffect(() => {
-    if (!loading && features.length > 0) {
-      console.log('✅ PlanContext loaded with features:', features)
-      console.log('✅ Business type:', businessType)
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") {
+        setFeatures([])
+        loadedForUserIdRef.current = null
+        return
+      }
+
+      if (event === "TOKEN_REFRESHED") {
+        // Nothing about entitlements changed — ignore entirely.
+        return
+      }
+
+      const uid = session?.user?.id ?? null
+
+      // Only refetch if we're looking at a genuinely different user/session
+      // than what we last loaded features for (e.g. user actually signed
+      // into a different account). Do this quietly in the background —
+      // never block already-rendered UI or wipe component state.
+      if (uid && uid !== loadedForUserIdRef.current) {
+        loadFeatures(true)
+      }
+    })
+    return () => {
+      authListener?.subscription?.unsubscribe()
     }
-  }, [loading, features, businessType])
+  }, [loadFeatures])
 
   const hasFeature = (code: string) => {
     if (code === "balance_sheet") return true
-    if (loading) return true
 
-    // ✅ Inventory is always enabled for trading companies
+    // 🔒 Deny by default until the FIRST load has completed. After that,
+    // background refreshes never flip this back to "unknown" — we keep
+    // showing the last known-good entitlement set while refreshing quietly.
+    if (!hasLoadedOnceRef.current) return false
+
     if (code === "inventory" && businessType === "trading") return true
-
-    // ❌ Purchase Orders fallback REMOVED – it is an add‑on, must be explicitly enabled
 
     return features.includes(code)
   }
 
   const refreshFeatures = () => {
-    loadFeatures()
+    loadFeatures(true)
   }
 
   const setFeatureState = async (code: string, enabled: boolean) => {
@@ -161,21 +214,12 @@ export function PlanProvider({ children }: { children: ReactNode }) {
       }
     } catch (err) {
       console.error("Failed to save feature state:", err)
-      loadFeatures()
+      loadFeatures(true)
     }
   }
 
-  useEffect(() => {
-    const { data: authListener } = supabase.auth.onAuthStateChange(() => {
-      loadFeatures()
-    })
-    return () => {
-      authListener?.subscription?.unsubscribe()
-    }
-  }, [loadFeatures])
-
   return (
-    <PlanContext.Provider value={{ hasFeature, features, loading, refreshFeatures, setFeatureState }}>
+    <PlanContext.Provider value={{ hasFeature, features, loading, refreshing, refreshFeatures, setFeatureState }}>
       {children}
     </PlanContext.Provider>
   )
