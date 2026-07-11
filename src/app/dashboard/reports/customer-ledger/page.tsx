@@ -92,12 +92,11 @@ export default function CustomerLedgerPage() {
         .is("deleted_at", null)
         .order("date", { ascending: true })
 
-      // 2. Receipts – exclude reversed receipts so they don’t inflate the opening balance
+      // 2. ALL receipts (both posted and reversed) to preserve audit trail
       const { data: allReceipts } = await supabase
         .from("receipts")
         .select("id, amount, receipt_no, date, status")
         .eq("party_id", selectedCustomerId)
-        .eq("status", "posted")                    // only active receipts
         .order("date", { ascending: true })
 
       // 3. Fetch the real opening balance entry via server API
@@ -144,15 +143,30 @@ export default function CustomerLedgerPage() {
 
       for (const rec of allReceipts || []) {
         if (rec.date < startDate || rec.date > endDate) continue
-        periodLines.push({
-          id: `rec-${rec.id}`,
-          entry_no: `REC-${rec.receipt_no}`,
-          date: rec.date,
-          description: `Receipt ${rec.receipt_no}`,
-          debit: 0,
-          credit: rec.amount || 0,
-          running_balance: 0,
-        })
+
+        if (rec.status === 'reversed') {
+          // Reversal entry: debits the customer (increases balance)
+          periodLines.push({
+            id: `rec-rev-${rec.id}`,
+            entry_no: `REC-${rec.receipt_no}`,
+            date: rec.date,
+            description: `Receipt Reversal - ${rec.receipt_no}`,
+            debit: rec.amount || 0,
+            credit: 0,
+            running_balance: 0,
+          })
+        } else {
+          // Normal receipt: credits the customer (decreases balance)
+          periodLines.push({
+            id: `rec-${rec.id}`,
+            entry_no: `REC-${rec.receipt_no}`,
+            date: rec.date,
+            description: `Receipt ${rec.receipt_no}`,
+            debit: 0,
+            credit: rec.amount || 0,
+            running_balance: 0,
+          })
+        }
       }
 
       periodLines.sort((a, b) => a.date.localeCompare(b.date))
@@ -198,7 +212,7 @@ export default function CustomerLedgerPage() {
     if (selectedCustomerId && companyId && customer) fetchLedger()
   }, [selectedCustomerId, companyId, startDate, endDate, customer])
 
-  // Sorting
+  // Sorting (opening line always first)
   const sortedLines = useMemo(() => {
     const list = [...ledgerLines]
     list.sort((a, b) => {
