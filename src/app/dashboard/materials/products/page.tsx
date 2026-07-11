@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { usePlan } from "@/contexts/PlanContext"
-import { Plus, X, Search, Pencil } from "lucide-react"
+import { Plus, X, Search, Pencil, ChevronDown, ChevronRight } from "lucide-react"
 
 const CATEGORIES = [
   { code: "RAW", label: "Raw Material" },
@@ -41,6 +41,7 @@ export default function MaterialsProductsPage() {
   const [search, setSearch] = useState("")
   const [showInactive, setShowInactive] = useState(false)
   const [message, setMessage] = useState("")
+  const [expandedParents, setExpandedParents] = useState<Set<number>>(new Set())
 
   const [showModal, setShowModal] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -182,22 +183,70 @@ export default function MaterialsProductsPage() {
     }
   }
 
-  const parentName = (id: number | null) => {
-    if (!id) return null
-    return products.find(p => p.id === id)?.name || `#${id}`
+  const toggleExpand = (id: number) => {
+    const next = new Set(expandedParents)
+    next.has(id) ? next.delete(id) : next.add(id)
+    setExpandedParents(next)
   }
 
-  const filtered = products.filter(p => {
-    if (!showInactive && p.deleted_at) return false
-    const q = search.toLowerCase()
-    return p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q)
-  })
+  const visibleProducts = products.filter(p => showInactive || !p.deleted_at)
+  const isSearching = search.trim().length > 0
+  const searchQuery = search.toLowerCase()
+
+  const matchesSearch = (p: Product) =>
+    p.name.toLowerCase().includes(searchQuery) || p.code.toLowerCase().includes(searchQuery)
+
+  const childrenOf = (parentId: number) => visibleProducts.filter(p => p.mm_parent_product_id === parentId)
+
+  // Search mode: flat list of everything matching, regardless of hierarchy
+  const searchResults = isSearching ? visibleProducts.filter(matchesSearch) : []
+
+  // Default mode: only top-level (no parent) products, expandable
+  const topLevelProducts = visibleProducts.filter(p => !p.mm_parent_product_id)
 
   // Candidates for "parent" dropdown: same category, not itself, not already a child
   const parentCandidates = products.filter(p =>
     p.mm_category === form.category &&
     p.id !== editingId &&
     !p.mm_parent_product_id
+  )
+
+  const renderProductRow = (p: Product, isChild: boolean, hasChildren: boolean) => (
+    <tr key={p.id}>
+      <td style={{ fontWeight: 600, paddingLeft: isChild ? 28 : 12 }}>
+        {!isChild && hasChildren && (
+          <button className="mp-expand-btn" onClick={() => toggleExpand(p.id)}>
+            {expandedParents.has(p.id) ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+          </button>
+        )}
+        {isChild && <span style={{ color: "var(--text-muted)", marginRight: 4 }}>↳</span>}
+        {p.code}
+      </td>
+      <td>{p.name}</td>
+      <td>{CATEGORIES.find(c => c.code === p.mm_category)?.label || p.mm_category}</td>
+      <td>{p.unit}</td>
+      <td>{p.reorder_level ?? "—"}</td>
+      <td>
+        {p.mm_is_sellable ? (
+          <span className="mp-badge mp-badge-sellable">On Invoices</span>
+        ) : (
+          <span style={{ color: "var(--text-muted)", fontSize: 12 }}>—</span>
+        )}
+      </td>
+      <td>
+        <span className={`mp-badge ${!p.deleted_at ? "mp-badge-active" : "mp-badge-inactive"}`}>
+          {!p.deleted_at ? "Active" : "Inactive"}
+        </span>
+      </td>
+      <td>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button className="mp-btn mp-btn-icon" onClick={() => openEditModal(p)} title="Edit"><Pencil size={12} /></button>
+          <button className="mp-btn" onClick={() => toggleActive(p)}>
+            {!p.deleted_at ? "Deactivate" : "Activate"}
+          </button>
+        </div>
+      </td>
+    </tr>
   )
 
   if (planLoading) {
@@ -226,6 +275,8 @@ export default function MaterialsProductsPage() {
         .mp-btn-primary:hover { background: var(--primary-hover); }
         .mp-btn-icon { padding: 6px; }
 
+        .mp-expand-btn { background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 0 4px 0 0; vertical-align: middle; }
+
         .mp-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
         .mp-search { display: flex; align-items: center; gap: 6px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; flex: 1; min-width: 200px; max-width: 320px; }
         .mp-search input { border: none; background: transparent; outline: none; color: var(--text); font-size: 13px; width: 100%; }
@@ -235,7 +286,6 @@ export default function MaterialsProductsPage() {
         .mp-table th { text-align: left; padding: 10px 12px; font-size: 11px; font-weight: 700; color: var(--text-muted); border-bottom: 2px solid var(--border); text-transform: uppercase; }
         .mp-table td { padding: 10px 12px; font-size: 13px; border-bottom: 1px solid var(--border); }
         .mp-table tr:hover { background: var(--card-hover); }
-        .mp-child-name { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 
         .mp-badge { padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; }
         .mp-badge-active { background: #065F46; color: #A7F3D0; }
@@ -274,6 +324,9 @@ export default function MaterialsProductsPage() {
           <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} />
           Show inactive
         </label>
+        {isSearching && (
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Showing flat search results (parent/child grouping hidden while searching)</span>
+        )}
       </div>
 
       <div className="mp-table-wrap">
@@ -293,43 +346,24 @@ export default function MaterialsProductsPage() {
           <tbody>
             {loading ? (
               <tr><td colSpan={8} style={{ textAlign: "center", padding: 30, color: "var(--text-muted)" }}>Loading…</td></tr>
-            ) : filtered.length === 0 ? (
+            ) : isSearching ? (
+              searchResults.length === 0 ? (
+                <tr><td colSpan={8} style={{ textAlign: "center", padding: 30, color: "var(--text-muted)" }}>No matches.</td></tr>
+              ) : (
+                searchResults.map(p => renderProductRow(p, !!p.mm_parent_product_id, false))
+              )
+            ) : topLevelProducts.length === 0 ? (
               <tr><td colSpan={8} style={{ textAlign: "center", padding: 30, color: "var(--text-muted)" }}>No products yet. Click "Add Product" to create your first one.</td></tr>
             ) : (
-              filtered.map(p => (
-                <tr key={p.id}>
-                  <td style={{ fontWeight: 600 }}>{p.code}</td>
-                  <td>
-                    {p.name}
-                    {p.mm_parent_product_id && (
-                      <div className="mp-child-name">↳ variant of {parentName(p.mm_parent_product_id)}</div>
-                    )}
-                  </td>
-                  <td>{CATEGORIES.find(c => c.code === p.mm_category)?.label || p.mm_category}</td>
-                  <td>{p.unit}</td>
-                  <td>{p.reorder_level ?? "—"}</td>
-                  <td>
-                    {p.mm_is_sellable ? (
-                      <span className="mp-badge mp-badge-sellable">On Invoices</span>
-                    ) : (
-                      <span style={{ color: "var(--text-muted)", fontSize: 12 }}>—</span>
-                    )}
-                  </td>
-                  <td>
-                    <span className={`mp-badge ${!p.deleted_at ? "mp-badge-active" : "mp-badge-inactive"}`}>
-                      {!p.deleted_at ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button className="mp-btn mp-btn-icon" onClick={() => openEditModal(p)} title="Edit"><Pencil size={12} /></button>
-                      <button className="mp-btn" onClick={() => toggleActive(p)}>
-                        {!p.deleted_at ? "Deactivate" : "Activate"}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              topLevelProducts.map(p => {
+                const kids = childrenOf(p.id)
+                return (
+                  <>
+                    {renderProductRow(p, false, kids.length > 0)}
+                    {expandedParents.has(p.id) && kids.map(child => renderProductRow(child, true, false))}
+                  </>
+                )
+              })
             )}
           </tbody>
         </table>
@@ -367,7 +401,7 @@ export default function MaterialsProductsPage() {
               {parentCandidates.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
             <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: -10, marginBottom: 14 }}>
-              Use this for size/packaging variants of the same base material (e.g. "Caustic Soda – 25kg Bag" and "Caustic Soda – 50kg Bag" both under a "Caustic Soda" parent).
+              Use this for size/packaging variants of the same base material (e.g. "Caustic Soda – 25kg Bag" and "Caustic Soda – 50kg Bag" both under a "Caustic Soda" parent). Parents show collapsed by default — click to expand and see their variants.
             </div>
 
             <label className="field-label">Unit of Measure</label>
