@@ -99,7 +99,16 @@ export default function CustomerLedgerPage() {
         .eq("party_id", selectedCustomerId)
         .order("date", { ascending: true })
 
-      // 3. Fetch the real opening balance entry via server API
+      // 3. Fetch reversal journal lines (where source_type = 'receipt_reversal')
+      const { data: reversalLines } = await supabase
+        .from("journal_lines")
+        .select("id, entry_id, debit, credit, source_id")
+        .eq("company_id", companyId)
+        .eq("source_type", "receipt_reversal")
+        .in("source_id", (allReceipts || []).map(r => r.id))
+        .order("entry_id", { ascending: true })
+
+      // 4. Fetch the real opening balance entry via server API
       let openingLine = null
       try {
         const apiRes = await fetch(`/api/customer-ledger/opening-balance?customerId=${selectedCustomerId}`)
@@ -113,7 +122,7 @@ export default function CustomerLedgerPage() {
         }
       } catch (apiErr) {}
 
-      // 4. Build period lines (invoices, returns, receipts)
+      // 5. Build period lines (invoices, returns, receipts, reversal journal lines)
       const periodLines: any[] = []
 
       for (const inv of allInvoices || []) {
@@ -143,20 +152,25 @@ export default function CustomerLedgerPage() {
 
       for (const rec of allReceipts || []) {
         if (rec.date < startDate || rec.date > endDate) continue
-
         if (rec.status === 'reversed') {
-          // Reversal entry: debits the customer (increases balance)
+          // This is a reversed receipt – do not add the original credit here,
+          // because the reversal debit will come from the journal lines.
+          // But we must add the ORIGINAL credit, because the receipt is what gave the customer credit.
+          // However, if the receipt is reversed, we need to show the reversal debit and NOT the original credit?
+          // Actually, the original credit remains in the receipt table with status='reversed'.
+          // The reversal is posted via journal lines. So we want both: original credit from this receipt,
+          // and the reversal debit from the journal lines. So add the credit line here even if status is reversed.
           periodLines.push({
-            id: `rec-rev-${rec.id}`,
+            id: `rec-${rec.id}`,
             entry_no: `REC-${rec.receipt_no}`,
             date: rec.date,
-            description: `Receipt Reversal - ${rec.receipt_no}`,
-            debit: rec.amount || 0,
-            credit: 0,
+            description: `Receipt ${rec.receipt_no}`,
+            debit: 0,
+            credit: rec.amount || 0,
             running_balance: 0,
           })
         } else {
-          // Normal receipt: credits the customer (decreases balance)
+          // posted or edited receipt
           periodLines.push({
             id: `rec-${rec.id}`,
             entry_no: `REC-${rec.receipt_no}`,
@@ -169,9 +183,28 @@ export default function CustomerLedgerPage() {
         }
       }
 
+      // Add reversal journal lines as debit entries
+      if (reversalLines) {
+        for (const revLine of reversalLines) {
+          // revLine.debit will be the reversal amount (AR debit)
+          if (revLine.debit > 0) {
+            const originalReceipt = (allReceipts || []).find(r => r.id === revLine.source_id)
+            periodLines.push({
+              id: `rev-${revLine.entry_id}`,
+              entry_no: `Rev-${originalReceipt?.receipt_no || 'REC'}`,
+              date: new Date().toISOString().split('T')[0], // reversal date = today (or we could get from journal entry)
+              description: `Receipt Reversal - ${originalReceipt?.receipt_no || 'Unknown'}`,
+              debit: revLine.debit,
+              credit: 0,
+              running_balance: 0,
+            })
+          }
+        }
+      }
+
       periodLines.sort((a, b) => a.date.localeCompare(b.date))
 
-      // 5. If no opening line from API, calculate from current balance
+      // 6. If no opening line from API, calculate from current balance
       if (!openingLine) {
         const periodDebits = periodLines.reduce((s: number, l: any) => s + l.debit, 0)
         const periodCredits = periodLines.reduce((s: number, l: any) => s + l.credit, 0)
@@ -190,10 +223,10 @@ export default function CustomerLedgerPage() {
         }
       }
 
-      // 6. Combine: opening line first, then period lines
+      // 7. Combine: opening line first, then period lines
       const allLines: any[] = [openingLine, ...periodLines]
 
-      // 7. Calculate running balance from zero
+      // 8. Calculate running balance from zero
       let running = 0
       for (const line of allLines) {
         running += (line.debit || 0) - (line.credit || 0)
@@ -212,7 +245,7 @@ export default function CustomerLedgerPage() {
     if (selectedCustomerId && companyId && customer) fetchLedger()
   }, [selectedCustomerId, companyId, startDate, endDate, customer])
 
-  // Sorting (opening line always first)
+  // Sorting
   const sortedLines = useMemo(() => {
     const list = [...ledgerLines]
     list.sort((a, b) => {

@@ -81,7 +81,6 @@ export default function ReceiptsPage() {
       .from("receipts")
       .select("*")
       .eq("company_id", companyId)
-      .eq("status", "posted")                     // ← only show active (posted) receipts
       .order(sortField === "customer" ? "party_id" : sortField, { ascending: sortDir === "asc" })
       .then(({ data }) => {
         setReceipts(data || [])
@@ -246,6 +245,7 @@ export default function ReceiptsPage() {
           display: inline-block;
         }
         .badge-reversed { background: rgba(148,163,184,0.15); color: #94a3b8; border: 1px solid rgba(148,163,184,0.3); }
+        .badge-edited { background: rgba(59,130,246,0.15); color: #3b82f6; border: 1px solid rgba(59,130,246,0.3); }
       `}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
@@ -305,11 +305,13 @@ export default function ReceiptsPage() {
                   const cust = customerMap[rec.party_id]
                   const custName = rec.party_id ? (cust?.name || "—") : "🎁 Donation"
                   const isReversed = rec.status === 'reversed'
+                  const isEdited = rec.status === 'edited'
                   return (
                     <tr key={rec.id} style={{ opacity: isReversed ? 0.6 : 1 }}>
                       <td style={tdStyle}>
                         <span style={{ fontWeight: 600, color: "var(--primary)" }}>{rec.receipt_no}</span>
                         {isReversed && <span className="badge badge-reversed" style={{ marginLeft: 6 }}>Reversed</span>}
+                        {isEdited && <span className="badge badge-edited" style={{ marginLeft: 6 }}>Edited</span>}
                       </td>
                       <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{rec.date}</td>
                       <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{custName}</td>
