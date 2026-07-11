@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { Plus, Eye, Edit, Search, ArrowUpDown, ArrowUp, ArrowDown, Undo2 } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
+import { getWhatsAppLink } from "@/lib/whatsapp"
 
 type SortField = "payment_no" | "payment_date" | "supplier" | "amount" | "payment_method"
 type SortDir = "asc" | "desc"
@@ -16,10 +17,8 @@ function SkeletonRow() {
       {[60, 50, 70, 40, 50, 80].map((w, i) => (
         <td key={i} style={{ padding: "12px 16px" }}>
           <div style={{
-            width: `${w}%`,
-            height: 12,
-            background: "var(--bg-soft)",
-            borderRadius: 4,
+            width: `${w}%`, height: 12,
+            background: "var(--bg-soft)", borderRadius: 4,
             animation: "shimmer 1.5s ease-in-out infinite"
           }} />
         </td>
@@ -64,9 +63,7 @@ export default function PaymentsPage() {
       .then(({ data }) => {
         if (data) {
           const map: Record<number, { name: string; phone: string }> = {}
-          data.forEach((s: any) => {
-            map[s.id] = { name: s.name || "", phone: s.phone || "" }
-          })
+          data.forEach((s: any) => { map[s.id] = { name: s.name || "", phone: s.phone || "" } })
           setSupplierMap(map)
         }
       })
@@ -74,10 +71,7 @@ export default function PaymentsPage() {
 
   useEffect(() => {
     if (!role) return
-    if (!canView || !companyId) {
-      setLoading(false)
-      return
-    }
+    if (!canView || !companyId) { setLoading(false); return }
     setLoading(true)
     supabase
       .from("payments")
@@ -90,17 +84,14 @@ export default function PaymentsPage() {
       })
   }, [role, canView, companyId, sortField, sortDir])
 
-  const filtered = search.trim()
-    ? payments.filter((pay) => {
-        const supp = supplierMap[pay.party_id]
-        const suppName = supp?.name || ""
-        return (
-          pay.payment_no?.toLowerCase().includes(search.toLowerCase()) ||
-          suppName.toLowerCase().includes(search.toLowerCase()) ||
-          (pay.reference || "").toLowerCase().includes(search.toLowerCase())
-        )
-      })
-    : payments
+  const filtered = payments.filter((pay) => {
+    if (!search.trim()) return true
+    const supp = supplierMap[pay.party_id]
+    const suppName = supp?.name || ""
+    return pay.payment_no?.toLowerCase().includes(search.toLowerCase()) ||
+           suppName.toLowerCase().includes(search.toLowerCase()) ||
+           (pay.reference || "").toLowerCase().includes(search.toLowerCase())
+  })
 
   const sortedFiltered = [...filtered].sort((a, b) => {
     let valA: any, valB: any
@@ -108,8 +99,7 @@ export default function PaymentsPage() {
       valA = (supplierMap[a.party_id]?.name || "").toLowerCase()
       valB = (supplierMap[b.party_id]?.name || "").toLowerCase()
     } else if (sortField === "amount") {
-      valA = Number(a.amount) || 0
-      valB = Number(b.amount) || 0
+      valA = Number(a.amount) || 0; valB = Number(b.amount) || 0
     } else {
       valA = (a[sortField] || "").toString().toLowerCase()
       valB = (b[sortField] || "").toString().toLowerCase()
@@ -120,19 +110,12 @@ export default function PaymentsPage() {
   })
 
   const totalPayments = sortedFiltered.length
-  const totalAmount = sortedFiltered
-    .filter(p => p.status !== 'reversed')
-    .reduce((s, p) => s + (p.amount || 0), 0)
+  const totalAmount = sortedFiltered.filter(p => p.status !== 'reversed').reduce((s, p) => s + (p.amount || 0), 0)
 
   const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDir(prev => prev === "asc" ? "desc" : "asc")
-    } else {
-      setSortField(field)
-      setSortDir("asc")
-    }
+    if (sortField === field) setSortDir(prev => prev === "asc" ? "desc" : "asc")
+    else { setSortField(field); setSortDir("asc") }
   }
-
   const getSortIcon = (field: SortField) => {
     if (sortField !== field) return <ArrowUpDown size={12} style={{ opacity: 0.5 }} />
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
@@ -140,48 +123,25 @@ export default function PaymentsPage() {
 
   const handleReverse = async (paymentId: number) => {
     if (!window.confirm("Reverse this payment? This will undo all its effects.")) return
-    const { error } = await supabase.rpc('reverse_vendor_payment', {
-      p_payment_id: paymentId,
-      p_company_id: companyId,
-    })
-    if (error) {
-      alert(error.message)
-    } else {
-      setPayments(prev => prev.map(p => p.id === paymentId ? { ...p, status: 'reversed' } : p))
-    }
+    const { error } = await supabase.rpc('reverse_vendor_payment', { p_payment_id: paymentId, p_company_id: companyId })
+    if (error) alert(error.message)
+    else setPayments(prev => prev.map(p => p.id === paymentId ? { ...p, status: 'reversed' } : p))
   }
 
-  const thStyle: React.CSSProperties = {
-    padding: "12px 16px",
-    background: "var(--card-hover)",
-    borderBottom: "1px solid var(--border)",
-    fontSize: 12,
-    fontWeight: 700,
-    textTransform: "uppercase",
-    letterSpacing: "0.04em",
-    color: "var(--text-muted)",
-    whiteSpace: "nowrap",
-    userSelect: "none",
+  const sendWhatsApp = (pay: any) => {
+    const supp = supplierMap[pay.party_id]
+    if (!supp?.phone) { alert("No phone number for this supplier."); return }
+    const msg = `Dear ${supp.name}, your payment ${pay.payment_no} of PKR ${pay.amount?.toLocaleString()} has been recorded.`
+    const link = getWhatsAppLink(supp.phone, msg)
+    if (link) window.open(link, "_blank")
   }
-  const tdStyle: React.CSSProperties = {
-    padding: "12px 16px",
-    borderBottom: "1px solid var(--border)",
-    fontSize: 13,
-    verticalAlign: "middle",
-  }
+
+  const thStyle: React.CSSProperties = { padding: "12px 16px", background: "var(--card-hover)", borderBottom: "1px solid var(--border)", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-muted)", whiteSpace: "nowrap", userSelect: "none" }
+  const tdStyle: React.CSSProperties = { padding: "12px 16px", borderBottom: "1px solid var(--border)", fontSize: 13, verticalAlign: "middle" }
 
   const SortTh = ({ field, children, style }: { field: SortField; children: React.ReactNode; style?: React.CSSProperties }) => (
     <th style={{ ...thStyle, ...style }}>
-      <button
-        onClick={() => handleSort(field)}
-        style={{
-          background: "none", border: "none", cursor: "pointer",
-          font: "inherit", fontSize: 12, fontWeight: 700,
-          textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-muted)",
-          display: "inline-flex", alignItems: "center", gap: 4, padding: 0,
-          whiteSpace: "nowrap",
-        }}
-      >
+      <button onClick={() => handleSort(field)} style={{ background: "none", border: "none", cursor: "pointer", font: "inherit", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-muted)", display: "inline-flex", alignItems: "center", gap: 4, padding: 0, whiteSpace: "nowrap" }}>
         {children} {getSortIcon(field)}
       </button>
     </th>
@@ -193,73 +153,30 @@ export default function PaymentsPage() {
   return (
     <div className="page-wrap" style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        @keyframes shimmer {
-          0%   { opacity: 0.4; }
-          50%  { opacity: 0.8; }
-          100% { opacity: 0.4; }
-        }
+        @keyframes shimmer { 0% { opacity: 0.4; } 50% { opacity: 0.8; } 100% { opacity: 0.4; } }
         .pay-table { width: 100%; border-collapse: collapse; }
         .pay-table tbody tr:last-child td { border-bottom: none; }
         .pay-table tbody tr:hover td { background: var(--card-hover); }
-        .btn {
-          padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
-          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-          background: transparent; border: 1.5px solid var(--border); color: var(--text-muted);
-          transition: all 0.2s;
-        }
+        .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 1.5px solid var(--border); color: var(--text-muted); transition: all 0.2s; }
         .btn:hover { background: var(--card-hover); }
-        .btn-primary {
-          background: var(--primary); color: var(--primary-text); border-color: var(--primary);
-        }
-        .btn-icon {
-          background: transparent; border: 1.5px solid var(--border);
-          color: var(--text-muted); padding: 5px; border-radius: 6px;
-          cursor: pointer; display: inline-flex; align-items: center;
-          justify-content: center; flex-shrink: 0; line-height: 1;
-        }
+        .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+        .btn-icon { background: transparent; border: 1.5px solid var(--border); color: var(--text-muted); padding: 5px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; line-height: 1; }
         .btn-icon:hover { background: var(--card-hover); }
-        .search-input {
-          width: 100%; height: 38px; border: 1.5px solid var(--border);
-          border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px;
-          background: var(--card); color: var(--text); outline: none;
-          box-sizing: border-box;
-        }
+        .search-input { width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px; background: var(--card); color: var(--text); outline: none; box-sizing: border-box; }
         .search-input:focus { border-color: var(--primary); }
-        .summary-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-          gap: 12px; margin-bottom: 20px;
-        }
-        .summary-item {
-          background: var(--card); border: 1px solid var(--border);
-          border-radius: 12px; padding: 16px;
-        }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
-        .card {
-          background: var(--card); border: 1px solid var(--border);
-          border-radius: 12px; overflow: hidden;
-          box-shadow: var(--shadow-sm);
-        }
-        .table-scroll {
-          overflow-x: auto;
-          scrollbar-width: thin;
-          scrollbar-color: var(--border) transparent;
-        }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-sm); }
+        .table-scroll { overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
         .table-scroll::-webkit-scrollbar { height: 4px; }
         .table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
         .pay-table { min-width: 700px; }
-        .badge {
-          padding: 2px 8px; border-radius: 100px; font-size: 11px; font-weight: 600;
-          display: inline-block;
-        }
+        .badge { padding: 2px 8px; border-radius: 100px; font-size: 11px; font-weight: 600; display: inline-block; }
         .badge-reversed { background: rgba(148,163,184,0.15); color: #94a3b8; border: 1px solid rgba(148,163,184,0.3); }
         .badge-edited { background: rgba(59,130,246,0.15); color: #3b82f6; border: 1px solid rgba(59,130,246,0.3); }
-
-        @media (max-width: 480px) {
-          .page-wrap { padding: 12px !important; }
-          .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
-        }
+        @media (max-width: 480px) { .page-wrap { padding: 12px !important; } .summary-grid { grid-template-columns: repeat(2, 1fr) !important; } }
       `}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
@@ -288,12 +205,7 @@ export default function PaymentsPage() {
         <div className="table-scroll">
           <table className="pay-table">
             <colgroup>
-              <col style={{ width: 130 }} />
-              <col style={{ width: 100 }} />
-              <col />
-              <col style={{ width: 120 }} />
-              <col style={{ width: 110 }} />
-              <col style={{ width: 130 }} />
+              <col style={{ width: 130 }} /><col style={{ width: 100 }} /><col /><col style={{ width: 120 }} /><col style={{ width: 110 }} /><col style={{ width: 130 }} />
             </colgroup>
             <thead>
               <tr>
@@ -307,13 +219,9 @@ export default function PaymentsPage() {
             </thead>
             <tbody>
               {loading ? (
-                [1, 2, 3, 4, 5].map(i => <SkeletonRow key={i} />)
+                [1,2,3,4,5].map(i => <SkeletonRow key={i} />)
               ) : sortedFiltered.length === 0 ? (
-                <tr>
-                  <td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>
-                    No payments found.
-                  </td>
-                </tr>
+                <tr><td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>No payments found.</td></tr>
               ) : (
                 sortedFiltered.map((pay) => {
                   const supp = supplierMap[pay.party_id]
@@ -328,12 +236,8 @@ export default function PaymentsPage() {
                         {isEdited && <span className="badge badge-edited" style={{ marginLeft: 6 }}>Edited</span>}
                       </td>
                       <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{pay.payment_date}</td>
-                      <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {suppName}
-                      </td>
-                      <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: isReversed ? "var(--text-muted)" : "#10B981", whiteSpace: "nowrap" }}>
-                        PKR {pay.amount?.toLocaleString()}
-                      </td>
+                      <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{suppName}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: isReversed ? "var(--text-muted)" : "#10B981", whiteSpace: "nowrap" }}>PKR {pay.amount?.toLocaleString()}</td>
                       <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{pay.payment_method || "-"}</td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>
                         <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
@@ -344,9 +248,14 @@ export default function PaymentsPage() {
                               <button className="btn-icon" onClick={() => handleReverse(pay.id)} style={{ color: "#F59E0B" }} title="Reverse"><Undo2 size={13} /></button>
                             </>
                           )}
-                          {isReversed && (
-                            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Reversed</span>
+                          {hasFeature("whatsapp_invoice") && (
+                            <button className="btn-icon" onClick={() => sendWhatsApp(pay)} title="Send via WhatsApp" style={{ color: "#25D366" }}>
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                              </svg>
+                            </button>
                           )}
+                          {isReversed && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Reversed</span>}
                         </div>
                       </td>
                     </tr>
