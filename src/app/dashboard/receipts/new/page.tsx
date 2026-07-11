@@ -267,7 +267,7 @@ export default function NewReceiptPage() {
   const totalAmount = Number(receiptAmount || 0)
   const unallocated = totalAmount - totalAllocated
 
-  // ── Save / Update using RPC (optimized) ──
+  // ── Save / Update ──
   const handleSubmit = async () => {
     if (!companyId) { setError("Company not loaded"); return }
     if (!selectedBankId) { setError("Please select a bank account"); return }
@@ -283,7 +283,6 @@ export default function NewReceiptPage() {
 
     setLoading(true); setError("")
 
-    // Build allocations array for RPC (excluding opening)
     const allocationsArray = Object.entries(allocations)
       .filter(([key, amount]) => key !== "opening" && amount > 0)
       .map(([invId, amount]) => ({
@@ -294,58 +293,61 @@ export default function NewReceiptPage() {
     const openingAllocAmount = allocations["opening"] || 0
 
     try {
-      // ── Call the RPC instead of the API ──
-      const { data, error: rpcError } = await supabase.rpc('create_receipt_transaction', {
-        p_company_id: companyId,
-        p_party_id: customerId,
-        p_receipt_date: receiptDate,
-        p_amount: totalAmount,
-        p_bank_account_id: selectedBankId,
-        p_income_account_id: isDonation ? selectedIncomeAccountId : null,
-        p_reference: reference || null,
-        p_notes: notes || null,
-        p_allocations: allocationsArray,
-        p_user_email: 'system',
-        p_is_donation: isDonation,
-        p_opening_allocation: openingAllocAmount,
-      })
-
-      if (rpcError) {
-        setError(rpcError.message || "Failed to save receipt")
-        setLoading(false)
-        return
-      }
-
-      if (!data || !data.success) {
-        setError(data?.error || "Failed to save receipt")
-        setLoading(false)
-        return
-      }
-
-      setFlash(`✅ Receipt ${editId ? "updated" : "saved"} successfully!`)
-
       if (editId) {
+        // Edit: call update RPC
+        const { data, error: rpcError } = await supabase.rpc('update_receipt_transaction', {
+          p_receipt_id: parseInt(editId),
+          p_company_id: companyId,
+          p_party_id: customerId,
+          p_receipt_date: receiptDate,
+          p_amount: totalAmount,
+          p_bank_account_id: selectedBankId,
+          p_income_account_id: isDonation ? selectedIncomeAccountId : null,
+          p_reference: reference || null,
+          p_notes: notes || null,
+          p_allocations: allocationsArray,
+          p_user_email: 'system',
+          p_is_donation: isDonation,
+          p_opening_allocation: openingAllocAmount,
+        })
+        if (rpcError || !data?.success) {
+          setError(rpcError?.message || data?.error || "Update failed")
+          setLoading(false)
+          return
+        }
+        setFlash("✅ Receipt updated successfully!")
         setTimeout(() => router.push("/dashboard/receipts"), 1500)
       } else {
+        // Create: call create RPC (existing)
+        const { data, error: rpcError } = await supabase.rpc('create_receipt_transaction', {
+          p_company_id: companyId,
+          p_party_id: customerId,
+          p_receipt_date: receiptDate,
+          p_amount: totalAmount,
+          p_bank_account_id: selectedBankId,
+          p_income_account_id: isDonation ? selectedIncomeAccountId : null,
+          p_reference: reference || null,
+          p_notes: notes || null,
+          p_allocations: allocationsArray,
+          p_user_email: 'system',
+          p_is_donation: isDonation,
+          p_opening_allocation: openingAllocAmount,
+        })
+        if (rpcError || !data?.success) {
+          setError(rpcError?.message || data?.error || "Failed to save")
+          setLoading(false)
+          return
+        }
+        setFlash("✅ Receipt saved successfully!")
         // Reset form
-        setCustomerId(null)
-        setSelectedCustomer(null)
-        setCustomerSearch("")
-        setShowCustomerList(false)
-        setSelectedBankId(null)
-        setSelectedIncomeAccountId(null)
-        setIsDonation(false)
-        setInvoices([])
-        setAllocations({})
-        setReceiptAmount("")
-        setNotes("")
-        setReference("")
+        setCustomerId(null); setSelectedCustomer(null); setCustomerSearch(""); setShowCustomerList(false)
+        setSelectedBankId(null); setSelectedIncomeAccountId(null); setIsDonation(false)
+        setInvoices([]); setAllocations({}); setReceiptAmount(""); setNotes(""); setReference("")
         setCustomerOpeningBalance(0)
         setLoading(false)
         setTimeout(() => loadCustomers(), 500)
       }
       setTimeout(() => setFlash(null), 4000)
-
     } catch (err: any) {
       setError(err.message || "Network error")
       setLoading(false)

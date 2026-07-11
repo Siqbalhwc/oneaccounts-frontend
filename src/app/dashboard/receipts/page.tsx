@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { Plus, Eye, Edit, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { Plus, Eye, Edit, Search, ArrowUpDown, ArrowUp, ArrowDown, Undo2 } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 
@@ -81,6 +81,7 @@ export default function ReceiptsPage() {
       .from("receipts")
       .select("*")
       .eq("company_id", companyId)
+      .is("deleted_at", null)                    // exclude soft‑deleted
       .order(sortField === "customer" ? "party_id" : sortField, { ascending: sortDir === "asc" })
       .then(({ data }) => {
         setReceipts(data || [])
@@ -115,7 +116,9 @@ export default function ReceiptsPage() {
   })
 
   const totalReceipts = sortedFiltered.length
-  const totalAmount = sortedFiltered.reduce((s, r) => s + (r.amount || 0), 0)
+  const totalAmount = sortedFiltered
+    .filter(r => r.status !== 'reversed')
+    .reduce((s, r) => s + (r.amount || 0), 0)
 
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDir(prev => prev === "asc" ? "desc" : "asc")
@@ -127,10 +130,17 @@ export default function ReceiptsPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("Delete this receipt? This will reverse all its accounting entries.")) return
-    await fetch(`/api/receipts?id=${id}`, { method: "DELETE" })
-    setReceipts(prev => prev.filter(r => r.id !== id))
+  const handleReverse = async (receiptId: number) => {
+    if (!window.confirm("Reverse this receipt? This will undo all its effects.")) return
+    const { error } = await supabase.rpc('reverse_receipt_transaction', {
+      p_receipt_id: receiptId,
+      p_company_id: companyId,
+    })
+    if (error) {
+      alert(error.message)
+    } else {
+      setReceipts(prev => prev.map(r => r.id === receiptId ? { ...r, status: 'reversed' } : r))
+    }
   }
 
   const thStyle: React.CSSProperties = {
@@ -184,15 +194,14 @@ export default function ReceiptsPage() {
         .rec-table tbody tr:last-child td { border-bottom: none; }
         .rec-table tbody tr:hover td { background: var(--card-hover); }
         .btn {
-          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+          padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
           cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
-          color: white; border: none; transition: all 0.2s;
+          background: transparent; border: 1.5px solid var(--border); color: var(--text-muted);
+          transition: all 0.2s;
         }
-        .btn:hover {
-          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
-          transform: translateY(-1px);
-          box-shadow: 0 6px 20px rgba(7,19,82,0.45);
+        .btn:hover { background: var(--card-hover); }
+        .btn-primary {
+          background: var(--primary); color: var(--primary-text); border-color: var(--primary);
         }
         .btn-icon {
           background: transparent; border: 1.5px solid var(--border);
@@ -226,18 +235,17 @@ export default function ReceiptsPage() {
         }
         .table-scroll {
           overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
           scrollbar-width: thin;
           scrollbar-color: var(--border) transparent;
         }
         .table-scroll::-webkit-scrollbar { height: 4px; }
         .table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
         .rec-table { min-width: 700px; }
-
-        @media (max-width: 480px) {
-          .page-wrap { padding: 12px !important; }
-          .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        .badge {
+          padding: 2px 8px; border-radius: 100px; font-size: 11px; font-weight: 600;
+          display: inline-block;
         }
+        .badge-reversed { background: rgba(148,163,184,0.15); color: #94a3b8; border: 1px solid rgba(148,163,184,0.3); }
       `}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
@@ -246,7 +254,7 @@ export default function ReceiptsPage() {
           <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>{canEdit ? "Record customer payments" : "View receipts"}</p>
         </div>
         {canEdit && (
-          <button className="btn" onClick={() => router.push("/dashboard/receipts/new")}>
+          <button className="btn btn-primary" onClick={() => router.push("/dashboard/receipts/new")}>
             <Plus size={16} /> New Receipt
           </button>
         )}
@@ -254,7 +262,7 @@ export default function ReceiptsPage() {
 
       <div className="summary-grid">
         <div className="summary-item"><div className="summary-label">Total Receipts</div><div className="summary-value">{totalReceipts}</div></div>
-        <div className="summary-item"><div className="summary-label">Total Amount</div><div className="summary-value" style={{ color: "#10B981" }}>PKR {totalAmount.toLocaleString()}</div></div>
+        <div className="summary-item"><div className="summary-label">Total Amount (excl. reversed)</div><div className="summary-value" style={{ color: "#10B981" }}>PKR {totalAmount.toLocaleString()}</div></div>
       </div>
 
       <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
@@ -296,18 +304,29 @@ export default function ReceiptsPage() {
                 sortedFiltered.map((rec) => {
                   const cust = customerMap[rec.party_id]
                   const custName = rec.party_id ? (cust?.name || "—") : "🎁 Donation"
+                  const isReversed = rec.status === 'reversed'
                   return (
-                    <tr key={rec.id}>
-                      <td style={tdStyle}><span style={{ fontWeight: 600, color: "var(--primary)" }}>{rec.receipt_no}</span></td>
+                    <tr key={rec.id} style={{ opacity: isReversed ? 0.6 : 1 }}>
+                      <td style={tdStyle}>
+                        <span style={{ fontWeight: 600, color: "var(--primary)" }}>{rec.receipt_no}</span>
+                        {isReversed && <span className="badge badge-reversed" style={{ marginLeft: 6 }}>Reversed</span>}
+                      </td>
                       <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{rec.date}</td>
                       <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{custName}</td>
-                      <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: "#10B981", whiteSpace: "nowrap" }}>PKR {rec.amount?.toLocaleString()}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: isReversed ? "var(--text-muted)" : "#10B981", whiteSpace: "nowrap" }}>PKR {rec.amount?.toLocaleString()}</td>
                       <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{rec.payment_method || "—"}</td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>
                         <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
                           <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/${rec.id}`)} title="View"><Eye size={13} /></button>
-                          {canEdit && <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/new?id=${rec.id}`)} title="Edit"><Edit size={13} /></button>}
-                          {canEdit && <button className="btn-icon" onClick={() => handleDelete(rec.id)} style={{ color: "#EF4444" }} title="Delete"><Trash2 size={13} /></button>}
+                          {canEdit && !isReversed && (
+                            <>
+                              <button className="btn-icon" onClick={() => router.push(`/dashboard/receipts/new?id=${rec.id}`)} title="Edit"><Edit size={13} /></button>
+                              <button className="btn-icon" onClick={() => handleReverse(rec.id)} style={{ color: "#F59E0B" }} title="Reverse"><Undo2 size={13} /></button>
+                            </>
+                          )}
+                          {isReversed && (
+                            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Reversed</span>
+                          )}
                         </div>
                       </td>
                     </tr>
