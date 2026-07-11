@@ -83,7 +83,16 @@ export default function CustomerLedgerPage() {
     setErrorMsg("")
 
     try {
-      // 1. Sale invoices & returns within period
+      // 1. Find the AR account for this company
+      const { data: arAccount } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("code", "1100")
+        .single()
+
+      // 2. Sale invoices & returns for this customer — ALL of them, no date filter here.
+      //    We need pre-startDate rows to compute a correct opening balance.
       const { data: allInvoices } = await supabase
         .from("invoices")
         .select("id, total, invoice_no, date, type")
@@ -92,135 +101,105 @@ export default function CustomerLedgerPage() {
         .is("deleted_at", null)
         .order("date", { ascending: true })
 
-      // 2. ALL receipts (both posted and reversed) to preserve audit trail
-      const { data: allReceipts } = await supabase
+      // 3. Every receipt ID ever created for this customer (id + receipt_no only —
+      //    the receipts table gets overwritten in place on edit, so we don't trust
+      //    amount/date/status on it for history)
+      const { data: customerReceipts } = await supabase
         .from("receipts")
-        .select("id, amount, receipt_no, date, status")
+        .select("id, receipt_no")
         .eq("party_id", selectedCustomerId)
-        .order("date", { ascending: true })
 
-      // 3. Fetch reversal journal lines (where source_type = 'receipt_reversal')
-      const { data: reversalLines } = await supabase
-        .from("journal_lines")
-        .select("id, entry_id, debit, credit, source_id")
-        .eq("company_id", companyId)
-        .eq("source_type", "receipt_reversal")
-        .in("source_id", (allReceipts || []).map(r => r.id))
-        .order("entry_id", { ascending: true })
+      const receiptIds = (customerReceipts || []).map(r => r.id)
+      const receiptNoById = new Map((customerReceipts || []).map(r => [r.id, r.receipt_no]))
 
-      // 4. Fetch the real opening balance entry via server API
-      let openingLine = null
-      try {
-        const apiRes = await fetch(`/api/customer-ledger/opening-balance?customerId=${selectedCustomerId}`)
-        const apiData = await apiRes.json()
-        if (apiData.entry) {
-          openingLine = {
-            ...apiData.entry,
-            running_balance: 0,
-            isOpening: true,
-          }
-        }
-      } catch (apiErr) {}
+      // 4. EVERY journal line ever posted to AR for those receipts — original posting,
+      //    reversal, and any re-posted edit — each with its real date. No date filter;
+      //    we bucket them into opening vs period below.
+      const { data: receiptJournalLines } = arAccount && receiptIds.length
+        ? await supabase
+            .from("journal_lines")
+            .select(`
+              id, debit, credit, entry_id, source_type, source_id,
+              journal_entries ( date, description, entry_no )
+            `)
+            .eq("company_id", companyId)
+            .eq("account_id", arAccount.id)
+            .in("source_type", ["receipt", "receipt_reversal"])
+            .in("source_id", receiptIds)
+            .order("entry_id", { ascending: true })
+        : { data: [] as any[] }
 
-      // 5. Build period lines (invoices, returns, receipts, reversal journal lines)
+      // 5. Walk every line once, bucketing into "opening" (before startDate) or
+      //    "period" (within [startDate, endDate]). Anything after endDate is dropped.
       const periodLines: any[] = []
+      let openingDebit = 0
+      let openingCredit = 0
 
       for (const inv of allInvoices || []) {
-        if (inv.date < startDate || inv.date > endDate) continue
-        if (inv.type === "sale") {
-          periodLines.push({
-            id: `inv-${inv.id}`,
-            entry_no: `INV-${inv.invoice_no}`,
-            date: inv.date,
-            description: `Sales Invoice ${inv.invoice_no}`,
-            debit: inv.total || 0,
-            credit: 0,
-            running_balance: 0,
-          })
-        } else if (inv.type === "sale_return") {
-          periodLines.push({
-            id: `ret-${inv.id}`,
-            entry_no: `SR-${inv.invoice_no}`,
-            date: inv.date,
-            description: `Sales Return ${inv.invoice_no}`,
-            debit: 0,
-            credit: inv.total || 0,
-            running_balance: 0,
-          })
+        const debit = inv.type === "sale" ? (inv.total || 0) : 0
+        const credit = inv.type === "sale_return" ? (inv.total || 0) : 0
+
+        if (inv.date < startDate) {
+          openingDebit += debit
+          openingCredit += credit
+          continue
         }
+        if (inv.date > endDate) continue
+
+        periodLines.push({
+          id: inv.type === "sale" ? `inv-${inv.id}` : `ret-${inv.id}`,
+          entry_no: inv.type === "sale" ? `INV-${inv.invoice_no}` : `SR-${inv.invoice_no}`,
+          date: inv.date,
+          description: inv.type === "sale" ? `Sales Invoice ${inv.invoice_no}` : `Sales Return ${inv.invoice_no}`,
+          debit,
+          credit,
+          running_balance: 0,
+        })
       }
 
-      for (const rec of allReceipts || []) {
-        if (rec.date < startDate || rec.date > endDate) continue
-        if (rec.status === 'reversed') {
-          // This is a reversed receipt – do not add the original credit here,
-          // because the reversal debit will come from the journal lines.
-          // But we must add the ORIGINAL credit, because the receipt is what gave the customer credit.
-          // However, if the receipt is reversed, we need to show the reversal debit and NOT the original credit?
-          // Actually, the original credit remains in the receipt table with status='reversed'.
-          // The reversal is posted via journal lines. So we want both: original credit from this receipt,
-          // and the reversal debit from the journal lines. So add the credit line here even if status is reversed.
-          periodLines.push({
-            id: `rec-${rec.id}`,
-            entry_no: `REC-${rec.receipt_no}`,
-            date: rec.date,
-            description: `Receipt ${rec.receipt_no}`,
-            debit: 0,
-            credit: rec.amount || 0,
-            running_balance: 0,
-          })
-        } else {
-          // posted or edited receipt
-          periodLines.push({
-            id: `rec-${rec.id}`,
-            entry_no: `REC-${rec.receipt_no}`,
-            date: rec.date,
-            description: `Receipt ${rec.receipt_no}`,
-            debit: 0,
-            credit: rec.amount || 0,
-            running_balance: 0,
-          })
-        }
-      }
+      for (const line of receiptJournalLines || []) {
+        const je = (line as any).journal_entries
+        const lineDate: string | undefined = je?.date
+        if (!lineDate) continue
 
-      // Add reversal journal lines as debit entries
-      if (reversalLines) {
-        for (const revLine of reversalLines) {
-          // revLine.debit will be the reversal amount (AR debit)
-          if (revLine.debit > 0) {
-            const originalReceipt = (allReceipts || []).find(r => r.id === revLine.source_id)
-            periodLines.push({
-              id: `rev-${revLine.entry_id}`,
-              entry_no: `Rev-${originalReceipt?.receipt_no || 'REC'}`,
-              date: new Date().toISOString().split('T')[0], // reversal date = today (or we could get from journal entry)
-              description: `Receipt Reversal - ${originalReceipt?.receipt_no || 'Unknown'}`,
-              debit: revLine.debit,
-              credit: 0,
-              running_balance: 0,
-            })
-          }
+        const debit = line.debit || 0
+        const credit = line.credit || 0
+
+        if (lineDate < startDate) {
+          openingDebit += debit
+          openingCredit += credit
+          continue
         }
+        if (lineDate > endDate) continue
+
+        const receiptNo = receiptNoById.get(line.source_id) || "REC"
+        const isReversal = line.source_type === "receipt_reversal"
+
+        periodLines.push({
+          id: `rec-${line.id}`,
+          entry_no: isReversal ? `Rev-${receiptNo}` : `REC-${receiptNo}`,
+          date: lineDate,
+          description: isReversal ? `Receipt Reversal - ${receiptNo}` : `Receipt ${receiptNo}`,
+          debit,
+          credit,
+          running_balance: 0,
+        })
       }
 
       periodLines.sort((a, b) => a.date.localeCompare(b.date))
 
-      // 6. If no opening line from API, calculate from current balance
-      if (!openingLine) {
-        const periodDebits = periodLines.reduce((s: number, l: any) => s + l.debit, 0)
-        const periodCredits = periodLines.reduce((s: number, l: any) => s + l.credit, 0)
-        const currentBalance = Number(customer.balance || 0)
-        const openingBalance = currentBalance - periodDebits + periodCredits
-
-        openingLine = {
-          id: "opening-calc",
-          entry_no: "",
-          date: startDate,
-          description: "Opening Balance",
-          debit: openingBalance > 0 ? openingBalance : 0,
-          credit: openingBalance < 0 ? -openingBalance : 0,
-          running_balance: 0,
-          isOpening: true,
-        }
+      // 6. Opening balance = net of every AR line dated strictly before startDate.
+      //    No dependency on customer.balance or "today" — correct for any date range.
+      const openingNet = openingDebit - openingCredit
+      const openingLine = {
+        id: "opening-calc",
+        entry_no: "",
+        date: startDate,
+        description: "Opening Balance",
+        debit: openingNet > 0 ? openingNet : 0,
+        credit: openingNet < 0 ? -openingNet : 0,
+        running_balance: 0,
+        isOpening: true,
       }
 
       // 7. Combine: opening line first, then period lines
