@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js"
 
 const FEATURE_CODES = [
   "inventory",
@@ -133,7 +134,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   // the splash screen again — that was the cause of the constant
   // "Loading your workspace..." flicker and the state loss on tab switch.
   useEffect(() => {
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
       if (event === "SIGNED_OUT") {
         setFeatures([])
         loadedForUserIdRef.current = null
