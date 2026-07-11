@@ -92,11 +92,12 @@ export default function CustomerLedgerPage() {
         .is("deleted_at", null)
         .order("date", { ascending: true })
 
-      // 2. Receipts within period
+      // 2. Receipts – exclude reversed receipts so they don’t inflate the opening balance
       const { data: allReceipts } = await supabase
         .from("receipts")
-        .select("id, amount, receipt_no, date")
+        .select("id, amount, receipt_no, date, status")
         .eq("party_id", selectedCustomerId)
+        .eq("status", "posted")                    // only active receipts
         .order("date", { ascending: true })
 
       // 3. Fetch the real opening balance entry via server API
@@ -267,7 +268,6 @@ export default function CustomerLedgerPage() {
         .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
 
-        /* ── Entry # column widened to 170px, all cells aligned with headers ── */
         .ledger-header {
           display: grid;
           grid-template-columns: 90px 170px 1fr 140px 140px 160px;
@@ -298,16 +298,14 @@ export default function CustomerLedgerPage() {
         .ledger-row:last-child { border-bottom: none; }
         .opening-row { background: var(--bg-soft); font-weight: 600; }
 
-        /* Every cell inside rows gets ellipsis + the same padding as the header buttons */
         .ledger-row span {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          display: block; /* ensures span fills grid cell */
+          display: block;
           box-sizing: border-box;
         }
 
-        /* Header sort buttons – match padding of row cells */
         .sort-btn {
           background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
           display: flex; align-items: center; gap: 4px; padding: 0;
@@ -334,7 +332,6 @@ export default function CustomerLedgerPage() {
         }
         .customer-select:focus { border-color: var(--primary); }
 
-        /* ── Mobile: keep responsiveness but adjust Entry # width ── */
         @media (max-width: 640px) {
           .ledger-header, .ledger-row {
             grid-template-columns: 70px 120px 1fr 100px 100px 120px;
