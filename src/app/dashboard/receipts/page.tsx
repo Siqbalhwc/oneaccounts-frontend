@@ -81,7 +81,7 @@ export default function ReceiptsPage() {
       .from("receipts")
       .select("*")
       .eq("company_id", companyId)
-      .is("deleted_at", null)                    // exclude soft‑deleted
+      .eq("status", "posted")                     // ← only show active (posted) receipts
       .order(sortField === "customer" ? "party_id" : sortField, { ascending: sortDir === "asc" })
       .then(({ data }) => {
         setReceipts(data || [])
