@@ -26,7 +26,15 @@ export default function NewAssetPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  const { companyId, userEmail } = useCompany()
+  const { companyId } = useCompany()
+  const [userEmail, setUserEmail] = useState("system")
+
+  // ── Fetch user email once ────────────────────────────
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user?.email) setUserEmail(user.email)
+    })
+  }, [])
 
   // ── Master data ────────────────────────────────────
   const [accounts,    setAccounts]    = useState<any[]>([])
@@ -53,7 +61,7 @@ export default function NewAssetPage() {
 
   const [saving,          setSaving]          = useState(false)
   const [error,           setError]           = useState("")
-  const [savedAsset,      setSavedAsset]      = useState<any>(null)   // { asset_no, asset_id }
+  const [savedAsset,      setSavedAsset]      = useState<any>(null)
 
   const [showAdvanced,    setShowAdvanced]    = useState(false)
 
@@ -115,7 +123,7 @@ export default function NewAssetPage() {
 
   // ── Submit handler ─────────────────────────────────
   const handleSubmit = async () => {
-    if (saving) return    // guard against double clicks
+    if (saving) return
 
     const validationError = validate()
     if (validationError) { setError(validationError); return }
@@ -139,7 +147,7 @@ export default function NewAssetPage() {
       p_credit_account_id:       creditAcctId ? parseInt(creditAcctId) : null,
       p_notes:                   notes,
       p_source_type:             sourceType,
-      p_user_email:              userEmail || "system",
+      p_user_email:              userEmail,
     })
 
     if (rpcError) {
@@ -154,12 +162,11 @@ export default function NewAssetPage() {
       return
     }
 
-    // Success – show completion card
     setSavedAsset({ asset_no: data.asset_no, asset_id: data.asset_id })
     setSaving(false)
   }
 
-  // ── Date formatter for summary ─────────────────────
+  // ── Date formatter ─────────────────────────────────
   const fmtDate = (iso: string) => {
     if (!iso) return "—"
     const d = new Date(iso)
@@ -171,7 +178,7 @@ export default function NewAssetPage() {
     return <div style={{ display:"flex", alignItems:"center", justifyContent:"center", minHeight:"60vh", color:"var(--text-muted)", fontSize:14 }}>Loading master data…</div>
   }
 
-  // ── If saved, show success card ────────────────────
+  // ── Success card ────────────────────────────────────
   if (savedAsset) {
     return (
       <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"60vh", gap:20, padding:24, background:"var(--bg)", color:"var(--text)", fontFamily:"'Inter', sans-serif" }}>
@@ -188,7 +195,6 @@ export default function NewAssetPage() {
           <button
             className="btn"
             onClick={() => {
-              // Reset form to create another
               setSavedAsset(null)
               setName(""); setCategory(""); setOtherCategory("")
               setCostPrice(""); setLifeMonths("60"); setSalvageValue("0")
@@ -208,6 +214,7 @@ export default function NewAssetPage() {
     )
   }
 
+  // ── Main form ──────────────────────────────────────
   return (
     <div style={{ padding:24, background:"var(--bg)", minHeight:"100vh", fontFamily:"'Inter', sans-serif", color:"var(--text)" }}>
       <style>{`
