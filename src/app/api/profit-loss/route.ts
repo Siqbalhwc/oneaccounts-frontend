@@ -28,13 +28,12 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const startDate = searchParams.get('startDate')
   const endDate   = searchParams.get('endDate')
-  const projectId = searchParams.get('projectId')  // optional
+  const projectId = searchParams.get('projectId')
 
   if (!startDate || !endDate) {
     return NextResponse.json({ error: 'Missing startDate or endDate' }, { status: 400 })
   }
 
-  // ── 1. Fetch all Revenue/Expense accounts for the company ──────────
   const { data: accounts, error: acctErr } = await supabase
     .from('accounts')
     .select('id, code, name, type')
@@ -44,12 +43,12 @@ export async function GET(request: NextRequest) {
 
   if (acctErr) return NextResponse.json({ error: acctErr.message }, { status: 500 })
 
-  // ── 2. Fetch journal lines (with project filter if provided) ────────
   let linesQuery = supabase
     .from('journal_lines')
-    .select('account_id, debit, credit, journal_entries!inner(date)')
+    .select('account_id, debit, credit, journal_entries!inner(date, deleted_at)')
     .gte('journal_entries.date', startDate)
     .lte('journal_entries.date', endDate)
+    .is('journal_entries.deleted_at', null)              // ← exclude soft‑deleted entries
 
   if (projectId) {
     linesQuery = linesQuery.eq('project_id', projectId)
@@ -59,14 +58,12 @@ export async function GET(request: NextRequest) {
 
   if (linesErr) return NextResponse.json({ error: linesErr.message }, { status: 500 })
 
-  // ── 3. Aggregate net (credit - debit) per account ──────────────────
   const netMap: Record<number, number> = {}
   ;(lines || []).forEach((l: any) => {
     const net = (l.credit || 0) - (l.debit || 0)
     netMap[l.account_id] = (netMap[l.account_id] || 0) + net
   })
 
-  // ── 4. Build result rows (every account, even with 0 balance) ──────
   const result = accounts.map(a => ({
     account_id: a.id,
     code: a.code,
