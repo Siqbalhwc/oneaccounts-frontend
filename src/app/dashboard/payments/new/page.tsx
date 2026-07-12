@@ -1,34 +1,20 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Search, X, CheckCircle, RefreshCw } from "lucide-react"
 
-// ── WHT math helpers ──────────────────────────────────────────────
-// A bill carries ONE flat WHT rate (set at invoice time). At payment time we
-// either (a) auto-fill the NET amount that fully settles the bill, or
-// (b) let the user type a NET amount and back-solve the gross allocation.
-//
-//   net  = gross - wht                = gross * (1 - rate/100)
-//   gross = net / (1 - rate/100)
-//   wht   = gross - net  (rounded the same way the backend rounds it)
-
+// ── WHT math helpers ──────────────────────────────────────
 function whtFromGross(gross: number, rate: number) {
   return Math.round(gross * (rate / 100))
 }
-
 function netFromGross(gross: number, rate: number) {
   return gross - whtFromGross(gross, rate)
 }
-
 function grossFromNet(net: number, rate: number) {
   if (rate <= 0) return net
-  // First pass estimate, then nudge so netFromGross(gross) reconciles exactly
-  // with what the backend will compute (avoids 1-rupee drift from rounding).
   let gross = Math.round(net / (1 - rate / 100))
-  // Correct rounding drift: adjust gross by ±1 until net matches exactly,
-  // bounded so we never loop more than a couple of rupees either side.
   for (let i = 0; i < 3; i++) {
     const impliedNet = netFromGross(gross, rate)
     if (impliedNet === net) break
@@ -39,6 +25,9 @@ function grossFromNet(net: number, rate: number) {
 
 export default function NewPaymentPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const editId = searchParams.get("id")   // null for new, string for edit
+
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -61,8 +50,6 @@ export default function NewPaymentPage() {
   const [selectedExpenseAccountId, setSelectedExpenseAccountId] = useState<number | null>(null)
 
   const [bills, setBills] = useState<any[]>([])
-  // allocations now store the NET amount the user wants to pay against each bill.
-  // Gross + WHT are always derived from this via grossFromNet().
   const [netAllocations, setNetAllocations] = useState<Record<string, number>>({})
 
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split("T")[0])
@@ -75,6 +62,7 @@ export default function NewPaymentPage() {
 
   const [supplierOpeningBalance, setSupplierOpeningBalance] = useState(0)
 
+  // ── Load company / master data ──────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -87,7 +75,7 @@ export default function NewPaymentPage() {
     if (!companyId) return
     setRefreshingSuppliers(true)
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("suppliers")
         .select("id, code, name, phone, balance, opening_balance")
         .eq("company_id", companyId)
@@ -102,11 +90,8 @@ export default function NewPaymentPage() {
           }
         }
       }
-    } catch (err) {
-      console.error("Refresh failed", err)
-    } finally {
-      setRefreshingSuppliers(false)
-    }
+    } catch (err) { console.error("Refresh failed", err) }
+    finally { setRefreshingSuppliers(false) }
   }
 
   useEffect(() => {
@@ -120,6 +105,79 @@ export default function NewPaymentPage() {
       .then(r => r.data && setExpenseAccounts(r.data))
   }, [companyId])
 
+  // ── Load existing payment data when editing ──────────
+  useEffect(() => {
+    if (!editId || !companyId) return
+
+    const loadExisting = async () => {
+      const { data: payment, error: payErr } = await supabase
+        .from("payments")
+        .select("*")
+        .eq("id", editId)
+        .eq("company_id", companyId)
+        .single()
+
+      if (payErr || !payment) return
+
+      setSupplierId(payment.party_id)
+      setPaymentDate(payment.payment_date)
+      setPaymentAmount(payment.amount)
+      setNotes(payment.notes || "")
+      setReference(payment.reference || "")
+      setSelectedBankId(payment.bank_account_id)
+      setIsDonation(!!payment.expense_account_id)
+      setSelectedExpenseAccountId(payment.expense_account_id || null)
+
+      if (payment.party_id) {
+        const { data: supp } = await supabase
+          .from("suppliers")
+          .select("id, code, name, phone, balance, opening_balance")
+          .eq("id", payment.party_id)
+          .single()
+        if (supp) {
+          setSelectedSupplier(supp)
+          setSupplierSearch(supp.name)
+          setSupplierOpeningBalance(supp.opening_balance || 0)
+        }
+      }
+
+      // Load allocations
+      const { data: allocs } = await supabase
+        .from("payment_allocations")
+        .select("invoice_id, allocated_amount")
+        .eq("payment_id", editId)
+        .eq("company_id", companyId)
+
+      if (allocs) {
+        const netMap: Record<string, number> = {}
+        for (const a of allocs) {
+          const { data: bill } = await supabase
+            .from("invoices")
+            .select("id, total, paid, invoice_no, date, due_date")
+            .eq("id", a.invoice_id)
+            .single()
+
+          if (!bill) continue
+
+          const { data: wht } = await supabase
+            .from("bill_withholding")
+            .select("wht_rate")
+            .eq("bill_id", a.invoice_id)
+            .maybeSingle()
+
+          const rate = wht?.wht_rate || 0
+          const gross = a.allocated_amount
+          const net = netFromGross(gross, rate)
+          netMap[String(a.invoice_id)] = net
+        }
+        setNetAllocations(prev => ({ ...prev, ...netMap }))
+      }
+    }
+
+    loadExisting()
+  }, [editId, companyId])
+
+  // ── Fetch bills when supplier is selected ─────────────
   useEffect(() => {
     if (!companyId || !supplierId || isDonation) {
       setBills([])
@@ -130,7 +188,6 @@ export default function NewPaymentPage() {
       })
       return
     }
-    // Fetch unpaid/partial bills + their WHT data (rate stored at invoice time)
     supabase.from("invoices")
       .select("id, invoice_no, date, due_date, total, paid, status")
       .eq("company_id", companyId).eq("party_id", supplierId)
@@ -147,9 +204,7 @@ export default function NewPaymentPage() {
           .eq("company_id", companyId)
 
         const whtMap: Record<number, any> = {}
-        if (whtData) {
-          whtData.forEach((w: any) => { whtMap[w.bill_id] = w })
-        }
+        if (whtData) { whtData.forEach((w: any) => { whtMap[w.bill_id] = w }) }
 
         const enriched = invs.map(inv => ({
           ...inv,
@@ -164,6 +219,7 @@ export default function NewPaymentPage() {
       })
   }, [companyId, supplierId, isDonation])
 
+  // ── Supplier search & click away ─────────────────────
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (supplierRef.current && !supplierRef.current.contains(e.target as Node)) {
@@ -198,8 +254,7 @@ export default function NewPaymentPage() {
     setSupplierOpeningBalance(0)
   }
 
-  // Checkbox click = shortcut for "fully settle this bill now" → auto-fill NET amount.
-  // Unchecking clears it back to 0.
+  // ── Allocation helpers ────────────────────────────────
   const toggleBill = (bill: any) => {
     const due = bill.total - (bill.paid || 0)
     const key = String(bill.id)
@@ -211,9 +266,6 @@ export default function NewPaymentPage() {
     })
   }
 
-  // Manual edit of the NET field = partial (or custom) payment against this bill.
-  // We clamp in GROSS terms (can't allocate more gross than is due), then re-derive
-  // the net figure from the clamped gross so the displayed numbers always agree.
   const updateNetAllocation = (bill: any, typedNet: number) => {
     const due = bill.total - (bill.paid || 0)
     const rate = bill.wht_rate || 0
@@ -232,7 +284,7 @@ export default function NewPaymentPage() {
     })
   }
 
-  // ── Derived totals (all reconciled from netAllocations) ──────────
+  // ── Derived totals ────────────────────────────────────
   const billRows = bills.map(bill => {
     const due = bill.total - (bill.paid || 0)
     const rate = bill.wht_rate || 0
@@ -245,7 +297,7 @@ export default function NewPaymentPage() {
     return { ...bill, due, rate, net, gross, wht, remainingGross, remainingWht, isFullySettled }
   })
 
-  const openingNet = netAllocations["opening"] || 0 // opening balance has no WHT
+  const openingNet = netAllocations["opening"] || 0
 
   const totalGrossAllocated = billRows.reduce((s, b) => s + b.gross, 0) + openingNet
   const totalWhtDeducted = billRows.reduce((s, b) => s + b.wht, 0)
@@ -254,6 +306,7 @@ export default function NewPaymentPage() {
   const totalAmount = Number(paymentAmount || 0)
   const difference = totalAmount - totalNetAllocated
 
+  // ── Submit (create or update) ─────────────────────────
   const handleSubmit = async () => {
     if (!companyId) { setError("Company not loaded"); return }
     if (!selectedBankId) { setError("Please select a bank account"); return }
@@ -269,45 +322,77 @@ export default function NewPaymentPage() {
 
     setLoading(true); setError("")
 
-    try {
-      const res = await fetch("/api/payments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          party_id: supplierId,
-          amount: totalAmount, // net amount paid from bank
-          payment_method: "Bank Transfer",
-          bank_account_id: selectedBankId,
-          expense_account_id: isDonation ? selectedExpenseAccountId : null,
-          date: paymentDate,
-          reference,
-          notes,
-          // Send GROSS allocation per bill — the backend computes WHT itself
-          // from bill_withholding, proportional to gross/total. Our gross here
-          // is already back-solved so it reconciles with the net figure shown.
-          allocations: billRows
-            .filter(b => b.gross > 0)
-            .map(b => ({
-              bill_id: b.id,
-              amount: b.gross,
-            })),
-        }),
-      })
-      const result = await res.json()
-      if (!result.success) {
-        setError(result.error || "Failed")
-        setLoading(false)
-        return
-      }
+    const allocationsPayload = billRows
+      .filter(b => b.gross > 0)
+      .map(b => ({
+        invoice_id: b.id,
+        allocated_amount: b.gross,
+      }))
 
-      setFlash(`✅ Payment ${result.payment_no} saved!`)
-      setSupplierId(null); setSelectedSupplier(null); setSupplierSearch("")
-      setSelectedBankId(null); setSelectedExpenseAccountId(null); setIsDonation(false)
-      setBills([]); setNetAllocations({}); setPaymentAmount(""); setNotes(""); setReference("")
-      setSupplierOpeningBalance(0)
-      setLoading(false)
-      setTimeout(() => loadSuppliers(), 500)
-      setTimeout(() => setFlash(null), 4000)
+    try {
+      if (editId) {
+        // Update existing payment
+        const { data, error: rpcError } = await supabase.rpc('update_vendor_payment', {
+          p_payment_id: parseInt(editId),
+          p_company_id: companyId,
+          p_party_id: supplierId,
+          p_payment_date: paymentDate,
+          p_amount: totalAmount,
+          p_payment_method: "Bank Transfer",
+          p_bank_account_id: selectedBankId,
+          p_allocations: allocationsPayload,
+          p_reference: reference || null,
+          p_notes: notes || null,
+          p_user_email: 'system',
+        })
+        if (rpcError) {
+          setError(rpcError.message || "Update failed")
+          setLoading(false)
+          return
+        }
+        if (!data?.success) {
+          setError(data?.error || "Update failed")
+          setLoading(false)
+          return
+        }
+        setFlash(`✅ Payment updated!`)
+        setTimeout(() => router.push("/dashboard/payments"), 1500)
+      } else {
+        // Create new payment
+        const res = await fetch("/api/payments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            party_id: supplierId,
+            amount: totalAmount,
+            payment_method: "Bank Transfer",
+            bank_account_id: selectedBankId,
+            expense_account_id: isDonation ? selectedExpenseAccountId : null,
+            date: paymentDate,
+            reference,
+            notes,
+            allocations: allocationsPayload.map(a => ({
+              bill_id: a.invoice_id,
+              amount: a.allocated_amount,
+            })),
+          }),
+        })
+        const result = await res.json()
+        if (!result.success) {
+          setError(result.error || "Failed")
+          setLoading(false)
+          return
+        }
+        setFlash(`✅ Payment ${result.payment_no} saved!`)
+        // Reset form
+        setSupplierId(null); setSelectedSupplier(null); setSupplierSearch("")
+        setSelectedBankId(null); setSelectedExpenseAccountId(null); setIsDonation(false)
+        setBills([]); setNetAllocations({}); setPaymentAmount(""); setNotes(""); setReference("")
+        setSupplierOpeningBalance(0)
+        setLoading(false)
+        setTimeout(() => loadSuppliers(), 500)
+        setTimeout(() => setFlash(null), 4000)
+      }
     } catch {
       setError("Network error")
       setLoading(false)
@@ -392,8 +477,8 @@ export default function NewPaymentPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
           <button className="pay-btn" onClick={() => router.push("/dashboard/payments")}><ArrowLeft size={16} /></button>
           <div style={{ flex: 1 }}>
-            <div className="pay-title">💳 New Payment</div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>Pay a supplier or record other expense</div>
+            <div className="pay-title">{editId ? "✏️ Edit Payment" : "💳 New Payment"}</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>{editId ? "Modify payment details" : "Pay a supplier or record other expense"}</div>
           </div>
         </div>
 
@@ -633,7 +718,7 @@ export default function NewPaymentPage() {
             </div>
             <div className="pay-card">
               <button className="pay-btn pay-btn-primary" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading}>
-                {loading ? "Posting..." : "💾 Save Payment"}
+                {loading ? "Posting..." : editId ? "💾 Update Payment" : "💾 Save Payment"}
               </button>
             </div>
           </div>
