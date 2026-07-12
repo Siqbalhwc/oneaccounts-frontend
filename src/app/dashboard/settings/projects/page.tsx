@@ -2,9 +2,13 @@
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { Plus, Edit, Trash2, X, Upload, Search, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react"
+import {
+  Plus, Edit, Trash2, X, Upload, Search, ArrowUp, ArrowDown, ArrowUpDown,
+  Save, CheckCircle2, AlertCircle, AlertTriangle, FolderKanban,
+} from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import * as XLSX from "xlsx"
+import { getLabelSet, type BusinessType } from "@/lib/labels"
 
 interface Entity {
   id: number
@@ -18,7 +22,7 @@ interface Entity {
   donor_name?: string | null
 }
 
-async function getNextDonorCode(supabase: any, companyId: string): Promise<string> {
+async function getNextDonorCode(supabase: any, companyId: string, prefix: string): Promise<string> {
   const { data } = await supabase
     .from("donors")
     .select("code")
@@ -28,15 +32,16 @@ async function getNextDonorCode(supabase: any, companyId: string): Promise<strin
 
   let maxNum = 0
   if (data) {
+    const re = new RegExp(`^${prefix}(\\d+)$`)
     for (const row of data) {
-      const match = row.code?.match(/^DON-(\d+)$/)
+      const match = row.code?.match(re)
       if (match) {
         const n = parseInt(match[1], 10)
         if (!isNaN(n) && n > maxNum) maxNum = n
       }
     }
   }
-  return `DON-${String(maxNum + 1).padStart(3, "0")}`
+  return `${prefix}${String(maxNum + 1).padStart(3, "0")}`
 }
 
 export default function ProjectsPage() {
@@ -63,6 +68,7 @@ export default function ProjectsPage() {
   const [formDonorId, setFormDonorId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [companyId, setCompanyId] = useState<string>("")
+  const [businessType, setBusinessType] = useState<string>("")
   const [projects, setProjects] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
@@ -78,10 +84,19 @@ export default function ProjectsPage() {
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importing, setImporting] = useState(false)
 
+  // ── Dynamic labels, driven by business_type (NGO: Donor/Project/Activity/Location,
+  // Construction: Investor/Site/Cost Code/Site Zone, etc.) ──
+  const labels = getLabelSet(businessType as BusinessType)
+  const donorCodePrefix = businessType === "construction" ? "INV-" : "DON-"
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
       setCompanyId(cid)
+
+      supabase.from("companies").select("business_type").eq("id", cid).single()
+        .then(({ data }) => { if (data) setBusinessType(data.business_type || "") })
+
       supabase.from("projects").select("id,name").eq("company_id", cid).order("name")
         .then(r => r.data && setProjects(r.data))
       supabase.from("locations").select("id,name").eq("company_id", cid).order("name")
@@ -207,7 +222,7 @@ export default function ProjectsPage() {
   const handleSave = async () => {
     if (!formName.trim() || !companyId) return
     if (activeTab === "activities" && !formProjectId) {
-      setFlash("?? Please select a project for the activity.")
+      setFlash(`Please select a ${labels.project.toLowerCase()} for the ${labels.activity.toLowerCase()}.`)
       return
     }
     setSaving(true)
@@ -222,18 +237,18 @@ export default function ProjectsPage() {
       payload.description = formDesc.trim()
       payload.donor_id = formDonorId
     } else if (activeTab === "donors") {
-      payload.code = formCode.trim() ? formCode.trim() : await getNextDonorCode(supabase, companyId)
+      payload.code = formCode.trim() ? formCode.trim() : await getNextDonorCode(supabase, companyId, donorCodePrefix)
     } else if (activeTab === "activities") {
       payload.project_id = formProjectId
     }
 
     if (editingItem) {
       await supabase.from(table).update(payload).eq("id", editingItem.id).eq("company_id", companyId)
-      setFlash("? Updated!")
+      setFlash("Updated successfully.")
     } else {
       const { data: inserted, error } = await supabase.from(table).insert(payload).select("id").single()
       if (error) { setFlash("Error: " + error.message); setSaving(false); return }
-      setFlash("? Created!")
+      setFlash("Created successfully.")
     }
 
     setSaving(false)
@@ -247,7 +262,7 @@ export default function ProjectsPage() {
     const table = activeTab === "projects" ? "projects" : activeTab === "locations" ? "locations" : activeTab === "activities" ? "activities" : "donors"
     await supabase.from(table).update({ deleted_at: new Date().toISOString() }).eq("id", deleteId).eq("company_id", companyId)
     setDeleteId(null)
-    setFlash("? Deleted.")
+    setFlash("Deleted.")
     fetchData()
     setTimeout(() => setFlash(""), 3000)
   }
@@ -256,20 +271,40 @@ export default function ProjectsPage() {
     setFlash("Import not yet updated for single-project. You can assign projects manually after import.")
   }
 
+  // ── Tab definitions + singular/plural label lookups, all driven by
+  // the business-type label config rather than string-slicing hacks
+  // (the old code did `.slice(0,-1)` on "Activities" which produced
+  // the typo "Activitie" — fixed by using explicit singular labels) ──
   const tabs: { key: typeof activeTab; label: string }[] = [
-    { key: "projects", label: "Projects" },
-    { key: "locations", label: "Locations" },
-    { key: "activities", label: "Activities" },
-    { key: "donors", label: "Donors" },
+    { key: "projects", label: labels.project_plural },
+    { key: "locations", label: labels.location_plural },
+    { key: "activities", label: labels.activity_plural },
+    { key: "donors", label: labels.donor_plural },
   ]
 
-  const getEntityLabel = () => activeTab.charAt(0).toUpperCase() + activeTab.slice(1)
+  const getEntityLabelPlural = () => {
+    switch (activeTab) {
+      case "projects": return labels.project_plural
+      case "locations": return labels.location_plural
+      case "activities": return labels.activity_plural
+      case "donors": return labels.donor_plural
+    }
+  }
+
+  const getEntityLabelSingular = () => {
+    switch (activeTab) {
+      case "projects": return labels.project
+      case "locations": return labels.location
+      case "activities": return labels.activity
+      case "donors": return labels.donor
+    }
+  }
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .pr-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
-        .pr-title { font-size: 22px; font-weight: 800; color: var(--text); }
+        .pr-title { font-size: 22px; font-weight: 800; color: var(--text); display: flex; align-items: center; gap: 10px; }
         .pr-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
         .pr-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); font-family: inherit; background: transparent; color: var(--text-muted); }
         .pr-btn:hover { background: var(--card-hover); }
@@ -305,18 +340,21 @@ export default function ProjectsPage() {
         .pr-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
         .pr-modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; color: var(--text); }
         .pr-modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-        .pr-modal-title { font-size: 18px; font-weight: 700; color: var(--text); }
+        .pr-modal-title { font-size: 18px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
         .pr-modal-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
         .pr-field-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
         .pr-field-input { width: 100%; height: 40px; border: 1.5px solid var(--border); border-radius: 9px; padding: 0 14px; font-size: 13px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; }
         .pr-field-input:focus { border-color: var(--primary); }
         .pr-modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+        .pr-flash { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 13px; }
       `}</style>
 
       <div className="pr-header">
         <div>
-          <div className="pr-title">📁 Projects & Activities</div>
-          <div className="pr-subtitle">Manage projects, locations, activities, and donors for budgeting and tracking</div>
+          <div className="pr-title"><FolderKanban size={22} /> {labels.project_plural} &amp; {labels.activity_plural}</div>
+          <div className="pr-subtitle">
+            Manage {labels.project_plural.toLowerCase()}, {labels.location_plural.toLowerCase()}, {labels.activity_plural.toLowerCase()}, and {labels.donor_plural.toLowerCase()} for budgeting and tracking
+          </div>
         </div>
       </div>
 
@@ -331,18 +369,18 @@ export default function ProjectsPage() {
       <div className="filter-row">
         {activeTab === "activities" && (
           <select className="filter-select" value={activityProjectFilter} onChange={e => setActivityProjectFilter(e.target.value)}>
-            <option value="">All Projects</option>
+            <option value="">All {labels.project_plural}</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         )}
         <div className="search-box">
           <Search size={14} style={{ position: "absolute", left: 12, top: 10, color: "var(--text-muted)" }} />
-          <input className="search-input" placeholder={`Search ${getEntityLabel().toLowerCase()}...`} value={search} onChange={e => setSearch(e.target.value)} />
+          <input className="search-input" placeholder={`Search ${getEntityLabelPlural()?.toLowerCase()}...`} value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <div style={{ display: "flex", gap: 10, marginLeft: "auto" }}>
           {canEdit && (
             <>
-              <button className="pr-btn" onClick={openNew}><Plus size={16} /> Add {getEntityLabel().slice(0, -1)}</button>
+              <button className="pr-btn" onClick={openNew}><Plus size={16} /> Add {getEntityLabelSingular()}</button>
               <button className="pr-btn" onClick={() => setShowImportModal(true)}><Upload size={16} /> Import</button>
             </>
           )}
@@ -350,7 +388,14 @@ export default function ProjectsPage() {
       </div>
 
       {flash && (
-        <div style={{ background: flash.startsWith("Error") ? "var(--card)" : "var(--card)", border: `1px solid ${flash.startsWith("Error") ? "#EF4444" : "#065F46"}`, color: flash.startsWith("Error") ? "#FCA5A5" : "#6EE7B7", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{flash}</div>
+        <div className="pr-flash" style={{
+          background: "var(--card)",
+          border: `1px solid ${flash.startsWith("Error") ? "#EF4444" : "#065F46"}`,
+          color: flash.startsWith("Error") ? "#FCA5A5" : "#6EE7B7",
+        }}>
+          {flash.startsWith("Error") ? <AlertCircle size={15} /> : <CheckCircle2 size={15} />}
+          {flash}
+        </div>
       )}
 
       <div className="pr-table">
@@ -362,9 +407,9 @@ export default function ProjectsPage() {
             "minmax(150px, 2fr) 100px 60px 60px"
         }}>
           <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
-          {activeTab === "activities" && <button className="sort-btn" onClick={() => handleSort("project")}>Project {getSortIcon("project")}</button>}
+          {activeTab === "activities" && <button className="sort-btn" onClick={() => handleSort("project")}>{labels.project} {getSortIcon("project")}</button>}
           {activeTab === "projects" && <button className="sort-btn" onClick={() => handleSort("description")}>Description {getSortIcon("description")}</button>}
-          {activeTab === "projects" && <button className="sort-btn" onClick={() => handleSort("donor")}>Donor {getSortIcon("donor")}</button>}
+          {activeTab === "projects" && <button className="sort-btn" onClick={() => handleSort("donor")}>{labels.donor} {getSortIcon("donor")}</button>}
           {activeTab === "donors" && <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>}
           <button className="sort-btn" onClick={() => handleSort("active")}>Active {getSortIcon("active")}</button>
           <span></span>
@@ -374,7 +419,7 @@ export default function ProjectsPage() {
         {loading ? (
           <div className="pr-empty">Loading...</div>
         ) : sorted.length === 0 ? (
-          <div className="pr-empty">{search ? "No matching records found." : `No ${getEntityLabel().toLowerCase()} found.`}</div>
+          <div className="pr-empty">{search ? "No matching records found." : `No ${getEntityLabelPlural()?.toLowerCase()} found.`}</div>
         ) : (
           sorted.map((item) => (
             <div key={item.id} className="pr-table-row" style={{
@@ -389,7 +434,7 @@ export default function ProjectsPage() {
               {activeTab === "projects" && <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{(item as any).description || "-"}</span>}
               {activeTab === "projects" && <span style={{ color: "var(--primary)" }}>{item.donor_name || "-"}</span>}
               {activeTab === "donors" && <span style={{ fontFamily: "monospace", fontSize: 12 }}>{(item as any).code || "-"}</span>}
-              <span>{item.is_active ? "?" : "?"}</span>
+              <span>{item.is_active ? <CheckCircle2 size={15} color="#10B981" /> : <span style={{ color: "var(--text-muted)" }}>—</span>}</span>
               <button className="pr-icon-btn" onClick={() => openEdit(item)}><Edit size={14} /></button>
               <button className="pr-icon-btn danger" onClick={() => setDeleteId(item.id)}><Trash2 size={14} /></button>
             </div>
@@ -402,7 +447,10 @@ export default function ProjectsPage() {
         <div className="pr-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="pr-modal" onClick={e => e.stopPropagation()}>
             <div className="pr-modal-header">
-              <div className="pr-modal-title">{editingItem ? "?? Edit" : "? Add"} {getEntityLabel().slice(0, -1)}</div>
+              <div className="pr-modal-title">
+                {editingItem ? <Edit size={17} /> : <Plus size={17} />}
+                {editingItem ? "Edit" : "Add"} {getEntityLabelSingular()}
+              </div>
               <button className="pr-icon-btn" onClick={() => setShowModal(false)}><X size={18} /></button>
             </div>
             <div className="pr-modal-body">
@@ -417,9 +465,9 @@ export default function ProjectsPage() {
                     <input className="pr-field-input" value={formDesc} onChange={e => setFormDesc(e.target.value)} placeholder="Brief description" />
                   </div>
                   <div>
-                    <label className="pr-field-label">Donor</label>
+                    <label className="pr-field-label">{labels.donor}</label>
                     <select className="pr-field-input" value={formDonorId ?? ""} onChange={e => setFormDonorId(e.target.value ? Number(e.target.value) : null)}>
-                      <option value="">- Select Donor -</option>
+                      <option value="">— Select {labels.donor} —</option>
                       {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
                   </div>
@@ -428,18 +476,18 @@ export default function ProjectsPage() {
               {activeTab === "donors" && (
                 <div>
                   <label className="pr-field-label">Code (optional)</label>
-                  <input className="pr-field-input" value={formCode} onChange={e => setFormCode(e.target.value)} placeholder="e.g., UNICEF, GIZ - leave blank for auto code" />
+                  <input className="pr-field-input" value={formCode} onChange={e => setFormCode(e.target.value)} placeholder={`e.g., ${donorCodePrefix}001 — leave blank for auto code`} />
                 </div>
               )}
               {activeTab === "activities" && (
                 <div>
-                  <label className="pr-field-label">Project *</label>
+                  <label className="pr-field-label">{labels.project} *</label>
                   <select
                     className="pr-field-input"
                     value={formProjectId ?? ""}
                     onChange={e => setFormProjectId(e.target.value ? Number(e.target.value) : null)}
                   >
-                    <option value="">- Select Project -</option>
+                    <option value="">— Select {labels.project} —</option>
                     {projects.map(p => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
@@ -454,7 +502,7 @@ export default function ProjectsPage() {
             <div className="pr-modal-footer">
               <button className="pr-btn" onClick={() => setShowModal(false)}>Cancel</button>
               <button className="pr-btn pr-btn-primary" onClick={handleSave} disabled={saving || !formName.trim() || (activeTab === "activities" && !formProjectId)}>
-                {saving ? "Saving..." : "?? Save"}
+                <Save size={14} /> {saving ? "Saving..." : "Save"}
               </button>
             </div>
           </div>
@@ -465,7 +513,7 @@ export default function ProjectsPage() {
       {deleteId && canEdit && (
         <div className="pr-modal-overlay">
           <div className="pr-modal" style={{ maxWidth: 400 }}>
-            <div className="pr-modal-header"><div className="pr-modal-title" style={{ color: "var(--text)" }}>?? Delete?</div></div>
+            <div className="pr-modal-header"><div className="pr-modal-title" style={{ color: "var(--text)" }}><AlertTriangle size={17} color="#EF4444" /> Delete?</div></div>
             <div className="pr-modal-body" style={{ textAlign: "center" }}><p style={{ color: "#EF4444" }}>This cannot be undone.</p></div>
             <div className="pr-modal-footer" style={{ justifyContent: "center" }}>
               <button className="pr-btn" onClick={() => setDeleteId(null)}>Cancel</button>
@@ -487,10 +535,10 @@ export default function ProjectsPage() {
               <div>
                 <label className="pr-field-label">Type</label>
                 <select className="pr-field-input" value={importType} onChange={e => setImportType(e.target.value as any)}>
-                  <option value="donor">Donor</option>
-                  <option value="project">Project</option>
-                  <option value="location">Location</option>
-                  <option value="activity">Activity</option>
+                  <option value="donor">{labels.donor}</option>
+                  <option value="project">{labels.project}</option>
+                  <option value="location">{labels.location}</option>
+                  <option value="activity">{labels.activity}</option>
                 </select>
               </div>
               <div>
@@ -498,9 +546,9 @@ export default function ProjectsPage() {
                 <input type="file" accept=".xlsx, .xls" onChange={e => setImportFile(e.target.files ? e.target.files[0] : null)} style={{ padding: "8px 0" }} />
                 <p style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 4 }}>
                   {importType === "donor" && "Columns: Name, Code (optional)"}
-                  {importType === "project" && "Columns: Name, Description (optional), DonorCode"}
+                  {importType === "project" && `Columns: Name, Description (optional), ${labels.donor}Code`}
                   {importType === "location" && "Columns: Name"}
-                  {importType === "activity" && "Columns: Name, ProjectName"}
+                  {importType === "activity" && `Columns: Name, ${labels.project}Name`}
                 </p>
               </div>
             </div>
