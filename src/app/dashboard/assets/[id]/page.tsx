@@ -58,11 +58,7 @@ export default function AssetDetailPage() {
       setError("")
 
       try {
-        const [
-          assetRes,
-          scheduleRes,
-          journalRes,
-        ] = await Promise.all([
+        const [assetRes, scheduleRes, journalRes] = await Promise.all([
           supabase
             .from("assets")
             .select("*, locations(name), personnel:responsible_person_id(name)")
@@ -130,7 +126,6 @@ export default function AssetDetailPage() {
     )
   }
 
-  // ── Stored values from the asset record (source of truth) ──
   const cost = Number(asset.cost_price ?? 0)
   const salvage = Number(asset.salvage_value ?? 0)
   const life = Number(asset.life_months ?? 0)
@@ -138,16 +133,12 @@ export default function AssetDetailPage() {
   const nbv = Number(asset.net_book_value ?? Math.max(cost - accumDep, salvage))
   const remainingLife = Number(asset.remaining_life_months ?? Math.max(life - depSchedule.length, 0))
   const depreciable = cost - salvage
-
-  // ── Progress bar percentage (safe division) ──────────
-  const progressPct = depreciable > 0
-    ? Math.min((accumDep / depreciable) * 100, 100)
-    : 0
+  const progressPct = depreciable > 0 ? Math.min((accumDep / depreciable) * 100, 100) : 0
 
   const formatDate = (d: string | null) => {
     if (!d) return "—"
     const date = new Date(d)
-    return isNaN(date.getTime()) ? "—" : date.toLocaleDateString("en-PK", { year:"numeric", month:"short", day:"numeric" })
+    return isNaN(date.getTime()) ? "—" : date.toLocaleDateString("en-PK", { year: "numeric", month: "short", day: "numeric" })
   }
 
   return (
@@ -169,10 +160,19 @@ export default function AssetDetailPage() {
         .kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; flex: 1; min-width: 160px; box-shadow: var(--shadow-sm); }
         .kpi-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 6px; }
         .kpi-value { font-size: 22px; font-weight: 800; color: var(--text); }
+
+        /* ── Responsive ── */
         @media (max-width: 900px) {
           .detail-grid { grid-template-columns: 1fr; }
-          .label { width: 130px; }
           .kpi-row { flex-direction: column; }
+          .kpi-card { min-width: unset; }
+          .label { width: 120px; }
+          .row { flex-wrap: wrap; }
+        }
+        @media (max-width: 480px) {
+          .label { width: 100px; font-size: 10px; }
+          .value { font-size: 12px; }
+          th, td { padding: 8px 6px; font-size: 11px; }
         }
       `}</style>
 
@@ -252,26 +252,28 @@ export default function AssetDetailPage() {
           {depSchedule.length === 0 ? (
             <p style={{ color: "var(--text-muted)" }}>No depreciation entries yet.</p>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Period</th>
-                  <th style={{ textAlign: "right" }}>Amount</th>
-                  <th>Note</th>
-                  <th>Posted</th>
-                </tr>
-              </thead>
-              <tbody>
-                {depSchedule.map(entry => (
-                  <tr key={entry.id}>
-                    <td>{entry.period}</td>
-                    <td style={{ textAlign: "right" }}>PKR {Number(entry.depreciation_amount).toLocaleString()}</td>
-                    <td>{entry.note || "—"}</td>
-                    <td>{entry.posted ? "✅" : "❌"}</td>
+            <div style={{ overflowX: "auto" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Period</th>
+                    <th style={{ textAlign: "right" }}>Amount</th>
+                    <th>Note</th>
+                    <th>Posted</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {depSchedule.map(entry => (
+                    <tr key={entry.id}>
+                      <td>{entry.period}</td>
+                      <td style={{ textAlign: "right" }}>PKR {Number(entry.depreciation_amount).toLocaleString()}</td>
+                      <td>{entry.note || "—"}</td>
+                      <td>{entry.posted ? "✅" : "❌"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
@@ -281,34 +283,36 @@ export default function AssetDetailPage() {
           {journalLines.length === 0 ? (
             <p style={{ color: "var(--text-muted)" }}>No journal entries found.</p>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Account</th>
-                  <th>Description</th>
-                  <th style={{ textAlign: "right" }}>Debit</th>
-                  <th style={{ textAlign: "right" }}>Credit</th>
-                  <th>Reference</th>
-                </tr>
-              </thead>
-              <tbody>
-                {journalLines.map(line => (
-                  <tr key={line.id}>
-                    <td>{formatDate(line.journal_entries?.date)}</td>
-                    <td>{line.accounts?.code} – {line.accounts?.name}</td>
-                    <td>{line.journal_entries?.description || "—"}</td>
-                    <td style={{ textAlign: "right", color: line.debit > 0 ? "#EF4444" : "var(--text-muted)" }}>
-                      {line.debit > 0 ? `PKR ${line.debit.toLocaleString()}` : "—"}
-                    </td>
-                    <td style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)" }}>
-                      {line.credit > 0 ? `PKR ${line.credit.toLocaleString()}` : "—"}
-                    </td>
-                    <td>{line.journal_entries?.entry_no || "—"}</td>
+            <div style={{ overflowX: "auto" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Account</th>
+                    <th>Description</th>
+                    <th style={{ textAlign: "right" }}>Debit</th>
+                    <th style={{ textAlign: "right" }}>Credit</th>
+                    <th>Reference</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {journalLines.map(line => (
+                    <tr key={line.id}>
+                      <td>{formatDate(line.journal_entries?.date)}</td>
+                      <td>{line.accounts?.code} – {line.accounts?.name}</td>
+                      <td>{line.journal_entries?.description || "—"}</td>
+                      <td style={{ textAlign: "right", color: line.debit > 0 ? "#EF4444" : "var(--text-muted)" }}>
+                        {line.debit > 0 ? `PKR ${line.debit.toLocaleString()}` : "—"}
+                      </td>
+                      <td style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)" }}>
+                        {line.credit > 0 ? `PKR ${line.credit.toLocaleString()}` : "—"}
+                      </td>
+                      <td>{line.journal_entries?.entry_no || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>
