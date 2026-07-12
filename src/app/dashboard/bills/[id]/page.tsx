@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Printer, Send } from "lucide-react"
+import { ArrowLeft, Printer, Send, Package, Eye } from "lucide-react"
 import { generateBillPDF } from "@/lib/pdf/billPDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
@@ -21,6 +21,7 @@ interface BillItem {
   tax_name_snapshot?: string
   tax_rate?: number
   tax_amount?: number
+  asset_id?: number | null
 }
 
 interface Bill {
@@ -65,6 +66,7 @@ export default function BillDetailPage() {
 
   const { hasFeature } = usePlan()
   const taxEnabled = hasFeature("tax_management")
+  const assetEnabled = hasFeature("asset_management")
   const { companyName, companyTagline, logoUrl } = useCompany()
 
   const [bill, setBill] = useState<Bill | null>(null)
@@ -114,12 +116,14 @@ export default function BillDetailPage() {
                 .eq("invoice_id", b.id)
                 .eq("company_id", companyId)
                 .then(({ data: items }) => {
-                  b.items = items || []
+                  b.items = (items || []).map(item => ({
+                    ...item,
+                    asset_id: item.asset_id ?? null,
+                  }))
                   setBill(b)
                 })
             })
 
-          // Fetch WHT data if tax is enabled
           if (taxEnabled) {
             supabase
               .from("bill_withholding")
@@ -143,7 +147,10 @@ export default function BillDetailPage() {
             .eq("invoice_id", b.id)
             .eq("company_id", companyId)
             .then(({ data: items }) => {
-              b.items = items || []
+              b.items = (items || []).map(item => ({
+                ...item,
+                asset_id: item.asset_id ?? null,
+              }))
               setBill(b)
             })
         }
@@ -223,6 +230,10 @@ export default function BillDetailPage() {
         .btn-primary:hover { background: var(--primary-hover); }
         .btn-success { background: #25D366; color: white; border-color: #25D366; }
         .btn-success:hover { background: #22C55E; }
+        .btn-asset { color: var(--primary); border-color: var(--primary); padding: 4px 10px; font-size: 11px; }
+        .btn-asset:hover { background: var(--primary); color: var(--primary-text); }
+        .btn-view-asset { color: #10B981; border-color: #10B981; padding: 4px 10px; font-size: 11px; }
+        .btn-view-asset:hover { background: #10B981; color: white; }
         .record-history { background: var(--bg-soft); border-radius: 8px; padding: 8px; }
         .wht-card { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin-top: 12px; }
         @media (max-width: 640px) {
@@ -257,36 +268,13 @@ export default function BillDetailPage() {
 
       <div className="card">
         <div className="grid-2col">
-          <div>
-            <div className="label">Date</div>
-            <div className="value">{bill.date}</div>
-          </div>
-          <div>
-            <div className="label">Due Date</div>
-            <div className="value">{bill.due_date}</div>
-          </div>
-          <div>
-            <div className="label">Supplier</div>
-            <div className="value">{bill.supplier?.code} – {bill.supplier?.name || "Unknown"}</div>
-          </div>
-          <div>
-            <div className="label">Total</div>
-            <div className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B" }}>PKR {bill.total?.toLocaleString()}</div>
-          </div>
-          {taxEnabled && bill.total_tax > 0 && (
-            <div>
-              <div className="label">Input Tax</div>
-              <div className="value">PKR {bill.total_tax?.toLocaleString()}</div>
-            </div>
-          )}
-          <div>
-            <div className="label">Paid</div>
-            <div className="value">PKR {bill.paid?.toLocaleString()}</div>
-          </div>
-          <div>
-            <div className="label">Due</div>
-            <div className="value" style={{ color: balanceDue > 0 ? "#EF4444" : "#10B981", fontWeight: 600 }}>PKR {balanceDue.toLocaleString()}</div>
-          </div>
+          <div><div className="label">Date</div><div className="value">{bill.date}</div></div>
+          <div><div className="label">Due Date</div><div className="value">{bill.due_date}</div></div>
+          <div><div className="label">Supplier</div><div className="value">{bill.supplier?.code} – {bill.supplier?.name || "Unknown"}</div></div>
+          <div><div className="label">Total</div><div className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B" }}>PKR {bill.total?.toLocaleString()}</div></div>
+          {taxEnabled && bill.total_tax > 0 && <div><div className="label">Input Tax</div><div className="value">PKR {bill.total_tax?.toLocaleString()}</div></div>}
+          <div><div className="label">Paid</div><div className="value">PKR {bill.paid?.toLocaleString()}</div></div>
+          <div><div className="label">Due</div><div className="value" style={{ color: balanceDue > 0 ? "#EF4444" : "#10B981", fontWeight: 600 }}>PKR {balanceDue.toLocaleString()}</div></div>
           <div>
             <div className="label">Status</div>
             <span style={{ padding: "2px 10px", borderRadius: 12, fontSize: 12, fontWeight: 700, background: bill.status === "Paid" ? "#065F46" : "#7C2D12", color: bill.status === "Paid" ? "#6EE7B7" : "#FCA5A5" }}>{bill.status}</span>
@@ -297,23 +285,13 @@ export default function BillDetailPage() {
           {bill.updated_by && <div><div className="label">Last updated by</div><div className="value">{bill.updated_by}</div></div>}
         </div>
 
-        {/* WHT Details */}
         {taxEnabled && whtData && (
           <div className="wht-card">
             <div className="label" style={{ marginBottom: 8, color: "#EF4444" }}>Withholding Tax (WHT)</div>
             <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-              <div>
-                <div className="label">Rate</div>
-                <div className="value" style={{ color: "#EF4444", fontWeight: 600 }}>{whtData.wht_rate}%</div>
-              </div>
-              <div>
-                <div className="label">Amount</div>
-                <div className="value" style={{ color: "#EF4444", fontWeight: 600 }}>PKR {whtData.wht_amount.toLocaleString()}</div>
-              </div>
-              <div>
-                <div className="label">Net Payable</div>
-                <div className="value" style={{ color: "#10B981", fontWeight: 600 }}>PKR {(bill.total - whtData.wht_amount).toLocaleString()}</div>
-              </div>
+              <div><div className="label">Rate</div><div className="value" style={{ color: "#EF4444", fontWeight: 600 }}>{whtData.wht_rate}%</div></div>
+              <div><div className="label">Amount</div><div className="value" style={{ color: "#EF4444", fontWeight: 600 }}>PKR {whtData.wht_amount.toLocaleString()}</div></div>
+              <div><div className="label">Net Payable</div><div className="value" style={{ color: "#10B981", fontWeight: 600 }}>PKR {(bill.total - whtData.wht_amount).toLocaleString()}</div></div>
             </div>
           </div>
         )}
@@ -331,6 +309,7 @@ export default function BillDetailPage() {
                 {taxEnabled && <th style={{ textAlign: "right" }}>Tax Rate</th>}
                 <th style={{ textAlign: "right" }}>Total</th>
                 {taxEnabled && <th style={{ textAlign: "right" }}>Tax</th>}
+                {assetEnabled && <th style={{ textAlign: "center", width: 80 }}>Asset</th>}
               </tr>
             </thead>
             <tbody>
@@ -348,6 +327,27 @@ export default function BillDetailPage() {
                   {taxEnabled && (
                     <td style={{ textAlign: "right", color: (item.tax_amount ?? 0) > 0 ? "#EF4444" : "var(--text-muted)" }}>
                       {(item.tax_amount ?? 0) > 0 ? `PKR ${(item.tax_amount ?? 0).toLocaleString()}` : "—"}
+                    </td>
+                  )}
+                  {assetEnabled && (
+                    <td style={{ textAlign: "center" }}>
+                      {item.asset_id ? (
+                        <button
+                          className="btn btn-view-asset"
+                          onClick={() => router.push(`/dashboard/assets/${item.asset_id}`)}
+                          title="View linked asset"
+                        >
+                          <Eye size={12} /> View
+                        </button>
+                      ) : (
+                        <button
+                          className="btn btn-asset"
+                          onClick={() => router.push(`/dashboard/assets/new?billId=${bill.id}&itemId=${item.id}`)}
+                          title="Create a fixed asset from this purchase"
+                        >
+                          <Package size={12} /> Asset
+                        </button>
+                      )}
                     </td>
                   )}
                 </tr>

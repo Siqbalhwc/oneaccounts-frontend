@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Save, ChevronDown, ChevronRight, Loader2, CheckCircle } from "lucide-react"
 import { useCompany } from "@/contexts/CompanyContext"
@@ -29,7 +29,7 @@ export default function NewAssetPage() {
   const { companyId } = useCompany()
   const [userEmail, setUserEmail] = useState("system")
 
-  // ── Fetch user email once ────────────────────────────
+  // ── Fetch user email ──────────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user?.email) setUserEmail(user.email)
@@ -64,6 +64,38 @@ export default function NewAssetPage() {
   const [savedAsset,      setSavedAsset]      = useState<any>(null)
 
   const [showAdvanced,    setShowAdvanced]    = useState(false)
+
+  // ── Purchase‑link data ─────────────────────────────
+  const searchParams = useSearchParams()
+  const billId = searchParams.get("billId")
+  const itemId = searchParams.get("itemId")
+  const isFromPurchase = !!(billId && itemId)
+  const [purchaseBillNo, setPurchaseBillNo] = useState("")
+
+  // ── Load purchase item if coming from a bill ──────────
+  useEffect(() => {
+    if (!isFromPurchase || !companyId) return
+    ;(async () => {
+      const { data: item, error: itemErr } = await supabase
+        .from("invoice_items")
+        .select("*, invoices!inner(id, invoice_no, date, party_id, company_id)")
+        .eq("id", itemId)
+        .eq("invoices.id", billId)
+        .eq("invoices.company_id", companyId)
+        .maybeSingle()
+
+      if (itemErr || !item) {
+        setError("Unable to load purchase item")
+        return
+      }
+      setPurchaseBillNo(item.invoices?.invoice_no || "")
+      setName(item.description || "")
+      setCostPrice(item.total?.toString() || "")
+      setPurchaseDate(item.invoices?.date || new Date().toISOString().split("T")[0])
+      setNotes(`Imported from Purchase Bill #${item.invoices?.invoice_no}`)
+      setSourceType("purchase")
+    })()
+  }, [isFromPurchase, companyId])
 
   // ── Load master data concurrently ──────────────────
   useEffect(() => {
@@ -131,24 +163,50 @@ export default function NewAssetPage() {
     setSaving(true)
     setError("")
 
-    const { data, error: rpcError } = await supabase.rpc('create_asset_transaction', {
-      p_company_id:              companyId,
-      p_name:                    name.trim(),
-      p_category:                finalCategory || null,
-      p_purchase_date:           purchaseDate,
-      p_cost_price:              cost,
-      p_life_months:             life,
-      p_salvage_value:           salvage,
-      p_location_id:             locationId ? parseInt(locationId) : null,
-      p_responsible_person_id:   personId ? parseInt(personId) : null,
-      p_gl_asset_account_id:     assetAcctId ? parseInt(assetAcctId) : null,
-      p_gl_accum_dep_account_id: accumDepAcctId ? parseInt(accumDepAcctId) : null,
-      p_gl_dep_expense_account_id: depExpAcctId ? parseInt(depExpAcctId) : null,
-      p_credit_account_id:       creditAcctId ? parseInt(creditAcctId) : null,
-      p_notes:                   notes,
-      p_source_type:             sourceType,
-      p_user_email:              userEmail,
-    })
+    let data: any, rpcError: any
+
+    if (isFromPurchase) {
+      const res = await supabase.rpc('create_asset_from_purchase_bill', {
+        p_company_id:              companyId,
+        p_bill_id:                 parseInt(billId!),
+        p_item_id:                 parseInt(itemId!),
+        p_name:                    name.trim(),
+        p_cost_price:              cost,
+        p_category:                finalCategory || null,
+        p_life_months:             life,
+        p_salvage_value:           salvage,
+        p_location_id:             locationId ? parseInt(locationId) : null,
+        p_responsible_person_id:   personId ? parseInt(personId) : null,
+        p_gl_asset_account_id:     assetAcctId ? parseInt(assetAcctId) : null,
+        p_gl_accum_dep_account_id: accumDepAcctId ? parseInt(accumDepAcctId) : null,
+        p_gl_dep_expense_account_id: depExpAcctId ? parseInt(depExpAcctId) : null,
+        p_notes:                   notes,
+        p_user_email:              userEmail,
+      })
+      rpcError = res.error
+      data = res.data
+    } else {
+      const res = await supabase.rpc('create_asset_transaction', {
+        p_company_id:              companyId,
+        p_name:                    name.trim(),
+        p_category:                finalCategory || null,
+        p_purchase_date:           purchaseDate,
+        p_cost_price:              cost,
+        p_life_months:             life,
+        p_salvage_value:           salvage,
+        p_location_id:             locationId ? parseInt(locationId) : null,
+        p_responsible_person_id:   personId ? parseInt(personId) : null,
+        p_gl_asset_account_id:     assetAcctId ? parseInt(assetAcctId) : null,
+        p_gl_accum_dep_account_id: accumDepAcctId ? parseInt(accumDepAcctId) : null,
+        p_gl_dep_expense_account_id: depExpAcctId ? parseInt(depExpAcctId) : null,
+        p_credit_account_id:       creditAcctId ? parseInt(creditAcctId) : null,
+        p_notes:                   notes,
+        p_source_type:             sourceType,
+        p_user_email:              userEmail,
+      })
+      rpcError = res.error
+      data = res.data
+    }
 
     if (rpcError) {
       setError(rpcError.message || "Unable to create asset – please try again.")
@@ -232,6 +290,7 @@ export default function NewAssetPage() {
         .advanced-toggle { display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:600; font-size:13px; margin-bottom:12px; color:var(--primary); }
         .spinner { animation: spin 1s linear infinite; }
         @keyframes spin { to { transform:rotate(360deg); } }
+        .purchase-note { font-size:12px; color:var(--primary); margin-bottom:8px; }
         @media (max-width:900px) { .header-grid { grid-template-columns:1fr; } }
         @media (max-width:600px) { .row { grid-template-columns:1fr; } }
       `}</style>
@@ -239,10 +298,20 @@ export default function NewAssetPage() {
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
         <button className="btn" onClick={() => router.push("/dashboard/assets")}><ArrowLeft size={16} /></button>
         <div>
-          <h1 style={{ fontSize:22, fontWeight:800, color:"var(--text)", margin:0 }}>➕ New Asset</h1>
-          <p style={{ fontSize:13, color:"var(--text-muted)", margin:0 }}>Add a fixed asset to your register</p>
+          <h1 style={{ fontSize:22, fontWeight:800, color:"var(--text)", margin:0 }}>
+            {isFromPurchase ? "📦 Create Asset from Purchase" : "➕ New Asset"}
+          </h1>
+          <p style={{ fontSize:13, color:"var(--text-muted)", margin:0 }}>
+            {isFromPurchase ? "Capitalize a purchased item" : "Add a fixed asset to your register"}
+          </p>
         </div>
       </div>
+
+      {isFromPurchase && purchaseBillNo && (
+        <div className="purchase-note">
+          📄 Imported from Purchase Bill <strong>#{purchaseBillNo}</strong> — the cost and date can be adjusted before saving.
+        </div>
+      )}
 
       {error && <div style={{ background:"var(--card)", border:"1px solid #EF4444", color:"#FCA5A5", padding:"10px 16px", borderRadius:8, marginBottom:16, fontSize:13 }}>{error}</div>}
 
@@ -265,7 +334,17 @@ export default function NewAssetPage() {
                   <input className="input" style={{ marginTop:6 }} value={otherCategory} onChange={e => setOtherCategory(e.target.value)} placeholder="Specify category" />
                 )}
               </div>
-              <div><label className="label">Purchase Date <span className="label-required">*</span></label><input className="input" type="date" value={purchaseDate} onChange={e => setPurchaseDate(e.target.value)} /></div>
+              <div>
+                <label className="label">Purchase Date <span className="label-required">*</span></label>
+                <input
+                  className="input"
+                  type="date"
+                  value={purchaseDate}
+                  onChange={e => setPurchaseDate(e.target.value)}
+                  disabled={isFromPurchase}
+                  style={isFromPurchase ? { opacity: 0.7 } : {}}
+                />
+              </div>
             </div>
             <div className="row">
               <div><label className="label">Cost Price <span className="label-required">*</span></label><input className="input" type="number" min="0" step="100" value={costPrice} onChange={e => setCostPrice(e.target.value)} placeholder="0" /></div>
@@ -277,12 +356,14 @@ export default function NewAssetPage() {
             </div>
             <div className="row">
               <div><label className="label">Responsible Person</label><select className="select" value={personId} onChange={e => setPersonId(e.target.value)}><option value="">— Select —</option>{personnel.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
-              <div>
-                <label className="label">Source Type</label>
-                <select className="select" value={sourceType} onChange={e => setSourceType(e.target.value)}>
-                  {SOURCE_TYPES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                </select>
-              </div>
+              {!isFromPurchase && (
+                <div>
+                  <label className="label">Source Type</label>
+                  <select className="select" value={sourceType} onChange={e => setSourceType(e.target.value)}>
+                    {SOURCE_TYPES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
 
             <div className="advanced-toggle" onClick={() => setShowAdvanced(!showAdvanced)}>
@@ -298,13 +379,15 @@ export default function NewAssetPage() {
                 </div>
                 <div className="row">
                   <div><label className="label">Dep. Expense Account</label><select className="select" value={depExpAcctId} onChange={e => setDepExpAcctId(e.target.value)}><option value="">— Select —</option>{expenseAccounts.map(a => <option key={a.id} value={a.id}>{a.code} – {a.name}</option>)}</select></div>
-                  <div>
-                    <label className="label">Payment / Credit Account</label>
-                    <select className="select" value={creditAcctId} onChange={e => setCreditAcctId(e.target.value)}>
-                      <option value="">— None —</option>
-                      {creditAccounts.map(a => <option key={a.id} value={a.id}>{a.code} – {a.name}</option>)}
-                    </select>
-                  </div>
+                  {!isFromPurchase && (
+                    <div>
+                      <label className="label">Payment / Credit Account</label>
+                      <select className="select" value={creditAcctId} onChange={e => setCreditAcctId(e.target.value)}>
+                        <option value="">— None —</option>
+                        {creditAccounts.map(a => <option key={a.id} value={a.id}>{a.code} – {a.name}</option>)}
+                      </select>
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -329,14 +412,16 @@ export default function NewAssetPage() {
             <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4 }}>
               <span style={{ color:"var(--text-muted)" }}>Purchase Date</span><span style={{ fontWeight:600 }}>{fmtDate(purchaseDate)}</span>
             </div>
+            {isFromPurchase && purchaseBillNo && (
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4 }}>
+                <span style={{ color:"var(--text-muted)" }}>From</span><span style={{ fontWeight:600 }}>Bill #{purchaseBillNo}</span>
+              </div>
+            )}
             <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4 }}>
               <span style={{ color:"var(--text-muted)" }}>Location</span><span style={{ fontWeight:600 }}>{locations.find(l => l.id == locationId)?.name || "—"}</span>
             </div>
             <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4 }}>
               <span style={{ color:"var(--text-muted)" }}>Responsible</span><span style={{ fontWeight:600 }}>{personnel.find(p => p.id == personId)?.name || "—"}</span>
-            </div>
-            <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4 }}>
-              <span style={{ color:"var(--text-muted)" }}>Source</span><span style={{ fontWeight:600 }}>{SOURCE_TYPES.find(s => s.value === sourceType)?.label || sourceType}</span>
             </div>
             <hr style={{ margin: "10px 0", border: "none", borderTop: "1px solid var(--border)" }} />
             <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4 }}>
