@@ -10,8 +10,7 @@ import {
 import { useRole } from "@/contexts/RoleContext"
 import { useCompany } from "@/contexts/CompanyContext"
 import PremiumGuard from "@/components/PremiumGuard"
-import jsPDF from "jspdf"
-import autoTable from "jspdf-autotable"
+import { generateAssetRegisterPDF } from "@/lib/pdf/assetRegisterPDF"
 
 type SortField = "asset_no" | "name" | "category" | "location" | "purchase_date" | "cost_price" | "accumulated_depreciation" | "net_book_value" | "remaining_life_months" | "status"
 type SortDir = "asc" | "desc"
@@ -64,7 +63,12 @@ function AssetsContent() {
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
   const router = useRouter()
   const { role, loading: roleLoading } = useRole()
-  const { companyId: contextCompanyId } = useCompany()
+  const {
+    companyId: contextCompanyId,
+    companyName,
+    companyTagline,
+    logoUrl,
+  } = useCompany()
   const canEdit = role === "admin" || role === "accountant"
   const canView = role === "admin" || role === "accountant"
 
@@ -153,7 +157,6 @@ function AssetsContent() {
 
   // ── Depreciation modal helpers ───────────────────────
   const openDepreciationModal = () => {
-    // Use already loaded assets – filter for active with remaining life > 0
     const eligible = assets.filter(
       a => a.status === "Active" && a.remaining_life_months > 0 && Number(a.depreciation_per_month ?? 0) > 0
     )
@@ -162,13 +165,11 @@ function AssetsContent() {
       return
     }
 
-    // Default start month to the earliest purchase date among eligible
     const dates = eligible.map(a => new Date(a.purchase_date)).filter(d => !isNaN(d.getTime()))
     const earliest = dates.length ? new Date(Math.min(...dates.map(d => d.getTime()))) : new Date()
     setDepStartMonth(earliest.toISOString().slice(0, 7))
     setDepPostingDate(new Date().toISOString().split("T")[0])
 
-    // Select all eligible by default
     setSelectedAssetIds(eligible.map(a => a.id))
     setDepResult(null)
     setShowDepModal(true)
@@ -197,7 +198,6 @@ function AssetsContent() {
       return
     }
     setDepRunning(true)
-    // p_start_month expects the first day of the month (YYYY-MM-DD)
     const startMonthDate = depStartMonth + "-01"
     const { data, error } = await supabase.rpc('post_asset_depreciation', {
       p_company_id: companyId,
@@ -209,7 +209,7 @@ function AssetsContent() {
     setDepResult(data || { error: error?.message })
     setDepRunning(false)
     if (data?.success) {
-      fetchAssets()  // refresh the list
+      fetchAssets()
     }
   }
 
@@ -304,12 +304,25 @@ function AssetsContent() {
         </div>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
           <button className="btn" onClick={fetchAssets} title="Refresh list"><RefreshCw size={14} /> Refresh</button>
-          <button className="btn" onClick={() => {
-            const doc = new jsPDF({ orientation:"landscape" });
-            doc.setFontSize(14); doc.text("Asset Register", 14, 20);
-            const head = [["Asset No","Name","Category","Location","Purchase Date","Cost","Accum. Dep.","NBV","Rem. Life","Status"]];
-            const data = sorted.map(a => [a.asset_no, a.name, a.category||"—", a.location_name||"—", formatDate(a.purchase_date), Number(a.cost_price ?? 0).toLocaleString(), Number(a.accumulated_depreciation ?? 0).toLocaleString(), Number(a.net_book_value ?? 0).toLocaleString(), a.remaining_life_months, a.status]);
-            autoTable(doc, { head, body: data, startY:30, styles:{ fontSize:8 } });
+          <button className="btn" onClick={async () => {
+            const pdfData = {
+              companyName: companyName || "OneAccounts",
+              companyTagline: companyTagline || "",
+              logoUrl: logoUrl || null,
+              asOfDate: new Date().toLocaleDateString("en-PK", { year:"numeric", month:"long", day:"numeric" }),
+              assets: sorted.map(a => ({
+                assetNo: a.asset_no,
+                name: a.name,
+                category: a.category,
+                purchaseDate: formatDate(a.purchase_date),
+                cost: Number(a.cost_price ?? 0),
+                accumDep: Number(a.accumulated_depreciation ?? 0),
+                nbv: Number(a.net_book_value ?? 0),
+                remainingLife: a.remaining_life_months,
+                status: a.status,
+              })),
+            };
+            const doc = await generateAssetRegisterPDF(pdfData);
             doc.save("asset_register.pdf");
           }}><Download size={14} /> PDF</button>
           {canEdit && (
