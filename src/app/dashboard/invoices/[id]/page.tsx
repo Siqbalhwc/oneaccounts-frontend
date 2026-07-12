@@ -153,11 +153,11 @@ export default function InvoiceDetailPage() {
   }, [companyId, invoiceId])
 
   const waLink = invoice && invoice.customer
-    ? getWhatsAppLink(invoice.customer.phone || "", `Dear ${invoice.customer.name},\n\nYour invoice ${invoice.invoice_no} of PKR ${invoice.total?.toLocaleString()} has been generated.\n\n📄 View Online: https://www.oneaccountsbysiqbal.com/invoice/${invoice.id}\n📅 Date: ${invoice.date}\n📆 Due: ${invoice.due_date}\n\nThank you for your business.\n— OneAccounts by Siqbal`)
+    ? getWhatsAppLink(invoice.customer.phone || "", `Dear ${invoice.customer.name},\n\nYour invoice ${invoice.invoice_no} of PKR ${invoice.total?.toLocaleString()} has been generated.\n\n📄 View Online: https://app.oneaccountsbysiqbal.com/invoice/${invoice.id}\n📅 Date: ${invoice.date}\n📆 Due: ${invoice.due_date}\n\nThank you for your business.\n— OneAccounts by Siqbal`)
     : ""
 
   const reminderLink = invoice && invoice.customer
-    ? getWhatsAppLink(invoice.customer.phone || "", `Dear ${invoice.customer.name},\n\nFriendly reminder: Your invoice ${invoice.invoice_no} for PKR ${invoice.total?.toLocaleString()} is overdue.\n\n📄 View & Pay: https://www.oneaccountsbysiqbal.com/invoice/${invoice.id}\n\nThank you.\n— OneAccounts by Siqbal`)
+    ? getWhatsAppLink(invoice.customer.phone || "", `Dear ${invoice.customer.name},\n\nFriendly reminder: Your invoice ${invoice.invoice_no} for PKR ${invoice.total?.toLocaleString()} is overdue.\n\n📄 View & Pay: https://app.oneaccountsbysiqbal.com/invoice/${invoice.id}\n\nThank you.\n— OneAccounts by Siqbal`)
     : ""
 
   const handlePrintPDF = async () => {

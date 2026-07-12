@@ -11,6 +11,7 @@ function getPlanCode(businessType: string): string {
   switch (businessType) {
     case 'trading': return 'basic-trading'
     case 'service': return 'basic-service'
+    case 'construction': return 'basic-construction'
     case 'ngo':
     default:        return 'basic-ngo'
   }
@@ -150,6 +151,22 @@ export async function POST(request: Request) {
       .from('features')
       .select('id')
       .eq('code', 'inventory')
+      .single()
+
+    if (feature) {
+      const { error: featureError } = await supabaseAdmin.from('company_features').upsert(
+        { company_id: company.id, feature_id: feature.id, enabled: true },
+        { onConflict: 'company_id,feature_id' }
+      )
+      if (featureError) {
+        console.error('Failed to enable feature:', featureError)
+      }
+    }
+  } else if (type === 'construction') {
+    const { data: feature } = await supabaseAdmin
+      .from('features')
+      .select('id')
+      .eq('code', 'construction_module')
       .single()
 
     if (feature) {

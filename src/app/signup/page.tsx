@@ -328,6 +328,7 @@ export default function SignupPage() {
             <option value="ngo">NGO</option>
             <option value="service">Service Business</option>
             <option value="trading">Trading Business</option>
+            <option value="construction">Construction Business</option>
           </select>
 
           <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4, color: "var(--text)" }}>
