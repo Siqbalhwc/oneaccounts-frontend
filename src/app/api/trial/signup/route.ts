@@ -40,7 +40,11 @@ export async function POST(request: Request) {
   const { data: userCheck, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId)
 
   if (userError || !userCheck?.user) {
-    return NextResponse.json({ error: 'Invalid user' }, { status: 401 })
+    console.error('getUserById failed:', userError)
+    return NextResponse.json(
+      { error: `Invalid user: ${userError?.message || 'user not found for id ' + userId}` },
+      { status: 401 }
+    )
   }
 
   const user = userCheck.user
