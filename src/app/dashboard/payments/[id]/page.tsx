@@ -43,6 +43,8 @@ interface JournalLine {
   account_name?: string
   debit: number
   credit: number
+  source_type: string
+  description?: string
 }
 
 interface Attachment {
@@ -130,12 +132,14 @@ export default function PaymentDetailPage() {
         setLoading(false)
       })
 
+    // Fetch ALL journal lines (payment + reversal) for this payment
     supabase
       .from("journal_lines")
-      .select("account_id, debit, credit, accounts(code, name)")
+      .select("account_id, debit, credit, source_type, accounts(code, name), journal_entries(description)")
       .eq("company_id", companyId)
-      .eq("source_type", "payment")
+      .in("source_type", ["payment", "payment_reversal"])
       .eq("source_id", paymentId)
+      .order("entry_id", { ascending: true })
       .then(({ data: lines }) => {
         if (lines && lines.length > 0) {
           const formatted = lines.map((l: any) => ({
@@ -144,8 +148,12 @@ export default function PaymentDetailPage() {
             account_name: l.accounts?.name || "",
             debit: l.debit || 0,
             credit: l.credit || 0,
+            source_type: l.source_type,
+            description: l.journal_entries?.description || "",
           }))
           setJournalLines(formatted)
+        } else {
+          setJournalLines([])
         }
       })
   }, [companyId, paymentId])
@@ -219,7 +227,7 @@ export default function PaymentDetailPage() {
     await fetchAttachments()
   }
 
-  // WhatsApp link using the helper
+  // WhatsApp link
   const waLink = payment && payment.supplier
     ? getWhatsAppLink(
         payment.supplier.phone || "",
@@ -258,6 +266,9 @@ export default function PaymentDetailPage() {
   if (loading) return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", color: "var(--text-muted)" }}>Loading…</div>
   if (!payment) return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", color: "var(--text-muted)" }}>Payment not found</div>
 
+  // Separate original, reversal, and edited lines for clarity (optional)
+  const originalLines = journalLines.filter(l => l.source_type === 'payment')
+  const reversalLines = journalLines.filter(l => l.source_type === 'payment_reversal')
   const totalDebit = journalLines.reduce((s, l) => s + l.debit, 0)
   const totalCredit = journalLines.reduce((s, l) => s + l.credit, 0)
 
@@ -330,13 +341,22 @@ export default function PaymentDetailPage() {
           70% { opacity: 1; }
           100% { opacity: 0; visibility: hidden; }
         }
+        .source-tag {
+          font-size: 10px;
+          font-weight: 700;
+          padding: 2px 6px;
+          border-radius: 4px;
+          margin-left: 6px;
+          background: rgba(148,163,184,0.15);
+          color: #94a3b8;
+          display: inline-block;
+        }
         @media (max-width: 640px) {
           .grid-2col { grid-template-columns: 1fr; }
           .attachments-grid { grid-template-columns: 1fr; }
         }
       `}</style>
 
-      {/* Toast notification */}
       {uploadSuccess && (
         <div className="toast">
           <CheckCircle size={16} /> {uploadSuccess}
@@ -460,7 +480,7 @@ export default function PaymentDetailPage() {
 
       {journalLines.length > 0 && (
         <div className="card">
-          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📒 Journal Entry</h3>
+          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📒 Journal Entries (incl. reversals)</h3>
           <div className="table-wrapper">
             <table>
               <thead>
@@ -468,8 +488,12 @@ export default function PaymentDetailPage() {
               </thead>
               <tbody>
                 {journalLines.map((line, idx) => (
-                  <tr key={idx}>
-                    <td>{line.account_code} – {line.account_name}</td>
+                  <tr key={idx} style={line.source_type === 'payment_reversal' ? { opacity: 0.8, fontStyle: 'italic' } : {}}>
+                    <td>
+                      {line.account_code} – {line.account_name}
+                      {line.source_type === 'payment_reversal' && <span className="source-tag">REVERSAL</span>}
+                      {line.source_type === 'payment' && line.description?.includes('(edited)') && <span className="source-tag" style={{background: 'rgba(59,130,246,0.15)', color:'#3b82f6'}}>EDITED</span>}
+                    </td>
                     <td style={{ textAlign: "right", color: line.debit > 0 ? "#F87171" : "var(--text-muted)" }}>{line.debit > 0 ? line.debit.toLocaleString() : "–"}</td>
                     <td style={{ textAlign: "right", color: line.credit > 0 ? "#2DD4BF" : "var(--text-muted)" }}>{line.credit > 0 ? line.credit.toLocaleString() : "–"}</td>
                   </tr>
@@ -477,7 +501,7 @@ export default function PaymentDetailPage() {
               </tbody>
               <tfoot>
                 <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
-                  <td style={{ fontWeight: 700 }}>Total</td>
+                  <td>Total</td>
                   <td style={{ textAlign: "right", color: "#F87171" }}>{totalDebit.toLocaleString()}</td>
                   <td style={{ textAlign: "right", color: "#2DD4BF" }}>{totalCredit.toLocaleString()}</td>
                 </tr>

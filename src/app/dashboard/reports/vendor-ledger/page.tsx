@@ -89,7 +89,7 @@ export default function VendorLedgerPage() {
         .eq("code", "2000")
         .single()
 
-      // 2. Fetch ALL purchase bills for this supplier (to calculate opening)
+      // 2. Fetch ALL purchase bills for this supplier
       const { data: allBills } = await supabase
         .from("invoices")
         .select("id, total, invoice_no, date, type")
@@ -122,14 +122,14 @@ export default function VendorLedgerPage() {
             .order("entry_id", { ascending: true })
         : { data: [] as any[] }
 
-      // 5. Build ledger lines, bucketing into opening/period
+      // 5. Build ledger lines
       const periodLines: any[] = []
       let openingDebit = 0
       let openingCredit = 0
 
       // Bills
       for (const bill of allBills || []) {
-        const credit = bill.total || 0   // purchase bill is a credit to AP
+        const credit = bill.total || 0
         if (bill.date < startDate) {
           openingCredit += credit
           continue
@@ -272,8 +272,190 @@ export default function VendorLedgerPage() {
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
-      {/* Styling identical to the customer ledger (omitted for brevity but must be included in the actual file) */}
-      {/* ... */}
+      <style>{`
+        .ledger-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0; box-shadow: var(--shadow-sm); overflow: hidden; }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .summary-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+        .summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+        .summary-value { font-size: 22px; font-weight: 800; color: var(--text); }
+
+        .ledger-header {
+          display: grid;
+          grid-template-columns: 90px 170px 1fr 140px 140px 160px;
+          padding: 12px 16px;
+          background: var(--card-hover);
+          font-size: 12px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          color: var(--text-muted);
+          border-bottom: 1px solid var(--border);
+          white-space: nowrap;
+          user-select: none;
+        }
+        .ledger-row {
+          display: grid;
+          grid-template-columns: 90px 170px 1fr 140px 140px 160px;
+          padding: 12px 16px;
+          border-bottom: 1px solid var(--border);
+          font-size: 13px;
+          align-items: center;
+          transition: background 0.15s;
+        }
+        .ledger-row:hover { background: var(--card-hover); }
+        .ledger-row:last-child { border-bottom: none; }
+        .opening-row { background: var(--bg-soft); font-weight: 600; }
+
+        .ledger-row .cell-no-wrap {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .sort-btn {
+          background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
+          display: inline-flex; align-items: center; gap: 4px; padding: 0;
+          font-weight: 700; text-transform: uppercase; font-size: 12px;
+          letter-spacing: 0.04em;
+        }
+        .sort-btn:hover { color: var(--primary); }
+
+        .date-input {
+          height: 34px; border: 1.5px solid var(--border); border-radius: 8px;
+          padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text);
+          outline: none; font-family: inherit; width: 140px;
+        }
+        .date-input:focus { border-color: var(--primary); }
+        .btn { padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
+        .btn-outline:hover { background: var(--card-hover); }
+        .supplier-select {
+          height: 34px; border: 1.5px solid var(--border); border-radius: 8px;
+          padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text);
+          outline: none; font-family: inherit; min-width: 200px;
+        }
+        .supplier-select:focus { border-color: var(--primary); }
+
+        @media (max-width: 640px) {
+          .ledger-header, .ledger-row {
+            grid-template-columns: 70px 120px 1fr 100px 100px 120px;
+          }
+        }
+      `}</style>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}>
+          <ArrowLeft size={16} />
+        </button>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>
+            🚚 Vendor Ledger
+          </h1>
+          <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Transaction history for a specific supplier</p>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <select
+            className="supplier-select"
+            value={selectedSupplierId}
+            onChange={(e) => setSelectedSupplierId(e.target.value)}
+          >
+            <option value="">— Select Supplier —</option>
+            {suppliers.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.code} – {s.name}
+              </option>
+            ))}
+          </select>
+          <input type="date" className="date-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
+          <span style={{ color: "var(--text-muted)", fontSize: 12 }}>to</span>
+          <input type="date" className="date-input" value={endDate} onChange={e => setEndDate(e.target.value)} />
+          <button className="btn btn-outline" onClick={fetchLedger}>Refresh</button>
+          <button className="btn btn-outline" onClick={handlePrintPDF}>
+            <Printer size={16} /> Print PDF
+          </button>
+        </div>
+      </div>
+
+      {errorMsg && (
+        <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, border: "1px solid #FECACA" }}>
+          {errorMsg}
+        </div>
+      )}
+
+      {selectedSupplierId && supplier ? (
+        <>
+          <div style={{
+            background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12,
+            padding: "12px 20px", marginBottom: 20, display: "flex", alignItems: "center", gap: 16
+          }}>
+            <div style={{ background: "var(--bg-soft)", borderRadius: 8, padding: "6px 12px", fontWeight: 700, fontSize: 14, color: "var(--primary)" }}>
+              {supplier.code}
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, color: "var(--text)" }}>{supplier.name}</div>
+            </div>
+          </div>
+
+          <div className="summary-grid">
+            <div className="summary-item">
+              <div className="summary-label">Total Debits</div>
+              <div className="summary-value" style={{ color: "#EF4444" }}>PKR {totalDebit.toLocaleString()}</div>
+            </div>
+            <div className="summary-item">
+              <div className="summary-label">Total Credits</div>
+              <div className="summary-value" style={{ color: "#10B981" }}>PKR {totalCredit.toLocaleString()}</div>
+            </div>
+            <div className="summary-item">
+              <div className="summary-label">Closing Balance</div>
+              <div className="summary-value" style={{ color: closingBalance >= 0 ? "#10B981" : "#EF4444" }}>
+                PKR {closingBalance.toLocaleString()}
+              </div>
+            </div>
+          </div>
+
+          {loading ? (
+            <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading ledger entries…</div>
+          ) : sortedLines.length === 0 ? (
+            <div className="ledger-card" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
+              No transactions found for this period.
+            </div>
+          ) : (
+            <div className="ledger-card">
+              <div className="ledger-header">
+                <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
+                <button className="sort-btn" onClick={() => handleSort("entry_no")}>Entry # {getSortIcon("entry_no")}</button>
+                <button className="sort-btn" onClick={() => handleSort("description")} style={{ textAlign: "left", justifyContent: "flex-start" }}>Description {getSortIcon("description")}</button>
+                <button className="sort-btn" onClick={() => handleSort("debit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
+                <button className="sort-btn" onClick={() => handleSort("credit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
+                <button className="sort-btn" onClick={() => handleSort("running_balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("running_balance")}</button>
+              </div>
+              {sortedLines.map((line, idx) => (
+                <div key={line.id || idx} className={`ledger-row ${line.isOpening ? "opening-row" : ""}`}>
+                  <span className="cell-no-wrap" style={{ fontSize: 12 }}>{line.date}</span>
+                  <span className="cell-no-wrap" style={{ color: "var(--primary)", fontSize: 12 }} title={line.entry_no || ""}>
+                    {line.entry_no || "—"}
+                  </span>
+                  <span className="cell-no-wrap" title={line.description} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {line.description}
+                  </span>
+                  <span className="cell-no-wrap" style={{ textAlign: "right", color: line.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit > 0 ? 600 : 400 }}>
+                    {line.debit > 0 ? `PKR ${line.debit.toLocaleString()}` : "—"}
+                  </span>
+                  <span className="cell-no-wrap" style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.credit > 0 ? 600 : 400 }}>
+                    {line.credit > 0 ? `PKR ${line.credit.toLocaleString()}` : "—"}
+                  </span>
+                  <span className="cell-no-wrap" style={{ textAlign: "right", fontWeight: 600, color: line.running_balance >= 0 ? "#10B981" : "#EF4444" }}>
+                    PKR {line.running_balance.toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        <div style={{ textAlign: "center", padding: 60, color: "var(--text-muted)" }}>
+          <p style={{ fontSize: 16 }}>Select a supplier above to view their ledger.</p>
+        </div>
+      )}
     </div>
   )
 }
