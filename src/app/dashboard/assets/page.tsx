@@ -5,21 +5,21 @@ import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import {
   Plus, Search, Download, Upload, Eye, ArrowUpDown, ArrowUp, ArrowDown,
-  RefreshCw, X, CheckCircle, BookOpen
+  RefreshCw, X, CheckCircle, BookOpen, Loader2
 } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
+import { useCompany } from "@/contexts/CompanyContext"
 import PremiumGuard from "@/components/PremiumGuard"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
-type SortField = "asset_no" | "name" | "category" | "location" | "purchase_date" | "cost_price" | "depreciation_per_month" | "status"
+type SortField = "asset_no" | "name" | "category" | "location" | "purchase_date" | "cost_price" | "accumulated_depreciation" | "net_book_value" | "remaining_life_months" | "status"
 type SortDir = "asc" | "desc"
 
-// ── Skeleton Loading Row ──
 function SkeletonRow() {
   return (
     <tr>
-      {[60, 70, 50, 50, 60, 40, 40, 50, 30].map((w, i) => (
+      {[60, 70, 50, 50, 60, 40, 40, 50, 40, 30].map((w, i) => (
         <td key={i} style={{ padding: "12px 16px" }}>
           <div style={{
             width: `${w}%`,
@@ -34,124 +34,80 @@ function SkeletonRow() {
   )
 }
 
+const STATUS_COLORS: Record<string, string> = {
+  Active: "#22c55e",
+  Sold: "#f59e0b",
+  Disposed: "#ef4444",
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const color = STATUS_COLORS[status] || "#94a3b8"
+  return (
+    <span
+      style={{
+        padding: "2px 10px",
+        borderRadius: "100px",
+        fontSize: 11,
+        fontWeight: 600,
+        background: `${color}22`,
+        color: color,
+        border: `1px solid ${color}44`,
+        display: "inline-block",
+      }}
+    >
+      {status}
+    </span>
+  )
+}
+
 function AssetsContent() {
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
   const router = useRouter()
   const { role, loading: roleLoading } = useRole()
+  const { companyId: contextCompanyId } = useCompany()
   const canEdit = role === "admin" || role === "accountant"
   const canView = role === "admin" || role === "accountant"
 
   const [assets, setAssets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState("")
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("")
   const [sortField, setSortField] = useState<SortField>("asset_no")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
   const [companyId, setCompanyId] = useState("")
+  const [userEmail, setUserEmail] = useState("")
 
   // Depreciation modal state
   const [showDepModal, setShowDepModal] = useState(false)
-  const [activeAssetsForDep, setActiveAssetsForDep] = useState<any[]>([])
+  const [depStartMonth, setDepStartMonth] = useState("")               // "YYYY-MM"
+  const [depPostingDate, setDepPostingDate] = useState(new Date().toISOString().split("T")[0])
   const [selectedAssetIds, setSelectedAssetIds] = useState<number[]>([])
-  const [depStartMonth, setDepStartMonth] = useState("")
   const [depRunning, setDepRunning] = useState(false)
   const [depResult, setDepResult] = useState<any>(null)
 
-  // ── Shared header & cell styles (matching Stock Register) ──
-  const thStyle: React.CSSProperties = {
-    padding: "12px 16px",
-    background: "var(--card-hover)",
-    borderBottom: "1px solid var(--border)",
-    fontSize: 12,
-    fontWeight: 700,
-    textTransform: "uppercase",
-    letterSpacing: "0.04em",
-    color: "var(--text-muted)",
-    whiteSpace: "nowrap",
-    userSelect: "none",
-  }
-
-  const tdStyle: React.CSSProperties = {
-    padding: "12px 16px",
-    borderBottom: "1px solid var(--border)",
-    fontSize: 13,
-    verticalAlign: "middle",
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  }
-
-  // ── Sortable Header Component ──
-  const SortTh = ({ field, children, style, align }: { 
-    field: SortField; 
-    children: React.ReactNode; 
-    style?: React.CSSProperties;
-    align?: "left" | "center" | "right";
-  }) => {
-    const isNumeric = field === "cost_price" || field === "depreciation_per_month"
-    const textAlign = align || (isNumeric ? "right" : "left")
-    
-    return (
-      <th style={{ ...thStyle, textAlign, ...style }}>
-        <button
-          onClick={() => {
-            if (sortField === field) {
-              setSortDir(prev => prev === "asc" ? "desc" : "asc")
-            } else {
-              setSortField(field)
-              setSortDir("asc")
-            }
-          }}
-          style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            font: "inherit",
-            fontSize: 12,
-            fontWeight: 700,
-            textTransform: "uppercase",
-            letterSpacing: "0.04em",
-            color: "var(--text-muted)",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-            padding: 0,
-            whiteSpace: "nowrap",
-            justifyContent: textAlign === "right" ? "flex-end" : textAlign === "center" ? "center" : "flex-start",
-            width: "100%",
-          }}
-        >
-          {children}
-          {sortField !== field ? (
-            <ArrowUpDown size={12} style={{ opacity: 0.5 }} />
-          ) : sortDir === "asc" ? (
-            <ArrowUp size={12} />
-          ) : (
-            <ArrowDown size={12} />
-          )}
-        </button>
-      </th>
-    )
-  }
-
-  // ── Data Fetching ──
+  // ── Get company ID and user email ────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
-      const cid = (user?.app_metadata as any)?.company_id
-      if (cid) setCompanyId(cid)
+      const cid = contextCompanyId || (user?.app_metadata as any)?.company_id
+      if (cid) {
+        setCompanyId(cid)
+        setUserEmail(user?.email || "system")
+      }
     })
-  }, [])
+  }, [contextCompanyId])
 
   const fetchAssets = async () => {
     if (!companyId) return
     setLoading(true)
-    const { data } = await supabase
-      .from("assets")
-      .select("*, locations(name)")
-      .eq("company_id", companyId)
-      .is("deleted_at", null)
-      .order("asset_no")
-    setAssets(data || [])
+    setFetchError("")
+    const { data, error } = await supabase.rpc('get_asset_list', { p_company_id: companyId })
+    if (error) {
+      setFetchError("Failed to load assets: " + error.message)
+      setAssets([])
+    } else {
+      setAssets(data || [])
+    }
     setLoading(false)
   }
 
@@ -160,21 +116,25 @@ function AssetsContent() {
   // ── Filter & Sort ──
   const filtered = assets.filter(a => {
     if (statusFilter && a.status !== statusFilter) return false
-    if (search && !a.name.toLowerCase().includes(search.toLowerCase()) && !a.asset_no.toLowerCase().includes(search.toLowerCase())) return false
+    if (search) {
+      const s = search.toLowerCase()
+      const name = (a.name ?? "").toLowerCase()
+      const code = (a.asset_no ?? "").toLowerCase()
+      const cat = (a.category ?? "").toLowerCase()
+      const loc = (a.location_name ?? "").toLowerCase()
+      if (!name.includes(s) && !code.includes(s) && !cat.includes(s) && !loc.includes(s)) return false
+    }
     return true
   })
 
   const sorted = [...filtered].sort((a, b) => {
     let valA: any, valB: any
     if (sortField === "location") {
-      valA = (a.locations?.name || "").toLowerCase()
-      valB = (b.locations?.name || "").toLowerCase()
-    } else if (sortField === "cost_price" || sortField === "depreciation_per_month") {
-      valA = Number(a[sortField]) || 0
-      valB = Number(b[sortField]) || 0
-    } else if (sortField === "status") {
-      valA = (a.status || "").toLowerCase()
-      valB = (b.status || "").toLowerCase()
+      valA = (a.location_name || "").toLowerCase()
+      valB = (b.location_name || "").toLowerCase()
+    } else if (["cost_price","accumulated_depreciation","net_book_value","remaining_life_months"].includes(sortField)) {
+      valA = Number(a[sortField] ?? 0)
+      valB = Number(b[sortField] ?? 0)
     } else {
       valA = (a[sortField] || "").toString().toLowerCase()
       valB = (b[sortField] || "").toString().toLowerCase()
@@ -185,57 +145,46 @@ function AssetsContent() {
   })
 
   const totalAssets = filtered.length
-  const totalCost = filtered.reduce((s, a) => s + (a.cost_price || 0), 0)
+  const totalCost = filtered.reduce((s, a) => s + Number(a.cost_price ?? 0), 0)
+  const totalAccum = filtered.reduce((s, a) => s + Number(a.accumulated_depreciation ?? 0), 0)
+  const totalNBV = filtered.reduce((s, a) => s + Number(a.net_book_value ?? 0), 0)
   const activeCount = filtered.filter(a => a.status === "Active").length
+  const fullyDepCount = filtered.filter(a => a.status === "Active" && a.remaining_life_months === 0).length
 
-  // ── Depreciation Modal (unchanged) ──
-  const openDepreciationModal = async () => {
-    const { data } = await supabase
-      .from("assets")
-      .select("id, asset_no, name, purchase_date, depreciation_per_month, remaining_life_months")
-      .eq("company_id", companyId)
-      .eq("status", "Active")
-      .gt("remaining_life_months", 0)
-      .order("asset_no")
-
-    if (!data || data.length === 0) {
-      alert("No active assets with remaining life available to depreciate.")
+  // ── Depreciation modal helpers ───────────────────────
+  const openDepreciationModal = () => {
+    // Use already loaded assets – filter for active with remaining life > 0
+    const eligible = assets.filter(
+      a => a.status === "Active" && a.remaining_life_months > 0 && Number(a.depreciation_per_month ?? 0) > 0
+    )
+    if (eligible.length === 0) {
+      alert("No active assets with remaining life and monthly depreciation available.")
       return
     }
 
-    setActiveAssetsForDep(data)
-    setSelectedAssetIds(data.map(a => a.id))
+    // Default start month to the earliest purchase date among eligible
+    const dates = eligible.map(a => new Date(a.purchase_date)).filter(d => !isNaN(d.getTime()))
+    const earliest = dates.length ? new Date(Math.min(...dates.map(d => d.getTime()))) : new Date()
+    setDepStartMonth(earliest.toISOString().slice(0, 7))
+    setDepPostingDate(new Date().toISOString().split("T")[0])
 
-    const dates = data.map(a => new Date(a.purchase_date)).filter(d => !isNaN(d.getTime()))
-    if (dates.length > 0) {
-      const earliest = new Date(Math.min(...dates.map(d => d.getTime())))
-      setDepStartMonth(earliest.toISOString().slice(0, 7))
-    } else {
-      setDepStartMonth(new Date().toISOString().slice(0, 7))
-    }
+    // Select all eligible by default
+    setSelectedAssetIds(eligible.map(a => a.id))
     setDepResult(null)
     setShowDepModal(true)
   }
 
   const toggleAssetSelection = (id: number) => {
-    setSelectedAssetIds(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    )
+    setSelectedAssetIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
-  const getMonthsToProcess = (asset: any) => {
-    const start = new Date(depStartMonth + "-01")
-    if (isNaN(start.getTime())) return 0
-    const now = new Date()
-    const current = new Date(now.getFullYear(), now.getMonth(), 1)
-    if (start > current) return 0
-    let months = 0
-    let cursor = new Date(start)
-    while (cursor <= current) {
-      months++
-      cursor.setMonth(cursor.getMonth() + 1)
+  const toggleSelectAll = () => {
+    const eligible = assets.filter(a => a.status === "Active" && a.remaining_life_months > 0)
+    if (selectedAssetIds.length === eligible.length) {
+      setSelectedAssetIds([])
+    } else {
+      setSelectedAssetIds(eligible.map(a => a.id))
     }
-    return Math.min(months, asset.remaining_life_months)
   }
 
   const executeDepreciation = async () => {
@@ -248,43 +197,70 @@ function AssetsContent() {
       return
     }
     setDepRunning(true)
-    setDepResult(null)
-
-    const res = await fetch("/api/assets/depreciation", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        asset_ids: selectedAssetIds,
-        start_month: depStartMonth,
-      }),
+    // p_start_month expects the first day of the month (YYYY-MM-DD)
+    const startMonthDate = depStartMonth + "-01"
+    const { data, error } = await supabase.rpc('post_asset_depreciation', {
+      p_company_id: companyId,
+      p_asset_ids: selectedAssetIds,
+      p_start_month: startMonthDate,
+      p_posting_date: depPostingDate,
+      p_user_email: userEmail,
     })
-    const json = await res.json()
-    setDepResult(json)
+    setDepResult(data || { error: error?.message })
     setDepRunning(false)
-    if (json.success) {
-      fetchAssets()
+    if (data?.success) {
+      fetchAssets()  // refresh the list
     }
   }
 
-  // ── PDF Export ──
-  const exportPDF = () => {
-    const doc = new jsPDF({ orientation: "landscape" })
-    doc.setFontSize(14)
-    doc.text("Asset Register", 14, 20)
-    const head = [["Asset No", "Name", "Category", "Location", "Purchase Date", "Cost", "Monthly Dep.", "Status"]]
-    const data = sorted.map(a => [
-      a.asset_no,
-      a.name,
-      a.category || "—",
-      a.locations?.name || "—",
-      a.purchase_date,
-      a.cost_price?.toLocaleString(),
-      a.depreciation_per_month?.toLocaleString(),
-      a.status,
-    ])
-    autoTable(doc, { head, body: data, startY: 30, styles: { fontSize: 8 } })
-    doc.save("asset_register.pdf")
+  // ── Format helpers ───────────────────────────────────
+  const formatDate = (dateStr: string | null): string => {
+    if (!dateStr) return "—"
+    const d = new Date(dateStr)
+    return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-PK", { year:"numeric", month:"short", day:"numeric" })
   }
+
+  const thStyle: React.CSSProperties = {
+    padding: "12px 16px",
+    background: "var(--card-hover)",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 12,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    color: "var(--text-muted)",
+    whiteSpace: "nowrap",
+    userSelect: "none",
+  }
+  const tdStyle: React.CSSProperties = {
+    padding: "12px 16px",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 13,
+    verticalAlign: "middle",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  }
+
+  const SortTh = ({ field, children, align }: { field: SortField; children: React.ReactNode; align?: "left"|"center"|"right" }) => (
+    <th style={{ ...thStyle, textAlign: align || "left" }}>
+      <button
+        onClick={() => {
+          if (sortField === field) setSortDir(prev => prev === "asc" ? "desc" : "asc")
+          else { setSortField(field); setSortDir("asc") }
+        }}
+        style={{
+          background: "none", border: "none", cursor: "pointer",
+          font: "inherit", color: "var(--text-muted)",
+          display: "inline-flex", alignItems: "center", gap: 4, padding: 0,
+          fontWeight: 700, textTransform: "uppercase", fontSize: 12,
+        }}
+      >
+        {children}
+        {sortField === field ? (sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={12} style={{ opacity: 0.5 }} />}
+      </button>
+    </th>
+  )
 
   if (roleLoading || !role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
@@ -292,139 +268,75 @@ function AssetsContent() {
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        @keyframes shimmer {
-          0%   { opacity: 0.4; }
-          50%  { opacity: 0.8; }
-          100% { opacity: 0.4; }
-        }
-        .btn {
-          display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px;
-          border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
-          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
-          color: white; border: none; transition: all 0.2s; font-family: inherit;
-        }
-        .btn:hover {
-          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
-          transform: translateY(-1px);
-          box-shadow: 0 6px 20px rgba(7,19,82,0.45);
-        }
-        .btn-outline {
-          background: transparent; color: var(--text-muted); border: 1.5px solid var(--border);
-        }
-        .btn-outline:hover {
-          background: var(--card-hover);
-          transform: translateY(-1px);
-          box-shadow: none;
-        }
-        .btn-icon {
-          background: transparent; border: 1.5px solid var(--border);
-          color: var(--text-muted); padding: 5px; border-radius: 6px;
-          cursor: pointer; display: inline-flex; align-items: center;
-          justify-content: center; flex-shrink: 0; line-height: 1;
-        }
-        .btn-icon:hover { background: var(--card-hover); }
-        .input {
-          height: 38px; border: 1.5px solid var(--border); border-radius: 8px;
-          padding: 0 12px 0 36px; font-size: 13px; background: var(--card);
-          color: var(--text); outline: none; box-sizing: border-box; width: 100%;
-        }
-        .input:focus { border-color: var(--primary); }
-        .filter-select {
-          height: 38px; border: 1.5px solid var(--border); border-radius: 8px;
-          padding: 0 12px; font-size: 13px; background: var(--card);
-          color: var(--text); outline: none; font-family: inherit;
-        }
-        .filter-select:focus { border-color: var(--primary); }
-        .summary-grid {
-          display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-          gap: 12px; margin-bottom: 20px;
-        }
-        .summary-item {
-          background: var(--card); border: 1px solid var(--border);
-          border-radius: 12px; padding: 16px;
-        }
-        .summary-label {
-          font-size: 10px; font-weight: 700; text-transform: uppercase;
-          color: var(--text-muted); margin-bottom: 4px;
-        }
-        .summary-value {
-          font-size: 22px; font-weight: 800; color: var(--text);
-        }
-        .card {
-          background: var(--card); border: 1px solid var(--border);
-          border-radius: 12px; overflow: hidden;
-          box-shadow: var(--shadow-sm);
-        }
-        .table-scroll {
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-          scrollbar-width: thin;
-          scrollbar-color: var(--border) transparent;
-        }
-        .table-scroll::-webkit-scrollbar { height: 4px; }
-        .table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-        .asset-table { min-width: 900px; width: 100%; border-collapse: collapse; }
-        .asset-table tbody tr:last-child td { border-bottom: none; }
-        .asset-table tbody tr:hover td { background: var(--card-hover); }
-        .filter-bar {
-          display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
-          margin-bottom: 16px;
-        }
-        .modal-overlay {
-          position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200;
-          display: flex; align-items: center; justify-content: center; padding: 20px;
-        }
-        .modal-card {
-          background: var(--card); border: 1px solid var(--border); border-radius: 16px;
-          width: 100%; max-width: 600px; max-height: 80vh; overflow-y: auto; padding: 24px;
-          color: var(--text);
-        }
-        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-        .modal-title { font-size: 18px; font-weight: 700; }
-        .asset-row {
-          display: flex; align-items: center; gap: 12px; padding: 8px 0;
-          border-bottom: 1px solid var(--border);
-        }
-        .asset-row label { display: flex; align-items: center; gap: 8px; flex: 1; }
-        .month-badge { font-size: 11px; color: var(--text-muted); margin-left: auto; }
-        .checkbox { width: 16px; height: 16px; accent-color: var(--primary); }
-        @media (max-width: 480px) {
-          .page-wrap { padding: 12px !important; }
-          .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
-        }
+        @keyframes shimmer { 0% { opacity:0.4; } 50% { opacity:0.8; } 100% { opacity:0.4; } }
+        .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; background:transparent; border:1.5px solid var(--border); color:var(--text-muted); transition:all 0.2s; }
+        .btn:hover { background:var(--card-hover); }
+        .btn-primary { background:var(--primary); color:var(--primary-text); border-color:var(--primary); }
+        .btn-icon { background:transparent; border:1.5px solid var(--border); color:var(--text-muted); padding:5px; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; line-height:1; }
+        .btn-icon:hover { background:var(--card-hover); }
+        .input { height:38px; border:1.5px solid var(--border); border-radius:8px; padding:0 12px 0 36px; font-size:13px; background:var(--card); color:var(--text); outline:none; box-sizing:border-box; width:100%; }
+        .input:focus { border-color:var(--primary); }
+        .filter-select { height:38px; border:1.5px solid var(--border); border-radius:8px; padding:0 12px; font-size:13px; background:var(--card); color:var(--text); outline:none; font-family:inherit; }
+        .filter-select:focus { border-color:var(--primary); }
+        .summary-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin-bottom:20px; }
+        .summary-item { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; }
+        .summary-label { font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px; }
+        .summary-value { font-size:20px; font-weight:800; color:var(--text); }
+        .card { background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden; box-shadow:var(--shadow-sm); }
+        .table-scroll { overflow-x:auto; scrollbar-width:thin; scrollbar-color:var(--border) transparent; }
+        .table-scroll::-webkit-scrollbar { height:4px; }
+        .table-scroll::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+        .asset-table { min-width:1000px; width:100%; border-collapse:collapse; }
+        .asset-table tbody tr:last-child td { border-bottom:none; }
+        .asset-table tbody tr:hover td { background:var(--card-hover); }
+        .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px; }
+        .modal-card { background:var(--card); border:1px solid var(--border); border-radius:16px; width:100%; max-width:650px; max-height:80vh; overflow-y:auto; padding:24px; color:var(--text); }
+        .spinner { animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+        @media (max-width:480px) { .summary-grid { grid-template-columns:repeat(2,1fr); } }
       `}</style>
 
-      {/* ── Header ── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+      {/* Header */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📦 Asset Register</h1>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Manage fixed assets, depreciation, transfers & sales</p>
+          <h1 style={{ fontSize:22, fontWeight:800, color:"var(--text)", margin:0 }}>📦 Asset Register</h1>
+          <p style={{ fontSize:13, color:"var(--text-muted)", margin:0 }}>Manage fixed assets, depreciation, transfers & sales</p>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <button className="btn btn-outline" onClick={exportPDF}><Download size={14} /> PDF</button>
-          <button className="btn btn-outline" onClick={() => window.open("/api/assets/template", "_blank")}><Download size={14} /> Template</button>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+          <button className="btn" onClick={fetchAssets} title="Refresh list"><RefreshCw size={14} /> Refresh</button>
+          <button className="btn" onClick={() => {
+            const doc = new jsPDF({ orientation:"landscape" });
+            doc.setFontSize(14); doc.text("Asset Register", 14, 20);
+            const head = [["Asset No","Name","Category","Location","Purchase Date","Cost","Accum. Dep.","NBV","Rem. Life","Status"]];
+            const data = sorted.map(a => [a.asset_no, a.name, a.category||"—", a.location_name||"—", formatDate(a.purchase_date), Number(a.cost_price ?? 0).toLocaleString(), Number(a.accumulated_depreciation ?? 0).toLocaleString(), Number(a.net_book_value ?? 0).toLocaleString(), a.remaining_life_months, a.status]);
+            autoTable(doc, { head, body: data, startY:30, styles:{ fontSize:8 } });
+            doc.save("asset_register.pdf");
+          }}><Download size={14} /> PDF</button>
           {canEdit && (
             <>
-              <button className="btn btn-outline" onClick={openDepreciationModal}><RefreshCw size={14} /> Run Depreciation</button>
-              <button className="btn btn-outline" onClick={() => router.push("/dashboard/assets/import")}><Upload size={14} /> Import</button>
-              <button className="btn" onClick={() => router.push("/dashboard/assets/new")}><Plus size={16} /> New Asset</button>
+              <button className="btn" onClick={openDepreciationModal}><RefreshCw size={14} /> Run Depreciation</button>
+              <button className="btn" onClick={() => router.push("/dashboard/assets/import")}><Upload size={14} /> Import</button>
+              <button className="btn btn-primary" onClick={() => router.push("/dashboard/assets/new")}><Plus size={16} /> New Asset</button>
             </>
           )}
         </div>
       </div>
 
-      {/* ── Summary ── */}
+      {/* Summary */}
       <div className="summary-grid">
         <div className="summary-item"><div className="summary-label">Total Assets</div><div className="summary-value">{totalAssets}</div></div>
-        <div className="summary-item"><div className="summary-label">Total Cost</div><div className="summary-value" style={{ color: "#F59E0B" }}>PKR {totalCost.toLocaleString()}</div></div>
-        <div className="summary-item"><div className="summary-label">Active Assets</div><div className="summary-value" style={{ color: "#10B981" }}>{activeCount}</div></div>
+        <div className="summary-item"><div className="summary-label">Total Cost</div><div className="summary-value" style={{ color:"#F59E0B" }}>PKR {totalCost.toLocaleString()}</div></div>
+        <div className="summary-item"><div className="summary-label">Accum. Dep.</div><div className="summary-value" style={{ color:"#A78BFA" }}>PKR {totalAccum.toLocaleString()}</div></div>
+        <div className="summary-item"><div className="summary-label">Net Book Value</div><div className="summary-value" style={{ color:"#10B981" }}>PKR {totalNBV.toLocaleString()}</div></div>
+        <div className="summary-item"><div className="summary-label">Active</div><div className="summary-value" style={{ color:"#22c55e" }}>{activeCount}</div></div>
+        <div className="summary-item"><div className="summary-label">Fully Depreciated</div><div className="summary-value" style={{ color:"#94a3b8" }}>{fullyDepCount}</div></div>
       </div>
 
-      {/* ── Filter Bar ── */}
-      <div className="filter-bar">
-        <div style={{ position: "relative", flex: 1, maxWidth: 320 }}>
-          <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-          <input className="input" placeholder="Search assets..." value={search} onChange={e => setSearch(e.target.value)} />
+      {/* Search & Filter */}
+      <div style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap", alignItems:"center" }}>
+        <div style={{ position:"relative", flex:1, maxWidth:320 }}>
+          <Search size={16} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--text-muted)" }} />
+          <input className="input" placeholder="Search by name, code, category, location..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <select className="filter-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
           <option value="">All Status</option>
@@ -432,103 +344,97 @@ function AssetsContent() {
           <option value="Sold">Sold</option>
           <option value="Disposed">Disposed</option>
         </select>
-        {statusFilter && (
-          <button className="btn btn-outline" onClick={() => setStatusFilter("")} style={{ padding: "6px 12px" }}>
-            Clear Filter
-          </button>
-        )}
+        {statusFilter && <button className="btn" onClick={() => setStatusFilter("")}>Clear</button>}
       </div>
 
-      {/* ── Table ── */}
+      {fetchError && (
+        <div style={{ background:"var(--card)", border:"1px solid #EF4444", color:"#FCA5A5", padding:"10px 16px", borderRadius:8, marginBottom:16, fontSize:13 }}>
+          {fetchError}
+        </div>
+      )}
+
+      {/* Table */}
       <div className="card">
         <div className="table-scroll">
           <table className="asset-table">
-            <colgroup>
-              <col style={{ width: 80 }} />  {/* Asset No */}
-              <col style={{ width: 140 }} /> {/* Name */}
-              <col style={{ width: 90 }} />  {/* Category */}
-              <col style={{ width: 90 }} />  {/* Location */}
-              <col style={{ width: 100 }} /> {/* Purchase Date */}
-              <col style={{ width: 90 }} />  {/* Cost */}
-              <col style={{ width: 80 }} />  {/* Monthly Dep */}
-              <col style={{ width: 70 }} />  {/* Status */}
-              <col style={{ width: 80 }} />  {/* Actions */}
-            </colgroup>
             <thead>
               <tr>
-                <SortTh field="asset_no" align="left">Asset No</SortTh>
-                <SortTh field="name" align="left">Name</SortTh>
-                <SortTh field="category" align="left">Category</SortTh>
-                <SortTh field="location" align="left">Location</SortTh>
-                <SortTh field="purchase_date" align="left">Purchase Date</SortTh>
-                <SortTh field="cost_price" align="right">PKR Cost</SortTh>
-                <SortTh field="depreciation_per_month" align="right">PKR Monthly Dep.</SortTh>
-                <SortTh field="status" align="left">Status</SortTh>
-                <th style={{ ...thStyle, textAlign: "center" }}>Actions</th>
+                <SortTh field="asset_no">Asset No</SortTh>
+                <SortTh field="name">Name</SortTh>
+                <SortTh field="category">Category</SortTh>
+                <SortTh field="location">Location</SortTh>
+                <SortTh field="purchase_date">Purchase Date</SortTh>
+                <SortTh field="cost_price" align="right">Cost</SortTh>
+                <SortTh field="accumulated_depreciation" align="right">Accum. Dep.</SortTh>
+                <SortTh field="net_book_value" align="right">NBV</SortTh>
+                <SortTh field="remaining_life_months" align="right">Rem. Life</SortTh>
+                <SortTh field="status">Status</SortTh>
+                <th style={{ ...thStyle, textAlign:"center" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                [1, 2, 3, 4, 5].map(i => <SkeletonRow key={i} />)
+                Array.from({ length: 5 }, (_, i) => <SkeletonRow key={i} />)
               ) : sorted.length === 0 ? (
-                <tr>
-                  <td colSpan={9} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>
-                    No assets found. {canEdit && "Add an asset to get started."}
-                  </td>
-                </tr>
+                <tr><td colSpan={11} style={{ ...tdStyle, textAlign:"center", padding:40, color:"var(--text-muted)" }}>
+                  {search || statusFilter ? "No assets match your filters." : "No assets found. Add an asset to get started."}
+                </td></tr>
               ) : (
-                sorted.map(asset => (
-                  <tr key={asset.id}>
-                    <td style={{ ...tdStyle, fontWeight: 600, color: "var(--primary)" }} title={asset.asset_no}>{asset.asset_no}</td>
-                    <td style={{ ...tdStyle }} title={asset.name}>{asset.name}</td>
-                    <td style={{ ...tdStyle }} title={asset.category || "—"}>{asset.category || "—"}</td>
-                    <td style={{ ...tdStyle }} title={asset.locations?.name || "—"}>{asset.locations?.name || "—"}</td>
-                    <td style={{ ...tdStyle }} title={asset.purchase_date}>{asset.purchase_date}</td>
-                    <td style={{ ...tdStyle, textAlign: "right" }} title={asset.cost_price?.toLocaleString()}>
-                      PKR {asset.cost_price?.toLocaleString()}
-                    </td>
-                    <td style={{ ...tdStyle, textAlign: "right" }} title={asset.depreciation_per_month?.toLocaleString()}>
-                      PKR {asset.depreciation_per_month?.toLocaleString()}
-                    </td>
-                    <td style={{ ...tdStyle, fontWeight: 600, color: asset.status === "Active" ? "#10B981" : asset.status === "Sold" ? "#F59E0B" : "#EF4444" }}>
-                      {asset.status}
-                    </td>
-                    <td style={{ ...tdStyle, textAlign: "center" }}>
-                      <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
-                        <button className="btn-icon" onClick={() => router.push(`/dashboard/reports/asset-ledger?asset_id=${asset.id}`)} title="Ledger">
-                          <BookOpen size={13} />
-                        </button>
-                        <button className="btn-icon" onClick={() => router.push(`/dashboard/assets/${asset.id}`)} title="View">
-                          <Eye size={13} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                sorted.map(asset => {
+                  const cost = Number(asset.cost_price ?? 0)
+                  const accum = Number(asset.accumulated_depreciation ?? 0)
+                  const nbv = Number(asset.net_book_value ?? 0)
+                  return (
+                    <tr key={asset.id} onClick={() => router.push(`/dashboard/assets/${asset.id}`)} style={{ cursor:"pointer" }}>
+                      <td style={tdStyle}>{asset.asset_no}</td>
+                      <td style={tdStyle}>{asset.name}</td>
+                      <td style={tdStyle}>{asset.category || "—"}</td>
+                      <td style={tdStyle}>{asset.location_name || "—"}</td>
+                      <td style={tdStyle}>{formatDate(asset.purchase_date)}</td>
+                      <td style={{...tdStyle, textAlign:"right"}}>PKR {cost.toLocaleString()}</td>
+                      <td style={{...tdStyle, textAlign:"right"}}>PKR {accum.toLocaleString()}</td>
+                      <td style={{...tdStyle, textAlign:"right", fontWeight:600, color: nbv > 0 ? "#10B981" : "#EF4444"}}>PKR {nbv.toLocaleString()}</td>
+                      <td style={{...tdStyle, textAlign:"right"}}>{asset.remaining_life_months} m</td>
+                      <td style={tdStyle}><StatusBadge status={asset.status} /></td>
+                      <td style={{...tdStyle, textAlign:"center"}} onClick={e => e.stopPropagation()}>
+                        <button className="btn-icon" onClick={() => router.push(`/dashboard/reports/asset-ledger?asset_id=${asset.id}`)}><BookOpen size={13} /></button>
+                        <button className="btn-icon" onClick={() => router.push(`/dashboard/assets/${asset.id}`)}><Eye size={13} /></button>
+                      </td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* ── Depreciation Modal ── */}
+      {/* Depreciation Modal */}
       {showDepModal && (
         <div className="modal-overlay" onClick={() => setShowDepModal(false)}>
           <div className="modal-card" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title">🗓️ Run Depreciation</div>
-              <button className="btn-icon" onClick={() => setShowDepModal(false)}><X size={16} /></button>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+              <h2>🗓️ Run Depreciation</h2>
+              <button onClick={() => setShowDepModal(false)}><X size={16} /></button>
             </div>
 
             {depResult ? (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ background: depResult.success ? "#065F46" : "#7F1D1D", color: "#fff", padding: "12px", borderRadius: 8, fontSize: 13 }}>
-                  {depResult.success
-                    ? `✅ Depreciation posted for ${depResult.processed} entries.`
-                    : `❌ Error: ${depResult.error || "Unknown"}`}
+              <div>
+                <div style={{
+                  background: depResult.success ? "#065F46" : "#7F1D1D",
+                  color: "white",
+                  padding: "12px",
+                  borderRadius: 8,
+                  fontSize: 13
+                }}>
+                  {depResult.success ? (
+                    <>✅ {depResult.processed} depreciation entries posted.</>
+                  ) : (
+                    <>❌ {depResult.error || "Failed"}</>
+                  )}
                 </div>
                 {depResult.errors && depResult.errors.length > 0 && (
-                  <ul style={{ marginTop: 8, paddingLeft: 20, color: "#FCA5A5", fontSize: 12 }}>
+                  <ul style={{ marginTop: 8, color: "#FCA5A5", fontSize: 12 }}>
                     {depResult.errors.map((e: string, i: number) => <li key={i}>{e}</li>)}
                   </ul>
                 )}
@@ -537,44 +443,76 @@ function AssetsContent() {
             ) : (
               <>
                 <div style={{ marginBottom: 16 }}>
-                  <label className="label" style={{ color: "var(--text-muted)", fontSize: 10, fontWeight: 600, textTransform: "uppercase" }}>Start Month</label>
-                  <input type="month" className="input" style={{ height: 38, paddingLeft: 12 }} value={depStartMonth} onChange={e => setDepStartMonth(e.target.value)} />
+                  <label className="label" style={{ marginBottom: 4, display: "block", fontSize: 10, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase" }}>
+                    Start Month
+                  </label>
+                  <input
+                    type="month"
+                    className="input"
+                    style={{ paddingLeft: 12 }}
+                    value={depStartMonth}
+                    onChange={e => setDepStartMonth(e.target.value)}
+                  />
                   <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
-                    Depreciation will be posted for every missing month from this date to the current month.
+                    Depreciation will be posted from this month up to the posting date.
                   </div>
                 </div>
 
                 <div style={{ marginBottom: 16 }}>
-                  <label className="label" style={{ color: "var(--text-muted)", fontSize: 10, fontWeight: 600, textTransform: "uppercase" }}>Select Assets</label>
-                  <div style={{ maxHeight: 200, overflowY: "auto" }}>
-                    {activeAssetsForDep.map(asset => {
-                      const months = getMonthsToProcess(asset)
-                      return (
-                        <div key={asset.id} className="asset-row">
-                          <label style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
-                            <input
-                              type="checkbox"
-                              className="checkbox"
-                              checked={selectedAssetIds.includes(asset.id)}
-                              onChange={() => toggleAssetSelection(asset.id)}
-                            />
-                            <span style={{ fontSize: 13 }}>{asset.asset_no} – {asset.name}</span>
-                          </label>
-                          <span className="month-badge">{months > 0 ? `${months} month(s)` : "Up to date"}</span>
-                        </div>
-                      )
-                    })}
-                  </div>
+                  <label className="label" style={{ marginBottom: 4, display: "block", fontSize: 10, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase" }}>
+                    Posting Date
+                  </label>
+                  <input
+                    type="date"
+                    className="input"
+                    style={{ paddingLeft: 12 }}
+                    value={depPostingDate}
+                    onChange={e => setDepPostingDate(e.target.value)}
+                  />
                 </div>
 
-                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                  <button className="btn btn-outline" onClick={() => setShowDepModal(false)}>Cancel</button>
-                  <button
-                    className="btn"
-                    onClick={executeDepreciation}
-                    disabled={depRunning || selectedAssetIds.length === 0}
-                  >
-                    {depRunning ? "Processing..." : <><CheckCircle size={16} /> Confirm & Post</>}
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <strong>Select Assets ({selectedAssetIds.length} of {assets.filter(a => a.status === "Active" && a.remaining_life_months > 0).length})</strong>
+                    <button className="btn" style={{ fontSize: 11, padding: "4px 10px" }} onClick={toggleSelectAll}>
+                      {selectedAssetIds.length === assets.filter(a => a.status === "Active" && a.remaining_life_months > 0).length ? "Deselect All" : "Select All"}
+                    </button>
+                  </div>
+                  <table style={{ width: "100%" }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: 30 }}></th>
+                        <th>Asset</th>
+                        <th style={{ textAlign: "right" }}>Monthly Dep.</th>
+                        <th style={{ textAlign: "right" }}>Rem. Life</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {assets
+                        .filter(a => a.status === "Active" && a.remaining_life_months > 0)
+                        .map(asset => (
+                          <tr key={asset.id}>
+                            <td>
+                              <input
+                                type="checkbox"
+                                checked={selectedAssetIds.includes(asset.id)}
+                                onChange={() => toggleAssetSelection(asset.id)}
+                                style={{ accentColor: "var(--primary)" }}
+                              />
+                            </td>
+                            <td>{asset.asset_no} – {asset.name}</td>
+                            <td style={{ textAlign: "right" }}>PKR {Number(asset.depreciation_per_month ?? 0).toLocaleString()}</td>
+                            <td style={{ textAlign: "right" }}>{asset.remaining_life_months} months</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+                  <button className="btn" onClick={() => setShowDepModal(false)}>Cancel</button>
+                  <button className="btn btn-primary" onClick={executeDepreciation} disabled={depRunning || selectedAssetIds.length === 0}>
+                    {depRunning ? <><Loader2 size={16} className="spinner" /> Processing...</> : "Confirm & Post"}
                   </button>
                 </div>
               </>
