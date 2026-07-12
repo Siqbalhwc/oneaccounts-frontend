@@ -9,6 +9,7 @@ import { useRole } from "@/contexts/RoleContext"
 import { useTheme } from "@/contexts/ThemeContext"
 import ThemeToggleButton from "@/components/ThemeToggleButton"
 import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react"
+import { getLabel, type BusinessType } from "@/lib/labels"
 
 // ── Types ──
 interface NavItem { label: string; icon: string; href: string; feature?: string; adminOnly?: boolean }
@@ -81,7 +82,24 @@ const baseNavSections: NavSection[] = [
 const matchesItem = (item: NavItem, path: string): boolean =>
   item.href === "/dashboard" ? path === item.href : path.startsWith(item.href)
 
-function getSectionForPath(path: string): string {
+// ── Tag-management section (Projects/Sites, Activities/Cost Codes, Budgets) —
+// shown for both NGO and Construction, reusing the exact same underlying
+// pages, since those pages already relabel themselves per business_type. ──
+const TAG_SECTION_PATHS = [
+  '/dashboard/projects',
+  '/dashboard/settings/projects',
+  '/dashboard/settings/budgets',
+]
+
+function getTagSectionLabel(businessType: string): string {
+  const projectPlural = getLabel(businessType as BusinessType, 'project_plural')
+  return `${projectPlural} & Budgets`
+}
+
+function getSectionForPath(path: string, businessType: string): string {
+  if ((businessType === 'ngo' || businessType === 'construction') && TAG_SECTION_PATHS.some(p => path.startsWith(p))) {
+    return getTagSectionLabel(businessType)
+  }
   for (const sec of baseNavSections) {
     if (sec.items?.some(item => matchesItem(item, path))) return sec.section
     if (sec.groups) {
@@ -196,15 +214,23 @@ export default function DashboardSidebar({
 
   const navSections = [...baseNavSections]
 
-  if (businessType === 'ngo') {
+  // ── NGO and Construction both get a tag-management section
+  // (Projects/Sites, Activities/Cost Codes & Locations/Zones, Budgets),
+  // reusing the same pages — those pages already relabel themselves
+  // based on business_type, so no new pages are needed here. ──
+  if (businessType === 'ngo' || businessType === 'construction') {
     const invIndex = navSections.findIndex(s => s.section === 'INVENTORY')
     const insertAt = invIndex >= 0 ? invIndex + 1 : navSections.length - 1
+    const projectLabel = getLabel(businessType as BusinessType, 'project_plural')
+    const activityLabel = getLabel(businessType as BusinessType, 'activity_plural')
+    const locationLabel = getLabel(businessType as BusinessType, 'location_plural')
+
     navSections.splice(insertAt, 0, {
-      section: 'Project & Budgets',
+      section: getTagSectionLabel(businessType),
       items: [
-        { label: 'Projects',            icon: '📁', href: '/dashboard/projects'            },
-        { label: 'Activities & Locations', icon: '📍', href: '/dashboard/settings/projects' },
-        { label: 'Budgets',             icon: '💰', href: '/dashboard/settings/budgets'    },
+        { label: projectLabel,                          icon: '📁', href: '/dashboard/projects'            },
+        { label: `${activityLabel} & ${locationLabel}`, icon: '📍', href: '/dashboard/settings/projects' },
+        { label: 'Budgets',                              icon: '💰', href: '/dashboard/settings/budgets'    },
       ],
     })
   }
@@ -223,20 +249,7 @@ export default function DashboardSidebar({
 
   const GAP = 6
 
-  const [openSection, setOpenSection] = useState<string>(() => {
-    const base = getSectionForPath(pathname)
-    if (businessType === 'ngo') {
-      const ngoPaths = [
-        '/dashboard/projects',
-        '/dashboard/settings/projects',
-        '/dashboard/settings/budgets',
-      ]
-      if (ngoPaths.some(p => pathname.startsWith(p))) {
-        return 'Project & Budgets'
-      }
-    }
-    return base
-  })
+  const [openSection, setOpenSection] = useState<string>(() => getSectionForPath(pathname, businessType))
 
   useEffect(() => {
     localStorage.setItem("sidebarCollapsed", String(collapsed))
@@ -248,19 +261,7 @@ export default function DashboardSidebar({
   }, [collapsed])
 
   useEffect(() => {
-    const base = getSectionForPath(pathname)
-    if (businessType === 'ngo') {
-      const ngoPaths = [
-        '/dashboard/projects',
-        '/dashboard/settings/projects',
-        '/dashboard/settings/budgets',
-      ]
-      if (ngoPaths.some(p => pathname.startsWith(p))) {
-        setOpenSection('Project & Budgets')
-        return
-      }
-    }
-    setOpenSection(base)
+    setOpenSection(getSectionForPath(pathname, businessType))
   }, [pathname, businessType])
 
   const handleSectionClick = (section: string) => {
