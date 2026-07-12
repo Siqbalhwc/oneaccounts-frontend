@@ -105,8 +105,7 @@ export default function SignupPage() {
       if (!data.success) {
         console.error("Company creation error:", data.error)
         setErrorMsg(
-          "Your account was created, but we couldn't finish setting up your company. Please contact support and mention this email: " +
-            email
+          `Setup failed: ${data.error || "Unknown error"}. Please contact support and mention this email: ${email}`
         )
         setLoading(false)
         return
