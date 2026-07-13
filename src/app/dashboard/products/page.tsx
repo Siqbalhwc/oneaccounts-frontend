@@ -25,10 +25,11 @@ interface Product {
 type SortField = "code" | "name" | "cost_price" | "sale_price" | "opening_qty" | "qty_on_hand" | "total_inflow" | "total_outflow"
 type SortDir = "asc" | "desc"
 
-function SkeletonRow() {
+function SkeletonRow({ colCount }: { colCount: number }) {
+  const widths = [60, 70, 40, 40, 50, 50, 50, 50, 60, 60, 60].slice(0, colCount)
   return (
     <tr>
-      {[60, 70, 40, 40, 50, 50, 50, 50, 60, 60, 60].map((w, i) => (
+      {widths.map((w, i) => (
         <td key={i} style={{ padding: "12px 16px" }}>
           <div style={{
             width: `${w}%`,
@@ -54,6 +55,13 @@ export default function StockRegisterPage() {
   const canView = role === "admin" || role === "accountant"
 
   const [companyId, setCompanyId] = useState<string>("")
+  // ✅ Defaults to "" (falsy / non-construction) until fetched, so every
+  // existing business type behaves exactly as before with zero delay —
+  // only once we positively confirm businessType === 'construction' does
+  // any label or column change take effect.
+  const [businessType, setBusinessType] = useState<string>("")
+  const isConstruction = businessType === "construction"
+
   const [loading, setLoading] = useState(true)
   const [products, setProducts] = useState<Product[]>([])
   const [search, setSearch] = useState("")
@@ -74,6 +82,13 @@ export default function StockRegisterPage() {
       if (cid) setCompanyId(cid)
     })
   }, [])
+
+  // ✅ New: fetch business_type, same pattern as every other page in the app.
+  useEffect(() => {
+    if (!companyId) return
+    supabase.from("companies").select("business_type").eq("id", companyId).single()
+      .then(({ data }) => { if (data) setBusinessType(data.business_type || "") })
+  }, [companyId])
 
   useEffect(() => {
     if (!companyId) return
@@ -173,15 +188,22 @@ export default function StockRegisterPage() {
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Delete this product?")) return
+    const label = isConstruction ? "unit/plot" : "product"
+    if (!confirm(`Delete this ${label}?`)) return
     await supabase.from("products").update({ deleted_at: new Date().toISOString() }).eq("id", id).eq("company_id", companyId)
-    setFlash("Product deleted.")
+    setFlash(`${isConstruction ? "Unit/plot" : "Product"} deleted.`)
     fetchProducts()
     setTimeout(() => setFlash(""), 3000)
   }
 
   const totalStockValue = products.reduce((sum, p) => sum + (p.qty_on_hand * (p.cost_price || 0)), 0)
   const totalProducts = total
+
+  // ✅ Construction hides the Inflow/Outflow columns (pure stock-movement
+  // language that doesn't fit one-off unit/plot sales) and relabels
+  // Opening -> "Qty" and Closing -> "Available". Column count adjusts
+  // accordingly so the skeleton loader and colgroup stay in sync.
+  const colCount = isConstruction ? 8 : 10
 
   const thStyle: React.CSSProperties = {
     padding: "12px 16px",
@@ -373,21 +395,30 @@ export default function StockRegisterPage() {
       {/* Header: title left, Add Product right */}
       <div className="header-row">
         <div className="title-area">
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📦 Stock Register</h1>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Manage inventory, view opening / inflow / outflow / closing</p>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>
+            {isConstruction ? "🏗️ Units & Plots" : "📦 Stock Register"}
+          </h1>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
+            {isConstruction
+              ? "Manage the rooms, units, or plots you sell"
+              : "Manage inventory, view opening / inflow / outflow / closing"}
+          </p>
         </div>
         {canEdit && (
           <button className="btn" onClick={() => router.push("/dashboard/products/new")}>
-            <Plus size={16} /> Add Product
+            <Plus size={16} /> {isConstruction ? "Add Unit / Plot" : "Add Product"}
           </button>
         )}
       </div>
 
       {/* Summary cards */}
       <div className="summary-grid">
-        <div className="summary-item"><div className="summary-label">Total Products</div><div className="summary-value">{totalProducts}</div></div>
         <div className="summary-item">
-          <div className="summary-label">Closing Stock Value</div>
+          <div className="summary-label">{isConstruction ? "Total Units" : "Total Products"}</div>
+          <div className="summary-value">{totalProducts}</div>
+        </div>
+        <div className="summary-item">
+          <div className="summary-label">{isConstruction ? "Unsold Units Value" : "Closing Stock Value"}</div>
           <div className="summary-value" style={{ color: "#10B981" }}>
             <sup>PKR</sup> {totalStockValue.toLocaleString()}
           </div>
@@ -404,7 +435,7 @@ export default function StockRegisterPage() {
       <div className="filter-row">
         <div className="search-group">
           <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-          <input className="search-input" placeholder="Search by name or code..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} style={{ width: "100%" }} />
+          <input className="search-input" placeholder={isConstruction ? "Search by unit name or code..." : "Search by name or code..."} value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} style={{ width: "100%" }} />
         </div>
         <div className="filter-group">
           <select className="filter-select" value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); setPage(1) }} style={{ minWidth: 160 }}>
@@ -422,15 +453,15 @@ export default function StockRegisterPage() {
       {/* Table */}
       <div className="card" style={{ overflowX: "auto" }}>
         <div className="table-scroll">
-          <table className="stock-table">
+          <table className="stock-table" style={isConstruction ? { minWidth: 950 } : undefined}>
             <colgroup>
               <col style={{ minWidth: "150px" }} />
               <col style={{ minWidth: "250px" }} />
               <col style={{ minWidth: "100px" }} />
               <col style={{ minWidth: "100px" }} />
               <col style={{ minWidth: "90px" }} />
-              <col style={{ minWidth: "90px" }} />
-              <col style={{ minWidth: "90px" }} />
+              {!isConstruction && <col style={{ minWidth: "90px" }} />}
+              {!isConstruction && <col style={{ minWidth: "90px" }} />}
               <col style={{ minWidth: "100px" }} />
               <col style={{ minWidth: "60px" }} />
               <col style={{ minWidth: "150px" }} />
@@ -441,21 +472,22 @@ export default function StockRegisterPage() {
                 <SortTh field="name" style={{ textAlign: "left" }}>Name</SortTh>
                 <SortTh field="cost_price" style={{ textAlign: "right" }}>Cost</SortTh>
                 <SortTh field="sale_price" style={{ textAlign: "right" }}>Sale</SortTh>
-                <SortTh field="opening_qty" style={{ textAlign: "right" }}>Opening</SortTh>
-                <SortTh field="total_inflow" style={{ textAlign: "right" }}>Inflow</SortTh>
-                <SortTh field="total_outflow" style={{ textAlign: "right" }}>Outflow</SortTh>
-                <SortTh field="qty_on_hand" style={{ textAlign: "right" }}>Closing</SortTh>
+                <SortTh field="opening_qty" style={{ textAlign: "right" }}>{isConstruction ? "Qty" : "Opening"}</SortTh>
+                {!isConstruction && <SortTh field="total_inflow" style={{ textAlign: "right" }}>Inflow</SortTh>}
+                {!isConstruction && <SortTh field="total_outflow" style={{ textAlign: "right" }}>Outflow</SortTh>}
+                <SortTh field="qty_on_hand" style={{ textAlign: "right" }}>{isConstruction ? "Available" : "Closing"}</SortTh>
                 <th style={{ ...thStyle, textAlign: "center" }}>Img</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                [1, 2, 3, 4, 5].map(i => <SkeletonRow key={i} />)
+                [1, 2, 3, 4, 5].map(i => <SkeletonRow key={i} colCount={colCount} />)
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>
-                    No products found. {canEdit && "Add a product to get started."}
+                  <td colSpan={colCount} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>
+                    {isConstruction ? "No units/plots found. " : "No products found. "}
+                    {canEdit && (isConstruction ? "Add a unit/plot to get started." : "Add a product to get started.")}
                   </td>
                 </tr>
               ) : (
@@ -470,8 +502,8 @@ export default function StockRegisterPage() {
                       <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>PKR {prod.cost_price?.toLocaleString()}</td>
                       <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>PKR {prod.sale_price?.toLocaleString()}</td>
                       <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>{prod.opening_qty}</td>
-                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: "#10B981" }}>{inflow}</td>
-                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: "#EF4444" }}>{outflow}</td>
+                      {!isConstruction && <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: "#10B981" }}>{inflow}</td>}
+                      {!isConstruction && <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: "#EF4444" }}>{outflow}</td>}
                       <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", fontWeight: 600 }}>{closing}</td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>
                         {prod.image_path ? (
