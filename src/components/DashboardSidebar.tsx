@@ -36,7 +36,7 @@ const baseNavSections: NavSection[] = [
     { label: 'Products',       icon: '📦', href: '/dashboard/products'              },
     { label: 'Inventory Adj.', icon: '⚖️', href: '/dashboard/inventory/adjustments' },
   ]},
-    { section: 'PAYROLL', feature: 'payroll', items: [
+  { section: 'PAYROLL', feature: 'payroll', items: [
     { label: 'Employees',         icon: '👥', href: '/dashboard/payroll/employees' },
     { label: 'Attendance',          icon: '📋', href: '/dashboard/payroll/attendance' },
     { label: 'Attendance Verification', icon: '✅', href: '/dashboard/payroll/attendance/verify' },
@@ -75,6 +75,7 @@ const baseNavSections: NavSection[] = [
   ]},
   { section: 'SYSTEM', items: [
     { label: 'Settings',        icon: '⚙️', href: '/dashboard/settings' },
+    { label: 'Fiscal Periods',  icon: '📅', href: '/dashboard/settings/periods' },   // ← NEW
     { label: 'Upgrade Plan',    icon: '⭐', href: '/dashboard/upgrade' },
   ]},
 ]
