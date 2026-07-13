@@ -13,6 +13,7 @@ import { CompanyProvider } from "@/contexts/CompanyContext"
 import QueryProvider from "@/components/QueryProvider"
 import { SessionMonitor } from "@/components/SessionMonitor"
 import TrialGuard from "@/components/TrialGuard"
+import Breadcrumb from "@/components/Breadcrumb"
 
 // Branded splash screen shown while permissions are loading
 function BrandedSplash() {
@@ -136,8 +137,11 @@ export default function DashboardLayoutClient({
           <QueryProvider>
             <SessionMonitor>
               <TrialGuard>
-                <div className="dl-main-content">{children}</div>
-              </TrialGuard>
+  <div className="dl-main-content">
+    <Breadcrumb />
+    {children}
+  </div>
+</TrialGuard>
             </SessionMonitor>
           </QueryProvider>
         </CompanyProvider>
