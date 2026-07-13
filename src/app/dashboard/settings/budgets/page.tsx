@@ -30,7 +30,7 @@ export default function BudgetsPage() {
   const [accounts, setAccounts] = useState<any[]>([])
   const [projects, setProjects] = useState<any[]>([])
   const [donors, setDonors] = useState<any[]>([])
-  const [locations, setLocations] = useState<any[]>([])
+  const [allLocations, setAllLocations] = useState<any[]>([]) // ✅ unfiltered master list
   const [allActivities, setAllActivities] = useState<any[]>([])
 
   const [selectedProjectId, setSelectedProjectId] = useState<string>(initialProject)
@@ -96,8 +96,12 @@ export default function BudgetsPage() {
 
       supabase.from("donors").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
         .then(r => r.data && setDonors(r.data))
-      supabase.from("locations").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
-        .then(r => r.data && setLocations(r.data))
+
+      // ✅ Now also fetches project_id, so we can scope locations to a
+      // Site (Construction) while leaving project_id = NULL locations
+      // (NGO's existing flat list) visible everywhere as before.
+      supabase.from("locations").select("id, name, project_id").eq("company_id", cid).is("deleted_at", null).order("name")
+        .then(r => r.data && setAllLocations(r.data))
     })
   }, [])
 
@@ -165,6 +169,26 @@ export default function BudgetsPage() {
         })
     }
   }, [selectedProjectId, projects, businessType, initialDonor, companyId])
+
+  // ✅ -- 4b. Locations scoped to the selected Site --
+  // A location with project_id = NULL is "global" and always shows
+  // (this is how every existing NGO location behaves — zero change
+  // for NGO). A location with project_id set only shows once that
+  // specific Site is selected, so Construction sites with the same
+  // zone names ("Floor 1", "Floor 2"...) never collide.
+  const locations = useMemo(() => {
+    if (!selectedProjectId) {
+      return allLocations.filter(l => !l.project_id)
+    }
+    return allLocations.filter(l => !l.project_id || String(l.project_id) === String(selectedProjectId))
+  }, [allLocations, selectedProjectId])
+
+  // Reset a stale location filter if it no longer belongs to the newly selected project
+  useEffect(() => {
+    if (filterLocationId && !locations.some(l => String(l.id) === filterLocationId)) {
+      setFilterLocationId("")
+    }
+  }, [locations])
 
   // -- Approval status fetch --
   useEffect(() => {
@@ -673,6 +697,10 @@ export default function BudgetsPage() {
               <option value="">All Activities</option>
               {allActivities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
+            {/* ✅ Now sourced from the project-scoped `locations` list, not
+                the raw unfiltered master list — so once a project/site is
+                selected, only that site's zones (plus any global/unlinked
+                locations) show up here. */}
             <select className="filter-select" value={filterLocationId} onChange={e => setFilterLocationId(e.target.value)}>
               <option value="">All Locations</option>
               {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -721,8 +749,8 @@ export default function BudgetsPage() {
                   ({projectDuration} month{projectDuration !== 1 ? "s" : ""})
                 </span>
               )}
-              {isApproved && <span style={{ fontSize: 12, fontWeight: 600, color: "#10B981" }}>? Approved</span>}
-              {isPendingApproval && <span style={{ fontSize: 12, fontWeight: 600, color: "#F59E0B" }}>? Pending Approval</span>}
+              {isApproved && <span style={{ fontSize: 12, fontWeight: 600, color: "#10B981" }}>✓ Approved</span>}
+              {isPendingApproval && <span style={{ fontSize: 12, fontWeight: 600, color: "#F59E0B" }}>⏳ Pending Approval</span>}
               {!isApproved && !isPendingApproval && budgetStatus === "draft" && (
                 <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}>Draft</span>
               )}
@@ -814,6 +842,9 @@ export default function BudgetsPage() {
                         })}
                         <tr>
                           <td>
+                            {/* ✅ "+ Add Location" now offers only this project's
+                                zones (plus global ones) — was previously every
+                                location in the whole company. */}
                             <select style={{ width: "100%", padding: "2px 4px", fontSize: 10 }} value="" onChange={e => { if (e.target.value) addLocationRow(act.id, e.target.value) }}>
                               <option value="">+ Add Location</option>
                               {locations.filter(l => !locationsInAct.includes(l.id.toString())).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}

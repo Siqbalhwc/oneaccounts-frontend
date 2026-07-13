@@ -78,6 +78,7 @@ export default function ProjectsPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
 
   const [activityProjectFilter, setActivityProjectFilter] = useState<string>("")
+  const [locationProjectFilter, setLocationProjectFilter] = useState<string>("")
 
   const [showImportModal, setShowImportModal] = useState(false)
   const [importType, setImportType] = useState<"donor" | "project" | "location" | "activity">("donor")
@@ -118,8 +119,16 @@ export default function ProjectsPage() {
       if (data) setItems(data.map((p: any) => ({ ...p, donor_id: p.donor_id, donor_name: p.donors?.name || null })))
       else setItems([])
     } else if (activeTab === "locations") {
-      const { data } = await supabase.from("locations").select("*").eq("company_id", companyId).order("name")
-      setItems(data || [])
+      let query = supabase
+        .from("locations")
+        .select("*, projects(name)")
+        .eq("company_id", companyId)
+      if (locationProjectFilter) {
+        query = query.eq("project_id", Number(locationProjectFilter))
+      }
+      const { data } = await query.order("name")
+      if (data) setItems(data.map((l: any) => ({ ...l, project_name: l.projects?.name || null })))
+      else setItems([])
     } else if (activeTab === "donors") {
       const { data } = await supabase.from("donors").select("*").eq("company_id", companyId).order("name")
       setItems(data || [])
@@ -155,7 +164,7 @@ export default function ProjectsPage() {
     setLoading(false)
   }
 
-  useEffect(() => { fetchData() }, [companyId, activeTab, activityProjectFilter])
+  useEffect(() => { fetchData() }, [companyId, activeTab, activityProjectFilter, locationProjectFilter])
 
   if (!companyId) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
   if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
@@ -239,6 +248,8 @@ export default function ProjectsPage() {
     } else if (activeTab === "donors") {
       payload.code = formCode.trim() ? formCode.trim() : await getNextDonorCode(supabase, companyId, donorCodePrefix)
     } else if (activeTab === "activities") {
+      payload.project_id = formProjectId
+    } else if (activeTab === "locations") {
       payload.project_id = formProjectId
     }
 
@@ -373,6 +384,12 @@ export default function ProjectsPage() {
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         )}
+        {activeTab === "locations" && (
+          <select className="filter-select" value={locationProjectFilter} onChange={e => setLocationProjectFilter(e.target.value)}>
+            <option value="">All {labels.project_plural}</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        )}
         <div className="search-box">
           <Search size={14} style={{ position: "absolute", left: 12, top: 10, color: "var(--text-muted)" }} />
           <input className="search-input" placeholder={`Search ${getEntityLabelPlural()?.toLowerCase()}...`} value={search} onChange={e => setSearch(e.target.value)} />
@@ -404,10 +421,12 @@ export default function ProjectsPage() {
             activeTab === "activities" ? "minmax(150px, 2fr) 120px 60px 60px 60px" :
             activeTab === "donors" ? "minmax(150px, 2fr) 80px 60px 60px 60px" :
             activeTab === "projects" ? "minmax(150px, 2fr) 120px 100px 60px 60px 60px" :
+            activeTab === "locations" ? "minmax(150px, 2fr) 120px 60px 60px 60px" :
             "minmax(150px, 2fr) 100px 60px 60px"
         }}>
           <button className="sort-btn" onClick={() => handleSort("name")}>Name {getSortIcon("name")}</button>
           {activeTab === "activities" && <button className="sort-btn" onClick={() => handleSort("project")}>{labels.project} {getSortIcon("project")}</button>}
+          {activeTab === "locations" && <button className="sort-btn" onClick={() => handleSort("project")}>{labels.project} {getSortIcon("project")}</button>}
           {activeTab === "projects" && <button className="sort-btn" onClick={() => handleSort("description")}>Description {getSortIcon("description")}</button>}
           {activeTab === "projects" && <button className="sort-btn" onClick={() => handleSort("donor")}>{labels.donor} {getSortIcon("donor")}</button>}
           {activeTab === "donors" && <button className="sort-btn" onClick={() => handleSort("code")}>Code {getSortIcon("code")}</button>}
@@ -427,10 +446,12 @@ export default function ProjectsPage() {
                 activeTab === "activities" ? "minmax(150px, 2fr) 120px 60px 60px 60px" :
                 activeTab === "donors" ? "minmax(150px, 2fr) 80px 60px 60px 60px" :
                 activeTab === "projects" ? "minmax(150px, 2fr) 120px 100px 60px 60px 60px" :
+                activeTab === "locations" ? "minmax(150px, 2fr) 120px 60px 60px 60px" :
                 "minmax(150px, 2fr) 100px 60px 60px"
             }}>
               <span style={{ fontWeight: 600 }}>{item.name}{item.description ? <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: 8 }}>({item.description})</span> : ""}</span>
               {activeTab === "activities" && <span>{item.project_name}</span>}
+              {activeTab === "locations" && <span style={{ color: item.project_name ? "var(--text)" : "var(--text-muted)" }}>{item.project_name || "— (all)"}</span>}
               {activeTab === "projects" && <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{(item as any).description || "-"}</span>}
               {activeTab === "projects" && <span style={{ color: "var(--primary)" }}>{item.donor_name || "-"}</span>}
               {activeTab === "donors" && <span style={{ fontFamily: "monospace", fontSize: 12 }}>{(item as any).code || "-"}</span>}
@@ -492,6 +513,24 @@ export default function ProjectsPage() {
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                   </select>
+                </div>
+              )}
+              {activeTab === "locations" && (
+                <div>
+                  <label className="pr-field-label">{labels.project} (optional)</label>
+                  <select
+                    className="pr-field-input"
+                    value={formProjectId ?? ""}
+                    onChange={e => setFormProjectId(e.target.value ? Number(e.target.value) : null)}
+                  >
+                    <option value="">— All {labels.project_plural} (global) —</option>
+                    {projects.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                  <p style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 4 }}>
+                    Link this {labels.location.toLowerCase()} to one {labels.project.toLowerCase()} to keep zones separate across sites. Leave blank to make it available everywhere.
+                  </p>
                 </div>
               )}
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
