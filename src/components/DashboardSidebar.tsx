@@ -225,13 +225,22 @@ export default function DashboardSidebar({
     const activityLabel = getLabel(businessType as BusinessType, 'activity_plural')
     const locationLabel = getLabel(businessType as BusinessType, 'location_plural')
 
+    const tagSectionItems: NavItem[] = [
+      { label: projectLabel,                          icon: '📁', href: '/dashboard/projects'            },
+      { label: `${activityLabel} & ${locationLabel}`, icon: '📍', href: '/dashboard/settings/projects' },
+      { label: 'Budgets',                              icon: '💰', href: '/dashboard/settings/budgets'    },
+    ]
+
+    // Bookings is construction-only — NGO has no equivalent concept.
+    // Links straight to the New Booking form since a list/history page
+    // doesn't exist yet; update this href once that page is built.
+    if (businessType === 'construction') {
+      tagSectionItems.push({ label: 'New Booking', icon: '🏗️', href: '/dashboard/bookings/new' })
+    }
+
     navSections.splice(insertAt, 0, {
       section: getTagSectionLabel(businessType),
-      items: [
-        { label: projectLabel,                          icon: '📁', href: '/dashboard/projects'            },
-        { label: `${activityLabel} & ${locationLabel}`, icon: '📍', href: '/dashboard/settings/projects' },
-        { label: 'Budgets',                              icon: '💰', href: '/dashboard/settings/budgets'    },
-      ],
+      items: tagSectionItems,
     })
   }
 
