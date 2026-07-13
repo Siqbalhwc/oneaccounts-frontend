@@ -167,19 +167,37 @@ export async function POST(request: Request) {
       }
     }
   } else if (type === 'construction') {
-    const { data: feature } = await supabaseAdmin
+    // Construction needs both the construction module AND Products
+    // (used to represent units/plots) enabled by default.
+    const { data: constructionFeature } = await supabaseAdmin
       .from('features')
       .select('id')
       .eq('code', 'construction_module')
       .single()
 
-    if (feature) {
+    if (constructionFeature) {
       const { error: featureError } = await supabaseAdmin.from('company_features').upsert(
-        { company_id: company.id, feature_id: feature.id, enabled: true },
+        { company_id: company.id, feature_id: constructionFeature.id, enabled: true },
         { onConflict: 'company_id,feature_id' }
       )
       if (featureError) {
         console.error('Failed to enable feature:', featureError)
+      }
+    }
+
+    const { data: inventoryFeature } = await supabaseAdmin
+      .from('features')
+      .select('id')
+      .eq('code', 'inventory')
+      .single()
+
+    if (inventoryFeature) {
+      const { error: featureError } = await supabaseAdmin.from('company_features').upsert(
+        { company_id: company.id, feature_id: inventoryFeature.id, enabled: true },
+        { onConflict: 'company_id,feature_id' }
+      )
+      if (featureError) {
+        console.error('Failed to enable inventory feature:', featureError)
       }
     }
   }
