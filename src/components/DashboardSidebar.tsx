@@ -14,7 +14,7 @@ import { getLabel, type BusinessType } from "@/lib/labels"
 // ── Types ──
 interface NavItem { label: string; icon: string; href: string; feature?: string; adminOnly?: boolean }
 interface NavGroup { groupLabel: string; items: NavItem[] }
-interface NavSection { section: string; feature?: string; items?: NavItem[]; groups?: NavGroup[] }
+interface NavSection { section: string; displayLabel?: string; feature?: string; items?: NavItem[]; groups?: NavGroup[] }
 
 // ── Base navigation ──
 const baseNavSections: NavSection[] = [
@@ -244,6 +244,29 @@ export default function DashboardSidebar({
     })
   }
 
+  // ── Relabel INVENTORY -> "UNITS" for construction (selling rooms/plots
+  // isn't "stock"), and hide Inventory Adj. (not a relevant concept for
+  // real-estate units). We only change the displayLabel + item label
+  // here, never `section` itself — the internal key must stay 'INVENTORY'
+  // so getSectionForPath()/openSection state (which key off the original
+  // name) keep matching correctly. ──
+  if (businessType === 'construction') {
+    const invSectionIdx = navSections.findIndex(s => s.section === 'INVENTORY')
+    if (invSectionIdx >= 0) {
+      const original = navSections[invSectionIdx]
+      navSections[invSectionIdx] = {
+        ...original,
+        displayLabel: 'UNITS',
+        items: (original.items || [])
+          .filter(item => item.href !== '/dashboard/inventory/adjustments')
+          .map(item => item.href === '/dashboard/products'
+            ? { ...item, label: 'Units / Plots' }
+            : item
+          ),
+      }
+    }
+  }
+
   const systemSection = navSections.find(s => s.section === 'SYSTEM')!
   if (isPlatformAdmin) {
     if (!systemSection.items!.some(item => item.href === '/dashboard/admin')) {
@@ -403,7 +426,7 @@ export default function DashboardSidebar({
                   onClick={() => handleSectionClick(sec.section)}
                   whileHover={{ color: textColor }}
                 >
-                  <span style={{ flex: 1 }}>{sec.section}</span>
+                  <span style={{ flex: 1 }}>{sec.displayLabel ?? sec.section}</span>
                   <motion.span animate={{ rotate: isOpen ? 0 : -90 }} transition={{ duration: 0.2 }}><ChevronDown size={12} /></motion.span>
                 </motion.div>
               )}
