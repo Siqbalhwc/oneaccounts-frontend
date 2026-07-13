@@ -7,14 +7,12 @@ import { ChevronRight } from "lucide-react"
 // ── Configuration: each URL segment maps to a label and an optional module ──
 const BREADCRUMB_CONFIG: Record<string, { label: string; module?: string }> = {
   dashboard:       { label: "Dashboard" },
-  // Accounting
   invoices:        { label: "Sales Invoices",    module: "Sales" },
   bills:           { label: "Purchase Bills",    module: "Purchases" },
   receipts:        { label: "Receipts",          module: "Sales" },
   payments:        { label: "Payments",          module: "Purchases" },
   accounts:        { label: "Chart of Accounts", module: "Accounting" },
   journal:         { label: "Journal Entries",   module: "Accounting" },
-  // Reports
   reports:         { label: "Reports" },
   "trial-balance": { label: "Trial Balance" },
   "profit-loss":   { label: "Profit & Loss" },
@@ -22,12 +20,9 @@ const BREADCRUMB_CONFIG: Record<string, { label: string; module?: string }> = {
   "customer-ledger": { label: "Customer Ledger" },
   "vendor-ledger":   { label: "Vendor Ledger" },
   "general-ledger":  { label: "General Ledger" },
-  // CRM
   customers:       { label: "Customers" },
   suppliers:       { label: "Suppliers" },
-  // Inventory
   products:        { label: "Products" },
-  // Payroll
   payroll:         { label: "Payroll" },
   employees:       { label: "Employees",       module: "Payroll" },
   attendance:      { label: "Attendance",      module: "Payroll" },
@@ -38,17 +33,13 @@ const BREADCRUMB_CONFIG: Record<string, { label: string; module?: string }> = {
   "salary-components": { label: "Salary Components", module: "Payroll" },
   "salary-structures": { label: "Salary Structures", module: "Payroll" },
   runs:            { label: "Payroll Runs",    module: "Payroll" },
-  // Assets
   assets:          { label: "Assets",          module: "Fixed Assets" },
-  // Materials
   materials:       { label: "Materials",       module: "Material Management" },
-  // Settings
   settings:        { label: "Settings" },
   company:         { label: "Company" },
   users:           { label: "Users" },
   roles:           { label: "Roles" },
   "approval-workflow": { label: "Approval Workflow", module: "Payroll" },
-  // Generic actions
   new:             { label: "New" },
   edit:            { label: "Edit" },
 }
@@ -74,13 +65,11 @@ export default function Breadcrumb() {
 
   if (!pathname) return null
 
-  // Split the path and remove empty strings
   const segments = pathname.split("/").filter(Boolean)
 
   // Don't show breadcrumb on the bare dashboard page
   if (segments.length === 1 && segments[0] === "dashboard") return null
 
-  // Build breadcrumb items
   const items: { label: string; href: string }[] = []
   let accumulatedPath = ""
 
@@ -93,9 +82,8 @@ export default function Breadcrumb() {
     // If the segment has a module defined, insert the module before the segment's label
     if (config?.module) {
       const modLabel = MODULE_NAMES[config.module] || config.module
-      // Insert module only if it's not already the last added label (avoid duplicate)
       if (items.length === 0 || items[items.length - 1].label !== modLabel) {
-        items.push({ label: modLabel, href: "#" }) // module itself is not a link (or you can link to a module page if exists)
+        items.push({ label: modLabel, href: "#" })
       }
     }
 
@@ -104,15 +92,12 @@ export default function Breadcrumb() {
     if (config) {
       label = config.label
     } else if (isNumeric(seg)) {
-      label = "Detail" // numeric ID → generic detail
+      label = "Detail"
     } else {
-      // Capitalise and replace hyphens
-      label = seg
-        .replace(/-/g, " ")
-        .replace(/\b\w/g, (c) => c.toUpperCase())
+      label = seg.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
     }
 
-    // Prevent duplicate consecutive labels (e.g., "Sales" twice)
+    // Prevent duplicate consecutive labels
     if (items.length > 0 && items[items.length - 1].label === label) {
       continue
     }
@@ -120,16 +105,38 @@ export default function Breadcrumb() {
     items.push({ label, href: accumulatedPath })
   }
 
-  // The last item should not be a link, and gets aria-current
   return (
-    <nav aria-label="Breadcrumb" style={{ padding: "0 0 12px 0", overflowX: "auto", whiteSpace: "nowrap", scrollbarWidth: "thin" }}>
-      <ol style={{ listStyle: "none", display: "flex", alignItems: "center", gap: 4, margin: 0, padding: 0, fontSize: 13, fontFamily: "'Inter', sans-serif" }}>
+    <nav
+      aria-label="Breadcrumb"
+      style={{
+        marginTop: 24,          // breathing room above
+        marginBottom: 12,       // space before page title
+        overflowX: "auto",
+        whiteSpace: "nowrap",
+        scrollbarWidth: "thin",
+      }}
+    >
+      <ol
+        style={{
+          listStyle: "none",
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          margin: 0,
+          padding: 0,
+          fontSize: 12,          // subtle size
+          fontFamily: "'Inter', sans-serif",
+        }}
+      >
         {items.map((item, idx) => {
           const isLast = idx === items.length - 1
           return (
             <li key={idx} style={{ display: "flex", alignItems: "center", gap: 4 }}>
               {isLast ? (
-                <span style={{ color: "var(--text)", fontWeight: 600 }} aria-current="page">
+                <span
+                  style={{ color: "var(--text)", fontWeight: 600 }}
+                  aria-current="page"
+                >
                   {item.label}
                 </span>
               ) : (
@@ -146,7 +153,9 @@ export default function Breadcrumb() {
                   {item.label}
                 </Link>
               )}
-              {!isLast && <ChevronRight size={12} style={{ color: "var(--text-muted)", margin: "0 2px" }} />}
+              {!isLast && (
+                <ChevronRight size={12} style={{ color: "var(--text-muted)", margin: "0 2px" }} />
+              )}
             </li>
           )
         })}
