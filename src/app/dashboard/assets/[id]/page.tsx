@@ -3,9 +3,11 @@
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Truck, DollarSign } from "lucide-react"
+import { ArrowLeft, Truck, DollarSign, Download } from "lucide-react"
 import RecordHistory from "@/components/RecordHistory"
 import { useCompany } from "@/contexts/CompanyContext"
+import { generateMonthlyDepreciationPDF } from "@/lib/pdf/monthlyDepreciationPDF"
+import { generateDepreciationEntryPDF } from "@/lib/pdf/depreciationEntryPDF"
 
 const STATUS_COLORS: Record<string, string> = {
   Active: "#22c55e",
@@ -42,7 +44,7 @@ export default function AssetDetailPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  const { companyId } = useCompany()
+  const { companyId, companyName, companyTagline, logoUrl } = useCompany()
 
   const [asset, setAsset] = useState<any>(null)
   const [depSchedule, setDepSchedule] = useState<any[]>([])
@@ -161,26 +163,13 @@ export default function AssetDetailPage() {
         .kpi-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 6px; }
         .kpi-value { font-size: 22px; font-weight: 800; color: var(--text); }
 
-        /* ── Responsive ── */
-        @media (max-width: 900px) {
-          .detail-grid { grid-template-columns: 1fr; }
-          .kpi-row { flex-direction: column; }
-          .kpi-card { min-width: unset; }
-          .label { width: 120px; }
-          .row { flex-wrap: wrap; }
-        }
-        @media (max-width: 480px) {
-          .label { width: 100px; font-size: 10px; }
-          .value { font-size: 12px; }
-          th, td { padding: 8px 6px; font-size: 11px; }
-        }
+        @media (max-width: 900px) { .detail-grid { grid-template-columns: 1fr; } .kpi-row { flex-direction: column; } .kpi-card { min-width: unset; } .label { width: 120px; } .row { flex-wrap: wrap; } }
+        @media (max-width: 480px) { .label { width: 100px; font-size: 10px; } .value { font-size: 12px; } th, td { padding: 8px 6px; font-size: 11px; } }
       `}</style>
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
-        <button className="btn" onClick={() => router.push("/dashboard/assets")}>
-          <ArrowLeft size={16} />
-        </button>
+        <button className="btn" onClick={() => router.push("/dashboard/assets")}><ArrowLeft size={16} /></button>
         <div style={{ flex: 1 }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>{asset.name}</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>{asset.asset_no}</p>
@@ -198,22 +187,10 @@ export default function AssetDetailPage() {
 
       {/* KPI Cards */}
       <div className="kpi-row">
-        <div className="kpi-card">
-          <div className="kpi-label">Original Cost</div>
-          <div className="kpi-value">PKR {cost.toLocaleString()}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Accum. Depreciation</div>
-          <div className="kpi-value" style={{ color: "#A78BFA" }}>PKR {accumDep.toLocaleString()}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Net Book Value</div>
-          <div className="kpi-value" style={{ color: nbv > 0 ? "#10B981" : "#EF4444" }}>PKR {nbv.toLocaleString()}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Remaining Life</div>
-          <div className="kpi-value">{remainingLife} months</div>
-        </div>
+        <div className="kpi-card"><div className="kpi-label">Original Cost</div><div className="kpi-value">PKR {cost.toLocaleString()}</div></div>
+        <div className="kpi-card"><div className="kpi-label">Accum. Depreciation</div><div className="kpi-value" style={{ color: "#A78BFA" }}>PKR {accumDep.toLocaleString()}</div></div>
+        <div className="kpi-card"><div className="kpi-label">Net Book Value</div><div className="kpi-value" style={{ color: nbv > 0 ? "#10B981" : "#EF4444" }}>PKR {nbv.toLocaleString()}</div></div>
+        <div className="kpi-card"><div className="kpi-label">Remaining Life</div><div className="kpi-value">{remainingLife} months</div></div>
       </div>
 
       {/* Details and Status */}
@@ -231,36 +208,53 @@ export default function AssetDetailPage() {
 
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, marginBottom: 12 }}>Status & Value</h3>
-          <div className="row">
-            <span className="label">Status</span>
-            <span className="value"><StatusBadge status={asset.status} /></span>
-          </div>
+          <div className="row"><span className="label">Status</span><span className="value"><StatusBadge status={asset.status} /></span></div>
           <div className="row"><span className="label">Salvage Value</span><span className="value">PKR {salvage.toLocaleString()}</span></div>
           <div className="row"><span className="label">Depreciable Value</span><span className="value">PKR {depreciable.toLocaleString()}</span></div>
           <div className="row"><span className="label">Depreciation %</span><span className="value">{progressPct.toFixed(1)}%</span></div>
           <div className="row"><span className="label">Remaining Life</span><span className="value">{remainingLife} months</span></div>
-          <div className="progress-bar">
-            <div className="progress-fill" style={{ width: `${progressPct}%` }} />
-          </div>
+          <div className="progress-bar"><div className="progress-fill" style={{ width: `${progressPct}%` }} /></div>
         </div>
       </div>
 
       {/* Depreciation Schedule */}
       <div style={{ maxWidth: 1000, marginTop: 16 }}>
         <div className="card">
-          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, marginBottom: 12 }}>📆 Depreciation Schedule</h3>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "var(--text)" }}>📆 Depreciation Schedule</h3>
+            {depSchedule.length > 0 && (
+              <button
+                className="btn"
+                onClick={() => {
+                  const latestPeriod = depSchedule[depSchedule.length - 1].period;
+                  const entries = depSchedule.map(e => ({
+                    assetNo: asset.asset_no,
+                    assetName: asset.name,
+                    period: e.period,
+                    depreciationAmount: Number(e.depreciation_amount),
+                  }));
+                  const pdfData = {
+                    companyName: companyName || "OneAccounts",
+                    companyTagline: companyTagline || "",
+                    logoUrl: logoUrl || null,
+                    reportMonth: latestPeriod || "",
+                    entries,
+                  };
+                  generateMonthlyDepreciationPDF(pdfData).then(doc => doc.save(`Monthly_Depreciation_${asset.asset_no}.pdf`));
+                }}
+                title="Download monthly depreciation report"
+              >
+                <Download size={14} /> PDF
+              </button>
+            )}
+          </div>
           {depSchedule.length === 0 ? (
             <p style={{ color: "var(--text-muted)" }}>No depreciation entries yet.</p>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table>
                 <thead>
-                  <tr>
-                    <th>Period</th>
-                    <th style={{ textAlign: "right" }}>Amount</th>
-                    <th>Note</th>
-                    <th>Posted</th>
-                  </tr>
+                  <tr><th>Period</th><th style={{ textAlign: "right" }}>Amount</th><th>Note</th><th>Posted</th></tr>
                 </thead>
                 <tbody>
                   {depSchedule.map(entry => (
@@ -279,21 +273,43 @@ export default function AssetDetailPage() {
 
         {/* Journal Entries */}
         <div className="card">
-          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, marginBottom: 12 }}>📒 Journal Entries</h3>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "var(--text)" }}>📒 Journal Entries</h3>
+            {journalLines.length > 0 && (
+              <button
+                className="btn"
+                onClick={() => {
+                  const entries = journalLines.map(line => ({
+                    date: new Date(line.journal_entries?.date).toLocaleDateString("en-PK", { year:"numeric", month:"short", day:"numeric" }),
+                    entryNo: line.journal_entries?.entry_no || "—",
+                    description: line.journal_entries?.description || "—",
+                    account: `${line.accounts?.code || ""} – ${line.accounts?.name || ""}`,
+                    debit: Number(line.debit),
+                    credit: Number(line.credit),
+                  }));
+                  const pdfData = {
+                    companyName: companyName || "OneAccounts",
+                    companyTagline: companyTagline || "",
+                    logoUrl: logoUrl || null,
+                    fromDate: "2000-01-01",
+                    toDate: new Date().toISOString().split("T")[0],
+                    entries,
+                  };
+                  generateDepreciationEntryPDF(pdfData).then(doc => doc.save(`Depreciation_Journal_${asset.asset_no}.pdf`));
+                }}
+                title="Download depreciation journal entries"
+              >
+                <Download size={14} /> PDF
+              </button>
+            )}
+          </div>
           {journalLines.length === 0 ? (
             <p style={{ color: "var(--text-muted)" }}>No journal entries found.</p>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table>
                 <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Account</th>
-                    <th>Description</th>
-                    <th style={{ textAlign: "right" }}>Debit</th>
-                    <th style={{ textAlign: "right" }}>Credit</th>
-                    <th>Reference</th>
-                  </tr>
+                  <tr><th>Date</th><th>Account</th><th>Description</th><th style={{ textAlign: "right" }}>Debit</th><th style={{ textAlign: "right" }}>Credit</th><th>Reference</th></tr>
                 </thead>
                 <tbody>
                   {journalLines.map(line => (
