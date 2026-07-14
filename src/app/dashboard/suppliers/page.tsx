@@ -210,6 +210,13 @@ export default function SuppliersPage() {
 
     const fullPhone = form.countryCode + (form.phone.trim().replace(/\D/g, ""))
 
+    // Calculate new balance to keep it in sync with opening + transactions
+    let newBalance = form.opening_balance || 0
+    if (editingSupplier) {
+      const transactionEffect = (editingSupplier.balance || 0) - (editingSupplier.opening_balance || 0)
+      newBalance = (form.opening_balance || 0) + transactionEffect
+    }
+
     const payload = {
       company_id: companyId,
       name: form.name.trim(),
@@ -217,6 +224,7 @@ export default function SuppliersPage() {
       email: form.email.trim(),
       address: form.address.trim(),
       opening_balance: form.opening_balance,
+      balance: newBalance,
       payment_terms: form.payment_terms,
       default_project_id: form.default_project_id,
       default_location_id: form.default_location_id,
@@ -231,7 +239,7 @@ export default function SuppliersPage() {
       else setFlash("Supplier updated!")
     } else {
       const code = await getNextCode()
-      const { error } = await supabase.from("suppliers").insert({ ...payload, code, balance: form.opening_balance })
+      const { error } = await supabase.from("suppliers").insert({ ...payload, code, created_by: "system" })
       if (error) errorMsg = error.message
       else setFlash("Supplier created!")
     }
@@ -650,7 +658,7 @@ export default function SuppliersPage() {
         </div>
       )}
 
-      {/* Modal for add/edit (unchanged) */}
+      {/* Modal for add/edit */}
       {showModal && canEdit && (
         <div className="pr-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="pr-modal" onClick={e => e.stopPropagation()}>

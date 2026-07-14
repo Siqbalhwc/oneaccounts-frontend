@@ -1,9 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Plus, CheckCircle } from "lucide-react"
+import RecordHistory from "@/components/RecordHistory"
 
 const COUNTRY_CODES = [
   { code: "+92", label: "🇵🇰 +92" },
@@ -36,6 +37,10 @@ const PAYMENT_TERMS = [
 
 export default function NewSupplierPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const editId = searchParams.get("id")   // null for new, string for edit
+  const isEdit = Boolean(editId)
+
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -54,7 +59,7 @@ export default function NewSupplierPage() {
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
 
-  const [phoneError, setPhoneError] = useState("")   // ✅ inline phone error
+  const [phoneError, setPhoneError] = useState("")
 
   const [totalSuppliers, setTotalSuppliers] = useState(0)
   const [totalPayables, setTotalPayables] = useState(0)
@@ -66,6 +71,7 @@ export default function NewSupplierPage() {
   const [defaultLocationId, setDefaultLocationId] = useState<number | null>(null)
   const [defaultActivityId, setDefaultActivityId] = useState<number | null>(null)
 
+  // Fetch company ID and load data (new or edit)
   useEffect(() => {
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -73,22 +79,58 @@ export default function NewSupplierPage() {
       if (!cid) return
       setCompanyId(cid)
 
-      supabase
-        .from("suppliers")
-        .select("code")
-        .eq("company_id", cid)
-        .ilike("code", "SUP-%")
-        .order("code", { ascending: false })
-        .limit(1)
-        .then(({ data }) => {
-          let nextNum = 1
-          if (data && data.length > 0) {
-            const match = data[0].code?.match(/SUP-(\d+)/)
-            if (match) nextNum = parseInt(match[1], 10) + 1
-          }
-          setSupplierCode(`SUP-${String(nextNum).padStart(3, "0")}`)
-        })
+      // If editing, load the supplier data
+      if (editId) {
+        const { data: supData } = await supabase
+          .from("suppliers")
+          .select("*")
+          .eq("id", Number(editId))
+          .eq("company_id", cid)
+          .single()
 
+        if (supData) {
+          setSupplierCode(supData.code)
+          setSupplierName(supData.name)
+          const phone = supData.phone || ""
+          let cc = "+92"
+          let ph = ""
+          if (phone && phone.startsWith("+")) {
+            const match = phone.match(/^(\+\d{1,3})(.*)/)
+            if (match) {
+              cc = match[1]
+              ph = match[2].trim()
+            }
+          }
+          setCountryCode(cc)
+          setPhoneNumber(ph)
+          setEmail(supData.email || "")
+          setAddress(supData.address || "")
+          setOpeningBalance(String(supData.opening_balance || 0))
+          setPaymentTerms(supData.payment_terms || "Net 15")
+          setDefaultProjectId(supData.default_project_id || null)
+          setDefaultLocationId(supData.default_location_id || null)
+          setDefaultActivityId(supData.default_activity_id || null)
+        }
+      } else {
+        // Generate new code
+        supabase
+          .from("suppliers")
+          .select("code")
+          .eq("company_id", cid)
+          .ilike("code", "SUP-%")
+          .order("code", { ascending: false })
+          .limit(1)
+          .then(({ data }) => {
+            let nextNum = 1
+            if (data && data.length > 0) {
+              const match = data[0].code?.match(/SUP-(\d+)/)
+              if (match) nextNum = parseInt(match[1], 10) + 1
+            }
+            setSupplierCode(`SUP-${String(nextNum).padStart(3, "0")}`)
+          })
+      }
+
+      // Totals
       supabase
         .from("suppliers")
         .select("id, balance")
@@ -101,6 +143,7 @@ export default function NewSupplierPage() {
           }
         })
 
+      // Dependencies
       supabase.from("projects").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
         .then(r => r.data && setProjects(r.data))
       supabase.from("locations").select("id, name").eq("company_id", cid).is("deleted_at", null).order("name")
@@ -109,7 +152,7 @@ export default function NewSupplierPage() {
         .then(r => r.data && setActivities(r.data))
     }
     init()
-  }, [])
+  }, [editId])
 
   const handlePhoneChange = (value: string) => {
     setPhoneNumber(value)
@@ -154,40 +197,60 @@ export default function NewSupplierPage() {
       default_project_id: defaultProjectId,
       default_location_id: defaultLocationId,
       default_activity_id: defaultActivityId,
-      created_by: userEmail,
       updated_by: userEmail,
     }
 
-    const { data, error: insertErr } = await supabase
-      .from("suppliers")
-      .insert(payload)
-      .select("id, code, name")
-      .single()
+    if (isEdit) {
+      // Update
+      const { error: updateErr } = await supabase
+        .from("suppliers")
+        .update(payload)
+        .eq("id", Number(editId))
+        .eq("company_id", companyId)
 
-    if (insertErr) {
-      if (insertErr.message?.includes("duplicate key")) {
-        setError("This code already exists. Please refresh to regenerate.")
-      } else {
-        setError(insertErr.message)
+      if (updateErr) {
+        setError(updateErr.message)
+        setLoading(false)
+        return
       }
-      setLoading(false)
-      return
+      setFlash("✅ Supplier updated!")
+    } else {
+      // Insert
+      const { data, error: insertErr } = await supabase
+        .from("suppliers")
+        .insert({ ...payload, created_by: userEmail })
+        .select("id, code, name")
+        .single()
+
+      if (insertErr) {
+        if (insertErr.message?.includes("duplicate key")) {
+          setError("This code already exists. Please refresh to regenerate.")
+        } else {
+          setError(insertErr.message)
+        }
+        setLoading(false)
+        return
+      }
+      setFlash(`✅ Supplier ${data.code} – ${data.name} created!`)
+      setSupplierName("")
+      setPhoneNumber("")
+      setEmail("")
+      setAddress("")
+      setOpeningBalance("0")
+      setPaymentTerms("Net 15")
+      setDefaultProjectId(null)
+      setDefaultLocationId(null)
+      setDefaultActivityId(null)
+      setTotalSuppliers(prev => prev + 1)
+      setTotalPayables(prev => prev + balance)
     }
 
-    setFlash(`✅ Supplier ${data.code} – ${data.name} created!`)
-    setSupplierName("")
-    setPhoneNumber("")
-    setEmail("")
-    setAddress("")
-    setOpeningBalance("0")
-    setPaymentTerms("Net 15")
-    setDefaultProjectId(null)
-    setDefaultLocationId(null)
-    setDefaultActivityId(null)
     setLoading(false)
-    setTotalSuppliers(prev => prev + 1)
-    setTotalPayables(prev => prev + balance)
-    setTimeout(() => router.push("/dashboard/suppliers"), 1500)
+    if (!isEdit) {
+      setTimeout(() => router.push("/dashboard/suppliers"), 1500)
+    } else {
+      setTimeout(() => router.push("/dashboard/suppliers"), 1500)
+    }
   }
 
   if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading company data…</div>
@@ -234,8 +297,12 @@ export default function NewSupplierPage() {
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
         <button className="btn btn-back" onClick={() => router.push("/dashboard/suppliers")}><ArrowLeft size={16} /></button>
         <div style={{ flex: 1 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>➕ New Supplier</h1>
-          <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Add a supplier to your system</p>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>
+            {isEdit ? "✏️ Edit Supplier" : "➕ New Supplier"}
+          </h1>
+          <p style={{ color: "var(--text-muted)", fontSize: 13 }}>
+            {isEdit ? "Update supplier information" : "Add a supplier to your system"}
+          </p>
         </div>
       </div>
 
@@ -321,6 +388,14 @@ export default function NewSupplierPage() {
                 {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
             </div>
+
+            {/* CHANGE HISTORY – only shown when editing */}
+            {isEdit && (
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 4 }}>
+                <h4 style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>📝 Change History</h4>
+                <RecordHistory tableName="suppliers" recordId={editId!} />
+              </div>
+            )}
           </div>
 
           <div className="summary-side" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -337,7 +412,7 @@ export default function NewSupplierPage() {
             </div>
             <div className="card" style={{ padding: "16px" }}>
               <button className="btn btn-submit" type="submit" disabled={loading}>
-                {loading ? "Saving..." : <><Plus size={16} /> Create Supplier</>}
+                {loading ? "Saving..." : (isEdit ? "Update Supplier" : <><Plus size={16} /> Create Supplier</>)}
               </button>
             </div>
           </div>
