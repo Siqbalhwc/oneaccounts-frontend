@@ -48,7 +48,7 @@ type SortDir = "asc" | "desc"
 function SkeletonRow() {
   return (
     <tr>
-      {[60, 70, 50, 60, 80].map((w, i) => (
+      {[60, 70, 50, 50, 60, 80].map((w, i) => (
         <td key={i} style={{ padding: "12px 16px" }}>
           <div style={{
             width: `${w}%`,
@@ -574,6 +574,7 @@ export default function SuppliersPage() {
               <col style={{ width: 110 }} /> {/* Code */}
               <col />                         {/* Name - takes remaining space */}
               <col style={{ width: 120 }} /> {/* Phone */}
+              <col style={{ width: 120 }} /> {/* Opening Balance */}
               <col style={{ width: 130 }} /> {/* Balance */}
               <col style={{ width: 140 }} /> {/* Actions */}
             </colgroup>
@@ -582,6 +583,7 @@ export default function SuppliersPage() {
                 <SortTh field="code">Code</SortTh>
                 <SortTh field="name" style={{ textAlign: "left" }}>Name</SortTh>
                 <SortTh field="phone" style={{ textAlign: "left" }}>Phone</SortTh>
+                <th style={{ ...thStyle, textAlign: "right" }}>Opening Bal.</th>
                 <SortTh field="balance" style={{ textAlign: "right" }}>Balance</SortTh>
                 <th style={{ ...thStyle, textAlign: "center" }}>Actions</th>
               </tr>
@@ -591,7 +593,7 @@ export default function SuppliersPage() {
                 [1, 2, 3, 4, 5].map(i => <SkeletonRow key={i} />)
               ) : suppliers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>
+                  <td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>
                     {search ? "No matching suppliers found." : "No suppliers yet. Add your first supplier."}
                   </td>
                 </tr>
@@ -605,6 +607,9 @@ export default function SuppliersPage() {
                       {s.name}
                     </td>
                     <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{s.phone || "-"}</td>
+                    <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>
+                      PKR {s.opening_balance?.toLocaleString() ?? "0"}
+                    </td>
                     <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: s.balance >= 0 ? "#10B981" : "#EF4444", whiteSpace: "nowrap" }}>
                       PKR {s.balance?.toLocaleString()}
                     </td>

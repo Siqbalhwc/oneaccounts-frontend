@@ -68,7 +68,7 @@ export default function VendorLedgerPage() {
     }
     supabase
       .from("suppliers")
-      .select("id, code, name, balance")
+      .select("id, code, name, balance, opening_balance")   // ← now includes opening_balance
       .eq("id", selectedSupplierId)
       .eq("company_id", companyId)
       .single()
@@ -179,8 +179,9 @@ export default function VendorLedgerPage() {
 
       periodLines.sort((a, b) => a.date.localeCompare(b.date))
 
-      // 6. Opening balance
-      const openingNet = openingDebit - openingCredit
+      // 6. Opening balance = net of transactions before startDate + supplier's manual opening_balance
+      //    (opening_balance is a credit from the supplier's perspective – money owed to them)
+      const openingNet = openingDebit - openingCredit + (supplier.opening_balance || 0)
       const openingLine = {
         id: "opening-calc",
         entry_no: "",
