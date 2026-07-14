@@ -5,25 +5,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
-import { Plus, Search, Edit, Trash2, X, Eye, ArrowUpDown, ArrowUp, ArrowDown, FileText, Download, Upload } from "lucide-react"
-import RecordHistory from "@/components/RecordHistory"
-
-const COUNTRY_CODES = [
-  { code: "+92",  label: "🇵🇰 +92" },
-  { code: "+1",   label: "🇺🇸 +1" },
-  { code: "+44",  label: "🇬🇧 +44" },
-  { code: "+971", label: "🇦🇪 +971" },
-  { code: "+966", label: "🇸🇦 +966" },
-  { code: "+91",  label: "🇮🇳 +91" },
-]
-
-const PAYMENT_TERMS = [
-  "Due on Receipt",
-  "Net 7",
-  "Net 15",
-  "Net 30",
-  "Net 60",
-]
+import { Plus, Search, Edit, Trash2, Eye, ArrowUpDown, ArrowUp, ArrowDown, FileText, Download, Upload } from "lucide-react"
 
 interface Supplier {
   id: number
@@ -34,12 +16,7 @@ interface Supplier {
   address: string
   opening_balance: number
   balance: number
-  default_project_id: number | null
-  default_location_id: number | null
-  default_activity_id: number | null
   payment_terms?: string | null
-  created_by?: string | null
-  updated_by?: string | null
 }
 
 type SortField = "code" | "name" | "phone" | "balance"
@@ -88,30 +65,8 @@ export default function SuppliersPage() {
   const [sortField, setSortField] = useState<SortField>("name")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
-  const [showModal, setShowModal] = useState(false)
-  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null)
-  const [form, setForm] = useState({
-    name: "",
-    countryCode: "+92",
-    phone: "",
-    email: "",
-    address: "",
-    opening_balance: 0,
-    payment_terms: "Net 15",
-    default_project_id: null as number | null,
-    default_location_id: null as number | null,
-    default_activity_id: null as number | null,
-  })
-  const [saving, setSaving] = useState(false)
-  const [flash, setFlash] = useState("")
-  const [formError, setFormError] = useState("")
-
   const [importMessage, setImportMessage] = useState("")
   const [importing, setImporting] = useState(false)
-
-  const [projects, setProjects] = useState<any[]>([])
-  const [locations, setLocations] = useState<any[]>([])
-  const [activities, setActivities] = useState<any[]>([])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -120,16 +75,6 @@ export default function SuppliersPage() {
       if (cid) setCompanyId(cid)
     })
   }, [])
-
-  useEffect(() => {
-    if (!companyId) return
-    supabase.from("projects").select("id, name").eq("company_id", companyId).is("deleted_at", null).order("name")
-      .then(r => r.data && setProjects(r.data))
-    supabase.from("locations").select("id, name").eq("company_id", companyId).is("deleted_at", null).order("name")
-      .then(r => r.data && setLocations(r.data))
-    supabase.from("activities").select("id, name").eq("company_id", companyId).is("deleted_at", null).order("name")
-      .then(r => r.data && setActivities(r.data))
-  }, [companyId])
 
   const fetchSuppliers = () => {
     if (!companyId) return
@@ -171,109 +116,8 @@ export default function SuppliersPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  const openNew = () => {
-    router.push("/dashboard/suppliers/new")
-  }
-
-  const openEdit = (s: Supplier) => {
-    setEditingSupplier(s)
-    let cc = "+92"
-    let ph = s.phone || ""
-    if (ph && ph.startsWith("+")) {
-      const match = ph.match(/^(\+\d{1,3})(.*)/)
-      if (match) {
-        cc = match[1]
-        ph = match[2].trim()
-      }
-    }
-    setForm({
-      name: s.name,
-      countryCode: cc,
-      phone: ph,
-      email: s.email || "",
-      address: s.address || "",
-      opening_balance: s.opening_balance || 0,
-      payment_terms: s.payment_terms || "Net 15",
-      default_project_id: s.default_project_id || null,
-      default_location_id: s.default_location_id || null,
-      default_activity_id: s.default_activity_id || null,
-    })
-    setFormError("")
-    setShowModal(true)
-  }
-
-  const handleSave = async () => {
-    if (!form.name.trim() || !companyId) return
-    setSaving(true)
-    setFormError("")
-    setFlash("")
-
-    const fullPhone = form.countryCode + (form.phone.trim().replace(/\D/g, ""))
-
-    // Calculate new balance to keep it in sync with opening + transactions
-    let newBalance = form.opening_balance || 0
-    if (editingSupplier) {
-      const transactionEffect = (editingSupplier.balance || 0) - (editingSupplier.opening_balance || 0)
-      newBalance = (form.opening_balance || 0) + transactionEffect
-    }
-
-    const payload = {
-      company_id: companyId,
-      name: form.name.trim(),
-      phone: fullPhone,
-      email: form.email.trim(),
-      address: form.address.trim(),
-      opening_balance: form.opening_balance,
-      balance: newBalance,
-      payment_terms: form.payment_terms,
-      default_project_id: form.default_project_id,
-      default_location_id: form.default_location_id,
-      default_activity_id: form.default_activity_id,
-    }
-
-    let errorMsg = ""
-
-    if (editingSupplier) {
-      const { error } = await supabase.from("suppliers").update(payload).eq("id", editingSupplier.id).eq("company_id", companyId)
-      if (error) errorMsg = error.message
-      else setFlash("Supplier updated!")
-    } else {
-      const code = await getNextCode()
-      const { error } = await supabase.from("suppliers").insert({ ...payload, code, created_by: "system" })
-      if (error) errorMsg = error.message
-      else setFlash("Supplier created!")
-    }
-
-    setSaving(false)
-    if (errorMsg) {
-      setFormError(errorMsg)
-      setFlash("Error: " + errorMsg)
-    } else {
-      setShowModal(false)
-      fetchSuppliers()
-      setTimeout(() => setFlash(""), 3000)
-    }
-  }
-
-  const getNextCode = async (): Promise<string> => {
-    const { data } = await supabase
-      .from("suppliers")
-      .select("code")
-      .eq("company_id", companyId)
-      .order("code", { ascending: false })
-      .limit(50)
-    let maxNum = 0
-    if (data) {
-      data.forEach(row => {
-        const match = row.code?.match(/SUP-(\d+)/)
-        if (match) {
-          const n = parseInt(match[1], 10)
-          if (!isNaN(n) && n > maxNum) maxNum = n
-        }
-      })
-    }
-    return `SUP-${String(maxNum + 1).padStart(3, "0")}`
-  }
+  const openNew = () => router.push("/dashboard/suppliers/new")
+  const openEdit = (s: Supplier) => router.push(`/dashboard/suppliers/new?id=${s.id}`)
 
   const handleDelete = async (id: number) => {
     if (!confirm("Delete this supplier?")) return
@@ -326,13 +170,13 @@ export default function SuppliersPage() {
       const res = await fetch("/api/import", { method: "POST", body: formData })
       const result = await res.json()
       if (result.success) {
-        setImportMessage(`? Imported ${result.count} suppliers successfully`)
+        setImportMessage(`✅ Imported ${result.count} suppliers successfully`)
         fetchSuppliers()
       } else {
-        setImportMessage(`? Error: ${result.error}`)
+        setImportMessage(`❌ Error: ${result.error}`)
       }
     } catch (err: any) {
-      setImportMessage(`? Network error: ${err.message}`)
+      setImportMessage(`❌ Network error: ${err.message}`)
     } finally {
       setImporting(false)
       if (fileInputRef.current) fileInputRef.current.value = ""
@@ -341,7 +185,6 @@ export default function SuppliersPage() {
 
   const totalPayables = suppliers.reduce((s, c) => s + (c.balance || 0), 0)
 
-  // Shared th/td styles (same as invoice page)
   const thStyle: React.CSSProperties = {
     padding: "12px 16px",
     background: "var(--card-hover)",
@@ -462,18 +305,7 @@ export default function SuppliersPage() {
         .sup-table { min-width: 700px; }
 
         .message { padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
-        .pr-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
-        .pr-modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; color: var(--text); }
-        .form-error { background: var(--card); border: 1px solid #EF4444; color: #FCA5A5; padding: 8px 12px; border-radius: 6px; }
-        .input, .select {
-          width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px;
-          padding: 0 12px; font-size: 13px; box-sizing: border-box;
-          background: var(--bg); color: var(--text);
-        }
-        .input:focus, .select:focus { border-color: var(--primary); outline: none; }
-        label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; display: block; }
 
-        /* -- DESKTOP: original header layout -- */
         .header-row {
           display: flex;
           justify-content: space-between;
@@ -482,46 +314,25 @@ export default function SuppliersPage() {
           flex-wrap: wrap;
           gap: 12px;
         }
-        .header-row .title-area {
-          flex: 1;
-        }
-        .header-row .actions {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-        }
+        .header-row .title-area { flex: 1; }
+        .header-row .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
-        /* search section below summary */
         .search-section {
           margin-bottom: 16px;
           max-width: 320px;
           position: relative;
         }
 
-        /* -- MOBILE ONLY -- */
         @media (max-width: 640px) {
           .page-wrap { padding: 12px !important; }
           .summary-grid { grid-template-columns: 1fr 1fr; }
-
-          .header-row {
-            flex-direction: column;
-            align-items: stretch;
-          }
-          .header-row .title-area {
-            margin-bottom: 8px;
-            text-align: left;
-          }
-          .header-row .actions {
-            width: 100%;
-            justify-content: space-between;
-          }
-          .search-section {
-            max-width: 100%;
-          }
+          .header-row { flex-direction: column; align-items: stretch; }
+          .header-row .title-area { margin-bottom: 8px; text-align: left; }
+          .header-row .actions { width: 100%; justify-content: space-between; }
+          .search-section { max-width: 100%; }
         }
       `}</style>
 
-      {/* -- HEADER ROW: title left, all buttons right -- */}
       <div className="header-row">
         <div className="title-area">
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>🚚 Suppliers</h1>
@@ -551,40 +362,31 @@ export default function SuppliersPage() {
       </div>
 
       {importMessage && (
-        <div className="message" style={{ background: importMessage.startsWith("?") ? "#065F46" : "#7C2D12", color: "white" }}>
+        <div className="message" style={{ background: importMessage.startsWith("✅") ? "#065F46" : "#7C2D12", color: "white" }}>
           {importMessage}
         </div>
       )}
 
-      {/* -- Summary cards -- */}
       <div className="summary-grid">
         <div className="summary-item"><div className="summary-label">Total Suppliers</div><div className="summary-value">{total}</div></div>
         <div className="summary-item"><div className="summary-label">Total Payables</div><div className="summary-value" style={{ color: totalPayables >= 0 ? "#10B981" : "#EF4444" }}>PKR {totalPayables.toLocaleString()}</div></div>
       </div>
 
-      {/* -- Search (below summary) -- */}
       <div className="search-section">
         <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
         <input className="search-input" placeholder="Search by code, name, or phone..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
       </div>
 
-      {flash && (
-        <div style={{ background: flash.startsWith("Error") ? "var(--card)" : "var(--card)", border: flash.startsWith("Error") ? "1px solid #EF4444" : "1px solid #065F46", color: flash.startsWith("Error") ? "#FCA5A5" : "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
-          {flash}
-        </div>
-      )}
-
-      {/* -- Table -- */}
       <div className="card">
         <div className="table-scroll">
           <table className="sup-table">
             <colgroup>
-              <col style={{ width: 110 }} /> {/* Code */}
-              <col />                         {/* Name - takes remaining space */}
-              <col style={{ width: 120 }} /> {/* Phone */}
-              <col style={{ width: 120 }} /> {/* Opening Balance */}
-              <col style={{ width: 130 }} /> {/* Balance */}
-              <col style={{ width: 140 }} /> {/* Actions */}
+              <col style={{ width: 110 }} />
+              <col />
+              <col style={{ width: 120 }} />
+              <col style={{ width: 120 }} />
+              <col style={{ width: 130 }} />
+              <col style={{ width: 140 }} />
             </colgroup>
             <thead>
               <tr>
@@ -608,33 +410,19 @@ export default function SuppliersPage() {
               ) : (
                 suppliers.map((s) => (
                   <tr key={s.id}>
-                    <td style={tdStyle}>
-                      <span style={{ fontWeight: 600, color: "var(--primary)" }}>{s.code}</span>
-                    </td>
-                    <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {s.name}
-                    </td>
+                    <td style={tdStyle}><span style={{ fontWeight: 600, color: "var(--primary)" }}>{s.code}</span></td>
+                    <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</td>
                     <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{s.phone || "-"}</td>
-                    <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>
-                      PKR {s.opening_balance?.toLocaleString() ?? "0"}
-                    </td>
-                    <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: s.balance >= 0 ? "#10B981" : "#EF4444", whiteSpace: "nowrap" }}>
-                      PKR {s.balance?.toLocaleString()}
-                    </td>
+                    <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>PKR {s.opening_balance?.toLocaleString() ?? "0"}</td>
+                    <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: s.balance >= 0 ? "#10B981" : "#EF4444", whiteSpace: "nowrap" }}>PKR {s.balance?.toLocaleString()}</td>
                     <td style={{ ...tdStyle, textAlign: "center" }}>
                       <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
-                        <button className="btn-icon" onClick={() => router.push(`/dashboard/reports/vendor-ledger?supplierId=${s.id}`)} title="View Ledger">
-                          <Eye size={13} />
-                        </button>
+                        <button className="btn-icon" onClick={() => router.push(`/dashboard/reports/vendor-ledger?supplierId=${s.id}`)} title="View Ledger"><Eye size={13} /></button>
                         {canEdit && (
-                          <button className="btn-icon" onClick={() => openEdit(s)} title="Edit">
-                            <Edit size={13} />
-                          </button>
+                          <button className="btn-icon" onClick={() => openEdit(s)} title="Edit"><Edit size={13} /></button>
                         )}
                         {canEdit && (
-                          <button className="btn-icon" onClick={() => handleDelete(s.id)} style={{ color: "#EF4444" }} title="Delete">
-                            <Trash2 size={13} />
-                          </button>
+                          <button className="btn-icon" onClick={() => handleDelete(s.id)} style={{ color: "#EF4444" }} title="Delete"><Trash2 size={13} /></button>
                         )}
                       </div>
                     </td>
@@ -654,75 +442,6 @@ export default function SuppliersPage() {
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn-outline" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</button>
             <button className="btn btn-outline" disabled={page * pageSize >= total} onClick={() => setPage(p => p + 1)}>Next</button>
-          </div>
-        </div>
-      )}
-
-      {/* Modal for add/edit */}
-      {showModal && canEdit && (
-        <div className="pr-modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="pr-modal" onClick={e => e.stopPropagation()}>
-            <div style={{ padding: "20px 24px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between" }}>
-              <h3 style={{ margin: 0, color: "var(--text)" }}>{editingSupplier ? "Edit Supplier" : "Add Supplier"}</h3>
-              <button className="btn btn-outline" onClick={() => setShowModal(false)}><X size={18} /></button>
-            </div>
-            <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
-              {formError && <div className="form-error">{formError}</div>}
-              <div><label>Name *</label><input className="input" value={form.name} onChange={e => setForm({...form, name: e.target.value})} /></div>
-              <div><label>Phone</label>
-                <div style={{ display: "grid", gridTemplateColumns: "100px 1fr", gap: 8 }}>
-                  <select className="select" value={form.countryCode} onChange={e => setForm({...form, countryCode: e.target.value})}>
-                    {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
-                  </select>
-                  <input className="input" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} placeholder="3001234567" />
-                </div>
-              </div>
-              <div><label>Email</label><input className="input" type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></div>
-              <div><label>Address</label><input className="input" value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <div><label>Opening Balance</label><input className="input" type="number" value={form.opening_balance} onChange={e => setForm({...form, opening_balance: parseFloat(e.target.value) || 0})} /></div>
-                <div>
-                  <label>Payment Terms</label>
-                  <select className="select" value={form.payment_terms} onChange={e => setForm({...form, payment_terms: e.target.value})}>
-                    {PAYMENT_TERMS.map(term => <option key={term} value={term}>{term}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <div>
-                  <label>Default Project</label>
-                  <select className="select" value={form.default_project_id ?? ""} onChange={e => setForm({...form, default_project_id: e.target.value ? Number(e.target.value) : null})}>
-                    <option value="">- None -</option>
-                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label>Default Location</label>
-                  <select className="select" value={form.default_location_id ?? ""} onChange={e => setForm({...form, default_location_id: e.target.value ? Number(e.target.value) : null})}>
-                    <option value="">- None -</option>
-                    {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label>Default Activity</label>
-                <select className="select" value={form.default_activity_id ?? ""} onChange={e => setForm({...form, default_activity_id: e.target.value ? Number(e.target.value) : null})}>
-                  <option value="">- None -</option>
-                  {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
-              </div>
-
-              {editingSupplier && (
-                <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 4 }}>
-                  <h4 style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>?? Change History</h4>
-                  <RecordHistory tableName="suppliers" recordId={String(editingSupplier.id)} />
-                </div>
-              )}
-            </div>
-            <div style={{ padding: "16px 24px", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
-              <button className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
-              <button className="btn btn-outline" style={{ background: "var(--primary)", color: "var(--primary-text)", borderColor: "var(--primary)" }} onClick={handleSave} disabled={saving || !form.name.trim()}>{saving ? "Saving..." : "Save"}</button>
-            </div>
           </div>
         </div>
       )}
