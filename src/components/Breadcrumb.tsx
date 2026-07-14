@@ -114,6 +114,7 @@ export default function Breadcrumb() {
         overflowX: "auto",
         whiteSpace: "nowrap",
         scrollbarWidth: "thin",
+        paddingLeft: 24,        // 🆕 aligns with page heading's left edge
       }}
     >
       <ol
