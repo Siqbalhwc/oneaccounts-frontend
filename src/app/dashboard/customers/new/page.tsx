@@ -130,16 +130,22 @@ export default function NewCustomerPage() {
     if (!companyId) { setError("Company not loaded"); return }
     if (!customerName.trim()) { setError("Customer name is required"); return }
 
-    // Phone validation (with inline error)
-    if (phoneNumber.trim()) {
-      const digitsOnly = phoneNumber.trim().replace(/\D/g, "")
-      const expectedLength = PHONE_LENGTHS[countryCode]
-      if (expectedLength && digitsOnly.length !== expectedLength) {
-        const msg = `Must be ${expectedLength} digits for ${countryCode}. Currently ${digitsOnly.length} digits.`
-        setPhoneError(msg)
-        setError(msg)   // also top banner
-        return
-      }
+    // Phone required check
+    if (!phoneNumber.trim()) {
+      const msg = "Phone number is required"
+      setPhoneError(msg)
+      setError(msg)
+      return
+    }
+
+    // Phone length validation
+    const digitsOnly = phoneNumber.trim().replace(/\D/g, "")
+    const expectedLength = PHONE_LENGTHS[countryCode]
+    if (expectedLength && digitsOnly.length !== expectedLength) {
+      const msg = `Must be ${expectedLength} digits for ${countryCode}. Currently ${digitsOnly.length} digits.`
+      setPhoneError(msg)
+      setError(msg)
+      return
     }
 
     setLoading(true)
@@ -309,7 +315,7 @@ export default function NewCustomerPage() {
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <label className="label">Phone</label>
+              <label className="label">Phone *</label>
               <div className="phone-row">
                 <select className="select" value={countryCode} onChange={e => setCountryCode(e.target.value)}>
                   {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
