@@ -207,6 +207,20 @@ export default function NewJournalPage() {
       return
     }
 
+    // ── Period validation ── (new)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error("Not authenticated")
+      await supabase.rpc('validate_posting', {
+        p_company_id: companyId,
+        p_user_id: user.id,
+        p_date: entryDate,
+      })
+    } catch (e: any) {
+      setError(e.message || "Period validation failed")
+      return
+    }
+
     setLoading(true)
     setError("")
 
