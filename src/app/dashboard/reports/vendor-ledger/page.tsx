@@ -181,7 +181,7 @@ export default function VendorLedgerPage() {
 
       // 6. Opening balance = net of transactions before startDate + supplier's manual opening_balance
       //    (opening_balance is a credit from the supplier's perspective – money owed to them)
-      const openingNet = openingDebit - openingCredit + (supplier.opening_balance || 0)
+      const openingNet = openingDebit - openingCredit - (supplier.opening_balance || 0)
       const openingLine = {
         id: "opening-calc",
         entry_no: "",
