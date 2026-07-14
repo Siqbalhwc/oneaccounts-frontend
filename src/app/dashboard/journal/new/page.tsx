@@ -81,31 +81,6 @@ export default function NewJournalPage() {
     })
   }, [])
 
-  // ── Generate entry number ──
-  const generateEntryNo = async (): Promise<string> => {
-    const datePrefix = new Date().toISOString().split("T")[0].replace(/-/g, "")
-
-    const { data } = await supabase
-      .from("journal_entries")
-      .select("entry_no")
-      .ilike("entry_no", `JE-${datePrefix}-%`)
-      .order("entry_no", { ascending: false })
-      .limit(1)
-
-    let maxNum = 0
-    if (data && data.length > 0) {
-      const match = data[0].entry_no?.match(
-        new RegExp(`JE-${datePrefix}-(\\d+)$`)
-      )
-      if (match) {
-        maxNum = parseInt(match[1], 10) || 0
-      }
-    }
-
-    const nextNum = maxNum + 1
-    return `JE-${datePrefix}-${String(nextNum).padStart(3, "0")}`
-  }
-
   const addLine = () =>
     setLines([
       ...lines,
@@ -207,161 +182,36 @@ export default function NewJournalPage() {
       return
     }
 
-    // ── Period validation ── (new)
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error("Not authenticated")
-      await supabase.rpc('validate_posting', {
-        p_company_id: companyId,
-        p_user_id: user.id,
-        p_date: entryDate,
-      })
-    } catch (e: any) {
-      setError(e.message || "Period validation failed")
-      return
-    }
-
     setLoading(true)
     setError("")
 
-    let entryNo = ""
-    let je: any = null
-    let headerErr: any = null
-
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        entryNo = await generateEntryNo()
-      } catch (e: any) {
-        setError("Failed to generate entry number. Please try again.")
-        setLoading(false)
-        return
-      }
-
-      const result = await supabase
-        .from("journal_entries")
-        .insert({
-          company_id: companyId,
-          entry_no: entryNo,
-          date: entryDate,
-          description,
-        })
-        .select("id")
-        .single()
-
-      headerErr = result.error
-      je = result.data
-
-      if (!headerErr) break
-
-      if (headerErr.message?.includes("duplicate key") && attempt < 2) {
-        continue
-      }
-
-      setError(headerErr?.message || "Failed to create journal entry")
-      setLoading(false)
-      return
-    }
-
-    if (!je) {
-      setError("Failed to create journal entry after multiple attempts.")
-      setLoading(false)
-      return
-    }
-
-    const entryId = je.id
-
-    const validLines = lines.filter(
-      (l) => l.account_id && (l.debit > 0 || l.credit > 0)
-    )
-    if (validLines.length === 0) {
-      await supabase.from("journal_entries").delete().eq("id", entryId)
-      setError("At least one line with an account and amount is required")
-      setLoading(false)
-      return
-    }
-
-    const { error: linesErr } = await supabase.from("journal_lines").insert(
-      validLines.map((l) => ({
-        company_id: companyId,
-        entry_id: entryId,
-        account_id: l.account_id,
-        debit: l.debit,
-        credit: l.credit,
-        narration: l.narration || null,
-        location_id: l.location_id || null,
-        activity_id: l.activity_id || null,
-        project_id: l.project_id || null,
-        donor_id: l.donor_id || null,
-        source_type: "manual_journal",
-        source_id: entryId,
-      }))
-    )
-    if (linesErr) {
-      await supabase.from("journal_entries").delete().eq("id", entryId)
-      setError("Failed to save lines: " + linesErr.message)
-      setLoading(false)
-      return
-    }
-
-    try {
-      for (const l of validLines) {
-        const { data: acc, error: accErr } = await supabase
-          .from("accounts")
-          .select("balance")
-          .eq("id", l.account_id)
-          .eq("company_id", companyId)
-          .single()
-        if (accErr) throw new Error(`Account not found: ${l.account_id}`)
-        if (acc) {
-          const newBal = acc.balance + (l.debit || 0) - (l.credit || 0)
-          const { error: updateErr } = await supabase
-            .from("accounts")
-            .update({ balance: newBal })
-            .eq("id", l.account_id)
-            .eq("company_id", companyId)
-          if (updateErr)
-            throw new Error(`Balance update failed: ${updateErr.message}`)
-        }
-      }
-    } catch (balErr: any) {
-      await supabase.from("journal_lines").delete().eq("entry_id", entryId)
-      await supabase.from("journal_entries").delete().eq("id", entryId)
-      setError("Error updating accounts, rolled back: " + balErr.message)
-      setLoading(false)
-      return
-    }
-
-    const { data: { user } } = await supabase.auth.getUser()
-    const auditPayload = {
-      table_name: "journal_entries",
-      record_id: String(entryId),
-      action: "INSERT",
-      old_data: null,
-      new_data: {
-        id: entryId,
-        company_id: companyId,
-        entry_no: entryNo,
-        date: entryDate,
-        description,
-        lines: validLines.map((l) => ({
+    // Call the backend RPC
+    const { data, error: rpcError } = await supabase.rpc('create_journal_entry', {
+      p_company_id: companyId,
+      p_date: entryDate,
+      p_description: description || null,
+      p_lines: lines
+        .filter(l => l.account_id && (l.debit > 0 || l.credit > 0))
+        .map(l => ({
           account_id: l.account_id,
           debit: l.debit,
           credit: l.credit,
-          narration: l.narration,
-          location_id: l.location_id,
-          activity_id: l.activity_id,
-          project_id: l.project_id,
-          donor_id: l.donor_id,
-          source_type: "manual_journal",
-          source_id: entryId,
+          narration: l.narration || null,
+          location_id: l.location_id || null,
+          activity_id: l.activity_id || null,
+          project_id: l.project_id || null,
+          donor_id: l.donor_id || null,
         })),
-      },
-      changed_by: user?.id || null,
-      changed_at: new Date().toISOString(),
-    }
-    await supabase.from("data_change_logs").insert(auditPayload)
+    })
 
-    setFlash(`✅ Journal Entry ${entryNo} posted!`)
+    if (rpcError || (data && data[0]?.error_msg)) {
+      setError(rpcError?.message || data[0].error_msg || "Failed to create journal entry")
+      setLoading(false)
+      return
+    }
+
+    const result = data?.[0]
+    setFlash(`✅ Journal Entry ${result.entry_no} posted!`)
     setTimeout(() => router.push("/dashboard/journal"), 1500)
     setLoading(false)
   }
