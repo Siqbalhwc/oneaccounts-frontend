@@ -69,7 +69,7 @@ export default function CustomerLedgerPage() {
     }
     supabase
       .from("customers")
-      .select("id, code, name, balance")
+      .select("id, code, name, balance, opening_balance")   // ← now includes opening_balance
       .eq("id", selectedCustomerId)
       .eq("company_id", companyId)
       .single()
@@ -188,9 +188,9 @@ export default function CustomerLedgerPage() {
 
       periodLines.sort((a, b) => a.date.localeCompare(b.date))
 
-      // 6. Opening balance = net of every AR line dated strictly before startDate.
-      //    No dependency on customer.balance or "today" — correct for any date range.
-      const openingNet = openingDebit - openingCredit
+      // 6. Opening balance = net of every AR line before startDate + customer's manual opening_balance
+      //    opening_balance is treated as an initial debit (money owed by customer)
+      const openingNet = openingDebit - openingCredit + (customer.opening_balance || 0)
       const openingLine = {
         id: "opening-calc",
         entry_no: "",
