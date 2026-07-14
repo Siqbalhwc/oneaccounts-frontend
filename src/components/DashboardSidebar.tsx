@@ -75,7 +75,7 @@ const baseNavSections: NavSection[] = [
   ]},
   { section: 'SYSTEM', items: [
     { label: 'Settings',        icon: '⚙️', href: '/dashboard/settings' },
-    { label: 'Fiscal Periods',  icon: '📅', href: '/dashboard/settings/periods' },   // ← NEW
+    { label: 'Fiscal Periods',  icon: '📅', href: '/dashboard/settings/periods' },
     { label: 'Upgrade Plan',    icon: '⭐', href: '/dashboard/upgrade' },
   ]},
 ]
@@ -233,10 +233,9 @@ export default function DashboardSidebar({
     ]
 
     // Bookings is construction-only — NGO has no equivalent concept.
-    // Links straight to the New Booking form since a list/history page
-    // doesn't exist yet; update this href once that page is built.
     if (businessType === 'construction') {
       tagSectionItems.push({ label: 'New Booking', icon: '🏗️', href: '/dashboard/bookings/new' })
+      tagSectionItems.push({ label: 'Record Payment', icon: '💵', href: '/dashboard/bookings/record-payment' })
     }
 
     navSections.splice(insertAt, 0, {

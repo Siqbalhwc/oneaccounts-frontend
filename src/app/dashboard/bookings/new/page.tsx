@@ -152,6 +152,14 @@ function NewBookingPageContent() {
               >
                 <ExternalLink size={15} /> View Sales Invoice
               </button>
+              {result.receipt_id && (
+                <button
+                  onClick={() => router.push(`/dashboard/receipts/${result.receipt_id}`)}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 11, borderRadius: 9, background: "transparent", color: "var(--text)", border: "1.5px solid var(--border)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+                >
+                  <ExternalLink size={15} /> View Advance Receipt
+                </button>
+              )}
               <button
                 onClick={() => router.push("/dashboard")}
                 style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 11, borderRadius: 9, background: "transparent", color: "var(--text-muted)", border: "1.5px solid var(--border)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}

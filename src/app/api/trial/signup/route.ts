@@ -200,6 +200,24 @@ export async function POST(request: Request) {
         console.error('Failed to enable inventory feature:', featureError)
       }
     }
+
+    // Withholding Tax (Section 153) is standard practice for construction
+    // contractors in Pakistan — enable by default, same as inventory.
+    const { data: taxFeature } = await supabaseAdmin
+      .from('features')
+      .select('id')
+      .eq('code', 'tax_management')
+      .single()
+
+    if (taxFeature) {
+      const { error: featureError } = await supabaseAdmin.from('company_features').upsert(
+        { company_id: company.id, feature_id: taxFeature.id, enabled: true },
+        { onConflict: 'company_id,feature_id' }
+      )
+      if (featureError) {
+        console.error('Failed to enable tax_management feature:', featureError)
+      }
+    }
   }
 
   // ── 9. Directly update user's app_metadata – no Edge Function needed ──
