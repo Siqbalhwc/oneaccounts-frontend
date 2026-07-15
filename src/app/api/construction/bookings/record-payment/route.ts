@@ -136,6 +136,26 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ── 3b. Keep property_bookings.balance_amount in sync ──
+  // Was previously only ever set once at booking creation and never
+  // updated afterward — meaning it silently went stale the moment any
+  // installment payment was recorded. Reduce it by exactly what was
+  // actually applied (not the raw payment amount, in case some of it
+  // was unapplied leftover beyond the remaining balance).
+  const amountApplied = Math.round((amount - remaining) * 100) / 100
+  if (amountApplied > 0) {
+    const { error: balanceUpdateError } = await supabaseAdmin
+      .from('property_bookings')
+      .update({
+        balance_amount: Math.max(0, Math.round((booking.balance_amount - amountApplied) * 100) / 100),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', booking.id)
+    if (balanceUpdateError) {
+      console.error('Failed to update booking balance_amount', balanceUpdateError)
+    }
+  }
+
   // ── 4. If every installment is now paid, mark the booking completed ──
   const { data: remainingUnpaid } = await supabaseAdmin
     .from('installment_schedule')
