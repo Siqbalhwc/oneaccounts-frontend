@@ -11,6 +11,7 @@ import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
 import EntityPicker from "@/components/entity-picker/EntityPicker"
+import { getLabel, type BusinessType } from "@/lib/labels"
 
 export default function NewBillPage() {
   const router = useRouter()
@@ -33,6 +34,18 @@ export default function NewBillPage() {
   const [loading, setLoading] = useState(true)
 
   const isNGO = businessType === "ngo"
+  // ✅ New: construction gets the same cascading Site Zone -> Cost Code ->
+  // Project display and GL-account restriction that NGO already has for
+  // Location -> Activity -> Project/Donor. Everything below is additive —
+  // isNGO-only behavior is unchanged, we only ever ADD isConstruction
+  // alongside it, never replace a check.
+  const isConstruction = businessType === "construction"
+  const labels = {
+    location: getLabel(businessType as BusinessType, "location"),
+    activity: getLabel(businessType as BusinessType, "activity"),
+    project: getLabel(businessType as BusinessType, "project"),
+    donor: getLabel(businessType as BusinessType, "donor"),
+  }
 
   const [suppliers, setSuppliers] = useState<any[]>([])
   const [supplierId, setSupplierId] = useState<number | null>(null)
@@ -881,9 +894,12 @@ export default function NewBillPage() {
     return activities.filter(a => allowed.includes(a.id))
   }
 
-  // NEW: get filtered account IDs for a given location+activity (NGO only)
+  // Filtered account IDs for a given location+activity — now applies to
+  // BOTH NGO and Construction (was NGO-only before). Generic mechanism,
+  // driven purely by which combos exist in `budgets`, works identically
+  // for either business type.
   const getFilteredAccountIds = (locationId: string, activityId: string): number[] | undefined => {
-    if (!isNGO || !locationId || !activityId) return undefined
+    if (!(isNGO || isConstruction) || !locationId || !activityId) return undefined
     const key = `${Number(locationId)}_${Number(activityId)}`
     return locationActivityAccountsMap[key]
   }
@@ -940,7 +956,7 @@ export default function NewBillPage() {
         .inv-title { font-size: 18px; font-weight: 700; color: var(--text); }
         .inv-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 16px 20px; box-shadow: var(--shadow-sm); margin-bottom: 12px; overflow: visible; }
         .inv-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block; }
-        .inv-input, .inv-select { width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: 13px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box; }
+        .inv-input, .inv-select { width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: 13px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box; min-width: 0; }
         /* color-scheme for input[type=date] is set globally per data-theme
            (see global stylesheet) — was previously missing entirely on this
            page, which made the calendar icon invisible. Do not add it here;
@@ -1004,10 +1020,17 @@ export default function NewBillPage() {
         .inv-item-header .header-right { justify-content: flex-end; text-align: right; }
         .inv-item-header .header-center { justify-content: center; text-align: center; }
 
+        /* ✅ Responsiveness fix: CSS Grid items default to min-width:auto,
+           which stops them shrinking below their content's natural width —
+           this is why the ROW scrolled fine but fields INSIDE it stayed
+           cramped/misaligned regardless of viewport width. min-width: 0
+           lets every cell actually respect its grid track. Applies to
+           every business type — this was never NGO/construction-specific,
+           just a pre-existing layout bug. */
         .inv-item-row { border-bottom: 1px solid var(--border); padding: 6px 4px; }
-        .inv-item-row > * { padding: 0 8px; min-height: 34px; display: flex; align-items: center; }
-        .inv-item-row .inv-cell { border: 1.5px solid var(--border); border-radius: 8px; padding: 0 8px; font-size: 12px; font-family: inherit; background: var(--bg); color: var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; box-sizing: border-box; height: 34px; width: 100%; }
-        .inv-item-row input, .inv-item-row select { height: 34px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 8px; font-size: 12px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box; width: 100%; }
+        .inv-item-row > * { padding: 0 8px; min-height: 34px; display: flex; align-items: center; min-width: 0; }
+        .inv-item-row .inv-cell { border: 1.5px solid var(--border); border-radius: 8px; padding: 0 8px; font-size: 12px; font-family: inherit; background: var(--bg); color: var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; box-sizing: border-box; height: 34px; width: 100%; min-width: 0; }
+        .inv-item-row input, .inv-item-row select { height: 34px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 8px; font-size: 12px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; box-sizing: border-box; width: 100%; min-width: 0; }
         .inv-item-row input:focus, .inv-item-row select:focus { border-color: var(--primary); }
         .inv-item-row .inv-cell-total { justify-content: flex-end; font-weight: 600; }
         .inv-item-row .inv-cell-tax { justify-content: flex-end; color: var(--text-muted); font-size: 11px; }
@@ -1015,7 +1038,7 @@ export default function NewBillPage() {
         .inv-item-row .delete-btn { background: none; border: none; cursor: pointer; color: #EF4444; display: flex; align-items: center; justify-content: center; padding: 4px; min-height: 34px; }
         .inv-item-row .delete-btn:hover { color: #DC2626; }
 
-        .tax-wrapper { display: flex; align-items: center; gap: 6px; width: 100%; }
+        .tax-wrapper { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; }
         .tax-wrapper select { flex: 1; min-width: 60px; }
         .tax-badge { font-size: 10px; font-weight: 600; padding: 2px 10px; border-radius: 12px; background: rgba(56, 189, 248, 0.15); color: #38BDF8; border: 1px solid rgba(56, 189, 248, 0.2); white-space: nowrap; flex-shrink: 0; }
         .tax-badge.no-tax { background: rgba(255, 255, 255, 0.04); color: var(--text-muted); border-color: var(--border); }
@@ -1304,8 +1327,8 @@ export default function NewBillPage() {
                     <span className="header-center">Qty</span>
                     <span className="header-right">Price</span>
                     {taxEnabled && <span className="header-center">Tax %</span>}
-                    {(isNGO || locations.length > 0) && <span>Location</span>}
-                    {(isNGO || activities.length > 0) && <span>Activity</span>}
+                    {(isNGO || locations.length > 0) && <span>{labels.location}</span>}
+                    {(isNGO || activities.length > 0) && <span>{labels.activity}</span>}
                     <span>GL Acc</span>
                     <span className="header-right">Total</span>
                     <span className="header-center"></span>
@@ -1324,7 +1347,13 @@ export default function NewBillPage() {
                       ? allDonors.find(d => d.id === item.donor_id)
                       : null
 
-                    const showInfoRow = isNGO && !item.product_id && !!item.activity_id
+                    // ✅ Now shows for both NGO and Construction manual lines.
+                    // For construction, Investor is intentionally NOT shown yet —
+                    // there's no data linking a Site Zone/Cost Code combo to a
+                    // specific Investor until Piece B (Investor Capital Tracking)
+                    // is built. Project/Site display works today since that
+                    // linkage already exists via activities.project_id.
+                    const showInfoRow = (isNGO || isConstruction) && !item.product_id && !!item.activity_id
                     const taxBadge = taxEnabled && item.tax_code_id ? `${item.tax_rate}%` : null
 
                     return (
@@ -1425,14 +1454,20 @@ export default function NewBillPage() {
 
                         {showInfoRow && (
                           <div className="line-info-row">
-                            {combos.length === 0 && (
-                              <span className="line-info-chip" style={{ opacity: 0.5 }}>📁 No project linked</span>
+                            {isNGO && combos.length === 0 && (
+                              <span className="line-info-chip" style={{ opacity: 0.5 }}>📁 No {labels.project.toLowerCase()} linked</span>
+                            )}
+                            {isConstruction && combos.length === 0 && (
+                              <span className="line-info-chip" style={{ opacity: 0.5 }}>📁 No {labels.project.toLowerCase()} linked</span>
                             )}
                             {combos.length === 1 && (
                               <span className="line-info-chip">
                                 📁 {combos[0].projectName}
-                                {combos[0].donorName && (
+                                {isNGO && combos[0].donorName && (
                                   <span style={{ color: "var(--primary)", marginLeft: 4 }}>· 🤝 {combos[0].donorName}</span>
+                                )}
+                                {isConstruction && (
+                                  <span style={{ color: "var(--text-muted)", marginLeft: 4, fontStyle: "italic" }}>· Investor: pending</span>
                                 )}
                               </span>
                             )}
@@ -1445,14 +1480,14 @@ export default function NewBillPage() {
                                     value={item.project_id ? JSON.stringify({ project_id: item.project_id, donor_id: item.donor_id }) : ""}
                                     onChange={e => updateItem(idx, "project_select", e.target.value)}
                                   >
-                                    <option value="">Select project…</option>
+                                    <option value="">Select {labels.project.toLowerCase()}…</option>
                                     {combos.map((c, i) => (
                                       <option key={i} value={JSON.stringify({ project_id: c.project_id, donor_id: c.donor_id })}>
-                                        {c.projectName}{c.donorName ? ` (${c.donorName})` : ""}
+                                        {c.projectName}{isNGO && c.donorName ? ` (${c.donorName})` : ""}
                                       </option>
                                     ))}
                                   </select>
-                                  {selectedDonor && (
+                                  {isNGO && selectedDonor && (
                                     <span style={{ color: "var(--primary)", marginLeft: 4 }}>· 🤝 {selectedDonor.name}</span>
                                   )}
                                 </span>
