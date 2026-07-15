@@ -234,6 +234,7 @@ export default function DashboardSidebar({
 
     // Bookings is construction-only — NGO has no equivalent concept.
     if (businessType === 'construction') {
+      tagSectionItems.push({ label: 'Investor Capital', icon: '💼', href: '/dashboard/settings/investor-capital' })
       tagSectionItems.push({ label: 'Bookings', icon: '🏗️', href: '/dashboard/bookings' })
       tagSectionItems.push({ label: 'Record Payment', icon: '💵', href: '/dashboard/bookings/record-payment' })
     }
