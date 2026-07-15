@@ -404,11 +404,12 @@ export default function NewPaymentPage() {
   return (
     <div style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .pay-shell { width: 100%; }
+        .pay-shell { width: 100%; max-width: 100%; overflow-x: hidden; }
         .pay-title { font-size: 18px; font-weight: 700; color: var(--text); }
         .pay-card {
           background: var(--card); border-radius: 12px; border: 1px solid var(--border);
           padding: 16px 20px; box-shadow: var(--shadow-sm); margin-bottom: 12px;
+          min-width: 0;
         }
         .pay-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block; }
         .pay-input, .pay-select {
@@ -457,6 +458,7 @@ export default function NewPaymentPage() {
           gap: 16px;
           align-items: start;
         }
+        .header-grid > * { min-width: 0; }
         @media (max-width: 900px) {
           .header-grid {
             grid-template-columns: 1fr;
@@ -464,7 +466,12 @@ export default function NewPaymentPage() {
         }
         .chk-box { width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary); }
         .alloc-input { width: 96px; height: 28px; border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; text-align: right; background: var(--bg); color: var(--text); }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        table {
+          width: max-content;
+          min-width: 980px;
+          border-collapse: collapse;
+          font-size: 13px;
+        }
         th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
         td { padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
         .hint-text { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
@@ -583,102 +590,111 @@ export default function NewPaymentPage() {
                 <div className="hint-text" style={{ marginBottom: 10 }}>
                   Tick a bill to auto-fill the net amount that fully settles it, or type a net amount yourself for a partial payment — gross and WHT are calculated automatically.
                 </div>
-                <div style={{ overflowX: "auto" }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th style={{ width: 30 }}></th>
-                        <th>Bill</th>
-                        <th>Gross Due</th>
-                        <th>WHT Rate</th>
-                        <th style={{ textAlign: "right" }}>Net to Pay</th>
-                        <th style={{ textAlign: "right" }}>Gross / WHT Applied</th>
-                        <th style={{ textAlign: "right" }}>Balance After</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {supplierOpeningBalance > 0 && (
-                        <tr style={{ background: "var(--bg-soft)" }}>
-                          <td>
-                            <input className="chk-box" type="checkbox"
-                              checked={openingNet > 0}
-                              onChange={toggleOpeningAllocation}
-                            />
-                          </td>
-                          <td colSpan={3}>
-                            <span style={{ fontWeight: 600 }}>Opening Balance</span>
-                            <span style={{ marginLeft: 8, fontSize: 12, color: "var(--text-muted)" }}>
-                              (no WHT applies)
-                            </span>
-                          </td>
-                          <td style={{ textAlign: "right", fontWeight: 600 }}>
-                            PKR {supplierOpeningBalance.toLocaleString()}
-                          </td>
-                          <td style={{ textAlign: "right" }} className="derived-cell">—</td>
-                          <td style={{ textAlign: "right" }} className="derived-cell">
-                            PKR {(supplierOpeningBalance - openingNet).toLocaleString()}
-                          </td>
-                          <td></td>
+                <div
+                  style={{
+                    overflowX: "auto",
+                    overflowY: "hidden",
+                    WebkitOverflowScrolling: "touch",
+                    maxWidth: "100%"
+                  }}
+                >
+                  <div style={{ minWidth: 980 }}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th style={{ width: 30 }}></th>
+                          <th>Bill</th>
+                          <th>Gross Due</th>
+                          <th>WHT Rate</th>
+                          <th style={{ textAlign: "right" }}>Net to Pay</th>
+                          <th style={{ textAlign: "right" }}>Gross / WHT Applied</th>
+                          <th style={{ textAlign: "right" }}>Balance After</th>
+                          <th></th>
                         </tr>
-                      )}
-                      {billRows.map(bill => (
-                        <tr key={bill.id}>
-                          <td><input className="chk-box" type="checkbox" checked={bill.gross > 0} onChange={() => toggleBill(bill)} /></td>
-                          <td>{bill.invoice_no}</td>
-                          <td style={{ fontWeight: 600 }}>{bill.due.toLocaleString()}</td>
-                          <td>{bill.rate > 0 ? `${bill.rate}%` : "—"}</td>
-                          <td style={{ textAlign: "right" }}>
-                            <input
-                              className="alloc-input"
-                              type="number"
-                              min="0"
-                              value={bill.net}
-                              onChange={e => updateNetAllocation(bill, parseFloat(e.target.value) || 0)}
-                            />
-                          </td>
-                          <td style={{ textAlign: "right" }} className="derived-cell">
-                            {bill.gross.toLocaleString()} / {bill.wht.toLocaleString()}
-                          </td>
-                          <td style={{ textAlign: "right" }} className="derived-cell">
-                            {bill.remainingGross.toLocaleString()}
-                            {bill.rate > 0 ? ` (WHT ${bill.remainingWht.toLocaleString()})` : ""}
-                          </td>
-                          <td>
-                            {bill.gross > 0 && (
-                              bill.isFullySettled
-                                ? <span className="badge-full">Full</span>
-                                : <span className="badge-partial">Partial</span>
-                            )}
-                          </td>
+                      </thead>
+                      <tbody>
+                        {supplierOpeningBalance > 0 && (
+                          <tr style={{ background: "var(--bg-soft)" }}>
+                            <td>
+                              <input className="chk-box" type="checkbox"
+                                checked={openingNet > 0}
+                                onChange={toggleOpeningAllocation}
+                              />
+                            </td>
+                            <td colSpan={3}>
+                              <span style={{ fontWeight: 600 }}>Opening Balance</span>
+                              <span style={{ marginLeft: 8, fontSize: 12, color: "var(--text-muted)" }}>
+                                (no WHT applies)
+                              </span>
+                            </td>
+                            <td style={{ textAlign: "right", fontWeight: 600 }}>
+                              PKR {supplierOpeningBalance.toLocaleString()}
+                            </td>
+                            <td style={{ textAlign: "right" }} className="derived-cell">—</td>
+                            <td style={{ textAlign: "right" }} className="derived-cell">
+                              PKR {(supplierOpeningBalance - openingNet).toLocaleString()}
+                            </td>
+                            <td></td>
+                          </tr>
+                        )}
+                        {billRows.map(bill => (
+                          <tr key={bill.id}>
+                            <td><input className="chk-box" type="checkbox" checked={bill.gross > 0} onChange={() => toggleBill(bill)} /></td>
+                            <td>{bill.invoice_no}</td>
+                            <td style={{ fontWeight: 600 }}>{bill.due.toLocaleString()}</td>
+                            <td>{bill.rate > 0 ? `${bill.rate}%` : "—"}</td>
+                            <td style={{ textAlign: "right" }}>
+                              <input
+                                className="alloc-input"
+                                type="number"
+                                min="0"
+                                value={bill.net}
+                                onChange={e => updateNetAllocation(bill, parseFloat(e.target.value) || 0)}
+                              />
+                            </td>
+                            <td style={{ textAlign: "right" }} className="derived-cell">
+                              {bill.gross.toLocaleString()} / {bill.wht.toLocaleString()}
+                            </td>
+                            <td style={{ textAlign: "right" }} className="derived-cell">
+                              {bill.remainingGross.toLocaleString()}
+                              {bill.rate > 0 ? ` (WHT ${bill.remainingWht.toLocaleString()})` : ""}
+                            </td>
+                            <td>
+                              {bill.gross > 0 && (
+                                bill.isFullySettled
+                                  ? <span className="badge-full">Full</span>
+                                  : <span className="badge-partial">Partial</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                        <tr style={{ borderTop: "2px solid var(--border)", fontWeight: 700 }}>
+                          <td colSpan={5} style={{ textAlign: "right" }}>Allocated (Gross)</td>
+                          <td colSpan={3} style={{ textAlign: "right" }}>PKR {totalGrossAllocated.toLocaleString()}</td>
                         </tr>
-                      ))}
-                      <tr style={{ borderTop: "2px solid var(--border)", fontWeight: 700 }}>
-                        <td colSpan={5} style={{ textAlign: "right" }}>Allocated (Gross)</td>
-                        <td colSpan={3} style={{ textAlign: "right" }}>PKR {totalGrossAllocated.toLocaleString()}</td>
-                      </tr>
-                      {totalWhtDeducted > 0 && (
-                        <tr style={{ color: "var(--text-muted)" }}>
-                          <td colSpan={5} style={{ textAlign: "right" }}>WHT → Withholding Tax Payable</td>
-                          <td colSpan={3} style={{ textAlign: "right" }}>PKR {totalWhtDeducted.toLocaleString()}</td>
+                        {totalWhtDeducted > 0 && (
+                          <tr style={{ color: "var(--text-muted)" }}>
+                            <td colSpan={5} style={{ textAlign: "right" }}>WHT → Withholding Tax Payable</td>
+                            <td colSpan={3} style={{ textAlign: "right" }}>PKR {totalWhtDeducted.toLocaleString()}</td>
+                          </tr>
+                        )}
+                        <tr style={{ fontWeight: 600 }}>
+                          <td colSpan={5} style={{ textAlign: "right" }}>Net Payment from Bank</td>
+                          <td colSpan={3} style={{ textAlign: "right", color: "#10B981" }}>PKR {totalNetAllocated.toLocaleString()}</td>
                         </tr>
-                      )}
-                      <tr style={{ fontWeight: 600 }}>
-                        <td colSpan={5} style={{ textAlign: "right" }}>Net Payment from Bank</td>
-                        <td colSpan={3} style={{ textAlign: "right", color: "#10B981" }}>PKR {totalNetAllocated.toLocaleString()}</td>
-                      </tr>
-                      {totalAmount > 0 && Math.abs(difference) > 0.5 && (
-                        <tr style={{ fontSize: 12, color: "#EF4444" }}>
-                          <td colSpan={5} style={{ textAlign: "right", paddingTop: 4 }}>
-                            ⚠️ Payment amount {difference > 0 ? `exceeds net payable by` : `is short by`} PKR {Math.abs(difference).toLocaleString()}
-                          </td>
-                          <td colSpan={3} style={{ textAlign: "right", paddingTop: 4, fontWeight: 600 }}>
-                            {difference > 0 ? `Overpaid` : `Underpaid`}
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+                        {totalAmount > 0 && Math.abs(difference) > 0.5 && (
+                          <tr style={{ fontSize: 12, color: "#EF4444" }}>
+                            <td colSpan={5} style={{ textAlign: "right", paddingTop: 4 }}>
+                              ⚠️ Payment amount {difference > 0 ? `exceeds net payable by` : `is short by`} PKR {Math.abs(difference).toLocaleString()}
+                            </td>
+                            <td colSpan={3} style={{ textAlign: "right", paddingTop: 4, fontWeight: 600 }}>
+                              {difference > 0 ? `Overpaid` : `Underpaid`}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
                 {bills.length === 0 && supplierOpeningBalance === 0 && (
                   <div style={{ textAlign: "center", color: "var(--text-muted)" }}>
