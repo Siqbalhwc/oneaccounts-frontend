@@ -220,7 +220,7 @@ export default function BillDetailPage() {
         .grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
         .label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
         .value { font-size: 14px; font-weight: 500; color: var(--text); }
-        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        table { width: 100%; border-collapse: collapse; }
         th { text-align: left; padding: 10px 12px; background: var(--card-hover); font-weight: 700; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); }
         td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); }
         tr:hover td { background: var(--card-hover); }
@@ -236,6 +236,18 @@ export default function BillDetailPage() {
         .btn-view-asset:hover { background: #10B981; color: white; }
         .record-history { background: var(--bg-soft); border-radius: 8px; padding: 8px; }
         .wht-card { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin-top: 12px; }
+
+        /* ── NEW: responsive table container ── */
+        .table-responsive {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          margin-top: 12px;
+        }
+        .table-responsive table {
+          margin-top: 0;
+          min-width: 650px;      /* forces scroll on small screens */
+        }
+
         @media (max-width: 640px) {
           .grid-2col { grid-template-columns: 1fr; }
         }
@@ -300,68 +312,71 @@ export default function BillDetailPage() {
       {bill.items && bill.items.length > 0 && (
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>Items</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Description</th>
-                <th style={{ textAlign: "center" }}>Qty</th>
-                <th style={{ textAlign: "right" }}>Unit Price</th>
-                {taxEnabled && <th style={{ textAlign: "right" }}>Tax Rate</th>}
-                <th style={{ textAlign: "right" }}>Total</th>
-                {taxEnabled && <th style={{ textAlign: "right" }}>Tax</th>}
-                {assetEnabled && <th style={{ textAlign: "center", width: 80 }}>Asset</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {bill.items.map(item => (
-                <tr key={item.id}>
-                  <td>{item.description}</td>
-                  <td style={{ textAlign: "center" }}>{item.qty}</td>
-                  <td style={{ textAlign: "right" }}>PKR {item.unit_price?.toLocaleString()}</td>
-                  {taxEnabled && (
-                    <td style={{ textAlign: "right", color: "var(--text-muted)" }}>
-                      {(item.tax_rate ?? 0) > 0 ? `${item.tax_rate}%` : "—"}
-                    </td>
-                  )}
-                  <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {item.total?.toLocaleString()}</td>
-                  {taxEnabled && (
-                    <td style={{ textAlign: "right", color: (item.tax_amount ?? 0) > 0 ? "#EF4444" : "var(--text-muted)" }}>
-                      {(item.tax_amount ?? 0) > 0 ? `PKR ${(item.tax_amount ?? 0).toLocaleString()}` : "—"}
-                    </td>
-                  )}
-                  {assetEnabled && (
-                    <td style={{ textAlign: "center" }}>
-                      {item.asset_id ? (
-                        <button
-                          className="btn btn-view-asset"
-                          onClick={() => router.push(`/dashboard/assets/${item.asset_id}`)}
-                          title="View linked asset"
-                        >
-                          <Eye size={12} /> View
-                        </button>
-                      ) : (
-                        <button
-                          className="btn btn-asset"
-                          onClick={() => router.push(`/dashboard/assets/new?billId=${bill.id}&itemId=${item.id}`)}
-                          title="Create a fixed asset from this purchase"
-                        >
-                          <Package size={12} /> Asset
-                        </button>
-                      )}
-                    </td>
-                  )}
+          {/* ── table wrapped for mobile scroll ── */}
+          <div className="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>Description</th>
+                  <th style={{ textAlign: "center" }}>Qty</th>
+                  <th style={{ textAlign: "right" }}>Unit Price</th>
+                  {taxEnabled && <th style={{ textAlign: "right" }}>Tax Rate</th>}
+                  <th style={{ textAlign: "right" }}>Total</th>
+                  {taxEnabled && <th style={{ textAlign: "right" }}>Tax</th>}
+                  {assetEnabled && <th style={{ textAlign: "center", width: 80 }}>Asset</th>}
                 </tr>
-              ))}
-            </tbody>
-            {taxEnabled && bill.total_tax > 0 && (
-              <tfoot>
-                <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
-                  <td colSpan={taxEnabled ? 5 : 3} style={{ textAlign: "right" }}>Total Tax</td>
-                  <td style={{ textAlign: "right", color: "#EF4444" }}>PKR {bill.total_tax.toLocaleString()}</td>
-                </tr>
-              </tfoot>
-            )}
-          </table>
+              </thead>
+              <tbody>
+                {bill.items.map(item => (
+                  <tr key={item.id}>
+                    <td>{item.description}</td>
+                    <td style={{ textAlign: "center" }}>{item.qty}</td>
+                    <td style={{ textAlign: "right" }}>PKR {item.unit_price?.toLocaleString()}</td>
+                    {taxEnabled && (
+                      <td style={{ textAlign: "right", color: "var(--text-muted)" }}>
+                        {(item.tax_rate ?? 0) > 0 ? `${item.tax_rate}%` : "—"}
+                      </td>
+                    )}
+                    <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {item.total?.toLocaleString()}</td>
+                    {taxEnabled && (
+                      <td style={{ textAlign: "right", color: (item.tax_amount ?? 0) > 0 ? "#EF4444" : "var(--text-muted)" }}>
+                        {(item.tax_amount ?? 0) > 0 ? `PKR ${(item.tax_amount ?? 0).toLocaleString()}` : "—"}
+                      </td>
+                    )}
+                    {assetEnabled && (
+                      <td style={{ textAlign: "center" }}>
+                        {item.asset_id ? (
+                          <button
+                            className="btn btn-view-asset"
+                            onClick={() => router.push(`/dashboard/assets/${item.asset_id}`)}
+                            title="View linked asset"
+                          >
+                            <Eye size={12} /> View
+                          </button>
+                        ) : (
+                          <button
+                            className="btn btn-asset"
+                            onClick={() => router.push(`/dashboard/assets/new?billId=${bill.id}&itemId=${item.id}`)}
+                            title="Create a fixed asset from this purchase"
+                          >
+                            <Package size={12} /> Asset
+                          </button>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+              {taxEnabled && bill.total_tax > 0 && (
+                <tfoot>
+                  <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
+                    <td colSpan={taxEnabled ? 5 : 3} style={{ textAlign: "right" }}>Total Tax</td>
+                    <td style={{ textAlign: "right", color: "#EF4444" }}>PKR {bill.total_tax.toLocaleString()}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
         </div>
       )}
 
