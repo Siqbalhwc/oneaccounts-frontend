@@ -295,6 +295,7 @@ export default function NewPurchaseOrderPage() {
         .inv-item-block {
           padding: 8px 0; border-bottom: 1px solid var(--border);
         }
+        /* item row grid – fixed columns, always in a row, scrollable container */
         .inv-item-row {
           display: grid;
           grid-template-columns: 1.4fr 1.4fr 70px 100px 100px 30px;
@@ -305,6 +306,15 @@ export default function NewPurchaseOrderPage() {
           grid-template-columns: 1.4fr 1.4fr 70px 100px 100px 30px;
           gap: 6px; font-size: 9px; font-weight: 700;
           text-transform: uppercase; color: var(--text-muted); padding-bottom: 6px;
+          min-width: 600px; /* ensures header stays wide */
+        }
+        .item-scroll {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+        /* inner container that holds the rows – min-width forces scroll if needed */
+        .item-scroll-inner {
+          min-width: 600px;
         }
 
         .cust-wrap { position: relative; }
@@ -334,9 +344,6 @@ export default function NewPurchaseOrderPage() {
 
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
         @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
-        @media (max-width: 700px) {
-          .inv-item-row, .inv-item-header { grid-template-columns: 1fr; }
-        }
 
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
@@ -448,35 +455,38 @@ export default function NewPurchaseOrderPage() {
                 <button className="inv-btn" onClick={addItem}><Plus size={14} /> Add Item</button>
               </div>
               {items.length > 0 && (
-                <div className="inv-card" style={{ overflowX: "auto", padding: "16px 12px" }}>
-                  <div className="inv-item-header">
-                    <span>Product</span>
-                    <span>Description</span>
-                    <span>Qty</span>
-                    <span>Price</span>
-                    <span style={{ textAlign: "right" }}>Total</span>
-                    <span></span>
-                  </div>
-                  {items.map((item, idx) => (
-                    <div key={idx} className="inv-item-block">
-                      <div className="inv-item-row">
-                        <select
-                          className="inv-select"
-                          style={{ height: 34, fontSize: 12 }}
-                          value={item.product_id || ""}
-                          onChange={e => selectItemProduct(idx, e.target.value)}
-                        >
-                          <option value="">— Custom line item —</option>
-                          {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                        <input className="inv-input" style={{ height: 34, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Item description" />
-                        <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                        <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                        <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13 }}>PKR {(item.total || 0).toLocaleString()}</span>
-                        <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
-                      </div>
+                <div className="inv-card item-scroll" style={{ padding: "16px 12px" }}>
+                  {/* Wrapper that forces min-width for scroll */}
+                  <div className="item-scroll-inner">
+                    <div className="inv-item-header">
+                      <span>Product</span>
+                      <span>Description</span>
+                      <span>Qty</span>
+                      <span>Price</span>
+                      <span style={{ textAlign: "right" }}>Total</span>
+                      <span></span>
                     </div>
-                  ))}
+                    {items.map((item, idx) => (
+                      <div key={idx} className="inv-item-block">
+                        <div className="inv-item-row">
+                          <select
+                            className="inv-select"
+                            style={{ height: 34, fontSize: 12 }}
+                            value={item.product_id || ""}
+                            onChange={e => selectItemProduct(idx, e.target.value)}
+                          >
+                            <option value="">— Custom line item —</option>
+                            {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          </select>
+                          <input className="inv-input" style={{ height: 34, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Item description" />
+                          <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                          <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                          <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13 }}>PKR {(item.total || 0).toLocaleString()}</span>
+                          <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
