@@ -270,6 +270,7 @@ export default function NewPurchaseOrderPage() {
           background: var(--card); border-radius: 12px; border: 1px solid var(--border);
           padding: 16px 20px; box-shadow: var(--shadow-sm);
           margin-bottom: 12px;
+          max-width: 100%;          /* ← ADDED to contain card width */
         }
         .inv-label {
           font-size: 10px; font-weight: 600; color: var(--text-muted);
@@ -446,34 +447,38 @@ export default function NewPurchaseOrderPage() {
               </div>
               {items.length > 0 && (
                 <div className="inv-card" style={{ overflowX: "auto", padding: "16px 12px" }}>
-                  <div className="inv-item-header">
-                    <span>Product</span>
-                    <span>Description</span>
-                    <span>Qty</span>
-                    <span>Price</span>
-                    <span style={{ textAlign: "right" }}>Total</span>
-                    <span></span>
-                  </div>
-                  {items.map((item, idx) => (
-                    <div key={idx} className="inv-item-block">
-                      <div className="inv-item-row">
-                        <select
-                          className="inv-select"
-                          style={{ height: 34, fontSize: 12 }}
-                          value={item.product_id || ""}
-                          onChange={e => selectItemProduct(idx, e.target.value)}
-                        >
-                          <option value="">— Custom line item —</option>
-                          {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                        <input className="inv-input" style={{ height: 34, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Item description" />
-                        <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                        <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                        <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13 }}>PKR {(item.total || 0).toLocaleString()}</span>
-                        <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
-                      </div>
+                  {/* ⬇️ Wrapper added to force internal scroll without affecting page width */}
+                  <div style={{ minWidth: 600 }}>
+                    <div className="inv-item-header">
+                      <span>Product</span>
+                      <span>Description</span>
+                      <span>Qty</span>
+                      <span>Price</span>
+                      <span style={{ textAlign: "right" }}>Total</span>
+                      <span></span>
                     </div>
-                  ))}
+                    {items.map((item, idx) => (
+                      <div key={idx} className="inv-item-block">
+                        <div className="inv-item-row">
+                          <select
+                            className="inv-select"
+                            style={{ height: 34, fontSize: 12 }}
+                            value={item.product_id || ""}
+                            onChange={e => selectItemProduct(idx, e.target.value)}
+                          >
+                            <option value="">— Custom line item —</option>
+                            {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          </select>
+                          <input className="inv-input" style={{ height: 34, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Item description" />
+                          <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                          <input className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                          <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13 }}>PKR {(item.total || 0).toLocaleString()}</span>
+                          <button style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 2 }} onClick={() => removeItem(idx)}><Trash2 size={12} /></button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* ⬆️ End wrapper */}
                 </div>
               )}
             </div>
