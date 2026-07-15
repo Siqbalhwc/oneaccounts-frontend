@@ -2,7 +2,7 @@
 
 import { Suspense } from "react"
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, CheckCircle, AlertTriangle, Clock } from "lucide-react"
 import EntityPicker from "@/components/entity-picker/EntityPicker"
@@ -27,6 +27,10 @@ function computeDisplayStatus(inst: Installment): { label: string; color: string
 
 function RecordPaymentPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const initialCustomerId = searchParams.get("customer")
+  const initialBookingId = searchParams.get("booking")
+
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -67,6 +71,14 @@ function RecordPaymentPageContent() {
           if (r.data) setBanks(r.data.map((b: any) => ({ id: b.id, name: b.bank_name, glCode: b.accounts?.code })))
         })
 
+      // Deep-link support: pre-select customer if arriving from the
+      // Bookings list page's "Record Payment" row action.
+      if (initialCustomerId) {
+        supabase.from("customers").select("id, code, name")
+          .eq("id", initialCustomerId).eq("company_id", cid).maybeSingle()
+          .then(({ data }) => { if (data) setSelectedCustomer(data) })
+      }
+
       setLoading(false)
     })
   }, [])
@@ -80,7 +92,13 @@ function RecordPaymentPageContent() {
       .eq("status", "active")
       .then(({ data }) => {
         setBookings(data || [])
-        setSelectedBookingId(null)
+        // Deep-link: auto-select the specific booking if one was passed in,
+        // otherwise leave unselected as usual.
+        if (initialBookingId && data?.some(b => String(b.id) === initialBookingId)) {
+          setSelectedBookingId(Number(initialBookingId))
+        } else {
+          setSelectedBookingId(null)
+        }
         setInstallments([])
       })
   }, [selectedCustomer, companyId])
