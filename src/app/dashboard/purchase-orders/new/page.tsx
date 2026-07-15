@@ -262,15 +262,16 @@ export default function NewPurchaseOrderPage() {
   }
 
   return (
-    <div style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+    <div style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", overflowX: "hidden", width: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .inv-shell { max-width: 100%; margin: 0 auto; }
+        .inv-shell { width: 100%; max-width: 100%; overflow-x: hidden; margin: 0 auto; }
         .inv-title { font-size: 18px; font-weight: 700; color: var(--text); }
         .inv-card {
           background: var(--card); border-radius: 12px; border: 1px solid var(--border);
           padding: 16px 20px; box-shadow: var(--shadow-sm);
           margin-bottom: 12px;
-          max-width: 100%;          /* ← ADDED to contain card width */
+          max-width: 100%;
+          min-width: 0;
         }
         .inv-label {
           font-size: 10px; font-weight: 600; color: var(--text-muted);
@@ -300,12 +301,14 @@ export default function NewPurchaseOrderPage() {
           display: grid;
           grid-template-columns: 1.4fr 1.4fr 70px 100px 100px 30px;
           gap: 6px; align-items: center;
+          min-width: 600px;
         }
         .inv-item-header {
           display: grid;
           grid-template-columns: 1.4fr 1.4fr 70px 100px 100px 30px;
           gap: 6px; font-size: 9px; font-weight: 700;
           text-transform: uppercase; color: var(--text-muted); padding-bottom: 6px;
+          min-width: 600px;
         }
 
         .cust-wrap { position: relative; }
@@ -334,6 +337,7 @@ export default function NewPurchaseOrderPage() {
         }
 
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
+        .header-grid > * { min-width: 0; }
         @media (max-width: 900px) { .header-grid { grid-template-columns: 1fr; } }
 
         input[type="number"]::-webkit-inner-spin-button,
@@ -446,8 +450,8 @@ export default function NewPurchaseOrderPage() {
                 <button className="inv-btn" onClick={addItem}><Plus size={14} /> Add Item</button>
               </div>
               {items.length > 0 && (
-                <div className="inv-card" style={{ overflowX: "auto", padding: "16px 12px" }}>
-                  {/* ⬇️ Wrapper added to force internal scroll without affecting page width */}
+                <div className="inv-card" style={{ overflowX: "auto", overflowY: "hidden", WebkitOverflowScrolling: "touch", maxWidth: "100%" }}>
+                  {/* Items wrapper with forced min-width so only this area scrolls */}
                   <div style={{ minWidth: 600 }}>
                     <div className="inv-item-header">
                       <span>Product</span>
@@ -478,7 +482,6 @@ export default function NewPurchaseOrderPage() {
                       </div>
                     ))}
                   </div>
-                  {/* ⬆️ End wrapper */}
                 </div>
               )}
             </div>
