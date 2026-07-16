@@ -84,22 +84,30 @@ export default function InvestorCapitalPage() {
   const handleAddInvestor = async () => {
     if (!newDonorId || newPercentage <= 0) { setAddError("Select an investor and a valid %"); return }
     setAddSaving(true); setAddError("")
-    const { error } = await supabase.from("project_investors").insert({
-      company_id: companyId,
-      project_id: Number(selectedProjectId),
-      donor_id: Number(newDonorId),
-      profit_share_percentage: newPercentage,
-      capital_contributed: 0,
-    })
-    if (error) {
-      setAddError(error.message)
+    try {
+      const res = await fetch("/api/construction/investors/assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project_id: Number(selectedProjectId),
+          donor_id: Number(newDonorId),
+          profit_share_percentage: newPercentage,
+        }),
+      })
+      const data = await res.json()
+      if (!data.success) {
+        setAddError(data.error || "Failed to add investor")
+        setAddSaving(false)
+        return
+      }
+      setFlash("Investor added to this site.")
+      setNewDonorId(""); setNewPercentage(0); setShowAddForm(false); setAddSaving(false)
+      fetchProjectInvestors()
+      setTimeout(() => setFlash(""), 3000)
+    } catch (err: any) {
+      setAddError(err.message || "Network error")
       setAddSaving(false)
-      return
     }
-    setFlash("Investor added to this site.")
-    setNewDonorId(""); setNewPercentage(0); setShowAddForm(false); setAddSaving(false)
-    fetchProjectInvestors()
-    setTimeout(() => setFlash(""), 3000)
   }
 
   const openContributeForm = (pi: any) => {

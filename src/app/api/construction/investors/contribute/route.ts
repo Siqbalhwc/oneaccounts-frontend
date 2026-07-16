@@ -81,17 +81,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Selected bank account has no linked GL account' }, { status: 400 })
   }
 
-  // ── 3. Resolve the Investor Capital account (3100) ──
-  const { data: capitalAccount } = await supabaseAdmin
-    .from('accounts')
-    .select('id')
+  // ── 3. Resolve the investor's dedicated capital account ──
+  // (One per investor, shared across every site they invest in — not
+  // the old shared 3100 account, which is no longer posted to.)
+  const { data: donor } = await supabaseAdmin
+    .from('donors')
+    .select('id, name, capital_account_id')
+    .eq('id', donor_id)
     .eq('company_id', companyId)
-    .eq('code', '3100')
     .maybeSingle()
 
-  if (!capitalAccount) {
-    return NextResponse.json({ error: 'Investor Capital account (3100) not found for this company' }, { status: 500 })
+  if (!donor?.capital_account_id) {
+    return NextResponse.json(
+      { error: 'This investor has no capital account yet — this should be created automatically when assigned to a site. Please contact support.' },
+      { status: 500 }
+    )
   }
+  const capitalAccountId = donor.capital_account_id
 
   // ── 4. Post the journal entry ──
   const { data: entry, error: entryError } = await supabaseAdmin
@@ -111,7 +117,7 @@ export async function POST(request: NextRequest) {
 
   const lines = [
     { entry_id: entry.id, company_id: companyId, account_id: bankAccount.account_id, debit: amount, credit: 0, project_id, donor_id, source_type: 'investor_contribution', source_id: entry.id },
-    { entry_id: entry.id, company_id: companyId, account_id: capitalAccount.id, debit: 0, credit: amount, project_id, donor_id, source_type: 'investor_contribution', source_id: entry.id },
+    { entry_id: entry.id, company_id: companyId, account_id: capitalAccountId, debit: 0, credit: amount, project_id, donor_id, source_type: 'investor_contribution', source_id: entry.id },
   ]
 
   const { error: linesError } = await supabaseAdmin.from('journal_lines').insert(lines)
@@ -124,7 +130,7 @@ export async function POST(request: NextRequest) {
   // Update account balances (same debit-credit delta convention used everywhere else)
   for (const acc of [
     { id: bankAccount.account_id, delta: amount },
-    { id: capitalAccount.id, delta: -amount },
+    { id: capitalAccountId, delta: -amount },
   ]) {
     const { data: current } = await supabaseAdmin.from('accounts').select('balance').eq('id', acc.id).single()
     if (current) {
