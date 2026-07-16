@@ -3,8 +3,9 @@
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { ChevronRight } from "lucide-react"
+import { useBreadcrumbContext } from "@/contexts/BreadcrumbContext"
 
-// ── Configuration: each URL segment maps to a label and an optional module ──
+// ── Configuration (unchanged) ──
 const BREADCRUMB_CONFIG: Record<string, { label: string; module?: string }> = {
   dashboard:       { label: "Dashboard" },
   invoices:        { label: "Sales Invoices",    module: "Sales" },
@@ -44,7 +45,6 @@ const BREADCRUMB_CONFIG: Record<string, { label: string; module?: string }> = {
   edit:            { label: "Edit" },
 }
 
-// Modules – these segments represent grouping levels
 const MODULE_NAMES: Record<string, string> = {
   sales:      "Sales",
   purchases:  "Purchases",
@@ -56,65 +56,32 @@ const MODULE_NAMES: Record<string, string> = {
   settings:   "Settings",
 }
 
-function isNumeric(str: string) {
-  return /^\d+$/.test(str)
-}
+function isNumeric(str: string) { return /^\d+$/.test(str) }
 
 export default function Breadcrumb() {
   const pathname = usePathname()
+  const { trail } = useBreadcrumbContext()   // navigation trail from context
 
   if (!pathname) return null
 
-  const segments = pathname.split("/").filter(Boolean)
+  // If we have a custom trail, use it
+  const items = trail.length > 0
+    ? [...trail]   // copy the trail (it already contains the current page as the last item)
+    : buildFallbackItems(pathname)   // otherwise fall back to URL-based
 
-  // Don't show breadcrumb on the bare dashboard page
-  if (segments.length === 1 && segments[0] === "dashboard") return null
-
-  const items: { label: string; href: string }[] = []
-  let accumulatedPath = ""
-
-  for (let i = 0; i < segments.length; i++) {
-    const seg = segments[i]
-    accumulatedPath += "/" + seg
-
-    const config = BREADCRUMB_CONFIG[seg]
-
-    // If the segment has a module defined, insert the module before the segment's label
-    if (config?.module) {
-      const modLabel = MODULE_NAMES[config.module] || config.module
-      if (items.length === 0 || items[items.length - 1].label !== modLabel) {
-        items.push({ label: modLabel, href: "#" })
-      }
-    }
-
-    // Determine label
-    let label: string
-    if (config) {
-      label = config.label
-    } else if (isNumeric(seg)) {
-      label = "Detail"
-    } else {
-      label = seg.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
-    }
-
-    // Prevent duplicate consecutive labels
-    if (items.length > 0 && items[items.length - 1].label === label) {
-      continue
-    }
-
-    items.push({ label, href: accumulatedPath })
-  }
+  // Don't show on bare dashboard
+  if (items.length === 0 || (items.length === 1 && items[0].label === "Dashboard")) return null
 
   return (
     <nav
       aria-label="Breadcrumb"
       style={{
-        marginTop: 24,          // breathing room above
-        marginBottom: 12,       // space before page title
+        marginTop: 24,
+        marginBottom: 12,
         overflowX: "auto",
         whiteSpace: "nowrap",
         scrollbarWidth: "thin",
-        paddingLeft: 24,        // 🆕 aligns with page heading's left edge
+        paddingLeft: 24,
       }}
     >
       <ol
@@ -125,7 +92,7 @@ export default function Breadcrumb() {
           gap: 4,
           margin: 0,
           padding: 0,
-          fontSize: 12,          // subtle size
+          fontSize: 12,
           fontFamily: "'Inter', sans-serif",
         }}
       >
@@ -134,10 +101,7 @@ export default function Breadcrumb() {
           return (
             <li key={idx} style={{ display: "flex", alignItems: "center", gap: 4 }}>
               {isLast ? (
-                <span
-                  style={{ color: "var(--text)", fontWeight: 600 }}
-                  aria-current="page"
-                >
+                <span style={{ color: "var(--text)", fontWeight: 600 }} aria-current="page">
                   {item.label}
                 </span>
               ) : (
@@ -163,4 +127,44 @@ export default function Breadcrumb() {
       </ol>
     </nav>
   )
+}
+
+// ── Fallback breadcrumb generator (same as original) ──
+function buildFallbackItems(pathname: string) {
+  const segments = pathname.split("/").filter(Boolean)
+  if (segments.length === 1 && segments[0] === "dashboard") return []
+
+  const items: { label: string; href: string }[] = []
+  let accumulatedPath = ""
+
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i]
+    accumulatedPath += "/" + seg
+
+    const config = BREADCRUMB_CONFIG[seg]
+
+    if (config?.module) {
+      const modLabel = MODULE_NAMES[config.module] || config.module
+      if (items.length === 0 || items[items.length - 1].label !== modLabel) {
+        items.push({ label: modLabel, href: "#" })
+      }
+    }
+
+    let label: string
+    if (config) {
+      label = config.label
+    } else if (isNumeric(seg)) {
+      label = "Detail"
+    } else {
+      label = seg.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    }
+
+    if (items.length > 0 && items[items.length - 1].label === label) {
+      continue
+    }
+
+    items.push({ label, href: accumulatedPath })
+  }
+
+  return items
 }
