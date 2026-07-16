@@ -11,8 +11,9 @@ import { generateProjectPDF } from "@/lib/pdf/projectPDF"
 type SortField = "name" | "status" | "approved" | "budget" | "actual" | "balance" | "donor"
 type SortDir = "asc" | "desc"
 
+// Format amount without "PKR" prefix
 function fmt(n: number) {
-  return "PKR " + n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 export default function ProjectsPage() {
@@ -194,19 +195,57 @@ export default function ProjectsPage() {
   const isLightStyle = themeMode === "light" || themeMode === "oneaccounts"
   const rowLight = isLightStyle ? "#FFFFFF" : "#1E293B"
   const rowDark  = isLightStyle ? "#F8F9FC" : "#111827"
-  const headerBg = isLightStyle ? "#07085B" : "#000000"
 
-  const baseCols = "minmax(200px, 2fr) minmax(100px, 1fr) 100px 90px"
-  const budgetCol = " 1fr"
-  const actualCol = " 1fr"
-  const balanceCol = " 1fr"
-  const pdfCol = " 80px 60px"
+  // ── Shared table styles (consistent with customer page) ──
+  const thStyle: React.CSSProperties = {
+    padding: "12px 16px",
+    background: "var(--card-hover)",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 12,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    color: "var(--text-muted)",
+    whiteSpace: "nowrap",
+    userSelect: "none",
+  }
+  const tdStyle: React.CSSProperties = {
+    padding: "12px 16px",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 13,
+    verticalAlign: "middle",
+    whiteSpace: "nowrap",
+  }
 
-  let gridCols = baseCols
-  if (visibleColumns.budget) gridCols += budgetCol
-  if (visibleColumns.actual) gridCols += actualCol
-  if (visibleColumns.balance) gridCols += balanceCol
-  gridCols += pdfCol
+  const SortTh = ({ field, children, style }: { field: SortField; children: React.ReactNode; style?: React.CSSProperties }) => (
+    <th style={{ ...thStyle, ...style }}>
+      <button
+        onClick={() => handleSort(field)}
+        style={{
+          background: "none", border: "none", cursor: "pointer",
+          font: "inherit", fontSize: 12, fontWeight: 700,
+          textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-muted)",
+          display: "inline-flex", alignItems: "center", gap: 4, padding: 0,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {children} {getSortIcon(field)}
+      </button>
+    </th>
+  )
+
+  // Column widths (fixed, in pixels)
+  const colWidths = {
+    name: 200,
+    donor: 200,
+    status: 100,
+    approved: 90,
+    budget: 160,
+    actual: 160,
+    balance: 160,
+    pdf: 80,
+    action: 50, // small extra column to match original grid's trailing empty cell
+  }
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -223,33 +262,19 @@ export default function ProjectsPage() {
           border: 1px solid var(--border);
           border-radius: 12px;
           overflow: hidden;
+          box-shadow: var(--shadow-sm);
         }
-        .table-header {
-          display: grid;
-          padding: 14px 24px;
-          color: white;
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-          background: ${headerBg};
-          column-gap: 2px;
+        .table-scroll {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: thin;
+          scrollbar-color: var(--border) transparent;
         }
-        .table-row {
-          display: grid;
-          padding: 12px 24px;
-          font-size: 13px;
-          align-items: center;
-          border-bottom: 1px solid var(--border);
-          transition: background 0.15s;
-          column-gap: 2px;
-        }
-        .table-row:hover { background: var(--card-hover); }
-        .sort-btn {
-          background: none; border: none; cursor: pointer;
-          font: inherit; color: white;
-          display: inline-flex; align-items: center; gap: 4px;
-          padding: 0; font-weight: 700; text-transform: uppercase; font-size: 10px;
-        }
+        .table-scroll::-webkit-scrollbar { height: 6px; }
+        .table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        .proj-table { width: 100%; border-collapse: collapse; min-width: 950px; }
+        .proj-table tbody tr:last-child td { border-bottom: none; }
+        .proj-table tbody tr:hover td { background: var(--card-hover); }
         .status-col { display: flex; justify-content: center; align-items: center; }
         .status-badge {
           display: inline-flex; align-items: center; gap: 4px;
@@ -284,15 +309,6 @@ export default function ProjectsPage() {
           color: var(--text);
           cursor: pointer;
         }
-
-        @media (max-width: 900px) {
-          .table-wrap { overflow-x: auto; }
-          .table-header, .table-row {
-            grid-template-columns: 160px 90px 80px 70px ${visibleColumns.budget ? "100px" : ""} ${visibleColumns.actual ? "100px" : ""} ${visibleColumns.balance ? "100px" : ""} 60px 50px;
-            padding: 10px 12px;
-            font-size: 11px;
-          }
-        }
       `}</style>
 
       <div className="page-header">
@@ -300,7 +316,7 @@ export default function ProjectsPage() {
           <ArrowLeft size={16} />
         </button>
         <div style={{ flex: 1 }}>
-          <h1 className="page-title">📁 Projects</h1>
+          <h1 className="page-title">📁 Sites/Projects</h1>
           <p className="page-subtitle">All projects with budget, actual spending, and balance</p>
         </div>
       </div>
@@ -342,68 +358,89 @@ export default function ProjectsPage() {
         </div>
       ) : (
         <div className="table-wrap">
-          <div className="table-header" style={{ gridTemplateColumns: gridCols }}>
-            <button className="sort-btn" onClick={() => handleSort("name")}>Project Name {getSortIcon("name")}</button>
-            <button className="sort-btn" onClick={() => handleSort("donor")}>Donor {getSortIcon("donor")}</button>
-            <div className="sort-btn" style={{ justifyContent: "center", cursor: "default", color: "white" }}>Status</div>
-            <button className="sort-btn" onClick={() => handleSort("approved")}>Approved {getSortIcon("approved")}</button>
-            {visibleColumns.budget && (
-              <button className="sort-btn" onClick={() => handleSort("budget")} style={{ justifyContent: "flex-end" }}>Budget {getSortIcon("budget")}</button>
-            )}
-            {visibleColumns.actual && (
-              <button className="sort-btn" onClick={() => handleSort("actual")} style={{ justifyContent: "flex-end" }}>Actual {getSortIcon("actual")}</button>
-            )}
-            {visibleColumns.balance && (
-              <button className="sort-btn" onClick={() => handleSort("balance")} style={{ justifyContent: "flex-end" }}>Balance {getSortIcon("balance")}</button>
-            )}
-            <span style={{ textAlign: "center" }}>PDF</span>
-            <span></span>
+          {/* Amount in PKR label */}
+          <div style={{ textAlign: "right", padding: "8px 16px 0 16px", fontSize: 11, fontStyle: "italic", color: "var(--text-muted)" }}>
+            Amount in PKR
           </div>
-          {sorted.map((p, i) => {
-            const balance = (p.totalBudget || 0) - (p.actualSpent || 0)
-            return (
-              <div
-                key={p.id}
-                className="table-row"
-                style={{ background: i % 2 === 0 ? rowLight : rowDark, gridTemplateColumns: gridCols }}
-              >
-                <span style={{ fontWeight: 600, color: "var(--text)" }}>{p.name}</span>
-                <span style={{ fontSize: 13, color: "var(--text)" }}>{p.donors?.name || "—"}</span>
-                <div className="status-col">
-                  <span className={`status-badge ${p.deleted_at ? "status-inactive" : "status-active"}`}>
-                    {p.deleted_at ? "Inactive" : "Active"}
-                  </span>
-                </div>
-                <span style={{ textAlign: "center", cursor: "pointer" }} onClick={() => toggleApproval(p)}>
-                  {p.is_approved ? (
-                    <Check size={18} className="approved-icon" />
-                  ) : (
-                    <X size={18} className="not-approved-icon" />
+          <div className="table-scroll">
+            <table className="proj-table">
+              <colgroup>
+                <col style={{ width: colWidths.name }} />
+                <col style={{ width: colWidths.donor }} />
+                <col style={{ width: colWidths.status }} />
+                <col style={{ width: colWidths.approved }} />
+                {visibleColumns.budget && <col style={{ width: colWidths.budget }} />}
+                {visibleColumns.actual && <col style={{ width: colWidths.actual }} />}
+                {visibleColumns.balance && <col style={{ width: colWidths.balance }} />}
+                <col style={{ width: colWidths.pdf }} />
+                <col style={{ width: colWidths.action }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <SortTh field="name">Project Name</SortTh>
+                  <SortTh field="donor">Donor</SortTh>
+                  <th style={{ ...thStyle, textAlign: "center" }}>Status</th>
+                  <SortTh field="approved" style={{ textAlign: "center" }}>Approved</SortTh>
+                  {visibleColumns.budget && (
+                    <SortTh field="budget" style={{ textAlign: "right" }}>Budget</SortTh>
                   )}
-                </span>
-                {visibleColumns.budget && (
-                  <span style={{ textAlign: "right", fontWeight: 500, whiteSpace: "nowrap" }}>{fmt(p.totalBudget || 0)}</span>
-                )}
-                {visibleColumns.actual && (
-                  <span style={{ textAlign: "right", whiteSpace: "nowrap" }}>{fmt(p.actualSpent || 0)}</span>
-                )}
-                {visibleColumns.balance && (
-                  <span style={{
-                    textAlign: "right",
-                    whiteSpace: "nowrap",
-                    fontWeight: 600,
-                    color: balance < 0 ? "#EF4444" : "#10B981"
-                  }}>{fmt(balance)}</span>
-                )}
-                <span style={{ textAlign: "center" }}>
-                  <button className="btn btn-outline" style={{ padding: "4px 8px" }} onClick={() => handleGeneratePDF(p)}>
-                    <FileText size={12} /> PDF
-                  </button>
-                </span>
-                <span></span>
-              </div>
-            )
-          })}
+                  {visibleColumns.actual && (
+                    <SortTh field="actual" style={{ textAlign: "right" }}>Actual</SortTh>
+                  )}
+                  {visibleColumns.balance && (
+                    <SortTh field="balance" style={{ textAlign: "right" }}>Balance</SortTh>
+                  )}
+                  <th style={{ ...thStyle, textAlign: "center" }}>PDF</th>
+                  <th style={thStyle}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((p, i) => {
+                  const balance = (p.totalBudget || 0) - (p.actualSpent || 0)
+                  return (
+                    <tr key={p.id} style={{ background: i % 2 === 0 ? rowLight : rowDark }}>
+                      <td style={{ ...tdStyle, fontWeight: 600, color: "var(--text)" }}>{p.name}</td>
+                      <td style={{ ...tdStyle, fontSize: 13, color: "var(--text)" }}>{p.donors?.name || "—"}</td>
+                      <td style={{ ...tdStyle, textAlign: "center" }}>
+                        <span className={`status-badge ${p.deleted_at ? "status-inactive" : "status-active"}`}>
+                          {p.deleted_at ? "Inactive" : "Active"}
+                        </span>
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: "center" }}>
+                        <span onClick={() => toggleApproval(p)} style={{ cursor: "pointer" }}>
+                          {p.is_approved ? (
+                            <Check size={18} className="approved-icon" />
+                          ) : (
+                            <X size={18} className="not-approved-icon" />
+                          )}
+                        </span>
+                      </td>
+                      {visibleColumns.budget && (
+                        <td style={{ ...tdStyle, textAlign: "right", fontWeight: 500 }}>{fmt(p.totalBudget || 0)}</td>
+                      )}
+                      {visibleColumns.actual && (
+                        <td style={{ ...tdStyle, textAlign: "right" }}>{fmt(p.actualSpent || 0)}</td>
+                      )}
+                      {visibleColumns.balance && (
+                        <td style={{
+                          ...tdStyle,
+                          textAlign: "right",
+                          fontWeight: 600,
+                          color: balance < 0 ? "#EF4444" : "#10B981"
+                        }}>{fmt(balance)}</td>
+                      )}
+                      <td style={{ ...tdStyle, textAlign: "center" }}>
+                        <button className="btn btn-outline" style={{ padding: "4px 8px" }} onClick={() => handleGeneratePDF(p)}>
+                          <FileText size={12} /> PDF
+                        </button>
+                      </td>
+                      <td style={tdStyle}></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
