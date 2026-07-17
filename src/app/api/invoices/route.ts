@@ -701,6 +701,10 @@ export async function PUT(request: NextRequest) {
 
   if (itemRows.length > 0) await supabase.from('invoice_items').insert(itemRows)
 
+  // FIX: remove old stock movements for this invoice before recording new ones
+  // (prevents duplicate stock deductions when an invoice with products is edited)
+  await supabase.from('stock_moves').delete().eq('company_id', companyId).eq('source_type', 'invoice').eq('source_id', id)
+
   await recordStockMoves(supabase, companyId, items, 'sale', id, 'out')
 
   const totalSalesAmount = itemRows.reduce((s: number, i: any) => s + (i.total || 0), 0)

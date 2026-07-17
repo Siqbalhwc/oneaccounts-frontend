@@ -1,0 +1,63 @@
+src\app\api\bills\route.ts:329:    .select('business_type').eq('id', companyId).single()
+src\app\api\bills\route.ts:330:  const businessType = company?.business_type || ''
+src\app\api\bills\route.ts:574:    .select('business_type').eq('id', companyId).single()
+src\app\api\bills\route.ts:575:  const businessType = company?.business_type || ''
+src\app\api\companies\create\route.ts:46:      business_type: type,
+src\app\api\companies\create\route.ts:75:    business_type: type,
+src\app\api\company-settings\route.ts:42:    .select('business_name, address, phone, email, tagline, logo_url, business_type')
+src\app\api\company-settings\route.ts:57:    business_type: data?.business_type || '',
+src\app\api\construction\bookings\route.ts:117:    p_business_type: 'construction',
+src\app\api\invoices\route.ts:225:    .select('business_type').eq('id', companyId).single()
+src\app\api\invoices\route.ts:226:  const businessType = company?.business_type || ''
+src\app\api\invoices\route.ts:636:    .select('business_type').eq('id', companyId).single()
+src\app\api\invoices\route.ts:637:  const isNGO = (company?.business_type || '') === 'ngo'
+src\app\api\trial\signup\route.ts:97:      business_type: type,
+src\app\api\trial\signup\route.ts:112:    business_type: type,
+src\app\dashboard\bills\new\page.tsx:121:      supabase.from("companies").select("business_type").eq("id", cid).single()
+src\app\dashboard\bills\new\page.tsx:122:        .then(r => { if (r.data) setBusinessType(r.data.business_type || "") })
+src\app\dashboard\bills\new\page.tsx:807:        p_business_type: businessType,
+src\app\dashboard\bookings\new\page.tsx:46:      supabase.from("companies").select("business_type").eq("id", cid).single()
+src\app\dashboard\bookings\new\page.tsx:47:        .then(({ data }) => { if (data) setBusinessType(data.business_type || "") })
+src\app\dashboard\invoices\new\page.tsx:90:      supabase.from("companies").select("business_type").eq("id", cid).single()
+src\app\dashboard\invoices\new\page.tsx:91:        .then(({ data }) => { if (data) setBusinessType(data.business_type || "") })
+src\app\dashboard\invoices\new\page.tsx:114:              .select("name, logo_url, tagline, address, business_type")
+src\app\dashboard\invoices\new\page.tsx:494:        p_business_type: businessType,
+src\app\dashboard\invoices\new\page.tsx:562:      businessType: company?.business_type || "",
+src\app\dashboard\invoices\new\page.tsx:635:      businessType: company?.business_type || "",
+src\app\dashboard\invoices\new\page.tsx.backup:81:      supabase.from("companies").select("business_type").eq("id", cid).single()
+src\app\dashboard\invoices\new\page.tsx.backup:82:        .then(({ data }) => { if (data) setBusinessType(data.business_type || "") })
+src\app\dashboard\invoices\new\page.tsx.backup:105:              .select("name, logo_url, tagline, address, business_type")
+src\app\dashboard\invoices\new\page.tsx.backup:399:      businessType: company?.business_type || "",
+src\app\dashboard\invoices\new\page.tsx.backup:464:      businessType: company?.business_type || "",
+src\app\dashboard\page.tsx:71:            .select("business_type")
+src\app\dashboard\page.tsx:74:          if (data) setBusinessType(data.business_type || "")
+src\app\dashboard\products\page.tsx:86:  // ✅ New: fetch business_type, same pattern as every other page in the app.
+src\app\dashboard\products\page.tsx:89:    supabase.from("companies").select("business_type").eq("id", companyId).single()
+src\app\dashboard\products\page.tsx:90:      .then(({ data }) => { if (data) setBusinessType(data.business_type || "") })
+src\app\dashboard\reports\budget-vs-actual\page.tsx:37:      supabase.from("companies").select("business_type").eq("id", cid).single()
+src\app\dashboard\reports\budget-vs-actual\page.tsx:38:        .then(r => r.data && setBusinessType(r.data.business_type || ""))
+src\app\dashboard\reports\budgets\page.tsx:38:      supabase.from("companies").select("business_type").eq("id", cid).single()
+src\app\dashboard\reports\budgets\page.tsx:39:        .then(r => r.data && setBusinessType(r.data.business_type || ""))
+src\app\dashboard\sales-returns\new\page.tsx:77:              .select("name, logo_url, tagline, address, business_type")
+src\app\dashboard\select-business-type\page.tsx:29:    await supabase.from("companies").update({ business_type: selectedType }).eq("id", companyId)
+src\app\dashboard\settings\budgets\page.tsx:65:      supabase.from("companies").select("business_type").eq("id", cid).single()
+src\app\dashboard\settings\budgets\page.tsx:66:        .then(r => r.data && setBusinessType(r.data.business_type || ""))
+src\app\dashboard\settings\projects\page.tsx:88:  // ── Dynamic labels, driven by business_type (NGO: Donor/Project/Activity/Location,
+src\app\dashboard\settings\projects\page.tsx:98:      supabase.from("companies").select("business_type").eq("id", cid).single()
+src\app\dashboard\settings\projects\page.tsx:99:        .then(({ data }) => { if (data) setBusinessType(data.business_type || "") })
+src\app\dashboard\upgrade\page.tsx:160:          .select("business_type, is_trial, plans(code, name, monthly_price_per_user, half_yearly_price_per_user, yearly_price_per_user, trial_days)")
+src\app\dashboard\upgrade\page.tsx:165:          setBusinessType(company.business_type || "")
+src\app\signup\page.tsx:70:          business_type: businessType,
+src\components\dashboard\TradingServiceDashboard.tsx:794:      supabase.from("companies").select("business_type").eq("id", companyId).single()
+src\components\dashboard\TradingServiceDashboard.tsx:796:      if (data) setBusinessType(data.business_type || "")
+src\components\DashboardSidebar.tsx:88:// pages, since those pages already relabel themselves per business_type. ──
+src\components\DashboardSidebar.tsx:155:          .select("business_type")
+src\components\DashboardSidebar.tsx:158:        if (!cancelled && data) setBusinessType(data.business_type || "")
+src\components\DashboardSidebar.tsx:221:  // based on business_type, so no new pages are needed here. ──
+src\contexts\PlanContext.tsx:71:        .select("business_type")
+src\contexts\PlanContext.tsx:76:        setBusinessType(companyData.business_type || "")
+src\lib\labels.ts:10: * for every tenant of a given business_type (not further
+src\lib\labels.ts:18: *   const donorLabel = getLabel(company.business_type, 'donor');
+src\lib\labels.ts:68: * Returns the correct display label for a given business_type.
+src\lib\labels.ts:69: * Falls back to the NGO default if business_type is null/unknown,
+src\lib\labels.ts:81: * Convenience: returns the full label set for a business_type,

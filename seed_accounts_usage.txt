@@ -1,0 +1,3 @@
+src\app\api\companies\create\route.ts:73:  await supabaseAdmin.rpc('seed_accounts_for_company', {
+src\app\api\payments\jazzcash\callback\route.ts:67:              await supabaseAdmin.rpc('seed_accounts_for_company', {
+src\app\api\trial\signup\route.ts:110:  const { error: seedError } = await supabaseAdmin.rpc('seed_accounts_for_company', {
