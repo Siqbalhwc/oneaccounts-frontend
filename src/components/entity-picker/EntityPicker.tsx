@@ -136,7 +136,7 @@ export default function EntityPicker({
       // ✅ notify parent so it can update its own state (e.g., for stock validation)
       if (onRecordsRefreshed) onRecordsRefreshed(records)
     })
-  }, [isOpen, companyId, tableName, allRecords, entityType, config, allowedIds, clearCacheOnOpen, onRecordsRefreshed])
+  }, [isOpen, companyId, tableName, entityType, config, allowedIds, clearCacheOnOpen, onRecordsRefreshed])
 
   // ── Filter locally ──
   useEffect(() => {
