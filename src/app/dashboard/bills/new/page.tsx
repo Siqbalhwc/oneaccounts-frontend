@@ -1162,6 +1162,7 @@ export default function NewBillPage() {
                           placeholder="Search product…"
                           label="Add Item"
                           allowCreate={false}
+                          clearCacheOnOpen
                         />
                       </div>
                       <button className="inv-btn" style={{ height: 38, flexShrink: 0 }} onClick={addManualItem}><Plus size={14} /> Manual</button>
