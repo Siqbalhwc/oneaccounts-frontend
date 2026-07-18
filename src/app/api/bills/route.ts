@@ -739,6 +739,8 @@ export async function PUT(request: NextRequest) {
     await supabase.from('invoice_items').insert(itemRows)
   }
 
+  # FIX marker placeholder
+  await supabase.from('stock_moves').delete().eq('company_id', companyId).eq('source_type', 'invoice').eq('source_id', id)
   await recordStockMoves(supabase, companyId, items, 'purchase', id, 'in')
 
   // Calculate WHT amount if not provided but a default code is set
