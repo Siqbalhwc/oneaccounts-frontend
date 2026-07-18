@@ -147,13 +147,16 @@ function NewInvoicePageContent() {
     items.forEach((item, idx) => {
       if (item.product_id && item.qty > 0) {
         const product = products.find(p => p.id === item.product_id)
-        if (product && item.qty > (product.qty_on_hand || 0)) {
-          errors[idx] = `Insufficient stock: available ${product.qty_on_hand}`
+        if (product) {
+          const available = (product.qty_on_hand || 0) + (editId ? (item.original_qty || 0) : 0)
+          if (item.qty > available) {
+            errors[idx] = `Insufficient stock: available ${available}`
+          }
         }
       }
     })
     setStockErrors(errors)
-  }, [items, products])
+  }, [items, products, editId])
 
   useEffect(() => {
     if (!editId || !companyId) return
@@ -184,6 +187,7 @@ function NewInvoicePageContent() {
                 product_name: item.products?.name || "",
                 product_image: item.products?.image_path || null,
                 qty: item.qty,
+                original_qty: item.qty,
                 unit_price: item.unit_price,
                 cost_price: item.cost_price || 0,
                 total: item.total,
