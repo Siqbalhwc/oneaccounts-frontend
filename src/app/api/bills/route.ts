@@ -739,7 +739,7 @@ export async function PUT(request: NextRequest) {
     await supabase.from('invoice_items').insert(itemRows)
   }
 
-  # FIX marker placeholder
+  // FIX: remove old stock movements before recording new ones (prevents duplicate stock on bill edit)
   await supabase.from('stock_moves').delete().eq('company_id', companyId).eq('source_type', 'invoice').eq('source_id', id)
   await recordStockMoves(supabase, companyId, items, 'purchase', id, 'in')
 
