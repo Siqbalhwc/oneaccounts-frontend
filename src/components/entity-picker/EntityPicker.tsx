@@ -121,7 +121,7 @@ export default function EntityPicker({
 
     query = query.order("name", { ascending: true })
 
-    query.then(({ data, error }) => {
+    query.then(async ({ data, error }) => {
       if (error) {
         console.error(`EntityPicker (${entityType}) failed to load from "${tableName}":`, error)
         setLoadError(error.message || "Failed to load records")
@@ -131,6 +131,23 @@ export default function EntityPicker({
       let records = data || []
       if (allowedIds && allowedIds.length > 0) {
         records = records.filter((r: any) => allowedIds.includes(r.id))
+      }
+      if (entityType === "product" && records.length > 0) {
+        const productIds = records.map((r: any) => r.id)
+        const { data: movesData } = await supabase
+          .from("stock_moves")
+          .select("product_id, qty")
+          .in("product_id", productIds)
+        if (movesData) {
+          const sums: Record<number, number> = {}
+          movesData.forEach((m: any) => {
+            sums[m.product_id] = (sums[m.product_id] || 0) + Number(m.qty)
+          })
+          records = records.map((r: any) => ({
+            ...r,
+            qty_on_hand: Number(r.opening_qty || 0) + (sums[r.id] || 0),
+          }))
+        }
       }
       setAllRecords(records)
       // ✅ notify parent so it can update its own state (e.g., for stock validation)
