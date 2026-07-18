@@ -173,7 +173,7 @@ function NewInvoicePageContent() {
         setNotes(bill.notes || "")
 
         supabase.from("invoice_items")
-          .select("*")
+          .select("*, products(name, image_path)")
           .eq("invoice_id", bill.id)
           .order("id")
           .then(({ data: itemsData }) => {
@@ -181,8 +181,8 @@ function NewInvoicePageContent() {
               const loaded = itemsData.map((item: any) => ({
                 product_id: item.product_id,
                 description: item.description,
-                product_name: "",
-                product_image: null,
+                product_name: item.products?.name || "",
+                product_image: item.products?.image_path || null,
                 qty: item.qty,
                 unit_price: item.unit_price,
                 cost_price: item.cost_price || 0,
