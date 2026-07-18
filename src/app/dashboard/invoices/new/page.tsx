@@ -415,48 +415,63 @@ function NewInvoicePageContent() {
 
     if (editId) {
       try {
-        const url = `/api/invoices?id=${editId}`
-        const res = await fetch(url, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: editId,
-            party_id: customerId,
-            invoice_date: invoiceDate,
-            due_date: dueDate,
-            items: items.map(i => ({
-              product_id: i.product_id,
-              description: i.description,
-              qty: i.qty,
-              unit_price: i.unit_price,
-              cost_price: i.cost_price,
-              project_id: i.project_id || null,
-              donor_id: i.donor_id || null,
-              tax_code_id: taxEnabled ? (i.tax_code_id || null) : undefined,
-              tax_rate: taxEnabled ? (i.tax_rate || 0) : undefined,
-              tax_amount: taxEnabled ? (i.tax_amount || 0) : undefined,
-            })),
-            reference,
-            notes,
-          }),
+        let automationConfig = {}
+        let automationAllowed = false
+        if (automationFeatureEnabled) {
+          const { data: settings } = await supabase
+            .from("company_settings")
+            .select("invoice_automation_config")
+            .eq("company_id", companyId)
+            .maybeSingle()
+          automationConfig = settings?.invoice_automation_config || {}
+          automationAllowed = true
+        }
+        const payloadItems = items.map(i => ({
+          product_id: i.product_id || null,
+          description: i.description,
+          qty: i.qty,
+          unit_price: i.unit_price,
+          cost_price: i.cost_price || 0,
+          project_id: i.project_id || null,
+          donor_id: i.donor_id || null,
+          tax_code_id: taxEnabled ? (i.tax_code_id || null) : null,
+          tax_rate: taxEnabled ? (i.tax_rate || 0) : 0,
+          tax_amount: taxEnabled ? (i.tax_amount || 0) : 0,
+        }))
+        const { data, error: rpcError } = await supabase.rpc('update_invoice_transaction', {
+          p_invoice_id: Number(editId),
+          p_company_id: companyId,
+          p_party_id: customerId,
+          p_invoice_date: invoiceDate,
+          p_due_date: dueDate,
+          p_items: payloadItems,
+          p_reference: reference || '',
+          p_notes: notes || '',
+          p_user_email: selectedCustomer?.email || 'system',
+          p_tax_enabled: taxEnabled,
+          p_automation_config: automationConfig,
+          p_automation_allowed: automationAllowed,
+          p_business_type: businessType,
         })
-        const result = await res.json()
-        if (!result.success) {
-          setError(result.error || "Failed to update invoice")
+        if (rpcError) {
+          setError(rpcError.message || "Failed to update invoice")
           setSaving(false)
           return
         }
-        const newInvoiceId = result.invoice?.id
-        setSavedInvoiceId(newInvoiceId || null)
-        setFlash(`✅ Invoice updated successfully!`)
+        if (!data || !data.success) {
+          setError(data?.error || "Failed to update invoice")
+          setSaving(false)
+          return
+        }
+        setSavedInvoiceId(Number(editId))
+        setFlash("Invoice updated successfully.")
         router.push(`/dashboard/invoices/${editId}`)
-      } catch {
-        setError("Network error")
+      } catch (err: any) {
+        setError(err.message || "Network error")
         setSaving(false)
       }
       return
     }
-
     try {
       let automationConfig = {}
       let automationAllowed = false
