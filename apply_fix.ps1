@@ -1,9 +1,8 @@
 $path = "src\app\dashboard\products\page.tsx"
 $content = Get-Content $path -Raw
 
-$old = "  const closing = prod.qty_on_hand"
-
-$new = "  const closing = prod.qty_on_hand`n  const productUnit = prod.unit || `"PCS`""
+$old = "  qty_on_hand: number"
+$new = "  qty_on_hand: number`n  unit: string"
 
 $count = ([regex]::Matches($content, [regex]::Escape($old))).Count
 if ($count -ne 1) {
