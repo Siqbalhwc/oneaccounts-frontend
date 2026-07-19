@@ -20,7 +20,7 @@ export const productMeta: EntityConfig = {
   // Display stock in search results
   searchResultExtra: (record) => {
     if (record.qty_on_hand !== undefined) {
-      return `Stock: ${record.qty_on_hand}`;
+      return `Stock: ${record.qty_on_hand} ${record.unit || "PCS"}`;
     }
     return null;
   },

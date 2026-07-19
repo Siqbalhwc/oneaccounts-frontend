@@ -1,18 +1,23 @@
-$path = "src\app\dashboard\products\page.tsx"
-$lines = Get-Content $path
+$path = "src\lib\entities\product.meta.ts"
+$content = Get-Content $path -Raw
 
-$anchorIdx = -1
-for ($i = 0; $i -lt $lines.Count; $i++) {
-    if ($lines[$i].Trim() -eq "qty_on_hand: number") { $anchorIdx = $i; break }
-}
+$old = @'
+    if (record.qty_on_hand !== undefined) {
+      return `Stock: ${record.qty_on_hand}`;
+    }
+'@
 
-if ($anchorIdx -lt 0) {
-    Write-Host "SAFETY CHECK FAILED: anchor not found. No changes made." -ForegroundColor Red
+$new = @'
+    if (record.qty_on_hand !== undefined) {
+      return `Stock: ${record.qty_on_hand} ${record.unit || "PCS"}`;
+    }
+'@
+
+$count = ([regex]::Matches($content, [regex]::Escape($old))).Count
+if ($count -ne 1) {
+    Write-Host "SAFETY CHECK FAILED: expected 1 match, found $count. No changes made." -ForegroundColor Red
 } else {
-    Write-Host "Found anchor at line $($anchorIdx+1), inserting 'unit: string' after it."
-    $before = $lines[0..$anchorIdx]
-    $after = $lines[($anchorIdx+1)..($lines.Count - 1)]
-    $result = $before + "  unit: string" + $after
-    Set-Content -Path $path -Value $result
+    $content = $content.Replace($old, $new)
+    Set-Content -Path $path -Value $content -NoNewline
     Write-Host "SUCCESS: file updated." -ForegroundColor Green
 }
