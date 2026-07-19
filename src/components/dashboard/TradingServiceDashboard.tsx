@@ -1333,6 +1333,8 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
               <div className="quick-action-btn" onClick={() => router.push("/dashboard/payments/new")}>💳 Record Payment</div>
               <div className="quick-action-btn" onClick={() => router.push("/dashboard/customers/new")}>👤 Add Customer</div>
               <div className="quick-action-btn" onClick={() => router.push("/dashboard/suppliers/new")}>🚚 Add Supplier</div>
+              <div className="quick-action-btn" onClick={() => router.push("/dashboard/cash-sales/new")}>💵 Cash Sales</div>
+              <div className="quick-action-btn" onClick={() => router.push("/dashboard/products/new")}>📦 Add Product</div>
             </div>
           </div>
         </div>
@@ -1351,4 +1353,4 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
       </div>
     </div>
   )
-} 
+}
