@@ -330,6 +330,14 @@ function NewInvoicePageContent() {
       }
     }
 
+    if (field === "total") {
+      updated[idx].unit_price = updated[idx].qty > 0 ? updated[idx].total / updated[idx].qty : 0
+      if (updated[idx].tax_rate > 0) {
+        updated[idx].tax_amount = (updated[idx].qty * updated[idx].unit_price * updated[idx].tax_rate) / 100
+      } else {
+        updated[idx].tax_amount = 0
+      }
+    }
     if (field === "project_id" && value) {
       const project = projects.find(p => p.id == value)
       if (project) {
@@ -997,7 +1005,7 @@ function NewInvoicePageContent() {
                             </div>
                           )}
 
-                          <div className="inv-cell inv-cell-total">PKR {item.total.toLocaleString()}</div>
+                          <input className="inv-input" style={{ height: 32, fontSize: 12, textAlign: "right", fontWeight: 600 }} type="number" value={item.total} onChange={e => updateItem(idx, "total", Number(e.target.value))} />
 
                           {taxEnabled && (
                             <div className="inv-cell inv-cell-tax">
