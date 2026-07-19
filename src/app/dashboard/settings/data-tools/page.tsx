@@ -8,7 +8,7 @@ import {
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
 import * as Papa from "papaparse"
-import * as XLSX from "xlsx"   // ← new import
+import * as XLSX from "xlsx"
 
 // ---------- DB‑validated active company ID ----------
 async function getActiveCompanyId(supabase: any): Promise<string> {
@@ -70,13 +70,27 @@ export default function DataManagementPage() {
   const [duplicateAction, setDuplicateAction] = useState<"skip" | "update">("skip")
   const [validationError, setValidationError] = useState("")
 
+  // ── Persistent import result (stays visible until next import) ──
+  const [importResult, setImportResult] = useState<{
+    type: "success" | "error"
+    message: string
+  } | null>(null)
+
   useEffect(() => {
     getActiveCompanyId(supabase).then(id => setCompanyId(id))
   }, [])
 
   const showMessage = (msg: string) => {
     setFlash(msg)
-    setTimeout(() => setFlash(""), 5000)
+    setTimeout(() => setFlash(""), 10000)   // longer visibility
+  }
+
+  const showPersistentResult = (type: "success" | "error", message: string) => {
+    setImportResult({ type, message })
+  }
+
+  const clearImportResult = () => {
+    setImportResult(null)
   }
 
   const resetBalances = async () => {
@@ -188,13 +202,13 @@ export default function DataManagementPage() {
     if (!file) return
     setImportFile(file)
     setValidationError("")
+    clearImportResult()
 
     try {
       let rows: Record<string, string>[] = []
       const name = file.name.toLowerCase()
 
       if (name.endsWith(".xlsx")) {
-        // Excel file – read with xlsx library
         const data = await file.arrayBuffer()
         const workbook = XLSX.read(data, { type: "array" })
         const sheetName = workbook.SheetNames[0]
@@ -203,9 +217,7 @@ export default function DataManagementPage() {
           return
         }
         const worksheet = workbook.Sheets[sheetName]
-        // Convert to array of objects with header:true
         rows = XLSX.utils.sheet_to_json<Record<string, string>>(worksheet, { header: 1 })
-        // If first row is headers, convert to key-value objects
         if (rows.length > 0) {
           const headers = rows[0] as unknown as string[]
           const dataRows = rows.slice(1) as unknown as string[][]
@@ -218,7 +230,6 @@ export default function DataManagementPage() {
           })
         }
       } else {
-        // Assume CSV – use Papa Parse
         const text = await file.text()
         const result = Papa.parse<Record<string, string>>(text, {
           header: true,
@@ -236,7 +247,6 @@ export default function DataManagementPage() {
 
       setImportPreview(rows)
 
-      // Auto‑map columns
       const headers = Object.keys(rows[0])
       const autoMap: Record<string, string> = {}
       headers.forEach(h => {
@@ -266,12 +276,16 @@ export default function DataManagementPage() {
     if (!validateImport(columnMap, importPreview)) return
 
     setImporting(true)
+    clearImportResult()
     const tableMap: Record<string, string> = { customer: "customers", supplier: "suppliers", product: "products" }
     const tableName = tableMap[importEntity]
-    if (!tableName) { showMessage("Invalid entity type."); setImporting(false); return }
+    if (!tableName) {
+      showPersistentResult("error", "Invalid entity type.")
+      setImporting(false)
+      return
+    }
 
     try {
-      // 1. Fetch ALL existing codes for this entity (one query)
       const { data: existingCodes } = await supabase
         .from(tableName)
         .select("code")
@@ -279,7 +293,6 @@ export default function DataManagementPage() {
 
       const existingCodeSet = new Set((existingCodes || []).map((r: any) => r.code))
 
-      // 2. Generate codes for rows that don't have one
       const prefix = importEntity === "customer" ? "CUST-" : importEntity === "supplier" ? "SUP-" : "PROD-"
       let maxNum = 0
       existingCodes?.forEach((r: any) => {
@@ -302,7 +315,6 @@ export default function DataManagementPage() {
         })
         if (!record.name) continue
 
-        // Parse numeric fields
         if (importEntity === "product") {
           record.cost_price = parseFloat(record.cost_price || 0)
           record.sale_price = parseFloat(record.sale_price || 0)
@@ -312,7 +324,6 @@ export default function DataManagementPage() {
           record.balance = parseFloat(record.balance || 0)
         }
 
-        // Assign code if missing
         if (!columnMap.code || !record.code) {
           record.code = `${prefix}${String(nextNum).padStart(3, "0")}`
           nextNum++
@@ -331,37 +342,35 @@ export default function DataManagementPage() {
         }
       }
 
-      // 3. Batch insert new rows
       let inserted = 0
       if (rowsToInsert.length > 0) {
         const { error: insertError } = await supabase
           .from(tableName)
           .insert(rowsToInsert)
         if (insertError) {
-          showMessage("❌ Insert failed: " + insertError.message)
+          showPersistentResult("error", "Insert failed: " + insertError.message)
           setImporting(false)
           return
         }
         inserted = rowsToInsert.length
       }
 
-      // 4. Batch update existing rows (if updating duplicates)
       let updated = 0
       if (rowsToUpdate.length > 0) {
         const { error: updateError } = await supabase
           .from(tableName)
           .upsert(rowsToUpdate, { onConflict: 'code' })
         if (updateError) {
-          showMessage("❌ Update failed: " + updateError.message)
+          showPersistentResult("error", "Update failed: " + updateError.message)
           setImporting(false)
           return
         }
         updated = rowsToUpdate.length
       }
 
-      showMessage(`✅ Import completed! Inserted: ${inserted}, Updated: ${updated}, Skipped: ${skipped}`)
+      showPersistentResult("success", `✅ Import completed! Inserted: ${inserted}, Updated: ${updated}, Skipped: ${skipped}`)
     } catch (err: any) {
-      showMessage("❌ Import error: " + (err.message || "Unknown error"))
+      showPersistentResult("error", "❌ Import error: " + (err.message || "Unknown error"))
     }
     setImporting(false)
   }
@@ -427,6 +436,26 @@ export default function DataManagementPage() {
           .import-preview-table th {
             font-family: 'Noto Nastaliq Urdu', 'Arial', sans-serif;
           }
+
+          .import-result {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+          }
+          .import-result.success {
+            background: #064E3B;
+            color: #6EE7B7;
+            border: 1px solid #065F46;
+          }
+          .import-result.error {
+            background: #7F1D1D;
+            color: #FCA5A5;
+            border: 1px solid #991B1B;
+          }
         `}</style>
 
         <div className="dm-header">
@@ -434,7 +463,28 @@ export default function DataManagementPage() {
           <div className="dm-subtitle">Clean, import, export, backup & restore</div>
         </div>
 
-        {flash && (
+        {/* ── Persistent import result message ── */}
+        {importResult && (
+          <div className={`import-result ${importResult.type}`}>
+            <span>{importResult.message}</span>
+            <button
+              onClick={clearImportResult}
+              style={{
+                background: "none",
+                border: "none",
+                color: "inherit",
+                cursor: "pointer",
+                fontWeight: 700,
+                fontSize: 14,
+                marginLeft: 12,
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {flash && !importResult && (
           <div style={{
             background: flash.includes("✅") ? "#064E3B" : "#1E293B",
             border: "1px solid " + (flash.includes("✅") ? "#065F46" : "#EF4444"),
