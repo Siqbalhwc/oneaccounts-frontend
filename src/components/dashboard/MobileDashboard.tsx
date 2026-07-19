@@ -181,7 +181,7 @@ export default function MobileDashboard({
         ))}
       </div>
 
-      {/* ── Quick actions as 3×2 grid ── */}
+      {/* ── Quick actions (now 8 items) ── */}
       <div
         style={{
           display: "grid",
@@ -197,6 +197,8 @@ export default function MobileDashboard({
           { label: "Record Payment", icon: "💳", href: "/dashboard/payments/new" },
           { label: "Add Customer", icon: "👤", href: "/dashboard/customers/new" },
           { label: "Add Supplier", icon: "🚚", href: "/dashboard/suppliers/new" },
+          { label: "Cash Sales", icon: "💵", href: "/dashboard/cash-sales/new" },
+          { label: "Add Product", icon: "📦", href: "/dashboard/products/new" },
         ].map((action) => (
           <div
             key={action.label}
