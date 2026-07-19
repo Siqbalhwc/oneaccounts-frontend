@@ -119,7 +119,7 @@ export default function DataManagementPage() {
     }
   }
 
-  // ── Template download ──
+  // ── Template download (opening_qty replaces qty_on_hand) ──
   const downloadTemplate = (entity: string) => {
     let headers: string[] = []
     let sample: Record<string, string> = {}
@@ -131,8 +131,8 @@ export default function DataManagementPage() {
       headers = ["name", "code", "phone", "email", "address", "balance"]
       sample = { name: "Acme Corp", code: "SUP-001", phone: "+923001234567", email: "acme@example.com", address: "456 Avenue", balance: "0" }
     } else if (entity === "product") {
-      headers = ["name", "category", "unit", "cost_price", "sale_price", "qty_on_hand"]
-      sample = { name: "Product A", category: "General", unit: "pcs", cost_price: "500", sale_price: "750", qty_on_hand: "100" }
+      headers = ["name", "category", "unit", "cost_price", "sale_price", "opening_qty"]
+      sample = { name: "Product A", category: "General", unit: "pcs", cost_price: "500", sale_price: "750", opening_qty: "100" }
     }
 
     const csvContent = [
@@ -149,13 +149,13 @@ export default function DataManagementPage() {
     window.URL.revokeObjectURL(url)
   }
 
-  // ── Validation ──
+  // ── Validation (opening_qty required) ──
   const validateImport = (map: Record<string, string>, data: Record<string, string>[]) => {
     setValidationError("")
     const required: Record<string, string[]> = {
       customer: ["name"],
       supplier: ["name"],
-      product: ["name", "unit", "cost_price", "sale_price", "qty_on_hand"],
+      product: ["name", "unit", "cost_price", "sale_price", "opening_qty"],
     }
     const reqFields = required[importEntity] || []
 
@@ -168,7 +168,7 @@ export default function DataManagementPage() {
 
     // Numeric validation
     if (importEntity === "product") {
-      const numericFields = ["cost_price", "sale_price", "qty_on_hand"]
+      const numericFields = ["cost_price", "sale_price", "opening_qty"]
       for (const field of numericFields) {
         const col = map[field]
         if (!col) continue
@@ -259,7 +259,7 @@ export default function DataManagementPage() {
         if (lower.includes("balance")) autoMap.balance = h
         if (lower.includes("cost")) autoMap.cost_price = h
         if (lower.includes("sale") || lower.includes("price")) autoMap.sale_price = h
-        if (lower.includes("qty") || lower.includes("quantity")) autoMap.qty_on_hand = h
+        if (lower.includes("opening") || lower.includes("opening_qty")) autoMap.opening_qty = h   // ← changed
         if (lower.includes("category")) autoMap.category = h
         if (lower.includes("unit") || lower.includes("uom") || lower.includes("measure")) autoMap.unit = h
       })
@@ -318,7 +318,8 @@ export default function DataManagementPage() {
         if (importEntity === "product") {
           record.cost_price = parseFloat(record.cost_price || 0)
           record.sale_price = parseFloat(record.sale_price || 0)
-          record.qty_on_hand = parseFloat(record.qty_on_hand || 0)
+          record.opening_qty = parseFloat(record.opening_qty || 0)     // ← changed: opening_qty
+          record.qty_on_hand = record.opening_qty                      // initial stock = opening_qty
           if (record.category === "") delete record.category
         } else {
           record.balance = parseFloat(record.balance || 0)
@@ -378,7 +379,7 @@ export default function DataManagementPage() {
   const fieldOptions: Record<string, string[]> = {
     customer: ["name", "code", "phone", "email", "address", "balance"],
     supplier: ["name", "code", "phone", "email", "address", "balance"],
-    product: ["name", "category", "unit", "cost_price", "sale_price", "qty_on_hand"],
+    product: ["name", "category", "unit", "cost_price", "sale_price", "opening_qty"],   // ← changed
   }
 
   if (companyId === null) return <div style={{ padding: 24, textAlign: "center", color: "#94A3B8" }}>Loading company context…</div>
