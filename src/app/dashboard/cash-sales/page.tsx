@@ -7,6 +7,8 @@ import { Plus, Eye, Edit, Search, ArrowUpDown, ArrowUp, ArrowDown, FileText, Sen
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
+import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
+import { useCompany } from "@/contexts/CompanyContext"
 
 type SortField = "sale_no" | "date" | "customer" | "total"
 type SortDir = "asc" | "desc"
@@ -48,6 +50,8 @@ export default function CashSalesListPage() {
   const [companyId, setCompanyId] = useState("")
 
   const [customerMap, setCustomerMap] = useState<Record<number, { name: string; phone: string }>>({})
+
+  const { companyName, companyTagline, logoUrl } = useCompany()
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -147,6 +151,88 @@ export default function CashSalesListPage() {
     ].join("\n")
     const waLink = getWhatsAppLink(cust.phone, message)
     if (waLink) window.open(waLink, "_blank")
+  }
+
+  const handlePrintPDF = async (sale: any) => {
+    try {
+      // Fetch customer data (already in map, but we need full object for PDF)
+      const cust = customerMap[sale.party_id]
+      const customer = cust ? { name: cust.name, code: "", phone: cust.phone } : undefined
+
+      // Fetch line items
+      const { data: items } = await supabase
+        .from("cash_sale_items")
+        .select("*")
+        .eq("cash_sale_id", sale.id)
+        .eq("company_id", companyId)
+
+      // Enrich with product images if any
+      let enrichedItems = items || []
+      if (enrichedItems.length > 0) {
+        const productIds = enrichedItems.map((i: any) => i.product_id).filter((id: any) => id != null)
+        if (productIds.length > 0) {
+          const { data: products } = await supabase.from("products")
+            .select("id, code, name, image_path").in("id", productIds)
+          const productMap: Record<number, any> = {}
+          if (products) products.forEach((p: any) => { productMap[p.id] = p })
+          enrichedItems = enrichedItems.map((item: any) => {
+            const prod = productMap[item.product_id]
+            return {
+              ...item,
+              product_code: prod?.code || "",
+              product_name: prod?.name || "",
+              product_image: prod?.image_path || null
+            }
+          })
+        }
+      }
+
+      const subTotal = enrichedItems.reduce((s: number, i: any) => s + (i.total || 0), 0)
+
+      const pdfData = {
+        companyName: companyName || "",
+        companyAddress: "",
+        companyPhone: "",
+        companyEmail: "",
+        companyTagline: companyTagline || "",
+        logoUrl,
+        businessType: "",
+        invoiceNo: sale.sale_no,
+        date: sale.date,
+        dueDate: sale.date,
+        customerName: customer?.name || "Walk‑in Customer",
+        customerAddress: "",
+        customerPhone: customer?.phone || "",
+        customerEmail: "",
+        paymentTerms: null,
+        notes: sale.notes || null,
+        createdBy: sale.created_by || "—",
+        status: "Paid",
+        items: enrichedItems.map((item: any) => ({
+          description: item.description || "",
+          qty: item.qty || 0,
+          unit_price: item.unit_price || 0,
+          total: item.total || 0,
+          image_path: item.product_image || null,
+          product_id: item.product_code || null,
+          product_name: item.product_name || "",
+          tax_rate: 0,
+          tax_amount: 0,
+        })),
+        subtotal: subTotal,
+        total: sale.total,
+        totalTax: 0,
+        paid: sale.total,
+        balanceDue: 0,
+        hideTerms: true,
+      }
+
+      const doc = await generateInvoicePDF(pdfData)
+      doc.save(`CashSale_${sale.sale_no}.pdf`)
+    } catch (err) {
+      alert("Failed to generate PDF. Please try again.")
+      console.error(err)
+    }
   }
 
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
@@ -286,7 +372,7 @@ export default function CashSalesListPage() {
               <col style={{ width: 100 }} />  {/* Date */}
               <col />                           {/* Customer */}
               <col style={{ width: 120 }} />  {/* Total */}
-              <col style={{ width: 130 }} />  {/* Actions */}
+              <col style={{ width: 160 }} />  {/* Actions (wider to fit all icons) */}
             </colgroup>
             <thead>
               <tr>
@@ -330,7 +416,7 @@ export default function CashSalesListPage() {
                           <button className="btn-icon" onClick={() => router.push(`/dashboard/cash-sales/new?id=${sale.id}`)} title="Edit">
                             <Edit size={13} />
                           </button>
-                          <button className="btn-icon" onClick={() => { /* PDF generate later */ alert("PDF will be available soon.") }} title="PDF">
+                          <button className="btn-icon" onClick={() => handlePrintPDF(sale)} title="PDF">
                             <FileText size={13} />
                           </button>
                           {hasFeature("whatsapp_invoice") && cust?.phone && (
