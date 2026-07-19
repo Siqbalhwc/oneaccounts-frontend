@@ -19,6 +19,7 @@ export default function ProductFormPage() {
   const [productCode, setProductCode] = useState("")
   const [name, setName] = useState("")
   const [category, setCategory] = useState("")
+  const [unit, setUnit] = useState("PCS")
   const [salePrice, setSalePrice] = useState("")
   const [costPrice, setCostPrice] = useState("")
   const [openingQty, setOpeningQty] = useState("")
@@ -50,6 +51,7 @@ export default function ProductFormPage() {
           setProductCode(product.code)
           setName(product.name)
           setCategory(product.category || "")
+          setUnit(product.unit || "PCS")
           setSalePrice(String(product.sale_price || ""))
           setCostPrice(String(product.cost_price || ""))
           setOpeningQty(String(product.opening_qty || ""))
@@ -118,6 +120,7 @@ export default function ProductFormPage() {
       code: productCode,
       name: name.trim(),
       category: category.trim() || null,
+      unit: unit,
       sale_price: parseFloat(salePrice) || 0,
       cost_price: parseFloat(costPrice) || 0,
       opening_qty: parseFloat(openingQty) || 0,
@@ -239,6 +242,26 @@ export default function ProductFormPage() {
             <div style={{ marginBottom: 16 }}>
               <label className="label">Category (optional)</label>
               <input className="input" value={category} onChange={e => setCategory(e.target.value)} placeholder="e.g. Cabinet Handles, Cabinet Knobs" />
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label className="label">Unit of Measurement</label>
+              <select className="input" value={unit} onChange={e => setUnit(e.target.value)}>
+                <option value="PCS">Pieces (PCS)</option>
+                <option value="KG">Kilogram (KG)</option>
+                <option value="Gram">Gram</option>
+                <option value="Liter">Liter</option>
+                <option value="Meter">Meter</option>
+                <option value="Yard">Yard</option>
+                <option value="Dozen">Dozen</option>
+                <option value="Box">Box</option>
+                <option value="Carton">Carton</option>
+                <option value="Set">Set</option>
+                <option value="Pair">Pair</option>
+                <option value="Roll">Roll</option>
+                <option value="Bag">Bag</option>
+                <option value="Ton">Ton</option>
+              </select>
             </div>
 
             <div className="inline-group" style={{ marginBottom: 16 }}>
