@@ -149,6 +149,7 @@ export default function ProductLedgerPage() {
       productName: product.name, productCode: product.code,
       startDate, endDate,
       totalInflow, totalOutflow, closingBalance,
+      unit: product?.unit || "PCS",
       ledgerLines: sortedLines,
     }
     const doc = await generateProductLedgerPDF(pdfData)
@@ -245,7 +246,7 @@ export default function ProductLedgerPage() {
         <div className="summary-item">
           <div className="summary-label">Closing Balance</div>
           <div className="summary-value" style={{ color: closingBalance >= 0 ? "#10B981" : "#EF4444" }}>
-            {closingBalance}
+            {closingBalance} {product?.unit || "PCS"}
           </div>
         </div>
       </div>
@@ -282,7 +283,7 @@ export default function ProductLedgerPage() {
                 {line.qty_out > 0 ? line.qty_out.toLocaleString() : "—"}
               </span>
               <span style={{ textAlign: "right", fontWeight: 600, color: line.balance >= 0 ? "#10B981" : "#EF4444" }}>
-                {line.balance.toLocaleString()}
+                {line.balance.toLocaleString()} {product?.unit || "PCS"}
               </span>
             </div>
           ))}

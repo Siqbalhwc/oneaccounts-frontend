@@ -1,15 +1,16 @@
-$path = "src\lib\entities\product.meta.ts"
+$path = "src\app\dashboard\reports\product-ledger\page.tsx"
 $content = Get-Content $path -Raw
 
 $old = @'
-    if (record.qty_on_hand !== undefined) {
-      return `Stock: ${record.qty_on_hand}`;
+      totalInflow, totalOutflow, closingBalance,
+      ledgerLines: sortedLines,
     }
 '@
 
 $new = @'
-    if (record.qty_on_hand !== undefined) {
-      return `Stock: ${record.qty_on_hand} ${record.unit || "PCS"}`;
+      totalInflow, totalOutflow, closingBalance,
+      unit: product?.unit || "PCS",
+      ledgerLines: sortedLines,
     }
 '@
 

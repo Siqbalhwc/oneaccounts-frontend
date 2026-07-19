@@ -11,7 +11,7 @@ const ROW_ALT = [248,249,252] as [number,number,number]
 async function loadImage(url:string):Promise<string|null>{ try{const r=await fetch(url);if(!r.ok)return null;const b=await r.blob();return new Promise(res=>{const reader=new FileReader();reader.onload=()=>res(reader.result as string);reader.onerror=()=>res("");reader.readAsDataURL(b)})}catch{return null} }
 
 export interface ProductLedgerLine{ date:string; type:string; invoice_no:string; qty_in:number; qty_out:number; balance:number; isOpening?:boolean }
-export interface ProductLedgerPDFData{ companyName:string; companyAddress?:string; companyPhone?:string; companyEmail?:string; companyTagline:string; logoUrl?:string|null; productName:string; productCode:string; startDate:string; endDate:string; totalInflow:number; totalOutflow:number; closingBalance:number; ledgerLines:ProductLedgerLine[] }
+export interface ProductLedgerPDFData{ companyName:string; companyAddress?:string; companyPhone?:string; companyEmail?:string; companyTagline:string; logoUrl?:string|null; productName:string; productCode:string; startDate:string; endDate:string; totalInflow:number; totalOutflow:number; closingBalance:number; unit:string; ledgerLines:ProductLedgerLine[] }
 
 export async function generateProductLedgerPDF(data:ProductLedgerPDFData):Promise<jsPDF>{
   const doc = new jsPDF({orientation:"landscape",unit:"mm",format:"a4"})
@@ -38,11 +38,11 @@ export async function generateProductLedgerPDF(data:ProductLedgerPDFData):Promis
     l.isOpening?"":l.date,
     l.type==="Opening"?"Opening":l.type==="purchase"?"Purchase":"Sale",
     l.invoice_no||"",
-    l.qty_in>0?l.qty_in.toString():"–",
-    l.qty_out>0?l.qty_out.toString():"–",
-    l.balance.toString()
+    l.qty_in>0?`${l.qty_in} ${data.unit}`:"-",
+    l.qty_out>0?`${l.qty_out} ${data.unit}`:"-",
+    `${l.balance} ${data.unit}`
   ])
-  rows.push(["","","Total",data.totalInflow.toString(),data.totalOutflow.toString(),data.closingBalance.toString()])
+  rows.push(["","","Total",`${data.totalInflow} ${data.unit}`,`${data.totalOutflow} ${data.unit}`,`${data.closingBalance} ${data.unit}`])
   autoTable(doc,{
     startY:Y,margin:{left:ML,right:MR},head:[headers],body:rows,
     styles:{fontSize:7.5,cellPadding:{top:2,bottom:2,left:2,right:2},textColor:DARK,lineColor:BORDER,lineWidth:0.2},
