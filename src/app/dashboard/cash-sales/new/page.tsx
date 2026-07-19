@@ -138,14 +138,18 @@ export default function NewCashSalePage() {
   return (
     <div className="cs-page">
       <style>{`
-        .cs-page { max-width: 900px; margin: 0 auto; padding: 20px 16px; }
-        @media (max-width: 480px) { .cs-page { padding: 12px; } }
+        .cs-page { max-width: 1100px; margin: 0 auto; padding: 20px 16px; }
+        @media (max-width: 480px) { .cs-page { padding: 12px; padding-bottom: 90px; } }
 
         .cs-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 12px; }
         .cs-label { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; display: block; }
         .cs-input { width: 100%; height: 38px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; }
         .cs-btn { height: 38px; padding: 0 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
         .cs-btn-primary { background: var(--primary); color: #fff; border: none; font-weight: 600; justify-content: center; width: 100%; }
+
+        .cs-header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
+        @media (max-width: 1024px) { .cs-header-grid { display: block; } .cs-desktop-summary { display: none !important; } .cs-mobile-sticky { display: flex !important; } .cs-input, .cs-btn { font-size: 16px; } }
+        @media (min-width: 1025px) { .cs-desktop-summary { display: flex; flex-direction: column; gap: 12px; } .cs-mobile-sticky { display: none !important; } }
 
         .cs-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         @media (max-width: 600px) { .cs-two-col { grid-template-columns: 1fr; } }
@@ -164,7 +168,7 @@ export default function NewCashSalePage() {
           .cs-item-row .cs-remove { justify-self: end; }
         }
 
-        .cs-total-row { display: flex; justify-content: space-between; align-items: center; }
+        .cs-mobile-sticky { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--border); padding: 10px 16px; align-items: center; justify-content: space-between; gap: 12px; z-index: 20; }
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
@@ -178,98 +182,121 @@ export default function NewCashSalePage() {
       {error && <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, border: "1px solid #FECACA" }}>{error}</div>}
       {flash && <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
 
-      <div className="cs-card">
-        <div style={{ marginBottom: 14 }}>
-          <label className="cs-label">Customer (optional - walk-in if blank)</label>
-          <EntityPicker
-            entityType="customer"
-            value={selectedCustomer}
-            onChange={(record: any) => {
-              if (record) { setCustomerId(Number(record.id)); setSelectedCustomer(record) }
-              else { setCustomerId(null); setSelectedCustomer(null) }
-            }}
-            label=""
-          />
-        </div>
-
-        <div className="cs-two-col" style={{ marginBottom: 14 }}>
-          <div>
-            <label className="cs-label">Sale Date</label>
-            <input className="cs-input" type="date" value={saleDate} onChange={e => setSaleDate(e.target.value)} />
-          </div>
-          <div>
-            <label className="cs-label">Receive Into</label>
-            <select className="cs-input" value={bankAccountId ?? ""} onChange={e => setBankAccountId(e.target.value ? Number(e.target.value) : null)}>
-              <option value="">Cash in Hand (default)</option>
-              {bankAccounts.map((b: any) => (
-                <option key={b.id} value={b.id}>{b.bank_name}{b.account_number ? " - " + b.account_number : ""}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="cs-two-col">
-          <div>
-            <label className="cs-label">Reference</label>
-            <input className="cs-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="Optional reference" />
-          </div>
-          <div>
-            <label className="cs-label">Notes</label>
-            <input className="cs-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes" />
-          </div>
-        </div>
-      </div>
-
-      <div className="cs-card">
-        <label className="cs-label">Add Item</label>
-        <div className="cs-add-item-row">
-          <div style={{ flex: 1 }}>
-            <EntityPicker
-              entityType="product"
-              value={null}
-              onChange={(record: any) => { if (record) addProductItem(record) }}
-              placeholder="Search product..."
-              label=""
-              allowCreate={false}
-              clearCacheOnOpen
-            />
-          </div>
-          <button className="cs-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
-        </div>
-      </div>
-
-      {items.length > 0 && (
-        <div className="cs-card">
-          <div className="cs-item-header">
-            <span>Description</span>
-            <span style={{ textAlign: "center" }}>Qty</span>
-            <span style={{ textAlign: "right" }}>Rate</span>
-            <span style={{ textAlign: "right" }}>Total</span>
-            <span></span>
-          </div>
-          {items.map((item, idx) => (
-            <div key={idx}>
-              <div className="cs-item-row">
-                <input className="cs-input cs-desc" style={{ height: 34 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Description" />
-                <input className="cs-input" style={{ height: 34, textAlign: "center", borderColor: stockErrors[idx] ? "#EF4444" : undefined }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                <input className="cs-input" style={{ height: 34, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                <input className="cs-input cs-total" style={{ height: 34, textAlign: "right", fontWeight: 600 }} type="number" value={item.total} onChange={e => updateItem(idx, "total", Number(e.target.value))} />
-                <button className="cs-remove" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }} onClick={() => removeItem(idx)}><Trash2 size={14} /></button>
-              </div>
-              {stockErrors[idx] && <div style={{ fontSize: 11, color: "#EF4444", marginTop: -4, marginBottom: 8 }}>{stockErrors[idx]}</div>}
+      <div className="cs-header-grid">
+        <div>
+          <div className="cs-card">
+            <div style={{ marginBottom: 14 }}>
+              <label className="cs-label">Customer (optional - walk-in if blank)</label>
+              <EntityPicker
+                entityType="customer"
+                value={selectedCustomer}
+                onChange={(record: any) => {
+                  if (record) { setCustomerId(Number(record.id)); setSelectedCustomer(record) }
+                  else { setCustomerId(null); setSelectedCustomer(null) }
+                }}
+                label=""
+              />
             </div>
-          ))}
-        </div>
-      )}
 
-      <div className="cs-card cs-total-row">
-        <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>Total Received</span>
-        <span style={{ fontSize: 18, fontWeight: 800, color: "var(--text)" }}>PKR {totalAmount.toLocaleString()}</span>
+            <div className="cs-two-col" style={{ marginBottom: 14 }}>
+              <div>
+                <label className="cs-label">Sale Date</label>
+                <input className="cs-input" type="date" value={saleDate} onChange={e => setSaleDate(e.target.value)} />
+              </div>
+              <div>
+                <label className="cs-label">Receive Into</label>
+                <select className="cs-input" value={bankAccountId ?? ""} onChange={e => setBankAccountId(e.target.value ? Number(e.target.value) : null)}>
+                  <option value="">Cash in Hand (default)</option>
+                  {bankAccounts.map((b: any) => (
+                    <option key={b.id} value={b.id}>{b.bank_name}{b.account_number ? " - " + b.account_number : ""}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="cs-two-col">
+              <div>
+                <label className="cs-label">Reference</label>
+                <input className="cs-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="Optional reference" />
+              </div>
+              <div>
+                <label className="cs-label">Notes</label>
+                <input className="cs-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes" />
+              </div>
+            </div>
+          </div>
+
+          <div className="cs-card">
+            <label className="cs-label">Add Item</label>
+            <div className="cs-add-item-row">
+              <div style={{ flex: 1 }}>
+                <EntityPicker
+                  entityType="product"
+                  value={null}
+                  onChange={(record: any) => { if (record) addProductItem(record) }}
+                  placeholder="Search product..."
+                  label=""
+                  allowCreate={false}
+                  clearCacheOnOpen
+                />
+              </div>
+              <button className="cs-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
+            </div>
+          </div>
+
+          {items.length > 0 && (
+            <div className="cs-card">
+              <div className="cs-item-header">
+                <span>Description</span>
+                <span style={{ textAlign: "center" }}>Qty</span>
+                <span style={{ textAlign: "right" }}>Rate</span>
+                <span style={{ textAlign: "right" }}>Total</span>
+                <span></span>
+              </div>
+              {items.map((item, idx) => (
+                <div key={idx}>
+                  <div className="cs-item-row">
+                    <input className="cs-input cs-desc" style={{ height: 34 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Description" />
+                    <input className="cs-input" style={{ height: 34, textAlign: "center", borderColor: stockErrors[idx] ? "#EF4444" : undefined }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                    <input className="cs-input" style={{ height: 34, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                    <input className="cs-input cs-total" style={{ height: 34, textAlign: "right", fontWeight: 600 }} type="number" value={item.total} onChange={e => updateItem(idx, "total", Number(e.target.value))} />
+                    <button className="cs-remove" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }} onClick={() => removeItem(idx)}><Trash2 size={14} /></button>
+                  </div>
+                  {stockErrors[idx] && <div style={{ fontSize: 11, color: "#EF4444", marginTop: -4, marginBottom: 8 }}>{stockErrors[idx]}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="cs-desktop-summary">
+          <div className="cs-card">
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
+              <span>Total</span>
+              <span>PKR {totalAmount.toLocaleString()}</span>
+            </div>
+            {hasStockErrors && (
+              <div style={{ marginTop: 8, padding: "6px 10px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, color: "#EF4444", fontSize: 11 }}>Some items have insufficient stock</div>
+            )}
+          </div>
+          <div className="cs-card">
+            <button className="cs-btn cs-btn-primary" onClick={handleSubmit} disabled={saving || hasStockErrors || items.length === 0}>
+              {saving ? "Posting..." : "Post Cash Sale"}
+            </button>
+          </div>
+        </div>
       </div>
 
-      <button className="cs-btn cs-btn-primary" onClick={handleSubmit} disabled={saving || hasStockErrors || items.length === 0}>
-        {saving ? "Posting..." : "Post Cash Sale"}
-      </button>
+      <div className="cs-mobile-sticky">
+        <div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Total</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>PKR {totalAmount.toLocaleString()}</div>
+        </div>
+        <button className="cs-btn cs-btn-primary" style={{ width: "auto", padding: "0 20px" }} onClick={handleSubmit} disabled={saving || hasStockErrors || items.length === 0}>
+          {saving ? "Posting..." : "Post"}
+        </button>
+      </div>
 
       {savedSaleNo && (
         <div style={{ marginTop: 12, textAlign: "center" }}>
