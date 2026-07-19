@@ -260,7 +260,6 @@ export default function DataManagementPage() {
         record.sale_price = parseFloat(record.sale_price || 0)
         record.qty_on_hand = parseFloat(record.qty_on_hand || 0)
         if (record.category === "") delete record.category
-        // unit is mandatory, so it will be present
       } else {
         record.balance = parseFloat(record.balance || 0)
       }
@@ -301,6 +300,8 @@ export default function DataManagementPage() {
     <RoleGuard allowedRoles={["admin", "accountant"]}>
       <div style={{ padding: 24, background: "#0B1120", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#E2E8F0" }}>
         <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu&display=swap');
+
           .dm-header { margin-bottom: 20px; }
           .dm-title { font-size: 22px; font-weight: 800; color: #F1F5F9; }
           .dm-subtitle { font-size: 13px; color: #94A3B8; }
@@ -336,6 +337,12 @@ export default function DataManagementPage() {
           th { background: #1E293B; color: #94A3B8; font-size: 10px; padding: 6px; text-align: left; }
           td { border-bottom: 1px solid #1E293B; padding: 4px 6px; }
           label { color: #CBD5E1; }
+
+          /* Urdu‑aware font for import preview */
+          .import-preview-table td,
+          .import-preview-table th {
+            font-family: 'Noto Nastaliq Urdu', 'Arial', sans-serif;
+          }
         `}</style>
 
         <div className="dm-header">
@@ -435,7 +442,7 @@ export default function DataManagementPage() {
             <>
               <h4 style={{ color: "#F1F5F9" }}>Preview ({importPreview.length} rows)</h4>
               <div style={{ maxHeight: 200, overflow: "auto", marginBottom: 12 }}>
-                <table>
+                <table className="import-preview-table">
                   <thead>
                     <tr>{Object.keys(importPreview[0]).map(k => <th key={k}>{k}</th>)}</tr>
                   </thead>
