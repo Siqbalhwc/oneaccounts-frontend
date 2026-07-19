@@ -1243,12 +1243,6 @@ export default function NewBillPage() {
                 </div>
               )}
 
-              {editId && (
-                <div className="inv-card" style={{ marginTop: 12 }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
-                  <RecordHistory tableName="invoices" recordId={editId} />
-                </div>
-              )}
             </div>
 
             <div className="desktop-summary">
@@ -1521,6 +1515,12 @@ export default function NewBillPage() {
             )}
           </div>
 
+          {editId && (
+            <div className="inv-card" style={{ marginTop: 12 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>Change History</h3>
+              <RecordHistory tableName="invoices" recordId={editId} />
+            </div>
+          )}
           <div className="mobile-sticky-summary">
             <div className="total-left">
               <div className="total-label">Total</div>
