@@ -8,6 +8,7 @@ import {
 import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
 import * as Papa from "papaparse"
+import * as XLSX from "xlsx"   // ← new import
 
 // ---------- DB‑validated active company ID ----------
 async function getActiveCompanyId(supabase: any): Promise<string> {
@@ -181,7 +182,7 @@ export default function DataManagementPage() {
     return true
   }
 
-  // ── CSV Import ──
+  // ── CSV / Excel Import (batch optimized) ──
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -189,23 +190,54 @@ export default function DataManagementPage() {
     setValidationError("")
 
     try {
-      const text = await file.text()
-      const result = Papa.parse<Record<string, string>>(text, {
-        header: true,
-        skipEmptyLines: true,
-        transformHeader: (h: string) => h.trim(),
-      })
+      let rows: Record<string, string>[] = []
+      const name = file.name.toLowerCase()
 
-      if (result.errors.length > 0) console.warn("CSV parse warnings:", result.errors)
+      if (name.endsWith(".xlsx")) {
+        // Excel file – read with xlsx library
+        const data = await file.arrayBuffer()
+        const workbook = XLSX.read(data, { type: "array" })
+        const sheetName = workbook.SheetNames[0]
+        if (!sheetName) {
+          showMessage("Excel file has no sheets.")
+          return
+        }
+        const worksheet = workbook.Sheets[sheetName]
+        // Convert to array of objects with header:true
+        rows = XLSX.utils.sheet_to_json<Record<string, string>>(worksheet, { header: 1 })
+        // If first row is headers, convert to key-value objects
+        if (rows.length > 0) {
+          const headers = rows[0] as unknown as string[]
+          const dataRows = rows.slice(1) as unknown as string[][]
+          rows = dataRows.map(row => {
+            const obj: Record<string, string> = {}
+            headers.forEach((h, i) => {
+              obj[String(h).trim()] = String(row[i] ?? "").trim()
+            })
+            return obj
+          })
+        }
+      } else {
+        // Assume CSV – use Papa Parse
+        const text = await file.text()
+        const result = Papa.parse<Record<string, string>>(text, {
+          header: true,
+          skipEmptyLines: true,
+          transformHeader: (h: string) => h.trim(),
+        })
+        if (result.errors.length > 0) console.warn("CSV parse warnings:", result.errors)
+        rows = result.data
+      }
 
-      if (result.data.length === 0) {
+      if (rows.length === 0) {
         showMessage("File is empty or has no valid rows.")
         return
       }
 
-      setImportPreview(result.data)
+      setImportPreview(rows)
 
-      const headers = Object.keys(result.data[0])
+      // Auto‑map columns
+      const headers = Object.keys(rows[0])
       const autoMap: Record<string, string> = {}
       headers.forEach(h => {
         const lower = h.toLowerCase().replace(/\s/g, "")
@@ -223,7 +255,7 @@ export default function DataManagementPage() {
       })
       setColumnMap(autoMap)
 
-      validateImport(autoMap, result.data)
+      validateImport(autoMap, rows)
     } catch (err) {
       showMessage("Error reading file: " + (err as Error).message)
     }
@@ -238,46 +270,99 @@ export default function DataManagementPage() {
     const tableName = tableMap[importEntity]
     if (!tableName) { showMessage("Invalid entity type."); setImporting(false); return }
 
-    let startNum = 1
-    if (!columnMap.code) {
-      const prefix = importEntity === "customer" ? "CUST-" : importEntity === "supplier" ? "VEND-" : "PROD-"
-      const { data: existing } = await supabase.from(tableName).select("code").like("code", `${prefix}%`).eq("company_id", companyId)
-      let maxNum = 0
-      existing?.forEach((r: any) => {
-        const parts = r.code.split("-")
-        if (parts.length === 2) { const n = parseInt(parts[1]); if (!isNaN(n) && n > maxNum) maxNum = n }
-      })
-      startNum = maxNum + 1
-    }
+    try {
+      // 1. Fetch ALL existing codes for this entity (one query)
+      const { data: existingCodes } = await supabase
+        .from(tableName)
+        .select("code")
+        .eq("company_id", companyId)
 
-    let success = 0, updated = 0, skipped = 0
-    for (const row of importPreview) {
-      const record: any = {}
-      Object.entries(columnMap).forEach(([field, col]) => { record[field] = row[col] || "" })
-      if (!record.name) continue
-      if (importEntity === "product") {
-        record.cost_price = parseFloat(record.cost_price || 0)
-        record.sale_price = parseFloat(record.sale_price || 0)
-        record.qty_on_hand = parseFloat(record.qty_on_hand || 0)
-        if (record.category === "") delete record.category
-      } else {
-        record.balance = parseFloat(record.balance || 0)
+      const existingCodeSet = new Set((existingCodes || []).map((r: any) => r.code))
+
+      // 2. Generate codes for rows that don't have one
+      const prefix = importEntity === "customer" ? "CUST-" : importEntity === "supplier" ? "SUP-" : "PROD-"
+      let maxNum = 0
+      existingCodes?.forEach((r: any) => {
+        const parts = r.code.split("-")
+        if (parts.length === 2) {
+          const n = parseInt(parts[1])
+          if (!isNaN(n) && n > maxNum) maxNum = n
+        }
+      })
+      let nextNum = maxNum + 1
+
+      const rowsToInsert: any[] = []
+      const rowsToUpdate: any[] = []
+      let skipped = 0
+
+      for (const row of importPreview) {
+        const record: any = { company_id: companyId }
+        Object.entries(columnMap).forEach(([field, col]) => {
+          record[field] = row[col] || ""
+        })
+        if (!record.name) continue
+
+        // Parse numeric fields
+        if (importEntity === "product") {
+          record.cost_price = parseFloat(record.cost_price || 0)
+          record.sale_price = parseFloat(record.sale_price || 0)
+          record.qty_on_hand = parseFloat(record.qty_on_hand || 0)
+          if (record.category === "") delete record.category
+        } else {
+          record.balance = parseFloat(record.balance || 0)
+        }
+
+        // Assign code if missing
+        if (!columnMap.code || !record.code) {
+          record.code = `${prefix}${String(nextNum).padStart(3, "0")}`
+          nextNum++
+        }
+
+        if (existingCodeSet.has(record.code)) {
+          if (duplicateAction === "skip") {
+            skipped++
+            continue
+          } else {
+            rowsToUpdate.push(record)
+          }
+        } else {
+          rowsToInsert.push(record)
+          existingCodeSet.add(record.code)
+        }
       }
-      if (!columnMap.code) {
-        const code = importEntity === "customer" ? `CUST-${String(startNum++).padStart(3, "0")}`
-          : importEntity === "supplier" ? `VEND-${String(startNum++).padStart(3, "0")}`
-          : `PROD-${String(startNum++).padStart(3, "0")}`
-        record.code = code
+
+      // 3. Batch insert new rows
+      let inserted = 0
+      if (rowsToInsert.length > 0) {
+        const { error: insertError } = await supabase
+          .from(tableName)
+          .insert(rowsToInsert)
+        if (insertError) {
+          showMessage("❌ Insert failed: " + insertError.message)
+          setImporting(false)
+          return
+        }
+        inserted = rowsToInsert.length
       }
-      const { data: existing } = await supabase.from(tableName).select("id").eq("code", record.code).eq("company_id", companyId).maybeSingle()
-      if (existing) {
-        if (duplicateAction === "skip") { skipped++; continue }
-        else { await supabase.from(tableName).update(record).eq("code", record.code).eq("company_id", companyId); updated++ }
-      } else {
-        await supabase.from(tableName).insert({ ...record, company_id: companyId }); success++
+
+      // 4. Batch update existing rows (if updating duplicates)
+      let updated = 0
+      if (rowsToUpdate.length > 0) {
+        const { error: updateError } = await supabase
+          .from(tableName)
+          .upsert(rowsToUpdate, { onConflict: 'code' })
+        if (updateError) {
+          showMessage("❌ Update failed: " + updateError.message)
+          setImporting(false)
+          return
+        }
+        updated = rowsToUpdate.length
       }
+
+      showMessage(`✅ Import completed! Inserted: ${inserted}, Updated: ${updated}, Skipped: ${skipped}`)
+    } catch (err: any) {
+      showMessage("❌ Import error: " + (err.message || "Unknown error"))
     }
-    showMessage(`✅ Import completed! Inserted: ${success}, Updated: ${updated}, Skipped: ${skipped}`)
     setImporting(false)
   }
 
@@ -338,7 +423,6 @@ export default function DataManagementPage() {
           td { border-bottom: 1px solid #1E293B; padding: 4px 6px; }
           label { color: #CBD5E1; }
 
-          /* Urdu‑aware font for import preview */
           .import-preview-table td,
           .import-preview-table th {
             font-family: 'Noto Nastaliq Urdu', 'Arial', sans-serif;
@@ -406,9 +490,9 @@ export default function DataManagementPage() {
         </div>
 
         <div className="import-section">
-          <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: "#F1F5F9" }}>📥 Import from CSV</h3>
+          <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: "#F1F5F9" }}>📥 Import from CSV or Excel</h3>
           <p style={{ fontSize: 12, color: "#94A3B8", marginBottom: 12 }}>
-            Upload a CSV file to bulk import Customers, Suppliers, or Products. Download the template for correct format.
+            Upload a CSV or Excel (.xlsx) file to bulk import Customers, Suppliers, or Products. Download the template for correct format.
           </p>
 
           <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
@@ -429,7 +513,7 @@ export default function DataManagementPage() {
               <option value="supplier">Suppliers</option>
               <option value="product">Products</option>
             </select>
-            <input type="file" accept=".csv" onChange={handleFileChange} />
+            <input type="file" accept=".csv,.xlsx" onChange={handleFileChange} />
           </div>
 
           {validationError && (
