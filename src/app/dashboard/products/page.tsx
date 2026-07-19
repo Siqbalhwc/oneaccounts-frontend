@@ -15,6 +15,7 @@ interface Product {
   sale_price: number
   opening_qty: number
   qty_on_hand: number
+  unit: string
   total_inflow: number
   total_outflow: number
   image_path: string

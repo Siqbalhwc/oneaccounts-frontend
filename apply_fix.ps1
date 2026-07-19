@@ -1,15 +1,18 @@
 $path = "src\app\dashboard\products\page.tsx"
-$content = Get-Content $path -Raw
+$lines = Get-Content $path
 
-$old = '                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", fontWeight: 600 }}>{closing}</td>'
+$anchorIdx = -1
+for ($i = 0; $i -lt $lines.Count; $i++) {
+    if ($lines[$i].Trim() -eq "qty_on_hand: number") { $anchorIdx = $i; break }
+}
 
-$new = '                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", fontWeight: 600 }}>{closing} {productUnit}</td>'
-
-$count = ([regex]::Matches($content, [regex]::Escape($old))).Count
-if ($count -ne 1) {
-    Write-Host "SAFETY CHECK FAILED: expected 1 match, found $count. No changes made." -ForegroundColor Red
+if ($anchorIdx -lt 0) {
+    Write-Host "SAFETY CHECK FAILED: anchor not found. No changes made." -ForegroundColor Red
 } else {
-    $content = $content.Replace($old, $new)
-    Set-Content -Path $path -Value $content -NoNewline
+    Write-Host "Found anchor at line $($anchorIdx+1), inserting 'unit: string' after it."
+    $before = $lines[0..$anchorIdx]
+    $after = $lines[($anchorIdx+1)..($lines.Count - 1)]
+    $result = $before + "  unit: string" + $after
+    Set-Content -Path $path -Value $result
     Write-Host "SUCCESS: file updated." -ForegroundColor Green
 }
