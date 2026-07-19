@@ -1,18 +1,8 @@
-$path = "src\app\dashboard\reports\product-ledger\page.tsx"
+$path = "src\app\dashboard\cash-sales\new\page.tsx"
 $content = Get-Content $path -Raw
 
-$old = @'
-      totalInflow, totalOutflow, closingBalance,
-      ledgerLines: sortedLines,
-    }
-'@
-
-$new = @'
-      totalInflow, totalOutflow, closingBalance,
-      unit: product?.unit || "PCS",
-      ledgerLines: sortedLines,
-    }
-'@
+$old = "        .cs-page { max-width: 1100px; margin: 0 auto; padding: 20px 16px; }"
+$new = "        .cs-page { padding: 20px 16px; overflow: visible; }"
 
 $count = ([regex]::Matches($content, [regex]::Escape($old))).Count
 if ($count -ne 1) {

@@ -138,7 +138,7 @@ export default function NewCashSalePage() {
   return (
     <div className="cs-page">
       <style>{`
-        .cs-page { max-width: 1100px; margin: 0 auto; padding: 20px 16px; }
+        .cs-page { padding: 20px 16px; overflow: visible; }
         @media (max-width: 480px) { .cs-page { padding: 12px; padding-bottom: 90px; } }
 
         .cs-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 12px; }
