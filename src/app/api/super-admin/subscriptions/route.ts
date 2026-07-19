@@ -61,6 +61,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: updateError.message }, { status: 500 })
   }
 
+  // ✅ Also update company_settings so the TrialGuard sees the plan immediately
+  const { error: settingsError } = await supabaseAdmin
+    .from('company_settings')
+    .upsert({
+      company_id: companyId,
+      plan_id: planData.id,
+      trial_ends_at: null,          // clear trial since they're now paid
+    })
+    .eq('company_id', companyId)
+
+  if (settingsError) {
+    console.error('Failed to update company_settings:', settingsError)
+  }
+
   // Insert subscription record with end_date
   const { error: insertError } = await supabaseAdmin
     .from('subscriptions')
