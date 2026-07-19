@@ -70,6 +70,7 @@ export default function DataManagementPage() {
   const [importPreview, setImportPreview] = useState<Record<string, string>[]>([])
   const [columnMap, setColumnMap] = useState<Record<string, string>>({})
   const [duplicateAction, setDuplicateAction] = useState<"skip" | "update">("skip")
+  const [validationError, setValidationError] = useState("")   // ← new
 
   useEffect(() => {
     getActiveCompanyId(supabase).then(id => setCompanyId(id))
@@ -108,11 +109,90 @@ export default function DataManagementPage() {
     }
   }
 
+  // ── Template download ──────────────────────────────
+  const downloadTemplate = (entity: string) => {
+    let headers: string[] = []
+    let sample: Record<string, string> = {}
+
+    if (entity === "customer") {
+      headers = ["name", "code", "phone", "email", "address", "balance"]
+      sample = { name: "John Doe", code: "CUST-001", phone: "+923001234567", email: "john@example.com", address: "123 Street", balance: "0" }
+    } else if (entity === "supplier") {
+      headers = ["name", "code", "phone", "email", "address", "balance"]
+      sample = { name: "Acme Corp", code: "SUP-001", phone: "+923001234567", email: "acme@example.com", address: "456 Avenue", balance: "0" }
+    } else if (entity === "product") {
+      headers = ["name", "category", "cost_price", "sale_price", "qty_on_hand"]
+      sample = { name: "Product A", category: "General", cost_price: "500", sale_price: "750", qty_on_hand: "100" }
+    }
+
+    const csvContent = [
+      headers.join(","),
+      headers.map(h => sample[h] || "").join(",")
+    ].join("\n")
+
+    const blob = new Blob([csvContent], { type: "text/csv" })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${entity}_template.csv`
+    a.click()
+    window.URL.revokeObjectURL(url)
+  }
+
+  // ── Validation ──────────────────────────────────────
+  const validateImport = (map: Record<string, string>, data: Record<string, string>[]) => {
+    setValidationError("")
+    const required: Record<string, string[]> = {
+      customer: ["name"],
+      supplier: ["name"],
+      product: ["name", "cost_price", "sale_price", "qty_on_hand"],
+    }
+    const reqFields = required[importEntity] || []
+
+    for (const field of reqFields) {
+      if (!map[field]) {
+        setValidationError(`Required column "${field}" is not mapped. Please download the template for correct headers.`)
+        return false
+      }
+    }
+
+    // Numeric validation for product fields
+    if (importEntity === "product") {
+      const numericFields = ["cost_price", "sale_price", "qty_on_hand"]
+      for (const field of numericFields) {
+        const col = map[field]
+        if (!col) continue
+        for (let i = 0; i < data.length; i++) {
+          const val = data[i][col]
+          if (val !== undefined && val.trim() !== "" && isNaN(Number(val))) {
+            setValidationError(`Row ${i+1}: "${field}" must be a valid number. Found: "${val}"`)
+            return false
+          }
+        }
+      }
+    } else {
+      // balance numeric check for customers/suppliers
+      const balCol = map["balance"]
+      if (balCol) {
+        for (let i = 0; i < data.length; i++) {
+          const val = data[i][balCol]
+          if (val !== undefined && val.trim() !== "" && isNaN(Number(val))) {
+            setValidationError(`Row ${i+1}: "balance" must be a number. Found: "${val}"`)
+            return false
+          }
+        }
+      }
+    }
+
+    return true
+  }
+
   // ----- CSV Import handlers (now using Papa Parse) -----
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     setImportFile(file)
+    setValidationError("")   // reset
 
     try {
       const text = await file.text()
@@ -148,8 +228,12 @@ export default function DataManagementPage() {
         if (lower.includes("cost")) autoMap.cost_price = h
         if (lower.includes("sale_price") || lower.includes("price")) autoMap.sale_price = h
         if (lower.includes("qty") || lower.includes("quantity")) autoMap.qty_on_hand = h
+        if (lower.includes("category")) autoMap.category = h
       })
       setColumnMap(autoMap)
+
+      // Run validation after auto‑mapping
+      validateImport(autoMap, result.data)
     } catch (err) {
       showMessage("Error reading file: " + (err as Error).message)
     }
@@ -157,6 +241,10 @@ export default function DataManagementPage() {
 
   const handleImport = async () => {
     if (!importFile || importing || !companyId) return
+
+    // Re‑validate before final import
+    if (!validateImport(columnMap, importPreview)) return
+
     setImporting(true)
     const tableMap: Record<string, string> = { customer: "customers", supplier: "suppliers", product: "products" }
     const tableName = tableMap[importEntity]
@@ -183,6 +271,7 @@ export default function DataManagementPage() {
         record.cost_price = parseFloat(record.cost_price || 0)
         record.sale_price = parseFloat(record.sale_price || 0)
         record.qty_on_hand = parseFloat(record.qty_on_hand || 0)
+        if (record.category === "") delete record.category  // optional
       } else {
         record.balance = parseFloat(record.balance || 0)
       }
@@ -207,7 +296,7 @@ export default function DataManagementPage() {
   const fieldOptions: Record<string, string[]> = {
     customer: ["name", "code", "phone", "email", "address", "balance"],
     supplier: ["name", "code", "phone", "email", "address", "balance"],
-    product: ["name", "code", "cost_price", "sale_price", "qty_on_hand"],
+    product: ["name", "category", "cost_price", "sale_price", "qty_on_hand"],
   }
 
   // ----- Access guards -----
@@ -338,8 +427,21 @@ export default function DataManagementPage() {
         <div className="import-section">
           <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: "#F1F5F9" }}>📥 Import from CSV</h3>
           <p style={{ fontSize: 12, color: "#94A3B8", marginBottom: 12 }}>
-            Upload a CSV file to bulk import Customers, Suppliers, or Products.
+            Upload a CSV file to bulk import Customers, Suppliers, or Products. Download the correct template before preparing your data.
           </p>
+
+          {/* Template download buttons */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+            <button className="dm-btn dm-btn-outline" onClick={() => downloadTemplate("customer")}>
+              <Download size={14} /> Customer Template
+            </button>
+            <button className="dm-btn dm-btn-outline" onClick={() => downloadTemplate("supplier")}>
+              <Download size={14} /> Supplier Template
+            </button>
+            <button className="dm-btn dm-btn-outline" onClick={() => downloadTemplate("product")}>
+              <Download size={14} /> Product Template
+            </button>
+          </div>
 
           <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
             <select value={importEntity} onChange={(e) => setImportEntity(e.target.value)}>
@@ -350,7 +452,13 @@ export default function DataManagementPage() {
             <input type="file" accept=".csv" onChange={handleFileChange} />
           </div>
 
-          {importPreview.length > 0 && (
+          {validationError && (
+            <div style={{ background: "#1E293B", border: "1px solid #EF4444", color: "#FCA5A5", padding: "8px 12px", borderRadius: 6, marginBottom: 12, fontSize: 13 }}>
+              {validationError}
+            </div>
+          )}
+
+          {importPreview.length > 0 && !validationError && (
             <>
               <h4 style={{ color: "#F1F5F9" }}>Preview ({importPreview.length} rows)</h4>
               <div style={{ maxHeight: 200, overflow: "auto", marginBottom: 12 }}>
@@ -369,7 +477,7 @@ export default function DataManagementPage() {
               <h4 style={{ color: "#F1F5F9" }}>Column Mapping</h4>
               {fieldOptions[importEntity].map(field => (
                 <div key={field} style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center" }}>
-                  <span style={{ width: 100, fontWeight: 600 }}>{field}:</span>
+                  <span style={{ width: 100, fontWeight: 600, color: "#CBD5E1" }}>{field}:</span>
                   <select
                     value={columnMap[field] || ""}
                     onChange={(e) => setColumnMap(prev => ({ ...prev, [field]: e.target.value }))}
