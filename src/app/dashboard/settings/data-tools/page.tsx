@@ -18,7 +18,6 @@ async function getActiveCompanyId(supabase: any): Promise<string> {
     const cookieMatch = document.cookie.match(/(?:^| )active_company_id=([^;]+)/)
     const candidateId = cookieMatch ? cookieMatch[2] : (user.app_metadata as any)?.company_id
 
-    // prefer the active company from user_roles
     const { data: activeRole } = await supabase
       .from('user_roles')
       .select('company_id')
@@ -27,7 +26,6 @@ async function getActiveCompanyId(supabase: any): Promise<string> {
       .maybeSingle()
     if (activeRole?.company_id) return activeRole.company_id
 
-    // fallback: any company the user belongs to
     if (candidateId) {
       const { data: anyRole } = await supabase
         .from('user_roles')
@@ -63,14 +61,13 @@ export default function DataManagementPage() {
   const [confirmSection, setConfirmSection] = useState<string | null>(null)
   const [companyId, setCompanyId] = useState<string | null>(null)
 
-  // import state
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importEntity, setImportEntity] = useState("customer")
   const [importing, setImporting] = useState(false)
   const [importPreview, setImportPreview] = useState<Record<string, string>[]>([])
   const [columnMap, setColumnMap] = useState<Record<string, string>>({})
   const [duplicateAction, setDuplicateAction] = useState<"skip" | "update">("skip")
-  const [validationError, setValidationError] = useState("")   // ← new
+  const [validationError, setValidationError] = useState("")
 
   useEffect(() => {
     getActiveCompanyId(supabase).then(id => setCompanyId(id))
@@ -81,14 +78,12 @@ export default function DataManagementPage() {
     setTimeout(() => setFlash(""), 5000)
   }
 
-  // ----- Reset balances (direct Supabase call, safe with RLS) -----
   const resetBalances = async () => {
     if (!companyId) return
     await supabase.from("accounts").update({ balance: 0 }).eq("company_id", companyId)
     showMessage("✅ Account balances reset to zero.")
   }
 
-  // ----- Generic API caller for entity deletion -----
   const callDeleteEntity = async (entity: string, successMsg: string) => {
     if (!companyId) return
     try {
@@ -109,7 +104,7 @@ export default function DataManagementPage() {
     }
   }
 
-  // ── Template download ──────────────────────────────
+  // ── Template download ──
   const downloadTemplate = (entity: string) => {
     let headers: string[] = []
     let sample: Record<string, string> = {}
@@ -121,8 +116,8 @@ export default function DataManagementPage() {
       headers = ["name", "code", "phone", "email", "address", "balance"]
       sample = { name: "Acme Corp", code: "SUP-001", phone: "+923001234567", email: "acme@example.com", address: "456 Avenue", balance: "0" }
     } else if (entity === "product") {
-      headers = ["name", "category", "cost_price", "sale_price", "qty_on_hand"]
-      sample = { name: "Product A", category: "General", cost_price: "500", sale_price: "750", qty_on_hand: "100" }
+      headers = ["name", "category", "unit", "cost_price", "sale_price", "qty_on_hand"]
+      sample = { name: "Product A", category: "General", unit: "pcs", cost_price: "500", sale_price: "750", qty_on_hand: "100" }
     }
 
     const csvContent = [
@@ -139,13 +134,13 @@ export default function DataManagementPage() {
     window.URL.revokeObjectURL(url)
   }
 
-  // ── Validation ──────────────────────────────────────
+  // ── Validation ──
   const validateImport = (map: Record<string, string>, data: Record<string, string>[]) => {
     setValidationError("")
     const required: Record<string, string[]> = {
       customer: ["name"],
       supplier: ["name"],
-      product: ["name", "cost_price", "sale_price", "qty_on_hand"],
+      product: ["name", "unit", "cost_price", "sale_price", "qty_on_hand"],
     }
     const reqFields = required[importEntity] || []
 
@@ -156,7 +151,7 @@ export default function DataManagementPage() {
       }
     }
 
-    // Numeric validation for product fields
+    // Numeric validation
     if (importEntity === "product") {
       const numericFields = ["cost_price", "sale_price", "qty_on_hand"]
       for (const field of numericFields) {
@@ -171,7 +166,6 @@ export default function DataManagementPage() {
         }
       }
     } else {
-      // balance numeric check for customers/suppliers
       const balCol = map["balance"]
       if (balCol) {
         for (let i = 0; i < data.length; i++) {
@@ -187,25 +181,22 @@ export default function DataManagementPage() {
     return true
   }
 
-  // ----- CSV Import handlers (now using Papa Parse) -----
+  // ── CSV Import ──
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     setImportFile(file)
-    setValidationError("")   // reset
+    setValidationError("")
 
     try {
       const text = await file.text()
-      // Use Papa Parse to robustly parse CSV (handles commas in quotes, etc.)
       const result = Papa.parse<Record<string, string>>(text, {
-        header: true,               // first row becomes headers
-        skipEmptyLines: true,       // ignore blank lines
-        transformHeader: (h: string) => h.trim(),  // trim whitespace from header names
+        header: true,
+        skipEmptyLines: true,
+        transformHeader: (h: string) => h.trim(),
       })
 
-      if (result.errors.length > 0) {
-        console.warn("CSV parse warnings:", result.errors)
-      }
+      if (result.errors.length > 0) console.warn("CSV parse warnings:", result.errors)
 
       if (result.data.length === 0) {
         showMessage("File is empty or has no valid rows.")
@@ -214,7 +205,6 @@ export default function DataManagementPage() {
 
       setImportPreview(result.data)
 
-      // Auto‑map columns based on header names
       const headers = Object.keys(result.data[0])
       const autoMap: Record<string, string> = {}
       headers.forEach(h => {
@@ -226,13 +216,13 @@ export default function DataManagementPage() {
         if (lower.includes("address")) autoMap.address = h
         if (lower.includes("balance")) autoMap.balance = h
         if (lower.includes("cost")) autoMap.cost_price = h
-        if (lower.includes("sale_price") || lower.includes("price")) autoMap.sale_price = h
+        if (lower.includes("sale") || lower.includes("price")) autoMap.sale_price = h
         if (lower.includes("qty") || lower.includes("quantity")) autoMap.qty_on_hand = h
         if (lower.includes("category")) autoMap.category = h
+        if (lower.includes("unit") || lower.includes("uom") || lower.includes("measure")) autoMap.unit = h
       })
       setColumnMap(autoMap)
 
-      // Run validation after auto‑mapping
       validateImport(autoMap, result.data)
     } catch (err) {
       showMessage("Error reading file: " + (err as Error).message)
@@ -241,8 +231,6 @@ export default function DataManagementPage() {
 
   const handleImport = async () => {
     if (!importFile || importing || !companyId) return
-
-    // Re‑validate before final import
     if (!validateImport(columnMap, importPreview)) return
 
     setImporting(true)
@@ -271,7 +259,8 @@ export default function DataManagementPage() {
         record.cost_price = parseFloat(record.cost_price || 0)
         record.sale_price = parseFloat(record.sale_price || 0)
         record.qty_on_hand = parseFloat(record.qty_on_hand || 0)
-        if (record.category === "") delete record.category  // optional
+        if (record.category === "") delete record.category
+        // unit is mandatory, so it will be present
       } else {
         record.balance = parseFloat(record.balance || 0)
       }
@@ -296,10 +285,9 @@ export default function DataManagementPage() {
   const fieldOptions: Record<string, string[]> = {
     customer: ["name", "code", "phone", "email", "address", "balance"],
     supplier: ["name", "code", "phone", "email", "address", "balance"],
-    product: ["name", "category", "cost_price", "sale_price", "qty_on_hand"],
+    product: ["name", "category", "unit", "cost_price", "sale_price", "qty_on_hand"],
   }
 
-  // ----- Access guards -----
   if (companyId === null) return <div style={{ padding: 24, textAlign: "center", color: "#94A3B8" }}>Loading company context…</div>
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "#94A3B8" }}>Loading...</div>
   if (!canView) return (
@@ -366,7 +354,6 @@ export default function DataManagementPage() {
           </div>
         )}
 
-        {/* ── Delete / Reset cards ── */}
         <div className="dm-grid">
           {[
             { key: "journal",          title: "Delete Journal Entries",    desc: "Remove all journal entries and reset balances.", entity: "journal",          successMsg: "Journal entries deleted." },
@@ -387,35 +374,23 @@ export default function DataManagementPage() {
                 <div className="confirmation-box">
                   ⚠️ Are you sure?
                   <div className="confirmation-buttons">
-                    <button
-                      className="dm-btn dm-btn-danger"
-                      onClick={() => {
-                        if (item.entity === 'all') {
-                          fetch('/api/admin/nuke-company', { method: 'POST' })
-                            .then(r => r.json())
-                            .then(data => {
-                              if (data.success) showMessage('✅ Company wiped.')
-                              else showMessage('❌ ' + (data.error || 'Failed'))
-                            })
-                            .catch(() => showMessage('❌ Network error'))
-                        } else if (item.entity) {
-                          callDeleteEntity(item.entity, item.successMsg)
-                        } else if (item.key === 'reset_balances') {
-                          resetBalances()
-                        }
-                      }}
-                    >
-                      ✅ Yes
-                    </button>
+                    <button className="dm-btn dm-btn-danger" onClick={() => {
+                      if (item.entity === 'all') {
+                        fetch('/api/admin/nuke-company', { method: 'POST' }).then(r => r.json()).then(data => {
+                          if (data.success) showMessage('✅ Company wiped.')
+                          else showMessage('❌ ' + (data.error || 'Failed'))
+                        }).catch(() => showMessage('❌ Network error'))
+                      } else if (item.entity) {
+                        callDeleteEntity(item.entity, item.successMsg)
+                      } else if (item.key === 'reset_balances') {
+                        resetBalances()
+                      }
+                    }}>✅ Yes</button>
                     <button className="dm-btn dm-btn-outline" onClick={() => setConfirmSection(null)}>Cancel</button>
                   </div>
                 </div>
               ) : (
-                <button
-                  className="dm-btn dm-btn-danger"
-                  onClick={() => setConfirmSection(item.key)}
-                  disabled={!canEdit}
-                >
+                <button className="dm-btn dm-btn-danger" onClick={() => setConfirmSection(item.key)} disabled={!canEdit}>
                   {item.key === "nuke" ? "💣 Reset" : "Delete"}
                 </button>
               )}
@@ -423,14 +398,12 @@ export default function DataManagementPage() {
           ))}
         </div>
 
-        {/* ── Bulk Import Section ─────────────── */}
         <div className="import-section">
           <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: "#F1F5F9" }}>📥 Import from CSV</h3>
           <p style={{ fontSize: 12, color: "#94A3B8", marginBottom: 12 }}>
-            Upload a CSV file to bulk import Customers, Suppliers, or Products. Download the correct template before preparing your data.
+            Upload a CSV file to bulk import Customers, Suppliers, or Products. Download the template for correct format.
           </p>
 
-          {/* Template download buttons */}
           <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
             <button className="dm-btn dm-btn-outline" onClick={() => downloadTemplate("customer")}>
               <Download size={14} /> Customer Template
