@@ -1,8 +1,9 @@
 $path = "src\app\dashboard\products\page.tsx"
 $content = Get-Content $path -Raw
 
-$old = "  qty_on_hand: number"
-$new = "  qty_on_hand: number`n  unit: string"
+$old = '                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", fontWeight: 600 }}>{closing}</td>'
+
+$new = '                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", fontWeight: 600 }}>{closing} {productUnit}</td>'
 
 $count = ([regex]::Matches($content, [regex]::Escape($old))).Count
 if ($count -ne 1) {

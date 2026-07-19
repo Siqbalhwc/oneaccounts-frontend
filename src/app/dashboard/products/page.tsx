@@ -505,7 +505,7 @@ export default function StockRegisterPage() {
                       <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>{prod.opening_qty}</td>
                       {!isConstruction && <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: "#10B981" }}>{inflow}</td>}
                       {!isConstruction && <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: "#EF4444" }}>{outflow}</td>}
-                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", fontWeight: 600 }}>{closing}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", fontWeight: 600 }}>{closing} {productUnit}</td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>
                         {prod.image_path ? (
                           <img src={prod.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
