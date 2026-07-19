@@ -90,6 +90,8 @@ export interface InvoicePDFData {
     accountNumber:  string
     showOnInvoice?: boolean
   }[]
+
+  hideTerms?: boolean   // ← new: set true to suppress payment terms section
 }
 
 export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
@@ -450,29 +452,39 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   }
 
   // ── NOTES & TERMS ───────────────────────────────────────────────
-  SY += 6
+  //  Only show if hideTerms is not explicitly true
+  if (!data.hideTerms) {
+    SY += 6
 
-  const terms = data.paymentTerms || "Payment is due within 30 days of invoice date."
-  const termsLines: string[] = [terms]
-  if (data.notes) termsLines.push(data.notes)
+    const terms = data.paymentTerms || "Payment is due within 30 days of invoice date."
+    const termsLines: string[] = [terms]
+    if (data.notes) termsLines.push(data.notes)
 
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(7.5)
-  doc.setTextColor(...MUTED)
-  doc.text("NOTES & TERMS", ML, SY)
-  SY += 4
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(7.5)
+    doc.setTextColor(...MUTED)
+    doc.text("NOTES & TERMS", ML, SY)
+    SY += 4
 
-  doc.setFont("helvetica", "normal")
-  doc.setFontSize(8.5)
-  doc.setTextColor(...DARK)
-  const noteLines = doc.splitTextToSize(termsLines.join("\n"), CW)
-  doc.text(noteLines, ML, SY)
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(8.5)
+    doc.setTextColor(...DARK)
+    const noteLines = doc.splitTextToSize(termsLines.join("\n"), CW)
+    doc.text(noteLines, ML, SY)
+  }
 
   // ── BANK ACCOUNTS ───────────────────────────────────────────────
   if (data.bankAccounts && data.bankAccounts.length > 0) {
     const visibleBanks = data.bankAccounts.filter(b => b.showOnInvoice !== false)
     if (visibleBanks.length > 0) {
-      SY += 8
+      // If we skipped terms, we need to ensure Y is current.
+      // We don't need to recalc SY, just use the next available space.
+      // Add a gap after the previous section.
+      if (!data.hideTerms) {
+        // Already added gap above, just continue
+      } else {
+        SY += 8 // extra gap when terms are hidden
+      }
       doc.setFont("helvetica", "bold")
       doc.setFontSize(7.5)
       doc.setTextColor(...MUTED)
