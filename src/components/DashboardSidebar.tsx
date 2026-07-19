@@ -22,7 +22,7 @@ const baseNavSections: NavSection[] = [
   { section: 'CRM', items: [
     { label: 'Customers',      icon: '👥', href: '/dashboard/customers' },
     { label: 'Sales Invoices', icon: '🧾', href: '/dashboard/invoices'  },
-    { label: 'Cash Sales',     icon: '💵', href: '/dashboard/cash-sales/new' },  // ← new
+    { label: 'Cash Sales',     icon: '💵', href: '/dashboard/cash-sales' },  // ← new
     { label: 'Receipts',       icon: '💰', href: '/dashboard/receipts'  },
     { label: 'Suppliers',      icon: '🚚', href: '/dashboard/suppliers' },
     { label: 'Purchase Bills', icon: '📦', href: '/dashboard/bills'     },
