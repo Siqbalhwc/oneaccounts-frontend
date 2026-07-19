@@ -495,6 +495,7 @@ export default function StockRegisterPage() {
                   const inflow = prod.total_inflow
                   const outflow = prod.total_outflow
                   const closing = prod.qty_on_hand
+  const productUnit = prod.unit || "PCS"
                   return (
                     <tr key={prod.id}>
                       <td style={tdStyle}><span style={{ fontWeight: 600, color: "var(--primary)" }}>{prod.code}</span></td>

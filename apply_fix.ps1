@@ -1,9 +1,9 @@
-$path = "src\app\dashboard\invoices\new\page.tsx"
+$path = "src\app\dashboard\products\page.tsx"
 $content = Get-Content $path -Raw
 
-$old = '                          <div className="inv-cell inv-cell-total">PKR {item.total.toLocaleString()}</div>'
+$old = "  const closing = prod.qty_on_hand"
 
-$new = '                          <input className="inv-input" style={{ height: 32, fontSize: 12, textAlign: "right", fontWeight: 600 }} type="number" value={item.total} onChange={e => updateItem(idx, "total", Number(e.target.value))} />'
+$new = "  const closing = prod.qty_on_hand`n  const productUnit = prod.unit || `"PCS`""
 
 $count = ([regex]::Matches($content, [regex]::Escape($old))).Count
 if ($count -ne 1) {
