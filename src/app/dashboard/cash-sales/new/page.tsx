@@ -135,21 +135,40 @@ export default function NewCashSalePage() {
     }
   }
 
-  const cardStyle: React.CSSProperties = {
-    background: "var(--card)",
-    border: "1px solid var(--border)",
-    borderRadius: 10,
-    padding: 16,
-  }
-  const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 4, display: "block" }
-  const inputStyle: React.CSSProperties = { width: "100%", height: 38, padding: "0 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text)", fontSize: 13 }
-  const btnStyle: React.CSSProperties = { height: 38, padding: "0 14px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--card)", color: "var(--text)", fontSize: 13, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }
-  const btnPrimaryStyle: React.CSSProperties = { ...btnStyle, background: "var(--primary)", color: "#fff", border: "none", fontWeight: 600, justifyContent: "center" }
-
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: "20px 16px" }}>
+    <div className="cs-page">
+      <style>{`
+        .cs-page { max-width: 900px; margin: 0 auto; padding: 20px 16px; }
+        @media (max-width: 480px) { .cs-page { padding: 12px; } }
+
+        .cs-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 12px; }
+        .cs-label { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; display: block; }
+        .cs-input { width: 100%; height: 38px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; }
+        .cs-btn { height: 38px; padding: 0 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+        .cs-btn-primary { background: var(--primary); color: #fff; border: none; font-weight: 600; justify-content: center; width: 100%; }
+
+        .cs-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        @media (max-width: 600px) { .cs-two-col { grid-template-columns: 1fr; } }
+
+        .cs-add-item-row { display: flex; gap: 10px; }
+        @media (max-width: 480px) { .cs-add-item-row { flex-direction: column; } .cs-add-item-row .cs-btn { width: 100%; justify-content: center; } }
+
+        .cs-item-header { display: grid; grid-template-columns: 2fr 80px 100px 100px 40px; gap: 8px; font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+        @media (max-width: 640px) { .cs-item-header { display: none; } }
+
+        .cs-item-row { display: grid; grid-template-columns: 2fr 80px 100px 100px 40px; gap: 8px; align-items: center; margin-bottom: 6px; }
+        @media (max-width: 640px) {
+          .cs-item-row { grid-template-columns: 1fr 1fr; row-gap: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+          .cs-item-row .cs-desc { grid-column: 1 / -1; }
+          .cs-item-row .cs-total { grid-column: 1 / -1; }
+          .cs-item-row .cs-remove { justify-self: end; }
+        }
+
+        .cs-total-row { display: flex; justify-content: space-between; align-items: center; }
+      `}</style>
+
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        <button style={btnStyle} onClick={() => router.push("/dashboard")}><ArrowLeft size={16} /></button>
+        <button className="cs-btn" onClick={() => router.push("/dashboard")}><ArrowLeft size={16} /></button>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 800, color: "var(--text)", margin: 0 }}>New Cash Sale</h1>
           <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Receive cash immediately against a product sale</p>
@@ -159,9 +178,9 @@ export default function NewCashSalePage() {
       {error && <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, border: "1px solid #FECACA" }}>{error}</div>}
       {flash && <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
 
-      <div style={{ ...cardStyle, marginBottom: 12 }}>
+      <div className="cs-card">
         <div style={{ marginBottom: 14 }}>
-          <label style={labelStyle}>Customer (optional - walk-in if blank)</label>
+          <label className="cs-label">Customer (optional - walk-in if blank)</label>
           <EntityPicker
             entityType="customer"
             value={selectedCustomer}
@@ -173,14 +192,14 @@ export default function NewCashSalePage() {
           />
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+        <div className="cs-two-col" style={{ marginBottom: 14 }}>
           <div>
-            <label style={labelStyle}>Sale Date</label>
-            <input style={inputStyle} type="date" value={saleDate} onChange={e => setSaleDate(e.target.value)} />
+            <label className="cs-label">Sale Date</label>
+            <input className="cs-input" type="date" value={saleDate} onChange={e => setSaleDate(e.target.value)} />
           </div>
           <div>
-            <label style={labelStyle}>Receive Into</label>
-            <select style={inputStyle} value={bankAccountId ?? ""} onChange={e => setBankAccountId(e.target.value ? Number(e.target.value) : null)}>
+            <label className="cs-label">Receive Into</label>
+            <select className="cs-input" value={bankAccountId ?? ""} onChange={e => setBankAccountId(e.target.value ? Number(e.target.value) : null)}>
               <option value="">Cash in Hand (default)</option>
               {bankAccounts.map((b: any) => (
                 <option key={b.id} value={b.id}>{b.bank_name}{b.account_number ? " - " + b.account_number : ""}</option>
@@ -189,21 +208,21 @@ export default function NewCashSalePage() {
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div className="cs-two-col">
           <div>
-            <label style={labelStyle}>Reference</label>
-            <input style={inputStyle} value={reference} onChange={e => setReference(e.target.value)} placeholder="Optional reference" />
+            <label className="cs-label">Reference</label>
+            <input className="cs-input" value={reference} onChange={e => setReference(e.target.value)} placeholder="Optional reference" />
           </div>
           <div>
-            <label style={labelStyle}>Notes</label>
-            <input style={inputStyle} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes" />
+            <label className="cs-label">Notes</label>
+            <input className="cs-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes" />
           </div>
         </div>
       </div>
 
-      <div style={{ ...cardStyle, marginBottom: 12 }}>
-        <label style={labelStyle}>Add Item</label>
-        <div style={{ display: "flex", gap: 10 }}>
+      <div className="cs-card">
+        <label className="cs-label">Add Item</label>
+        <div className="cs-add-item-row">
           <div style={{ flex: 1 }}>
             <EntityPicker
               entityType="product"
@@ -215,13 +234,13 @@ export default function NewCashSalePage() {
               clearCacheOnOpen
             />
           </div>
-          <button style={btnStyle} onClick={addManualItem}><Plus size={14} /> Manual</button>
+          <button className="cs-btn" onClick={addManualItem}><Plus size={14} /> Manual</button>
         </div>
       </div>
 
       {items.length > 0 && (
-        <div style={{ ...cardStyle, marginBottom: 12 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 80px 100px 100px 40px", gap: 8, fontSize: 11, fontWeight: 700, color: "var(--text-muted)", marginBottom: 8, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
+        <div className="cs-card">
+          <div className="cs-item-header">
             <span>Description</span>
             <span style={{ textAlign: "center" }}>Qty</span>
             <span style={{ textAlign: "right" }}>Rate</span>
@@ -229,32 +248,32 @@ export default function NewCashSalePage() {
             <span></span>
           </div>
           {items.map((item, idx) => (
-            <div key={idx} style={{ marginBottom: 6 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "2fr 80px 100px 100px 40px", gap: 8, alignItems: "center" }}>
-                <input style={{ ...inputStyle, height: 34 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Description" />
-                <input style={{ ...inputStyle, height: 34, textAlign: "center", borderColor: stockErrors[idx] ? "#EF4444" : undefined }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                <input style={{ ...inputStyle, height: 34, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                <input style={{ ...inputStyle, height: 34, textAlign: "right", fontWeight: 600 }} type="number" value={item.total} onChange={e => updateItem(idx, "total", Number(e.target.value))} />
-                <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }} onClick={() => removeItem(idx)}><Trash2 size={14} /></button>
+            <div key={idx}>
+              <div className="cs-item-row">
+                <input className="cs-input cs-desc" style={{ height: 34 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Description" />
+                <input className="cs-input" style={{ height: 34, textAlign: "center", borderColor: stockErrors[idx] ? "#EF4444" : undefined }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
+                <input className="cs-input" style={{ height: 34, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
+                <input className="cs-input cs-total" style={{ height: 34, textAlign: "right", fontWeight: 600 }} type="number" value={item.total} onChange={e => updateItem(idx, "total", Number(e.target.value))} />
+                <button className="cs-remove" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }} onClick={() => removeItem(idx)}><Trash2 size={14} /></button>
               </div>
-              {stockErrors[idx] && <div style={{ fontSize: 11, color: "#EF4444", marginTop: 4 }}>{stockErrors[idx]}</div>}
+              {stockErrors[idx] && <div style={{ fontSize: 11, color: "#EF4444", marginTop: -4, marginBottom: 8 }}>{stockErrors[idx]}</div>}
             </div>
           ))}
         </div>
       )}
 
-      <div style={{ ...cardStyle, display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+      <div className="cs-card cs-total-row">
         <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>Total Received</span>
         <span style={{ fontSize: 18, fontWeight: 800, color: "var(--text)" }}>PKR {totalAmount.toLocaleString()}</span>
       </div>
 
-      <button style={{ ...btnPrimaryStyle, width: "100%" }} onClick={handleSubmit} disabled={saving || hasStockErrors || items.length === 0}>
+      <button className="cs-btn cs-btn-primary" onClick={handleSubmit} disabled={saving || hasStockErrors || items.length === 0}>
         {saving ? "Posting..." : "Post Cash Sale"}
       </button>
 
       {savedSaleNo && (
         <div style={{ marginTop: 12, textAlign: "center" }}>
-          <button style={btnStyle} onClick={() => router.push("/dashboard")}>Done</button>
+          <button className="cs-btn" onClick={() => router.push("/dashboard")}>Done</button>
         </div>
       )}
     </div>
