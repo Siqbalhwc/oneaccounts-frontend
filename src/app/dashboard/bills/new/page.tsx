@@ -714,38 +714,38 @@ export default function NewBillPage() {
         account_id: i.account_id || null,
         project_id: i.project_id || null,
         donor_id: i.donor_id || null,
-        tax_code_id: taxEnabled ? (i.tax_code_id || null) : undefined,
-        tax_rate: taxEnabled ? (i.tax_rate || 0) : undefined,
-        tax_amount: taxEnabled ? (i.tax_amount || 0) : undefined,
+        tax_code_id: taxEnabled ? (i.tax_code_id || null) : null,
+        tax_rate: taxEnabled ? (i.tax_rate || 0) : 0,
+        tax_amount: taxEnabled ? (i.tax_amount || 0) : 0,
+        is_recoverable: true,
       }))
 
       try {
-        const res = await fetch(`/api/bills?id=${editId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: editId,
-            party_id: supplierId,
-            invoice_date: billDate,
-            due_date: dueDate,
-            items: payloadItems,
-            reference,
-            notes,
-            po_id: poId || null,
-            wht_tax_code_id: taxEnabled ? selectedWhtTaxCodeId || null : undefined,
-            wht_rate: taxEnabled ? whtRate : undefined,
-            wht_amount: taxEnabled ? whtAmount : undefined,
-          }),
+        const { data, error: rpcError } = await supabase.rpc('update_bill_transaction', {
+          p_bill_id: Number(editId),
+          p_company_id: companyId,
+          p_party_id: supplierId,
+          p_bill_date: billDate,
+          p_due_date: dueDate,
+          p_items: payloadItems,
+          p_reference: reference || '',
+          p_notes: notes || '',
+          p_po_id: poId || null,
+          p_wht_tax_code_id: taxEnabled ? (selectedWhtTaxCodeId || null) : null,
+          p_wht_rate: taxEnabled ? whtRate : 0,
+          p_wht_amount: taxEnabled ? whtAmount : 0,
+          p_business_type: businessType,
+          p_tax_enabled: taxEnabled,
         })
-        const result = await res.json()
-        if (!result.success) { setError(result.error || "Failed to update bill"); setSaving(false); return }
-        setFlash(`✅ Bill updated successfully!`)
+        if (rpcError) { setError(rpcError.message || "Failed to update bill"); setSaving(false); return }
+        if (!data || !data.success) { setError(data?.error || "Failed to update bill"); setSaving(false); return }
+        setFlash("Bill updated successfully.")
         loadSuppliers()
         setSaving(false)
         setTimeout(() => router.push(`/dashboard/bills/${editId}`), 800)
         return
-      } catch {
-        setError("Network error")
+      } catch (err: any) {
+        setError(err.message || "Network error")
         setSaving(false)
         return
       }
