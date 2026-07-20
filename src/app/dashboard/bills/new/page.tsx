@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import {
   ArrowLeft, Plus, Trash2, Search, X, Download, CheckCircle,
-  RefreshCw,
+  RefreshCw, Paperclip, ChevronDown, FileText, Upload,
 } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
@@ -92,6 +92,11 @@ export default function NewBillPage() {
   const [selectedWhtTaxCodeId, setSelectedWhtTaxCodeId] = useState<string>("")
   const [whtRate, setWhtRate] = useState<number>(0)
   const [whtAmount, setWhtAmount] = useState<number>(0)
+
+  const [attachments, setAttachments] = useState<any[]>([])
+  const [attachPanelOpen, setAttachPanelOpen] = useState(false)
+  const [uploadingAttachment, setUploadingAttachment] = useState(false)
+  const [tempAttachKey] = useState(() => `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`)
 
   const [inputTaxCodes, setInputTaxCodes] = useState<any[]>([])
 
@@ -675,6 +680,43 @@ export default function NewBillPage() {
       setWhtAmount(grossTotal * (whtRate / 100))
     }
   }, [grossTotal, whtRate, taxEnabled])
+
+  const uploadAttachment = async (file: File) => {
+    if (!companyId) return
+    setUploadingAttachment(true)
+    try {
+      const path = `bills/${companyId}/${Date.now()}-${file.name}`
+      const { error: uploadErr } = await supabase.storage.from('attachments').upload(path, file)
+      if (uploadErr) { setError(uploadErr.message); setUploadingAttachment(false); return }
+      const { data: publicData } = supabase.storage.from('attachments').getPublicUrl(path)
+      const { data: inserted, error: insertErr } = await supabase.from('bill_attachments').insert({
+        bill_id: editId ? Number(editId) : null,
+        temp_key: editId ? null : tempAttachKey,
+        company_id: companyId,
+        file_name: file.name,
+        file_url: publicData.publicUrl,
+        file_size: file.size,
+        uploaded_by: 'system',
+      }).select('*').single()
+      if (!insertErr && inserted) setAttachments(prev => [...prev, inserted])
+    } catch (e) {}
+    setUploadingAttachment(false)
+  }
+
+  const handleAttachmentFiles = (files: FileList | null) => {
+    if (!files) return
+    Array.from(files).forEach(f => uploadAttachment(f))
+  }
+
+  const removeAttachment = async (att: any) => {
+    await supabase.from('bill_attachments').delete().eq('id', att.id)
+    setAttachments(prev => prev.filter(a => a.id !== att.id))
+  }
+
+  useEffect(() => {
+    if (!editId || !companyId) return
+    supabase.from('bill_attachments').select('*').eq('bill_id', editId).order('uploaded_at').then(({ data }) => { if (data) setAttachments(data) })
+  }, [editId, companyId])
 
   const handleSubmit = async () => {
     if (!supplierId) { setError("Please select a supplier"); return }
