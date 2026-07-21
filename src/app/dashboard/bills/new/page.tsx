@@ -689,15 +689,15 @@ export default function NewBillPage() {
       const { error: uploadErr } = await supabase.storage.from('attachments').upload(path, file)
       if (uploadErr) { setError(uploadErr.message); setUploadingAttachment(false); return }
       const { data: publicData } = supabase.storage.from('attachments').getPublicUrl(path)
-      const { data: inserted, error: insertErr } = await supabase.from('bill_attachments').insert({
-        bill_id: editId ? Number(editId) : null,
-        temp_key: editId ? null : tempAttachKey,
-        company_id: companyId,
-        file_name: file.name,
-        file_url: publicData.publicUrl,
-        file_size: file.size,
-        uploaded_by: 'system',
-      }).select('*').single()
+      const { data: inserted, error: insertErr } = await supabase.rpc('insert_bill_attachment', {
+        p_company_id: companyId,
+        p_bill_id: editId ? Number(editId) : null,
+        p_temp_key: editId ? null : tempAttachKey,
+        p_file_name: file.name,
+        p_file_url: publicData.publicUrl,
+        p_file_size: file.size,
+        p_user_email: 'system',
+      })
       if (!insertErr && inserted) setAttachments(prev => [...prev, inserted])
     } catch (e) {}
     setUploadingAttachment(false)
@@ -709,13 +709,13 @@ export default function NewBillPage() {
   }
 
   const removeAttachment = async (att: any) => {
-    await supabase.from('bill_attachments').delete().eq('id', att.id)
+    await supabase.rpc('delete_bill_attachment', { p_company_id: companyId, p_attachment_id: att.id })
     setAttachments(prev => prev.filter(a => a.id !== att.id))
   }
 
   useEffect(() => {
     if (!editId || !companyId) return
-    supabase.from('bill_attachments').select('*').eq('bill_id', editId).order('uploaded_at').then(({ data }) => { if (data) setAttachments(data) })
+    supabase.rpc('get_bill_attachments', { p_company_id: companyId, p_bill_id: Number(editId) }).then(({ data }) => { if (data) setAttachments(data) })
   }, [editId, companyId])
 
   const handleSubmit = async () => {
@@ -863,7 +863,7 @@ export default function NewBillPage() {
       }
 
       const newBillId = data.bill_id
-      await supabase.from('bill_attachments').update({ bill_id: newBillId, temp_key: null }).eq('temp_key', tempAttachKey).eq('company_id', companyId)
+      await supabase.rpc('link_bill_attachments', { p_company_id: companyId, p_temp_key: tempAttachKey, p_bill_id: newBillId })
       setFlash(`✅ Bill saved successfully!`)
       loadSuppliers()
       setSaving(false)
