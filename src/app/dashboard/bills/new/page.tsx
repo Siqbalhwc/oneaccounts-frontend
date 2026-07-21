@@ -863,6 +863,7 @@ export default function NewBillPage() {
       }
 
       const newBillId = data.bill_id
+      await supabase.from('bill_attachments').update({ bill_id: newBillId, temp_key: null }).eq('temp_key', tempAttachKey).eq('company_id', companyId)
       setFlash(`✅ Bill saved successfully!`)
       loadSuppliers()
       setSaving(false)
