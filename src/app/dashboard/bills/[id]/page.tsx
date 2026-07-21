@@ -394,7 +394,7 @@ export default function BillDetailPage() {
           </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {attachments.map((att: any) => (
-              
+              <a
                 key={att.id}
                 href={att.file_url}
                 target="_blank"
