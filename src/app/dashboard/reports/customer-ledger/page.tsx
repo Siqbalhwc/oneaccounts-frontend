@@ -225,7 +225,8 @@ export default function CustomerLedgerPage() {
 
       // 6. Opening balance = net of every AR line before startDate + customer's manual opening_balance
       //    opening_balance is treated as an initial debit (money owed by customer)
-      const openingNet = openingDebit - openingCredit + (customer.opening_balance || 0)
+      const hasTaggedOpeningEntry = (openingEntryLines || []).length > 0
+      const openingNet = openingDebit - openingCredit + (hasTaggedOpeningEntry ? 0 : (customer.opening_balance || 0))
       const openingLine = {
         id: "opening-calc",
         entry_no: "",
