@@ -1,49 +1,53 @@
 $path = "src\app\dashboard\receipts\new\page.tsx"
 $content = Get-Content $path -Raw
 
-$old1 = @'
-  const toggleOpeningAllocation = () => {
-    setAllocations(prev => {
-      const current = prev["opening"] || 0
-      const newVal = current > 0 ? 0 : customerOpeningBalance
-      return { ...prev, opening: newVal }
-    })
-  }
-'@
-
-$new1 = @'
-  const toggleOpeningAllocation = () => {
-    setAllocations(prev => {
-      const current = prev["opening"] || 0
-      const newVal = current > 0 ? 0 : customerOpeningBalance
-      return { ...prev, opening: newVal }
-    })
-  }
-  const updateOpeningAllocation = (value: number) => {
-    const clamped = Math.min(Math.max(value, 0), customerOpeningBalance)
-    setAllocations(prev => ({ ...prev, opening: clamped }))
-  }
-'@
-
-$old2 = @'
-                        <td style={{ textAlign: "right", fontWeight: 600 }}>
-                          PKR {customerOpeningBalance.toLocaleString()}
+$old = @'
+                    {customerOpeningBalance > 0 && (
+                      <tr style={{ background: "var(--bg-soft)" }}>
+                        <td>
+                          <input className="chk-box" type="checkbox"
+                            checked={(allocations["opening"] || 0) > 0}
+                            onChange={toggleOpeningAllocation}
+                          />
                         </td>
-'@
-
-$new2 = @'
+                        <td colSpan={4}>
+                          <span style={{ fontWeight: 600 }}>Opening Balance</span>
+                          <span style={{ marginLeft: 8, fontSize: 12, color: "var(--text-muted)" }}>
+                            (PKR {customerOpeningBalance.toLocaleString()})
+                          </span>
+                        </td>
                         <td style={{ textAlign: "right" }}>
                           <input className="alloc-input" type="number" min="0" max={customerOpeningBalance} value={allocations["opening"] || 0} onChange={e => updateOpeningAllocation(parseFloat(e.target.value) || 0)} />
                         </td>
+                      </tr>
+                    )}
 '@
 
-$count1 = ([regex]::Matches($content, [regex]::Escape($old1))).Count
-$count2 = ([regex]::Matches($content, [regex]::Escape($old2))).Count
+$new = @'
+    {customerOpeningBalance > 0 && (
+                      <tr style={{ background: "var(--bg-soft)" }}>
+                        <td>
+                          <input className="chk-box" type="checkbox"
+                            checked={(allocations["opening"] || 0) > 0}
+                            onChange={toggleOpeningAllocation}
+                          />
+                        </td>
+                        <td>Opening Balance</td>
+                        <td>{customerOpeningTotal.toLocaleString()}</td>
+                        <td>{customerOpeningPaid.toLocaleString()}</td>
+                        <td style={{ fontWeight: 600 }}>{customerOpeningBalance.toLocaleString()}</td>
+                        <td style={{ textAlign: "right" }}>
+                          <input className="alloc-input" type="number" min="0" max={customerOpeningBalance} value={allocations["opening"] || 0} onChange={e => updateOpeningAllocation(parseFloat(e.target.value) || 0)} />
+                        </td>
+                      </tr>
+                    )}
+'@
 
-if ($count1 -ne 1 -or $count2 -ne 1) {
-    Write-Host "SAFETY CHECK FAILED: block1 matches=$count1 block2 matches=$count2. No changes made." -ForegroundColor Red
+$count = ([regex]::Matches($content, [regex]::Escape($old))).Count
+if ($count -ne 1) {
+    Write-Host "SAFETY CHECK FAILED: expected 1 match, found $count. No changes made." -ForegroundColor Red
 } else {
-    $content = $content.Replace($old1, $new1).Replace($old2, $new2)
+    $content = $content.Replace($old, $new)
     Set-Content -Path $path -Value $content -NoNewline
     Write-Host "SUCCESS: file updated." -ForegroundColor Green
 }

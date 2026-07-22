@@ -47,6 +47,8 @@ export default function NewReceiptPage() {
   const [flash, setFlash] = useState<string | null>(null)
 
   const [customerOpeningBalance, setCustomerOpeningBalance] = useState(0)
+  const [customerOpeningTotal, setCustomerOpeningTotal] = useState(0)
+  const [customerOpeningPaid, setCustomerOpeningPaid] = useState(0)
 
   // ── Load company ID and master data ──
   useEffect(() => {
@@ -201,6 +203,25 @@ export default function NewReceiptPage() {
 
     fetchInvoicesWithPaid()
   }, [companyId, customerId, isDonation, editId])
+
+  useEffect(() => {
+    if (!companyId || !customerId || isDonation) {
+      setCustomerOpeningTotal(0)
+      setCustomerOpeningPaid(0)
+      setCustomerOpeningBalance(0)
+      return
+    }
+    Promise.all([
+      supabase.rpc("get_customer_opening_total", { p_company_id: companyId, p_customer_id: customerId }),
+      supabase.rpc("get_customer_opening_paid", { p_company_id: companyId, p_customer_id: customerId }),
+    ]).then(([totalRes, paidRes]) => {
+      const total = totalRes.data || 0
+      const paid = paidRes.data || 0
+      setCustomerOpeningTotal(total)
+      setCustomerOpeningPaid(paid)
+      setCustomerOpeningBalance(Math.max(0, total - paid))
+    })
+  }, [companyId, customerId, isDonation])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -544,7 +565,7 @@ export default function NewReceiptPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {customerOpeningBalance > 0 && (
+    {customerOpeningBalance > 0 && (
                       <tr style={{ background: "var(--bg-soft)" }}>
                         <td>
                           <input className="chk-box" type="checkbox"
@@ -552,12 +573,10 @@ export default function NewReceiptPage() {
                             onChange={toggleOpeningAllocation}
                           />
                         </td>
-                        <td colSpan={4}>
-                          <span style={{ fontWeight: 600 }}>Opening Balance</span>
-                          <span style={{ marginLeft: 8, fontSize: 12, color: "var(--text-muted)" }}>
-                            (PKR {customerOpeningBalance.toLocaleString()})
-                          </span>
-                        </td>
+                        <td>Opening Balance</td>
+                        <td>{customerOpeningTotal.toLocaleString()}</td>
+                        <td>{customerOpeningPaid.toLocaleString()}</td>
+                        <td style={{ fontWeight: 600 }}>{customerOpeningBalance.toLocaleString()}</td>
                         <td style={{ textAlign: "right" }}>
                           <input className="alloc-input" type="number" min="0" max={customerOpeningBalance} value={allocations["opening"] || 0} onChange={e => updateOpeningAllocation(parseFloat(e.target.value) || 0)} />
                         </td>
