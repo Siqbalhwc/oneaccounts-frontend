@@ -194,6 +194,8 @@ export default function NewReceiptPage() {
         setAllocations(prev => ({ ...initAlloc, ...prev }))
       }
 
+      const dueFromInvoices = stillDue.reduce((s, inv) => s + Math.max(0, (inv.total || 0) - (inv.paid || 0)), 0)
+      setCustomerOpeningBalance(Math.max(0, (selectedCustomer?.balance || 0) - dueFromInvoices))
       setInvoices(stillDue)
     }
 
