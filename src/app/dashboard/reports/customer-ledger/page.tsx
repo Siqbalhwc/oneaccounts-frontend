@@ -238,7 +238,7 @@ export default function CustomerLedgerPage() {
       }
 
       // 7. Combine: opening line first, then period lines
-      const allLines: any[] = [openingLine, ...periodLines]
+      const allLines: any[] = openingNet !== 0 ? [openingLine, ...periodLines] : [...periodLines]
 
       // 8. Calculate running balance from zero
       let running = 0
