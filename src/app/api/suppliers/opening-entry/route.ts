@@ -58,8 +58,8 @@ export async function POST(request: NextRequest) {
   }
 
   await supabase.from('journal_lines').insert([
-    { company_id: companyId, entry_id: entry.id, account_id: eqAcc.data.id, debit: amount, credit: 0 },
-    { company_id: companyId, entry_id: entry.id, account_id: apAcc.data.id, debit: 0, credit: amount },
+    { company_id: companyId, entry_id: entry.id, account_id: eqAcc.data.id, debit: amount, credit: 0, source_type: 'supplier_opening', source_id: supplierId },
+    { company_id: companyId, entry_id: entry.id, account_id: apAcc.data.id, debit: 0, credit: amount, source_type: 'supplier_opening', source_id: supplierId },
   ])
 
   await supabase.from('accounts').update({ balance: eqAcc.data.balance - amount }).eq('id', eqAcc.data.id)

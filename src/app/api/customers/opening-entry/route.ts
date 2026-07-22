@@ -81,8 +81,8 @@ export async function POST(request: Request) {
 
   // Insert lines
   const lines = [
-    { entry_id: entry.id, account_id: arAccount.id, debit: amount, credit: 0, company_id: companyId },
-    { entry_id: entry.id, account_id: equityAccount.id, debit: 0, credit: amount, company_id: companyId },
+    { entry_id: entry.id, account_id: arAccount.id, debit: amount, credit: 0, company_id: companyId, source_type: 'customer_opening', source_id: customerId },
+    { entry_id: entry.id, account_id: equityAccount.id, debit: 0, credit: amount, company_id: companyId, source_type: 'customer_opening', source_id: customerId },
   ]
 
   const { error: linesErr } = await supabase.from('journal_lines').insert(lines)

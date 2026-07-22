@@ -128,6 +128,19 @@ export default function CustomerLedgerPage() {
             .in("source_id", receiptIds)
             .order("entry_id", { ascending: true })
         : { data: [] as any[] }
+      // 4b. Opening balance journal lines tagged directly to this customer
+      const { data: openingEntryLines } = arAccount
+        ? await supabase
+            .from("journal_lines")
+            .select(`
+              id, debit, credit, entry_id, source_type, source_id,
+              journal_entries ( date, description, entry_no )
+            `)
+            .eq("company_id", companyId)
+            .eq("account_id", arAccount.id)
+            .eq("source_type", "customer_opening")
+            .eq("source_id", selectedCustomerId)
+        : { data: [] as any[] }
 
       // 5. Walk every line once, bucketing into "opening" (before startDate) or
       //    "period" (within [startDate, endDate]). Anything after endDate is dropped.
@@ -186,6 +199,28 @@ export default function CustomerLedgerPage() {
         })
       }
 
+      for (const line of openingEntryLines || []) {
+        const je = (line as any).journal_entries
+        const lineDate: string | undefined = je?.date
+        if (!lineDate) continue
+        const debit = line.debit || 0
+        const credit = line.credit || 0
+        if (lineDate < startDate) {
+          openingDebit += debit
+          openingCredit += credit
+          continue
+        }
+        if (lineDate > endDate) continue
+        periodLines.push({
+          id: `op-${line.id}`,
+          entry_no: "OB",
+          date: lineDate,
+          description: "Opening Balance Entry",
+          debit,
+          credit,
+          running_balance: 0,
+        })
+      }
       periodLines.sort((a, b) => a.date.localeCompare(b.date))
 
       // 6. Opening balance = net of every AR line before startDate + customer's manual opening_balance
