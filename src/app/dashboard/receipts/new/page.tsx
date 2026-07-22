@@ -259,6 +259,10 @@ export default function NewReceiptPage() {
       return { ...prev, opening: newVal }
     })
   }
+  const updateOpeningAllocation = (value: number) => {
+    const clamped = Math.min(Math.max(value, 0), customerOpeningBalance)
+    setAllocations(prev => ({ ...prev, opening: clamped }))
+  }
 
   const totalAllocatedToInvoices = Object.entries(allocations)
     .filter(([key]) => key !== "opening")
@@ -554,8 +558,8 @@ export default function NewReceiptPage() {
                             (PKR {customerOpeningBalance.toLocaleString()})
                           </span>
                         </td>
-                        <td style={{ textAlign: "right", fontWeight: 600 }}>
-                          PKR {customerOpeningBalance.toLocaleString()}
+                        <td style={{ textAlign: "right" }}>
+                          <input className="alloc-input" type="number" min="0" max={customerOpeningBalance} value={allocations["opening"] || 0} onChange={e => updateOpeningAllocation(parseFloat(e.target.value) || 0)} />
                         </td>
                       </tr>
                     )}
