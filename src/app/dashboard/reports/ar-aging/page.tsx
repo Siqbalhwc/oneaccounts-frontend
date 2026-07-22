@@ -187,7 +187,7 @@ export default function ARAgingPage() {
 
         filteredInvoices.forEach((inv: ARInvoice) => {
           const bal = (inv.total || 0) - (inv.paid || 0)
-          if (bal <= 0) return
+          if (bal === 0) return
 
           const due = new Date(inv.due_date)
           const days = Math.floor((refDate.getTime() - due.getTime()) / 86400000)
