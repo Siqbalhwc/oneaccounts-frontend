@@ -283,6 +283,10 @@ export default function NewPaymentPage() {
       return { ...prev, opening: newVal }
     })
   }
+  const updateOpeningAllocation = (value: number) => {
+    const clamped = Math.min(Math.max(value, 0), supplierOpeningBalance)
+    setNetAllocations(prev => ({ ...prev, opening: clamped }))
+  }
 
   // ── Derived totals ────────────────────────────────────
   const billRows = bills.map(bill => {
@@ -612,8 +616,8 @@ export default function NewPaymentPage() {
                               (no WHT applies)
                             </span>
                           </td>
-                          <td style={{ textAlign: "right", fontWeight: 600 }}>
-                            PKR {supplierOpeningBalance.toLocaleString()}
+                          <td style={{ textAlign: "right" }}>
+                            <input className="alloc-input" type="number" min="0" max={supplierOpeningBalance} value={openingNet} onChange={e => updateOpeningAllocation(parseFloat(e.target.value) || 0)} />
                           </td>
                           <td style={{ textAlign: "right" }} className="derived-cell">—</td>
                           <td style={{ textAlign: "right" }} className="derived-cell">

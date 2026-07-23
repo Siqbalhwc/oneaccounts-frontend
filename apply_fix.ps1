@@ -1,8 +1,17 @@
-$path = "src\app\dashboard\reports\ar-aging\page.tsx"
+$path = "src\app\dashboard\payments\new\page.tsx"
 $content = Get-Content $path -Raw
 
-$old = "          if (bal <= 0) return"
-$new = "          if (bal === 0) return"
+$old = @'
+                          <td style={{ textAlign: "right", fontWeight: 600 }}>
+                            PKR {supplierOpeningBalance.toLocaleString()}
+                          </td>
+'@
+
+$new = @'
+                          <td style={{ textAlign: "right" }}>
+                            <input className="alloc-input" type="number" min="0" max={supplierOpeningBalance} value={openingNet} onChange={e => updateOpeningAllocation(parseFloat(e.target.value) || 0)} />
+                          </td>
+'@
 
 $count = ([regex]::Matches($content, [regex]::Escape($old))).Count
 if ($count -ne 1) {
