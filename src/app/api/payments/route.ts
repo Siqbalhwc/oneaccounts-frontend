@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
 
   const {
     party_id, amount, payment_method, bank_account_id,
-    expense_account_id, date, reference, notes, allocations
+    expense_account_id, date, reference, notes, allocations, opening_allocation
   } = await request.json()
 
   if (!amount || amount <= 0) {
@@ -288,7 +288,8 @@ export async function POST(request: NextRequest) {
     p_allocations: mappedAllocations,
     p_reference: reference || null,
     p_notes: notes || null,
-    p_user_email: user?.email || 'system'
+    p_user_email: user?.email || 'system',
+    p_opening_allocation: opening_allocation || 0
   })
 
   if (rpcError) {

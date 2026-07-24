@@ -2,15 +2,22 @@ $path = "src\app\dashboard\payments\new\page.tsx"
 $content = Get-Content $path -Raw
 
 $old = @'
-                          <td style={{ textAlign: "right", fontWeight: 600 }}>
-                            PKR {supplierOpeningBalance.toLocaleString()}
-                          </td>
+            allocations: allocationsPayload.map(a => ({
+              bill_id: a.invoice_id,
+              amount: a.allocated_amount,
+            })),
+          }),
+        })
 '@
 
 $new = @'
-                          <td style={{ textAlign: "right" }}>
-                            <input className="alloc-input" type="number" min="0" max={supplierOpeningBalance} value={openingNet} onChange={e => updateOpeningAllocation(parseFloat(e.target.value) || 0)} />
-                          </td>
+            allocations: allocationsPayload.map(a => ({
+              bill_id: a.invoice_id,
+              amount: a.allocated_amount,
+            })),
+            opening_allocation: openingNet || 0,
+          }),
+        })
 '@
 
 $count = ([regex]::Matches($content, [regex]::Escape($old))).Count

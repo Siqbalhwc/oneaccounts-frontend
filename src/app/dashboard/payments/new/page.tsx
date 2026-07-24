@@ -379,6 +379,7 @@ export default function NewPaymentPage() {
               bill_id: a.invoice_id,
               amount: a.allocated_amount,
             })),
+            opening_allocation: openingNet || 0,
           }),
         })
         const result = await res.json()
