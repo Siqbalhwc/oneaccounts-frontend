@@ -1,23 +1,18 @@
-$path = "src\app\dashboard\payments\new\page.tsx"
+$path = "src\app\api\payments\route.ts"
 $content = Get-Content $path -Raw
 
 $old = @'
-            allocations: allocationsPayload.map(a => ({
-              bill_id: a.invoice_id,
-              amount: a.allocated_amount,
-            })),
-          }),
-        })
+  if (!allocations || !Array.isArray(allocations) || allocations.length === 0) {
+    return NextResponse.json({ error: 'Allocations are required for supplier payment' }, { status: 400 })
+  }
 '@
 
 $new = @'
-            allocations: allocationsPayload.map(a => ({
-              bill_id: a.invoice_id,
-              amount: a.allocated_amount,
-            })),
-            opening_allocation: openingNet || 0,
-          }),
-        })
+  const hasBillAllocations = allocations && Array.isArray(allocations) && allocations.length > 0
+  const hasOpeningAllocation = (opening_allocation || 0) > 0
+  if (!hasBillAllocations && !hasOpeningAllocation) {
+    return NextResponse.json({ error: 'Please allocate the payment to at least one bill or the opening balance' }, { status: 400 })
+  }
 '@
 
 $count = ([regex]::Matches($content, [regex]::Escape($old))).Count

@@ -269,8 +269,10 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Supplier Payment – call the new database function ──
-  if (!allocations || !Array.isArray(allocations) || allocations.length === 0) {
-    return NextResponse.json({ error: 'Allocations are required for supplier payment' }, { status: 400 })
+  const hasBillAllocations = allocations && Array.isArray(allocations) && allocations.length > 0
+  const hasOpeningAllocation = (opening_allocation || 0) > 0
+  if (!hasBillAllocations && !hasOpeningAllocation) {
+    return NextResponse.json({ error: 'Please allocate the payment to at least one bill or the opening balance' }, { status: 400 })
   }
 
   const mappedAllocations = allocations.map((a: any) => ({
