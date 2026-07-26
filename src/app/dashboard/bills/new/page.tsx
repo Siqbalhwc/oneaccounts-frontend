@@ -536,7 +536,7 @@ export default function NewBillPage() {
       const { data: budgetRow } = await budgetQuery.maybeSingle()
 
       let spentQuery = supabase.from("journal_lines")
-        .select("debit, credit")
+        .select("debit, credit, source_type, source_id")
         .eq("company_id", companyId)
         .eq("activity_id", activityId)
         .eq("account_id", accountId)
@@ -545,10 +545,16 @@ export default function NewBillPage() {
       else spentQuery = spentQuery.is("location_id", null)
 
       const { data: spentRows } = await spentQuery
-      const actualSpent = (spentRows || []).reduce(
-        (sum: number, line: any) => sum + (line.debit || 0) - (line.credit || 0),
-        0
-      )
+      // Exclude this bill's own existing journal lines when editing, so the live
+      // budget preview matches what the backend will show after save (the backend
+      // releases this bill's old budget usage at submit time, before re-validating).
+      const currentBillId = editId ? Number(editId) : null
+      const actualSpent = (spentRows || [])
+        .filter((line: any) => !(currentBillId && line.source_type === 'purchase_bill' && line.source_id === currentBillId))
+        .reduce(
+          (sum: number, line: any) => sum + (line.debit || 0) - (line.credit || 0),
+          0
+        )
       const budget = budgetRow?.budgeted_amount || 0
       const available = budget - actualSpent
       const result = { budget, spent: actualSpent, available, hasBudget: budgetRow !== null }
