@@ -91,7 +91,6 @@ export default function BillDetailPage() {
       .from("invoices")
       .select("*")
       .eq("id", billId)
-      .eq("company_id", companyId)
       .eq("type", "purchase")
       .single()
       .then(({ data }) => {
