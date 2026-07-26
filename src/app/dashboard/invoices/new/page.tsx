@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import {
   ArrowLeft, Plus, Trash2, Send, Search, X, Download, CheckCircle,
-  Image as ImageIcon, RefreshCw, ExternalLink,
+  Image as ImageIcon, RefreshCw, ExternalLink, Paperclip, ChevronDown, FileText, Upload,
 } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
@@ -76,6 +76,10 @@ function NewInvoicePageContent() {
   const [taxCodes, setTaxCodes] = useState<any[]>([])
 
   const [bankAccounts, setBankAccounts] = useState<any[]>([])
+  const [attachments, setAttachments] = useState<any[]>([])
+  const [attachPanelOpen, setAttachPanelOpen] = useState(false)
+  const [uploadingAttachment, setUploadingAttachment] = useState(false)
+  const [tempAttachKey] = useState(() => `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`)
 
   const isNGO = businessType === "ngo"
   const invoiceIdForLink = savedInvoiceId || (editId ? Number(editId) : null)
@@ -411,6 +415,43 @@ function NewInvoicePageContent() {
 
   const hasStockErrors = Object.keys(stockErrors).length > 0
 
+  const uploadAttachment = async (file: File) => {
+    if (!companyId) return
+    setUploadingAttachment(true)
+    try {
+      const path = `/invoices/${Date.now()}-${file.name}`
+      const { error: uploadErr } = await supabase.storage.from('attachments').upload(path, file)
+      if (uploadErr) { setError(uploadErr.message); setUploadingAttachment(false); return }
+      const { data: publicData } = supabase.storage.from('attachments').getPublicUrl(path)
+      const { data: inserted, error: insertErr } = await supabase.rpc('insert_invoice_attachment', {
+        p_company_id: companyId,
+        p_invoice_id: editId ? Number(editId) : null,
+        p_temp_key: editId ? null : tempAttachKey,
+        p_file_name: file.name,
+        p_file_url: publicData.publicUrl,
+        p_file_size: file.size,
+        p_user_email: 'system',
+      })
+      if (!insertErr && inserted) setAttachments(prev => [...prev, inserted])
+    } catch (e) {}
+    setUploadingAttachment(false)
+  }
+
+  const handleAttachmentFiles = (files: FileList | null) => {
+    if (!files) return
+    Array.from(files).forEach(f => uploadAttachment(f))
+  }
+
+  const removeAttachment = async (att: any) => {
+    await supabase.rpc('delete_invoice_attachment', { p_company_id: companyId, p_attachment_id: att.id })
+    setAttachments(prev => prev.filter(a => a.id !== att.id))
+  }
+
+  useEffect(() => {
+    if (!editId || !companyId) return
+    supabase.rpc('get_invoice_attachments', { p_company_id: companyId, p_invoice_id: Number(editId) }).then(({ data }) => { if (data) setAttachments(data) })
+  }, [editId, companyId])
+
   const handleSubmit = async () => {
     if (!customerId) { setError("Please select a customer"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
@@ -530,6 +571,13 @@ function NewInvoicePageContent() {
         return
       }
       const newInvoiceId = data.invoice_id
+      if (newInvoiceId) {
+        try {
+          await supabase.rpc('link_invoice_attachments', { p_company_id: companyId, p_temp_key: tempAttachKey, p_invoice_id: newInvoiceId })
+        } catch (linkErr) {
+          console.error('Attachment linking failed (invoice already saved successfully):', linkErr)
+        }
+      }
       setSavedInvoiceId(newInvoiceId || null)
       setFlash("Invoice saved successfully.")
       setSaving(false)
@@ -922,6 +970,43 @@ function NewInvoicePageContent() {
                 </button>
                 <button className="inv-btn" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleBeforeSavePdf}><Download size={14} /> PDF Preview</button>
                 {selectedCustomer && hasFeature("whatsapp_invoice") && <button className="inv-btn inv-btn-success" style={{ justifyContent: "center", padding: 9, marginTop: 8, width: "100%" }} onClick={handleWhatsAppWithPDF}><Send size={14} /> WhatsApp (PDF)</button>}
+              </div>
+              <div className="inv-card" style={{ padding: 0, overflow: "hidden" }}>
+                <button
+                  onClick={() => setAttachPanelOpen(!attachPanelOpen)}
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left", color: "var(--text)" }}
+                >
+                  <Paperclip size={16} style={{ color: "var(--text-muted)" }} />
+                  <span style={{ fontSize: 13, flex: 1 }}>Attachments</span>
+                  {attachments.length > 0 && (
+                    <span style={{ fontSize: 11, color: "var(--text-muted)", background: "var(--bg)", borderRadius: 10, padding: "1px 7px" }}>{attachments.length}</span>
+                  )}
+                  <ChevronDown size={16} style={{ color: "var(--text-muted)", transform: attachPanelOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+                </button>
+                {attachPanelOpen && (
+                  <div style={{ borderTop: "1px solid var(--border)", padding: "12px 14px" }}>
+                    {attachments.length > 0 && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+                        {attachments.map((att: any) => (
+                          <div key={att.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: 8, border: "1px solid var(--border)", borderRadius: 6 }}>
+                            <FileText size={16} style={{ color: "var(--primary)", flexShrink: 0 }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <a href={att.file_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "var(--text)", textDecoration: "none", display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{att.file_name}</a>
+                            </div>
+                            <button onClick={() => removeAttachment(att)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", flexShrink: 0 }}>
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, border: "1px dashed var(--border)", borderRadius: 6, padding: 10, cursor: "pointer" }}>
+                      <Upload size={14} style={{ color: "var(--text-muted)" }} />
+                      <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{uploadingAttachment ? "Uploading..." : "Add file"}</span>
+                      <input type="file" multiple style={{ display: "none" }} onChange={e => { handleAttachmentFiles(e.target.files); e.target.value = "" }} disabled={uploadingAttachment} />
+                    </label>
+                  </div>
+                )}
               </div>
             </div>
           </div>

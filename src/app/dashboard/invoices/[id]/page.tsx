@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Printer, Send } from "lucide-react"
+import { ArrowLeft, Printer, Send, Paperclip, FileText } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
@@ -77,6 +77,7 @@ export default function InvoiceDetailPage() {
   const [loading, setLoading] = useState(true)
   const [companyId, setCompanyId] = useState<string>("")
   const [journalLines, setJournalLines] = useState<JournalLine[]>([])
+  const [attachments, setAttachments] = useState<any[]>([])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -150,6 +151,12 @@ export default function InvoiceDetailPage() {
           })))
         }
       })
+  }, [companyId, invoiceId])
+
+  useEffect(() => {
+    if (!companyId || !invoiceId) return
+    supabase.rpc("get_invoice_attachments", { p_company_id: companyId, p_invoice_id: Number(invoiceId) })
+      .then(({ data }) => { if (data) setAttachments(data) })
   }, [companyId, invoiceId])
 
   const waLink = invoice && invoice.customer
@@ -362,6 +369,28 @@ export default function InvoiceDetailPage() {
                 </tr>
               </tfoot>
             </table>
+          </div>
+        </div>
+      )}
+
+      {attachments.length > 0 && (
+        <div className="card">
+          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+            <Paperclip size={16} /> Attachments
+          </h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {attachments.map((att: any) => (
+              <a
+                key={att.id}
+                href={att.file_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: "flex", alignItems: "center", gap: 8, padding: 10, border: "1px solid var(--border)", borderRadius: 8, textDecoration: "none", color: "var(--text)" }}
+              >
+                <FileText size={16} style={{ color: "var(--primary)", flexShrink: 0 }} />
+                <span style={{ fontSize: 13, flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{att.file_name}</span>
+              </a>
+            ))}
           </div>
         </div>
       )}
