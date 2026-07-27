@@ -419,7 +419,7 @@ function NewInvoicePageContent() {
     if (!companyId) return
     setUploadingAttachment(true)
     try {
-      const path = `/invoices/${Date.now()}-${file.name}`
+      const path = `${companyId}/invoices/${Date.now()}-${file.name}`
       const { error: uploadErr } = await supabase.storage.from('attachments').upload(path, file)
       if (uploadErr) { setError(uploadErr.message); setUploadingAttachment(false); return }
       const { data: publicData } = supabase.storage.from('attachments').getPublicUrl(path)
