@@ -135,7 +135,7 @@ function NewInvoicePageContent() {
       }
 
       supabase.from("bank_accounts")
-        .select("bank_name, account_title, account_number, show_on_invoice")
+        .select("bank_name, account_number, show_on_invoice")
         .eq("company_id", cid)
         .eq("show_on_invoice", true)
         .then(({ data: banks }) => {
@@ -656,7 +656,7 @@ function NewInvoicePageContent() {
       balanceDue: totalAmount + totalTaxAmount,
       bankAccounts: bankAccounts.map((b: any) => ({
         bankName: b.bank_name,
-        accountTitle: b.account_title,
+        accountTitle: b.bank_name,
         accountNumber: b.account_number,
         showOnInvoice: b.show_on_invoice
       }))
@@ -729,7 +729,7 @@ function NewInvoicePageContent() {
       balanceDue: totalAmount + totalTaxAmount,
       bankAccounts: bankAccounts.map((b: any) => ({
         bankName: b.bank_name,
-        accountTitle: b.account_title,
+        accountTitle: b.bank_name,
         accountNumber: b.account_number,
         showOnInvoice: b.show_on_invoice
       }))
