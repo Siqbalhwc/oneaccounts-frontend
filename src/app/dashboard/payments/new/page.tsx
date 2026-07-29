@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Search, X, CheckCircle, RefreshCw } from "lucide-react"
+import { ArrowLeft, Search, X, CheckCircle, RefreshCw, Paperclip, ChevronDown, FileText, Upload } from "lucide-react"
 
 // ── WHT math helpers ──────────────────────────────────────
 function whtFromGross(gross: number, rate: number) {
@@ -61,6 +61,10 @@ export default function NewPaymentPage() {
   const [flash, setFlash] = useState<string | null>(null)
 
   const [supplierOpeningBalance, setSupplierOpeningBalance] = useState(0)
+  const [attachments, setAttachments] = useState<any[]>([])
+  const [attachPanelOpen, setAttachPanelOpen] = useState(false)
+  const [uploadingAttachment, setUploadingAttachment] = useState(false)
+  const [tempAttachKey] = useState(() => `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`)
 
   // ── Load company / master data ──────────────────────
   useEffect(() => {
@@ -311,6 +315,43 @@ export default function NewPaymentPage() {
   const difference = totalAmount - totalNetAllocated
 
   // ── Submit (create or update) ─────────────────────────
+  const uploadAttachment = async (file: File) => {
+    if (!companyId) return
+    setUploadingAttachment(true)
+    try {
+      const path = `${companyId}/payments/${Date.now()}-${file.name}`
+      const { error: uploadErr } = await supabase.storage.from('attachments').upload(path, file)
+      if (uploadErr) { setError(uploadErr.message); setUploadingAttachment(false); return }
+      const { data: publicData } = supabase.storage.from('attachments').getPublicUrl(path)
+      const { data: inserted, error: insertErr } = await supabase.rpc('insert_payment_attachment', {
+        p_company_id: companyId,
+        p_payment_id: editId ? Number(editId) : null,
+        p_temp_key: editId ? null : tempAttachKey,
+        p_file_name: file.name,
+        p_file_url: publicData.publicUrl,
+        p_file_size: file.size,
+        p_user_email: 'system',
+      })
+      if (!insertErr && inserted) setAttachments(prev => [...prev, inserted])
+    } catch (e) {}
+    setUploadingAttachment(false)
+  }
+
+  const handleAttachmentFiles = (files: FileList | null) => {
+    if (!files) return
+    Array.from(files).forEach(f => uploadAttachment(f))
+  }
+
+  const removeAttachment = async (att: any) => {
+    await supabase.rpc('delete_payment_attachment', { p_company_id: companyId, p_attachment_id: att.id })
+    setAttachments(prev => prev.filter(a => a.id !== att.id))
+  }
+
+  useEffect(() => {
+    if (!editId || !companyId) return
+    supabase.rpc('get_payment_attachments', { p_company_id: companyId, p_payment_id: Number(editId) }).then(({ data }) => { if (data) setAttachments(data) })
+  }, [editId, companyId])
+
   const handleSubmit = async () => {
     if (!companyId) { setError("Company not loaded"); return }
     if (!selectedBankId) { setError("Please select a bank account"); return }
@@ -389,6 +430,13 @@ export default function NewPaymentPage() {
           return
         }
         setFlash(`✅ Payment ${result.payment_no} saved!`)
+        if (result.payment?.id) {
+          try {
+            await supabase.rpc('link_payment_attachments', { p_company_id: companyId, p_temp_key: tempAttachKey, p_payment_id: result.payment.id })
+          } catch (linkErr) {
+            console.error('Attachment linking failed (payment already saved successfully):', linkErr)
+          }
+        }
         // Reset form
         setSupplierId(null); setSelectedSupplier(null); setSupplierSearch("")
         setSelectedBankId(null); setSelectedExpenseAccountId(null); setIsDonation(false)
@@ -725,6 +773,43 @@ export default function NewPaymentPage() {
               <button className="pay-btn pay-btn-primary" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading}>
                 {loading ? "Posting..." : editId ? "💾 Update Payment" : "💾 Save Payment"}
               </button>
+            </div>
+            <div className="pay-card" style={{ padding: 0, overflow: "hidden" }}>
+              <button
+                onClick={() => setAttachPanelOpen(!attachPanelOpen)}
+                style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left", color: "var(--text)" }}
+              >
+                <Paperclip size={16} style={{ color: "var(--text-muted)" }} />
+                <span style={{ fontSize: 13, flex: 1 }}>Attachments</span>
+                {attachments.length > 0 && (
+                  <span style={{ fontSize: 11, color: "var(--text-muted)", background: "var(--bg)", borderRadius: 10, padding: "1px 7px" }}>{attachments.length}</span>
+                )}
+                <ChevronDown size={16} style={{ color: "var(--text-muted)", transform: attachPanelOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+              </button>
+              {attachPanelOpen && (
+                <div style={{ borderTop: "1px solid var(--border)", padding: "12px 14px" }}>
+                  {attachments.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+                      {attachments.map((att: any) => (
+                        <div key={att.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: 8, border: "1px solid var(--border)", borderRadius: 6 }}>
+                          <FileText size={16} style={{ color: "var(--primary)", flexShrink: 0 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <a href={att.file_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "var(--text)", textDecoration: "none", display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{att.file_name}</a>
+                          </div>
+                          <button onClick={() => removeAttachment(att)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", flexShrink: 0 }}>
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, border: "1px dashed var(--border)", borderRadius: 6, padding: 10, cursor: "pointer" }}>
+                    <Upload size={14} style={{ color: "var(--text-muted)" }} />
+                    <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{uploadingAttachment ? "Uploading..." : "Add file"}</span>
+                    <input type="file" multiple style={{ display: "none" }} onChange={e => { handleAttachmentFiles(e.target.files); e.target.value = "" }} disabled={uploadingAttachment} />
+                  </label>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -72,9 +72,7 @@ export default function PaymentDetailPage() {
   const [companyId, setCompanyId] = useState<string>("")
   const [bankName, setBankName] = useState<string>("")
   const [journalLines, setJournalLines] = useState<JournalLine[]>([])
-  const [attachments, setAttachments] = useState<Attachment[]>([])
-  const [uploading, setUploading] = useState(false)
-  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null)
+  const [attachments, setAttachments] = useState<any[]>([])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -158,74 +156,9 @@ export default function PaymentDetailPage() {
       })
   }, [companyId, paymentId])
 
-  // Fetch attachments
-  const fetchAttachments = async () => {
-    if (!paymentId || !companyId) return
-    const { data } = await supabase
-      .from("attachments")
-      .select("*")
-      .eq("source_type", "payment")
-      .eq("source_id", paymentId)
-    setAttachments(data || [])
-  }
 
-  useEffect(() => {
-    if (paymentId && companyId) {
-      fetchAttachments()
-    }
-  }, [paymentId, companyId])
 
-  const uploadFile = async (file: File) => {
-    if (!paymentId || !companyId) return
-    setUploading(true)
-    const fileExt = file.name.split('.').pop()
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
-    const storagePath = `${companyId}/payment/${paymentId}/${fileName}`
 
-    const { error: uploadError } = await supabase.storage
-      .from("attachments")
-      .upload(storagePath, file)
-
-    if (uploadError) {
-      alert("Upload failed: " + uploadError.message)
-      setUploading(false)
-      return
-    }
-
-    const { data: urlData } = supabase.storage
-      .from("attachments")
-      .getPublicUrl(storagePath)
-
-    const { error: dbError } = await supabase
-      .from("attachments")
-      .insert({
-        company_id: companyId,
-        source_type: "payment",
-        source_id: parseInt(paymentId),
-        file_name: file.name,
-        file_url: urlData.publicUrl,
-        file_size: file.size,
-        mime_type: file.type,
-        uploaded_by: (await supabase.auth.getUser()).data.user?.email,
-      })
-
-    if (dbError) {
-      alert("Failed to save attachment record: " + dbError.message)
-    } else {
-      await fetchAttachments()
-      setUploadSuccess(`✅ ${file.name} uploaded`)
-      setTimeout(() => setUploadSuccess(null), 3000)
-    }
-    setUploading(false)
-  }
-
-  const deleteAttachment = async (id: number, fileUrl: string) => {
-    const pathParts = fileUrl.split('/')
-    const storagePath = pathParts.slice(-3).join('/')
-    await supabase.storage.from("attachments").remove([storagePath])
-    await supabase.from("attachments").delete().eq("id", id)
-    await fetchAttachments()
-  }
 
   // WhatsApp link
   const waLink = payment && payment.supplier

@@ -3,27 +3,26 @@ $raw = Get-Content -Raw $path
 $hadCRLF = $raw -match "`r`n"
 $content = $raw -replace "`r`n", "`n"
 
-# ── Edit A: icons ──
+function Norm($s) { return ($s -replace "`r`n", "`n") }
+
 $oldA = 'import { ArrowLeft, Search, X, CheckCircle, RefreshCw } from "lucide-react"'
 $newA = 'import { ArrowLeft, Search, X, CheckCircle, RefreshCw, Paperclip, ChevronDown, FileText, Upload } from "lucide-react"'
 
-# ── Edit B: state ──
-$oldB = @'
+$oldB = Norm(@'
   const [supplierOpeningBalance, setSupplierOpeningBalance] = useState(0)
-'@
-$newB = @'
+'@)
+$newB = Norm(@'
   const [supplierOpeningBalance, setSupplierOpeningBalance] = useState(0)
   const [attachments, setAttachments] = useState<any[]>([])
   const [attachPanelOpen, setAttachPanelOpen] = useState(false)
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
   const [tempAttachKey] = useState(() => `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`)
-'@
+'@)
 
-# ── Edit C: attachment functions, inserted before handleSubmit ──
-$oldC = @'
+$oldC = Norm(@'
   const handleSubmit = async () => {
-'@
-$newC = @'
+'@)
+$newC = Norm(@'
   const uploadAttachment = async (file: File) => {
     if (!companyId) return
     setUploadingAttachment(true)
@@ -62,22 +61,12 @@ $newC = @'
   }, [editId, companyId])
 
   const handleSubmit = async () => {
-'@
+'@)
 
-# ── Edit D: isolated attachment linking after successful create ──
-$oldD = @'
-        if (!result.success) {
-          setError(result.error || "Failed")
-          setLoading(false)
-          return
-        }
-'@
-$newD = @'
-        if (!result.success) {
-          setError(result.error || "Failed")
-          setLoading(false)
-          return
-        }
+$oldD = Norm(@'
+        // Reset form
+'@)
+$newD = Norm(@'
         if (result.payment?.id) {
           try {
             await supabase.rpc('link_payment_attachments', { p_company_id: companyId, p_temp_key: tempAttachKey, p_payment_id: result.payment.id })
@@ -85,18 +74,29 @@ $newD = @'
             console.error('Attachment linking failed (payment already saved successfully):', linkErr)
           }
         }
-'@
+        // Reset form
+'@)
 
-# ── Edit E: Attachments UI card, inserted after the Save Payment button ──
-$oldE = @'
+$oldE = Norm(@'
+onClick={handleSubmit} disabled={loading}>
+'@)
+# only the payments/new "pay-btn-primary" occurrence should match; unique because of pay-btn-primary context handled via count check
+$oldE = Norm(@'
               <button className="pay-btn pay-btn-primary" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading}>
-                {loading ? "Posting..." : editId ? "ðŸ’¾ Update Payment" : "ðŸ’¾ Save Payment"}
+'@)
+$newE = Norm(@'
+              <button className="pay-btn pay-btn-primary" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading}>
+'@)
+# Edit E strategy: anchor on the closing </div> that immediately follows this button's own wrapping div (2 lines after),
+# using a separate short anchor so we never need to touch the emoji-containing button label line at all.
+$oldE2 = Norm(@'
               </button>
             </div>
-'@
-$newE = @'
-              <button className="pay-btn pay-btn-primary" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading}>
-                {loading ? "Posting..." : editId ? "ðŸ’¾ Update Payment" : "ðŸ’¾ Save Payment"}
+          </div>
+        </div>
+      </div>
+'@)
+$newE2 = Norm(@'
               </button>
             </div>
             <div className="pay-card" style={{ padding: 0, overflow: "hidden" }}>
@@ -136,14 +136,17 @@ $newE = @'
                 </div>
               )}
             </div>
-'@
+          </div>
+        </div>
+      </div>
+'@)
 
 $edits = @(
   @{ Name = "A-icons"; Old = $oldA; New = $newA },
   @{ Name = "B-state"; Old = $oldB; New = $newB },
   @{ Name = "C-functions"; Old = $oldC; New = $newC },
   @{ Name = "D-link-on-create"; Old = $oldD; New = $newD },
-  @{ Name = "E-ui-card"; Old = $oldE; New = $newE }
+  @{ Name = "E2-ui-card"; Old = $oldE2; New = $newE2 }
 )
 
 $allGood = $true
@@ -164,4 +167,4 @@ foreach ($e in $edits) {
 
 if ($hadCRLF) { $content = $content -replace "`n", "`r`n" }
 Set-Content -Path $path -Value $content -NoNewline
-Write-Host "SUCCESS: all 5 edits applied to payments/new/page.tsx" -ForegroundColor Green
+Write-Host "SUCCESS: all edits applied to payments/new/page.tsx" -ForegroundColor Green
