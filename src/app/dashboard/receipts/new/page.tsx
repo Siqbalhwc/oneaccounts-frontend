@@ -52,7 +52,7 @@ export default function NewReceiptPage() {
   const [attachments, setAttachments] = useState<any[]>([])
   const [attachPanelOpen, setAttachPanelOpen] = useState(false)
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
-  const [tempAttachKey] = useState(() => `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  const [tempAttachKey, setTempAttachKey] = useState(() => `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`)
 
   // ── Load company ID and master data ──
   useEffect(() => {
@@ -336,6 +336,12 @@ export default function NewReceiptPage() {
     supabase.rpc('get_receipt_attachments', { p_company_id: companyId, p_receipt_id: Number(editId) }).then(({ data }) => { if (data) setAttachments(data) })
   }, [editId, companyId])
 
+  useEffect(() => {
+    if (editId) return
+    setAttachments([])
+    setTempAttachKey(`temp-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  }, [editId])
+
   const handleSubmit = async () => {
     if (!companyId) { setError("Company not loaded"); return }
     if (!selectedBankId) { setError("Please select a bank account"); return }
@@ -414,6 +420,8 @@ export default function NewReceiptPage() {
             console.error('Attachment linking failed (receipt already saved successfully):', linkErr)
           }
         }
+        setAttachments([])
+        setTempAttachKey(`temp-${Date.now()}-${Math.random().toString(36).slice(2)}`)
         // Reset form
         setCustomerId(null); setSelectedCustomer(null); setCustomerSearch(""); setShowCustomerList(false)
         setSelectedBankId(null); setSelectedIncomeAccountId(null); setIsDonation(false)

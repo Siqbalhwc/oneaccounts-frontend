@@ -64,7 +64,7 @@ export default function NewPaymentPage() {
   const [attachments, setAttachments] = useState<any[]>([])
   const [attachPanelOpen, setAttachPanelOpen] = useState(false)
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
-  const [tempAttachKey] = useState(() => `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  const [tempAttachKey, setTempAttachKey] = useState(() => `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`)
 
   // ── Load company / master data ──────────────────────
   useEffect(() => {
@@ -352,6 +352,12 @@ export default function NewPaymentPage() {
     supabase.rpc('get_payment_attachments', { p_company_id: companyId, p_payment_id: Number(editId) }).then(({ data }) => { if (data) setAttachments(data) })
   }, [editId, companyId])
 
+  useEffect(() => {
+    if (editId) return
+    setAttachments([])
+    setTempAttachKey(`temp-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  }, [editId])
+
   const handleSubmit = async () => {
     if (!companyId) { setError("Company not loaded"); return }
     if (!selectedBankId) { setError("Please select a bank account"); return }
@@ -437,6 +443,8 @@ export default function NewPaymentPage() {
             console.error('Attachment linking failed (payment already saved successfully):', linkErr)
           }
         }
+        setAttachments([])
+        setTempAttachKey(`temp-${Date.now()}-${Math.random().toString(36).slice(2)}`)
         // Reset form
         setSupplierId(null); setSelectedSupplier(null); setSupplierSearch("")
         setSelectedBankId(null); setSelectedExpenseAccountId(null); setIsDonation(false)
