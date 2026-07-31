@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Printer, Send, Upload, Trash2, FileText, Image, CheckCircle } from "lucide-react"
+import { ArrowLeft, Printer, Send, Upload, Trash2, FileText, Image, CheckCircle, Paperclip } from "lucide-react"
 import { generatePaymentPDF } from "@/lib/pdf/paymentPDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
@@ -161,6 +161,12 @@ export default function PaymentDetailPage() {
 
 
   // WhatsApp link
+  useEffect(() => {
+    if (!paymentId || !companyId) return
+    supabase.rpc("get_payment_attachments", { p_company_id: companyId, p_payment_id: Number(paymentId) })
+      .then(({ data }) => { if (data) setAttachments(data) })
+  }, [companyId, paymentId])
+
   const waLink = payment && payment.supplier
     ? getWhatsAppLink(
         payment.supplier.phone || "",
@@ -315,17 +321,7 @@ export default function PaymentDetailPage() {
           <button className="btn btn-primary" onClick={handlePrintPDF}>
             <Printer size={16} /> Print PDF
           </button>
-          <label className="btn" style={{ cursor: "pointer", position: "relative" }}>
-            <Upload size={16} /> {uploading ? "Uploading..." : "Add Attachment"}
-            <input
-              type="file"
-              onChange={(e) => {
-                if (e.target.files?.[0]) uploadFile(e.target.files[0])
-              }}
-              disabled={uploading}
-              style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }}
-            />
-          </label>
+
         </div>
       </div>
 
@@ -444,33 +440,27 @@ export default function PaymentDetailPage() {
         </div>
       )}
 
-      {/* Attachments Section */}
-      <div className="card">
-        <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📎 Attachments</h3>
-        {attachments.length === 0 ? (
-          <div style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center", padding: 12 }}>
-            No attachments. Use the "Add Attachment" button above.
+      {attachments.length > 0 && (
+        <div className="card">
+          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+            <Paperclip size={16} /> Attachments
+          </h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {attachments.map((att: any) => (
+              <a
+                key={att.id}
+                href={att.file_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: "flex", alignItems: "center", gap: 8, padding: 10, border: "1px solid var(--border)", borderRadius: 8, textDecoration: "none", color: "var(--text)" }}
+              >
+                <FileText size={16} style={{ color: "var(--primary)", flexShrink: 0 }} />
+                <span style={{ fontSize: 13, flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{att.file_name}</span>
+              </a>
+            ))}
           </div>
-        ) : (
-          <div className="attachments-grid">
-            {attachments.map((att) => {
-              const fileName = att.file_name.length > 40 ? att.file_name.substring(0, 37) + "..." : att.file_name
-              return (
-                <div key={att.id} className="attachment-item">
-                  <a href={att.file_url} target="_blank" rel="noopener noreferrer" className="attachment-link" title={att.file_name}>
-                    {att.mime_type?.startsWith("image/") ? <Image size={14} /> : <FileText size={14} />}
-                    <span>{fileName}</span>
-                  </a>
-                  <button className="btn" onClick={() => deleteAttachment(att.id, att.file_url)} style={{ padding: "2px 6px", borderColor: "#EF4444" }}>
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
+        </div>
+      )}
       {payment && payment.id && (
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>📝 Change History</h3>
