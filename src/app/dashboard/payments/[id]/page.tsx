@@ -296,11 +296,7 @@ export default function PaymentDetailPage() {
         }
       `}</style>
 
-      {uploadSuccess && (
-        <div className="toast">
-          <CheckCircle size={16} /> {uploadSuccess}
-        </div>
-      )}
+
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
