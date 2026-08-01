@@ -175,23 +175,24 @@ export default function NewReceiptPage() {
       }
 
       const invoiceIds = invs.map(inv => inv.id)
-      const { data: allocationsData } = await supabase
+      let allocQuery = supabase
         .from("receipt_allocations")
-        .select("invoice_id, amount")
+        .select("invoice_id, amount, receipt_id")
         .in("invoice_id", invoiceIds)
-
+      if (editId) {
+        allocQuery = allocQuery.neq("receipt_id", parseInt(editId))
+      }
+      const { data: allocationsData } = await allocQuery
       const paidMap: Record<number, number> = {}
       if (allocationsData) {
         allocationsData.forEach((a: any) => {
           paidMap[a.invoice_id] = (paidMap[a.invoice_id] || 0) + (a.amount || 0)
         })
       }
-
       const enriched = invs.map(inv => ({
         ...inv,
-        paid: Math.max(inv.paid || 0, paidMap[inv.id] || 0),
+        paid: editId ? (paidMap[inv.id] || 0) : Math.max(inv.paid || 0, paidMap[inv.id] || 0),
       }))
-
       const stillDue = enriched.filter(inv => inv.total - inv.paid > 0.001)
 
       if (!editId) {
