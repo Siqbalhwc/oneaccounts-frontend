@@ -1,64 +1,108 @@
-$path = "src\app\dashboard\payments\new\page.tsx"
+$path = "src\app\dashboard\receipts\new\page.tsx"
 $raw = Get-Content -Raw $path
 $hadCRLF = $raw -match "`r`n"
 $content = $raw -replace "`r`n", "`n"
 
 function Norm($s) { return ($s -replace "`r`n", "`n") }
 
-# A: give tempAttachKey a real setter
+# A: restore the opening allocation on edit-load (was never fetched before)
 $oldA = Norm(@'
-  const [tempAttachKey] = useState(() => `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+        const allocs: Record<string, number> = {}
+        data.receipt_allocations?.forEach((a: any) => {
+          allocs[String(a.invoice_id)] = a.amount
+        })
+        setAllocations(allocs)
 '@)
 $newA = Norm(@'
-  const [tempAttachKey, setTempAttachKey] = useState(() => `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+        const allocs: Record<string, number> = {}
+        data.receipt_allocations?.forEach((a: any) => {
+          allocs[String(a.invoice_id)] = a.amount
+        })
+        const { data: openingAlloc } = await supabase
+          .from("customer_opening_allocations")
+          .select("amount")
+          .eq("receipt_id", editId)
+          .eq("company_id", companyId)
+          .maybeSingle()
+        if (openingAlloc?.amount) {
+          allocs["opening"] = openingAlloc.amount
+        }
+        setAllocations(allocs)
 '@)
 
-# B: reset attachments + tempAttachKey whenever editId becomes falsy (fresh "new" form, even without full remount)
+# B: make the edit-load effect callback async, so the await above is valid
 $oldB = Norm(@'
-  useEffect(() => {
-    if (!editId || !companyId) return
-    supabase.rpc('get_payment_attachments', { p_company_id: companyId, p_payment_id: Number(editId) }).then(({ data }) => { if (data) setAttachments(data) })
-  }, [editId, companyId])
+      .single()
+      .then(({ data }) => {
+        if (!data) return
 '@)
 $newB = Norm(@'
-  useEffect(() => {
-    if (!editId || !companyId) return
-    supabase.rpc('get_payment_attachments', { p_company_id: companyId, p_payment_id: Number(editId) }).then(({ data }) => { if (data) setAttachments(data) })
-  }, [editId, companyId])
-
-  useEffect(() => {
-    if (editId) return
-    setAttachments([])
-    setTempAttachKey(`temp-${Date.now()}-${Math.random().toString(36).slice(2)}`)
-  }, [editId])
+      .single()
+      .then(async ({ data }) => {
+        if (!data) return
 '@)
 
-# C: after successful create, reset attachments + get a fresh tempAttachKey (in addition to the existing link call)
+# C: widen the invoice status filter in edit mode, so an invoice this
+# receipt itself fully paid stays in the base fetched list
 $oldC = Norm(@'
-        if (result.payment?.id) {
-          try {
-            await supabase.rpc('link_payment_attachments', { p_company_id: companyId, p_temp_key: tempAttachKey, p_payment_id: result.payment.id })
-          } catch (linkErr) {
-            console.error('Attachment linking failed (payment already saved successfully):', linkErr)
-          }
-        }
+        .in("status", ["Unpaid", "Partial"])
+        .neq("status", "Returned")
+        .order("date")
 '@)
 $newC = Norm(@'
-        if (result.payment?.id) {
-          try {
-            await supabase.rpc('link_payment_attachments', { p_company_id: companyId, p_temp_key: tempAttachKey, p_payment_id: result.payment.id })
-          } catch (linkErr) {
-            console.error('Attachment linking failed (payment already saved successfully):', linkErr)
-          }
-        }
-        setAttachments([])
-        setTempAttachKey(`temp-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+        .in("status", editId ? ["Unpaid", "Partial", "Paid"] : ["Unpaid", "Partial"])
+        .neq("status", "Returned")
+        .order("date")
+'@)
+
+# D: exclude this receipt's own allocations from the "paid by others" sum,
+# and stop letting the invoice's own stale .paid column (which already
+# includes this receipt's contribution) override that in edit mode -
+# otherwise the invoice would still compute as fully paid and get filtered out.
+$oldD = Norm(@'
+      const invoiceIds = invs.map(inv => inv.id)
+      const { data: allocationsData } = await supabase
+        .from("receipt_allocations")
+        .select("invoice_id, amount")
+        .in("invoice_id", invoiceIds)
+      const paidMap: Record<number, number> = {}
+      if (allocationsData) {
+        allocationsData.forEach((a: any) => {
+          paidMap[a.invoice_id] = (paidMap[a.invoice_id] || 0) + (a.amount || 0)
+        })
+      }
+      const enriched = invs.map(inv => ({
+        ...inv,
+        paid: Math.max(inv.paid || 0, paidMap[inv.id] || 0),
+      }))
+'@)
+$newD = Norm(@'
+      const invoiceIds = invs.map(inv => inv.id)
+      let allocQuery = supabase
+        .from("receipt_allocations")
+        .select("invoice_id, amount, receipt_id")
+        .in("invoice_id", invoiceIds)
+      if (editId) {
+        allocQuery = allocQuery.neq("receipt_id", parseInt(editId))
+      }
+      const { data: allocationsData } = await allocQuery
+      const paidMap: Record<number, number> = {}
+      if (allocationsData) {
+        allocationsData.forEach((a: any) => {
+          paidMap[a.invoice_id] = (paidMap[a.invoice_id] || 0) + (a.amount || 0)
+        })
+      }
+      const enriched = invs.map(inv => ({
+        ...inv,
+        paid: editId ? (paidMap[inv.id] || 0) : Math.max(inv.paid || 0, paidMap[inv.id] || 0),
+      }))
 '@)
 
 $edits = @(
-  @{ Name = "A-setter"; Old = $oldA; New = $newA },
-  @{ Name = "B-reset-on-editId-change"; Old = $oldB; New = $newB },
-  @{ Name = "C-reset-after-create"; Old = $oldC; New = $newC }
+  @{ Name = "A-restore-opening-alloc"; Old = $oldA; New = $newA },
+  @{ Name = "B-async-callback"; Old = $oldB; New = $newB },
+  @{ Name = "C-widen-status-filter"; Old = $oldC; New = $newC },
+  @{ Name = "D-exclude-own-allocation"; Old = $oldD; New = $newD }
 )
 
 $allGood = $true
@@ -79,4 +123,4 @@ foreach ($e in $edits) {
 
 if ($hadCRLF) { $content = $content -replace "`n", "`r`n" }
 Set-Content -Path $path -Value $content -NoNewline
-Write-Host "SUCCESS: attachment reset fixed in payments/new/page.tsx" -ForegroundColor Green
+Write-Host "SUCCESS: receipt edit allocation restore fixed" -ForegroundColor Green
