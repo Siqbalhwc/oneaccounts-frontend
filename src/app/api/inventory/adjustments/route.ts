@@ -78,16 +78,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: moveError?.message || "Failed to record movement" }, { status: 500 })
     }
 
-    // 4. Update product quantity (scoped)
-    const { error: updateError } = await supabase
-      .from("products")
-      .update({ qty_on_hand: newQty })
-      .eq("id", product_id)
-      .eq("company_id", companyId)
-
-    if (updateError) {
-      return NextResponse.json({ success: false, error: updateError.message }, { status: 500 })
-    }
+    
 
     // 5. Journal entry (unchanged)
     const inventoryAccount = await getOrCreateAccount(supabase, companyId, "1200", "Inventory", "Asset")
