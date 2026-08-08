@@ -238,6 +238,18 @@ export default function NewSupplierPage() {
         setLoading(false)
         return
       }
+      if (balance !== 0 && data) {
+        try {
+          await fetch("/api/suppliers/opening-entry", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ supplierId: data.id, supplierName: data.name, amount: balance }),
+          })
+        } catch (err) {
+          console.error("Opening entry failed:", err)
+        }
+      }
+
       setFlash(`✅ Supplier ${data.code} – ${data.name} created!`)
       setSupplierName("")
       setPhoneNumber("")
