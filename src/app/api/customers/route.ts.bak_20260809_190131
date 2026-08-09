@@ -270,24 +270,12 @@ export async function PUT(request: NextRequest) {
   if (oldOpeningBalance !== newOpeningBalance) {
     try {
       // 1. Find the old opening balance journal entry (if any)
-      // RELIABLE LOOKUP (fixed): find the MOST RECENT opening-balance journal entry
-      // via source_type/source_id instead of matching journal_entries.description text.
-      // The old ILIKE match broke after the first edit, since both the reversal entry
-      // ("Reversal of old opening balance for customer X") and the new entry
-      // ("Opening balance for customer X") contain the same substring, and unpadded
-      // customer IDs could also cross-match (e.g. "customer 1" matching "customer 15").
-      // Same root pattern as the B4 vendor-payment fix.
-      const { data: latestOpeningLine } = await serviceSupabase
-        .from('journal_lines')
-        .select('entry_id')
+      const { data: oldEntry } = await serviceSupabase
+        .from('journal_entries')
+        .select('id, entry_no, date, description')
         .eq('company_id', companyId)
-        .eq('source_type', 'opening_balance')
-        .eq('source_id', id)
-        .order('entry_id', { ascending: false })
-        .limit(1)
+        .ilike('description', `%Opening balance for customer ${id}%`)
         .maybeSingle()
-
-      const oldEntry = latestOpeningLine ? { id: latestOpeningLine.entry_id } : null
 
       // 2. Reverse the old entry if it exists and old balance wasn't zero
       if (oldEntry && oldOpeningBalance !== 0) {
