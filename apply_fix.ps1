@@ -1,102 +1,51 @@
 $ErrorActionPreference = "Stop"
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
-function Restore-And-Fix {
-    param(
-        [string]$Path,
-        [string]$BackupPath,
-        [string]$OldSnippet,
-        [string]$NewSnippet
-    )
+$path = "src\app\api\suppliers\opening-entry\route.ts"
 
-    if (-not (Test-Path $BackupPath)) {
-        Write-Host "ABORT: Backup not found: $BackupPath" -ForegroundColor Red
-        return
-    }
-
-    # Restore original (correctly-encoded) content from backup
-    $content = [System.IO.File]::ReadAllText($BackupPath, [System.Text.Encoding]::UTF8)
-
-    if ($content -notmatch [regex]::Escape($OldSnippet)) {
-        Write-Host "ABORT: Original snippet not found in backup for $Path. No changes made." -ForegroundColor Red
-        return
-    }
-
-    $countMatches = ([regex]::Matches($content, [regex]::Escape($OldSnippet))).Count
-    if ($countMatches -gt 1) {
-        Write-Host "ABORT: Snippet found $countMatches times in $BackupPath (expected 1). No changes made." -ForegroundColor Red
-        return
-    }
-
-    $newContent = $content.Replace($OldSnippet, $NewSnippet)
-
-    # Write back as proper UTF-8, no BOM corruption
-    [System.IO.File]::WriteAllText($Path, $newContent, $utf8NoBom)
-
-    Write-Host "FIXED (encoding-safe): $Path" -ForegroundColor Green
+if (-not (Test-Path $path)) {
+    Write-Host "ABORT: File not found: $path" -ForegroundColor Red
+    return
 }
 
-# ---------- Customer form ----------
-$customerOld = @'
-          const fullPhone = customer.phone || ""
-          const match = fullPhone.match(/^(\+\d{1,3})(.*)$/)
-          if (match) {
-            setCountryCode(match[1])
-            setPhoneNumber(match[2].trim())
-          } else {
-            setPhoneNumber(fullPhone)
-          }
+$backupPath = "$path.bak_$(Get-Date -Format yyyyMMdd_HHmmss)"
+Copy-Item -Path $path -Destination $backupPath
+Write-Host "Backup created: $backupPath" -ForegroundColor Yellow
+
+$content = [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
+
+$old = @'
+  if (amount > 0) {
+    await supabase.from('accounts').update({ balance: eqAcc.data.balance - absAmount }).eq('id', eqAcc.data.id)
+    await supabase.from('accounts').update({ balance: apAcc.data.balance + absAmount }).eq('id', apAcc.data.id)
+  } else {
+    await supabase.from('accounts').update({ balance: apAcc.data.balance - absAmount }).eq('id', apAcc.data.id)
+    await supabase.from('accounts').update({ balance: eqAcc.data.balance + absAmount }).eq('id', eqAcc.data.id)
+  }
 '@
 
-$customerNew = @'
-          const fullPhone = customer.phone || ""
-          const matchedCode = COUNTRY_CODES.slice().sort((a, b) => b.code.length - a.code.length).find(c => fullPhone.startsWith(c.code))
-          if (matchedCode) {
-            setCountryCode(matchedCode.code)
-            setPhoneNumber(fullPhone.slice(matchedCode.code.length).trim())
-          } else {
-            setPhoneNumber(fullPhone)
-          }
+$new = @'
+  if (amount > 0) {
+    await supabase.from('accounts').update({ balance: eqAcc.data.balance + absAmount }).eq('id', eqAcc.data.id)
+    await supabase.from('accounts').update({ balance: apAcc.data.balance - absAmount }).eq('id', apAcc.data.id)
+  } else {
+    await supabase.from('accounts').update({ balance: apAcc.data.balance + absAmount }).eq('id', apAcc.data.id)
+    await supabase.from('accounts').update({ balance: eqAcc.data.balance - absAmount }).eq('id', eqAcc.data.id)
+  }
 '@
 
-Restore-And-Fix -Path "src\app\dashboard\customers\new\page.tsx" `
-    -BackupPath "src\app\dashboard\customers\new\page.tsx.bak_20260808_235715" `
-    -OldSnippet $customerOld -NewSnippet $customerNew
+if ($content -notmatch [regex]::Escape($old)) {
+    Write-Host "ABORT: Original snippet not found. No changes made." -ForegroundColor Red
+    return
+}
 
-# ---------- Supplier form ----------
-$supplierOld = @'
-          const phone = supData.phone || ""
-          let cc = "+92"
-          let ph = ""
-          if (phone && phone.startsWith("+")) {
-            const match = phone.match(/^(\+\d{1,3})(.*)/)
-            if (match) {
-              cc = match[1]
-              ph = match[2].trim()
-            }
-          }
-          setCountryCode(cc)
-          setPhoneNumber(ph)
-'@
+$countMatches = ([regex]::Matches($content, [regex]::Escape($old))).Count
+if ($countMatches -gt 1) {
+    Write-Host "ABORT: Snippet found $countMatches times (expected 1). No changes made." -ForegroundColor Red
+    return
+}
 
-$supplierNew = @'
-          const phone = supData.phone || ""
-          let cc = "+92"
-          let ph = ""
-          if (phone && phone.startsWith("+")) {
-            const matchedCode = COUNTRY_CODES.slice().sort((a, b) => b.code.length - a.code.length).find(c => phone.startsWith(c.code))
-            if (matchedCode) {
-              cc = matchedCode.code
-              ph = phone.slice(matchedCode.code.length).trim()
-            }
-          }
-          setCountryCode(cc)
-          setPhoneNumber(ph)
-'@
+$newContent = $content.Replace($old, $new)
+[System.IO.File]::WriteAllText($path, $newContent, $utf8NoBom)
 
-Restore-And-Fix -Path "src\app\dashboard\suppliers\new\page.tsx" `
-    -BackupPath "src\app\dashboard\suppliers\new\page.tsx.bak_20260808_235715" `
-    -OldSnippet $supplierOld -NewSnippet $supplierNew
-
-Write-Host ""
-Write-Host "Done. Review FIXED/ABORT messages above." -ForegroundColor Cyan
+Write-Host "FIXED (encoding-safe): $path" -ForegroundColor Green

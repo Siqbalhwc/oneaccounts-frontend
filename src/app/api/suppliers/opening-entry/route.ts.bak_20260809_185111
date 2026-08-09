@@ -66,11 +66,11 @@ export async function POST(request: NextRequest) {
   await supabase.from('journal_lines').insert(lines)
 
   if (amount > 0) {
-    await supabase.from('accounts').update({ balance: eqAcc.data.balance + absAmount }).eq('id', eqAcc.data.id)
-    await supabase.from('accounts').update({ balance: apAcc.data.balance - absAmount }).eq('id', apAcc.data.id)
-  } else {
-    await supabase.from('accounts').update({ balance: apAcc.data.balance + absAmount }).eq('id', apAcc.data.id)
     await supabase.from('accounts').update({ balance: eqAcc.data.balance - absAmount }).eq('id', eqAcc.data.id)
+    await supabase.from('accounts').update({ balance: apAcc.data.balance + absAmount }).eq('id', apAcc.data.id)
+  } else {
+    await supabase.from('accounts').update({ balance: apAcc.data.balance - absAmount }).eq('id', apAcc.data.id)
+    await supabase.from('accounts').update({ balance: eqAcc.data.balance + absAmount }).eq('id', eqAcc.data.id)
   }
 
   return NextResponse.json({ success: true, entryId: entry.id })
