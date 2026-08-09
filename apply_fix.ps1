@@ -14,50 +14,59 @@ Write-Host "Backup created: $backupPath" -ForegroundColor Yellow
 
 $content = [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
 
-$old = @'
-      // 1. Find the old opening balance journal entry (if any)
-      const { data: oldEntry } = await serviceSupabase
-        .from('journal_entries')
-        .select('id, entry_no, date, description')
-        .eq('company_id', companyId)
-        .ilike('description', `%Opening balance for customer ${id}%`)
-        .maybeSingle()
-'@
+# ---------- Shared validation helper ----------
+$importAnchor = "import { logDataChange } from '@/lib/audit'`r`nimport { generateNextCode } from '@/lib/generate-code'"
 
-$new = @'
-      // 1. Find the old opening balance journal entry (if any)
-      // RELIABLE LOOKUP (fixed): find the MOST RECENT opening-balance journal entry
-      // via source_type/source_id instead of matching journal_entries.description text.
-      // The old ILIKE match broke after the first edit, since both the reversal entry
-      // ("Reversal of old opening balance for customer X") and the new entry
-      // ("Opening balance for customer X") contain the same substring, and unpadded
-      // customer IDs could also cross-match (e.g. "customer 1" matching "customer 15").
-      // Same root pattern as the B4 vendor-payment fix.
-      const { data: latestOpeningLine } = await serviceSupabase
-        .from('journal_lines')
-        .select('entry_id')
-        .eq('company_id', companyId)
-        .eq('source_type', 'opening_balance')
-        .eq('source_id', id)
-        .order('entry_id', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+$importReplacement = @'
+import { logDataChange } from '@/lib/audit'
+import { generateNextCode } from '@/lib/generate-code'
 
-      const oldEntry = latestOpeningLine ? { id: latestOpeningLine.entry_id } : null
-'@
-
-if ($content -notmatch [regex]::Escape($old)) {
-    Write-Host "ABORT: Original snippet not found. No changes made." -ForegroundColor Red
-    return
+const COUNTRY_CODES = ['+971', '+966', '+92', '+1', '+44', '+91', '+86', '+81', '+49', '+33', '+61', '+27']
+const PHONE_LENGTHS: Record<string, number> = {
+  '+92': 10, '+1': 10, '+44': 10, '+971': 9,
+  '+966': 9, '+91': 10, '+86': 11, '+81': 10,
+  '+49': 10, '+33': 9, '+61': 9, '+27': 9,
 }
 
-$countMatches = ([regex]::Matches($content, [regex]::Escape($old))).Count
-if ($countMatches -gt 1) {
-    Write-Host "ABORT: Snippet found $countMatches times (expected 1). No changes made." -ForegroundColor Red
+function validatePhone(phone: string | null | undefined): string | null {
+  if (!phone) return 'Phone number is required'
+  const matchedCode = COUNTRY_CODES.slice().sort((a, b) => b.length - a.length).find(c => phone.startsWith(c))
+  if (!matchedCode) return 'Phone number must start with a recognized country code'
+  const digits = phone.slice(matchedCode.length).replace(/\D/g, '')
+  const expectedLength = PHONE_LENGTHS[matchedCode]
+  if (expectedLength && digits.length !== expectedLength) {
+    return `Phone must be ${expectedLength} digits for ${matchedCode}. Currently ${digits.length} digits.`
+  }
+  return null
+}
+'@
+
+$countImport = ([regex]::Matches($content, [regex]::Escape($importAnchor))).Count
+if ($countImport -ne 1) {
+    Write-Host "ABORT: Import anchor found $countImport times (expected 1). No changes made." -ForegroundColor Red
     return
 }
+$content = $content.Replace($importAnchor, $importReplacement)
 
-$newContent = $content.Replace($old, $new)
-[System.IO.File]::WriteAllText($path, $newContent, $utf8NoBom)
+# ---------- POST: insert right after the destructure line ----------
+$postAnchor = "  const { code, name, phone, email, address, country_code, payment_terms, opening_balance } = await request.json()"
+$countPost = ([regex]::Matches($content, [regex]::Escape($postAnchor))).Count
+if ($countPost -ne 1) {
+    Write-Host "ABORT: POST anchor found $countPost times (expected 1). No changes made." -ForegroundColor Red
+    return
+}
+$postReplacement = $postAnchor + "`r`n`r`n  const phoneError = validatePhone(phone)`r`n  if (phoneError) {`r`n    return NextResponse.json({ error: phoneError }, { status: 400 })`r`n  }"
+$content = $content.Replace($postAnchor, $postReplacement)
 
-Write-Host "FIXED (encoding-safe): $path" -ForegroundColor Greens
+# ---------- PUT: insert right after the destructure line ----------
+$putAnchor = "  const { id, code, name, phone, email, address, country_code, payment_terms, opening_balance } = await request.json()"
+$countPut = ([regex]::Matches($content, [regex]::Escape($putAnchor))).Count
+if ($countPut -ne 1) {
+    Write-Host "ABORT: PUT anchor found $countPut times (expected 1). No changes made." -ForegroundColor Red
+    return
+}
+$putReplacement = $putAnchor + "`r`n`r`n  const phoneError = validatePhone(phone)`r`n  if (phoneError) {`r`n    return NextResponse.json({ error: phoneError }, { status: 400 })`r`n  }"
+$content = $content.Replace($putAnchor, $putReplacement)
+
+[System.IO.File]::WriteAllText($path, $content, $utf8NoBom)
+Write-Host "FIXED (encoding-safe): $path" -ForegroundColor Green

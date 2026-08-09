@@ -4,25 +4,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { logDataChange } from '@/lib/audit'
 import { generateNextCode } from '@/lib/generate-code'
 
-const COUNTRY_CODES = ['+971', '+966', '+92', '+1', '+44', '+91', '+86', '+81', '+49', '+33', '+61', '+27']
-const PHONE_LENGTHS: Record<string, number> = {
-  '+92': 10, '+1': 10, '+44': 10, '+971': 9,
-  '+966': 9, '+91': 10, '+86': 11, '+81': 10,
-  '+49': 10, '+33': 9, '+61': 9, '+27': 9,
-}
-
-function validatePhone(phone: string | null | undefined): string | null {
-  if (!phone) return 'Phone number is required'
-  const matchedCode = COUNTRY_CODES.slice().sort((a, b) => b.length - a.length).find(c => phone.startsWith(c))
-  if (!matchedCode) return 'Phone number must start with a recognized country code'
-  const digits = phone.slice(matchedCode.length).replace(/\D/g, '')
-  const expectedLength = PHONE_LENGTHS[matchedCode]
-  if (expectedLength && digits.length !== expectedLength) {
-    return `Phone must be ${expectedLength} digits for ${matchedCode}. Currently ${digits.length} digits.`
-  }
-  return null
-}
-
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -46,11 +27,6 @@ export async function POST(request: NextRequest) {
   const companyId = user.app_metadata?.company_id || '00000000-0000-0000-0000-000000000001'
 
   const { code, name, phone, email, address, country_code, payment_terms, opening_balance } = await request.json()
-
-  const phoneError = validatePhone(phone)
-  if (phoneError) {
-    return NextResponse.json({ error: phoneError }, { status: 400 })
-  }
 
   // Auto‑generate code if missing (ignores soft‑deleted rows)
   let custCode = code || ''
@@ -208,11 +184,6 @@ export async function PUT(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id, code, name, phone, email, address, country_code, payment_terms, opening_balance } = await request.json()
-
-  const phoneError = validatePhone(phone)
-  if (phoneError) {
-    return NextResponse.json({ error: phoneError }, { status: 400 })
-  }
 
   // Fetch old customer values including old opening_balance
   const { data: oldCustomer } = await supabase
