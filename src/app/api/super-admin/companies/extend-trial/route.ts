@@ -47,11 +47,13 @@ export async function PATCH(request: Request) {
   // Upsert into company_settings so the upgrade page picks it up
   const { error } = await supabaseAdmin
     .from('company_settings')
-    .upsert({
-      company_id: companyId,
-      trial_ends_at: newEndDate,
-    })
-    .eq('company_id', companyId)
+    .upsert(
+      {
+        company_id: companyId,
+        trial_ends_at: newEndDate,
+      },
+      { onConflict: 'company_id' }
+    )
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
