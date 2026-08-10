@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
-$path = "src\app\api\customers\route.ts"
+$path = "src\app\dashboard\inventory\adjustments\new\page.tsx"
 
 if (-not (Test-Path $path)) {
     Write-Host "ABORT: File not found: $path" -ForegroundColor Red
@@ -14,59 +14,81 @@ Write-Host "Backup created: $backupPath" -ForegroundColor Yellow
 
 $content = [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
 
-# ---------- Shared validation helper ----------
-$importAnchor = "import { logDataChange } from '@/lib/audit'`r`nimport { generateNextCode } from '@/lib/generate-code'"
+$old = @'
+      // Fetch products for THIS company only
+      const { data: prods } = await supabase
+        .from("products")
+        .select("id, code, name, opening_qty, cost_price")
+        .eq("company_id", cid)
+        .order("code")
+      if (!prods) return
+      setProducts(prods)
 
-$importReplacement = @'
-import { logDataChange } from '@/lib/audit'
-import { generateNextCode } from '@/lib/generate-code'
+      // Fetch invoice items (only for this company's invoices) and stock moves
+      const [{ data: items }, { data: moves }] = await Promise.all([
+        supabase
+          .from("invoice_items")
+          .select("qty, product_id, invoices!inner(type, company_id)")
+          .eq("invoices.company_id", cid),
+        supabase
+          .from("stock_moves")
+          .select("qty, product_id")
+          .eq("company_id", cid),
+      ])
 
-const COUNTRY_CODES = ['+971', '+966', '+92', '+1', '+44', '+91', '+86', '+81', '+49', '+33', '+61', '+27']
-const PHONE_LENGTHS: Record<string, number> = {
-  '+92': 10, '+1': 10, '+44': 10, '+971': 9,
-  '+966': 9, '+91': 10, '+86': 11, '+81': 10,
-  '+49': 10, '+33': 9, '+61': 9, '+27': 9,
-}
+      // Build closing stock map
+      const map: Record<number, number> = {}
+      prods.forEach((p: any) => {
+        map[p.id] = p.opening_qty || 0
+      })
 
-function validatePhone(phone: string | null | undefined): string | null {
-  if (!phone) return 'Phone number is required'
-  const matchedCode = COUNTRY_CODES.slice().sort((a, b) => b.length - a.length).find(c => phone.startsWith(c))
-  if (!matchedCode) return 'Phone number must start with a recognized country code'
-  const digits = phone.slice(matchedCode.length).replace(/\D/g, '')
-  const expectedLength = PHONE_LENGTHS[matchedCode]
-  if (expectedLength && digits.length !== expectedLength) {
-    return `Phone must be ${expectedLength} digits for ${matchedCode}. Currently ${digits.length} digits.`
-  }
-  return null
-}
+      if (items) {
+        items.forEach((item: any) => {
+          const type = item.invoices?.type
+          if (type === "purchase") map[item.product_id] = (map[item.product_id] || 0) + item.qty
+          else if (type === "sale") map[item.product_id] = (map[item.product_id] || 0) - item.qty
+        })
+      }
+
+      if (moves) {
+        moves.forEach((m: any) => {
+          map[m.product_id] = (map[m.product_id] || 0) + (m.qty || 0)
+        })
+      }
+
+      setStockMap(map)
 '@
 
-$countImport = ([regex]::Matches($content, [regex]::Escape($importAnchor))).Count
-if ($countImport -ne 1) {
-    Write-Host "ABORT: Import anchor found $countImport times (expected 1). No changes made." -ForegroundColor Red
+$new = @'
+      // Fetch products for THIS company only.
+      // qty_on_hand is the single source of truth (opening_qty + SUM(stock_moves),
+      // maintained by the trg_set_qty_on_hand trigger - see audit item C15).
+      // Previously this form independently rebuilt stock from invoice_items + stock_moves,
+      // which double-counted every invoice (invoices write their own stock_moves row,
+      // so their effect was being added twice) and omitted cash_sale/return/stock_out moves.
+      const { data: prods } = await supabase
+        .from("products")
+        .select("id, code, name, opening_qty, cost_price, qty_on_hand")
+        .eq("company_id", cid)
+        .order("code")
+      if (!prods) return
+      setProducts(prods)
+
+      const map: Record<number, number> = {}
+      prods.forEach((p: any) => {
+        map[p.id] = p.qty_on_hand ?? p.opening_qty ?? 0
+      })
+
+      setStockMap(map)
+'@
+
+$count = ([regex]::Matches($content, [regex]::Escape($old))).Count
+if ($count -ne 1) {
+    Write-Host "ABORT: Anchor block found $count times (expected 1). No changes made." -ForegroundColor Red
     return
 }
-$content = $content.Replace($importAnchor, $importReplacement)
 
-# ---------- POST: insert right after the destructure line ----------
-$postAnchor = "  const { code, name, phone, email, address, country_code, payment_terms, opening_balance } = await request.json()"
-$countPost = ([regex]::Matches($content, [regex]::Escape($postAnchor))).Count
-if ($countPost -ne 1) {
-    Write-Host "ABORT: POST anchor found $countPost times (expected 1). No changes made." -ForegroundColor Red
-    return
-}
-$postReplacement = $postAnchor + "`r`n`r`n  const phoneError = validatePhone(phone)`r`n  if (phoneError) {`r`n    return NextResponse.json({ error: phoneError }, { status: 400 })`r`n  }"
-$content = $content.Replace($postAnchor, $postReplacement)
+$newContent = $content.Replace($old, $new)
+[System.IO.File]::WriteAllText($path, $newContent, $utf8NoBom)
 
-# ---------- PUT: insert right after the destructure line ----------
-$putAnchor = "  const { id, code, name, phone, email, address, country_code, payment_terms, opening_balance } = await request.json()"
-$countPut = ([regex]::Matches($content, [regex]::Escape($putAnchor))).Count
-if ($countPut -ne 1) {
-    Write-Host "ABORT: PUT anchor found $countPut times (expected 1). No changes made." -ForegroundColor Red
-    return
-}
-$putReplacement = $putAnchor + "`r`n`r`n  const phoneError = validatePhone(phone)`r`n  if (phoneError) {`r`n    return NextResponse.json({ error: phoneError }, { status: 400 })`r`n  }"
-$content = $content.Replace($putAnchor, $putReplacement)
-
-[System.IO.File]::WriteAllText($path, $content, $utf8NoBom)
 Write-Host "FIXED (encoding-safe): $path" -ForegroundColor Green
