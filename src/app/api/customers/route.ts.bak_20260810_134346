@@ -306,17 +306,11 @@ export async function PUT(request: NextRequest) {
       // ("Opening balance for customer X") contain the same substring, and unpadded
       // customer IDs could also cross-match (e.g. "customer 1" matching "customer 15").
       // Same root pattern as the B4 vendor-payment fix.
-      // FIX (regression from earlier same-session fix): the ORIGINAL opening-balance
-      // entry created at customer signup is tagged source_type='customer_opening' by
-      // /api/customers/opening-entry/route.ts, while THIS route's own inserts use
-      // source_type='opening_balance'. Checking only 'opening_balance' meant a customer's
-      // FIRST edit could never find/reverse the original entry, silently double-counting
-      // AR (and understating Equity) since the new entry was added without reversing the old.
       const { data: latestOpeningLine } = await serviceSupabase
         .from('journal_lines')
         .select('entry_id')
         .eq('company_id', companyId)
-        .in('source_type', ['opening_balance', 'customer_opening'])
+        .eq('source_type', 'opening_balance')
         .eq('source_id', id)
         .order('entry_id', { ascending: false })
         .limit(1)

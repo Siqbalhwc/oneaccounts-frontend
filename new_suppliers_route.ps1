@@ -1,3 +1,19 @@
+$ErrorActionPreference = "Stop"
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
+$dir = "src\app\api\suppliers"
+if (-not (Test-Path $dir)) {
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+}
+
+$path = "$dir\route.ts"
+
+if (Test-Path $path) {
+    Write-Host "ABORT: File already exists: $path - will not overwrite. Delete manually first if you want to replace it." -ForegroundColor Red
+    return
+}
+
+$fileContent = @'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
@@ -43,7 +59,8 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const companyId = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
+  const companyId = (user?.app_metadata as any)?.company_id
+  if (!companyId) return NextResponse.json({ error: 'No company linked' }, { status: 400 })
 
   const {
     code, name, phone, email, address, country_code, payment_terms, opening_balance,
@@ -59,9 +76,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Supplier name is required' }, { status: 400 })
   }
 
-  let suppCode = code || ''
-  if (!suppCode) {
-    suppCode = await generateNextCode('suppliers', 'SUP-', companyId)
+  let supCode = code || ''
+  if (!supCode) {
+    supCode = await generateNextCode('suppliers', 'SUP-', companyId)
   }
 
   const balanceValue = opening_balance || 0
@@ -71,7 +88,7 @@ export async function POST(request: NextRequest) {
     .from('suppliers')
     .insert({
       company_id: companyId,
-      code: suppCode,
+      code: supCode,
       name: String(name).trim(),
       phone,
       email,
@@ -244,6 +261,8 @@ export async function PUT(request: NextRequest) {
         return { apAcc, eqAcc }
       }
 
+      // 1. Find the most recent opening-balance entry for this supplier, single
+      //    consistent tag used throughout this route (no tag-mismatch risk).
       const { data: latestLine } = await serviceSupabase
         .from('journal_lines')
         .select('entry_id')
@@ -254,6 +273,7 @@ export async function PUT(request: NextRequest) {
         .limit(1)
         .maybeSingle()
 
+      // 2. Reverse it if it exists and the old balance wasn't zero
       if (latestLine && oldOpeningBalance !== 0) {
         const { data: oldLines } = await serviceSupabase
           .from('journal_lines').select('*').eq('entry_id', latestLine.entry_id)
@@ -294,8 +314,10 @@ export async function PUT(request: NextRequest) {
         }
       }
 
+      // 3. Create the new entry for the new opening balance, if non-zero
       if (newOpeningBalance !== 0) {
         const { apAcc, eqAcc } = await getAccounts()
+        // re-fetch fresh balances post-reversal
         const { data: freshAp } = await serviceSupabase.from('accounts').select('id,balance').eq('id', apAcc.id).single()
         const { data: freshEq } = await serviceSupabase.from('accounts').select('id,balance').eq('id', eqAcc.id).single()
 
@@ -332,6 +354,7 @@ export async function PUT(request: NextRequest) {
         }
       }
 
+      // 4. Only now touch suppliers.balance - kept isolated to this block on purpose
       await serviceSupabase.from('suppliers').update({ balance: newOpeningBalance }).eq('id', id)
 
     } catch (err) {
@@ -344,47 +367,7 @@ export async function PUT(request: NextRequest) {
 
   return NextResponse.json({ success: true, supplier: updatedSupplier })
 }
+'@
 
-export async function DELETE(request: NextRequest) {
-  const cookieStore = await cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          )
-        },
-      },
-    }
-  )
-
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { id } = await request.json()
-
-  const { data: oldSupplier } = await supabase
-    .from('suppliers')
-    .select('*')
-    .eq('id', id)
-    .single()
-
-  const { error } = await supabase
-    .from('suppliers')
-    .update({ deleted_at: new Date().toISOString() })
-    .eq('id', id)
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
-  if (oldSupplier) {
-    await logDataChange('suppliers', String(id), 'DELETE', oldSupplier, undefined)
-  }
-
-  return NextResponse.json({ success: true })
-}
+[System.IO.File]::WriteAllText($path, $fileContent, $utf8NoBom)
+Write-Host "CREATED: $path" -ForegroundColor Green
