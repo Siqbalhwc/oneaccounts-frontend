@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
       phone,
       email,
       address,
+      country_code,
       payment_terms,
       opening_balance: balanceValue,
       balance: balanceValue,
@@ -204,7 +205,7 @@ export async function PUT(request: NextRequest) {
   const { data: updatedSupplier, error: updateErr } = await supabase
     .from('suppliers')
     .update({
-      code, name, phone, email, address, payment_terms,
+      code, name, phone, email, address, country_code, payment_terms,
       opening_balance: newOpeningBalance,
       default_project_id: default_project_id || null,
       default_location_id: default_location_id || null,

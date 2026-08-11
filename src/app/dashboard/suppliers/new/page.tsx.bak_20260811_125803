@@ -201,6 +201,7 @@ export default function NewSupplierPage() {
       opening_balance: isNaN(balance) ? 0 : balance,
       balance: isNaN(balance) ? 0 : balance,
       payment_terms: paymentTerms,
+      country_code: countryCode,
       default_project_id: defaultProjectId,
       default_location_id: defaultLocationId,
       default_activity_id: defaultActivityId,
