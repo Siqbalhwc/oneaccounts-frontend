@@ -138,7 +138,7 @@ export default function CustomerLedgerPage() {
             `)
             .eq("company_id", companyId)
             .eq("account_id", arAccount.id)
-            .in("source_type", ["customer_opening", "opening_balance"])
+            .eq("source_type", "customer_opening")
             .eq("source_id", selectedCustomerId)
         : { data: [] as any[] }
 
