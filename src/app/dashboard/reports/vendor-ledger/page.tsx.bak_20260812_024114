@@ -122,20 +122,6 @@ export default function VendorLedgerPage() {
             .order("entry_id", { ascending: true })
         : { data: [] as any[] }
 
-      // 4b. Opening balance journal lines tagged directly to this supplier
-      const { data: openingBalanceLines } = apAccount
-      ? await supabase
-      .from("journal_lines")
-      .select(`
-      id, debit, credit, entry_id, source_type, source_id,
-      journal_entries ( date, description, entry_no )
-      `)
-      .eq("company_id", companyId)
-      .eq("account_id", apAccount.id)
-      .eq("source_type", "supplier_opening")
-      .eq("source_id", selectedSupplierId)
-      : { data: [] as any[] }
-
       // 5. Build ledger lines
       const periodLines: any[] = []
       let openingDebit = 0
@@ -191,35 +177,11 @@ export default function VendorLedgerPage() {
         })
       }
 
-      for (const line of openingBalanceLines || []) {
-      const je = (line as any).journal_entries
-      const lineDate: string | undefined = je?.date
-      if (!lineDate) continue
-      const debit = line.debit || 0
-      const credit = line.credit || 0
-      if (lineDate < startDate) {
-      openingDebit += debit
-      openingCredit += credit
-      continue
-      }
-      if (lineDate > endDate) continue
-      periodLines.push({
-      id: `ob-${line.id}`,
-      entry_no: je?.entry_no || "OB",
-      date: lineDate,
-      description: je?.description || "Opening Balance Entry",
-      debit,
-      credit,
-      running_balance: 0,
-      })
-      }
-
       periodLines.sort((a, b) => a.date.localeCompare(b.date))
 
       // 6. Opening balance = net of transactions before startDate + supplier's manual opening_balance
       //    (opening_balance is a credit from the supplier's perspective – money owed to them)
-      const hasTaggedOpeningEntry = (openingBalanceLines || []).length > 0
-      const openingNet = openingDebit - openingCredit - (hasTaggedOpeningEntry ? 0 : (supplier.opening_balance || 0))
+      const openingNet = openingDebit - openingCredit - (supplier.opening_balance || 0)
       const openingLine = {
         id: "opening-calc",
         entry_no: "",
