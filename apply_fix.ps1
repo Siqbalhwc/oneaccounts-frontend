@@ -2,134 +2,51 @@ $ErrorActionPreference = "Stop"
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 $path = "src\app\dashboard\suppliers\new\page.tsx"
+$backupPath = "src\app\dashboard\suppliers\new\page.tsx.bak_20260811_051706"
 
-if (-not (Test-Path $path)) {
-    Write-Host "ABORT: File not found: $path" -ForegroundColor Red
+if (-not (Test-Path $backupPath)) {
+    Write-Host "ABORT: Backup not found: $backupPath" -ForegroundColor Red
     return
 }
 
-$backupPath = "$path.bak_$(Get-Date -Format yyyyMMdd_HHmmss)"
-Copy-Item -Path $path -Destination $backupPath
-Write-Host "Backup created: $backupPath" -ForegroundColor Yellow
+# Restore clean, correctly-encoded content from the pre-corruption backup
+$content = [System.IO.File]::ReadAllText($backupPath, [System.Text.Encoding]::UTF8)
+Write-Host "Restored clean content from backup." -ForegroundColor Yellow
 
-$lines = Get-Content -Path $path
-
-function Apply-BlockFix {
-    param([string[]]$Lines, [string[]]$OldTrimmed, [string[]]$NewTrimmed, [string]$Label)
-
-    $blockLen = $OldTrimmed.Count
-    $matchIndexes = @()
-    for ($i = 0; $i -le ($Lines.Count - $blockLen); $i++) {
-        $isMatch = $true
-        for ($k = 0; $k -lt $blockLen; $k++) {
-            if ($Lines[$i + $k].Trim() -ne $OldTrimmed[$k]) { $isMatch = $false; break }
-        }
-        if ($isMatch) { $matchIndexes += $i }
-    }
-
-    if ($matchIndexes.Count -ne 1) {
-        Write-Host "ABORT ($Label): found $($matchIndexes.Count) times (expected 1)." -ForegroundColor Red
+function Apply-Edit {
+    param($Content, $Old, $New, $Label)
+    $count = ([regex]::Matches($Content, [regex]::Escape($Old))).Count
+    if ($count -ne 1) {
+        Write-Host "ABORT ($Label): found $count times (expected 1)." -ForegroundColor Red
         return $null
     }
-
-    $startIdx = $matchIndexes[0]
-    $newBlockLines = @()
-    $baseIndent = ($Lines[$startIdx] -replace '\S.*$', '')
-    foreach ($t in $NewTrimmed) {
-        $newBlockLines += ($baseIndent + $t)
-    }
-
-    $before = if ($startIdx -gt 0) { $Lines[0..($startIdx - 1)] } else { @() }
-    $afterStart = $startIdx + $blockLen
-    $after = if ($afterStart -le ($Lines.Count - 1)) { $Lines[$afterStart..($Lines.Count - 1)] } else { @() }
-
-    Write-Host "OK ($Label): matched at line $($startIdx + 1)" -ForegroundColor Green
-    return ($before + $newBlockLines + $after)
+    Write-Host "OK ($Label)" -ForegroundColor Green
+    return $Content.Replace($Old, $New)
 }
 
 # ---------- Edit 1: add country_code to payload ----------
-$old0 = @("opening_balance: isNaN(balance) ? 0 : balance,", "balance: isNaN(balance) ? 0 : balance,", "payment_terms: paymentTerms,")
-$new0 = @("opening_balance: isNaN(balance) ? 0 : balance,", "balance: isNaN(balance) ? 0 : balance,", "payment_terms: paymentTerms,", "country_code: countryCode,")
-$lines = Apply-BlockFix -Lines $lines -OldTrimmed $old0 -NewTrimmed $new0 -Label "add country_code"
-if ($null -eq $lines) { return }
+$old0 = "      opening_balance: isNaN(balance) ? 0 : balance,`r`n      balance: isNaN(balance) ? 0 : balance,`r`n      payment_terms: paymentTerms,"
+$new0 = "      opening_balance: isNaN(balance) ? 0 : balance,`r`n      balance: isNaN(balance) ? 0 : balance,`r`n      payment_terms: paymentTerms,`r`n      country_code: countryCode,"
+$content = Apply-Edit -Content $content -Old $old0 -New $new0 -Label "add country_code"
+if ($null -eq $content) { return }
 
-# ---------- Edit 2: update path (stop before setFlash - leave that line untouched) ----------
-$old1 = @(
-    "// Update",
-    "const { error: updateErr } = await supabase",
-    ".from(`"suppliers`")",
-    ".update(payload)",
-    '.eq("id", Number(editId))',
-    '.eq("company_id", companyId)',
-    "if (updateErr) {",
-    "setError(updateErr.message)",
-    "setLoading(false)",
-    "return",
-    "}"
-)
-$new1 = @(
-    "// Update - routed through /api/suppliers PUT",
-    'const putRes = await fetch("/api/suppliers", {',
-    'method: "PUT",',
-    'headers: { "Content-Type": "application/json" },',
-    "body: JSON.stringify({ id: Number(editId), ...payload }),",
-    "})",
-    "const putData = await putRes.json()",
-    "if (!putRes.ok || !putData.success) {",
-    'setError(putData.error || "Update failed")',
-    "setLoading(false)",
-    "return",
-    "}"
-)
-$lines = Apply-BlockFix -Lines $lines -OldTrimmed $old1 -NewTrimmed $new1 -Label "update path"
-if ($null -eq $lines) { return }
+# ---------- Edit 2: update path core call ----------
+$old1 = "      const { error: updateErr } = await supabase`r`n        .from(`"suppliers`")`r`n        .update(payload)`r`n        .eq(`"id`", Number(editId))`r`n        .eq(`"company_id`", companyId)"
+$new1 = "      const putRes = await fetch('/api/suppliers', {`r`n        method: 'PUT',`r`n        headers: { 'Content-Type': 'application/json' },`r`n        body: JSON.stringify({ id: Number(editId), ...payload }),`r`n      })`r`n      const putJson = await putRes.json()`r`n      const updateErr = (!putRes.ok || !putJson.success) ? { message: putJson.error || 'Update failed' } : null"
+$content = Apply-Edit -Content $content -Old $old1 -New $new1 -Label "update path"
+if ($null -eq $content) { return }
 
-# ---------- Edit 3: insert path (stop before setFlash - leave that line untouched) ----------
-$old2 = @(
-    "// Insert",
-    "const { data, error: insertErr } = await supabase",
-    ".from(`"suppliers`")",
-    '.insert({ ...payload, created_by: userEmail })',
-    '.select("id, code, name")',
-    ".single()",
-    "if (insertErr) {",
-    'if (insertErr.message?.includes("duplicate key")) {',
-    'setError("This code already exists. Please refresh to regenerate.")',
-    "} else {",
-    "setError(insertErr.message)",
-    "}",
-    "setLoading(false)",
-    "return",
-    "}",
-    "if (balance !== 0 && data) {",
-    "try {",
-    'await fetch("/api/suppliers/opening-entry", {',
-    'method: "POST",',
-    'headers: { "Content-Type": "application/json" },',
-    "body: JSON.stringify({ supplierId: data.id, supplierName: data.name, amount: balance }),",
-    "})",
-    "} catch (err) {",
-    'console.error("Opening entry failed:", err)',
-    "}",
-    "}"
-)
-$new2 = @(
-    "// Insert - routed through /api/suppliers POST",
-    'const postRes = await fetch("/api/suppliers", {',
-    'method: "POST",',
-    'headers: { "Content-Type": "application/json" },',
-    "body: JSON.stringify(payload),",
-    "})",
-    "const postResult = await postRes.json()",
-    "if (!postRes.ok || !postResult.success) {",
-    'setError(postResult.error || "Insert failed")',
-    "setLoading(false)",
-    "return",
-    "}",
-    "const data = postResult.supplier"
-)
-$lines = Apply-BlockFix -Lines $lines -OldTrimmed $old2 -NewTrimmed $new2 -Label "insert path"
-if ($null -eq $lines) { return }
+# ---------- Edit 3: insert path core call ----------
+$old2 = "      const { data, error: insertErr } = await supabase`r`n        .from(`"suppliers`")`r`n        .insert({ ...payload, created_by: userEmail })`r`n        .select(`"id, code, name`")`r`n        .single()"
+$new2 = "      const postRes = await fetch('/api/suppliers', {`r`n        method: 'POST',`r`n        headers: { 'Content-Type': 'application/json' },`r`n        body: JSON.stringify(payload),`r`n      })`r`n      const postJson = await postRes.json()`r`n      const insertErr = (!postRes.ok || !postJson.success) ? { message: postJson.error || 'Insert failed' } : null`r`n      const data = postJson.supplier"
+$content = Apply-Edit -Content $content -Old $old2 -New $new2 -Label "insert path"
+if ($null -eq $content) { return }
 
-[System.IO.File]::WriteAllText($path, ($lines -join "`r`n"), $utf8NoBom)
-Write-Host "FIXED (encoding-safe): $path" -ForegroundColor Green
+# ---------- Edit 4: remove now-redundant opening-entry POST block ----------
+$old3 = "      if (balance !== 0 && data) {`r`n        try {`r`n          await fetch(`"/api/suppliers/opening-entry`", {`r`n            method: `"POST`",`r`n            headers: { `"Content-Type`": `"application/json`" },`r`n            body: JSON.stringify({ supplierId: data.id, supplierName: data.name, amount: balance }),`r`n          })`r`n        } catch (err) {`r`n          console.error(`"Opening entry failed:`", err)`r`n        }`r`n      }`r`n`r`n"
+$new3 = ""
+$content = Apply-Edit -Content $content -Old $old3 -New $new3 -Label "remove opening-entry call"
+if ($null -eq $content) { return }
+
+[System.IO.File]::WriteAllText($path, $content, $utf8NoBom)
+Write-Host "FIXED (encoding-safe, restored from clean backup): $path" -ForegroundColor Green

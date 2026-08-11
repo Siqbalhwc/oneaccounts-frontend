@@ -201,7 +201,6 @@ export default function NewSupplierPage() {
       opening_balance: isNaN(balance) ? 0 : balance,
       balance: isNaN(balance) ? 0 : balance,
       payment_terms: paymentTerms,
-      country_code: countryCode,
       default_project_id: defaultProjectId,
       default_location_id: defaultLocationId,
       default_activity_id: defaultActivityId,
@@ -210,13 +209,11 @@ export default function NewSupplierPage() {
 
     if (isEdit) {
       // Update
-      const putRes = await fetch('/api/suppliers', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: Number(editId), ...payload }),
-      })
-      const putJson = await putRes.json()
-      const updateErr = (!putRes.ok || !putJson.success) ? { message: putJson.error || 'Update failed' } : null
+      const { error: updateErr } = await supabase
+        .from("suppliers")
+        .update(payload)
+        .eq("id", Number(editId))
+        .eq("company_id", companyId)
 
       if (updateErr) {
         setError(updateErr.message)
@@ -226,14 +223,11 @@ export default function NewSupplierPage() {
       setFlash("✅ Supplier updated!")
     } else {
       // Insert
-      const postRes = await fetch('/api/suppliers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      const postJson = await postRes.json()
-      const insertErr = (!postRes.ok || !postJson.success) ? { message: postJson.error || 'Insert failed' } : null
-      const data = postJson.supplier
+      const { data, error: insertErr } = await supabase
+        .from("suppliers")
+        .insert({ ...payload, created_by: userEmail })
+        .select("id, code, name")
+        .single()
 
       if (insertErr) {
         if (insertErr.message?.includes("duplicate key")) {
@@ -244,6 +238,18 @@ export default function NewSupplierPage() {
         setLoading(false)
         return
       }
+      if (balance !== 0 && data) {
+        try {
+          await fetch("/api/suppliers/opening-entry", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ supplierId: data.id, supplierName: data.name, amount: balance }),
+          })
+        } catch (err) {
+          console.error("Opening entry failed:", err)
+        }
+      }
+
       setFlash(`✅ Supplier ${data.code} – ${data.name} created!`)
       setSupplierName("")
       setPhoneNumber("")
