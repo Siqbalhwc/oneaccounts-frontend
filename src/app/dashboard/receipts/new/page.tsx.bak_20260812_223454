@@ -49,7 +49,6 @@ export default function NewReceiptPage() {
   const [customerOpeningBalance, setCustomerOpeningBalance] = useState(0)
   const [customerOpeningTotal, setCustomerOpeningTotal] = useState(0)
   const [customerOpeningPaid, setCustomerOpeningPaid] = useState(0)
-  const [ownOpeningAllocation, setOwnOpeningAllocation] = useState(0)
   const [attachments, setAttachments] = useState<any[]>([])
   const [attachPanelOpen, setAttachPanelOpen] = useState(false)
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
@@ -139,18 +138,6 @@ export default function NewReceiptPage() {
           allocs[String(a.invoice_id)] = a.amount
         })
         setAllocations(allocs)
-
-        supabase.from("customer_opening_allocations")
-          .select("amount")
-          .eq("receipt_id", editId)
-          .eq("company_id", companyId)
-          .then(({ data: openingAllocs }) => {
-            const amt = (openingAllocs || []).reduce((s: number, r: any) => s + (r.amount || 0), 0)
-            if (amt > 0) {
-              setOwnOpeningAllocation(amt)
-              setAllocations(prev => ({ ...prev, opening: amt }))
-            }
-          })
       })
   }, [editId, companyId])
 
@@ -234,13 +221,12 @@ export default function NewReceiptPage() {
       supabase.rpc("get_customer_opening_paid", { p_company_id: companyId, p_customer_id: customerId }),
     ]).then(([totalRes, paidRes]) => {
       const total = totalRes.data || 0
-      const rawPaid = paidRes.data || 0
-      const paid = editId ? Math.max(0, rawPaid - ownOpeningAllocation) : rawPaid
+      const paid = paidRes.data || 0
       setCustomerOpeningTotal(total)
       setCustomerOpeningPaid(paid)
       setCustomerOpeningBalance(Math.max(0, total - paid))
     })
-  }, [companyId, customerId, isDonation, editId, ownOpeningAllocation])
+  }, [companyId, customerId, isDonation])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {

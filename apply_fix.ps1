@@ -1,158 +1,112 @@
-$filePath = "C:\Users\Shahid Iqbal\Desktop\OneAccounts\frontend\src\app\dashboard\bills\[id]\page.tsx"
+$filePath = "C:\Users\Shahid Iqbal\Desktop\OneAccounts\frontend\src\app\dashboard\receipts\new\page.tsx"
 $backupPath = "$filePath.bak_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
 
 $content = [System.IO.File]::ReadAllText($filePath, [System.Text.Encoding]::UTF8)
 [System.IO.File]::WriteAllText($backupPath, $content, [System.Text.Encoding]::UTF8)
 
-$old = @'
-  useEffect(() => {
-    if (!companyId || !billId) return
-    setLoading(true)
+$old1 = @'
+  const [customerOpeningBalance, setCustomerOpeningBalance] = useState(0)
+  const [customerOpeningTotal, setCustomerOpeningTotal] = useState(0)
+  const [customerOpeningPaid, setCustomerOpeningPaid] = useState(0)
+'@
 
-    supabase
-      .from("invoices")
-      .select("*")
-      .eq("id", billId)
-      .eq("type", "purchase")
-      .single()
-      .then(({ data }) => {
-        if (!data) {
-          setLoading(false)
-          return
-        }
-        const b: Bill = data
+$new1 = @'
+  const [customerOpeningBalance, setCustomerOpeningBalance] = useState(0)
+  const [customerOpeningTotal, setCustomerOpeningTotal] = useState(0)
+  const [customerOpeningPaid, setCustomerOpeningPaid] = useState(0)
+  const [ownOpeningAllocation, setOwnOpeningAllocation] = useState(0)
+'@
 
-        if (b.party_id) {
-          supabase
-            .from("suppliers")
-            .select("name, code, phone, address, email, payment_terms")
-            .eq("id", b.party_id)
-            .single()
-            .then(({ data: supp }) => {
-              b.supplier = supp || undefined
-            })
-            .then(() => {
-              supabase
-                .from("invoice_items")
-                .select("*")
-                .eq("invoice_id", b.id)
-                .eq("company_id", companyId)
-                .then(({ data: items }) => {
-                  b.items = (items || []).map(item => ({
-                    ...item,
-                    asset_id: item.asset_id ?? null,
-                  }))
-                  setBill(b)
-                })
-            })
-
-          if (taxEnabled) {
-            supabase
-              .from("bill_withholding")
-              .select("*")
-              .eq("bill_id", b.id)
-              .maybeSingle()
-              .then(({ data: wht }) => {
-                if (wht) {
-                  setWhtData({
-                    wht_tax_code_id: wht.wht_tax_code_id,
-                    wht_rate: wht.wht_rate,
-                    wht_amount: wht.wht_amount,
-                  })
-                }
-              })
-          }
-        } else {
-          supabase
-            .from("invoice_items")
-            .select("*")
-            .eq("invoice_id", b.id)
-            .eq("company_id", companyId)
-            .then(({ data: items }) => {
-              b.items = (items || []).map(item => ({
-                ...item,
-                asset_id: item.asset_id ?? null,
-              }))
-              setBill(b)
-            })
-        }
-        setLoading(false)
+$old2 = @'
+        const allocs: Record<string, number> = {}
+        data.receipt_allocations?.forEach((a: any) => {
+          allocs[String(a.invoice_id)] = a.amount
+        })
+        setAllocations(allocs)
       })
-  }, [companyId, billId, taxEnabled])
+  }, [editId, companyId])
 '@
 
-$new = @'
-  useEffect(() => {
-    if (!companyId || !billId) return
-    let cancelled = false
+$new2 = @'
+        const allocs: Record<string, number> = {}
+        data.receipt_allocations?.forEach((a: any) => {
+          allocs[String(a.invoice_id)] = a.amount
+        })
+        setAllocations(allocs)
 
-    const loadBill = async () => {
-      setLoading(true)
-
-      const { data } = await supabase
-        .from("invoices")
-        .select("*")
-        .eq("id", billId)
-        .eq("type", "purchase")
-        .single()
-
-      if (!data) {
-        if (!cancelled) setLoading(false)
-        return
-      }
-
-      const b: Bill = data
-
-      if (b.party_id) {
-        const { data: supp } = await supabase
-          .from("suppliers")
-          .select("name, code, phone, address, email, payment_terms")
-          .eq("id", b.party_id)
-          .single()
-        b.supplier = supp || undefined
-
-        if (taxEnabled) {
-          const { data: wht } = await supabase
-            .from("bill_withholding")
-            .select("*")
-            .eq("bill_id", b.id)
-            .maybeSingle()
-          if (wht) {
-            setWhtData({
-              wht_tax_code_id: wht.wht_tax_code_id,
-              wht_rate: wht.wht_rate,
-              wht_amount: wht.wht_amount,
-            })
-          }
-        }
-      }
-
-      const { data: items } = await supabase
-        .from("invoice_items")
-        .select("*")
-        .eq("invoice_id", b.id)
-        .eq("company_id", companyId)
-
-      b.items = (items || []).map(item => ({
-        ...item,
-        asset_id: item.asset_id ?? null,
-      }))
-
-      if (!cancelled) {
-        setBill(b)
-        setLoading(false)
-      }
-    }
-
-    loadBill()
-    return () => { cancelled = true }
-  }, [companyId, billId, taxEnabled])
+        supabase.from("customer_opening_allocations")
+          .select("amount")
+          .eq("receipt_id", editId)
+          .eq("company_id", companyId)
+          .then(({ data: openingAllocs }) => {
+            const amt = (openingAllocs || []).reduce((s: number, r: any) => s + (r.amount || 0), 0)
+            if (amt > 0) {
+              setOwnOpeningAllocation(amt)
+              setAllocations(prev => ({ ...prev, opening: amt }))
+            }
+          })
+      })
+  }, [editId, companyId])
 '@
 
-if ($content.Contains($old)) {
-    $updated = $content.Replace($old, $new)
-    [System.IO.File]::WriteAllText($filePath, $updated, [System.Text.Encoding]::UTF8)
-    Write-Host "SUCCESS: Bill detail loading race condition fixed. Backup saved at $backupPath"
+$old3 = @'
+    Promise.all([
+      supabase.rpc("get_customer_opening_total", { p_company_id: companyId, p_customer_id: customerId }),
+      supabase.rpc("get_customer_opening_paid", { p_company_id: companyId, p_customer_id: customerId }),
+    ]).then(([totalRes, paidRes]) => {
+      const total = totalRes.data || 0
+      const paid = paidRes.data || 0
+      setCustomerOpeningTotal(total)
+      setCustomerOpeningPaid(paid)
+      setCustomerOpeningBalance(Math.max(0, total - paid))
+    })
+  }, [companyId, customerId, isDonation])
+'@
+
+$new3 = @'
+    Promise.all([
+      supabase.rpc("get_customer_opening_total", { p_company_id: companyId, p_customer_id: customerId }),
+      supabase.rpc("get_customer_opening_paid", { p_company_id: companyId, p_customer_id: customerId }),
+    ]).then(([totalRes, paidRes]) => {
+      const total = totalRes.data || 0
+      const rawPaid = paidRes.data || 0
+      const paid = editId ? Math.max(0, rawPaid - ownOpeningAllocation) : rawPaid
+      setCustomerOpeningTotal(total)
+      setCustomerOpeningPaid(paid)
+      setCustomerOpeningBalance(Math.max(0, total - paid))
+    })
+  }, [companyId, customerId, isDonation, editId, ownOpeningAllocation])
+'@
+
+$allFound = $true
+
+if ($content.Contains($old1)) {
+    $content = $content.Replace($old1, $new1)
+    Write-Host "Step 1 of 3: OK"
 } else {
-    Write-Host "ERROR: Exact block not found. No changes made. Please tell Claude so the file can be re-checked."
+    Write-Host "Step 1 of 3: NOT FOUND"
+    $allFound = $false
+}
+
+if ($content.Contains($old2)) {
+    $content = $content.Replace($old2, $new2)
+    Write-Host "Step 2 of 3: OK"
+} else {
+    Write-Host "Step 2 of 3: NOT FOUND"
+    $allFound = $false
+}
+
+if ($content.Contains($old3)) {
+    $content = $content.Replace($old3, $new3)
+    Write-Host "Step 3 of 3: OK"
+} else {
+    Write-Host "Step 3 of 3: NOT FOUND"
+    $allFound = $false
+}
+
+if ($allFound) {
+    [System.IO.File]::WriteAllText($filePath, $content, [System.Text.Encoding]::UTF8)
+    Write-Host "SUCCESS: Receipt opening balance edit fix applied. Backup saved at $backupPath"
+} else {
+    Write-Host "ERROR: One or more blocks not found. No changes were written to the real file. Please tell Claude which steps said NOT FOUND."
 }
