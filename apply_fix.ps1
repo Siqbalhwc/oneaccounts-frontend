@@ -1,108 +1,158 @@
-$ErrorActionPreference = "Stop"
-$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$filePath = "C:\Users\Shahid Iqbal\Desktop\OneAccounts\frontend\src\app\dashboard\bills\[id]\page.tsx"
+$backupPath = "$filePath.bak_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
 
-$path = "src\app\dashboard\reports\vendor-ledger\page.tsx"
+$content = [System.IO.File]::ReadAllText($filePath, [System.Text.Encoding]::UTF8)
+[System.IO.File]::WriteAllText($backupPath, $content, [System.Text.Encoding]::UTF8)
 
-if (-not (Test-Path $path)) {
-    Write-Host "ABORT: File not found: $path" -ForegroundColor Red
-    return
-}
+$old = @'
+  useEffect(() => {
+    if (!companyId || !billId) return
+    setLoading(true)
 
-$backupPath = "$path.bak_$(Get-Date -Format yyyyMMdd_HHmmss)"
-Copy-Item -Path $path -Destination $backupPath
-Write-Host "Backup created: $backupPath" -ForegroundColor Yellow
-
-$lines = Get-Content -Path $path -Encoding UTF8
-
-function Apply-BlockFix {
-    param([string[]]$Lines, [string[]]$OldTrimmed, [string[]]$NewTrimmed, [string]$Label)
-    $blockLen = $OldTrimmed.Count
-    $matchIndexes = @()
-    for ($i = 0; $i -le ($Lines.Count - $blockLen); $i++) {
-        $isMatch = $true
-        for ($k = 0; $k -lt $blockLen; $k++) {
-            if ($Lines[$i + $k].Trim() -ne $OldTrimmed[$k]) { $isMatch = $false; break }
+    supabase
+      .from("invoices")
+      .select("*")
+      .eq("id", billId)
+      .eq("type", "purchase")
+      .single()
+      .then(({ data }) => {
+        if (!data) {
+          setLoading(false)
+          return
         }
-        if ($isMatch) { $matchIndexes += $i }
+        const b: Bill = data
+
+        if (b.party_id) {
+          supabase
+            .from("suppliers")
+            .select("name, code, phone, address, email, payment_terms")
+            .eq("id", b.party_id)
+            .single()
+            .then(({ data: supp }) => {
+              b.supplier = supp || undefined
+            })
+            .then(() => {
+              supabase
+                .from("invoice_items")
+                .select("*")
+                .eq("invoice_id", b.id)
+                .eq("company_id", companyId)
+                .then(({ data: items }) => {
+                  b.items = (items || []).map(item => ({
+                    ...item,
+                    asset_id: item.asset_id ?? null,
+                  }))
+                  setBill(b)
+                })
+            })
+
+          if (taxEnabled) {
+            supabase
+              .from("bill_withholding")
+              .select("*")
+              .eq("bill_id", b.id)
+              .maybeSingle()
+              .then(({ data: wht }) => {
+                if (wht) {
+                  setWhtData({
+                    wht_tax_code_id: wht.wht_tax_code_id,
+                    wht_rate: wht.wht_rate,
+                    wht_amount: wht.wht_amount,
+                  })
+                }
+              })
+          }
+        } else {
+          supabase
+            .from("invoice_items")
+            .select("*")
+            .eq("invoice_id", b.id)
+            .eq("company_id", companyId)
+            .then(({ data: items }) => {
+              b.items = (items || []).map(item => ({
+                ...item,
+                asset_id: item.asset_id ?? null,
+              }))
+              setBill(b)
+            })
+        }
+        setLoading(false)
+      })
+  }, [companyId, billId, taxEnabled])
+'@
+
+$new = @'
+  useEffect(() => {
+    if (!companyId || !billId) return
+    let cancelled = false
+
+    const loadBill = async () => {
+      setLoading(true)
+
+      const { data } = await supabase
+        .from("invoices")
+        .select("*")
+        .eq("id", billId)
+        .eq("type", "purchase")
+        .single()
+
+      if (!data) {
+        if (!cancelled) setLoading(false)
+        return
+      }
+
+      const b: Bill = data
+
+      if (b.party_id) {
+        const { data: supp } = await supabase
+          .from("suppliers")
+          .select("name, code, phone, address, email, payment_terms")
+          .eq("id", b.party_id)
+          .single()
+        b.supplier = supp || undefined
+
+        if (taxEnabled) {
+          const { data: wht } = await supabase
+            .from("bill_withholding")
+            .select("*")
+            .eq("bill_id", b.id)
+            .maybeSingle()
+          if (wht) {
+            setWhtData({
+              wht_tax_code_id: wht.wht_tax_code_id,
+              wht_rate: wht.wht_rate,
+              wht_amount: wht.wht_amount,
+            })
+          }
+        }
+      }
+
+      const { data: items } = await supabase
+        .from("invoice_items")
+        .select("*")
+        .eq("invoice_id", b.id)
+        .eq("company_id", companyId)
+
+      b.items = (items || []).map(item => ({
+        ...item,
+        asset_id: item.asset_id ?? null,
+      }))
+
+      if (!cancelled) {
+        setBill(b)
+        setLoading(false)
+      }
     }
-    if ($matchIndexes.Count -ne 1) {
-        Write-Host "ABORT ($Label): found $($matchIndexes.Count) times (expected 1)." -ForegroundColor Red
-        return $null
-    }
-    $startIdx = $matchIndexes[0]
-    $baseIndent = ($Lines[$startIdx] -replace '\S.*$', '')
-    $newBlockLines = @()
-    foreach ($t in $NewTrimmed) {
-        if ($t -eq "") { $newBlockLines += "" } else { $newBlockLines += ($baseIndent + $t) }
-    }
-    $before = if ($startIdx -gt 0) { $Lines[0..($startIdx - 1)] } else { @() }
-    $afterStart = $startIdx + $blockLen
-    $after = if ($afterStart -le ($Lines.Count - 1)) { $Lines[$afterStart..($Lines.Count - 1)] } else { @() }
-    Write-Host "OK ($Label): matched at line $($startIdx + 1)" -ForegroundColor Green
-    return ($before + $newBlockLines + $after)
+
+    loadBill()
+    return () => { cancelled = true }
+  }, [companyId, billId, taxEnabled])
+'@
+
+if ($content.Contains($old)) {
+    $updated = $content.Replace($old, $new)
+    [System.IO.File]::WriteAllText($filePath, $updated, [System.Text.Encoding]::UTF8)
+    Write-Host "SUCCESS: Bill detail loading race condition fixed. Backup saved at $backupPath"
+} else {
+    Write-Host "ERROR: Exact block not found. No changes made. Please tell Claude so the file can be re-checked."
 }
-
-# ---------- Insertion 1: fetch supplier_opening journal lines ----------
-$old0 = @('// 5. Build ledger lines')
-$new0 = @(
-    '// 4b. Opening balance journal lines tagged directly to this supplier',
-    'const { data: openingBalanceLines } = apAccount',
-    '? await supabase',
-    '.from("journal_lines")',
-    '.select(`',
-    'id, debit, credit, entry_id, source_type, source_id,',
-    'journal_entries ( date, description, entry_no )',
-    '`)',
-    '.eq("company_id", companyId)',
-    '.eq("account_id", apAccount.id)',
-    '.eq("source_type", "supplier_opening")',
-    '.eq("source_id", selectedSupplierId)',
-    ': { data: [] as any[] }',
-    '',
-    '// 5. Build ledger lines'
-)
-$lines = Apply-BlockFix -Lines $lines -OldTrimmed $old0 -NewTrimmed $new0 -Label "fetch opening lines"
-if ($null -eq $lines) { return }
-
-# ---------- Insertion 2: bucket supplier_opening lines into periodLines/opening totals ----------
-$old1 = @('periodLines.sort((a, b) => a.date.localeCompare(b.date))')
-$new1 = @(
-    'for (const line of openingBalanceLines || []) {',
-    'const je = (line as any).journal_entries',
-    'const lineDate: string | undefined = je?.date',
-    'if (!lineDate) continue',
-    'const debit = line.debit || 0',
-    'const credit = line.credit || 0',
-    'if (lineDate < startDate) {',
-    'openingDebit += debit',
-    'openingCredit += credit',
-    'continue',
-    '}',
-    'if (lineDate > endDate) continue',
-    'periodLines.push({',
-    'id: `ob-${line.id}`,',
-    'entry_no: je?.entry_no || "OB",',
-    'date: lineDate,',
-    'description: je?.description || "Opening Balance Entry",',
-    'debit,',
-    'credit,',
-    'running_balance: 0,',
-    '})',
-    '}',
-    '',
-    'periodLines.sort((a, b) => a.date.localeCompare(b.date))'
-)
-$lines = Apply-BlockFix -Lines $lines -OldTrimmed $old1 -NewTrimmed $new1 -Label "bucket opening lines"
-if ($null -eq $lines) { return }
-
-# ---------- Edit 3: only fall back to supplier.opening_balance field if no tagged entries exist ----------
-$old2 = @('const openingNet = openingDebit - openingCredit - (supplier.opening_balance || 0)')
-$new2 = @(
-    'const hasTaggedOpeningEntry = (openingBalanceLines || []).length > 0',
-    'const openingNet = openingDebit - openingCredit - (hasTaggedOpeningEntry ? 0 : (supplier.opening_balance || 0))'
-)
-$lines = Apply-BlockFix -Lines $lines -OldTrimmed $old2 -NewTrimmed $new2 -Label "fallback condition"
-if ($null -eq $lines) { return }
-
-[System.IO.File]::WriteAllText($path, ($lines -join "`r`n"), $utf8NoBom)
-Write-Host "FIXED (encoding-safe): $path" -ForegroundColor Green

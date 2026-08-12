@@ -85,68 +85,77 @@ export default function BillDetailPage() {
 
   useEffect(() => {
     if (!companyId || !billId) return
-    let cancelled = false
+    setLoading(true)
 
-    const loadBill = async () => {
-      setLoading(true)
-
-      const { data } = await supabase
-        .from("invoices")
-        .select("*")
-        .eq("id", billId)
-        .eq("type", "purchase")
-        .single()
-
-      if (!data) {
-        if (!cancelled) setLoading(false)
-        return
-      }
-
-      const b: Bill = data
-
-      if (b.party_id) {
-        const { data: supp } = await supabase
-          .from("suppliers")
-          .select("name, code, phone, address, email, payment_terms")
-          .eq("id", b.party_id)
-          .single()
-        b.supplier = supp || undefined
-
-        if (taxEnabled) {
-          const { data: wht } = await supabase
-            .from("bill_withholding")
-            .select("*")
-            .eq("bill_id", b.id)
-            .maybeSingle()
-          if (wht) {
-            setWhtData({
-              wht_tax_code_id: wht.wht_tax_code_id,
-              wht_rate: wht.wht_rate,
-              wht_amount: wht.wht_amount,
-            })
-          }
+    supabase
+      .from("invoices")
+      .select("*")
+      .eq("id", billId)
+      .eq("type", "purchase")
+      .single()
+      .then(({ data }) => {
+        if (!data) {
+          setLoading(false)
+          return
         }
-      }
+        const b: Bill = data
 
-      const { data: items } = await supabase
-        .from("invoice_items")
-        .select("*")
-        .eq("invoice_id", b.id)
-        .eq("company_id", companyId)
+        if (b.party_id) {
+          supabase
+            .from("suppliers")
+            .select("name, code, phone, address, email, payment_terms")
+            .eq("id", b.party_id)
+            .single()
+            .then(({ data: supp }) => {
+              b.supplier = supp || undefined
+            })
+            .then(() => {
+              supabase
+                .from("invoice_items")
+                .select("*")
+                .eq("invoice_id", b.id)
+                .eq("company_id", companyId)
+                .then(({ data: items }) => {
+                  b.items = (items || []).map(item => ({
+                    ...item,
+                    asset_id: item.asset_id ?? null,
+                  }))
+                  setBill(b)
+                })
+            })
 
-      b.items = (items || []).map(item => ({
-        ...item,
-        asset_id: item.asset_id ?? null,
-      }))
-
-      if (!cancelled) {
-        setBill(b)
+          if (taxEnabled) {
+            supabase
+              .from("bill_withholding")
+              .select("*")
+              .eq("bill_id", b.id)
+              .maybeSingle()
+              .then(({ data: wht }) => {
+                if (wht) {
+                  setWhtData({
+                    wht_tax_code_id: wht.wht_tax_code_id,
+                    wht_rate: wht.wht_rate,
+                    wht_amount: wht.wht_amount,
+                  })
+                }
+              })
+          }
+        } else {
+          supabase
+            .from("invoice_items")
+            .select("*")
+            .eq("invoice_id", b.id)
+            .eq("company_id", companyId)
+            .then(({ data: items }) => {
+              b.items = (items || []).map(item => ({
+                ...item,
+                asset_id: item.asset_id ?? null,
+              }))
+              setBill(b)
+            })
+        }
         setLoading(false)
-      }
-    }
-
-    loadBill()
-    return () => { cancelled = true }
+      })
   }, [companyId, billId, taxEnabled])
 
   useEffect(() => {
