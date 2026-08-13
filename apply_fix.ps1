@@ -1,44 +1,47 @@
-$files = @(
-  "C:\Users\Shahid Iqbal\Desktop\OneAccounts\frontend\src\components\dashboard\ManagementDashboard.tsx",
-  "C:\Users\Shahid Iqbal\Desktop\OneAccounts\frontend\src\components\dashboard\TradingServiceDashboard.tsx",
-  "C:\Users\Shahid Iqbal\Desktop\OneAccounts\frontend\src\components\dashboard\AccountantDashboard.tsx"
-)
+$filePath = "C:\Users\Shahid Iqbal\Desktop\OneAccounts\frontend\src\components\DashboardSidebar.tsx"
+$backupPath = "$filePath.bak_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
 
-$map = @(
-  @{hex="#A78BFA"; var="var(--kpi-info)"},
-  @{hex="#F97316"; var="var(--kpi-warn)"},
-  @{hex="#2DD4BF"; var="var(--kpi-positive)"},
-  @{hex="#F87171"; var="var(--kpi-negative)"},
-  @{hex="#93C5FD"; var="var(--kpi-link)"}
-)
+$rawContent = [System.IO.File]::ReadAllText($filePath, [System.Text.Encoding]::UTF8)
+[System.IO.File]::WriteAllText($backupPath, $rawContent, [System.Text.Encoding]::UTF8)
+$content = $rawContent -replace "`r`n", "`n"
+function Norm($s) { return ($s -replace "`r`n", "`n").TrimEnd("`n") }
 
-foreach ($filePath in $files) {
-    $fileName = Split-Path $filePath -Leaf
-    if (-not (Test-Path $filePath)) {
-        Write-Host "$fileName : FILE NOT FOUND"
-        continue
-    }
-    $content = [System.IO.File]::ReadAllText($filePath, [System.Text.Encoding]::UTF8)
-    $original = $content
+$old = Norm @'
+  const bg = theme === "oneaccounts"
+    ? "linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%)"
+    : "var(--main-bg)"
 
-    $totalReplaced = 0
-    foreach ($m in $map) {
-        $before = $content
-        $content = $content.Replace($m.hex, $m.var)
-        if ($content -ne $before) {
-            $count = ([regex]::Matches($before, [regex]::Escape($m.hex))).Count
-            Write-Host "$fileName : replaced $count occurrence(s) of $($m.hex) -> $($m.var)"
-            $totalReplaced += $count
-        }
-    }
+  const isDarkText = theme === "light" || (theme === "system" && typeof window !== "undefined" && !window.matchMedia("(prefers-color-scheme: dark)").matches)
+  const textColor      = theme === "oneaccounts" ? "rgba(255,255,255,0.9)" : (isDarkText ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.85)")
+  const mutedTextColor  = theme === "oneaccounts" ? "rgba(255,255,255,0.6)" : (isDarkText ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.5)")
+  const borderColor     = theme === "oneaccounts" ? "rgba(255,255,255,0.15)" : (isDarkText ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.08)")
+  const shadow = theme === "oneaccounts"
+    ? "0 25px 50px -12px rgba(0,0,0,0.6)"
+    : (isDarkText ? "0 25px 50px -12px rgba(0,0,0,0.15)" : "0 25px 50px -12px rgba(0,0,0,0.5)")
+'@
 
-    if ($totalReplaced -gt 0) {
-        $backupPath = "$filePath.bak_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-        [System.IO.File]::WriteAllText($backupPath, $original, [System.Text.Encoding]::UTF8)
-        [System.IO.File]::WriteAllText($filePath, $content, [System.Text.Encoding]::UTF8)
-        Write-Host "$fileName : SUCCESS, $totalReplaced total replacement(s). Backup saved at $backupPath"
-    } else {
-        Write-Host "$fileName : no matching hex colors found, no changes made"
-    }
-    Write-Host "---"
+$new = Norm @'
+  const gradientThemes = ["oneaccounts", "light"]
+  const bg = theme === "oneaccounts"
+    ? "linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%)"
+    : theme === "light"
+    ? "linear-gradient(155deg, #021B0E 0%, #04331A 22%, #085C30 50%, #0B7C44 78%, #0F9D58 100%)"
+    : "var(--main-bg)"
+
+  const hasGradient = gradientThemes.includes(theme)
+  const isDarkText = !hasGradient && (theme === "system" && typeof window !== "undefined" && !window.matchMedia("(prefers-color-scheme: dark)").matches)
+  const textColor      = hasGradient ? "rgba(255,255,255,0.9)" : (isDarkText ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.85)")
+  const mutedTextColor  = hasGradient ? "rgba(255,255,255,0.6)" : (isDarkText ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.5)")
+  const borderColor     = hasGradient ? "rgba(255,255,255,0.15)" : (isDarkText ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.08)")
+  const shadow = hasGradient
+    ? "0 25px 50px -12px rgba(0,0,0,0.6)"
+    : (isDarkText ? "0 25px 50px -12px rgba(0,0,0,0.15)" : "0 25px 50px -12px rgba(0,0,0,0.5)")
+'@
+
+if ($content.Contains($old)) {
+    $content = $content.Replace($old, $new)
+    [System.IO.File]::WriteAllText($filePath, $content, [System.Text.Encoding]::UTF8)
+    Write-Host "SUCCESS: Sidebar light-theme gradient added. Backup saved at $backupPath"
+} else {
+    Write-Host "ERROR: Block not found. No changes made."
 }
