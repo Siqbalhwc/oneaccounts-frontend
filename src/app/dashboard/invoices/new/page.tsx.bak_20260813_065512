@@ -40,7 +40,7 @@ function NewInvoicePageContent() {
   const taxEnabled = hasFeature("tax_management")
   const automationFeatureEnabled = hasFeature("invoice_automation")
   const { theme: themeMode } = useTheme()
-  const isDark = themeMode === "dark"
+  const isDark = themeMode === "dark" || themeMode === "oneaccounts"
 
   const [companyId, setCompanyId] = useState("")
   const [businessType, setBusinessType] = useState("")
