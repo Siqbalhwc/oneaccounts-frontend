@@ -112,31 +112,6 @@ export default function CustomerLedgerPage() {
       const receiptIds = (customerReceipts || []).map(r => r.id)
       const receiptNoById = new Map((customerReceipts || []).map(r => [r.id, r.receipt_no]))
 
-      // 3b. Real creation timestamps for invoice/return journal lines posted to AR â€”
-      // used purely as a same-day tiebreaker so entries sort in true creation order,
-      // not just by their (time-less) transaction date.
-      const invoiceIds = (allInvoices || []).map(inv => inv.id)
-      const { data: invoiceJournalLines } = arAccount && invoiceIds.length
-        ? await supabase
-            .from("journal_lines")
-            .select(`
-              source_id,
-              journal_entries ( created_at )
-            `)
-            .eq("company_id", companyId)
-            .eq("account_id", arAccount.id)
-            .in("source_id", invoiceIds)
-            .not("source_type", "in", "(receipt,receipt_reversal,customer_opening,opening_balance)")
-        : { data: [] as any[] }
-
-      const invoiceCreatedAtById = new Map<number, string>()
-      for (const line of invoiceJournalLines || []) {
-        const je = (line as any).journal_entries
-        if (je?.created_at && line.source_id != null) {
-          invoiceCreatedAtById.set(line.source_id, je.created_at)
-        }
-      }
-
       // 4. EVERY journal line ever posted to AR for those receipts — original posting,
       //    reversal, and any re-posted edit — each with its real date. No date filter;
       //    we bucket them into opening vs period below.
@@ -145,7 +120,7 @@ export default function CustomerLedgerPage() {
             .from("journal_lines")
             .select(`
               id, debit, credit, entry_id, source_type, source_id,
-              journal_entries ( date, description, entry_no, created_at )
+              journal_entries ( date, description, entry_no )
             `)
             .eq("company_id", companyId)
             .eq("account_id", arAccount.id)
@@ -159,7 +134,7 @@ export default function CustomerLedgerPage() {
             .from("journal_lines")
             .select(`
               id, debit, credit, entry_id, source_type, source_id,
-              journal_entries ( date, description, entry_no, created_at )
+              journal_entries ( date, description, entry_no )
             `)
             .eq("company_id", companyId)
             .eq("account_id", arAccount.id)
@@ -188,7 +163,6 @@ export default function CustomerLedgerPage() {
           id: inv.type === "sale" ? `inv-${inv.id}` : `ret-${inv.id}`,
           entry_no: inv.type === "sale" ? `INV-${inv.invoice_no}` : `SR-${inv.invoice_no}`,
           date: inv.date,
-          created_at: invoiceCreatedAtById.get(inv.id) || `${inv.date}T00:00:00`,
           description: inv.type === "sale" ? `Sales Invoice ${inv.invoice_no}` : `Sales Return ${inv.invoice_no}`,
           debit,
           credit,
@@ -218,7 +192,6 @@ export default function CustomerLedgerPage() {
           id: `rec-${line.id}`,
           entry_no: isReversal ? `Rev-${receiptNo}` : `REC-${receiptNo}`,
           date: lineDate,
-          created_at: je?.created_at || `${lineDate}T00:00:00`,
           description: isReversal ? `Receipt Reversal - ${receiptNo}` : `Receipt ${receiptNo}`,
           debit,
           credit,
@@ -242,18 +215,13 @@ export default function CustomerLedgerPage() {
           id: `op-${line.id}`,
           entry_no: "OB",
           date: lineDate,
-          created_at: je?.created_at || `${lineDate}T00:00:00`,
           description: "Opening Balance Entry",
           debit,
           credit,
           running_balance: 0,
         })
       }
-      periodLines.sort((a, b) => {
-        const dateCompare = a.date.localeCompare(b.date)
-        if (dateCompare !== 0) return dateCompare
-        return (a.created_at || "").localeCompare(b.created_at || "")
-      })
+      periodLines.sort((a, b) => a.date.localeCompare(b.date))
 
       // 6. Opening balance = net of every AR line before startDate + customer's manual opening_balance
       //    opening_balance is treated as an initial debit (money owed by customer)
